@@ -1,0 +1,5 @@
+# dependency-phantom-solid
+
+**Claim (ADR 0981).** An installed package that imports `solid-js` without declaring it (a phantom dependency) is a Solid package for source selection: ADR 0297's default selected only a package whose manifest names one, so the package's returned location was read as plain and the read below, which Chrome warns STRICT_READ_UNTRACKED for, was a false clean.
+
+`dep-router` here is one file (`dist/index.js` imports `createMemo` and `createSignal` from `solid-js`), its manifest has no `dependencies` or `peerDependencies`, and `.solid-checker/runtime.json` pins no `dependencySources`: the default selection decides. `Read` is an SC1001 violation at `location.search` (a getter over a memo, read in a component body). The same program with the peer declared is `dependency-phantom-solid-declared`. Chrome (rc.21 development build, `fixtures/runtime-oracle/phantom-solid-flat`, the same program with the selection pinned: the oracle's `feedback run` never takes the default): STRICT_READ_UNTRACKED at the read.

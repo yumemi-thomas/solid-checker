@@ -32,6 +32,14 @@ unresolved member, primitive callback return or forwarded value. A proven
 tracked role discharges that read. A package-installed global function gets
 `dependency-global-read` at its call (ADR 0862). These rows prove no violation.
 
+A value a package the build does not read as source returned (ADR 0981) is read as possibly
+reactive: the result of a call or `new` into such a package, a member of one, or a binding that holds
+one, read by a member get, a call, a destructuring pattern, an iteration or an object spread where nothing
+tracks or places the read, is **uncertifiable** (`package-value-read:untracked` or `:unplaced`), never a
+violation. A package whose manifest names no Solid package is read as source nonetheless when its entry
+closure imports one (a package that forgot its peer): the same read of its value is a violation or
+silent by its source. `docs/open-work.md` names what would win the rows back.
+
 ## What it does
 
 Flags reads of reactive values that happen outside every tracking scope: at the top

@@ -87,10 +87,10 @@ export async function mapStacks(server, lookup, caseDir, rec) {
     if (!texts.has(file)) { let text; try { text = readFileSync(join(caseDir, file), "utf8"); } catch {} texts.set(file, text); }
     return texts.get(file);
   };
-  const startsOf = (frame, depth) => {
+  const startsOf = (frame, depth, inner) => {
     const text = textOf(frame.file);
     if (text === undefined) return null;
-    const starts = frameStarts(text, frame.file)(frame, depth);
+    const starts = frameStarts(text, frame.file)(frame, depth, inner);
     return starts.length > 1 ? starts : null;
   };
   const stacks = {};

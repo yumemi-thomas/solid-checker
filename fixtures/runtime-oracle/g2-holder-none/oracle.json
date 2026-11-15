@@ -1,0 +1,5 @@
+{
+  "note": "G2 of the check of #227 (ADR 0981): the holder never takes the location: the read is Chrome's STRICT_READ_UNTRACKED. dep-router declares no Solid package, so only the pinned selection reads it.",
+  "packages": ["dep-router"],
+  "dependencySources": ["dep-router"]
+}

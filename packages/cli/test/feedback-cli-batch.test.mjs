@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,7 +19,9 @@ function fixture() {
   writeFileSync(join(root, "index.html"), '<html><body><script type="module" src="/a/source.ts"></script></body></html>');
   writeFileSync(join(root, "scenario.json"), JSON.stringify({ schemaVersion: 1, steps: [{ action: "wait-for-selector", selector: "body" }] }));
   const binary = join(root, "solid-checker-rust");
-  writeFileSync(binary, "#!/bin/sh\necho '{\"findings\":[],\"feedbackFacts\":[]}'\n"); chmodSync(binary, 0o755);
+  // The native double records the arguments of each analysis, so a test reads what a job's flags reached the native child.
+  const nativeLog = join(root, "native-args.log");
+  writeFileSync(binary, `#!/bin/sh\necho "$@" >> ${JSON.stringify(nativeLog)}\necho '{"findings":[],"feedbackFacts":[]}'\n`); chmodSync(binary, 0o755);
   const lifecycle = join(root, "lifecycle.jsonl");
   const marker = name => JSON.stringify(join(root, name));
   const log = `import {appendFileSync, existsSync} from 'node:fs'; const log = row => appendFileSync(${JSON.stringify(lifecycle)}, JSON.stringify(row)+'\\n');`;
@@ -80,11 +82,12 @@ function fixture() {
   pkg("@jridgewell/trace-mapping", "export class TraceMap {} export function originalPositionFor() {}");
   // The browser binary is only hashed and stamped: the native double stands in for it.
   const events = () => existsSync(lifecycle) ? readFileSync(lifecycle, "utf8").trim().split("\n").map(row => JSON.parse(row)) : [];
-  return { root, binary, events, touch: name => writeFileSync(join(root, name), "") };
+  const nativeArgs = () => existsSync(nativeLog) ? readFileSync(nativeLog, "utf8").trim().split("\n").filter(Boolean) : [];
+  return { root, binary, events, nativeArgs, touch: name => writeFileSync(join(root, name), "") };
 }
 
 // Runs a batch, sending each job only after the previous answer, so `between(index)` can change the fixture in between.
-function batch({ root, binary }, count, between = () => {}) {
+function batch({ root, binary }, count, between = () => {}, extra = () => ({})) {
   return new Promise((done, fail) => {
     const child = spawn(process.execPath, [cli, "feedback", "batch", "--browser", binary, "--tooling", root, "--native-bin", binary],
       { cwd: root, env: { ...process.env, SOLID_CHECKER_TIMINGS: "", SC_BATCH_DOUBLE: "" }, stdio: ["pipe", "pipe", "pipe"] });
@@ -93,7 +96,7 @@ function batch({ root, binary }, count, between = () => {}) {
     const send = () => {
       if (sent === count) { child.stdin.end(); return; }
       between(sent);
-      child.stdin.write(JSON.stringify({ project: join(root, "tsconfig.json"), scenario: join(root, "scenario.json"), report: join(root, `report-${sent}.json`) }) + "\n");
+      child.stdin.write(JSON.stringify({ project: join(root, "tsconfig.json"), scenario: join(root, "scenario.json"), report: join(root, `report-${sent}.json`), ...extra(sent) }) + "\n");
       sent++;
     };
     const timer = setTimeout(() => { child.kill("SIGKILL"); fail(new Error(`batch timed out: ${stderr}`)); }, 30000);
@@ -154,4 +157,41 @@ for (const [name, change, expected] of [
     else { assert.equal(status, 0, stderr); assert.deepEqual(answers[2], { closed: true }); assert.equal(answers.length, 3); }
     assert.equal(run.events().filter(row => row[0] === "launch").length, 1);
   } finally { rmSync(run.root, { recursive: true, force: true }); }
+});
+
+// ADR 0981: a job's `dependencySources` reach the native child as `--dependency-source`, one flag per name, for that job alone.
+test("feedback batch passes a job's dependencySources to the native analysis, and only that job's", async () => {
+  const run = fixture();
+  try {
+    const { status, stderr, answers } = await batch(run, 3, () => {}, index => index === 1 ? { dependencySources: ["dep-a", "dep-b"] } : {});
+    assert.equal(status, 0, stderr);
+    assert.deepEqual(answers.map(row => "retire" in row ? row.retire : row.closed), [null, null, null, true]);
+    // Each job analyzes twice (the models, then the capture's findings); only a job that asked carries the flags, in the order given.
+    const flagged = run.nativeArgs().filter(line => line.includes("--dependency-source"));
+    assert.ok(flagged.length >= 1);
+    for (const line of flagged) assert.match(line, /--rendering csr --dependency-source dep-a --dependency-source dep-b$/);
+    assert.ok(run.nativeArgs().some(line => !line.includes("--dependency-source")));
+  } finally { rmSync(run.root, { recursive: true, force: true }); }
+});
+
+for (const [name, extra] of [
+  ["an empty list", { dependencySources: [] }],
+  ["a name that is a flag", { dependencySources: ["--runtime-target"] }],
+  ["a name with a space", { dependencySources: ["a b"] }],
+  ["an unknown field", { dependency: ["x"] }],
+]) test(`feedback batch refuses ${name} in a job`, async () => {
+  const run = fixture();
+  try {
+    const { status, stderr } = await batch(run, 1, () => {}, () => extra);
+    assert.notEqual(status, 0);
+    assert.match(stderr, /A batch job is \{project, scenario, report, cwd\?, dependencySources\?\}|--dependency-source takes a package specifier/);
+  } finally { rmSync(run.root, { recursive: true, force: true }); }
+});
+
+test("--dependency-source belongs to `feedback run`: the other commands refuse it, and it needs a package", () => {
+  const refused = (...args) => { const result = spawnSync(process.execPath, [cli, "feedback", ...args], { encoding: "utf8" }); assert.notEqual(result.status, 0); return result.stderr; };
+  assert.match(refused("manifest", "--project", "x", "--dependency-source", "dep-a"), /Unknown feedback option --dependency-source/);
+  assert.match(refused("--project", "x", "--dependency-source", "dep-a"), /Unknown feedback option --dependency-source/);
+  assert.match(refused("run", "--project", "x", "--scenario", "y", "--browser", "z", "--dependency-source"), /--dependency-source requires a value/);
+  assert.match(refused("run", "--project", "x", "--scenario", "y", "--browser", "z", "--dependency-source", "a b"), /--dependency-source takes a package specifier/);
 });

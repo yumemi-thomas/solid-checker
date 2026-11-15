@@ -2511,6 +2511,1131 @@
    "fact": "the holder is bound to a call's result (document.createElement, Object.create(null)), which is no fresh object the program writes and no sole name (an appended element is reachable through the DOM): the store is handed"
   },
   {
+   "fixture": "reactive-ir/action-in-owned-scope-getters",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 14,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-linked-package",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-origins",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 7,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-unread-packages-source",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-unread-packages-source",
+   "key": "SC9012 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-walk",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/context-package-component",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 8,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/context-package-entries",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 11,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/context-package-hop",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/context-package-no-default",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 7,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/context-package-selected-wrap",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/context-read-package",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-all",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-all",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-context-getter",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 17,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-context-reprovided",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-default-include",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-default-include",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-dotdot",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-computed-delete",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 19,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-descriptor",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 18,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-getter",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-getter",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 34,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-helper-delete",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 18,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-package-write",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 17,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-apply-this",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-apply-this",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-array-alias",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-array-alias",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-array-parameter",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-array-parameter",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-call-this",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-call-this",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-computed-assignment",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-computed-assignment",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-conditional",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-conditional",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-descriptor-map",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-descriptor-map",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-fresh-channels",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-fresh-channels",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-fresh-reflection",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-fresh-reflection",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-logical-and",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-logical-and",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-logical-nullish",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-logical-nullish",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-logical-or",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-logical-or",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-method-this",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-method-this",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-mutable-alias",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-mutable-alias",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-mutable-function-alias",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-mutable-function-alias",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-object-alias",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-object-alias",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-outside-write",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-outside-write",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 7,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-parameter-pattern",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-parameter-pattern",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-super-twins",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-super-twins",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 9,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-super-write",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-super-write",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-unknown-receiver",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-unknown-receiver",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-r2-visible-js",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 5,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-spread",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 19,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-unseen-provider",
+   "key": "SC2002 package-may-call-action",
+   "from": 1,
+   "to": 18,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-visible-provider",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 19,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-object-escape",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-object-member",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-owner",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 9,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-owner",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 6,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-package-accessor",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 7,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-package-call-error",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-package-forwarded-callee",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 9,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-package-forwarded-exact",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 5,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-program",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-program",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-proxy-store",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-window-realm",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 24,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-window-undeclared",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 24,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/host-dead-return",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 17,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/host-dead-return-prototype",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/host-dead-return-prototype",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/host-dead-return-wildcard",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/host-dead-return-wildcard",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/lazy-default-consumer",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/lazy-default-consumer",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 66,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/lazy-default-consumer-rc9",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/lazy-default-consumer-rc9",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 6,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/owner-call-no-leaf-opener-package-opener",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper",
+   "key": "SC2002 package-may-call-action",
+   "from": 55,
+   "to": 122,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper-eval",
+   "key": "SC2002 package-may-call-action",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper-patched-bind",
+   "key": "SC2002 package-may-call-action",
+   "from": 4,
+   "to": 5,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/package-handed-values",
+   "key": "SC9012 value-to-unresolved-callee",
+   "from": 9,
+   "to": 10,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/package-operations",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/package-operations",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/package-owner-entries",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/package-read-entries",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 11,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/package-write-entries",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 9,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/reviewed-vitest-4-1",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 27,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/route-components",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/route-components-core-modified",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/route-components-destructured",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/route-components-key-read",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/route-components-modified-bytes",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/route-components-patched",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/route-components-rc8",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/route-components-rc9",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/route-config-key-read",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/router-params",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/router-params-stock-history",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-curried-argument",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/value-walk-budget-reexport",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/value-walk-budget-transitive",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/write-detached-owner-helper",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/write-detached-owner-helper",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC2002 package-may-call-action",
+   "from": 37,
+   "to": 38,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc4001",
+   "key": "SC2002 package-may-call-action",
+   "from": 21,
+   "to": 43,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc9012",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned (a call's result, a member of one, a binding that holds one), read where nothing tracks or places it (SC1001 package-value-read); a project call, tag, render, hand-off or member read into code of an installed package that the build reads as source, which no analysis follows to the package's source (a stored handle, a getter, a lazy name, a namespace or standard-library form), is a site of the unread-package pass (SC2002 package-may-call-action) as it is for a package the build does not read, with the package findings re-reported at its entry; a package that imports a Solid package without declaring it is read as source; the props of a dynamic(...) or lazy(...) tag go to a component nobody resolved",
+   "why": "fail-closed: a package that returns what the program hands it (const g = wrap(() => count()); g()) raises STRICT_READ_UNTRACKED in Chrome rc.21 and the same three programs with a declared peer are false clean of ACTION_CALLED_IN_OWNED_SCOPE on main; the owner chose the literal rule on the measured price (+5,964 corpus rows, no violation); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/flush-holder-alias",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 0981",
+   "fact": "a value a package the build does not read as source returned, read where nothing tracks or places it (SC1001 package-value-read)",
+   "why": "fail-closed, as the rows of the same ADR: the new row is uncertifiable, never a violation"
+  },
+  {
    "fixture": "reactive-ir/write-climb-depth",
    "key": "SC3001 leaf-operation-unaccounted",
    "from": 7,
