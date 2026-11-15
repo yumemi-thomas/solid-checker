@@ -119,6 +119,13 @@ jobs:
         run: cargo +$RUST_VERSION build --release --manifest-path rust/Cargo.toml -p solid-facts-backend --bin solid-checker-rust
       - name: Wait for the installs and the runtime cache
         wait: [installs, runtime-cache]
+      # A push to main saves the runtime cache; each leg saves only the entries it reads or writes (ADR 1001), so the two caches are the one the single job
+      # kept, in two parts. Reads must update the access time for that: strictatime on this runner's disk (a failure keeps the cache whole), a marker after it.
+      - name: Mark the runtime cache
+        if: github.event_name == 'push'
+        run: |
+          if sudo mount -o remount,strictatime /; then touch "$RUNNER_TEMP/cache-mark"; sleep 2
+          else echo "::warning::strictatime remount failed: the runtime cache is saved as restored"; fi
       - name: Smoke
         env:
           COVER: ${{ (github.event_name == 'pull_request' || github.event_name == 'push') && 'all' || inputs.cover || 'per-code' }}
@@ -130,6 +137,17 @@ jobs:
           [ "$seed" = day ] && seed=$(date -u +%Y%j)
           node scripts/fuzz/focus.mjs --smoke --smoke-leg "$LEG" --cover "$COVER" --cover-seed "$seed" --sample 0 --out "$RUNNER_TEMP/out" \
             --checker-bin "$PWD/rust/target/release/solid-checker-rust" --typefacts "$PWD/bin/solid-typefacts" -- --cache-dir "$HOME/fuzz-cache"
+      - name: Keep the runtime cache entries this leg used
+        if: github.event_name == 'push' && !cancelled()
+        run: |
+          [ -f "$RUNNER_TEMP/cache-mark" ] || { echo "no mark: the cache is saved as restored"; exit 0; }
+          used=$(find ~/fuzz-cache -type f -anewer "$RUNNER_TEMP/cache-mark" | wc -l)
+          total=$(find ~/fuzz-cache -type f | wc -l)
+          echo "runtime cache: $used of $total files read or written by this leg, $(du -sm ~/fuzz-cache | cut -f1) MB"
+          # A leg of this cover reads or writes more than 20,000 entries; fewer means the marker or the run is wrong: save it whole.
+          if [ "$used" -lt 20000 ]; then echo "::warning::only $used entries used: the cache is saved as restored"; exit 0; fi
+          find ~/fuzz-cache -type f ! -anewer "$RUNNER_TEMP/cache-mark" -delete
+          echo "runtime cache kept: $(find ~/fuzz-cache -type f | wc -l) files, $(du -sm ~/fuzz-cache | cut -f1) MB"
       - uses: actions/cache/save@v4
         if: github.event_name == 'push' && always()
         with:
