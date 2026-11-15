@@ -11,9 +11,9 @@
 //! and a fixture or focused regression test.
 
 use crate::{
-    AsyncBoundaryShape, Boundary, CallbackOwner, CleanupRule, CodePolicy, ContextRole, Dialect,
-    Execution, OwnerRequirementRole, Primitive, ReactiveRole, ResultSlot, RuntimeCode,
-    TrackedCallbackTiming, Version, lookup, reverse,
+    AsyncBoundaryShape, Boundary, CallbackOwner, CleanupRule, CodePolicy, ComponentEntry,
+    ComponentSlot, ContextRole, Dialect, Execution, OwnerRequirementRole, Primitive, ReactiveRole,
+    ResultSlot, RuntimeCode, TrackedCallbackTiming, Version, lookup, reverse,
 };
 
 mod code_policy;
@@ -2615,6 +2615,36 @@ impl Dialect for Solid2 {
     fn flow_prop_read_in_own_computation(&self, tag: &str, prop: &str) -> bool {
         self.triple_exports == releases::TripleExports::Rc21
             && matches!((tag, prop), ("Show" | "Match", "when") | ("For", "each"))
+    }
+
+    /// ADR 0992, read on rc.21 (`solid-js` `dist/solid.dev.js`, `@solidjs/web` `dist/web.dev.js`; the rc.21 triple only, every other installation answers `None`):
+    /// - `lazy`: `wrap(props)` returns `createMemo(() => (Comp = (comp || local)()) ? createComponent(Comp, props) : "", { sync: true })` (`:1440`), where `comp`
+    ///   is `() => exportName ? mod[exportName] : mod.default` (`:1420`), read once the loader's promise settles. `createComponent` runs `Comp(props)` in a
+    ///   transparent root (`observedComponent`, `:70`): the export is rendered under an owner, with the wrapper's props. (The server build differs and is not
+    ///   asked: the owner emission models the client build.)
+    /// - `Portal`: `runWithOwner(createOwner(), () => portalImpl(props))` (`web.dev.js:2389`), and `children` is read in `createMemo(() => [startMarker,
+    ///   props.children])` (`:2396`): tracked, under an owner. `mount` is no such slot: `untrack(mount)` reads it again in the render effect's apply (`:2402`).
+    /// - `Dynamic`: `Dynamic(props)` is `createComponent(dynamic(() => props.component), omit(props, "component"))` (`:2451`); `dynamicCore`'s component builds
+    ///   `createMemo(() => { const component = value(); ... untrack(() => component(props)) })` (`solid.dev.js:1544`): a function is called in that memo, untracked,
+    ///   under an owner, with the props minus `component`. A string source takes the tag arm and a promise source is awaited by the same memo; neither
+    ///   is a function entering, and the engine asks only of a value it proves a function.
+    /// - `dynamic` itself and `lazyModule` answer `None`: `dynamic(source, { static: true })` is `staticDynamic`, whose component calls
+    ///   `untrack(() => component(props))` with no computation around it (`:1570`), and its non-static component is reached by value flows no slot names.
+    /// - `Loading` answers `None` here: [`Dialect::async_boundary_shape`] is its one answer (ADR 0978).
+    fn component_entry(&self, export: &str, slot: ComponentSlot<'_>) -> Option<ComponentEntry> {
+        if self.triple_exports != releases::TripleExports::Rc21 {
+            return None;
+        }
+        match (export, slot) {
+            ("lazy", ComponentSlot::LoadedExport) => Some(ComponentEntry::RenderedUnderOwner),
+            ("Portal", ComponentSlot::Prop("children")) => {
+                Some(ComponentEntry::ReadTrackedUnderOwner)
+            }
+            ("Dynamic", ComponentSlot::Prop("component")) => {
+                Some(ComponentEntry::RenderedUnderOwner)
+            }
+            _ => None,
+        }
     }
 
     fn computation_read_is_render(&self, primitive: Primitive) -> bool {

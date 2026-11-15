@@ -396,3 +396,23 @@ pub struct HostBooleanExport {
     pub server: bool,
     pub runtime_targets: &'static [&'static str],
 }
+
+/// Where a value enters a Solid-owned component, for [`crate::Dialect::component_entry`] (ADR 0992).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ComponentSlot<'a> {
+    /// The prop of the component's tag (or of its call's props literal) with this name.
+    Prop(&'a str),
+    /// The export a loader's module is selected by (`lazy(loader)`: `default`, or `options.export`).
+    LoadedExport,
+}
+
+/// What a Solid-owned component does with a value that enters it at a [`ComponentSlot`], read from the dialect's pinned source.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ComponentEntry {
+    /// The value is rendered as a component, called in a computation the component creates, under that owner, with the component's props
+    /// (or the wrapper's). Whatever the value's own body creates has an owner.
+    RenderedUnderOwner,
+    /// The prop is a getter the component reads only inside a computation of its own (a memo under an owner it creates): what the getter
+    /// creates has an owner, and its reads are tracked there.
+    ReadTrackedUnderOwner,
+}

@@ -2108,6 +2108,20 @@ pub trait Dialect: Sync {
         None
     }
 
+    /// ADR 0992: what the Solid-owned component exported as `export` does with a value that enters it at `slot`, read from the dialect's pinned source
+    /// (never from a package's name: the engine asks only of a component whose every declaration is in one of this dialect's packages under that name).
+    /// `None` states nothing, and the layer a value enters stays open: an unread release, an export whose entry is not rendered under an owner (the static
+    /// form of `dynamic`, which calls the component with no computation around it), and `Loading`, whose entries are
+    /// [`Dialect::async_boundary_shape`]'s (ADR 0978: one answer, not two).
+    fn component_entry(
+        &self,
+        export: &str,
+        slot: crate::ComponentSlot<'_>,
+    ) -> Option<crate::ComponentEntry> {
+        let _ = (export, slot);
+        None
+    }
+
     /// Whether a tag opens the async boundary specifically.
     /// ADR 0892: whether this component reads this prop only inside a
     /// computation of its own, so a tracked getter there suspends it.

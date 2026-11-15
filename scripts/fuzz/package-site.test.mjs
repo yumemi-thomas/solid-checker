@@ -8,7 +8,7 @@ import { cellList, componentSide, plainShape, recallShapes, shapeId } from "./ma
 import { legalCells, legalId, recallLegalShapes } from "./legal.mjs";
 import { MODULE, SOURCES, SPEC, parentSource, sourcesOf } from "./misuse.mjs";
 import { validate, walk } from "./model.mjs";
-import { COMPONENT_ENTRIES, PKG_ENTRIES, freeNames, packageSite, parsePkg, phantomShapesOf, pkgShapesOf } from "./package-site.mjs";
+import { COMPONENT_ENTRIES, PKG_ENTRIES, freeNames, packageSite, parsePkg, phantomShapesOf, pkgShapesOf, projectShapesOf, PROJECT_SITE_CODES } from "./package-site.mjs";
 import { packageCells } from "./package-cells.mjs";
 import { PACKAGE_SITE_EXEMPT_CONTEXTS, PACKAGE_SITE_EXEMPT_SOURCES, packageSiteOf } from "./package-site-coverage.mjs";
 
@@ -227,5 +227,48 @@ describe("package-cells", () => {
     expect(both.map((unit) => unit.grid)).toEqual(["mx-recall", "lg-recall"]);
     for (const unit of both) expect(unit.ids.every((id) => id.endsWith("-pk-call"))).toBe(true);
     expect(packageCells({ codes: ["NO_OWNER_EFFECT"], grids: ["lg"], contexts: ["body"] })[0].contexts).toEqual(["body"]);
+  });
+});
+
+describe("the project site (ADR 0992)", () => {
+  it("parses the project suffix, outermost, and names the entries a project site takes", () => {
+    expect(parsePkg("lazy-proj")).toEqual({ entry: "lazy", own: false, phantom: false, project: true });
+    expect(parsePkg("lazy").project).toBeUndefined();
+    expect(projectShapesOf()).toEqual(["lazy-proj", "dynamic-el-proj", "lazy-call-proj"]);
+  });
+  it("writes the site into a module of the project the entry imports, with its params typed", () => {
+    const moved = packageSite(base({ text: "onCleanup(() => {})", solid: ["onCleanup"] }), "lazy", MODULE, { project: true });
+    expect(moved.pkgFiles).toEqual({});
+    expect(moved.files["site1.tsx"]).toContain("export function Site1(__p: any) {\n  onCleanup(() => {});\n  return null;\n}");
+    expect(moved.files["site1.tsx"]).toContain("export default Site1;");
+    expect(moved.moduleLines).toEqual(['const SiteLazy1 = lazy(() => import("./site1"));']);
+    expect(moved.importLines).toEqual([]);
+    const dynamic = packageSite(base({ text: "onCleanup(() => {})", solid: ["onCleanup"] }), "dynamic-el", MODULE, { project: true });
+    expect(dynamic.text).toBe('render(() => <Dynamic component={Site1} />, document.createElement("div"))');
+    expect(dynamic.web).toEqual(["Dynamic", "render"]);
+    expect(dynamic.importLines).toEqual(['import { Site1 } from "./site1";']);
+    const twin = packageSite(base({ text: "onCleanup(() => {})", solid: ["onCleanup"] }), "lazy-call", MODULE, { project: true });
+    expect(twin.text).toBe('(render(() => <SiteLazy1 />, document.createElement("div")), Site1({  }))');
+    expect(twin.importLines).toEqual(['import { Site1 } from "./site1";']);
+    expect(twin.files["site1.tsx"]).toContain("export default Site1;");
+  });
+  it("refuses an entry a package has and a project has not, own values and a manifest", () => {
+    expect(() => packageSite(base(), "call", MODULE, { project: true })).toThrow(/unknown project entry/);
+    expect(() => packageSite(base(), "lazy", MODULE, { project: true, own: true })).toThrow(/handed values/);
+    expect(() => packageSite(base(), "lazy-call", MODULE)).toThrow(/unknown entry/);
+  });
+  it("is crossed by no grid yet: the judge reads App.tsx's ledger only, and the wiring lands with ADR 0993's judge", () => {
+    for (const code of PROJECT_SITE_CODES) {
+      const names = [
+        ...cellList({ codes: [code], recall: true }).flatMap((cell) => recallShapes(code, cell.context, { lean: true })),
+        ...legalCells({ codes: [code], recall: true }).flatMap((cell) => recallLegalShapes(code, cell.context, { lean: true })),
+      ].map((shape) => shape.pkg ?? "");
+      expect(names.filter((pkg) => pkg.endsWith("-proj")), code).toEqual([]);
+    }
+  });
+  it("builds a program whose site is in site1.tsx and whose lazy loader imports it", () => {
+    const built = buildCase(generateProgram(7, { profile: "misuse", misusePlan: { code: "NO_OWNER_CLEANUP", context: "body", binding: "direct", layer: "none", variant: null, census: true, legal: true, pkg: "lazy-proj" } }));
+    expect(built.files["site1.tsx"]).toContain("onCleanup(() => {});");
+    expect(built.files["App.tsx"]).toContain('lazy(() => import("./site1"))');
   });
 });

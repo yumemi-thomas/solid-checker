@@ -5328,6 +5328,21 @@ pub(crate) fn entered_by_unseen_code(
             && (!lookup.program_closed || lookup.escapes_unnamed(path)))
 }
 
+/// ADR 0992: [`entered_by_unseen_code`], except that a function handed out by name only through `lazy` loaders the dialect says render their export under an
+/// owner ([`solid_dialect::Dialect::component_entry`]) is not entered by code the program does not hold: the renders are the entry, and the owner emission asks
+/// them as such. Everything else is [`entered_by_unseen_code`]'s: an open program, another read naming it, a namespace that escapes with no name.
+pub(crate) fn entered_by_unseen_code_but_lazy_render(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let path = file.path.as_str();
+    (lookup.hands_out_by_name(path, function.span)
+        && !lookup.handed_out_only_by_lazy_render(path, function.span))
+        || (module_exports(file, function, lookup)
+            && (!lookup.program_closed || lookup.escapes_unnamed(path)))
+}
+
 /// Whether an export names a binding that holds `function`, resolved from the
 /// export's side: the declaration an export specifier's local resolves to
 /// (`export { Comp }`, `export { Comp as Other }`, `export default Comp`) is the

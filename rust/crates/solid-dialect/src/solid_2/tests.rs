@@ -1058,3 +1058,66 @@ fn lazy_is_the_component_loader_of_every_release() {
     );
     assert_eq!(dialect.component_loader_argument(Primitive::Dynamic), None);
 }
+
+/// ADR 0992: what a Solid-owned component does with a value that enters it, read on the rc.21 triple only; every other installation, and every slot no source
+/// was read for, answers `None` (the layer stays open).
+#[test]
+fn component_entries_are_the_rc21_triples_and_nothing_else() {
+    use crate::{ComponentEntry, ComponentSlot};
+    let rc21 = Solid2::RC21;
+    assert_eq!(
+        rc21.component_entry("lazy", ComponentSlot::LoadedExport),
+        Some(ComponentEntry::RenderedUnderOwner)
+    );
+    assert_eq!(
+        rc21.component_entry("Portal", ComponentSlot::Prop("children")),
+        Some(ComponentEntry::ReadTrackedUnderOwner)
+    );
+    assert_eq!(
+        rc21.component_entry("Dynamic", ComponentSlot::Prop("component")),
+        Some(ComponentEntry::RenderedUnderOwner)
+    );
+    // `Portal` reads `mount` again in its effect's apply (`untrack(mount)`): no slot of the tracked kind.
+    for (export, slot) in [
+        ("Portal", ComponentSlot::Prop("mount")),
+        ("Portal", ComponentSlot::LoadedExport),
+        ("Dynamic", ComponentSlot::Prop("children")),
+        ("Dynamic", ComponentSlot::LoadedExport),
+        ("lazy", ComponentSlot::Prop("children")),
+        // `dynamic`'s static form calls the component with no computation around it; `lazyModule` renders nothing.
+        ("dynamic", ComponentSlot::Prop("component")),
+        ("dynamic", ComponentSlot::LoadedExport),
+        ("lazyModule", ComponentSlot::LoadedExport),
+        // `Loading`'s entries are `async_boundary_shape`'s (ADR 0978): one answer, not two.
+        ("Loading", ComponentSlot::Prop("children")),
+        ("Loading", ComponentSlot::Prop("fallback")),
+        // A name is no evidence: a project's own `Portal` is asked only after its declarations are proven the dialect's.
+        ("portal", ComponentSlot::Prop("children")),
+    ] {
+        assert_eq!(
+            rc21.component_entry(export, slot),
+            None,
+            "{export} {slot:?}"
+        );
+    }
+    for dialect in [
+        Solid2::CONSERVATIVE,
+        Solid2::RC3,
+        Solid2::RC9,
+        Solid2::RC13,
+        Solid2::RC17,
+    ] {
+        assert_eq!(
+            dialect.component_entry("lazy", ComponentSlot::LoadedExport),
+            None
+        );
+        assert_eq!(
+            dialect.component_entry("Portal", ComponentSlot::Prop("children")),
+            None
+        );
+        assert_eq!(
+            dialect.component_entry("Dynamic", ComponentSlot::Prop("component")),
+            None
+        );
+    }
+}
