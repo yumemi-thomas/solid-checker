@@ -24520,5 +24520,11 @@
   "found": "the Fable review of main dfa6c5dec..48b5ecf6a (2026-11-15): the read-only helper report on #235 and #237, then the runtime oracle (3 of 3 `unproven-clean`, the plain-name control covered)",
   "fixed": "ADR 0999 (`package_action_calls::cooked_identifier`; `module_reach.rs`: the computed `defaultView` read and `document[k]`; `after_await_accounting/library_call.rs` `package_writes_global`)",
   "outside": "the package-site generators spell every identifier plainly, write a global through `window`/`globalThis`/`document.defaultView`, and place no package-replaced global after an await; the pattern lane holds the shapes: `patterns/pkgglobal/g02-escaped-name`, `g03-escaped-member`, `g04-computed-default-view`, `g05-await-replaced-global` (4 of 4 false clean on ADR 0998's head, fine on ADR 0999's), with `g01-plain-name` fine on both, `make fuzz-patterns ARGS=\"--only pkgglobal/\"`"
+ },
+ {
+  "finding": "UNTRACKED_READ_AFTER_AWAIT: a compound assignment (`local.x += 1`), an update (`local.x++`) and a logical assignment (`local.x ||= 5`) on a store alias after an `await` of an async computation had the store write's SC2003 row and no SC1002 row: the member was a write target, and the after-await member list left every write target out though each of the three Gets the member first. Chrome rc.21 warns at each",
+  "found": "the Fable review of main dfa6c5dec..48b5ecf6a (2026-11-15): the read-only helper report (`after_await_accounting/member_reads.rs` `chains`), then the runtime oracle (3 of 3 `unproven-clean`; `in`, `for…in` and `await local` after an await are quiet and not listed)",
+  "fixed": "ADR 1000 (`member_reads::chains`: a write target whose assignment `reads_target` stays a read)",
+  "outside": "the after-await generators read a member or call after the suspension and write through a setter; none writes a store member in place with an operator that reads it first. The pattern lane holds the shape: `patterns/net/aw-compound-store-alias`, `aw-update-store-alias`, `aw-logical-store-alias` (3 of 3 false clean on ADR 0999's head, fine on ADR 1000's), with the legal twin `aw-compound-local-object` fine on both, `make fuzz-patterns ARGS=\"--only net/aw-\"`"
  }
 ]

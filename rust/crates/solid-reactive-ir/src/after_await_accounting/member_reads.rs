@@ -36,12 +36,21 @@ pub(super) fn chains(file: &FileFacts) -> Vec<Chain> {
     let ast = &file.ast;
     let peel = |span: Span| ast.peel_ts_sugar_span(span);
     let callees: HashSet<Span> = ast.calls.iter().map(|call| peel(call.callee)).collect();
+    // ADR 1000: a write that reads its target first is a read of it: a compound assignment (`local.x += 1`), a logical one (`local.x ||= v`) and an
+    // update (`local.x++`) each Get the member before they Set it, and the runtime reports that Get after an await as it does any other.
+    let read_first: HashSet<Span> = ast
+        .assignments
+        .iter()
+        .filter(|assignment| assignment.reads_target)
+        .map(|assignment| peel(assignment.target))
+        .collect();
     let written: HashSet<Span> = ast
         .write_targets
         .iter()
         .chain(&ast.deleted_targets)
         .chain(&ast.iteration_targets)
         .map(|target| peel(*target))
+        .filter(|target| !read_first.contains(target))
         .collect();
     let mut users: HashMap<Span, Vec<Span>> = HashMap::default();
     for member in &ast.members {
