@@ -199,6 +199,88 @@ impl StaticApiContext<'_> {
     }
 }
 
+impl StaticApiContext<'_> {
+    /// ADR 0655: what the computation of `call` (its first argument) does on a pass: `None` where it has none (a value that is no function, a
+    /// one-element spread tuple), `Sync`, `Promise` or `AsyncIterable` where proven, `Open` where nothing says. One definition: SC7002's
+    /// arms ask it, and so does the render effect's boundary site (ADR 0989).
+    pub(crate) fn computation_answer(
+        &self,
+        file: &FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) -> Option<StaticSource> {
+        let argument = call.arguments.first()?;
+        let lookup = self.lookup;
+        // A spread of an exact one-element tuple has no options slot, so
+        // nothing there can say `sync`.
+        let spread_tuple = file
+            .ast
+            .spreads
+            .iter()
+            .find(|spread| argument.spread && spread.span == argument.span)
+            .and_then(|spread| lookup.entity_at(file.path.as_str(), spread.argument))
+            .and_then(|entity| entity.tuple_shape)
+            .and_then(typefacts::TupleShape::exact_length);
+        if spread_tuple == Some(1) && call.arguments.len() == 1 {
+            return None;
+        }
+        // `createSignal(0, options)` has no computation: only a value
+        // that may be a function can return anything.
+        let entity = lookup.entity_at(file.path.as_str(), argument.span);
+        if !argument.spread
+            && (matches!(
+                argument.runtime_value_kind,
+                solid_facts::ast::RuntimeValueKind::Primitive
+                    | solid_facts::ast::RuntimeValueKind::Nullish
+            ) || entity.and_then(|entity| entity.callability)
+                == Some(typefacts::Callability::NonCallable))
+        {
+            return None;
+        }
+        if computation_is_async(lookup, file, argument.span) {
+            let open = crate::owners::computation_may_answer_sync(lookup, file, argument.span);
+            return Some(if open {
+                StaticSource::Open
+            } else {
+                StaticSource::Promise("")
+            });
+        }
+        // ADR 0865: `handleAsync` probes `Symbol.asyncIterator` as well
+        // as `then`, unlike the static `dynamic()` check.
+        Some(match static_source_state(file, argument, self) {
+            StaticSource::AsyncIterable => StaticSource::Promise(""),
+            state => state,
+        })
+    }
+}
+
+/// ADR 0989: the calls of `file` whose primitive the dialect reads as a render effect's compute slot (`createRenderEffect`) and whose compute is not
+/// proven synchronous: a thenable it returns makes the effect pending, and a render effect pending with no `Loading` above it is what the runtime warns about
+/// (ASYNC_OUTSIDE_LOADING_BOUNDARY, `dist/dev.js:2672-2700`, `notifyEffectStatus`, `EFFECT_RENDER` only). Each call's callee, in source order.
+pub(crate) fn render_effect_computes_not_proven_sync(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+) -> Vec<Span> {
+    let lookup = ctx.semantic_lookup;
+    let mut context = None;
+    let mut found = Vec::new();
+    for call in &file.ast.calls {
+        let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
+            continue;
+        };
+        if !ctx.dialect.render_effect_compute(primitive) {
+            continue;
+        }
+        let context = context.get_or_insert_with(|| context_of(ctx));
+        if matches!(
+            context.computation_answer(file, call),
+            Some(StaticSource::Promise(_) | StaticSource::Open)
+        ) {
+            found.push(call.callee);
+        }
+    }
+    found
+}
+
 /// ADR 0830: a function-literal argument of `call` returns a value that is
 /// neither a function literal nor absent, on a line `tsc` may not check: the
 /// published type (`(() => void) | void`) is what rejects a non-cleanup there.
@@ -379,76 +461,54 @@ impl StaticApiContext<'_> {
                     uncertain: true,
                 });
             }
+            // ADR 0989: a call of an effect primitive the rule gives no row ends in the fact that says so: the apply is provably callable, or TypeScript
+            // reports the call (its resolved call is `Recovery` and no directive may silence it: where one may, the SC9012 above stands instead).
+            if let Some(semantics) = effect_semantics
+                && semantics.missing_effect_function == ProofStatus::No
+                && let Some(silence) = semantics.silence
+            {
+                use crate::effect_api::EffectSilence;
+                use crate::proof_log::PremiseKind;
+                use crate::site_accounting::SiteSilence;
+                match silence {
+                    EffectSilence::SlotCallable(at) => result.ends.end_at(
+                        file,
+                        call.callee,
+                        SiteSilence::EffectSlotCallable,
+                        PremiseKind::ArgumentShape,
+                        || Some(at),
+                    ),
+                    EffectSilence::TscRejected(at) => {
+                        if !file.tsc_may_be_silent_within(call.span) {
+                            result.ends.end_at(
+                                file,
+                                call.callee,
+                                SiteSilence::EffectCallTscRejected,
+                                PremiseKind::TscReportsAtSite,
+                                || Some(at),
+                            );
+                        }
+                    }
+                }
+            }
             // Where each primitive takes its options object -- a second index
             // vocabulary, and the dialect's to answer: 2.0's numbers read
             // 1.x's `createMemo(fn, seed)` seed as an options object.
             let options_index = kind
                 .filter(|kind| dialect.supports_sync_option(*kind))
                 .and_then(|kind| dialect.options_argument(kind));
-            let sync_literal = options_index.map(|options_index| {
-                (
-                    call.arguments.get(options_index).is_some_and(|argument| {
-                        argument.boolean_properties.iter().any(|property| {
-                            file.source_text(property.name) == Some("sync") && property.value
-                        })
-                    }),
-                    crate::call_option_literal(file, call, options_index, "sync"),
-                )
-            });
+            let sync_options =
+                options_index.map(|options_index| sync_option_state(file, call, options_index));
             // ADR 0655: what the computation does on a pass. A return typed
             // `any`, a type that may be sync and a value no fact describes are
             // open; only an async function or a Promise on every path proves
             // that a pass returns one.
-            let compute = || {
-                let argument = call.arguments.first()?;
-                let lookup = self.lookup;
-                // A spread of an exact one-element tuple has no options slot, so
-                // nothing there can say `sync`.
-                let spread_tuple = file
-                    .ast
-                    .spreads
-                    .iter()
-                    .find(|spread| argument.spread && spread.span == argument.span)
-                    .and_then(|spread| lookup.entity_at(file.path.as_str(), spread.argument))
-                    .and_then(|entity| entity.tuple_shape)
-                    .and_then(typefacts::TupleShape::exact_length);
-                if spread_tuple == Some(1) && call.arguments.len() == 1 {
-                    return None;
-                }
-                // `createSignal(0, options)` has no computation: only a value
-                // that may be a function can return anything.
-                let entity = lookup.entity_at(file.path.as_str(), argument.span);
-                if !argument.spread
-                    && (matches!(
-                        argument.runtime_value_kind,
-                        solid_facts::ast::RuntimeValueKind::Primitive
-                            | solid_facts::ast::RuntimeValueKind::Nullish
-                    ) || entity.and_then(|entity| entity.callability)
-                        == Some(typefacts::Callability::NonCallable))
-                {
-                    return None;
-                }
-                if computation_is_async(lookup, file, argument.span) {
-                    let open =
-                        crate::owners::computation_may_answer_sync(lookup, file, argument.span);
-                    return Some(if open {
-                        StaticSource::Open
-                    } else {
-                        StaticSource::Promise("")
-                    });
-                }
-                // ADR 0865: `handleAsync` probes `Symbol.asyncIterator` as well
-                // as `then`, unlike the static `dynamic()` check.
-                Some(match static_source_state(file, argument, self) {
-                    StaticSource::AsyncIterable => StaticSource::Promise(""),
-                    state => state,
-                })
-            };
+            let compute = || self.computation_answer(file, call);
             // Options the syntax cannot read (`createMemo(fn, opts)`, a spread,
             // a non-literal `sync:` value) may assert `sync: true`: with a
             // computation not proven synchronous that is an obligation, not a
             // silent clean.
-            if let Some((false, solid_dialect::OptionLiteral::Unknown)) = sync_literal
+            if let Some(SyncOptionState::Unreadable) = sync_options
                 && matches!(
                     compute(),
                     Some(StaticSource::Promise(_) | StaticSource::Open)
@@ -467,7 +527,7 @@ impl StaticApiContext<'_> {
                     uncertain: true,
                 });
             }
-            if let Some((true, _)) = sync_literal
+            if let Some(SyncOptionState::Asserted) = sync_options
                 && let Some(state @ (StaticSource::Promise(_) | StaticSource::Open)) = compute()
             {
                 let uncertain = matches!(state, StaticSource::Open);
@@ -495,6 +555,46 @@ impl StaticApiContext<'_> {
                     fixes: vec![],
                     uncertain,
                 });
+            }
+            // ADR 0989: a call of a primitive that takes `sync` the rule gave no row ends in the fact that says why: the options are proven not to assert it,
+            // TypeScript reports a duplicate key, or the computation answers synchronously (never for an `Open` answer, which is the row above).
+            if let Some(options_state) = sync_options {
+                use crate::proof_log::PremiseKind;
+                use crate::site_accounting::SiteSilence;
+                let options_at = options_index
+                    .and_then(|index| call.arguments.get(index))
+                    .map_or(call.span, |argument| argument.span);
+                match options_state {
+                    SyncOptionState::NotAsserted => result.ends.end_at(
+                        file,
+                        call.callee,
+                        SiteSilence::SyncOptionNotAsserted,
+                        PremiseKind::OptionsLiteral,
+                        || Some(options_at),
+                    ),
+                    SyncOptionState::TscReports(duplicate) => result.ends.end_at(
+                        file,
+                        call.callee,
+                        SiteSilence::SyncOptionTscReports,
+                        PremiseKind::TscReportsAtSite,
+                        || Some(duplicate),
+                    ),
+                    SyncOptionState::Asserted | SyncOptionState::Unreadable => {
+                        // A computation that is no function (`createSignal(0, ..)`) or is proven synchronous returns nothing the guard probes for. No
+                        // computation argument at all is a call TypeScript rejects, and stays unaccounted.
+                        if let Some(argument) = call.arguments.first()
+                            && matches!(compute(), None | Some(StaticSource::Sync))
+                        {
+                            result.ends.end_at(
+                                file,
+                                call.callee,
+                                SiteSilence::ComputationNotAsync,
+                                PremiseKind::StaticSourceState,
+                                || Some(argument.span),
+                            );
+                        }
+                    }
+                }
             }
             // SC2004 / SC2005 (ADR 0985): `resolve()` and `until()` in a tracked scope. Probed on
             // `@solidjs/signals@2.0.0-rc.0`: the dev bundle guards on the
@@ -615,13 +715,24 @@ impl StaticApiContext<'_> {
             // so `tsc` accepts every source proven here.
             // ADR 0654: a source not proven synchronous is open, and so is a
             // form the options do not decide (`dynamic(source, options)`).
-            if matches!(
-                kind,
-                Some(Primitive::DynamicStatic | Primitive::DynamicUnknownForm)
-            ) && let Some(source) = call.arguments.first()
+            let dynamic_form = kind.and_then(|primitive| dialect.static_dynamic_form(primitive));
+            if let Some(form) = dynamic_form
+                && let Some(source) = call.arguments.first()
             {
                 let state = static_source_state(file, source, self);
-                let unknown_form = kind == Some(Primitive::DynamicUnknownForm);
+                let unknown_form = form == solid_dialect::StaticDynamicForm::MayBeStatic;
+                // ADR 0989: a source proven to answer synchronously ends the site: the static form throws on a thenable only (ADR 0865).
+                if matches!(state, StaticSource::Sync | StaticSource::AsyncIterable)
+                    && let Some(function) = static_source_function(file, source, self)
+                {
+                    result.ends.end_at(
+                        file,
+                        call.callee,
+                        crate::site_accounting::SiteSilence::DynamicSourceSynchronous,
+                        crate::proof_log::PremiseKind::StaticSourceState,
+                        || Some(function.span),
+                    );
+                }
                 let reported = match state {
                     // ADR 0865: `staticDynamic` throws on a thenable only.
                     StaticSource::Sync | StaticSource::AsyncIterable => None,
@@ -2104,6 +2215,72 @@ fn resolve_scope_answer(
     silent(silence, PremiseKind::RoleDoesNotReport, call.callee)
 }
 
+/// What the options argument of a call that takes `sync` says of it (ADR 0989). The runtime reads the LAST `sync` property of an object
+/// literal, and a spread or a computed key after a literal `true` may override it, so only the exact literal's last `sync` is a fact:
+/// `{ sync: true, ...over }` and `{ sync: true, sync: false }` are not `sync: true`. TypeScript reports a duplicate key (TS1117, every
+/// configuration) unless a directive suppresses the line, and an exact literal TypeScript reports is its own.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SyncOptionState {
+    /// The exact literal's last `sync` is the literal `true`.
+    Asserted,
+    /// Options the syntax cannot read (an identifier, a spread, a computed key, a wrapped value): they may assert `sync: true`.
+    Unreadable,
+    /// The options are proven not to assert it: no options, `null`/`undefined`, an exact literal with no `sync` or whose last is `false`.
+    NotAsserted,
+    /// A duplicate `sync` key that TypeScript reports (TS1117): its diagnostic stands at this span, so the call is TypeScript's.
+    TscReports(Span),
+}
+
+fn sync_option_state(
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+) -> SyncOptionState {
+    use solid_dialect::OptionLiteral;
+    use solid_facts::TscSilence;
+    let literal = crate::call_option_literal(file, call, index, "sync");
+    // A duplicate `sync` key of an exact literal: TS1117 stands at each later one.
+    let duplicates = call
+        .arguments
+        .get(index)
+        .filter(|argument| argument.exact_object_literal)
+        .map(|argument| {
+            let mut keys = argument
+                .property_names
+                .iter()
+                .copied()
+                .filter(|span| file.source_text(*span) == Some("sync"))
+                .collect::<Vec<_>>();
+            keys.sort_by_key(|span| span.start);
+            keys
+        })
+        .unwrap_or_default();
+    if let [_, later @ ..] = duplicates.as_slice()
+        && !later.is_empty()
+    {
+        let states = later
+            .iter()
+            .map(|span| file.tsc_silence_at(span.start))
+            .collect::<Vec<_>>();
+        if let Some(position) = states
+            .iter()
+            .position(|state| *state == TscSilence::Reports)
+        {
+            return SyncOptionState::TscReports(later[position]);
+        }
+        // Every later key is suppressed by a directive both compilers read: TypeScript says nothing, so the runtime's last key decides.
+        // Where one compiler may still report, nothing is proven either way.
+        if states.iter().any(|state| *state != TscSilence::Silent) {
+            return SyncOptionState::Unreadable;
+        }
+    }
+    match literal {
+        OptionLiteral::True => SyncOptionState::Asserted,
+        OptionLiteral::Unknown => SyncOptionState::Unreadable,
+        OptionLiteral::Absent | OptionLiteral::False => SyncOptionState::NotAsserted,
+    }
+}
+
 /// Why a `dynamic` source provably returns a Promise, phrased for the
 /// message, or `None` where that is not proven.
 ///
@@ -2191,7 +2368,7 @@ fn alias_claims(
 }
 
 /// What a static `dynamic()` source does on its one call (ADR 0654).
-enum StaticSource {
+pub(crate) enum StaticSource {
     Promise(&'static str),
     /// An async generator's iterator: no `then`, an async iterator (ADR 0865).
     AsyncIterable,

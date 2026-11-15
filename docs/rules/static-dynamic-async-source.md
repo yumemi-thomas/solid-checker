@@ -121,3 +121,7 @@ A throw inside a generator stepped by an async caller rejects that caller's flig
 ## A stored throw needs a read that reports it
 
 `resolve`, `until`, a static `dynamic` source and `useContext` throw with no diagnostic. In a memo or another storing compute the error stays on the node until a read rethrows it. With no proven read that reports it (an effect compute with no `error` arm, intrinsic JSX, a handler, a component body) the row is `computation-error-unobserved`; one entry that reports keeps the violation (ADR 0893). A class constructor or method with no entry found, written in such a compute, is read as the site would be (ADR 0914).
+
+## Every call ends (ADR 0989)
+
+Each `dynamic` call in its static form, or in a form the options do not decide, is a site (`dynamic-static`, DYNAMIC_STATIC_PROMISE). A source proven to answer synchronously (a closed return type with no thenable, a sync or async generator: the static form throws on a thenable only) ends it (`source-synchronous`); a source not proven synchronous stays an obligation.

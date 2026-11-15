@@ -183,7 +183,7 @@ site_silences! {
     MemberRoleDoesNotReport => "local_access.discover_member.role-does-not-report",
     /// `onFlush` where the write role allows it (an effect's apply, a leaf, a
     /// handler): no owner rejects the call.
-    OnFlushRoleAllows => "static_api.on-flush.role-allows",
+    OnFlushRoleAllows => "static_api.on_flush.role-allows",
     /// ADR 0972: a call into a package the build does not read, whose role allows an action (a handler, a timer, an effect's apply).
     PackageCallRoleAllows => "package_action_calls.package_action_calls.role-allows",
     /// ADR 0972: a call into a package the build does not read that cannot run (module initialization, a function nothing reaches).
@@ -241,6 +241,23 @@ site_silences! {
     ResolveRoleDeferredCallback => "static_api.resolve_scope.role-deferred-callback",
     /// The role is code the compiler discarded (`DiscardedRendering`).
     ResolveRoleDiscardedRendering => "static_api.resolve_scope.role-discarded-rendering",
+    /// A call of an effect primitive whose apply argument is provably callable: no missing-function throw (SC7001; ADR 0989; the premise is the argument).
+    EffectSlotCallable => "static_api.effect_function.slot-callable",
+    /// A call of an effect primitive the published overloads reject and TypeScript reports (a resolved call with `Recovery` validity): the call is TypeScript's
+    /// (invariant 1; the premise is the callee or the failing argument).
+    EffectCallTscRejected => "static_api.effect_function.tsc-rejected",
+    /// A call whose options are proven not to assert `sync: true`: absent, nullish, or an exact literal whose last `sync` is `false` or that names none (SC7002; the
+    /// premise is the options argument, or the call).
+    SyncOptionNotAsserted => "static_api.sync_option.not-asserted",
+    /// An options literal with a duplicate `sync` key that TypeScript reports (TS1117, every configuration) where no directive suppresses it (SC7002; the premise is
+    /// the duplicate key).
+    SyncOptionTscReports => "static_api.sync_option.tsc-reports",
+    /// A call whose computation answers synchronously or is no function (`StaticSource::Sync`, or no computation): nothing the `sync` guard looks for is returned
+    /// (SC7002; never for an `Open` answer; the premise is the computation).
+    ComputationNotAsync => "static_api.sync_option.computation-not-async",
+    /// A static-form `dynamic` call whose source is proven to answer synchronously (a closed return type with no thenable, a sync or async generator: the static form
+    /// throws on a thenable only; SC2007; the premise is the source function).
+    DynamicSourceSynchronous => "static_api.dynamic_static.source-synchronous",
 }
 
 impl SiteSilence {
@@ -252,6 +269,7 @@ impl SiteSilence {
             ActionCall, CleanupForbidden, EffectCreation, OnFlush, PrimitiveForbidden,
             ReactiveWrite, ResolveInScope, StoreWrite, StrictRead, UntilInScope,
         };
+        use SiteCode::{DynamicStaticPromise, MissingEffectFn, SyncNodeAsync};
         match self {
             // The reads: an accessor's call, a store or props member Get.
             Self::AsyncSitesDormantCallbackArgument
@@ -337,6 +355,12 @@ impl SiteSilence {
             | Self::ResolveRoleModuleInitialization
             | Self::ResolveRoleDeferredCallback
             | Self::ResolveRoleDiscardedRendering => &[ResolveInScope, UntilInScope],
+            // The static API's calls (slice 8b): each silence answers the one code of its family.
+            Self::EffectSlotCallable | Self::EffectCallTscRejected => &[MissingEffectFn],
+            Self::SyncOptionNotAsserted
+            | Self::SyncOptionTscReports
+            | Self::ComputationNotAsync => &[SyncNodeAsync],
+            Self::DynamicSourceSynchronous => &[DynamicStaticPromise],
             // The passes that remove a row: the codes the removed row's ending answered.
             Self::ApplyNeverRuns
             | Self::ClosedProgramExportDischarge
@@ -753,6 +777,18 @@ fn unaccounted_row(file: &FileFacts, site: &Site, code: SiteCode) -> StaticViola
     }
 }
 
+/// The uncertifiable defect a code of a static-defect family gets when nothing ends it (SC7001).
+fn unaccounted_defect(file: &FileFacts, site: &Site, code: SiteCode) -> crate::StaticDefect {
+    let home = code.home();
+    crate::StaticDefect {
+        kind: crate::StaticDefectKind::MissingEffectFunction,
+        location: site.at.location(file.path.shared()),
+        analysis_context: home.blocker.into(),
+        fixes: vec![],
+        uncertain: true,
+    }
+}
+
 /// Ends every code of every site of the universe in the final `program`, or gives it the uncertifiable row of the code's own rule. Run once per build,
 /// after every producer and pass that adds or removes a row and before the reachability queries over the rows. A site ends for a code only by an
 /// ending that answers that code (a row of its table, an SC9012, a finding of a rule the dialect's policy says claims it, the compiler's discard) or by a
@@ -767,6 +803,8 @@ pub(crate) fn account<'a>(
     let dialect = ctx.dialect;
     let logging = proof_log::enabled();
     let mut rows = Vec::new();
+    // SC7001's rule is a static-defect family (`StaticDefectKind::MissingEffectFunction`), not a static-violation rule: its home row is a defect.
+    let mut defects = Vec::new();
     {
         let endings = Endings::of(program);
         let mut filed: HashSet<(&str, u32, u32, SiteCode)> = HashSet::default();
@@ -791,7 +829,11 @@ pub(crate) fn account<'a>(
                             })
                     });
                 if !silenced && filed.insert((path, site.at.start, site.at.end, code)) {
-                    rows.push(unaccounted_row(file, site, code));
+                    if code == SiteCode::MissingEffectFn {
+                        defects.push(unaccounted_defect(file, site, code));
+                    } else {
+                        rows.push(unaccounted_row(file, site, code));
+                    }
                 }
             }
         }
@@ -806,6 +848,7 @@ pub(crate) fn account<'a>(
     // In the universe's order, after the rows the program holds: the findings
     // are ordered by place when they are projected.
     program.static_violations.extend(rows);
+    program.static_defects.extend(defects);
     // The universe is the one list of the build's sites: the passes that run after this one (batch 11, slice 9B) read it rather than list it again.
     universe
 }
