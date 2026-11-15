@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { frameStarts } from "./call-starts.mjs";
 import { DISPOSITIONS, codeOfThrown, codePolicy, codeRules, codesForRule, consequenceCodes, coversCodeAt, decliningRules, withheldAtStack, isDefectCode, placelessCodes, policyOf, ruleHasRuntimeCounterpart, severityRank, thrownCodes, withholdingRules, codeOfLogged, stripErrorClass, codeOfUncaught } from "./codes.mjs";
 
 const oracle = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../runtime-oracle.mjs"), "utf8");
@@ -25,13 +26,31 @@ describe("a withholding at a handed argument", () => {
       expect(covers(code, { index: 2, noTarget: false }), code).toBe(true);
     }
   });
-  it("covers a store write only where the argument can be what is written: a project function's first, or any argument of a dependency's unread function", () => {
+  it("covers a store write only where the argument can be what is written: a project function's first, or a store handed whole to a dependency's unread function", () => {
     expect(covers("STORE_WRITE_OUTSIDE_SETTER", { index: 0, noTarget: false })).toBe(true);
     expect(covers("STORE_WRITE_OUTSIDE_SETTER", { index: 1, noTarget: false })).toBe(false);
     // `list.push(x)` says nothing of `x` (R22): a member call's argument is no target.
     expect(covers("STORE_WRITE_OUTSIDE_SETTER", { index: 0, noTarget: true })).toBe(false);
-    expect(covers("STORE_WRITE_OUTSIDE_SETTER", { index: 0, noTarget: true, dependency: true })).toBe(true);
-    expect(covers("STORE_WRITE_OUTSIDE_SETTER", { index: 1, noTarget: true, dependency: true })).toBe(true);
+    // A dependency's unread body: only a bare identifier handed whole (`site1(s1)`) is what the withholding at it is about; a member (`writeHeld(holder.c)`) is not.
+    expect(covers("STORE_WRITE_OUTSIDE_SETTER", { index: 0, noTarget: true, dependency: true })).toBe(false);
+    expect(covers("STORE_WRITE_OUTSIDE_SETTER", { index: 0, noTarget: true, dependency: true, bare: true })).toBe(true);
+    expect(covers("STORE_WRITE_OUTSIDE_SETTER", { index: 1, noTarget: true, dependency: true, bare: true })).toBe(true);
+    expect(covers("STORE_WRITE_OUTSIDE_SETTER", { index: 1, noTarget: true, bare: true })).toBe(false);
+  });
+  it("judges the two programs of the frozen row and of the phantom axis apart: `site1(s1)` is covered, `writeHeld(holder.c)` is not (ADR 0981)", () => {
+    const place = (source, line, column, finding) => {
+      const frame = { line, column };
+      const stack = [{ ...frame, starts: frameStarts(source)(frame, 0) }];
+      return withheldAtStack(finding, stack, () => true, "STORE_WRITE_OUTSIDE_SETTER");
+    };
+    const at = (line, column) => ({ rule: "reactive-dispatch-unresolved", kind: "uncertifiable", line, column });
+    expect(place('import { site1 } from "fz-pkg";\nsite1(s1);', 2, 1, at(2, 7))).toBe(true);
+    expect(place('import { writeHeld } from "fz-pkg";\nwriteHeld(holder.c);', 2, 1, at(2, 11))).toBe(false);
+    // The props object and the array a forwarding call holds: the identifiers inside them are handed whole.
+    expect(place('import { createComponent } from "solid-js";\nimport { Pkg } from "fz-pkg";\ncreateComponent(Pkg, { s1 });', 3, 1, at(3, 24))).toBe(true);
+    expect(place('import { createComponent } from "solid-js";\nimport { Pkg } from "fz-pkg";\ncreateComponent(Pkg, { a: holder.c });', 3, 1, at(3, 29))).toBe(false);
+    expect(place('import { run } from "fz-pkg";\nReflect.apply(run, undefined, [s1]);', 2, 9, at(2, 32))).toBe(true);
+    expect(place('import { run } from "fz-pkg";\nReflect.apply(run, undefined, [holder.c]);', 2, 9, at(2, 31))).toBe(false);
   });
   it("covers no code about something other than a handed value, and no finding of another rule", () => {
     expect(covers("CONTEXT_NOT_FOUND", { index: 0, noTarget: true, dependency: true })).toBe(false);

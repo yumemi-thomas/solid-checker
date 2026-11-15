@@ -207,7 +207,7 @@ export const coversCodeAt = (code, finding, atSite) => ((codeRules[code] ?? []).
  * cannot tell which argument a read went through (`Object.assign(out, st, holder.v)`).
  */
 const handedCovers = (at, finding, code) => handedCodes.includes(code) && withholdingRules.includes(finding.rule)
-  && (code !== "STORE_WRITE_OUTSIDE_SETTER" || at.dependency === true || (!at.noTarget && at.index === 0));
+  && (code !== "STORE_WRITE_OUTSIDE_SETTER" || (at.dependency === true && at.bare === true) || (!at.noTarget && at.index === 0));
 
 export const withheldAtStack = (finding, stack, mount = () => true, code = null) => (stack ?? []).some((frame, depth) =>
   (frame.handRead ? finding.line === frame.line

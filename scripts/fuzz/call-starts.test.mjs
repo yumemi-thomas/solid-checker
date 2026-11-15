@@ -127,7 +127,7 @@ describe("callStarts", () => {
     expect(marked(5)).toEqual([false]);
     expect(marked(6)).toEqual([true]);
     expect(marked(7)).toEqual([true]);
-    expect(marked(8)).toEqual([true, true]);
+    expect(marked(8)).toEqual([true, true, true]);
   });
   it("hands a dependency element's attribute and spread values to a frame on its `<`, and no other element's", () => {
     const frame = frameStarts('import { Pkg } from "fz-pkg";\nimport { Show } from "solid-js";\nimport { Local } from "./local";\n<Pkg v={r1} {...rest} w="s" n={1} />;\n<Show when={r1}>x</Show>;\n<Local v={r1} />;\n<div class={r1} />;');
@@ -149,7 +149,7 @@ describe("callStarts", () => {
     expect(handed(3, 10)).toEqual([]);
     expect(frame({ line: 3, column: 8 }, 1).filter((place) => place.handed)).toEqual([]);
     // `Reflect.apply(run, …)` forwards to a dependency, `Reflect.apply(own, …)` to a project function (a store write's target is then its first argument only).
-    expect(handed(6, 1).filter((place) => place.dependency === true).map((place) => place.column)).toEqual([15, 20, 31]);
+    expect(handed(6, 1).filter((place) => place.dependency === true).map((place) => place.column)).toEqual([15, 20, 31, 32]);
     expect(handed(7, 1).filter((place) => place.dependency === true)).toEqual([]);
   });
   // ADR 0981: a project helper that calls one of its own parameters (`f(...args)`) runs what the caller handed it, and the read's top frame is in the helper while the
@@ -178,10 +178,18 @@ describe("callStarts", () => {
     expect(handed(8)).toEqual([true]);
     expect(handed(9)).toEqual([]);
   });
+  it("marks a handed bare identifier, and the identifiers a props object or an array holds, for a dependency's call", () => {
+    const frame = frameStarts('import { run, writeHeld } from "fz-pkg";\nimport { createComponent } from "solid-js";\nrun(s1, holder.c, (s2));\ncreateComponent(run, { s1, a: s2, b: holder.c });\nReflect.apply(run, undefined, [s1, holder.c]);');
+    const bare = (line) => frame({ line, column: 1 }, 0).filter((place) => place.handed).map((place) => [place.column, place.bare === true]);
+    expect(bare(3)).toEqual([[5, true], [9, false], [19, true]]);
+    expect(bare(4)).toEqual([[17, true], [22, false], [24, true], [31, true]]);
+    expect(bare(5)).toEqual([[15, true], [20, true], [31, false], [32, true]]);
+  });
   it("hands createComponent's arguments when it renders a dependency's component, and not for Solid's, a project's or an unknown component", () => {
     const frame = frameStarts('import { createComponent } from "solid-js";\nimport { Pkg } from "fz-pkg";\nimport { Local } from "./local";\ncreateComponent(Pkg, { r1 });\ncreateComponent(Local, { r1 });\ncreateComponent(Unknown, { r1 });\ncreateComponent(Pkg);');
     expect(frame({ line: 4, column: 1 }, 0).filter((place) => place.handed)).toEqual([
-      expect.objectContaining({ line: 4, column: 17, index: 0, noTarget: true }), expect.objectContaining({ line: 4, column: 22, index: 1, noTarget: true })]);
+      expect.objectContaining({ line: 4, column: 17, index: 0, noTarget: true }), expect.objectContaining({ line: 4, column: 22, index: 1, noTarget: true }),
+      expect.objectContaining({ line: 4, column: 24, index: 2, noTarget: true, bare: true })]);
     for (const line of [5, 6, 7]) expect(frame({ line, column: 1 }, 0).filter((place) => place.handed), String(line)).toEqual([]);
     expect(frame({ line: 4, column: 1 }, 1).filter((place) => place.handed)).toEqual([]);
   });

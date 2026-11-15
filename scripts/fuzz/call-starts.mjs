@@ -151,6 +151,18 @@ export function callStarts(source, fileName = "App.tsx") {
     const inner = unwrap(node.expression);
     if (ts.isCallExpression(inner) || ts.isNewExpression(inner)) access(node, inner.getEnd() - 1, inner.getEnd());
   };
+  // Offsets of the handed expressions that are a bare identifier (a store or signal handed whole): STORE_WRITE_OUTSIDE_SETTER accepts a withholding at a dependency's
+  // argument only there (ADR 0981), never at a member (`writeHeld(holder.c)`: nothing says which store the unread body writes).
+  const bareStarts = new Set();
+  const mark = (nodes) => nodes.map((node) => { if (ts.isIdentifier(unwrap(node))) bareStarts.add(node.getStart(file)); return node.getStart(file); });
+  /** The identifiers a props object literal or an array literal holds as values: `{ s1 }`, `{ a: s1 }`, `[s1]`. */
+  const heldValues = (node) => {
+    const literal = node && unwrap(node);
+    if (!literal) return [];
+    if (ts.isArrayLiteralExpression(literal)) return literal.elements.filter((element) => ts.isIdentifier(unwrap(element)));
+    if (ts.isObjectLiteralExpression(literal)) return literal.properties.flatMap((property) => (ts.isShorthandPropertyAssignment(property) ? [property.name] : ts.isPropertyAssignment(property) && ts.isIdentifier(unwrap(property.initializer)) ? [property.initializer] : []));
+    return [];
+  };
   // Project functions that call one of their own parameters (`function apply1(f, ...args) { return f(...args); }`), by name: the ranges of those calls. A read
   // there has a frame in the function and one at each call of it, so the arguments of that call are what the function forwards.
   const forwarders = new Map();
@@ -173,20 +185,20 @@ export function callStarts(source, fileName = "App.tsx") {
     else if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) callee = node.tagName;
     if (callee) {
       calls.push([callee.getStart(file), callee.getEnd(), node.getStart(file), rootOf(callee).getStart(file)]);
-      if (node.arguments?.length && !solid.has(nameOf(rootOf(callee)))) handed.push([callee.getStart(file), callee.getEnd(), node.arguments.map((argument) => argument.getStart(file)), noTarget(callee), dependency.has(nameOf(rootOf(callee))) || (ts.isCallExpression(node) && callee.getText(file) === "Reflect.apply" && dependency.has(nameOf(node.arguments[0]))), ts.isCallExpression(node) ? nameOf(callee) : null]);
+      if (node.arguments?.length && !solid.has(nameOf(rootOf(callee)))) handed.push([callee.getStart(file), callee.getEnd(), [...mark(node.arguments), ...(ts.isCallExpression(node) && callee.getText(file) === "Reflect.apply" ? mark(heldValues(node.arguments[2])) : [])], noTarget(callee), dependency.has(nameOf(rootOf(callee))) || (ts.isCallExpression(node) && callee.getText(file) === "Reflect.apply" && dependency.has(nameOf(node.arguments[0]))), ts.isCallExpression(node) ? nameOf(callee) : null]);
       // ADR 0981: a `new`'s frame is on its keyword (the record of `new Site1(r1)` is at the `new`, not at `Site1`), a dependency's component element's on its `<`, and
       // the values handed to it are its attributes' expressions and spreads (a Solid or project component has an authored frame of its own). A frame there with no authored frame inside means the same as in a
       // call: native or dependency code read what the element or constructor was handed.
       // The keyword's and the `<`'s own range is kept apart from the callee's: a frame there is also the start of an enclosing call's callee (`new Function(s)(a)`), whose
       // handed arguments stay what they were; this adds the constructor's or element's own.
-      if (ts.isNewExpression(node) && node.arguments?.length && !solid.has(nameOf(rootOf(callee)))) opening.push([node.getStart(file), callee.getStart(file), node.arguments.map((argument) => argument.getStart(file)), noTarget(callee), dependency.has(nameOf(rootOf(callee)))]);
+      if (ts.isNewExpression(node) && node.arguments?.length && !solid.has(nameOf(rootOf(callee)))) opening.push([node.getStart(file), callee.getStart(file), mark(node.arguments), noTarget(callee), dependency.has(nameOf(rootOf(callee)))]);
       if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
         const values = node.attributes.properties.flatMap((attribute) => (ts.isJsxSpreadAttribute(attribute) ? [attribute.expression] : attribute.initializer && ts.isJsxExpression(attribute.initializer) && attribute.initializer.expression ? [attribute.initializer.expression] : []));
-        if (values.length && (dependency.has(nameOf(rootOf(callee))) || loaded.has(nameOf(rootOf(callee))))) { handed.push([callee.getStart(file), callee.getEnd(), values.map((value) => value.getStart(file)), true, true]); opening.push([node.getStart(file), callee.getStart(file), values.map((value) => value.getStart(file)), true, true]); }
+        if (values.length && (dependency.has(nameOf(rootOf(callee))) || loaded.has(nameOf(rootOf(callee))))) { handed.push([callee.getStart(file), callee.getEnd(), mark(values), true, true]); opening.push([node.getStart(file), callee.getStart(file), mark(values), true, true]); }
       }
       // `createComponent(Pkg, props)` calls a dependency's component with the props: its arguments are handed, though `createComponent` is Solid's.
       if (ts.isCallExpression(node) && node.arguments.length >= 2 && nameOf(callee) === "createComponent" && solid.has("createComponent") && dependency.has(nameOf(node.arguments[0]))) {
-        handed.push([callee.getStart(file), callee.getEnd(), node.arguments.map((argument) => argument.getStart(file)), true, true]);
+        handed.push([callee.getStart(file), callee.getEnd(), [...mark(node.arguments), ...mark(heldValues(node.arguments[1]))], true, true]);
       }
       if (ts.isCallExpression(node) && /^(?:render|hydrate)$/.test(callee.getText(file))) mounts.push([callee.getStart(file), callee.getEnd()]);
       if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
@@ -200,7 +212,7 @@ export function callStarts(source, fileName = "App.tsx") {
     // puts the frame there (`onResult`), so that is where the call's handed arguments are looked up.
     if ((ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) && (ts.isCallExpression(unwrap(node.expression)) || ts.isNewExpression(unwrap(node.expression)))) {
       const made = unwrap(node.expression);
-      if (made.arguments?.length && dependency.has(nameOf(rootOf(made.expression)))) opening.push([made.getEnd() - 1, made.getEnd(), made.arguments.map((argument) => argument.getStart(file)), true, true]);
+      if (made.arguments?.length && dependency.has(nameOf(rootOf(made.expression)))) opening.push([made.getEnd() - 1, made.getEnd(), mark(made.arguments), true, true]);
     }
     if (ts.isPropertyAccessExpression(node)) { access(node, node.name.getStart(file), node.name.getEnd()); onResult(node); }
     else if (ts.isElementAccessExpression(node)) {
@@ -253,7 +265,7 @@ export function callStarts(source, fileName = "App.tsx") {
   const starts = (line, column) => distinct([{ line, column }, ...smallest(calls, offsetOf(line, column)).flatMap((range) => [position(range[2]), position(range[3])])]);
   // The arguments of the call whose callee holds the position.
   starts.args = (line, column) => [...smallest(handed, offsetOf(line, column)), ...opening.filter((range) => range[0] <= offsetOf(line, column) && offsetOf(line, column) < range[1])]
-    .flatMap((range) => range[2].map((offset, index) => ({ ...position(offset), index, noTarget: range[3], ...(range[4] === true ? { dependency: true } : {}) })));
+    .flatMap((range) => range[2].map((offset, index) => ({ ...position(offset), index, noTarget: range[3], ...(range[4] === true ? { dependency: true, ...(bareStarts.has(offset) ? { bare: true } : {}) } : {}) })));
   // The arguments of the call of a project function whose callee holds the position, when the frame nearer the read is in a call of one of that function's own parameters.
   starts.forwarded = (line, column, inner) => {
     if (!inner || !(inner.line > 0) || !Number.isInteger(inner.column)) return [];
