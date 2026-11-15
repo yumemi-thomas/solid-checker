@@ -21,6 +21,7 @@ import { join } from "node:path";
 import process from "node:process";
 
 import { refuseAssumed } from "./lib/assumed.mjs";
+import { readReportFile } from "./lib/corpus-report.mjs";
 
 /** The reports under `paths`: a file is one, a directory contributes every `*.json` below it, sorted. */
 export function reportFiles(paths) {
@@ -39,7 +40,7 @@ export function reportFiles(paths) {
  * derives, and a prediction has already assumed some of its hazards away.
  */
 export function readReports(paths) {
-  return reportFiles(paths).map((path) => refuseAssumed(JSON.parse(readFileSync(path, "utf8")), `scripts/u-blockers.mjs (${path})`));
+  return reportFiles(paths).map((path) => refuseAssumed(readReportFile(path), `scripts/u-blockers.mjs (${path})`));
 }
 
 /** `[a, b]` ordered by count (descending), then key. */
