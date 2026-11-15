@@ -256,6 +256,8 @@ fn argument_is_inert(
         || ctx
             .semantic_lookup
             .proven_primitive(file, argument.span, PROOF_DEPTH)
+        // ADR 0984: a `let` timer handle every reference of which is a proven write or a clear, in a browser.
+        || super::timer_handle::is_timer_handle(ctx, file, argument.span)
 }
 
 /// Whether `argument` is a function by an exact fact: a function literal, or an identifier that names a project function.
