@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
+      "start": 77,
+      "end": 89,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
@@ -21,6 +32,17 @@
       "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
       "start": 77,
       "end": 89,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
+      "start": 279,
+      "end": 292,
       "fixes": 0
     },
     {
@@ -78,6 +100,28 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
+      "start": 578,
+      "end": 593,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
+      "start": 787,
+      "end": 800,
+      "fixes": 0
+    },
+    {
       "rule": "missing-context-provider",
       "code": "SC4002",
       "kind": "uncertifiable",
@@ -129,6 +173,28 @@
       "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
       "start": 1110,
       "end": 1125,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
+      "start": 1110,
+      "end": 1125,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
+      "start": 1203,
+      "end": 1216,
       "fixes": 0
     },
     {
@@ -186,6 +252,28 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
+      "start": 1562,
+      "end": 1577,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
+      "start": 1779,
+      "end": 1792,
+      "fixes": 0
+    },
+    {
       "rule": "missing-context-provider",
       "code": "SC4002",
       "kind": "uncertifiable",
@@ -240,11 +328,33 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
+      "start": 2083,
+      "end": 2098,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
       "blocker": "package-finding-at-entry",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
+      "start": 2170,
+      "end": 2178,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
       "path": "fixtures/reactive-ir/dependency-source-integrity-r2-super-twins/App.tsx",
       "start": 2170,
       "end": 2178,

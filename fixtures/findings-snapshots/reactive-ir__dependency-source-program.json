@@ -13,10 +13,32 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-program/App.tsx",
+      "start": 66,
+      "end": 77,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-program/App.tsx",
+      "start": 234,
+      "end": 248,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
       "path": "fixtures/reactive-ir/dependency-source-program/App.tsx",
       "start": 234,
       "end": 248,

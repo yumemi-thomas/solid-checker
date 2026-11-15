@@ -1,0 +1,4 @@
+{
+  "note": "ADR 0981: dep-wrap returns the function the program hands it, which reads a signal; `g()` in a component body warns STRICT_READ_UNTRACKED, the same read in JSX does not. dep-wrap imports no Solid package, so it is never selected.",
+  "packages": ["dep-wrap"]
+}

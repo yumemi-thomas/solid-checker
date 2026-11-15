@@ -640,6 +640,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/package-hono-route.ts",
+      "start": 358,
+      "end": 372,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -681,6 +692,17 @@
       "path": "fixtures/uncertifiable-repro/sc9012/src/package-relay-commit.tsx",
       "start": 1281,
       "end": 1283,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/package-relay-request.tsx",
+      "start": 574,
+      "end": 588,
       "fixes": 0
     },
     {

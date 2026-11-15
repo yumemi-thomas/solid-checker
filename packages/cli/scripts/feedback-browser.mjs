@@ -483,7 +483,8 @@ async function collectProject(project, scenario, tooling, browser, responses = n
   const { snapshot, leaves } = feedbackBrowserSnapshots(project), projectRoot = dirname(snapshot.manifest.project);
   // This run executes the application as a client-rendered development build
   // in Chromium, which is the runtime the native analysis answers for.
-  const nativeOptions = { feedbackFacts: true, runtime: { target: "browser", build: "development", rendering: "csr" } };
+  const nativeOptions = { feedbackFacts: true, runtime: { target: "browser", build: "development", rendering: "csr",
+    dependencySources: runtimeOptions.dependencySources ?? [] } };
   const projects = leaves?.map(leaf => {
     const report = inspectDevelopmentFeedback(leaf.manifest.project, { ...nativeOptions, snapshot: leaf });
     assert(Array.isArray(report.analysis.feedbackFacts), `Native checker does not expose development models: ${leaf.manifest.project}`);
@@ -784,13 +785,15 @@ export function selectFeedbackModels(rows) {
 }
 
 // The scenario, supplied responses and runtime options of one run, validated before any tooling loads.
-function prepareFeedbackRun({ project, scenarioPath, comparisonProject, root, config, sourceInstrumentation = true }) {
+function prepareFeedbackRun({ project, scenarioPath, comparisonProject, root, config, sourceInstrumentation = true, dependencySources = [] }) {
   const scenarioPin = { path: realpathSync(resolve(scenarioPath)), sha256: hash(readFileSync(scenarioPath)) };
   const scenario = validateFeedbackScenario(JSON.parse(readFileSync(scenarioPin.path, "utf8")));
   const responses = loadSuppliedResponses(scenario, scenarioPin.path);
   const runtimeOptions = validateFeedbackRuntimeOptions(project, { root, config });
   // Part of the execution cache's key through `runtimeOptions`.
   if (!sourceInstrumentation) runtimeOptions.sourceInstrumentation = false;
+  if (dependencySources.length) runtimeOptions.dependencySources = [...dependencySources];
+  assert(!comparisonProject || !dependencySources.length, "--dependency-source does not combine with --compare-project");
   assert(!comparisonProject || (!root && !config), "Explicit --root/--config with --compare-project needs separate app inputs; run each app separately");
   return { project, comparisonProject, scenarioPin, scenario, responses, runtimeOptions };
 }
@@ -842,8 +845,8 @@ async function executeFeedbackRun(session, { project, comparisonProject, scenari
     scenario: scenarioPin, browser: { ...browserPin, version: original.browserVersion } };
 }
 
-export async function runBrowserFeedback({ project, scenarioPath, browserPath, toolingRoot, comparisonProject, root, config, executionCacheDirectory, sourceInstrumentation = true }) {
-  const run = prepareFeedbackRun({ project, scenarioPath, comparisonProject, root, config, sourceInstrumentation });
+export async function runBrowserFeedback({ project, scenarioPath, browserPath, toolingRoot, comparisonProject, root, config, executionCacheDirectory, sourceInstrumentation = true, dependencySources = [] }) {
+  const run = prepareFeedbackRun({ project, scenarioPath, comparisonProject, root, config, sourceInstrumentation, dependencySources });
   const session = await openFeedbackSession({ toolingRoot: toolingRoot ?? dirname(resolve(project)), browserPath,
     executionCacheDirectory: comparisonProject ? null : executionCacheDirectory });
   assert(!executionCacheDirectory || !comparisonProject, "--execution-cache does not combine with --compare-project");
@@ -884,10 +887,10 @@ export async function openBrowserFeedbackBatch({ browserPath, toolingRoot, execu
   };
   const verifyBrowser = () => assert.equal(fileStamp(session.browserPin.path), stamp, "Browser changed during execution");
   return {
-    async run({ project, scenarioPath, root, config, sourceInstrumentation = true }) {
+    async run({ project, scenarioPath, root, config, sourceInstrumentation = true, dependencySources = [] }) {
       const cwd = process.cwd();
       restoreEnvironment();
-      const report = await executeFeedbackRun(session, prepareFeedbackRun({ project, scenarioPath, root, config, sourceInstrumentation }), verifyBrowser);
+      const report = await executeFeedbackRun(session, prepareFeedbackRun({ project, scenarioPath, root, config, sourceInstrumentation, dependencySources }), verifyBrowser);
       const chromium = await session.launched();
       const retire = report.execution.failure ? "the run's scenario failed"
         : report.execution.configuration?.kind !== "collector-default" ? "the run loaded an application Vite config into this process"

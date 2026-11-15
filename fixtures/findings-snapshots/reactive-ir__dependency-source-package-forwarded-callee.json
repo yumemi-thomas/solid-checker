@@ -2,6 +2,17 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-package-forwarded-callee/App.tsx",
+      "start": 348,
+      "end": 358,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -32,6 +43,17 @@
       "path": "fixtures/reactive-ir/dependency-source-package-forwarded-callee/App.tsx",
       "start": 352,
       "end": 357,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-package-forwarded-callee/App.tsx",
+      "start": 362,
+      "end": 376,
       "fixes": 0
     },
     {
@@ -79,6 +101,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-package-forwarded-callee/App.tsx",
+      "start": 380,
+      "end": 399,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -112,6 +145,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-package-forwarded-callee/App.tsx",
+      "start": 403,
+      "end": 418,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -142,6 +186,17 @@
       "path": "fixtures/reactive-ir/dependency-source-package-forwarded-callee/App.tsx",
       "start": 412,
       "end": 417,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-package-forwarded-callee/App.tsx",
+      "start": 422,
+      "end": 436,
       "fixes": 0
     },
     {
@@ -189,6 +244,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-package-forwarded-callee/App.tsx",
+      "start": 440,
+      "end": 452,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -219,6 +285,17 @@
       "path": "fixtures/reactive-ir/dependency-source-package-forwarded-callee/App.tsx",
       "start": 446,
       "end": 451,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-package-forwarded-callee/App.tsx",
+      "start": 456,
+      "end": 473,
       "fixes": 0
     },
     {
@@ -255,6 +332,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-package-forwarded-callee/App.tsx",
+      "start": 477,
+      "end": 493,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -274,6 +362,17 @@
       "path": "fixtures/reactive-ir/dependency-source-package-forwarded-callee/App.tsx",
       "start": 487,
       "end": 492,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-package-forwarded-callee/App.tsx",
+      "start": 544,
+      "end": 556,
       "fixes": 0
     },
     {
