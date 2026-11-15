@@ -16,10 +16,13 @@ set -eu
 limit_mb=5
 limit=$((limit_mb * 1024 * 1024))
 
-# Files this repository knowingly tracks above the limit. None today; adding a
-# path is a decision, which is why this is a list and not a bigger threshold.
+# Files this repository knowingly tracks above the limit. Adding a path is a
+# decision, which is why this is a list and not a bigger threshold.
+#   scripts/fuzz/smoke/mx-census.json: the smoke baseline of the census, which is
+#   the census's whole grid (46,997 programs, 6 MB; ADRs 0996, 1001).
 allowed() {
     case "$1" in
+        scripts/fuzz/smoke/mx-census.json) return 0 ;;
         *) return 1 ;;
     esac
 }
