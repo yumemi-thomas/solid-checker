@@ -23,10 +23,13 @@ import { spawnSync } from "node:child_process";
 
 import {
   COLD_SAMPLES,
+  CORPUS_PATH_CHARS,
   DEFAULT_CEILINGS,
   EXPORT_CORPUS_FILES,
+  FIRST_IR_CORPUS,
   WALL_TIME_GATES,
   assessPerformance,
+  corpusRootPrefix,
   quietLoadBound,
   renderPerformanceFindings,
   sampleFirstIr
@@ -55,7 +58,8 @@ const ceilings = {
     : {})
 };
 
-const directory = mkdtempSync(join(tmpdir(), "solid-checker-performance-"));
+// The corpus path is fixed at CORPUS_PATH_CHARS whatever TMPDIR is (ADR 0995): the checker's cost grows with it (ADR 0986).
+const directory = mkdtempSync(corpusRootPrefix(tmpdir()));
 
 function run(command, arguments_) {
   const result = spawnSync(command, arguments_, { cwd: repository, encoding: "utf8", env: process.env });
@@ -105,7 +109,8 @@ try {
   });
   // The checker's cost per source grows with the path's length (ADR 0986): the result names the corpus path and its length, so runs on
   // different machines are comparable.
-  const corpusPath = join(directory, "widget-1000");
+  const corpusPath = join(directory, FIRST_IR_CORPUS);
+  if (corpusPath.length !== CORPUS_PATH_CHARS) throw new Error(`the first-IR corpus path is ${corpusPath.length} characters, not ${CORPUS_PATH_CHARS}: ${corpusPath}`);
   firstIrRun.corpusPathChars = corpusPath.length;
   process.stdout.write(`corpus path: ${corpusPath} (${corpusPath.length} characters)\n`);
   const incremental = measure(1000, { iterations: 10, warmups: 2, edit: "mod0001.tsx" });

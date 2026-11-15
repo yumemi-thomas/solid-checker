@@ -464,6 +464,10 @@ bun scripts/repro-budget.mjs
 node scripts/guard/count.mjs
 # The rises of that count, named per fixture and fact: unnamed ones are printed, never a failure (ADR 0955).
 node scripts/guard/rises.mjs
+# A removed violation (turned uncertifiable or gone) needs a regress row (ADR 0995); the frozen judge, the proof gate's candidates and
+# the held cases are held against the merge base. Each fails when there is no base (COUNT_BASE=<rev> names one).
+node scripts/guard/regress.mjs
+node scripts/guard/base.mjs
 # A ratchet on raw cross-file reads in the reactive IR (ADR 0383).
 bun scripts/ir-read-lint.mjs
 # A ratchet on the code shapes that decide a silence without a fact (ADR 0933, phase B).

@@ -1,0 +1,4 @@
+{
+ "about": "Removals of proved violations on existing fixtures (ADR 0995; scripts/guard/regress.mjs). A violation the base held that a snapshot no longer holds (turned uncertifiable, or gone) needs a row: fixture, path, code, how many left that path, the ADR and why. Append-only; unnamed removals fail.",
+ "regress": []
+}

@@ -61,8 +61,28 @@ export const quietLoadBound = cpuCount => Math.max(2, cpuCount / 4);
 // The checker's cost per source grows with the length of the source path (it
 // keys its tables by path strings): the same binary read 4.5% slower, about
 // 8,000 ns/source, on a corpus directory of 93 characters than on one of 51
-// (ADR 0986, an open item). The corpus lives under the temporary directory, so
-// its path length is an input of this gate: the result says it.
+// (ADR 0986, an open item). The path length is an input of this gate, so it is
+// FIXED (ADR 0995): the 1,000-file corpus lives at exactly CORPUS_PATH_CHARS
+// characters whatever TMPDIR is (macOS's is 93 with the old name, Linux's /tmp
+// 51), so a run on any machine reads against the numbers of ADR 0986 and 0994,
+// which were measured at 93. The result still says the length it ran at.
+export const CORPUS_PATH_CHARS = 93;
+export const FIRST_IR_CORPUS = "widget-1000";
+const CORPUS_ROOT_NAME = "solid-checker-performance-";
+const MKDTEMP_SUFFIX = 6;
+
+/**
+ * The `mkdtemp` prefix under `tmp` whose directory, joined with the first-IR corpus's name, is exactly `chars` characters long: the name is
+ * padded with `-` (mkdtemp adds six). Throws when `tmp` is too long for any padding, naming the limit: set TMPDIR to a shorter directory.
+ */
+export function corpusRootPrefix(tmp, chars = CORPUS_PATH_CHARS, corpus = FIRST_IR_CORPUS) {
+  const base = `${tmp.replace(/\/+$/, "")}/${CORPUS_ROOT_NAME}`;
+  const padding = chars - (base.length + MKDTEMP_SUFFIX + 1 + corpus.length);
+  if (padding < 0) {
+    throw new Error(`the temporary directory ${tmp} is ${-padding} characters too long for a ${chars}-character corpus path (ADR 0995): point TMPDIR at a shorter directory`);
+  }
+  return `${base}${"-".repeat(padding)}`;
+}
 
 /** Order statistics of a list of numbers. */
 export function spreadOf(values) {

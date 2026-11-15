@@ -4,7 +4,7 @@ import { basename, join } from "node:path";
 import { describe, test } from "vitest";
 
 import { ROOT } from "./ir-read-lint.mjs";
-import { baselineFor, endIds, FINDING_FILTER_ONLY, HAND_OFF_WINDOW, hitsOf, KIND_NAMES, PENDING, premiseKinds, problems, proseHandOffs, SCANNED, seenLists, seenMutators, silentRoleValues, SITE_ACCOUNTING } from "./proof-lint.mjs";
+import { baselineFor, endIds, newTextProblems, risesOf, FINDING_FILTER_ONLY, HAND_OFF_WINDOW, hitsOf, KIND_NAMES, PENDING, premiseKinds, problems, proseHandOffs, SCANNED, seenLists, seenMutators, silentRoleValues, SITE_ACCOUNTING } from "./proof-lint.mjs";
 
 const kinds = (text, producer = true) => hitsOf(text, producer).map((hit) => hit.kind);
 
@@ -234,5 +234,35 @@ describe("a closed seen list exempts no mutating builtin (ADR 0803)", () => {
 
   test("another constant, a number and a list not named for being seen are no list", () => {
     assert.deepEqual(seenLists('const SEEN_DEPTH: usize = 3;\nconst LISTENER_ADDERS: [&str; 1] = ["Window.addEventListener"];\n'), []);
+  });
+});
+
+describe("ADR 0995: a stated reason covers only the hits it was read against", () => {
+  const why = "the collection is a memo table, nothing of the report is lost by dedup";
+  const allowed = (reason) => ({ "a.rs": { "finding-filter": { count: 1, why: reason } } });
+  const hit = (text) => ({ file: "a.rs", kind: "finding-filter", line: 1, text });
+
+  test("a rise resets the entry's why to pending-review; a fall and a hold keep it", () => {
+    // The laundering: `--update` after a new hit in a file whose entry says why it was sound kept that why over the new hit.
+    const previous = allowed(why);
+    assert.deepEqual(risesOf({ "a.rs": { "finding-filter": 2 } }, previous), [{ file: "a.rs", kind: "finding-filter", was: 1, now: 2 }]);
+    assert.equal(baselineFor({ "a.rs": { "finding-filter": 2 } }, previous)["a.rs"]["finding-filter"].why, PENDING);
+    assert.equal(baselineFor({ "a.rs": { "finding-filter": 1 } }, previous)["a.rs"]["finding-filter"].why, why);
+    assert.deepEqual(risesOf({ "a.rs": { "finding-filter": 1 } }, previous), []);
+    // A new kind in a known file rises from nothing, and is pending.
+    assert.equal(baselineFor({ "a.rs": { "finding-filter": 1, "text-premise": 1 } }, previous)["a.rs"]["text-premise"].why, PENDING);
+  });
+
+  test("fixing one hit and adding another keeps the count and is a new text under the old why", () => {
+    const baseHits = [hit("rows.dedup();")];
+    const swapped = newTextProblems({ baseHits, headHits: [hit("findings.retain(|f| f.keep);")], baseAllowed: allowed(why), headAllowed: allowed(why) });
+    assert.equal(swapped.length, 1);
+    assert.match(swapped[0].message, /1 finding-filter hit\(s\) in a\.rs have text the base did not \(`findings\.retain/);
+    // Restating the why (after reading the hit), or marking it pending, answers it; so does the same text, reflowed or elsewhere in the file.
+    assert.deepEqual(newTextProblems({ baseHits, headHits: [hit("findings.retain(|f| f.keep);")], baseAllowed: allowed(why), headAllowed: allowed(`${why}; and the retain of the work list`) }), []);
+    assert.deepEqual(newTextProblems({ baseHits, headHits: [hit("findings.retain(|f| f.keep);")], baseAllowed: allowed(why), headAllowed: allowed(PENDING) }), []);
+    assert.deepEqual(newTextProblems({ baseHits, headHits: [hit("rows.dedup();")], baseAllowed: allowed(why), headAllowed: allowed(why) }), []);
+    // A multiset: a second copy of a base text is new.
+    assert.equal(newTextProblems({ baseHits, headHits: [hit("rows.dedup();"), hit("rows.dedup();")], baseAllowed: allowed(why), headAllowed: allowed(why) }).length, 1);
   });
 });

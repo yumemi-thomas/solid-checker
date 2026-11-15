@@ -53,10 +53,18 @@
 //   bun scripts/proof-lint.mjs             check
 //   bun scripts/proof-lint.mjs --list      print every hit, grouped by file and kind
 //   bun scripts/proof-lint.mjs --update    rewrite the baseline from the sources (keeps every stated reason; a new entry is pending-review)
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+//   bun scripts/proof-lint.mjs --update --allow-rise   the same when a count ROSE (ADR 0995): refused without the flag, and a risen entry's `why`
+//                                          is reset to pending-review (the stated reason was written for fewer hits)
+//
+// Against the merge base (ADR 0995; COUNT_BASE=<rev> names one, no base is a failure): the count alone cannot see a hit fixed and another added,
+// so the hits are also compared by their normalized line text. An entry whose `why` is stated (not pending-review) and unchanged from the base,
+// whose file and kind hold a text the base did not, is a hit that `why` was never read against: restate the `why` (any change to it, after
+// reading the new hit) or set it to pending-review. A rise is recorded only by `--update --allow-rise`, which does the latter.
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join, relative } from "node:path";
 import process from "node:process";
 
+import { baseFile, exportBase, helpOf } from "./guard/base-revision.mjs";
 import { ROOT, SOURCE_ROOT, codeLines, sourceFiles, testItemLines } from "./ir-read-lint.mjs";
 import { EMPTY_REASONS } from "./lib/proof-log.mjs";
 
@@ -417,19 +425,82 @@ export function problems(allowed, measured) {
   return { found, pending };
 }
 
-/** The baseline for `counts`: stated reasons are kept, anything new is pending review. */
+/** The (file, kind) entries whose count rose against `previous` (a new entry rose from nothing): `[{ file, kind, was, now }]`. */
+export function risesOf(counts, previous = {}) {
+  const rises = [];
+  for (const [file, kinds] of Object.entries(counts)) {
+    for (const [kind, now] of Object.entries(kinds)) {
+      const was = previous[file]?.[kind]?.count ?? 0;
+      if (now > was) rises.push({ file, kind, was, now });
+    }
+  }
+  return rises;
+}
+
+/** The baseline for `counts`: stated reasons are kept, anything new or risen is pending review (a reason written for fewer hits covers no more). */
 export function baselineFor(counts, previous = {}) {
   const files = {};
   for (const [file, kinds] of Object.entries(counts).sort(([a], [b]) => a.localeCompare(b))) {
     files[file] = {};
     for (const [kind, count] of Object.entries(kinds).sort(([a], [b]) => a.localeCompare(b))) {
-      files[file][kind] = { count, why: previous[file]?.[kind]?.why ?? PENDING };
+      const rose = count > (previous[file]?.[kind]?.count ?? 0);
+      files[file][kind] = { count, why: rose ? PENDING : previous[file]?.[kind]?.why ?? PENDING };
     }
   }
   return files;
 }
 
+/** `file|kind -> [normalized hit text]` of a list of hits. */
+const textsOf = (hits) => {
+  const texts = new Map();
+  for (const hit of hits) {
+    const key = `${hit.file}|${hit.kind}`;
+    texts.set(key, [...(texts.get(key) ?? []), hit.text]);
+  }
+  return texts;
+};
+
+/**
+ * ADR 0995: the hits whose text the base did not hold, under a stated `why` that did not change. A count that held while one hit was fixed and
+ * another added (or one rewritten) passes the count check; the stated reason was written for the base's hits, so it covers none of them.
+ */
+export function newTextProblems({ baseHits, headHits, baseAllowed, headAllowed }) {
+  const problems = [];
+  const before = textsOf(baseHits);
+  for (const [key, texts] of textsOf(headHits)) {
+    const [file, kind] = key.split("|");
+    const entry = headAllowed[file]?.[kind];
+    if (!entry || entry.why === PENDING || entry.why !== baseAllowed[file]?.[kind]?.why) continue;
+    const left = [...(before.get(key) ?? [])];
+    const fresh = [];
+    for (const text of texts) {
+      const at = left.indexOf(text);
+      if (at >= 0) left.splice(at, 1);
+      else fresh.push(text);
+    }
+    if (fresh.length) problems.push({ kind: "new-text", key, message: `${fresh.length} ${kind} hit(s) in ${file} have text the base did not (\`${fresh[0].slice(0, 100)}\`) under a stated why that did not change: read it, then restate the why (or set ${PENDING})` });
+  }
+  return problems;
+}
+
+/** The base's hits and allowlist, or a problem (no base is a failure). */
+function baseState() {
+  const found = baseFile("scripts/proof-lint.allowlist.json");
+  if (found.problem) return { problem: found.problem };
+  const { dir, problem } = exportBase(found.revision, [...SCANNED, ...FINDING_FILTER_ONLY]);
+  try {
+    if (problem) return { problem };
+    return { hits: measure(dir).hits, allowed: JSON.parse(found.text).files ?? {}, revision: found.revision };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 function main(argv) {
+  if (argv.includes("--help")) {
+    console.log(helpOf(import.meta.url));
+    return 0;
+  }
   const { counts, hits } = measure();
   if (argv.includes("--list")) {
     const byKind = {};
@@ -440,6 +511,12 @@ function main(argv) {
   }
   const previous = existsSync(ALLOWLIST) ? JSON.parse(readFileSync(ALLOWLIST, "utf8")) : {};
   if (argv.includes("--update")) {
+    const rises = risesOf(counts, previous.files);
+    if (rises.length > 0 && !argv.includes("--allow-rise")) {
+      for (const rise of rises) console.error(`rise: ${rise.file} ${rise.kind} ${rise.was} -> ${rise.now}`);
+      console.error(`proof-lint: refusing to record ${rises.length} rise(s): a new hit needs a fact in place of the shape. If it is sound, record it with \`--update --allow-rise\` (its why becomes ${PENDING}) and state the reason after reading the hit`);
+      return 1;
+    }
     const baseline = { about: previous.about ?? "", files: baselineFor(counts, previous.files) };
     writeFileSync(ALLOWLIST, `${JSON.stringify(baseline, null, 2)}\n`);
     const total = Object.values(counts).flatMap((kinds) => Object.values(kinds)).reduce((a, b) => a + b, 0);
@@ -448,6 +525,9 @@ function main(argv) {
   }
   const { found, pending } = problems(previous.files ?? {}, counts);
   found.push(...premiseProblems(), ...seenMutatorProblems());
+  const base = baseState();
+  if (base.problem) found.push({ kind: "no-base", key: "base", message: base.problem });
+  else found.push(...newTextProblems({ baseHits: base.hits, headHits: hits, baseAllowed: base.allowed, headAllowed: previous.files ?? {} }));
   for (const problem of found) console.error(`${problem.kind}: ${problem.key} -- ${problem.message}`);
   if (found.length > 0) {
     console.error(`${found.length} problem(s): a new hit needs a fact in place of the shape, or a stated reason in scripts/proof-lint.allowlist.json`);

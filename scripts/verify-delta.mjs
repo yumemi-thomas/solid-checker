@@ -252,11 +252,14 @@ export const CHECKS = {
   "guard-count": {
     why:
       "the one-way uncertifiable count (endstage-report.md 1b): the ledger matches the snapshots, and a fall " +
-      "against the base names an ADR, a proof and a fixture on each side; its rises are named per fixture and fact " +
-      "(ADR 0955), an unnamed one printed and never a failure",
+      "against the base (per fixture and per path, ADR 0995) names an ADR, a proof and a fixture on each side; its rises are named per fixture and fact " +
+      "(ADR 0955), an unnamed one printed and never a failure; a removed violation needs a regress row, and the frozen judge, " +
+      "the proof gate's candidates and the held cases are held against the base",
     commands: [
       ["node", "scripts/guard/count.mjs"],
       ["node", "scripts/guard/rises.mjs"],
+      ["node", "scripts/guard/regress.mjs"],
+      ["node", "scripts/guard/base.mjs"],
     ],
   },
   "witnesses": {
@@ -413,10 +416,12 @@ export const ROWS = [
     owner: "the Solid 2 rules crate (analysis only)",
     checks: ["dialects-process", ...FINDING_GATES, "wasm-compile"],
   },
+  // proof-gate runs the checker over every fixture project (fixtureProjects: reactive-ir, engine and the reproduction set), so a fixture edit
+  // can open a site nothing ends (ADR 0995): `witnesses` reads no fixture (scripts/flip/witnesses.json carries its own programs).
   {
     prefix: "fixtures/",
     owner: "fixtures or expected findings",
-    checks: ["coverage", "ownership-gate", "guard-count", "backend-process"],
+    checks: ["coverage", "ownership-gate", "proof-gate", "guard-count", "backend-process"],
   },
   // The cases the two oracle gates read.
   ...["fixtures/tsc-oracle/", "fixtures/obligation-cases/"].map((prefix) => ({
@@ -427,7 +432,7 @@ export const ROWS = [
   {
     prefix: "fixtures/uncertifiable-repro/",
     owner: "the uncertifiable reproduction set (ADR 0446)",
-    checks: ["coverage", "ownership-gate", "repro-budget", "repro-causes", "guard-count"],
+    checks: ["coverage", "ownership-gate", "proof-gate", "repro-budget", "repro-causes", "guard-count"],
   },
   ...["scripts/repro-budget.mjs", "scripts/repro-budget.test.mjs"].map((prefix) => ({
     prefix,
@@ -436,8 +441,14 @@ export const ROWS = [
   })),
   {
     prefix: "scripts/uncertifiable-causes.mjs",
-    owner: "the uncertifiable-cause classifier (reproduction set self-check)",
-    checks: ["repro-causes"],
+    owner: "the uncertifiable-cause classifier (reproduction set self-check; HELD_CAP is held against the base by scripts/guard/base.mjs)",
+    checks: ["repro-causes", "guard-count"],
+  },
+  // The frozen judge rows and tables are held against the merge base (scripts/guard/base.mjs, ADR 0995).
+  {
+    prefix: "scripts/fuzz/judge-frozen.json",
+    owner: "the frozen judge rows (a moved id needs a changes row)",
+    checks: ["fuzz-tests", "guard-count"],
   },
   // The producer is the default (ADR 0365): a source change can move any fact,
   // so it also selects the fixture gates and the WASM parity gate that runs the

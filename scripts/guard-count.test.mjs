@@ -88,3 +88,84 @@ test("a rename keeps the count, with an ADR", () => {
 test("with no ledger at the base only the exact match is checked", () => {
   assert.deepEqual(run({ inRepo: { [K]: 1 } }, null, { [K]: 1 }), []);
 });
+
+// ADR 0995: a row that left a SITE is a fall, even when the fixture's total holds.
+const at = (path, blocker = "function-run-unplaced") => ({ code: "SC1001", kind: "uncertifiable", blocker, path });
+const sites = (...rows) => ({ findings: rows });
+// `was` and `now` are the fixtures the fall is measured over; `baseOnly` and `nowOnly` are the proof's fixtures (read, not measured).
+const siteRun = (ledger, base, { was, now, baseOnly = {}, nowOnly = {}, computed = { [K]: 1 } }) =>
+  checkLedger({
+    ledger, base, computed, decisions, baseSnapshots: new Map(Object.entries(was)),
+    read: (path) => files[path] ?? null,
+    snapshotOf: (fixture) => ({ ...now, ...nowOnly })[fixture] ?? null,
+    baseSnapshotOf: (fixture) => ({ ...was, ...baseOnly })[fixture] ?? null,
+  });
+
+test("a row that moved to another path is a fall, though the fixture's total holds", () => {
+  // The laundering: the uncertifiable row at a.tsx (which a proof would have to clear) is gone from there and a new one stands at b.tsx.
+  // The fixture's count is 1 -> 1, so count.mjs saw nothing before ADR 0995.
+  const was = { "reactive-ir/m": sites(at("a.tsx")) };
+  const now = { "reactive-ir/m": sites(at("b.tsx")) };
+  const failures = siteRun({ inRepo: { [K]: 1 } }, { inRepo: { [K]: 1 } }, { was, now });
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /^reactive-ir\/m SC1001 function-run-unplaced at a\.tsx: 1 -> 0, no drops row/);
+  // Recorded as a move: an ADR, the path it moved to, and no proof (it is no clean).
+  const moved = { fixture: "reactive-ir/m", key: K, path: "a.tsx", from: 1, to: 0, adr: "ADR 0812", kind: "moved", movedTo: "b.tsx" };
+  assert.deepEqual(siteRun({ inRepo: { [K]: 1 }, drops: [moved] }, { inRepo: { [K]: 1 } }, { was, now }), []);
+  assert.match(siteRun({ inRepo: { [K]: 1 }, drops: [{ ...moved, movedTo: "c.tsx" }] }, { inRepo: { [K]: 1 } }, { was, now })[0], /movedTo c\.tsx gained 0/);
+  assert.match(siteRun({ inRepo: { [K]: 1 }, drops: [{ ...moved, movedTo: "a.tsx" }] }, { inRepo: { [K]: 1 } }, { was, now })[0], /movedTo a\.tsx/);
+  assert.match(siteRun({ inRepo: { [K]: 1 }, drops: [{ ...moved, proof: "rust/x.rs::proves_y" }] }, { inRepo: { [K]: 1 } }, { was, now })[0], /names no proof/);
+  assert.match(siteRun({ inRepo: { [K]: 1 }, drops: [{ ...moved, adr: "ADR 0999" }] }, { inRepo: { [K]: 1 } }, { was, now })[0], /ADR 0999 is not in docs/);
+  // A moved row is no kind of fixture-level drop.
+  assert.match(run({ inRepo: { [K]: 2 }, drops: [{ ...drop, kind: "moved" }] }, { inRepo: { [K]: 3 } }, { [K]: 2 })[0], /moved|names no proof/);
+});
+
+const proofFixtures = { proved: "reactive-ir/proved", open: "reactive-ir/open" };
+const rowsOf = (path, times) => Array.from({ length: times }, () => at(path));
+
+test("a path that lost rows while its fixture's total fell by less is not covered by the fixture-level row", () => {
+  // a.tsx 2 -> 0 and b.tsx 0 -> 1: the total fell 2 -> 1. A fixture-level row for 2 -> 1 would, before ADR 0995, have recorded the whole
+  // thing as one clean; one of the rows only moved.
+  const was = { "reactive-ir/m": sites(...rowsOf("a.tsx", 2)) };
+  const now = { "reactive-ir/m": sites(at("b.tsx")) };
+  const baseOnly = { "reactive-ir/proved": sites(...rowsOf("a.tsx", 2)), "reactive-ir/open": sites(at("o.tsx")) };
+  const nowOnly = { "reactive-ir/proved": sites(at("a.tsx")), "reactive-ir/open": sites(at("o.tsx")) };
+  const total = { fixture: "reactive-ir/m", key: K, from: 2, to: 1, adr: "ADR 0812", proof: "rust/x.rs::proves_y", fixtures: proofFixtures };
+  const failures = siteRun({ inRepo: { [K]: 3 }, drops: [total] }, { inRepo: { [K]: 3 } }, { was, now, baseOnly, nowOnly, computed: { [K]: 3 } });
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /at a\.tsx: 2 -> 0, no drops row: the fixture's total fell by less than its paths lost/);
+});
+
+test("when the total fell by exactly what the paths lost, the fixture-level row answers them", () => {
+  const was = { "reactive-ir/m": sites(at("a.tsx"), at("b.tsx")) };
+  const now = { "reactive-ir/m": sites(at("b.tsx")) };
+  const baseOnly = { "reactive-ir/proved": sites(at("a.tsx")), "reactive-ir/open": sites(at("o.tsx")) };
+  const nowOnly = { "reactive-ir/proved": sites(), "reactive-ir/open": sites(at("o.tsx")) };
+  const total = { fixture: "reactive-ir/m", key: K, from: 2, to: 1, adr: "ADR 0812", proof: "rust/x.rs::proves_y", fixtures: proofFixtures };
+  assert.deepEqual(siteRun({ inRepo: { [K]: 2 }, drops: [total] }, { inRepo: { [K]: 3 } }, { was, now, baseOnly, nowOnly, computed: { [K]: 2 } }), []);
+});
+
+test("a row at a path is proved at that path, not by the fixture's total", () => {
+  // `proved` lost its row at a.tsx only by gaining one at z.tsx: its total holds, so nothing was proved. And a proved fixture whose total
+  // fell elsewhere (c.tsx) while a.tsx held proves nothing at a.tsx.
+  const was = { "reactive-ir/m": sites(at("a.tsx")) };
+  const now = { "reactive-ir/m": sites(at("b.tsx")) };
+  const baseOnly = { "reactive-ir/proved": sites(at("a.tsx")), "reactive-ir/open": sites(at("o.tsx")) };
+  const rowAt = { fixture: "reactive-ir/m", key: K, path: "a.tsx", from: 1, to: 0, adr: "ADR 0812", proof: "rust/x.rs::proves_y", fixtures: proofFixtures };
+  const nowOnly = { "reactive-ir/proved": sites(at("z.tsx")), "reactive-ir/open": sites(at("o.tsx")) };
+  const failures = siteRun({ inRepo: { [K]: 1 }, drops: [rowAt] }, { inRepo: { [K]: 1 } }, { was, now, baseOnly, nowOnly });
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /fixtures\.proved reactive-ir\/proved is no snapshot that held a SC1001 function-run-unplaced row at a\.tsx at the base and holds fewer now/);
+  const elsewhere = { "reactive-ir/proved": sites(at("a.tsx")), "reactive-ir/open": sites(at("o.tsx")) };
+  assert.match(siteRun({ inRepo: { [K]: 1 }, drops: [rowAt] }, { inRepo: { [K]: 1 } }, { was, now, baseOnly: { ...baseOnly, "reactive-ir/proved": sites(at("a.tsx"), at("c.tsx")) }, nowOnly: elsewhere })[0], /at a\.tsx at the base and holds fewer now/);
+  // Clearing it at the path makes the row hold.
+  const cleared = { ...nowOnly, "reactive-ir/proved": sites() };
+  assert.deepEqual(siteRun({ inRepo: { [K]: 1 }, drops: [rowAt] }, { inRepo: { [K]: 1 } }, { was, now, baseOnly, nowOnly: cleared }), []);
+});
+
+test("a deleted fixture's paths fall with its total: the fixture-level row answers, none is asked per path", () => {
+  const was = { "reactive-ir/m": sites(at("a.tsx"), at("b.tsx")) };
+  const failures = siteRun({ inRepo: {} }, { inRepo: { [K]: 2 } }, { was, now: {}, computed: {} });
+  assert.equal(failures.filter((failure) => / at /.test(failure)).length, 0);
+  assert.match(failures[0], /reactive-ir\/m SC1001 function-run-unplaced: 2 -> 0, no drops row/);
+});
