@@ -257,6 +257,26 @@ export function premiseKinds(text) {
 /** The file the ends are declared in (ADR 0936). */
 export const SITE_ACCOUNTING = `${SOURCE_ROOT}/site_accounting.rs`;
 
+/** What an id of the `site_silences!` list must look like: `<producer file stem>.<function>.<end>`, the function in snake_case, the end kebab-case. */
+const END_ID = /^[a-z0-9_]+\.[a-z0-9_]+\.[a-z0-9_-]+$/;
+
+/**
+ * Every `Variant => "id"` entry of a `site_silences!` body, `[{ variant, id, index }]`. Fails closed: an entry whose id does not
+ * match `END_ID`, and a `=>` that is not a one-line `Variant => "id",` entry, are errors, never skipped, so a list can only be
+ * read whole or not at all (a hyphen in the function part once dropped an id from every check below without a word).
+ */
+export function endEntries(body, who) {
+  const entries = [];
+  for (const match of body.matchAll(/^\s*([A-Z][A-Za-z0-9]*)\s*=>\s*"([^"\n]*)"\s*,/gm)) {
+    const [, variant, id] = match;
+    if (!END_ID.test(id)) throw new Error(`${who}: the silence id "${id}" (${variant}) is not <file stem>.<function>.<end> in [a-z0-9_] . [a-z0-9_] . [a-z0-9_-]`);
+    entries.push({ variant, id, index: match.index });
+  }
+  const arrows = body.split("\n").filter((line) => !/^\s*\/\//.test(line) && line.includes("=>")).length;
+  if (arrows !== entries.length) throw new Error(`${who}: the site_silences! list has ${arrows} \`=>\` lines but ${entries.length} readable entries; an entry is written \`Variant => "id",\` on one line`);
+  return entries;
+}
+
 /**
  * The ids of the named ends: the `site_silences!` list of site_accounting.rs (ADR 0936), one variant per producer return,
  * `<producer file stem>.<function>.<end>`. `stems` is the set of the producer files' stems. Throws on a missing list, a duplicate id
@@ -270,13 +290,12 @@ export function endIds(text, stems) {
   if (close < 0) throw new Error("proof-lint: the `site_silences!` list does not close");
   const found = [];
   const seen = new Set();
-  for (const match of text.slice(open, close).matchAll(/^\s*([A-Z][A-Za-z0-9]*)\s*=>\s*"([a-z0-9_]+\.[a-z0-9_]+\.[a-z0-9_-]+)"/gm)) {
-    const [, variant, id] = match;
+  for (const { variant, id, index } of endEntries(text.slice(open, close), "proof-lint")) {
     if (seen.has(id)) throw new Error(`proof-lint: the silence id ${id} is listed twice`);
     seen.add(id);
     const stem = id.split(".")[0];
     if (!stems.has(stem)) throw new Error(`proof-lint: ${id} (${variant}): no producer file ${stem}.rs among the scanned sources`);
-    found.push({ id, line: text.slice(0, open + match.index).split("\n").length + 1, variant });
+    found.push({ id, line: text.slice(0, open + index).split("\n").length + 1, variant });
   }
   return found;
 }

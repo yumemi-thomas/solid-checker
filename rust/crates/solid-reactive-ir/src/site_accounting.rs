@@ -183,7 +183,7 @@ site_silences! {
     MemberRoleDoesNotReport => "local_access.discover_member.role-does-not-report",
     /// `onFlush` where the write role allows it (an effect's apply, a leaf, a
     /// handler): no owner rejects the call.
-    OnFlushRoleAllows => "static_api.on-flush.role-allows",
+    OnFlushRoleAllows => "static_api.on_flush.role-allows",
     /// ADR 0972: a call into a package the build does not read, whose role allows an action (a handler, a timer, an effect's apply).
     PackageCallRoleAllows => "package_action_calls.package_action_calls.role-allows",
     /// ADR 0972: a call into a package the build does not read that cannot run (module initialization, a function nothing reaches).

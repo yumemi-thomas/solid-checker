@@ -177,6 +177,15 @@ describe("the typed premises", () => {
     assert.throws(() => endIds(list, new Set(["local_access"])), /no producer file shared_reactivity/);
   });
 
+  test("an id the lint cannot parse is an error, never a skipped entry", () => {
+    // a hyphen in the function part once dropped `static_api.on-flush.role-allows` from every check without a word
+    assert.throws(() => endIds(list.replace("local_access.discover_member.props-static", "local_access.discover-member.props-static"), stems), /not <file stem>\.<function>\.<end>/);
+    assert.throws(() => endIds(list.replace("shared_reactivity.unreached_write.cannot-run", "Shared.unreached_write.cannot-run"), stems), /not <file stem>/);
+    assert.throws(() => endIds(list.replace("shared_reactivity.unreached_write.cannot-run", "shared_reactivity.cannot-run"), stems), /not <file stem>/);
+    assert.throws(() => endIds(list.replace('"shared_reactivity.unreached_write.cannot-run"', "OTHER_ID"), stems), /2 `=>` lines but 1 readable/);
+    assert.throws(() => endIds(list.replace('B => "shared_reactivity.unreached_write.cannot-run",', 'B => "shared_reactivity.unreached_write.cannot-run"'), stems), /readable entries/);
+  });
+
   test("the real list holds at least 30 ends, each with a producer file", () => {
     const stemsOf = new Set(SCANNED.flatMap((directory) => readdirSync(join(ROOT, directory), { recursive: true })).filter((path) => path.endsWith(".rs")).map((path) => basename(path, ".rs")));
     const ends = endIds(readFileSync(join(ROOT, SITE_ACCOUNTING), "utf8"), stemsOf);
