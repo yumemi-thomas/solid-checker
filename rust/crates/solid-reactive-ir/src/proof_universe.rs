@@ -256,6 +256,10 @@ pub(crate) enum SiteCode {
     LoadingOnOutsideHold,
     /// LOADING_ON_ACCESSOR: a boundary whose `on` is a function, which it never calls (SC5007, ADR 0987). Placeless.
     LoadingOnAccessor,
+    /// RESOLVE_IN_REACTIVE_SCOPE: a `resolve` call with an observer active (SC2004; batch 11, slice 7).
+    ResolveInScope,
+    /// UNTIL_IN_REACTIVE_SCOPE: an `until` call with an observer active (SC2005; batch 11, slice 7).
+    UntilInScope,
 }
 
 /// The uncertifiable row a code gets when nothing ends it: the rule's id, name and blocker, and the noun its message uses.
@@ -268,7 +272,7 @@ pub(crate) struct Home {
 
 impl SiteCode {
     /// Every code of the universe, in the order the proof log writes them.
-    pub(crate) const ALL: [Self; 11] = [
+    pub(crate) const ALL: [Self; 13] = [
         Self::StrictRead,
         Self::ReactiveWrite,
         Self::OptimisticWrite,
@@ -280,6 +284,8 @@ impl SiteCode {
         Self::EffectCreation,
         Self::LoadingOnOutsideHold,
         Self::LoadingOnAccessor,
+        Self::ResolveInScope,
+        Self::UntilInScope,
     ];
 
     pub(crate) const fn runtime_code(self) -> RuntimeCode {
@@ -295,6 +301,8 @@ impl SiteCode {
             Self::EffectCreation => RuntimeCode::PrimitiveInEffectCallback,
             Self::LoadingOnOutsideHold => RuntimeCode::LoadingOnOutsideHold,
             Self::LoadingOnAccessor => RuntimeCode::LoadingOnAccessor,
+            Self::ResolveInScope => RuntimeCode::ResolveInReactiveScope,
+            Self::UntilInScope => RuntimeCode::UntilInReactiveScope,
         }
     }
 
@@ -372,6 +380,18 @@ impl SiteCode {
                 blocker: crate::blockers::LOADING_ON_ACCESSOR_UNACCOUNTED,
                 noun: "Loading boundary",
             },
+            Self::ResolveInScope => Home {
+                id: "SC2004",
+                rule: "no-await-primitive-in-tracked-scope",
+                blocker: crate::blockers::RESOLVE_SCOPE_UNACCOUNTED,
+                noun: "resolve call",
+            },
+            Self::UntilInScope => Home {
+                id: "SC2005",
+                rule: "no-await-primitive-in-tracked-scope",
+                blocker: crate::blockers::RESOLVE_SCOPE_UNACCOUNTED,
+                noun: "until call",
+            },
         }
     }
 }
@@ -389,6 +409,9 @@ const CREATION_CODES: &[SiteCode] = &[SiteCode::PrimitiveForbidden];
 const EFFECT_CREATION_CODES: &[SiteCode] = &[SiteCode::EffectCreation];
 const CREATION_AND_EFFECT_CODES: &[SiteCode] =
     &[SiteCode::PrimitiveForbidden, SiteCode::EffectCreation];
+/// The code lists of a resolve/until site (batch 11, slice 7): the observer guard of the one primitive the call is.
+const RESOLVE_CODES: &[SiteCode] = &[SiteCode::ResolveInScope];
+const UNTIL_CODES: &[SiteCode] = &[SiteCode::UntilInScope];
 /// A leaf operation at a call the walk could not place (`UnmodelledSlot`): any forbidden operation, so both of a leaf owner's codes.
 const CLEANUP_AND_CREATION_CODES: &[SiteCode] =
     &[SiteCode::CleanupForbidden, SiteCode::PrimitiveForbidden];
@@ -401,7 +424,7 @@ const LOADING_ON_HOLD_CODES: &[SiteCode] = &[SiteCode::LoadingOnOutsideHold];
 /// One site: where it is, what kind it is, and the other spans a row that
 /// answers for it may sit at.
 pub(crate) struct Site {
-    /// `read`, `write`, `action`, `store-write`, `on-flush` or `owner-call`.
+    /// `read`, `write`, `action`, `store-write`, `on-flush`, `owner-call` or `resolve`.
     pub(crate) table: &'static str,
     /// What the source is: `accessor`, `store`, `props`, `setter`, `action` or
     /// `primitive`.
@@ -1131,6 +1154,20 @@ pub(crate) fn owner_call_codes(
     }
 }
 
+/// The code list of the observer guard a call of `primitive` opens with (batch 11, slice 7, ADR 0985), `None` for a primitive with none: the dialect's answer
+/// ([`Dialect::observer_guard_code`]), one code per site.
+pub(crate) fn observer_guard_codes(
+    dialect: &dyn Dialect,
+    primitive: solid_dialect::Primitive,
+) -> Option<&'static [SiteCode]> {
+    match dialect.observer_guard_code(primitive)? {
+        RuntimeCode::ResolveInReactiveScope => Some(RESOLVE_CODES),
+        RuntimeCode::UntilInReactiveScope => Some(UNTIL_CODES),
+        // A guard whose code this universe does not list has no site: the dialect names a code, and the universe lists the codes it accounts for.
+        _ => None,
+    }
+}
+
 /// The sites found from the calls' resolved primitives, whatever the callee is spelled and outside dependency source (like ADR 0886's owner sites), in one pass over the files:
 /// SC3002's, each call whose primitive is `onFlush`; and the owner-call universe's (batch 11, slice 6), each call whose primitive the dialect refuses under a leaf owner or on an
 /// effect apply's stack, with the codes [`owner_call_codes`] gives it.
@@ -1161,6 +1198,21 @@ fn primitive_call_sites<'a>(ctx: &AnalysisContext<'a>, found: &mut Vec<(&'a File
                 ));
                 continue;
             }
+            // Batch 11, slice 7 (ADR 0985): a `resolve` or `until` call is a site of the observer guard's table, found from the call's resolved primitive
+            // (whatever the callee is spelled), and also an owner-call site when the dialect's creation tests below say so.
+            if let Some(codes) = observer_guard_codes(dialect, primitive) {
+                found.push((
+                    file,
+                    Site {
+                        table: "resolve",
+                        source: "primitive",
+                        via: "call",
+                        at: call.callee,
+                        alternates: vec![call.span],
+                        codes,
+                    },
+                ));
+            }
             let codes = owner_call_codes(dialect, file, call, primitive, client_build);
             if codes.is_empty() {
                 continue;
@@ -1173,6 +1225,43 @@ fn primitive_call_sites<'a>(ctx: &AnalysisContext<'a>, found: &mut Vec<(&'a File
                     via: "call",
                     at: call.callee,
                     alternates: vec![call.span],
+                    codes,
+                },
+            ));
+        }
+        // Batch 11, slice 7 (ADR 0985): a reference to `resolve` or `until` that is a value (`pick(resolve)`, `[resolve]`, `Reflect.apply(until, ..)`): the call
+        // it reaches is no call of the primitive any rule reads, so the reference is the site, and the value-use census (an SC9012 `primitive-value` row at its span)
+        // is what ends it. Found by the census's own enumeration ([`crate::static_rules::primitive_value_candidates`]): a reference a rule reads (a callee) or that is no
+        // value (an import specifier, a type) is no site, and neither is the initializer of a binding the primitive is copied into (the alias is followed: each of its
+        // references is a site).
+        for (span, primitive) in
+            crate::static_rules::primitive_value_candidates(ctx, file, |name| {
+                name.primitive()
+                    .is_some_and(|primitive| observer_guard_codes(dialect, primitive).is_some())
+            })
+        {
+            let Some(codes) = primitive
+                .primitive()
+                .and_then(|primitive| observer_guard_codes(dialect, primitive))
+            else {
+                continue;
+            };
+            let alternates = file
+                .ast
+                .members
+                .iter()
+                .find(|member| member.property == span)
+                .map(|member| member.span)
+                .into_iter()
+                .collect();
+            found.push((
+                file,
+                Site {
+                    table: "resolve",
+                    source: "primitive",
+                    via: "reference",
+                    at: span,
+                    alternates,
                     codes,
                 },
             ));

@@ -472,6 +472,18 @@ pub(crate) enum PremiseKind {
     /// An exact owner-setting primitive's callback wraps the site (`runWithOwner`, `createRoot`, a computation's compute function): an owner is current there
     /// (batch 11, slice 6). The span is that primitive call.
     OwnerSetAround,
+    /// The primitive whose callback holds a `resolve`/`until` call runs that callback elsewhere (a queue, an event, a disposal, a later read: the dialect's
+    /// `SlotRun::Deferred`), not on the stack of the call that made it: no observer of the caller is active there (ADR 0985). The span is that primitive call.
+    SlotRunsElsewhere,
+    /// The primitive whose callback holds the call runs it in place with the observer cleared (`untrack`, `runWithOwner`, `createRoot`: the dialect's
+    /// `SlotRun::InPlace` with `SlotObserver::Clears`): the guard reads no observer (ADR 0985). The span is that primitive call.
+    SlotClearsObserver,
+    /// The primitive whose callback holds the call takes whatever its callback throws (`isPending`: `SlotThrows::Swallows`) and the callback is synchronous: the
+    /// guard's plain throw is no report whatever observer is active (ADR 0985). The span is that primitive call.
+    SlotSwallowsThrow,
+    /// An action's step runs from the continuation of a `yield` whose operand is a promise (or any `yield` of an async generator) on every path to the site: a
+    /// later task with no observer (ADR 0985; `owners::action_step_resumption`). The span is the `yield`.
+    StepResumedByYield,
 }
 
 /// A premise: a typed fact kind, the code the fact is about (`at`, in the

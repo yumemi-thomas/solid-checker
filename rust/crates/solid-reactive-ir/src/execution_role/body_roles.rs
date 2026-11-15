@@ -524,15 +524,26 @@ pub(crate) fn follows_try_head_await(
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    let Some(function) = continuation_function(file, span) else {
-        return false;
-    };
-    file.ast.try_head_awaits.iter().any(|head| {
-        head.regions.iter().any(|region| region.contains(span))
-            && containing_ast_function(&file.ast, head.awaited)
-                .is_some_and(|owner| owner.span == function.span)
-            && operand_cannot_throw(file, head, lookup)
-    })
+    try_head_await_before(file, span, lookup).is_some()
+}
+
+/// [`follows_try_head_await`]'s proof: the `await` at the head of the `try` whose `catch` or `finally` holds `span`.
+pub(crate) fn try_head_await_before(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    let function = continuation_function(file, span)?;
+    file.ast
+        .try_head_awaits
+        .iter()
+        .find(|head| {
+            head.regions.iter().any(|region| region.contains(span))
+                && containing_ast_function(&file.ast, head.awaited)
+                    .is_some_and(|owner| owner.span == function.span)
+                && operand_cannot_throw(file, head, lookup)
+        })
+        .map(|head| head.awaited)
 }
 
 fn operand_cannot_throw(

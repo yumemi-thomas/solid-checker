@@ -470,6 +470,15 @@ impl Dialect for Solid2 {
         self.triple_exports == releases::TripleExports::Rc21
     }
 
+    // ADR 0985: both open with `if (getObserver()) throw` (`resolve`: `@solidjs/signals` `dist/dev.js:4738`; `until`: `:2718`).
+    fn observer_guard_code(&self, primitive: Primitive) -> Option<RuntimeCode> {
+        match primitive {
+            Primitive::Resolve => Some(RuntimeCode::ResolveInReactiveScope),
+            Primitive::Until => Some(RuntimeCode::UntilInReactiveScope),
+            _ => None,
+        }
+    }
+
     // rc.21: `resolve` and `until` from `createTrackedEffect` throw "Cannot call
     // resolve inside a reactive scope", the observer guard, with no leaf-owner
     // mechanism (Chrome, ADR 0641). rc.17 is measured otherwise (ADR 0614).
