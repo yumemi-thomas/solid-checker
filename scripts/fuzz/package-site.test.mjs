@@ -257,14 +257,14 @@ describe("the project site (ADR 0992)", () => {
     expect(() => packageSite(base(), "lazy", MODULE, { project: true, own: true })).toThrow(/handed values/);
     expect(() => packageSite(base(), "lazy-call", MODULE)).toThrow(/unknown entry/);
   });
-  it("is crossed by no grid yet: the judge reads App.tsx's ledger only, and the wiring lands with ADR 0993's judge", () => {
-    for (const code of PROJECT_SITE_CODES) {
-      const names = [
-        ...cellList({ codes: [code], recall: true }).flatMap((cell) => recallShapes(code, cell.context, { lean: true })),
-        ...legalCells({ codes: [code], recall: true }).flatMap((cell) => recallLegalShapes(code, cell.context, { lean: true })),
-      ].map((shape) => shape.pkg ?? "");
-      expect(names.filter((pkg) => pkg.endsWith("-proj")), code).toEqual([]);
-    }
+  it("is crossed by the recall grids since ADR 0993, which reads every project module like App.tsx: each project entry, the component entries only where the cell takes them", () => {
+    const names = PROJECT_SITE_CODES.flatMap((code) => [
+      ...cellList({ codes: [code], recall: true }).flatMap((cell) => recallShapes(code, cell.context, { lean: true })),
+      ...legalCells({ codes: [code], recall: true }).flatMap((cell) => recallLegalShapes(code, cell.context, { lean: true })),
+    ]).map((shape) => shape.pkg ?? "").filter((pkg) => pkg.endsWith("-proj"));
+    // ADR 0992 built 79 programs of them (31 matrix, 48 legal): the same cells, now in the grids.
+    expect(names).toHaveLength(79);
+    expect(new Set(names)).toEqual(new Set(projectShapesOf()));
   });
   it("builds a program whose site is in site1.tsx and whose lazy loader imports it", () => {
     const built = buildCase(generateProgram(7, { profile: "misuse", misusePlan: { code: "NO_OWNER_CLEANUP", context: "body", binding: "direct", layer: "none", variant: null, census: true, legal: true, pkg: "lazy-proj" } }));

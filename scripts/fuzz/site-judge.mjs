@@ -31,7 +31,48 @@ import { codeRules, codesForRule, placelessCodes } from "./codes.mjs";
 export const unplaceableCodes = placelessCodes.filter((code) => code !== "LOADING_ON_ACCESSOR");
 export const isUnplaceable = (code) => unplaceableCodes.includes(code);
 
-const fileOf = (position) => position?.file ?? "App.tsx";
+/** The entry file of a case: a position or a finding with no `file` is its. */
+export const APP_FILE = "App.tsx";
+const fileOf = (position) => position?.file ?? APP_FILE;
+/** The file a recorded position (a frame, a violation) is in: `file`, else App.tsx (the oracle and the hosts record App.tsx's with none). */
+export const positionFile = fileOf;
+
+/**
+ * ADR 0993: the project source files of a case are judged alike. A frame of a diagnostic in `file` (a project module: `site1.tsx`,
+ * `helpers.ts`), never another file's: a frame that shares a line number with a finding of another file places nothing there. Package files
+ * (node_modules) are no project file: the runners keep no frame of them, and the entry rule (frames attributed to the entry line) stays theirs.
+ */
+export const framesIn = (positions, file = APP_FILE) => (positions ?? []).filter((position) => fileOf(position) === file);
+/** The lines of those frames. */
+export const linesIn = (positions, file = APP_FILE) => framesIn(positions, file).map((position) => position.line);
+
+/**
+ * Every checker row of the case, each with the file it is in: App.tsx's rows (`checker.findings`, which carry no `file`) and the other project
+ * modules' (`checker.moduleFindings`, checker.mjs `parseModuleFindings`, which do). The one place the judges read module rows, so none of them
+ * sees only App.tsx's.
+ */
+export const programFindings = (checker) => [...(checker?.findings ?? []).map((finding) => (finding.file ? finding : { ...finding, file: APP_FILE })), ...(checker?.moduleFindings ?? [])];
+/**
+ * A checker result with App.tsx's rows in `findings` and every other project file's in `moduleFindings`. The fast path's result is that already
+ * (`checker.mjs` `moduleFindings`); the real-Chrome oracle's record lists every file's rows in `findings`, each with its `file`, so the judges that read
+ * either (`judgeChrome` judges the oracle's) first split it: a module's row is never read as App.tsx's by its line.
+ */
+export function splitChecker(checker) {
+  if (!checker?.findings?.some((finding) => fileOf(finding) !== APP_FILE)) return checker;
+  return {
+    ...checker,
+    findings: checker.findings.filter((finding) => fileOf(finding) === APP_FILE),
+    moduleFindings: [...(checker.moduleFindings ?? []), ...checker.findings.filter((finding) => fileOf(finding) !== APP_FILE)],
+  };
+}
+/** The rows of one file. */
+export const findingsIn = (checker, file = APP_FILE) => (file === APP_FILE ? (checker?.findings ?? []) : (checker?.moduleFindings ?? []).filter((finding) => finding.file === file));
+/** A judge row's label for a finding: `rule@line`, with the file in front of the line for a module's (`rule@site1.tsx:4`). App.tsx's keep the label they had. */
+export const labelOf = (finding) => `${finding.rule}@${fileOf(finding) === APP_FILE ? "" : `${finding.file}:`}${finding.line}`;
+/** The line of a [`labelOf`] label. */
+export const lineOfLabel = (label) => Number(String(label).split("@").pop().split(":").pop());
+/** The file of a [`labelOf`] label. */
+export const fileOfLabel = (label) => { const at = String(label).split("@").pop(); return at.includes(":") ? at.slice(0, at.lastIndexOf(":")) : APP_FILE; };
 /** A violation's place, the key two violations of one site share. */
 export const siteKey = (violation) => `${fileOf(violation)}:${violation.line}:${violation.column ?? ""}`;
 

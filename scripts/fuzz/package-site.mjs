@@ -77,8 +77,8 @@ export const parsePkg = (value) => {
 /** ADR 0992: the project-site shapes a grid crosses: each project entry, handed (a project module has no manifest, so no phantom form). */
 export const projectShapesOf = () => PROJECT_ENTRIES.map((entry) => `${entry}${PROJECT_SUFFIX}`);
 /**
- * ADR 0992: the codes whose question is which owner a component's body runs under: the owner-code grids' project sites. NOT crossed by any grid yet: the judge reads only App.tsx's
- * ledger, so a row or a Chrome frame in `site1.tsx` is unplaced (docs/open-work.md); the wiring (matrix.mjs `packageShapes`) lands with ADR 0993's judge.
+ * ADR 0992: the codes whose question is which owner a component's body runs under: the owner-code grids' project sites. Crossed by the recall grids since ADR 0993 (matrix.mjs `packageShapes`):
+ * the judges read every project module like App.tsx, so a row or a Chrome frame in `site1.tsx` is judged where it is.
  */
 export const PROJECT_SITE_CODES = ["NO_OWNER_CLEANUP", "NO_OWNER_EFFECT", "NO_OWNER_CONTEXT", "SETTLED_CLEANUP_UNOWNED"];
 /** Every shape name a grid crosses: the entries handed, and each again with its own values where the template has signals to own. */
