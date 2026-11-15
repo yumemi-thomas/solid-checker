@@ -811,9 +811,7 @@ impl<'l, 'a> Census<'l, 'a> {
     }
 
     fn holders(&mut self, file: &FileFacts, at: Span) -> Vec<Holder> {
-        self.files
-            .entry(file.path.to_string())
-            .or_insert_with(|| FileIndex::of(file))
+        crate::get_or_insert_with_str(&mut self.files, file.path.as_str(), || FileIndex::of(file))
             .holders
             .get(&at)
             .cloned()
@@ -906,9 +904,7 @@ impl<'l, 'a> Census<'l, 'a> {
     }
 
     fn references(&mut self, file: &FileFacts, declaration: Span) -> Vec<Span> {
-        self.files
-            .entry(file.path.to_string())
-            .or_insert_with(|| FileIndex::of(file))
+        crate::get_or_insert_with_str(&mut self.files, file.path.as_str(), || FileIndex::of(file))
             .references
             .get(&declaration)
             .cloned()
@@ -2135,11 +2131,11 @@ impl<'l, 'a> Census<'l, 'a> {
     /// chain of `member`.
     fn write_decided(&mut self, file: &FileFacts, member: Span) -> bool {
         let member_writes = &self.member_writes;
-        self.decided_writes
-            .entry(file.path.to_string())
-            .or_insert_with(|| member_writes(file))
-            .iter()
-            .any(|written| written.start == member.start && written.end >= member.end)
+        crate::get_or_insert_with_str(&mut self.decided_writes, file.path.as_str(), || {
+            member_writes(file)
+        })
+        .iter()
+        .any(|written| written.start == member.start && written.end >= member.end)
     }
 
     /// Whether the call at `callee` runs where the rules of what it may do do

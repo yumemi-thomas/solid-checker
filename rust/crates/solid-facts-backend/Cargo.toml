@@ -37,6 +37,13 @@ solid-reactive-ir = { path = "../solid-reactive-ir" }
 solid-v2-rules = { path = "../../dialects/solid-v2/rules", optional = true }
 thiserror.workspace = true
 
+# ADR 0994: the process allocator of the checker binaries (the shipped one and the two
+# benchmark binaries, so a measurement is of what ships). Pinned exactly, with the
+# `libmimalloc-sys2` it pins in Cargo.lock; the wasm adapter is another crate and the
+# library is built for wasm32, which has no such allocator.
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+mimalloc-safe = "=0.1.67"
+
 [lib]
 name = "solid_facts_backend"
 path = "src/lib.rs"

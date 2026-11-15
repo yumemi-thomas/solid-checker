@@ -1634,10 +1634,26 @@ fn tracked_async_computation_context(
             == *function.expression.path
     };
     if let Some(range) = range {
-        for (file_index, file) in crate::base::reads::all_files(ctx.facts).iter().enumerate() {
-            if !own_file(file_index) {
-                continue;
-            }
+        // ADR 0994: the function's own file, found by its path (a project holds one such
+        // file, or a few listed under one path), not by comparing the path of every file
+        // of the project to it for every async function (a module-level fact per file,
+        // so a scan of every file for each). `all_files` still notes the whole-program read
+        // the scan recorded.
+        let files = crate::base::reads::all_files(ctx.facts);
+        let own_slots = ctx
+            .semantic_lookup
+            .slots_of_path(function.expression.path.as_ref());
+        debug_assert!(
+            files
+                .iter()
+                .enumerate()
+                .filter(|&(file_index, _)| own_file(file_index))
+                .map(|(file_index, _)| file_index)
+                .eq(own_slots.iter().copied()),
+            "the own files of an async function are the slots of its path"
+        );
+        for &file_index in own_slots {
+            let file = &files[file_index];
             for (call_index, call) in file.ast.calls.iter().enumerate() {
                 // ADR 0517: also an argument naming the function exactly
                 // (ADR 0516's `exact_function_argument`): the binding of a

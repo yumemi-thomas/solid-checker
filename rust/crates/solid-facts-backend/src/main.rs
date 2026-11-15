@@ -1,7 +1,14 @@
-// The daemon's own modules: the daemon (below) is Unix-only, and its
-// resolution witness stamps files with Unix metadata.
 // ADR 0950: the what-if build never reaches the daemon modules below, which stay compiled.
 #![cfg_attr(feature = "what-if", allow(dead_code, unused_imports))]
+
+/// ADR 0994: mimalloc is the process allocator (the system one made malloc and free about a
+/// sixth of the CPU of a first build). No `unsafe` here: the allocator is the crate's.
+#[cfg(not(target_family = "wasm"))]
+#[global_allocator]
+static ALLOCATOR: mimalloc_safe::MiMalloc = mimalloc_safe::MiMalloc;
+
+// The daemon's own modules: the daemon (below) is Unix-only, and its
+// resolution witness stamps files with Unix metadata.
 #[cfg(unix)]
 mod daemon_cache;
 #[cfg(unix)]

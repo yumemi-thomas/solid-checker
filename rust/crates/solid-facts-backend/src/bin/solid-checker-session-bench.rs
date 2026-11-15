@@ -59,6 +59,12 @@ fn measured_pipeline_duration(timing: AnalysisTimings) -> std::time::Duration {
         .saturating_add(timing.solver.total)
 }
 
+/// ADR 0994: mimalloc is the process allocator (the system one made malloc and free about a
+/// sixth of the CPU of a first build). No `unsafe` here: the allocator is the crate's.
+#[cfg(not(target_family = "wasm"))]
+#[global_allocator]
+static ALLOCATOR: mimalloc_safe::MiMalloc = mimalloc_safe::MiMalloc;
+
 fn main() {
     match run() {
         Ok(()) => {}
