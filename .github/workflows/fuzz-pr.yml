@@ -51,7 +51,17 @@ env:
   RUST_VERSION: 1.99.1
 
 jobs:
+  # Two jobs, one sample (ADR 1001): the cover is computed over every grid in both and each runs its own grids (focus.mjs --smoke-leg, SMOKE_LEGS):
+  # `rest` (the check that was called smoke) every grid but the census, `census` the census. Each has its own installs, cache restore and build, and a
+  # runtime cache of its own; both print the cover's hash, which is the same line. Neither cancels the other.
   smoke:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { leg: rest, name: smoke }
+          - { leg: census, name: smoke-census }
     # ubuntu-22.04 x64 so the release dependency cache CI's rust-package job writes on main restores here.
     runs-on: ubuntu-22.04
     timeout-minutes: ${{ github.event_name == 'pull_request' && 60 || 180 }}
@@ -87,8 +97,11 @@ jobs:
         background: true
         with:
           path: ~/fuzz-cache
-          key: fuzz-pr-runtime-${{ github.sha }}
-          restore-keys: fuzz-pr-runtime-
+          key: fuzz-pr-runtime-${{ matrix.leg }}-${{ github.sha }}
+          # The leg's own cache, then any (the one cache both legs shared before the split, `fuzz-pr-runtime-<sha>`: records are keyed by program bytes).
+          restore-keys: |
+            fuzz-pr-runtime-${{ matrix.leg }}-
+            fuzz-pr-runtime-
       - id: tsrs-cache
         uses: actions/cache@v4
         with:
@@ -111,20 +124,21 @@ jobs:
           COVER: ${{ (github.event_name == 'pull_request' || github.event_name == 'push') && 'all' || inputs.cover || 'per-code' }}
           # Only the nightly lane rotates: a day's seed, printed by the run, so a failure can be run again.
           COVER_SEED: ${{ github.event_name == 'schedule' && 'day' || '1' }}
+          LEG: ${{ matrix.leg }}
         run: |
           seed=$COVER_SEED
           [ "$seed" = day ] && seed=$(date -u +%Y%j)
-          node scripts/fuzz/focus.mjs --smoke --cover "$COVER" --cover-seed "$seed" --sample 0 --out "$RUNNER_TEMP/out" \
+          node scripts/fuzz/focus.mjs --smoke --smoke-leg "$LEG" --cover "$COVER" --cover-seed "$seed" --sample 0 --out "$RUNNER_TEMP/out" \
             --checker-bin "$PWD/rust/target/release/solid-checker-rust" --typefacts "$PWD/bin/solid-typefacts" -- --cache-dir "$HOME/fuzz-cache"
       - uses: actions/cache/save@v4
         if: github.event_name == 'push' && always()
         with:
           path: ~/fuzz-cache
-          key: fuzz-pr-runtime-${{ github.sha }}
+          key: fuzz-pr-runtime-${{ matrix.leg }}-${{ github.sha }}
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: fuzz-smoke
+          name: fuzz-smoke-${{ matrix.leg }}
           path: |
             ${{ runner.temp }}/out/**/*.json
             ${{ runner.temp }}/out/**/*.jsonl
