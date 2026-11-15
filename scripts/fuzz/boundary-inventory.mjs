@@ -80,10 +80,25 @@ const SILENT_READ = new Set(["TrackedJsx", "DeferredCallback", "EventCallback", 
 const SILENT_WRITE = new Set(["Unreported", "ModuleInitialization", "DeferredCallback", "UntrackedCallback", "UntrackedUnwindowed", "EffectApply", "EventCallback", "DirectiveApply", "DiscardedRendering"]);
 
 /**
+ * The kind of a `role_arm!` expression whose literal roles are `roles` (ADR 0995). An expression that is anything but role literals (a call, a
+ * binding, an `if` or `match` with a literal in one branch, `x.unwrap_or(ExecutionRole::Unknown)`) is `computed`: the arm transports another
+ * decision's answer, and a literal beside it says only what one branch answers. Only literals, `Some(..)` and punctuation are literal.
+ */
+export function armKind(expression, roles) {
+  const code = expression.replace(/\/\/.*$/gm, "").replace(/ExecutionRole::\w+/g, "").replace(/\b(?:Some|Ok)\b/g, "").replace(/[\s,()]/g, "");
+  if (roles.length === 0 || code !== "") return "computed";
+  if (roles.some((role) => SILENT_READ.has(role))) return "read-silent";
+  if (roles.some((role) => SILENT_WRITE.has(role))) return "write-silent-only";
+  if (roles.every((role) => role === "Unknown")) return "unknown";
+  return "reporting";
+}
+
+/**
  * Every tagged arm of the classifier: `{ id, file, line, default, roles, kind }`. `kind`:
  *   `read-silent`        a literal role that is silent for reads (and so for the rule that reads it);
  *   `write-silent-only`  a literal role silent for writes and actions only;
- *   `computed`           the role is an expression: the arm transports another decision's answer, silent iff that is;
+ *   `computed`           the role is an expression, or has any part that is not a role literal (see `armKind`): the arm transports another
+ *                        decision's answer, silent iff that is; it needs a pair, never a literal's classification;
  *   `reporting`          a literal role that reports (a read, a write or both): a wrong answer is a false positive, which the differential grids' own
  *                        judge finds, so it needs no boundary shape here;
  *   `unknown`            `Unknown`: an obligation, never a clean.
@@ -104,13 +119,8 @@ export function taggedArms(root = IR_SRC) {
           expression = text.slice(match.index + match[0].length, closing(text, open) - 1);
         }
         const roles = [...new Set([...expression.matchAll(/ExecutionRole::(\w+)/g)].map((role) => role[1]))].sort();
-        let kind;
-        if (!match[3]) kind = "owner"; // `arm_id!` at an owner answer (owners/owner_emission.rs): an owner context, not a role
-        else if (roles.length === 0) kind = "computed";
-        else if (roles.some((role) => SILENT_READ.has(role))) kind = "read-silent";
-        else if (roles.some((role) => SILENT_WRITE.has(role))) kind = "write-silent-only";
-        else if (roles.every((role) => role === "Unknown")) kind = "unknown";
-        else kind = "reporting";
+        // `arm_id!` at an owner answer (owners/owner_emission.rs) is an owner context, not a role.
+        const kind = match[3] ? armKind(expression, roles) : "owner";
         if (!id.startsWith(`${stem}.`)) throw new Error(`arm ${id} in ${relative(root, path)}: an arm id starts with its file's stem (${stem}.)`);
         arms.push({ id, file: relative(root, path), line: lineAt(text, match.index), default: Boolean(match[1]), roles, kind });
       }
@@ -303,16 +313,29 @@ export function tableEntries(root = IR_SRC) {
 // ---------------------------------------------------------------------------------------------------------------------------------------
 // The dialect API tables
 
-/** The questions `impl Dialect for Solid2` answers: `{ id, line }` per `fn` (the trait's methods are the dialect's tables). */
+/** The `fn` items of a Rust text, comments and string literals left out: how many times `fn name` is declared. */
+export function fnCount(text) {
+  return [...text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "").replace(/"(?:\\.|[^"\\])*"/g, '""').matchAll(/\bfn\s+[A-Za-z_]\w*/g)].length;
+}
+
+/**
+ * The questions `impl Dialect for Solid2` answers: `{ id, line }` per `fn` (the trait's methods are the dialect's tables). The scan reads
+ * `    fn name(` at one indent; a method written another way (`pub fn`, a generic, another indentation, a second impl) would be a question the
+ * inventory never lists and no shape covers, so the parsed count must equal the impl's `fn` count and one impl must exist, or this throws (ADR 0995).
+ */
 export function dialectQuestions(root = DIALECT_SRC) {
   const path = join(root, "solid_2.rs");
   const text = withoutTests(source(path));
+  const impls = text.split("impl Dialect for Solid2").length - 1;
+  if (impls !== 1) throw new Error(`boundary-inventory: ${impls} \`impl Dialect for Solid2\` blocks in solid_2.rs, expected exactly one`);
   const start = text.indexOf("impl Dialect for Solid2");
   const open = text.indexOf("{", start);
   const body = text.slice(open + 1, closing(text, open) - 1);
   const base = lineAt(text, open);
   const questions = [];
   for (const match of body.matchAll(/^    fn ([a-z_0-9]+)\(/gm)) questions.push({ id: match[1], line: base + body.slice(0, match.index).split("\n").length - 1 + 1 });
+  const declared = fnCount(body);
+  if (declared !== questions.length) throw new Error(`boundary-inventory: the Dialect impl declares ${declared} fn items but ${questions.length} were parsed as questions: a method is written in a shape the scan misses (pub fn, a generic, another indent) or a helper fn sits inside the impl`);
   return questions;
 }
 

@@ -53,8 +53,8 @@ test("each table row claims its own owner's paths", () => {
       "rust/crates/solid-facts-backend/src/diagnostics.rs",
       ["backend-process", "backend-staleness", "write-walk-strategies", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "proof-gate", "ir-edit-fuzz"],
     ],
-    ["fixtures/reactive-ir/store-flow/App.tsx", ["coverage", "ownership-gate", "guard-count", "backend-process"]],
-    ["fixtures/findings-snapshots/engine__oxlint-conformance.json", ["coverage", "ownership-gate", "guard-count", "backend-process"]],
+    ["fixtures/reactive-ir/store-flow/App.tsx", ["coverage", "ownership-gate", "proof-gate", "guard-count", "backend-process"]],
+    ["fixtures/findings-snapshots/engine__oxlint-conformance.json", ["coverage", "ownership-gate", "proof-gate", "guard-count", "backend-process"]],
     [
       "apps/solid-typefacts/src/session.rs",
       ["typefacts", "backend-staleness", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "proof-gate", "ir-edit-fuzz", "wasm-parity"],
@@ -146,6 +146,20 @@ test("a path that can move a finding selects every gate that reads findings", ()
   const gatesLane = lane.slice(lane.indexOf("gates_lane() {"), lane.indexOf("\n}\n", lane.indexOf("gates_lane() {")));
   const laneSteps = [...gatesLane.matchAll(/lane_step ([a-z-]+)/g)].map((match) => match[1]);
   assert.deepEqual(laneSteps, FINDING_GATES);
+});
+
+test("a fixture edit selects the proof gate: it runs the checker over every fixture project (ADR 0995)", () => {
+  // The laundering: a fixture edited so that a site nothing ends appears passed verify-delta, which ran coverage and the ownership gate only.
+  for (const path of ["fixtures/reactive-ir/store-flow/App.tsx", "fixtures/engine/eslint-reactivity-v2/App.tsx", "fixtures/uncertifiable-repro/sc2001/src/after-await.tsx", "fixtures/proof-log/candidates.json"]) {
+    const plan = planFor([path]);
+    assert.equal(plan.full, false, path);
+    assert.ok(plan.checks.includes("proof-gate"), `${path} must select proof-gate`);
+    assert.ok(plan.checks.includes("build-debug"), `${path} must rebuild the checker the gate runs`);
+  }
+  // The held cases, HELD_CAP and the frozen judge reach the base checks.
+  for (const path of ["scripts/uncertifiable-causes.mjs", "scripts/fuzz/judge-frozen.json", "fixtures/uncertifiable-repro/cases.json"]) {
+    assert.ok(planFor([path]).checks.includes("guard-count"), path);
+  }
 });
 
 test("a change that needs no checker skips the debug build", () => {
@@ -388,7 +402,7 @@ test("a real non-ASCII path git has to escape is read, not thrown on", () => {
     }
     // ...and every one of them lands on the fixtures row rather than escalating.
     for (const name of names) {
-      assert.deepEqual(classify(name)?.checks, ["coverage", "ownership-gate", "guard-count", "backend-process"], name);
+      assert.deepEqual(classify(name)?.checks, ["coverage", "ownership-gate", "proof-gate", "guard-count", "backend-process"], name);
     }
   });
 });

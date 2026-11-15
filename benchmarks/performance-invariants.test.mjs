@@ -5,7 +5,10 @@ import {
   COLD_SAMPLES,
   DEFAULT_CEILINGS,
   FIRST_IR_MAX_SAMPLES,
+  CORPUS_PATH_CHARS,
+  FIRST_IR_CORPUS,
   assessPerformance,
+  corpusRootPrefix,
   quietLoadBound,
   renderPerformanceFindings,
   sampleFirstIr,
@@ -232,4 +235,18 @@ test("the first-IR result names the corpus path length", () => {
   const sampled = sampler([170_000]);
   sampled.run.corpusPathChars = 93;
   assert.match(assessPerformance({ ...healthy, largeSamples: sampled.reports, firstIrRun: sampled.run }).summary, /corpus path 93 characters/);
+});
+
+test("the first-IR corpus path is 93 characters whatever the temporary directory is (ADR 0995)", () => {
+  // The laundering: the corpus lived under $TMPDIR, so the same binary read 93 characters on this Mac and 51 on a Linux runner, and a
+  // number measured at one was compared with the limit set at the other (ADR 0986: ~115-190 ns/source per character).
+  for (const tmp of ["/tmp", "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T", "/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/", "/Users/x/dev/sc-scratch.noindex/mac18/tmp"]) {
+    const root = `${corpusRootPrefix(tmp)}ABCDEF`; // mkdtemp adds six characters
+    assert.equal(`${root}/${FIRST_IR_CORPUS}`.length, CORPUS_PATH_CHARS, tmp);
+    assert.ok(root.startsWith(`${tmp.replace(/\/+$/, "")}/solid-checker-performance-`), tmp);
+  }
+  assert.equal(CORPUS_PATH_CHARS, 93);
+  assert.equal(FIRST_IR_CORPUS, "widget-1000");
+  // A temporary directory too long for 93 is refused, with the limit, never padded past it or silently measured at another length.
+  assert.throws(() => corpusRootPrefix(`/${"d".repeat(70)}`), /point TMPDIR at a shorter directory/);
 });
