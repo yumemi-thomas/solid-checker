@@ -1553,7 +1553,11 @@ fn stepped_generator_run_site_marks_the_exact_bound_unproven() {
             assert!(through_generator);
             assert_eq!(climb.bound(), bound, "{layers} generator steps");
             if !bound {
-                assert_eq!(climb.stop, InPlaceStop::Elsewhere, "{layers} generator steps");
+                assert_eq!(
+                    climb.stop,
+                    InPlaceStop::Elsewhere,
+                    "{layers} generator steps"
+                );
             }
         });
     }
@@ -1565,7 +1569,11 @@ fn in_place_climb_says_why_it_stopped() {
     use crate::execution_role::InPlaceStop;
     let cases: [(&str, &str, InPlaceStop); 5] = [
         // No function holds the climb's last call: module scope.
-        ("(() => { read(); })();", "module level", InPlaceStop::NoFunction),
+        (
+            "(() => { read(); })();",
+            "module level",
+            InPlaceStop::NoFunction,
+        ),
         // A generator's body runs where its iterator is stepped.
         (
             "function* g() { (() => { read(); })(); }",
@@ -1829,11 +1837,16 @@ fn every_match_on_a_climbs_stop_names_every_stop() {
                 );
             }
             assert!(
-                !block.lines().any(|line| line.trim_start().starts_with("_ =>")),
+                !block
+                    .lines()
+                    .any(|line| line.trim_start().starts_with("_ =>")),
                 "{name}: a match on `climb.stop` has a wildcard arm:\n{block}"
             );
             rest = &body[end..];
         }
     }
-    assert!(matches >= 10, "{matches} matches found: the deciding consumers are matched");
+    assert!(
+        matches >= 10,
+        "{matches} matches found: the deciding consumers are matched"
+    );
 }
