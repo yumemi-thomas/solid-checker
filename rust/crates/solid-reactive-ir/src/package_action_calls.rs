@@ -92,6 +92,8 @@ pub(crate) struct PackageSite {
 pub(crate) enum Provider {
     /// An installed package the build does not read.
     Package,
+    /// An installed package the build reads as source (ADR 0981): its code is analyzed, but this site enters it by a route no analysis follows to that source.
+    Selected,
     /// A global a project declaration file declares ([`AMBIENT_PREFIX`]), not a package's export: its provider is not said.
     Ambient,
     /// A value whose origin the walk could not follow to its end ([`LIMIT_PREFIX`]).
@@ -268,6 +270,8 @@ fn file_sites(
                 Provider::WrittenAny
             } else if declaration.path.starts_with(READ_ANY_PREFIX) {
                 Provider::Unspelled
+            } else if ctx.semantic_lookup.in_dependency_source(&declaration.path) {
+                Provider::Selected
             } else {
                 Provider::Package
             },
@@ -2769,12 +2773,17 @@ fn row(file: &FileFacts, site: &PackageSite) -> crate::StaticViolation {
                 Provider::WrittenAny => "a global the standard library declares, which an installed package this build does not read as source may write at run time (it writes globals under a key the scan does not decide)",
                 Provider::Unspelled => "a member of the global object that this build cannot name (the key is computed), which an installed package this build does not read as source may have written at run time",
                 Provider::Package => "a package this build does not read as source",
+                Provider::Selected => "a package this build reads as source, whose code no analysis follows from this site",
             },
             site.reach.describe()
         ),
-        hint: "Call the package from an event handler, an effect's apply function or onSettled; or let the build read the package as \
-               source (a declared host with the Solid Vite plugin reads the packages that name Solid)."
-            .into(),
+        hint: if site.provider == Provider::Selected {
+            "Call the package from an event handler, an effect's apply function or onSettled."
+        } else {
+            "Call the package from an event handler, an effect's apply function or onSettled; or let the build read the package as \
+             source (a declared host with the Solid Vite plugin reads the packages that name Solid)."
+        }
+        .into(),
         location: crate::location(file.path.shared(), site.at),
         analysis_context: format!("{}:{}", crate::blockers::PACKAGE_MAY_CALL_ACTION, site.reach.word()),
         fixes: Vec::new(),
