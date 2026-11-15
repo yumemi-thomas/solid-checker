@@ -261,32 +261,26 @@ pub(crate) fn climb_through_slots(
     mut crosses: impl FnMut(&SlotLayer<'_>, bool) -> bool,
 ) -> Option<SlotClimb> {
     let mut merged = InPlaceClimb {
-        exhausted: false,
         at: span,
-        in_list: false,
+        stop: super::InPlaceStop::NoFunction,
+        in_list: None,
         among_others: false,
         suspended: None,
         withheld: false,
         unmodelled: false,
     };
-    // Bounded: each step moves to the call that holds the previous function. A loop that runs out ends at the bound.
+    // Bounded: each step moves to the call that holds the previous function. The step after the last one crossed asks the same
+    // question of the next slot and, where it would be crossed too, ends at the bound (ADR 0988).
     let mut stop = ClimbStop::Bound;
-    for step in 0..16 {
-        if let Some(next) = super::climb_in_place_layers(file, merged.at, lookup) {
-            merged.in_list |= next.in_list;
-            merged.among_others |= next.among_others;
-            merged.withheld |= next.withheld;
-            merged.suspended = match (merged.suspended, next.suspended) {
-                (Some(true), _) | (_, Some(true)) => Some(true),
-                (Some(false), _) | (_, Some(false)) => Some(false),
-                (None, None) => None,
-            };
-            merged.at = next.at;
-            if next.exhausted {
-                merged.exhausted = true;
-                stop = ClimbStop::Bound;
-                break;
-            }
+    for step in 0..=16 {
+        let next =
+            super::write_roles::climb_layers(file, merged.at, lookup, false, None, &mut Vec::new());
+        merged.merge_flags(&next);
+        merged.at = next.at;
+        merged.stop = next.stop;
+        if next.bound() {
+            stop = ClimbStop::Bound;
+            break;
         }
         let Some(function) = owning_function(&file.ast, merged.at) else {
             stop = ClimbStop::NoFunction;
@@ -324,9 +318,14 @@ pub(crate) fn climb_through_slots(
             };
             break;
         }
+        // A slot beyond the sixteenth round is the bound.
+        if step == 16 {
+            merged.stop = super::InPlaceStop::Bound;
+            stop = ClimbStop::Bound;
+            break;
+        }
         merged.unmodelled |= unmodelled;
         merged.at = layer.call.span;
-        merged.exhausted |= step == 15;
     }
     (merged.at != span).then_some(SlotClimb {
         climb: merged,

@@ -308,7 +308,7 @@ pub(super) fn semantic_role_before_awaits(
         && super::named_callbacks::nested_in_named_callback(file, span, lookup)
         && let Some(climb) = super::write_roles::climb_in_place_layers(file, span, lookup)
     {
-        if climb.exhausted {
+        if climb.bound() {
             return role_arm!(
                 "callee_roles.semantic_role_before_awaits.named-climb-exhausted",
                 ExecutionRole::Unknown
@@ -328,7 +328,7 @@ pub(super) fn semantic_role_before_awaits(
         // other rules read (a named memo compute's `TrackedJsx` is SC5003's), so
         // no legal shape moves.
         if role.reports_untracked_read() {
-            return match climb.suspended {
+            return match climb.suspended.map(|suspension| suspension.every) {
                 Some(true) => role_arm!(
                     "callee_roles.named-climb-after-await",
                     ExecutionRole::Unreported
@@ -336,7 +336,7 @@ pub(super) fn semantic_role_before_awaits(
                 Some(false) => {
                     role_arm!("callee_roles.named-climb-may-await", ExecutionRole::Unknown)
                 }
-                None if climb.in_list => {
+                None if climb.in_list.is_some() => {
                     role_arm!("callee_roles.named-climb-in-list", ExecutionRole::Unknown)
                 }
                 None => role_arm!("callee_roles.named-climb", role),
@@ -425,9 +425,9 @@ pub(super) fn semantic_role_before_awaits(
                 if in_body(span)
                     || super::write_roles::climb_in_place_layers(file, span, lookup).is_some_and(
                         |climb| {
-                            !climb.exhausted
+                            !climb.bound()
                                 && climb.suspended.is_none()
-                                && !climb.in_list
+                                && climb.in_list.is_none()
                                 && in_body(climb.at)
                         },
                     )
@@ -471,9 +471,9 @@ pub(super) fn semantic_role_before_awaits(
             if entry.tracked
                 && super::write_roles::climb_in_place_layers(file, span, lookup).is_some_and(
                     |climb| {
-                        !climb.exhausted
+                        !climb.bound()
                             && climb.suspended.is_none()
-                            && !climb.in_list
+                            && climb.in_list.is_none()
                             && crate::owners::owning_function(&file.ast, climb.at)
                                 .is_some_and(|function| function.span == callback.span)
                     },
@@ -692,7 +692,7 @@ pub(super) fn semantic_role_before_awaits(
         if !classifying.contains(&write_classification_marker())
             && let Some(climb) = super::write_roles::climb_in_place_layers(file, span, lookup)
         {
-            if climb.exhausted {
+            if climb.bound() {
                 return role_arm!(
                     "callee_roles.semantic_role_before_awaits.layer-climb-exhausted",
                     ExecutionRole::Unknown
@@ -707,7 +707,7 @@ pub(super) fn semantic_role_before_awaits(
                 lookup,
                 classifying,
             );
-            return match climb.suspended {
+            return match climb.suspended.map(|suspension| suspension.every) {
                 _ if !role.reports_untracked_read() => {
                     role_arm!("callee_roles.allowed-climb-silent", role)
                 }
@@ -719,7 +719,7 @@ pub(super) fn semantic_role_before_awaits(
                     "callee_roles.allowed-climb-may-await",
                     ExecutionRole::Unknown
                 ),
-                None if climb.in_list => {
+                None if climb.in_list.is_some() => {
                     role_arm!("callee_roles.allowed-climb-in-list", ExecutionRole::Unknown)
                 }
                 None => role_arm!("callee_roles.allowed-climb", role),
@@ -756,7 +756,7 @@ pub(super) fn semantic_role_before_awaits(
             && let Some((climb, through_generator)) =
                 super::write_roles::in_place_run_site(file, span, lookup)
         {
-            if climb.exhausted {
+            if climb.bound() {
                 return role_arm!(
                     "callee_roles.semantic_role_before_awaits.deferred-climb-exhausted",
                     ExecutionRole::Unknown
@@ -772,7 +772,7 @@ pub(super) fn semantic_role_before_awaits(
                 classifying,
             );
             if placed.reports_untracked_read() {
-                return match climb.suspended {
+                return match climb.suspended.map(|suspension| suspension.every) {
                     Some(true) => role_arm!(
                         "callee_roles.control-flow-climb-after-await",
                         ExecutionRole::Unreported
@@ -781,7 +781,7 @@ pub(super) fn semantic_role_before_awaits(
                         "callee_roles.control-flow-climb-may-await",
                         ExecutionRole::Unknown
                     ),
-                    None if climb.in_list || through_generator => role_arm!(
+                    None if climb.in_list.is_some() || through_generator => role_arm!(
                         "callee_roles.control-flow-climb-in-list",
                         ExecutionRole::Unknown
                     ),

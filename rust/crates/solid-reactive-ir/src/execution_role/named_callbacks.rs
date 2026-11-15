@@ -1055,7 +1055,7 @@ fn inherits_callback_role(
     let owner = containing_ast_function(&file.ast, span)?;
     if owner.span != callback.span {
         let climb = super::write_roles::climb_in_place_layers(file, span, lookup)?;
-        if climb.exhausted {
+        if climb.bound() {
             return Some(ExecutionRole::Unknown);
         }
         if crate::owners::containing_body_function(&file.ast, climb.at)
@@ -1072,7 +1072,7 @@ fn inherits_callback_role(
                 ExecutionRole::Unknown
             ));
         }
-        if climb.in_list {
+        if climb.in_list.is_some() {
             return Some(role_arm!(
                 "named_callbacks.inherits_callback_role.unknown-2",
                 ExecutionRole::Unknown
@@ -1081,7 +1081,7 @@ fn inherits_callback_role(
         // The layers' own awaits are the climb's; the layer's call in the
         // callback's body may follow one of the callback's.
         let at = climb.at;
-        if climb.suspended == Some(true)
+        if climb.suspended_on_every_path()
             || follows_unconditional_await(file, at)
             || follows_dominating_await(file, at)
             || follows_try_head_await(file, at, lookup)

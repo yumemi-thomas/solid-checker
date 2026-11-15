@@ -3634,6 +3634,22 @@
    "adr": "ADR 0981",
    "fact": "a value a package the build does not read as source returned, read where nothing tracks or places it (SC1001 package-value-read)",
    "why": "fail-closed, as the rows of the same ADR: the new row is uncertifiable, never a violation"
+  },
+  {
+   "fixture": "reactive-ir/write-climb-depth",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 7,
+   "to": 8,
+   "adr": "ADR 0988",
+   "fact": "the new case FlowReadSeventeen in write-climb-depth adds one JSX creation site, its <For> element, to the owner-call universe (slice 6, ADR 0969): the site's home rows SC3001 leaf-operation-unaccounted and SC6002 effect-creation-unaccounted, the pair FlowReadSixteen's <For> already carries. No depth change adds a row; a component body is no leaf scope and no effect's apply, so Chrome rc.21 fires neither code there (patterns/depth/s17-flow-read reports STRICT_READ_UNTRACKED only)"
+  },
+  {
+   "fixture": "reactive-ir/write-climb-depth",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 0988",
+   "fact": "the new case FlowReadSeventeen in write-climb-depth adds one JSX creation site, its <For> element, to the owner-call universe (slice 6, ADR 0969): the site's home rows SC3001 leaf-operation-unaccounted and SC6002 effect-creation-unaccounted, the pair FlowReadSixteen's <For> already carries. No depth change adds a row; a component body is no leaf scope and no effect's apply, so Chrome rc.21 fires neither code there (patterns/depth/s17-flow-read reports STRICT_READ_UNTRACKED only)"
   }
  ]
 }

@@ -384,8 +384,8 @@ fn in_place_layer_owners(
         else {
             continue;
         };
-        if climb.exhausted
-            || climb.suspended == Some(true)
+        if climb.bound()
+            || climb.suspended_on_every_path()
             || climb.at != call
             || file.ast.function_at(node.span).is_none_or(|function| {
                 !crate::owners::written_directly_in(&file.ast, function, call)
@@ -404,7 +404,7 @@ fn in_place_layer_owners(
             owner: index,
             local: !site_on_every_completion(lookup, file, node.span, call),
             undecided: climb.suspended.is_some()
-                || climb.in_list
+                || climb.in_list.is_some()
                 || through_generator
                 || climb.withheld,
         });
