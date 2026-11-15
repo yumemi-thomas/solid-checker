@@ -22,12 +22,32 @@ use crate::pipeline::AnalysisContext;
 /// The handler functions of the program by file path: the spans of the function literals and project functions handed to a promise handler call.
 pub(super) type Handlers<'a> = HashMap<&'a str, HashSet<Span>>;
 
-/// Every function the program hands to a promise handler call, outside dependency source.
+/// Every function the program hands to a promise handler call, outside dependency source. A debug build asks again without the per-file gate and requires the same answer
+/// (the gate only skips files where [`is_handler_call`] can answer nothing).
 pub(super) fn handler_functions<'a>(ctx: &AnalysisContext<'a>) -> Handlers<'a> {
+    let found = collect(ctx, true);
+    if cfg!(debug_assertions) {
+        assert_eq!(
+            found,
+            collect(ctx, false),
+            "the per-file gate of the promise handler scan skipped a handler call"
+        );
+    }
+    found
+}
+
+fn collect<'a>(ctx: &AnalysisContext<'a>, gated: bool) -> Handlers<'a> {
     let lookup = ctx.semantic_lookup;
     let mut found: Handlers<'a> = HashMap::default();
     for file in lookup.files() {
         if lookup.in_dependency_source(file.path.as_str()) {
+            continue;
+        }
+        // A file where no call can be a promise handler call holds none: such a call resolves to a standard promise handler or is a member spelled like one.
+        if gated
+            && !lookup.path_resolves_promise_handler(file.path.as_str())
+            && !spells_handler_member(file)
+        {
             continue;
         }
         for call in &file.ast.calls {
@@ -65,17 +85,27 @@ fn is_handler_call(ctx: &AnalysisContext<'_>, file: &FileFacts, call: &CallFact)
         .semantic_lookup
         .resolved_standard_call_name(file, callee)
     {
-        return matches!(
-            name,
-            "Promise.then" | "Promise.catch" | "Promise.finally" | "PromiseLike.then"
-        );
+        return crate::runtime_semantics::is_promise_handler_name(name);
     }
-    file.ast.member_at(callee).is_some_and(|member| {
-        matches!(
-            file.source_text(member.property),
-            Some("then" | "catch" | "finally")
-        )
-    })
+    file.ast
+        .member_at(callee)
+        .is_some_and(|member| spells_handler(file, member))
+}
+
+/// Whether the member's property is spelled like a promise handler (a thenable of the project's, or a receiver whose type no fact proves).
+fn spells_handler(file: &FileFacts, member: &solid_facts::ast::MemberFact) -> bool {
+    matches!(
+        file.source_text(member.property),
+        Some("then" | "catch" | "finally")
+    )
+}
+
+/// Whether some member of the file is spelled like a promise handler: the text arm of [`is_handler_call`] answers only for such a member.
+fn spells_handler_member(file: &FileFacts) -> bool {
+    file.ast
+        .members
+        .iter()
+        .any(|member| spells_handler(file, member))
 }
 
 /// Whether the function whose own body holds `span` is a promise handler of the program.
