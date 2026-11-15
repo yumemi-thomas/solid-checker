@@ -24538,5 +24538,39 @@
   "found": "the Fable review of main dfa6c5dec..48b5ecf6a (2026-11-15): suspected by the read-only helper report (`after_await_accounting/handlers.rs`), then the runtime oracle (4 of 4 `unproven-clean`)",
   "fixed": "ADR 1003 (`handlers::Resolver`: the handler argument is followed to the functions it may be; where not all can be named the argument itself is a site)",
   "outside": "the after-await generators hand a promise handler as a function literal or a function's name; none writes it as a member, a conditional, a parameter, a bound function or a spread. The pattern lane holds the shapes: `patterns/net/th-bound`, `th-conditional`, `th-parameter`, `th-spread` (4 of 4 false clean on ADR 1002's head, fine on ADR 1003's), with `th-member` (covered on both by the arrow's own row) and the legal twin `th-executor-resolve` fine on both, `make fuzz-patterns ARGS=\"--only net/th-\"`"
+ },
+ {
+  "finding": "ASYNC_OUTSIDE_LOADING_BOUNDARY: 24 mx-recall programs, `module-ns` layer, contexts show / jsx / flush-iife / named-flush-call (6 each), lost their proved SC5003 violation to ADR 0978 (#234): a closure handed to `H.h1(cb)`, a member of a namespace import whose function calls it in the render, was read by `layer_cover` as handed to a call the analysis does not resolve (`function_called_at` names only an identifier callee), so the cover answered Unresolved and the finding became uncertifiable, blocker `mount-unresolved`. `agree` became `recall-gap`; the siblings reached through a named import, a default import, a barrel or `export *` kept their violation.",
+  "found": "the audit of main 78ddeb849 (CI run 43739577046) against the last green audit (aa4702650): the id-level comparison with the W audit of dfa6c5dec found 24 mx-recall ids agree there and recall-gap in the CI audit; bisected over the 29 first-parent merges dfa6c5dec..78ddeb849 to #234 (dbb5e7612); read with the proof log: the only difference at the site is SC5003 violation -> uncertifiable `mount-unresolved`.",
+  "fixed": "ADR 1011 (`loading_entries.rs` `layer_cover`: a member callee `project_callee_at_parameter` resolves exactly reads the closure as in place); fixture `loading-member-callee` (`Namespace`), pattern programs `membercallee/*`; the 24 ids are `agree` again, Chrome compares the same.",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-flush-iife-x-alias-module-ns",
+   "mx-async-outside-loading-boundary-flush-iife-x-destructured-module-ns",
+   "mx-async-outside-loading-boundary-flush-iife-x-direct-module-ns",
+   "mx-async-outside-loading-boundary-flush-iife-x-hook-member-module-ns",
+   "mx-async-outside-loading-boundary-flush-iife-x-hook-module-ns",
+   "mx-async-outside-loading-boundary-flush-iife-x-tuple-module-ns",
+   "mx-async-outside-loading-boundary-jsx-x-alias-module-ns",
+   "mx-async-outside-loading-boundary-jsx-x-destructured-module-ns",
+   "mx-async-outside-loading-boundary-jsx-x-direct-module-ns",
+   "mx-async-outside-loading-boundary-jsx-x-hook-member-module-ns",
+   "mx-async-outside-loading-boundary-jsx-x-hook-module-ns",
+   "mx-async-outside-loading-boundary-jsx-x-tuple-module-ns",
+   "mx-async-outside-loading-boundary-named-flush-call-x-alias-module-ns",
+   "mx-async-outside-loading-boundary-named-flush-call-x-destructured-module-ns",
+   "mx-async-outside-loading-boundary-named-flush-call-x-direct-module-ns",
+   "mx-async-outside-loading-boundary-named-flush-call-x-hook-member-module-ns",
+   "mx-async-outside-loading-boundary-named-flush-call-x-hook-module-ns",
+   "mx-async-outside-loading-boundary-named-flush-call-x-tuple-module-ns",
+   "mx-async-outside-loading-boundary-show-x-alias-module-ns",
+   "mx-async-outside-loading-boundary-show-x-destructured-module-ns",
+   "mx-async-outside-loading-boundary-show-x-direct-module-ns",
+   "mx-async-outside-loading-boundary-show-x-hook-member-module-ns",
+   "mx-async-outside-loading-boundary-show-x-hook-module-ns",
+   "mx-async-outside-loading-boundary-show-x-tuple-module-ns"
+  ],
+  "rediscovered": "the build that had it (#234 to main 78ddeb849) answers `recall-gap` on these ids and the fix `agree`, but `make fuzz-focus` cannot fail on it: `recall-gap` is not a problem outcome (codes.mjs PROBLEMS) and no smoke manifest holds a recall grid, so only the audit's `agree -> recall-gap` moves (and an id-level comparison of two audits) see it; the fixture `loading-member-callee` is the gate: its `Namespace` component's SC5003 is a violation in the snapshot and `make coverage` fails on the old build."
  }
 ]

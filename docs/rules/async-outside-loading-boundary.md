@@ -156,6 +156,13 @@ edge places is uncertifiable (blocker `mount-unresolved`), never uncovered: the 
 of the props (a function-valued `children`, a method, `on`), an array element, a class element,
 a tag function, a closure handed to a call whose target the analysis does not resolve
 (`Loading.call(null, props)`, `[Loading][0](props)`, a wrapper's `props`).
+A closure handed to a call is read as run where it is written when the call's target is a project
+function the analysis resolves exactly, a namespace import's member included (ADR 1011:
+`H.run(cb)` with `import * as H`; `function_called_at` names only an identifier callee, so that member read as an
+unresolved call and a violation became `mount-unresolved`): the walk goes on through the callee's call edge to the
+component. A callee it does not resolve exactly (a function that stores the closure, a method an assignment replaced,
+a function the component is handed) stays uncertifiable; so do a re-exported namespace's member, a default import's
+method and a literal's method, whose closure no call edge places in the callee (blocker `call-attributed-read`).
 
 ## A render effect's own compute (ADR 0989)
 
