@@ -57,6 +57,7 @@ import { GRIDS, SMOKE_LEGS } from "./focus-grids.mjs";
 import { legalCells, pairLegalCells } from "./legal.mjs";
 import { cellList, censusCells } from "./matrix.mjs";
 import { FIXED_SEED, wholeGrid, writeSample } from "./cover.mjs";
+import { provedLines, provedMoves, readChanges, readLedger } from "./proved.mjs";
 import { SMOKE_DIR, movedVerdicts, readRows } from "./smoke.mjs";
 import { BEHAVIOUR_KINDS } from "./runtime-diff.mjs";
 import { mergeGridReports, summaryLine } from "./roles.mjs";
@@ -374,6 +375,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     // `--codes all`: every code (the full grids); `--runtime-diff 0`: no oracle sample.
     const codes = options.codes === "all" ? undefined : options.codes.split(",");
     // One grid process: its output streamed to `<dir>.log`, a deadline, then its rows judged.
+    const provedLedger = readLedger(), provedChanges = readChanges();
     const covered = options.cover ? writeSample({ perCode: options.cover === "per-code", seed: Number(options.coverSeed ?? FIXED_SEED), grids: (options.coverGrids ?? options.grids).split(",").filter((grid) => !wholeGrid(grid, options.cover)), runSeed: options.seed, dir: join(out, "cover") }) : null;
     const runUnit = (grid, script, shape, unit, manifest) => {
       // Room for the grid before it starts: a run that fills the disk midway fails late, with ENOSPC rows (ADR 0519's preflight runs at
@@ -432,6 +434,16 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
         for (const move of moved.worse.slice(0, 10)) attention.push(`${unit.label}: worse ${move.id} ${move.from} -> ${move.to}`);
         if (moved.worse.length > 10) attention.push(`${unit.label}: ... ${moved.worse.length - 10} more worse`);
         for (const move of moved.other.slice(0, 5)) console.log(`             ${move.id} ${move.from} -> ${move.to}`);
+      }
+      // A proved verdict (agree on a misuse grid, clean on a legal one) never goes unnamed (ADR 1012): the smoke's cover holds every program of the
+      // ledger, so one that is now another outcome, or has no row, fails unless a row of proved/changes.json names it.
+      if (options.smoke && options.cover && existsSync(join(unit.dir, "programs.jsonl"))) {
+        const ids = provedLedger.get(grid);
+        if (ids?.size) {
+          const moves = provedMoves({ grid, ids, rows: readRows(unit.dir), changes: provedChanges, expectAll: options.cover === "all" });
+          if (moves.lost.length || moves.gained) console.log(`           proved verdicts: ${ids.size} in the ledger, ${moves.lost.length} lost (${moves.named} named), ${moves.gained} newly proved`);
+          attention.push(...provedLines(unit.label, moves));
+        }
       }
       // The unit's perf record, once its fold (if any) has added the role decisions and the fold and prune times.
       let recorded = false;

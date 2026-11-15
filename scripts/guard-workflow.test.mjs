@@ -19,7 +19,7 @@ test("the ratchets that need no checker build run in a CI job that fetches the w
   // whoever ran `make verify`; and with a shallow clone they would have had no merge base to compare with.
   const guards = job("guards");
   assert.match(guards, /fetch-depth: 0/);
-  for (const command of ["node scripts/guard/count.mjs", "node scripts/guard/rises.mjs", "node scripts/guard/regress.mjs", "node scripts/guard/base.mjs", "bun scripts/proof-lint.mjs", "bun scripts/ir-read-lint.mjs"]) {
+  for (const command of ["node scripts/guard/count.mjs", "node scripts/guard/rises.mjs", "node scripts/guard/regress.mjs", "node scripts/guard/base.mjs", "node scripts/guard/proved.mjs", "bun scripts/proof-lint.mjs", "bun scripts/ir-read-lint.mjs"]) {
     assert.ok(guards.includes(`- run: ${command}`), command);
   }
   // Nothing in it builds the checker.
