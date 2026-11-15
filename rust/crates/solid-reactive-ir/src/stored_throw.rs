@@ -22,7 +22,7 @@ use solid_facts::compiler::CallbackRoleKind;
 use solid_facts::core::Span;
 
 use crate::ExecutionRole;
-use crate::execution_role::{Reach, SiteReach};
+use crate::execution_role::{InPlaceStop, Reach, SiteReach};
 use crate::indexes::ComponentStatus;
 use crate::local_access::HandOff;
 use crate::static_api::StaticApiContext;
@@ -199,7 +199,7 @@ impl Walk<'_, '_> {
         }
         // A climb that stopped is walked on from where it stopped.
         let climb = crate::execution_role::climb_in_place_layers(file, site, lookup)
-            .filter(|climb| !climb.in_list);
+            .filter(|climb| climb.in_list.is_none());
         if observer
             && climb
                 .as_ref()
@@ -207,7 +207,21 @@ impl Walk<'_, '_> {
         {
             return self.open();
         }
-        let at = climb.map_or(site, |climb| climb.at);
+        let at = match climb {
+            // A climb that stopped is walked on from where it stopped, whatever stopped it (the bound included: the layers past it
+            // are asked by the walk's own depth).
+            Some(climb) => match climb.stop {
+                InPlaceStop::Bound
+                | InPlaceStop::NoFunction
+                | InPlaceStop::Generator
+                | InPlaceStop::Within
+                | InPlaceStop::FreshStack
+                | InPlaceStop::Elsewhere
+                | InPlaceStop::Withheld
+                | InPlaceStop::JsxPlaced => climb.at,
+            },
+            None => site,
+        };
         if caught(file, site) || caught(file, at) {
             return ThrowEnd::Unobserved;
         }

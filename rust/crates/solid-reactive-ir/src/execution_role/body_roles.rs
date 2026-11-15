@@ -524,15 +524,26 @@ pub(crate) fn follows_try_head_await(
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    let Some(function) = continuation_function(file, span) else {
-        return false;
-    };
-    file.ast.try_head_awaits.iter().any(|head| {
-        head.regions.iter().any(|region| region.contains(span))
-            && containing_ast_function(&file.ast, head.awaited)
-                .is_some_and(|owner| owner.span == function.span)
-            && operand_cannot_throw(file, head, lookup)
-    })
+    try_head_await_before(file, span, lookup).is_some()
+}
+
+/// [`follows_try_head_await`]'s proof: the `await` at the head of the `try` whose `catch` or `finally` holds `span`.
+pub(crate) fn try_head_await_before(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    let function = continuation_function(file, span)?;
+    file.ast
+        .try_head_awaits
+        .iter()
+        .find(|head| {
+            head.regions.iter().any(|region| region.contains(span))
+                && containing_ast_function(&file.ast, head.awaited)
+                    .is_some_and(|owner| owner.span == function.span)
+                && operand_cannot_throw(file, head, lookup)
+        })
+        .map(|head| head.awaited)
 }
 
 fn operand_cannot_throw(
@@ -920,7 +931,7 @@ pub(crate) fn generator_step_resumption(
         span
     } else {
         let climb = super::write_roles::climb_in_place_layers(file, span, lookup)?;
-        if climb.exhausted || climb.in_list {
+        if climb.bound() || climb.in_list.is_some() {
             return containing_ast_function(ast, climb.at)
                 .is_some_and(|function| function.generator)
                 .then_some(false);
@@ -1209,8 +1220,8 @@ pub(super) fn named_callback_write_role(
     // A library callback may run zero times (ADR 0493 review): no rejection.
     let at = match super::write_roles::climb_in_place_layers(file, span, lookup) {
         Some(climb)
-            if !climb.exhausted
-                && !climb.in_list
+            if !climb.bound()
+                && climb.in_list.is_none()
                 && climb.suspended.is_none()
                 && !super::write_roles::climb_crosses_library_callback(
                     file, span, climb.at, lookup,
@@ -1428,7 +1439,7 @@ fn layered_window_after_awaits(
     let Some(climb) = climb_in_place_layers(file, span, lookup) else {
         return role;
     };
-    if climb.exhausted {
+    if climb.bound() {
         return role_arm!(
             "body_roles.layered_window_after_awaits.climb-exhausted",
             ExecutionRole::Unknown
@@ -1444,7 +1455,7 @@ fn layered_window_after_awaits(
     } else {
         None
     };
-    match (climb.suspended, landing) {
+    match (climb.suspended.map(|suspension| suspension.every), landing) {
         (Some(true), _) | (_, Some(true)) if !climb.among_others && !climb.withheld => role_arm!(
             "body_roles.layered_window_after_awaits.unreported",
             ExecutionRole::Unreported

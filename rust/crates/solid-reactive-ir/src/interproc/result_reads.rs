@@ -1964,10 +1964,10 @@ fn body_site_runs_during_call_through_layers(
     else {
         return false;
     };
-    !climb.exhausted
+    !climb.bound()
         && !through_generator
         && climb.suspended.is_none()
-        && !climb.in_list
+        && climb.in_list.is_none()
         && body_site_runs_during_call(file, function, climb.at)
 }
 

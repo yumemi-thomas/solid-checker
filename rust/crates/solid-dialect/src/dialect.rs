@@ -498,6 +498,13 @@ pub trait Dialect: Sync {
         None
     }
 
+    /// ADR 0985: the runtime code of the observer guard a call of `primitive` opens with, if it has one (`resolve`, `until`: `if (getObserver()) throw`).
+    /// The site universe lists every call of such a primitive, and every value reference to one, as a site of that code.
+    fn observer_guard_code(&self, primitive: Primitive) -> Option<RuntimeCode> {
+        let _ = primitive;
+        None
+    }
+
     /// ADR 0893: whether `primitive` fails with a plain `throw`, no diagnostic
     /// emitted at the call: what says so is whatever reports the error.
     fn plain_throw(&self, primitive: Primitive) -> bool {

@@ -4,7 +4,9 @@
 
 use crate::HashSet;
 use crate::cleanup::callback_argument_literal;
-use crate::execution_role::{allowed_callback_spans, read_execution_role, semantic_execution_role};
+use crate::execution_role::{
+    InPlaceStop, allowed_callback_spans, read_execution_role, semantic_execution_role,
+};
 use crate::identity::SymbolId;
 use crate::owners::{
     component_binding_name, component_props_parameter_fix, containing_ast_function,
@@ -215,6 +217,86 @@ fn unresolved_import_references(
     defects
 }
 
+/// The references to a dialect primitive that are values (`primitive_value_references`' census, and the site universe's `resolve` table for
+/// `resolve` and `until`, ADR 0985): each `(span, primitive)` of a reference whose primitive `wanted` accepts, with every reference a rule
+/// already reads or that is no value left out (the callee of a call that resolves to a primitive and its plain member chain, a JSX tag, a type
+/// query or type name, an import or export specifier and the declaration, a binding the primitive is copied into). The primitive is asked
+/// first (an index lookup), so the position tests run only for a reference that names one `wanted` accepts.
+pub(crate) fn primitive_value_candidates(
+    ctx: &AnalysisContext<'_>,
+    file: &solid_facts::FileFacts,
+    wanted: impl Fn(&crate::PrimitiveName) -> bool,
+) -> Vec<(solid_facts::core::Span, crate::PrimitiveName)> {
+    let ast = &file.ast;
+    // The callee of a call that resolves to a primitive, and the plain
+    // member chain it is (`createEffect`, `Solid.createEffect`): the rules
+    // read these. Anything else is a value the call reaches: a method of
+    // the primitive (`createEffect.call(…)`, `.bind(…)`) or a choice
+    // (`(flag ? a : b)(…)`).
+    let mut callees = HashSet::default();
+    let mut callees_found = false;
+    let candidates = ast
+        .identifiers
+        .iter()
+        .filter(|identifier| identifier.role == solid_facts::ast::IdentifierRole::Reference)
+        .map(|identifier| identifier.span)
+        .chain(
+            ast.members
+                .iter()
+                .filter(|member| !ast.computed_members.contains(&member.span))
+                .map(|member| member.property),
+        );
+    let mut seen = HashSet::default();
+    let mut found = Vec::new();
+    for span in candidates {
+        let Some(primitive) =
+            crate::referenced_primitive(file, span, ctx.entities, ctx.symbol_names, ctx.dialect)
+        else {
+            continue;
+        };
+        if !wanted(&primitive) {
+            continue;
+        }
+        if !callees_found {
+            callees_found = true;
+            for call in ast.calls.iter().filter(|call| {
+                crate::call_primitive_name_cached(
+                    ctx.semantic_lookup,
+                    file,
+                    call,
+                    ctx.entities,
+                    ctx.symbol_names,
+                    ctx.dialect,
+                )
+                .is_some()
+            }) {
+                let mut span = ast.peel_ts_sugar_span(call.callee);
+                callees.insert(span);
+                while let Some(member) = ast.member_at(span) {
+                    callees.insert(member.property);
+                    span = ast.peel_ts_sugar_span(member.object);
+                    callees.insert(span);
+                }
+            }
+        }
+        if callees.contains(&span)
+            || ast.jsx_elements.iter().any(|element| {
+                element.name.span.contains(span)
+                    || element.closing_name.is_some_and(|name| name.contains(span))
+            })
+            || ast.type_queries.iter().any(|query| query.contains(span))
+            || ast.type_names.iter().any(|name| name.contains(span))
+            || crate::indexes::reference_is_declaration_or_module_surface(file, span)
+            || crate::symbols::copied_into_primitive_binding(file, span)
+            || !seen.insert(span)
+        {
+            continue;
+        }
+        found.push((span, primitive));
+    }
+    found
+}
+
 /// A dialect primitive referenced as a value rather than called by name
 /// (`const effect = createEffect; effect(…)`, `Reflect.apply(createEffect,
 /// …)`, `afterEach(cleanup)`, `[Solid.createEffect]`). Every rule finds a
@@ -234,66 +316,7 @@ fn primitive_value_references(
     let mut defects = Vec::new();
     {
         let ast = &file.ast;
-        // The callee of a call that resolves to a primitive, and the plain
-        // member chain it is (`createEffect`, `Solid.createEffect`): the rules
-        // read these. Anything else is a value the call reaches: a method of
-        // the primitive (`createEffect.call(…)`, `.bind(…)`) or a choice
-        // (`(flag ? a : b)(…)`).
-        let mut callees = HashSet::default();
-        for call in ast.calls.iter().filter(|call| {
-            crate::call_primitive_name_cached(
-                ctx.semantic_lookup,
-                file,
-                call,
-                ctx.entities,
-                ctx.symbol_names,
-                ctx.dialect,
-            )
-            .is_some()
-        }) {
-            let mut span = ast.peel_ts_sugar_span(call.callee);
-            callees.insert(span);
-            while let Some(member) = ast.member_at(span) {
-                callees.insert(member.property);
-                span = ast.peel_ts_sugar_span(member.object);
-                callees.insert(span);
-            }
-        }
-        let candidates = ast
-            .identifiers
-            .iter()
-            .filter(|identifier| identifier.role == solid_facts::ast::IdentifierRole::Reference)
-            .map(|identifier| identifier.span)
-            .chain(
-                ast.members
-                    .iter()
-                    .filter(|member| !ast.computed_members.contains(&member.span))
-                    .map(|member| member.property),
-            );
-        let mut seen = HashSet::default();
-        for span in candidates {
-            if callees.contains(&span)
-                || ast.jsx_elements.iter().any(|element| {
-                    element.name.span.contains(span)
-                        || element.closing_name.is_some_and(|name| name.contains(span))
-                })
-                || ast.type_queries.iter().any(|query| query.contains(span))
-                || ast.type_names.iter().any(|name| name.contains(span))
-                || crate::indexes::reference_is_declaration_or_module_surface(file, span)
-                || crate::symbols::copied_into_primitive_binding(file, span)
-                || !seen.insert(span)
-            {
-                continue;
-            }
-            let Some(primitive) = crate::referenced_primitive(
-                file,
-                span,
-                ctx.entities,
-                ctx.symbol_names,
-                ctx.dialect,
-            ) else {
-                continue;
-            };
+        for (span, primitive) in primitive_value_candidates(ctx, file, |_| true) {
             // ADR 0825: the primitive is named only when the binder confirms
             // it (ADR 0711); a symbol the producer attributes to one with no
             // import that says so stays open, named by its own text.
@@ -1861,8 +1884,21 @@ fn member_reads_after_await(
         let climbed = || {
             crate::execution_role::climb_in_place_layers(file, member.span, ctx.semantic_lookup)
                 .is_some_and(|climb| {
-                    !climb.exhausted
-                        && !climb.in_list
+                    // The layers past the bound are unread, so the member is not proven read on this continuation: it is not a read
+                    // here, and the after-await accounting's universe ends the member at its own site. Every other stop ends the
+                    // climb at a call that runs on this continuation.
+                    let layers_read = match climb.stop {
+                        InPlaceStop::Bound => false,
+                        InPlaceStop::NoFunction
+                        | InPlaceStop::Generator
+                        | InPlaceStop::Within
+                        | InPlaceStop::FreshStack
+                        | InPlaceStop::Elsewhere
+                        | InPlaceStop::Withheld
+                        | InPlaceStop::JsxPlaced => true,
+                    };
+                    layers_read
+                        && climb.in_list.is_none()
                         && !climb.among_others
                         // A hoisted function's call may come before the await.
                         && climb.at.start >= boundary

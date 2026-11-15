@@ -444,9 +444,9 @@ pub(super) fn emit_file(
         // owner, and the push-time guard test follows only IIFEs.
         let climbed_after_await = |site: Span| {
             crate::execution_role::climb_in_place_layers(file, site, lookup).is_some_and(|climb| {
-                !climb.exhausted
-                    && !climb.in_list
-                    && climb.suspended == Some(true)
+                !climb.bound()
+                    && climb.in_list.is_none()
+                    && climb.suspended_on_every_path()
                     && !crate::execution_role::climb_crosses_library_callback(
                         file, site, climb.at, lookup,
                     )
@@ -1458,7 +1458,7 @@ fn later_generator_step(
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     let climbed = crate::execution_role::climb_in_place_layers(file, span, lookup)
-        .filter(|climb| !climb.exhausted)
+        .filter(|climb| !climb.bound())
         .map(|climb| climb.at);
     std::iter::once(span)
         .chain(climbed)

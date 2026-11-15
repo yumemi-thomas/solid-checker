@@ -462,6 +462,16 @@ pub(crate) fn action_step_resumption(
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> Option<StepResumption> {
+    action_step_resumption_witness(file, span, lookup).map(|(resumption, _)| resumption)
+}
+
+/// [`action_step_resumption`] with the `yield` a `Proven` answer rests on (ADR 0985): the one whose operand is a promise, or
+/// any `yield` of an async generator, and whose block region holds `span`. A `Possible` answer names none.
+pub(crate) fn action_step_resumption_witness(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<(StepResumption, Option<Span>)> {
     let function = containing_body_function(&file.ast, span)?;
     stepped_action_generator(file, function, lookup)?;
     if lookup.dialect.fresh_stack_callback_owner() != Some(solid_dialect::CallbackOwner::None) {
@@ -479,7 +489,7 @@ pub(crate) fn action_step_resumption(
             continue;
         }
         if suspends && yielded.region.is_some_and(|region| region.contains(span)) {
-            return Some(StepResumption::Proven);
+            return Some((StepResumption::Proven, Some(yielded.span)));
         }
         let before = yielded.span.end <= span.start
             && !crate::execution_role::in_exclusive_arms(file, yielded.span, span);
@@ -490,7 +500,7 @@ pub(crate) fn action_step_resumption(
         });
         possible |= before || repeated;
     }
-    possible.then_some(StepResumption::Possible)
+    possible.then_some((StepResumption::Possible, None))
 }
 
 /// Whether the `yield`'s operand is a call the compiler resolved to the
@@ -1681,7 +1691,7 @@ pub(crate) fn gated_leaf_calls_at(
         .collect();
     let direct = crate::owners::containing_body_function(&file.ast, span);
     let climbed = crate::execution_role::climb_in_place_layers(file, span, lookup)
-        .filter(|climb| !climb.exhausted && !climb.in_list && climb.suspended.is_none())
+        .filter(|climb| !climb.bound() && climb.in_list.is_none() && climb.suspended.is_none())
         .and_then(|climb| crate::owners::containing_body_function(&file.ast, climb.at));
     for function in [direct, climbed].into_iter().flatten() {
         let Some((positions, _)) = crate::owners::exact_value_positions(file, function, lookup)
@@ -1736,7 +1746,7 @@ fn named_leaf_owner(
 ) -> Option<String> {
     let direct = crate::owners::containing_body_function(&file.ast, span)?;
     let climbed = crate::execution_role::climb_in_place_layers(file, span, lookup)
-        .filter(|climb| !climb.exhausted && !climb.in_list && climb.suspended.is_none())
+        .filter(|climb| !climb.bound() && climb.in_list.is_none() && climb.suspended.is_none())
         .and_then(|climb| crate::owners::containing_body_function(&file.ast, climb.at));
     [Some(direct), climbed]
         .into_iter()

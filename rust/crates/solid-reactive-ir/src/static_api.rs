@@ -11,7 +11,8 @@ use typefacts::Location;
 
 use crate::effect_api::{ProofStatus, classify_effect_call};
 use crate::execution_role::{
-    ClimbStop, RootBodyGuard, SlotClimb, allowed_callback_spans, semantic_write_execution_role,
+    ClimbStop, InPlaceStop, RootBodyGuard, SlotClimb, allowed_callback_spans,
+    climb_in_place_layers, semantic_write_execution_role,
 };
 use crate::identity::SymbolId;
 use crate::indexes::{EntitySymbols, SemanticLookup};
@@ -495,7 +496,7 @@ impl StaticApiContext<'_> {
                     uncertain,
                 });
             }
-            // SC2004: resolve() in a tracked scope. Probed on
+            // SC2004 / SC2005 (ADR 0985): `resolve()` and `until()` in a tracked scope. Probed on
             // `@solidjs/signals@2.0.0-rc.0`: the dev bundle guards on the
             // *observer* (`dev.js:4738` — `if (getObserver()) throw new
             // Error("Cannot call resolve inside a reactive scope…")`), so a
@@ -505,108 +506,100 @@ impl StaticApiContext<'_> {
             // all clear the observer and stay legal. The production bundle
             // has no guard — the call silently resolves a one-shot value —
             // so the dev throw is what this mirrors.
-            if kind == Some(Primitive::Resolve)
-                && let Some(scope) = resolve_tracked_scope(file, call, &allowed, self)
-            {
-                // ADR 0893: the throw may end stored on a compute no read reports.
-                let unobserved = plain_throw_unobserved(
-                    file,
-                    call.span,
-                    &allowed,
-                    self,
-                    dialect.plain_throw(Primitive::Resolve),
-                    Thrower::UnderObserver,
-                );
-                result.violations.push(StaticViolation {
-                    id: "SC2004".into(),
-                    rule: "no-await-primitive-in-tracked-scope".into(),
-                    message: format!(
-                        "resolve() is called inside {scope}; resolve() reads the expression once and never tracks updates, and an active observer makes Solid throw \"Cannot call resolve inside a reactive scope\" here in dev{}",
-                        unobserved_note(unobserved)
-                    ),
-                    hint: "Call resolve() from imperative code, such as an event handler; on rc.17 an effect's apply and onSettled refuse it too. To depend on a pending value inside a computation, read the accessor directly: tracked reads suspend and re-run on their own. A deliberate one-shot read can be wrapped in untrack(), which clears the observer the runtime guards on.".into(),
-                    location: location(file.path.shared(), call.callee),
-                    analysis_context: if unobserved {
-                        crate::blockers::COMPUTATION_ERROR_UNOBSERVED.to_owned()
-                    } else {
-                        String::new()
-                    },
-                    fixes: vec![],
-                    uncertain: unobserved,
-                });
-            }
-            // The same guard where nothing places the call: a helper that a
-            // tracked scope may reach (`createMemo(() => waitReady())`).
-            let walk_limited = Cell::new(None);
-            if kind == Some(Primitive::Resolve)
-                && (resolve_scope_unplaced(file, call, &allowed, self, &walk_limited)
-                    || in_async_swallowing_slot(file, call.span, self.lookup, &walk_limited))
-            {
-                result.violations.push(StaticViolation {
-                    id: "SC2004".into(),
-                    rule: "no-await-primitive-in-tracked-scope".into(),
-                    message: "resolve() is called in code the analysis cannot place; if an observer is active when it runs (a memo or effect compute, or tracked JSX, that reaches it through a helper), Solid throws \"Cannot call resolve inside a reactive scope\" in dev, and whether one is cannot be proven either way".into(),
-                    hint: "Call resolve() from imperative code, such as an event handler; on rc.17 an effect's apply and onSettled refuse it too. To depend on a pending value inside a computation, read the accessor directly: tracked reads suspend and re-run on their own. A deliberate one-shot read can be wrapped in untrack(), which clears the observer the runtime guards on.".into(),
-                    location: location(file.path.shared(), call.callee),
-                    analysis_context: walk_limit_context(&walk_limited),
-                    fixes: vec![],
-                    uncertain: true,
-                });
-            }
-            // SC2005: until() in a tracked scope. `@solidjs/signals@2.0.0-rc.9`
-            // opens `until` with the same observer guard `resolve` has
-            // (`dist/dev.js:2718-2722`, `if (getObserver()) throw new
+            // `@solidjs/signals@2.0.0-rc.9` opens `until` with the same observer
+            // guard (`dist/dev.js:2718-2722`, `if (getObserver()) throw new
             // Error("Cannot call until inside a reactive scope; …")`), and the
             // production bundle drops it (`dist/prod/signals.js:530`, no
             // guard), so the scopes, the dev throw and the proof are
             // resolve's. `until` does not exist before rc.9, so nothing
             // compiled against rc.3's typings reaches this arm.
-            if kind == Some(Primitive::Until)
-                && let Some(scope) = resolve_tracked_scope(file, call, &allowed, self)
-            {
-                // ADR 0893: the throw may end stored on a compute no read reports.
-                let unobserved = plain_throw_unobserved(
-                    file,
-                    call.span,
-                    &allowed,
-                    self,
-                    dialect.plain_throw(Primitive::Until),
-                    Thrower::UnderObserver,
-                );
-                result.violations.push(StaticViolation {
-                    id: "SC2005".into(),
-                    rule: "no-await-primitive-in-tracked-scope".into(),
-                    message: format!(
-                        "until() is called inside {scope}; an active observer makes Solid throw \"Cannot call until inside a reactive scope\" here in dev, and in production every run of the scope starts another root and effect that wait on the predicate{}",
-                        unobserved_note(unobserved)
-                    ),
-                    hint: "Await until() from imperative code — an action step (`yield until(...)`) or an event handler; on rc.17 an effect's apply and onSettled refuse it too. Inside a computation, read the condition directly: tracked reads re-run the computation when it changes.".into(),
-                    location: location(file.path.shared(), call.callee),
-                    analysis_context: if unobserved {
-                        crate::blockers::COMPUTATION_ERROR_UNOBSERVED.to_owned()
-                    } else {
-                        String::new()
-                    },
-                    fixes: vec![],
-                    uncertain: unobserved,
-                });
-            }
-            // The same guard where nothing places the call: a helper that a
-            // tracked scope may reach (`createMemo(() => waitReady())`).
-            if kind == Some(Primitive::Until)
-                && (resolve_scope_unplaced(file, call, &allowed, self, &walk_limited)
-                    || in_async_swallowing_slot(file, call.span, self.lookup, &walk_limited))
-            {
-                result.violations.push(StaticViolation {
-                    id: "SC2005".into(),
-                    rule: "no-await-primitive-in-tracked-scope".into(),
-                    message: "until() is called in code the analysis cannot place; if an observer is active when it runs (a memo or effect compute, or tracked JSX, that reaches it through a helper), Solid throws \"Cannot call until inside a reactive scope\" in dev, and whether one is cannot be proven either way".into(),
-                    hint: "Await until() from imperative code — an action step (`yield until(...)`) or an event handler; on rc.17 an effect's apply and onSettled refuse it too. Inside a computation, read the condition directly: tracked reads re-run the computation when it changes.".into(),
-                    location: location(file.path.shared(), call.callee),
-                    analysis_context: walk_limit_context(&walk_limited),
-                    fixes: vec![],
-                    uncertain: true,
-                });
+            // Every such call ends in one of three answers ([`ScopeAnswer`]): a tracked scope
+            // holds it (a row), nothing proves whether an observer is active where it runs (an
+            // obligation, "the same guard where nothing places the call": a helper that a tracked
+            // scope may reach, `createMemo(() => waitReady())`), or a fact proves none is, which
+            // the silence names with the span it rests on (`SiteSilence::Resolve*`, recorded in
+            // `ends` for the site universe's `resolve` table).
+            if let Some((guarded, guard)) = kind.and_then(|primitive| {
+                dialect
+                    .observer_guard_code(primitive)
+                    .map(|guard| (primitive, guard))
+            }) {
+                let walk_limited = Cell::new(None);
+                let answer = resolve_scope_answer(file, call, &allowed, self, &walk_limited);
+                let answer = match answer {
+                    // A call in an async callback of a primitive that swallows what it throws stays an
+                    // obligation whatever else is proven of it (ADR 0959).
+                    ScopeAnswer::Silent(..)
+                        if in_async_swallowing_slot(
+                            file,
+                            call.span,
+                            self.lookup,
+                            &walk_limited,
+                        ) =>
+                    {
+                        ScopeAnswer::Unplaced
+                    }
+                    other => other,
+                };
+                let resolves = guard == solid_dialect::RuntimeCode::ResolveInReactiveScope;
+                match answer {
+                    ScopeAnswer::Tracked(scope) => {
+                        // ADR 0893: the throw may end stored on a compute no read reports.
+                        let unobserved = plain_throw_unobserved(
+                            file,
+                            call.span,
+                            &allowed,
+                            self,
+                            dialect.plain_throw(guarded),
+                            Thrower::UnderObserver,
+                        );
+                        result.violations.push(StaticViolation {
+                            id: if resolves { "SC2004" } else { "SC2005" }.into(),
+                            rule: "no-await-primitive-in-tracked-scope".into(),
+                            message: if resolves {
+                                format!(
+                                    "resolve() is called inside {scope}; resolve() reads the expression once and never tracks updates, and an active observer makes Solid throw \"Cannot call resolve inside a reactive scope\" here in dev{}",
+                                    unobserved_note(unobserved)
+                                )
+                            } else {
+                                format!(
+                                    "until() is called inside {scope}; an active observer makes Solid throw \"Cannot call until inside a reactive scope\" here in dev, and in production every run of the scope starts another root and effect that wait on the predicate{}",
+                                    unobserved_note(unobserved)
+                                )
+                            },
+                            hint: scope_hint(resolves).into(),
+                            location: location(file.path.shared(), call.callee),
+                            analysis_context: if unobserved {
+                                crate::blockers::COMPUTATION_ERROR_UNOBSERVED.to_owned()
+                            } else {
+                                String::new()
+                            },
+                            fixes: vec![],
+                            uncertain: unobserved,
+                        });
+                    }
+                    ScopeAnswer::Unplaced => {
+                        result.violations.push(StaticViolation {
+                            id: if resolves { "SC2004" } else { "SC2005" }.into(),
+                            rule: "no-await-primitive-in-tracked-scope".into(),
+                            message: format!(
+                                "{}() is called in code the analysis cannot place; if an observer is active when it runs (a memo or effect compute, or tracked JSX, that reaches it through a helper), Solid throws \"Cannot call {} inside a reactive scope\" in dev, and whether one is cannot be proven either way",
+                                if resolves { "resolve" } else { "until" },
+                                if resolves { "resolve" } else { "until" },
+                            ),
+                            hint: scope_hint(resolves).into(),
+                            location: location(file.path.shared(), call.callee),
+                            analysis_context: walk_limit_context(&walk_limited),
+                            fixes: vec![],
+                            uncertain: true,
+                        });
+                    }
+                    ScopeAnswer::Silent(silence, premises) => {
+                        result
+                            .ends
+                            .end_with(file, call.callee, silence, || premises);
+                    }
+                }
             }
             // SC2007: a promise-valued source for rc.9's static `dynamic`
             // form, and rc.17's `dynamicComponent`, whose static form is the
@@ -1563,6 +1556,7 @@ fn walk_limit_context(limited: &Cell<Option<&'static str>>) -> String {
 /// the function that holds a `resolve`/`until` call.
 const ENTRY_DEPTH: usize = 4;
 
+#[deny(clippy::wildcard_enum_match_arm)]
 fn resolve_tracked_scope_within(
     file: &FileFacts,
     call: &solid_facts::ast::CallFact,
@@ -1572,7 +1566,7 @@ fn resolve_tracked_scope_within(
     limited: &Cell<Option<&'static str>>,
 ) -> Option<String> {
     // ADR 0612: the guard reads the observer, which no task past an await has.
-    // Past one on some path nothing is proven ([`resolve_scope_unplaced`]).
+    // Past one on some path nothing is proven ([`resolve_scope_answer`]).
     if crate::execution_role::past_suspension(file, call.span, context.lookup).is_some() {
         return None;
     }
@@ -1581,22 +1575,37 @@ fn resolve_tracked_scope_within(
     // the outermost layer's call, with the callback's observer active; not in
     // a parameter list, not after an await.
     let at = match crate::execution_role::climb_in_place_layers(file, call.span, context.lookup) {
-        // A library callback may run zero times (ADR 0493 review), so it is
-        // not crossed.
-        Some(climb)
-            if !climb.exhausted
-                && !climb.in_list
-                && climb.suspended.is_none()
-                && !crate::execution_role::climb_crosses_library_callback(
-                    file,
-                    call.span,
-                    climb.at,
-                    context.lookup,
-                ) =>
-        {
-            climb.at
-        }
-        _ => call.span,
+        Some(climb) => match climb.stop {
+            // Layers past the bound are unread: the walk asks from the site itself, where the entries walk's depth limit and
+            // `resolve_scope_answer`'s own bound check owe the obligation.
+            InPlaceStop::Bound => call.span,
+            // Every other stop leaves the climb at the call inside the layer it stopped at, which is where the tracked-scope proof
+            // asks: the stop says what stands beyond (a function that is none of the layers, module scope, a generator, a timer,
+            // JSX the compiler places), and the walk's own checks below place that. A library callback may run zero times (ADR
+            // 0493 review), so it is not crossed, and neither is a layer holding the site in its parameter list or after an await.
+            InPlaceStop::NoFunction
+            | InPlaceStop::Generator
+            | InPlaceStop::Within
+            | InPlaceStop::FreshStack
+            | InPlaceStop::Elsewhere
+            | InPlaceStop::Withheld
+            | InPlaceStop::JsxPlaced => {
+                if climb.in_list.is_none()
+                    && climb.suspended.is_none()
+                    && !crate::execution_role::climb_crosses_library_callback(
+                        file,
+                        call.span,
+                        climb.at,
+                        context.lookup,
+                    )
+                {
+                    climb.at
+                } else {
+                    call.span
+                }
+            }
+        },
+        None => call.span,
     };
     if let Some((container, index)) =
         file.ast
@@ -1762,68 +1771,203 @@ fn resolve_scope_of_entries(
     })
 }
 
-/// Whether a `resolve`/`until` call that [`resolve_tracked_scope`] does not
-/// report is still not proven free of an observer: an obligation unless a
-/// fact proves no observer is active where it runs.
+/// The hint of an SC2004 (`resolve`) or SC2005 (`until`) row.
+fn scope_hint(resolves: bool) -> &'static str {
+    if resolves {
+        "Call resolve() from imperative code, such as an event handler; on rc.17 an effect's apply and onSettled refuse it too. To depend on a pending value inside a computation, read the accessor directly: tracked reads suspend and re-run on their own. A deliberate one-shot read can be wrapped in untrack(), which clears the observer the runtime guards on."
+    } else {
+        "Await until() from imperative code — an action step (`yield until(...)`) or an event handler; on rc.17 an effect's apply and onSettled refuse it too. Inside a computation, read the condition directly: tracked reads re-run the computation when it changes."
+    }
+}
+
+/// ADR 0985: what the observer-guard walk answers for a `resolve`/`until` call: every call of the primitive ends in one of these, and
+/// no arm that is not [`ScopeAnswer::Tracked`] makes a violation.
+pub(crate) enum ScopeAnswer {
+    /// A tracked scope holds the call ([`resolve_tracked_scope`]): the row is a violation.
+    Tracked(String),
+    /// Nothing proves whether an observer is active where the call runs: an obligation.
+    Unplaced,
+    /// A fact proves the guard does not throw where the call runs: the silence that names it and the premises (each a
+    /// span the proof log can check) it rests on.
+    Silent(
+        crate::site_accounting::SiteSilence,
+        Vec<crate::proof_log::Premise>,
+    ),
+}
+
+impl ScopeAnswer {
+    /// The answer for a call the walk reached beyond the call it asked about (a carrier's, a caller's): a tracked scope there
+    /// was the first walk's to report ([`resolve_tracked_scope`] follows the same links), so one found here proves nothing the
+    /// first walk did not, and stays an obligation.
+    fn beyond(self) -> Self {
+        match self {
+            Self::Tracked(_) => Self::Unplaced,
+            other => other,
+        }
+    }
+}
+
+/// A silence of `silence` resting on `kind` at `at`.
+fn silent(
+    silence: crate::site_accounting::SiteSilence,
+    kind: crate::proof_log::PremiseKind,
+    at: Span,
+) -> ScopeAnswer {
+    ScopeAnswer::Silent(silence, vec![crate::proof_log::Premise::at(kind, Some(at))])
+}
+
+/// ADR 0985: how the primitive whose callback holds the call runs that callback, as the dialect's one answer states it
+/// ([`SlotRun`], matched with no wildcard): a slot that runs elsewhere or clears the observer is silent, one that takes what the
+/// guard throws is silent for a synchronous callback (an async one keeps ADR 0959's obligation), and a slot the dialect does not
+/// state, or that runs in place with the caller's observer and lets the throw through, is an obligation.
+fn slot_answer(
+    file: &FileFacts,
+    call: Span,
+    container: &solid_facts::ast::CallFact,
+    run: SlotRun,
+    context: &StaticApiContext<'_>,
+    limited: &Cell<Option<&'static str>>,
+) -> ScopeAnswer {
+    use crate::proof_log::PremiseKind;
+    use crate::site_accounting::SiteSilence;
+    match run {
+        SlotRun::Deferred => silent(
+            SiteSilence::ResolveSlotRunsElsewhere,
+            PremiseKind::SlotRunsElsewhere,
+            container.span,
+        ),
+        SlotRun::InPlace(run) => match (run.observer, run.throws) {
+            (SlotObserver::Clears, _) => silent(
+                SiteSilence::ResolveSlotClearsObserver,
+                PremiseKind::SlotClearsObserver,
+                container.span,
+            ),
+            (SlotObserver::Keeps | SlotObserver::Unstated, SlotThrows::Swallows) => {
+                if in_async_swallowing_slot(file, call, context.lookup, limited) {
+                    ScopeAnswer::Unplaced
+                } else {
+                    silent(
+                        SiteSilence::ResolveSlotSwallowsThrow,
+                        PremiseKind::SlotSwallowsThrow,
+                        container.span,
+                    )
+                }
+            }
+            (SlotObserver::Keeps | SlotObserver::Unstated, SlotThrows::Escapes) => {
+                ScopeAnswer::Unplaced
+            }
+        },
+        // A callback the call makes a computation of its own is a tracked scope the tracked-scope proof reports; reaching here it
+        // is not one that proof placed.
+        SlotRun::Computation => ScopeAnswer::Unplaced,
+        SlotRun::Unknown => ScopeAnswer::Unplaced,
+    }
+}
+
+/// ADR 0985: the answer for a `resolve`/`until` call (`ScopeAnswer`), replacing the boolean of whether the call is unplaced: whether
+/// a `resolve`/`until` call is still not proven free of an observer once [`resolve_tracked_scope`] did not report it.
 ///
 /// A callback of a primitive whose callback execution the dialect states is
-/// that function's to judge. Otherwise the call is proven only in a role that
+/// that function's to judge ([`slot_answer`]). Otherwise the call is proven only in a role that
 /// clears the observer (a component body, `untrack`, an effect apply, an
 /// event, a directive application, module scope, a deferred callback, or
 /// deleted code), and only when a body-written literal is not handed to a
 /// consumer that may run it later. A tracked role [`resolve_tracked_scope`]
 /// did not place (a named callback, `createMemo(read)`), `Unreported` (whose
 /// mix may hold a tracked run) and `Unknown` are obligations.
-fn resolve_scope_unplaced(
+#[deny(clippy::wildcard_enum_match_arm)]
+fn resolve_scope_answer(
     file: &FileFacts,
     call: &solid_facts::ast::CallFact,
     allowed: &[Span],
     context: &StaticApiContext<'_>,
     limited: &Cell<Option<&'static str>>,
-) -> bool {
+) -> ScopeAnswer {
     use crate::ExecutionRole;
-    if resolve_tracked_scope(file, call, allowed, context).is_some() {
-        return false;
+    use crate::proof_log::{Premise, PremiseKind};
+    use crate::site_accounting::SiteSilence;
+    if let Some(scope) = resolve_tracked_scope(file, call, allowed, context) {
+        return ScopeAnswer::Tracked(scope);
     }
     // ADR 0612: past an await on every path no observer is active; on some
     // path the call may still run on the compute's first stack.
     match crate::execution_role::past_suspension(file, call.span, context.lookup) {
-        Some(true) => return false,
-        Some(false) => return true,
+        // The `await` that proves it is the premise; a proof no span names is no silence.
+        Some(true) => {
+            return crate::execution_role::past_suspension_witness(file, call.span, context.lookup)
+                .map_or(ScopeAnswer::Unplaced, |awaited| {
+                    silent(
+                        SiteSilence::ResolvePastSuspension,
+                        PremiseKind::AfterAwait,
+                        awaited,
+                    )
+                });
+        }
+        Some(false) => return ScopeAnswer::Unplaced,
         None => {}
     }
     // ADR 0857: a call or a standard-library carrier that may run the function
     // holding the call (an empty or unknown receiver too) under an observer:
     // whether it runs is open.
-    let at = crate::execution_role::climb_in_place_layers(file, call.span, context.lookup)
-        .filter(|climb| !climb.exhausted && !climb.in_list && climb.suspended.is_none())
-        .map_or(call.span, |climb| climb.at);
+    let at = match climb_in_place_layers(file, call.span, context.lookup) {
+        Some(climb) => match climb.stop {
+            // The climb stopped at the bound: the layers past it are unread, so the entries are asked from the call itself, a
+            // walk that ends at its own depth limit with an obligation (`limited`).
+            InPlaceStop::Bound => call.span,
+            // Every other stop leaves the climb at the call inside the layer it stopped at, where the entries are asked.
+            InPlaceStop::NoFunction
+            | InPlaceStop::Generator
+            | InPlaceStop::Within
+            | InPlaceStop::FreshStack
+            | InPlaceStop::Elsewhere
+            | InPlaceStop::Withheld
+            | InPlaceStop::JsxPlaced => {
+                if climb.in_list.is_none() && climb.suspended.is_none() {
+                    climb.at
+                } else {
+                    call.span
+                }
+            }
+        },
+        None => call.span,
+    };
     if resolve_scope_of_entries(file, at, allowed, context, ENTRY_DEPTH, false, limited).is_some() {
-        return true;
+        return ScopeAnswer::Unplaced;
     }
     // Reviews R13, R16: the walk stopped, so the entries beyond are unread
     // and no role at the call itself can clear them.
     if limited.get().is_some() {
-        return true;
+        return ScopeAnswer::Unplaced;
     }
     // ADR 0517: a library callback on the way (`[1].forEach`) may run zero
     // times, so `resolve_tracked_scope` does not climb it; when the layers
     // beyond it reach a compute a tracked position names by its binding, the
     // call runs under that observer whenever it runs: an obligation.
-    if let Some(climb) =
-        crate::execution_role::climb_in_place_layers(file, call.span, context.lookup)
-        && !climb.exhausted
-        && !climb.in_list
+    if let Some(climb) = climb_in_place_layers(file, call.span, context.lookup)
+        && climb.in_list.is_none()
         && climb.suspended.is_none()
+        && match climb.stop {
+            // Past the bound the layers are unread: the entries walk above already owes the obligation.
+            InPlaceStop::Bound => false,
+            InPlaceStop::NoFunction
+            | InPlaceStop::Generator
+            | InPlaceStop::Within
+            | InPlaceStop::FreshStack
+            | InPlaceStop::Elsewhere
+            | InPlaceStop::Withheld
+            | InPlaceStop::JsxPlaced => true,
+        }
         && crate::owners::containing_body_function(&file.ast, climb.at).is_some_and(|function| {
             context.lookup.function_component_status(file, function)
                 == crate::indexes::ComponentStatus::No
                 && crate::execution_role::named_at_tracked_position(file, climb.at, context.lookup)
         })
     {
-        return true;
+        return ScopeAnswer::Unplaced;
     }
-    let mut judged_by_primitive = false;
+    let dialect = context.lookup.dialect;
+    // The answer of the slot that judges the call (ADR 0985): an obligation wins over a silence, the first silence stands.
+    let mut judged: Option<ScopeAnswer> = None;
     let mut steps_on_callers = false;
     for (container, index) in file.ast.arguments_containing(call.span) {
         if !crate::execution_role::direct_callback_runs(
@@ -1836,55 +1980,89 @@ fn resolve_scope_unplaced(
         let Some(primitive) = context.lookup.primitive_at_call(file, container.span) else {
             continue;
         };
+        let run = dialect.slot_run(primitive, index, container.arguments.len());
+        // ADR 0941, ADR 0985: a call that takes whatever its callback throws (`isPending`) takes the observer guard's plain
+        // throw whatever observer its own call has, so its slot answers before the walk reaches the call.
+        if matches!(run, SlotRun::InPlace(in_place) if in_place.throws == SlotThrows::Swallows) {
+            return slot_answer(file, call.span, container, run, context, limited);
+        }
         // ADR 0857: a callback that runs during the call with the caller's
         // listener (`flush(fn)`) is placed where the call is.
         if crate::execution_role::callback_inherits_listener(
-            context.lookup.dialect,
+            dialect,
             primitive,
             index,
             container.arguments.len(),
         ) {
-            return resolve_scope_unplaced(file, container, allowed, context, limited);
+            return resolve_scope_answer(file, container, allowed, context, limited).beyond();
         }
         // ADR 0614: a `flush()` under a computation drains this callback with
         // that computation's observer active (ADR 0613).
-        if context
-            .lookup
-            .dialect
-            .callback_runs_drained_by_flush(primitive, index)
+        if dialect.callback_runs_drained_by_flush(primitive, index)
             && context.lookup.flush_drains_under_owner()
         {
-            return true;
+            return ScopeAnswer::Unplaced;
         }
         steps_on_callers |= primitive == solid_dialect::Primitive::Action;
-        judged_by_primitive |= crate::owners::callback_execution_at_call(
-            file,
-            container,
-            primitive,
-            index,
-            context.lookup,
-        )
-        .is_some();
+        {
+            let answer = slot_answer(file, call.span, container, run, context, limited);
+            judged = match (judged.take(), answer) {
+                (Some(ScopeAnswer::Unplaced), _) | (_, ScopeAnswer::Unplaced) => {
+                    Some(ScopeAnswer::Unplaced)
+                }
+                (Some(first), _) => Some(first),
+                (None, answer) => Some(answer),
+            };
+        }
     }
     // ADR 0614: an action's first step runs on its caller's stack, under the
     // caller's observer (ADR 0547), so its callers answer, not the primitive:
     // a read role cannot, since a tracked caller reports no read.
     if steps_on_callers {
-        let resumed = crate::owners::action_step_resumption(file, call.span, context.lookup);
-        return resumed != Some(crate::owners::StepResumption::Proven)
-            && crate::owners::containing_body_function(&file.ast, call.span)
-                .and_then(|step| {
-                    crate::execution_role::action_step_call_sites(file, step, context.lookup)
-                })
-                .is_none_or(|calls| {
-                    calls.iter().any(|caller| {
-                        resolve_tracked_scope(file, caller, allowed, context).is_some()
-                            || resolve_scope_unplaced(file, caller, allowed, context, limited)
-                    })
-                });
+        let resumed =
+            crate::owners::action_step_resumption_witness(file, call.span, context.lookup);
+        if let Some((crate::owners::StepResumption::Proven, Some(yielded))) = resumed {
+            return silent(
+                SiteSilence::ResolveStepResumed,
+                PremiseKind::StepResumedByYield,
+                yielded,
+            );
+        }
+        if matches!(resumed, Some((crate::owners::StepResumption::Proven, None))) {
+            return ScopeAnswer::Unplaced;
+        }
+        let Some(step) = crate::owners::containing_body_function(&file.ast, call.span) else {
+            return ScopeAnswer::Unplaced;
+        };
+        let Some(calls) = crate::execution_role::action_step_call_sites(file, step, context.lookup)
+        else {
+            return ScopeAnswer::Unplaced;
+        };
+        if calls.iter().any(|caller| {
+            !matches!(
+                resolve_scope_answer(file, caller, allowed, context, limited),
+                ScopeAnswer::Silent(..)
+            )
+        }) {
+            return ScopeAnswer::Unplaced;
+        }
+        // Every invocation of the action is enumerated and none runs under an observer (an action referenced only by
+        // handlers has none: the premise is then the step itself).
+        let premises = if calls.is_empty() {
+            vec![Premise::at(
+                PremiseKind::ClosedProgramCallers,
+                Some(step.span),
+            )]
+        } else {
+            calls
+                .iter()
+                .map(|caller| Premise::at(PremiseKind::ClosedProgramCallers, Some(caller.span)))
+                .collect()
+        };
+        return ScopeAnswer::Silent(SiteSilence::ResolveStepCallersUntracked, premises);
     }
-    if judged_by_primitive {
-        return false;
+    if let Some(answer) = judged {
+        return answer;
     }
     let role = crate::execution_role::read_execution_role(
         file,
@@ -1894,18 +2072,22 @@ fn resolve_scope_unplaced(
         context.symbol_names,
         context.lookup,
     );
-    let observer_cleared = matches!(
-        role,
-        ExecutionRole::UntrackedRendering
-            | ExecutionRole::UntrackedCallback
-            | ExecutionRole::UntrackedUnwindowed
-            | ExecutionRole::EffectApply
-            | ExecutionRole::EventCallback
-            | ExecutionRole::DirectiveApply
-            | ExecutionRole::ModuleInitialization
-            | ExecutionRole::DeferredCallback
-            | ExecutionRole::DiscardedRendering
-    );
+    let silence = match role {
+        ExecutionRole::UntrackedRendering => SiteSilence::ResolveRoleUntrackedRendering,
+        ExecutionRole::UntrackedCallback => SiteSilence::ResolveRoleUntrackedCallback,
+        ExecutionRole::UntrackedUnwindowed => SiteSilence::ResolveRoleUntrackedUnwindowed,
+        ExecutionRole::EffectApply => SiteSilence::ResolveRoleEffectApply,
+        ExecutionRole::EventCallback => SiteSilence::ResolveRoleEventCallback,
+        ExecutionRole::DirectiveApply => SiteSilence::ResolveRoleDirectiveApply,
+        ExecutionRole::ModuleInitialization => SiteSilence::ResolveRoleModuleInitialization,
+        ExecutionRole::DeferredCallback => SiteSilence::ResolveRoleDeferredCallback,
+        ExecutionRole::DiscardedRendering => SiteSilence::ResolveRoleDiscardedRendering,
+        // Every other role is no proof that no observer is active (a tracked role the walk did not place, a role that reports,
+        // `Unreported`, `Unknown`): an obligation.
+        ExecutionRole::Unknown | ExecutionRole::Unreported | ExecutionRole::TrackedJsx => {
+            return ScopeAnswer::Unplaced;
+        }
+    };
     // ADR 0614: a deferred role inside tracked JSX is no proof the observer is
     // clear: an IIFE in a flow child's expression runs under the render effect.
     let deferred_in_jsx = role == ExecutionRole::DeferredCallback
@@ -1914,9 +2096,12 @@ fn resolve_scope_unplaced(
             .tracked_regions
             .iter()
             .any(|region| region.span.contains(call.span));
-    !observer_cleared
-        || deferred_in_jsx
+    if deferred_in_jsx
         || crate::execution_role::callee_callback_timing(file, call.span, role, context.lookup)
+    {
+        return ScopeAnswer::Unplaced;
+    }
+    silent(silence, PremiseKind::RoleDoesNotReport, call.callee)
 }
 
 /// Why a `dynamic` source provably returns a Promise, phrased for the
@@ -2154,6 +2339,7 @@ fn action_step_body_bounded(
 /// class or object literal written inside a function. A layer proven to run
 /// elsewhere (after an await, a scheduled callback, a kept listener, a
 /// generator) is not crossed: the enclosing proof refuses it as before.
+#[deny(clippy::wildcard_enum_match_arm)]
 fn action_step_body_unplaced(
     file: &FileFacts,
     site: Span,
@@ -2163,13 +2349,27 @@ fn action_step_body_unplaced(
     if depth == 0 {
         return None;
     }
-    let at = match crate::execution_role::climb_in_place_layers(file, site, context.lookup) {
-        Some(climb) if climb.in_list || climb.suspended.is_some() => return None,
-        Some(climb) if climb.exhausted => {
-            return action_step_body_bounded(file, climb.at, context, depth - 1)
-                .map(|(body, _)| body);
-        }
-        Some(climb) => climb.at,
+    let at = match climb_in_place_layers(file, site, context.lookup) {
+        // A layer proven to run elsewhere (the site in its parameter list, or after an await in it) is not crossed: the enclosing
+        // proof refuses it, as it did before the climb.
+        Some(climb) if climb.in_list.is_some() || climb.suspended.is_some() => return None,
+        Some(climb) => match climb.stop {
+            // The bound: outer layers unread, so the position is asked again from where the climb stopped.
+            InPlaceStop::Bound => {
+                return action_step_body_bounded(file, climb.at, context, depth - 1)
+                    .map(|(body, _)| body);
+            }
+            // The climb stops at the call inside the layer it stopped at, and the checks below ask the function around it:
+            // a generator (an obligation when it may be stepped), a member or a handed-on closure (`run_unplaced`), or a function
+            // that is none of those (`None`, which no proof of a step reaches).
+            InPlaceStop::NoFunction
+            | InPlaceStop::Generator
+            | InPlaceStop::Within
+            | InPlaceStop::FreshStack
+            | InPlaceStop::Elsewhere
+            | InPlaceStop::Withheld
+            | InPlaceStop::JsxPlaced => climb.at,
+        },
         None => site,
     };
     let function = crate::owners::owning_function(&file.ast, at)
@@ -2206,6 +2406,7 @@ fn action_step_body_unplaced(
 /// obligation: a sync generator called in place (its body runs where its
 /// iterator is stepped), and a named function some exact call of which runs
 /// in a step (other calls may run elsewhere, and the proof is lexical).
+#[deny(clippy::wildcard_enum_match_arm)]
 fn action_step_body_through(
     file: &FileFacts,
     site: Span,
@@ -2215,11 +2416,21 @@ fn action_step_body_through(
     if depth == 0 {
         return None;
     }
-    let at = match crate::execution_role::climb_in_place_layers(file, site, context.lookup) {
-        Some(climb) if !climb.exhausted && !climb.in_list && climb.suspended.is_none() => climb.at,
-        Some(_) => {
-            return None;
-        }
+    let at = match climb_in_place_layers(file, site, context.lookup) {
+        // A layer holding the site in its parameter list, or after an await in it, is not crossed: the enclosing proof refuses it.
+        Some(climb) if climb.in_list.is_some() || climb.suspended.is_some() => return None,
+        Some(climb) => match climb.stop {
+            // The bound: `action_step_body_unplaced` is the net that asks again from where the climb stopped, as an obligation.
+            InPlaceStop::Bound => return None,
+            // The climb stops at the call inside the layer it stopped at, and the checks below ask the function around it.
+            InPlaceStop::NoFunction
+            | InPlaceStop::Generator
+            | InPlaceStop::Within
+            | InPlaceStop::FreshStack
+            | InPlaceStop::Elsewhere
+            | InPlaceStop::Withheld
+            | InPlaceStop::JsxPlaced => climb.at,
+        },
         None => site,
     };
     let function = crate::owners::owning_function(&file.ast, at)
@@ -2368,18 +2579,30 @@ fn unplaced_step<'s, 'f: 's>(
     {
         return false;
     }
-    let at = match crate::execution_role::climb_in_place_layers(file, site, lookup) {
+    let at = match climb_in_place_layers(file, site, lookup) {
         // So after one in a layer in place.
-        Some(climb) if climb.suspended == Some(true) => return false,
-        // The layers that run in place end at a call in other code: ask
-        // there. A layer holding the site in its parameter list (ADR 0454)
-        // runs it when a call omits the argument, and an await on some paths
-        // leaves the others on the stack.
-        Some(climb) if climb.at != site => {
-            pending.push((file, climb.at));
-            return false;
-        }
-        Some(_) | None => site,
+        Some(climb) if climb.suspended_on_every_path() => return false,
+        Some(climb) => match climb.stop {
+            // The layers that run in place end at a call in other code: ask there, from where the climb stopped (the bound
+            // included: a chain of closures runs in place one call after another, however long). A layer holding the site in
+            // its parameter list (ADR 0454) runs it when a call omits the argument, and an await on some paths leaves the
+            // others on the stack.
+            InPlaceStop::Bound
+            | InPlaceStop::NoFunction
+            | InPlaceStop::Generator
+            | InPlaceStop::Within
+            | InPlaceStop::FreshStack
+            | InPlaceStop::Elsewhere
+            | InPlaceStop::Withheld
+            | InPlaceStop::JsxPlaced => {
+                if climb.at != site {
+                    pending.push((file, climb.at));
+                    return false;
+                }
+                site
+            }
+        },
+        None => site,
     };
     // The function a parameter default or a generator's body runs in: the
     // first runs at each call, the second where the iterator is drained,
@@ -2556,14 +2779,27 @@ fn unplaced_member_step<'s, 'f: 's>(
     if member_route_runs(routes, file, site, lookup) {
         return true;
     }
-    // A climb the layer bound stopped (`exhausted`) answers where it stopped, and the walk asks from there: a chain of named
-    // closures runs in place one call after another, however long.
-    let at = match crate::execution_role::climb_in_place_layers(file, site, lookup) {
-        Some(climb) if climb.at != site => {
-            pending.push((file, climb.at));
-            return false;
-        }
-        Some(_) | None => site,
+    let at = match climb_in_place_layers(file, site, lookup) {
+        Some(climb) => match climb.stop {
+            // A climb the layer bound stopped answers where it stopped, and the walk asks from there: a chain of named closures
+            // runs in place one call after another, however long. Every other stop ends the climb at the call inside the layer
+            // it stopped at, where the walk asks as well.
+            InPlaceStop::Bound
+            | InPlaceStop::NoFunction
+            | InPlaceStop::Generator
+            | InPlaceStop::Within
+            | InPlaceStop::FreshStack
+            | InPlaceStop::Elsewhere
+            | InPlaceStop::Withheld
+            | InPlaceStop::JsxPlaced => {
+                if climb.at != site {
+                    pending.push((file, climb.at));
+                    return false;
+                }
+                site
+            }
+        },
+        None => site,
     };
     let Some(function) = crate::owners::owning_function(&file.ast, at) else {
         return false;
@@ -2665,20 +2901,34 @@ fn runs_unplaced_once(
     } {
         return Some(crate::blockers::FUNCTION_RUN_UNPLACED);
     }
-    let at = match crate::execution_role::climb_in_place_layers(file, site, lookup) {
-        Some(climb) if climb.in_list || climb.suspended.is_some() => return None,
-        Some(climb) if climb.exhausted => return Some(crate::blockers::SEARCH_DEPTH_LIMIT),
-        // The layers that run in place end at a call in other code: ask
-        // there.
-        Some(climb) if climb.at != site => {
-            let Some(depth) = depth.checked_sub(1) else {
-                return Some(crate::blockers::SEARCH_DEPTH_LIMIT);
-            };
-            return runs_unplaced_through_callers(
-                file, climb.at, lookup, depth, ownerless, routes, memo,
-            );
-        }
-        Some(_) | None => site,
+    let at = match climb_in_place_layers(file, site, lookup) {
+        // A site in a parameter list, or after an await in its layer, runs when a call omits the argument or on a later task:
+        // `unplaced_run`'s own checks above answer the first, the after-await proof the second.
+        Some(climb) if climb.in_list.is_some() || climb.suspended.is_some() => return None,
+        Some(climb) => match climb.stop {
+            // The bound: outer layers unread, so nothing places the run: an obligation.
+            InPlaceStop::Bound => return Some(crate::blockers::SEARCH_DEPTH_LIMIT),
+            // The layers that run in place end at a call in other code: ask there. A climb the stop ended at the function that
+            // holds the site (it crossed no layer: `at == site`) asks the function itself below.
+            InPlaceStop::NoFunction
+            | InPlaceStop::Generator
+            | InPlaceStop::Within
+            | InPlaceStop::FreshStack
+            | InPlaceStop::Elsewhere
+            | InPlaceStop::Withheld
+            | InPlaceStop::JsxPlaced => {
+                if climb.at != site {
+                    let Some(depth) = depth.checked_sub(1) else {
+                        return Some(crate::blockers::SEARCH_DEPTH_LIMIT);
+                    };
+                    return runs_unplaced_through_callers(
+                        file, climb.at, lookup, depth, ownerless, routes, memo,
+                    );
+                }
+                site
+            }
+        },
+        None => site,
     };
     let function = crate::owners::owning_function(&file.ast, at)
         .filter(|function| function.body.contains(at))?;
@@ -2952,7 +3202,7 @@ fn action_step_body_at(
     ) {
         Some(SlotClimb { climb, stop }) => {
             // A site in a parameter list, or one after an await in its layer, is not claimed.
-            if climb.in_list || climb.suspended.is_some() {
+            if climb.in_list.is_some() || climb.suspended.is_some() {
                 return None;
             }
             match stop {

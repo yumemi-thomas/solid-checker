@@ -1494,7 +1494,14 @@ fn a_test_runner_registration_records_its_symbols_declarations() {
 
 #[test]
 fn in_place_climb_marks_the_exact_bound_unproven() {
-    for (layers, exhausted) in [(15, false), (16, true), (17, true)] {
+    use crate::execution_role::InPlaceStop;
+    // ADR 0988: the bound is a seventeenth layer. Sixteen layers under a function that is no layer end at that function, and
+    // sixteen at module scope end at module scope; neither is the bound.
+    for (layers, stop) in [
+        (15, InPlaceStop::Elsewhere),
+        (16, InPlaceStop::Elsewhere),
+        (17, InPlaceStop::Bound),
+    ] {
         let source = format!(
             "function outer() {{ {}read();{} }}",
             "(() => { ".repeat(layers),
@@ -1504,16 +1511,35 @@ fn in_place_climb_marks_the_exact_bound_unproven() {
             let file = lookup.file_by_path(PATH).unwrap();
             let site = span_of(&source, "read()", 0);
             let climb = crate::execution_role::climb_in_place_layers(file, site, lookup).unwrap();
-            assert_eq!(climb.exhausted, exhausted, "{layers} layers");
+            assert_eq!(climb.stop, stop, "{layers} layers");
+            assert_eq!(climb.bound(), stop == InPlaceStop::Bound, "{layers} layers");
             let (run, _) = crate::execution_role::in_place_run_site(file, site, lookup).unwrap();
-            assert_eq!(run.exhausted, exhausted, "run site: {layers} layers");
+            assert_eq!(run.stop, stop, "run site: {layers} layers");
+        });
+    }
+    for (layers, stop) in [
+        (15, InPlaceStop::NoFunction),
+        (16, InPlaceStop::NoFunction),
+        (17, InPlaceStop::Bound),
+    ] {
+        let source = format!(
+            "{}read();{}",
+            "(() => { ".repeat(layers),
+            " })();".repeat(layers)
+        );
+        with_lookup(&source, &[], |lookup| {
+            let file = lookup.file_by_path(PATH).unwrap();
+            let site = span_of(&source, "read()", 0);
+            let climb = crate::execution_role::climb_in_place_layers(file, site, lookup).unwrap();
+            assert_eq!(climb.stop, stop, "{layers} layers at module scope");
         });
     }
 }
 
 #[test]
 fn stepped_generator_run_site_marks_the_exact_bound_unproven() {
-    for (layers, exhausted) in [(7, false), (8, true), (9, true)] {
+    use crate::execution_role::InPlaceStop;
+    for (layers, bound) in [(7, false), (8, false), (9, true)] {
         let source = format!(
             "function outer() {{ {}read();{} }}",
             "(function* () { ".repeat(layers),
@@ -1525,7 +1551,68 @@ fn stepped_generator_run_site_marks_the_exact_bound_unproven() {
             let (climb, through_generator) =
                 crate::execution_role::in_place_run_site(file, site, lookup).unwrap();
             assert!(through_generator);
-            assert_eq!(climb.exhausted, exhausted, "{layers} generator steps");
+            assert_eq!(climb.bound(), bound, "{layers} generator steps");
+            if !bound {
+                assert_eq!(
+                    climb.stop,
+                    InPlaceStop::Elsewhere,
+                    "{layers} generator steps"
+                );
+            }
+        });
+    }
+}
+
+/// ADR 0988: every exit of the climb is one stop, asked of the code that holds the site.
+#[test]
+fn in_place_climb_says_why_it_stopped() {
+    use crate::execution_role::InPlaceStop;
+    let cases: [(&str, &str, InPlaceStop); 5] = [
+        // No function holds the climb's last call: module scope.
+        (
+            "(() => { read(); })();",
+            "module level",
+            InPlaceStop::NoFunction,
+        ),
+        // A generator's body runs where its iterator is stepped.
+        (
+            "function* g() { (() => { read(); })(); }",
+            "generator",
+            InPlaceStop::Generator,
+        ),
+        // A function stored or run by a call the climb does not know.
+        (
+            "function outer() { (() => { read(); })(); }",
+            "unnamed run",
+            InPlaceStop::Elsewhere,
+        ),
+        // `FreshStack` (a reviewed scheduler's callback: `setTimeout(() => ..)`) and `Withheld` (an argument of a call the census
+        // withholds) need a callee the compiler resolved to a declaration, which this synthetic project does not carry: the
+        // `execution_role` fixtures that run on real typings reach them, and every consumer names them.
+        // The layer is called in a JSX expression: the compiler places it.
+        (
+            "export const View = () => <div>{(() => { read(); })()}</div>;",
+            "JSX slot",
+            InPlaceStop::JsxPlaced,
+        ),
+        // The climb is asked not to cross the function.
+        (
+            "function outer() { (() => { read(); })(); } outer();",
+            "within",
+            InPlaceStop::Within,
+        ),
+    ];
+    for (source, name, stop) in cases {
+        with_lookup(source, &[], |lookup| {
+            let file = lookup.file_by_path(PATH).unwrap();
+            let site = span_of(source, "read()", 0);
+            let within = (stop == InPlaceStop::Within)
+                .then(|| span_of(source, "function outer() { (() => { read(); })(); }", 0));
+            assert_eq!(
+                crate::execution_role::climb_stop(file, site, lookup, within),
+                stop,
+                "{name}"
+            );
         });
     }
 }
@@ -1699,4 +1786,67 @@ fn the_unseen_code_census_reads_no_memo_as_a_probe() {
         });
         assert_eq!(probed, direct, "{source}");
     }
+}
+
+/// ADR 0988: a consumer that decides on why a climb stopped matches `climb.stop` with no wildcard, so a stop nobody decided is a
+/// compile error. The compiler checks that; this checks the match is written out (a `_ =>` arm would hide a new stop) and that it
+/// names every stop, in each source that decides on a climb.
+#[test]
+fn every_match_on_a_climbs_stop_names_every_stop() {
+    let stops = [
+        "NoFunction",
+        "Generator",
+        "Within",
+        "FreshStack",
+        "Elsewhere",
+        "Withheld",
+        "JsxPlaced",
+        "Bound",
+    ];
+    let mut matches = 0;
+    for (name, text) in [
+        ("static_api.rs", include_str!("../static_api.rs")),
+        ("stored_throw.rs", include_str!("../stored_throw.rs")),
+        ("static_rules.rs", include_str!("../static_rules.rs")),
+    ] {
+        let mut rest = text;
+        while let Some(start) = rest.find("match climb.stop {") {
+            let body = &rest[start..];
+            let open = body.find('{').unwrap();
+            let mut depth = 0;
+            let mut end = open;
+            for (index, character) in body[open..].char_indices() {
+                match character {
+                    '{' => depth += 1,
+                    '}' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            end = open + index;
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            let block = &body[..=end];
+            matches += 1;
+            for stop in stops {
+                assert!(
+                    block.contains(&format!("InPlaceStop::{stop}")),
+                    "{name}: a match on `climb.stop` does not name {stop}:\n{block}"
+                );
+            }
+            assert!(
+                !block
+                    .lines()
+                    .any(|line| line.trim_start().starts_with("_ =>")),
+                "{name}: a match on `climb.stop` has a wildcard arm:\n{block}"
+            );
+            rest = &body[end..];
+        }
+    }
+    assert!(
+        matches >= 10,
+        "{matches} matches found: the deciding consumers are matched"
+    );
 }
