@@ -1553,11 +1553,7 @@ fn stepped_generator_run_site_marks_the_exact_bound_unproven() {
             assert!(through_generator);
             assert_eq!(climb.bound(), bound, "{layers} generator steps");
             if !bound {
-                assert_eq!(
-                    climb.stop,
-                    InPlaceStop::Elsewhere,
-                    "{layers} generator steps"
-                );
+                assert_eq!(climb.stop, InPlaceStop::Elsewhere, "{layers} generator steps");
             }
         });
     }
@@ -1569,11 +1565,7 @@ fn in_place_climb_says_why_it_stopped() {
     use crate::execution_role::InPlaceStop;
     let cases: [(&str, &str, InPlaceStop); 5] = [
         // No function holds the climb's last call: module scope.
-        (
-            "(() => { read(); })();",
-            "module level",
-            InPlaceStop::NoFunction,
-        ),
+        ("(() => { read(); })();", "module level", InPlaceStop::NoFunction),
         // A generator's body runs where its iterator is stepped.
         (
             "function* g() { (() => { read(); })(); }",
@@ -1614,6 +1606,177 @@ fn in_place_climb_says_why_it_stopped() {
                 "{name}"
             );
         });
+    }
+}
+
+#[test]
+fn callback_result_identity_exhaustion_retains_typed_candidates() {
+    for aliases in [15, 16, 17] {
+        let mut source = "const a0 = 0;".to_owned();
+        for index in 1..=aliases {
+            source.push_str(&format!("const a{index} = a{};", index - 1));
+        }
+        source.push_str(&format!(" a{aliases}();"));
+        with_lookup(&source, &[], |lookup| {
+            let file = lookup.file_by_path(PATH).unwrap();
+            let site = span_of(&source, &format!("a{aliases}()"), 0);
+            let callee = file.ast.call_at(site).unwrap().callee;
+            assert!(
+                !crate::callback_return::binding_is_callback_result(lookup, file, callee),
+                "{aliases} aliases cannot prove callback-result identity"
+            );
+        });
+    }
+}
+
+#[test]
+fn a_summary_memo_answers_as_the_plain_walk_does_in_any_order() {
+    let source = "
+        const value = 1;
+        function a() { return value; }
+        function b() { a(); return this; }
+        function c() { d(); }
+        function d() { c(); arguments; }
+        function e() { a(); }
+    ";
+    with_lookup(source, &[], |lookup| {
+        let file = &lookup.files()[0];
+        let functions = &file.ast.functions;
+        let plain = functions
+            .iter()
+            .map(|function| {
+                crate::interproc::completeness::summary_complete(file, function, lookup)
+            })
+            .collect::<Vec<_>>();
+        assert!(plain.contains(&true) && plain.contains(&false));
+        // Forward, backward and twice: no ask may lean on an earlier one.
+        let mut forward = crate::interproc::completeness::SummaryMemo::default();
+        let mut backward = crate::interproc::completeness::SummaryMemo::default();
+        for (function, answer) in functions.iter().zip(&plain) {
+            assert_eq!(forward.complete(file, function, lookup), *answer);
+            assert_eq!(forward.complete(file, function, lookup), *answer);
+        }
+        for (function, answer) in functions.iter().zip(&plain).rev() {
+            assert_eq!(backward.complete(file, function, lookup), *answer);
+        }
+    });
+}
+
+/// ADR 0803 step 2, reviews R2 and R7: each program hands the global object,
+/// `Function` or an array intrinsic to code the checker does not see (here
+/// nothing resolves, so every recorded call is unseen; the fixtures
+/// `iteration-written-slots/handed-*` cover the seen side with real
+/// resolution), and so withdraws a primitive's tuple slots.
+#[test]
+fn a_value_handed_to_unseen_code_withdraws_the_tuple_slots() {
+    let withdrawn = |source: &str| {
+        with_lookup(source, &[], |lookup| {
+            (
+                lookup.tuple_slot_iteration_may_be_mutated(),
+                crate::interproc::accessor_provenance::handed_to_unseen_code(lookup),
+            )
+        })
+    };
+    assert_eq!(withdrawn("export const answer = 1;"), (false, false));
+    assert_eq!(
+        withdrawn("'x' in globalThis; Object.keys(window);"),
+        (false, false)
+    );
+    for source in [
+        "[code].map(Function).forEach((f) => f());",
+        "patch.call(null, globalThis);",
+        "setTimeout(patch, 0, globalThis);",
+        "patch(globalThis);",
+        "unseen.bind(window)();",
+        // Review D3: the window as `this`, and a listener or a timer's
+        // callback that can reach it.
+        "window.open('x');",
+        "window.addEventListener('resize', (e) => go(e));",
+        "window.addEventListener('resize', function () { go(this); });",
+        "addEventListener('resize', function () { go(arguments); });",
+        "function tick() { go(this); } setTimeout(tick, 0);",
+        "function onResize(e) { go(e); } window.addEventListener('resize', onResize);",
+    ] {
+        assert_eq!(withdrawn(source), (true, true), "{source}");
+    }
+    // Reviews R19b, D8: a written member is no longer the listed one, and a
+    // key argument of a listed builtin is coerced through program code.
+    assert_eq!(
+        withdrawn("const o = {}; Object.keys(o); Object.hasOwn(o, 'k');"),
+        (false, false)
+    );
+    for source in [
+        "Object.keys = patch; Object.keys(window);",
+        "Object.hasOwn({}, window);",
+        "Object.keys(...args, window);",
+    ] {
+        assert_eq!(withdrawn(source), (true, true), "{source}");
+    }
+    // Review R19d: a platform caller as a value. Review R19e: a path's
+    // element. Compared, tested or read for its own answers, neither.
+    for source in [
+        "const st = setTimeout; st(tick);",
+        "[tick].forEach(setTimeout);",
+        "setTimeout.call(null, tick);",
+        "const st = window.setTimeout; st(tick);",
+        "const on = addEventListener; on('x', tick);",
+        "const t = e.composedPath().at(-1); t.go();",
+        "const t = e.composedPath()[3]; go(t);",
+        "for (const t of e.composedPath()) go(t);",
+        "const p = e.composedPath(); go(p);",
+        "e.composedPath().some((t) => t.go());",
+        "e.composedPath().some(go);",
+        "if (x === window.Function(code)()) go();",
+    ] {
+        assert!(withdrawn(source).0 || withdrawn(source).1, "{source}");
+    }
+    for source in [
+        "typeof setTimeout === 'function';",
+        "type T = ReturnType<typeof setTimeout>;",
+        "const p = e.composedPath(); p.includes(el); p.length;",
+        "e.composedPath().indexOf(el);",
+        "e.composedPath().some((t) => t === el);",
+    ] {
+        assert_eq!(withdrawn(source), (false, false), "{source}");
+    }
+    // What is seen (a closed method, a listener or a timer's callback that
+    // reaches nothing) needs Type Facts, which this harness has none of: the
+    // iteration-written-slots fixtures pin it.
+    // Stored or returned: handed on in the file itself.
+    for source in [
+        "Reflect.apply(patch, null, [globalThis]);",
+        "new Map([[1, Array.prototype]]);",
+        "const o = { g: globalThis };",
+        "function root() { return globalThis; }",
+    ] {
+        assert!(withdrawn(source).0, "{source}");
+    }
+}
+
+/// The census runs inside the member-stability memo probe, which may read no
+/// memo: a probe that does begins the build from inside its own
+/// invalidation, and a daemon's incremental build waits on itself forever
+/// (the rf3 grid's stall). A listed member's intactness reads the
+/// assigned-member names from the base index, as that memo's probe does.
+#[test]
+fn the_unseen_code_census_reads_no_memo_as_a_probe() {
+    for source in [
+        "window.addEventListener('itx', (e: any) => { e.currentTarget.Function('x')(); });",
+        "window.addEventListener('itx', function (this: any) { this.Function('x')(); });",
+        "window.scrollTo = patch; window.scrollTo(0, 0);",
+        "Object.keys(window);",
+        "Object.keys = patch; Object.keys(window);",
+    ] {
+        let (probed, direct) = with_lookup(source, &[], |lookup| {
+            let probed = super::memo_probes::as_probe(|| {
+                crate::interproc::accessor_provenance::handed_to_unseen_code(lookup)
+            });
+            (
+                probed,
+                crate::interproc::accessor_provenance::handed_to_unseen_code(lookup),
+            )
+        });
+        assert_eq!(probed, direct, "{source}");
     }
 }
 
@@ -1666,16 +1829,11 @@ fn every_match_on_a_climbs_stop_names_every_stop() {
                 );
             }
             assert!(
-                !block
-                    .lines()
-                    .any(|line| line.trim_start().starts_with("_ =>")),
+                !block.lines().any(|line| line.trim_start().starts_with("_ =>")),
                 "{name}: a match on `climb.stop` has a wildcard arm:\n{block}"
             );
             rest = &body[end..];
         }
     }
-    assert!(
-        matches >= 10,
-        "{matches} matches found: the deciding consumers are matched"
-    );
+    assert!(matches >= 10, "{matches} matches found: the deciding consumers are matched");
 }
