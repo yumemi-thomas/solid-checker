@@ -651,6 +651,11 @@ impl<'a> SemanticLookup<'a> {
         self.entities.locations.at(path, span)
     }
 
+    /// [`EntityLocations::resolves_promise_handler`](super::EntityLocations::resolves_promise_handler) for `path`.
+    pub(crate) fn path_resolves_promise_handler(&self, path: &str) -> bool {
+        self.entities.locations.resolves_promise_handler(path)
+    }
+
     pub(crate) fn typescript_file(&self, path: &str) -> Option<&'a FileFact> {
         self.facts.typescript.file(path)
     }

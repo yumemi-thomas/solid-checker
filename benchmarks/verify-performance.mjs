@@ -17,7 +17,7 @@
 // SOLID_CHECKER_MAX_INCREMENTAL_NS.
 
 import { appendFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { cpus, loadavg, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -27,7 +27,9 @@ import {
   EXPORT_CORPUS_FILES,
   WALL_TIME_GATES,
   assessPerformance,
-  renderPerformanceFindings
+  quietLoadBound,
+  renderPerformanceFindings,
+  sampleFirstIr
 } from "./lib/performance-invariants.mjs";
 
 const repository = resolve(import.meta.dirname, "..");
@@ -93,7 +95,19 @@ try {
   // best, since shared scheduling slows one sample while a real regression
   // slows every one.
   const small = measure(500);
-  const largeSamples = Array.from({ length: COLD_SAMPLES }, () => measure(1000));
+  const sleep = milliseconds => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+  const { reports: largeSamples, run: firstIrRun } = sampleFirstIr({
+    measureOne: () => measure(1000),
+    limit: ceilings.firstIrNsPerSource,
+    bound: quietLoadBound(cpus().length),
+    load: () => loadavg()[0],
+    sleep
+  });
+  // The checker's cost per source grows with the path's length (ADR 0986): the result names the corpus path and its length, so runs on
+  // different machines are comparable.
+  const corpusPath = join(directory, "widget-1000");
+  firstIrRun.corpusPathChars = corpusPath.length;
+  process.stdout.write(`corpus path: ${corpusPath} (${corpusPath.length} characters)\n`);
   const incremental = measure(1000, { iterations: 10, warmups: 2, edit: "mod0001.tsx" });
   // Export aggregation is measured on the structured corpus, where the phase
   // takes milliseconds (on the widget corpus it takes 0.1-0.6 ms and its
@@ -107,7 +121,7 @@ try {
     measure(EXPORT_CORPUS_FILES.large, { shape: "structured" })
   );
 
-  const assessment = assessPerformance({ small, largeSamples, exportSmallSamples, exportLargeSamples, incremental }, { wallTimeGate, ceilings });
+  const assessment = assessPerformance({ small, largeSamples, exportSmallSamples, exportLargeSamples, incremental, firstIrRun }, { wallTimeGate, ceilings });
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(
       process.env.GITHUB_STEP_SUMMARY,
