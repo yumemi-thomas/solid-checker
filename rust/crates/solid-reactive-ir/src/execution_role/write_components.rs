@@ -33,7 +33,7 @@
 
 use super::write_roles::{
     CallerFold, caller_loop, entry_census_complete, event_only_entries, plain_call_outside_jsx,
-    write_allowed_spans, write_role_fallback, write_role_walk,
+    withheld_caller_role, write_allowed_spans, write_role_fallback, write_role_walk,
 };
 use super::*;
 
@@ -428,6 +428,18 @@ impl<'a, 'y: 'a> Region<'a, 'y, '_, '_> {
                     Entry::Skip
                 } else {
                     Entry::Unplaced
+                });
+                continue;
+            }
+            // ADR 0991: the veto the path walk asks of every caller (ADR 0874), in the same order: a caller nothing places is `Unknown`, not the fold's
+            // deferred or in-place role, which the paths never reach.
+            if let Some(role) = withheld_caller_role(caller_file, callee, lookup) {
+                entries.push(Entry::Value(role));
+                self.placed.push(Placed {
+                    node,
+                    caller: caller_key,
+                    value: true,
+                    queried: HashSet::default(),
                 });
                 continue;
             }

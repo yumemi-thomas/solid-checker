@@ -47,6 +47,7 @@ declare module "solid-js" {
   export function createMemo<T>(compute: (prev: T | undefined) => T): Accessor<T>;
   export function createEffect<T>(compute: () => T, effect: (value: T) => void | (() => void)): void;
   export function untrack<T>(fn: () => T): T;
+  export function onSettled(fn: () => void | (() => void)): void;
 }
 
 declare module "hands" {
@@ -600,6 +601,170 @@ fn path_dependent_walks_end_at_their_bound_and_fail_closed() {
     solid_reactive_ir::follow_every_path(false);
     solid_reactive_ir::bound_walks(None);
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// ADR 0991: the region fold asks the veto the path walk asks (ADR 0874). A program-wide veto (an unspelled-key write into a handed object) withholds the
+/// standard `then`, so a call written in its callback, and in a listener nested in that callback, has no role the walk can place: the paths answer `Unknown` for
+/// the write of `sync`, and the fold must answer the same (it placed both as deferred callbacks and left the write clean, which only the role log, the proof log
+/// and a probe turned into `Unknown`).
+const WITHHELD_CALLER: &str = r#"import { createSignal, onSettled } from "solid-js";
+
+export function hashKey(args: unknown) {
+  return JSON.stringify(args, (_, val) => val && typeof val === "object"
+    ? Object.keys(val).sort().reduce((result: any, key: string) => { result[key] = val[key]; return result; }, Object.create(null))
+    : val);
+}
+declare function load(): Promise<void>;
+declare const bus: { addListener(cb: () => void): () => void };
+
+export function Settled() {
+  const [s, setS] = createSignal(0);
+  const sync = () => { setS(1); };
+  onSettled(() => {
+    void load().then(() => { bus.addListener(() => { sync(); }); sync(); });
+  });
+  return <p>{s()}</p>;
+}
+
+export function Alias() {
+  const [s, setS] = createSignal(0);
+  const sync = () => { setS(1); };
+  const run = () => sync();
+  onSettled(() => {
+    void load().then(() => { bus.addListener(() => { run(); }); run(); });
+  });
+  return <p>{s()}</p>;
+}
+"#;
+
+/// The same functions with no veto in the program.
+const WITHHELD_CALLER_NO_VETO: &str = r#"import { createSignal, onSettled } from "solid-js";
+
+declare function load(): Promise<void>;
+declare const bus: { addListener(cb: () => void): () => void };
+
+export function Settled() {
+  const [s, setS] = createSignal(0);
+  const sync = () => { setS(1); };
+  onSettled(() => {
+    void load().then(() => { bus.addListener(() => { sync(); }); sync(); });
+  });
+  return <p>{s()}</p>;
+}
+
+export function Alias() {
+  const [s, setS] = createSignal(0);
+  const sync = () => { setS(1); };
+  const run = () => sync();
+  onSettled(() => {
+    void load().then(() => { bus.addListener(() => { run(); }); run(); });
+  });
+  return <p>{s()}</p>;
+}
+"#;
+
+/// The roles of the writes of `source`, built following every path, folded, and with the role log: the three must be one answer.
+fn write_roles_three_ways(typefacts: &str, source: &str) -> Vec<ExecutionRole> {
+    let _switches = SWITCHES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let root = env::temp_dir()
+        .join("sc-scratch.noindex")
+        .join(format!("withheld-caller-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let _scratch = Scratch(root.clone());
+    fs::write(root.join("solid-js.d.ts"), STUB).unwrap();
+    fs::write(root.join("tsconfig.json"), TSCONFIG).unwrap();
+    fs::write(root.join("App.tsx"), source).unwrap();
+    let root = root.canonicalize().unwrap();
+    let app = root.join("App.tsx");
+    let log = RoleLogTarget {
+        path: root.join("roles.jsonl"),
+        program: None,
+    };
+    let project_id = root.join("tsconfig.json").to_string_lossy().into_owned();
+    let typefacts = PathBuf::from(typefacts)
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let typescript = TypeFactsSession::open(&typefacts, &project_id, &[]).unwrap();
+    let solid_v2 = dialect::by_id("solid-v2").unwrap();
+    let mut session = NativeIncrementalSession::open(
+        solid_v2,
+        project_id,
+        vec![SourceFile {
+            path: app.to_string_lossy().into_owned(),
+            source: source.to_owned().into(),
+            compiler_options: CompilerOptions::default(),
+        }],
+        typescript,
+    )
+    .unwrap();
+    let facts = session
+        .edit(
+            vec![SourceChange {
+                path: app.to_string_lossy().into_owned(),
+                version: 1,
+                source: Some(source.to_owned()),
+                compiler_options: CompilerOptions::default(),
+            }],
+            None,
+        )
+        .unwrap();
+    let build = || {
+        solid_reactive_ir::build_with_analysis_inputs_measured(
+            &facts,
+            solid_v2.vocabulary,
+            AnalysisInputs::empty(),
+            &RuleOptions::default(),
+        )
+        .unwrap()
+        .0
+    };
+    solid_reactive_ir::follow_every_path(true);
+    let reference = build();
+    solid_reactive_ir::follow_every_path(false);
+    let folded = build();
+    solid_reactive_ir::configure_role_log(Some(&log));
+    let logged = build();
+    solid_reactive_ir::configure_role_log(None);
+    assert_eq!(
+        folded, reference,
+        "the fold builds differently from every path:\n{source}"
+    );
+    assert_eq!(
+        logged, reference,
+        "the role log builds differently from every path:\n{source}"
+    );
+    reference
+        .writes
+        .iter()
+        .map(|write| write.execution)
+        .collect()
+}
+
+#[test]
+fn a_caller_in_a_withheld_layer_is_unknown_in_the_fold_and_on_every_path() {
+    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let withheld = write_roles_three_ways(&typefacts, WITHHELD_CALLER);
+    assert_eq!(withheld.len(), 2, "{withheld:?}");
+    assert!(
+        withheld.iter().all(|role| *role == ExecutionRole::Unknown),
+        "a write whose callers an impostor may run is placed: {withheld:?}"
+    );
+    // Without the veto the callers are deferred callbacks and nothing is withheld: no write is `Unknown`, in any of the three builds.
+    let standard = write_roles_three_ways(&typefacts, WITHHELD_CALLER_NO_VETO);
+    assert_eq!(standard.len(), 2, "{standard:?}");
+    assert!(
+        standard
+            .iter()
+            .all(|role| *role != ExecutionRole::Unknown && !role.reports_disallowed_write()),
+        "the standard `then` withheld a caller with no veto in the program: {standard:?}"
+    );
 }
 
 struct Scratch(PathBuf);

@@ -71,6 +71,9 @@ fn the_proof_log_changes_no_answer() {
         "pending-read-accounted",
         // Batch 11, slice 6: the owner-call universe's silences and declines.
         "owner-call-leaf-universe",
+        // ADR 0991: a write whose callers an impostor may run (the fold must ask the veto the paths ask), and the same program with no veto.
+        "write-fold-withheld-caller",
+        "write-fold-withheld-caller-no-veto",
     ] {
         let log = directory.join(format!("{name}.jsonl"));
         assert_eq!(
