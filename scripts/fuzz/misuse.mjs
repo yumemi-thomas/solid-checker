@@ -693,8 +693,8 @@ export const SPEC = {
   },
   SYNC_NODE_RECEIVED_ASYNC: {
     variants: ["memo", "effect"], recallVariants: Object.keys(SYNC_COMPUTES), contexts: ["body", "root", "untrack", "memo", "jsx"], bindings: BINDINGS, setup: () => [],
-    // ADR 0989: the legal side: `{ sync: true, ...optOver }` where `optOver.sync` is `false` (Chrome rc.21 reads the last `sync`: quiet), on a memo and on an effect.
-    legalVariants: ["memo", "effect", "opt-spread", "opt-spread-effect"], legalVariantContexts: { "opt-spread": ["body", "root", "memo"], "opt-spread-effect": ["body", "root", "memo"] },
+    // ADR 0989: the legal side (recall grids): `{ sync: true, ...optOver }` where `optOver.sync` is `false` (Chrome rc.21 reads the last `sync`: quiet), on a memo and on an effect.
+    recallLegal: ["body", "root", "memo"], recallLegalVariants: ["opt-spread", "opt-spread-effect"],
     contextLine: (variant) => SYNC_COMPUTE_LINES[variant],
     call: (node) => (SYNC_COMPUTES[node.variant] ? api("createMemo", SYNC_COMPUTES[node.variant])
       : node.variant === "opt-spread" ? api("createMemo", "async () => 1, { sync: true, ...optOver }")
