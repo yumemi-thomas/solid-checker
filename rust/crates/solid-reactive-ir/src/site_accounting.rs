@@ -781,6 +781,18 @@ fn unaccounted_row(file: &FileFacts, site: &Site, code: SiteCode) -> StaticViola
     }
 }
 
+/// The uncertifiable defect a code of a static-defect family gets when nothing ends it (SC7001).
+fn unaccounted_defect(file: &FileFacts, site: &Site, code: SiteCode) -> crate::StaticDefect {
+    let home = code.home();
+    crate::StaticDefect {
+        kind: crate::StaticDefectKind::MissingEffectFunction,
+        location: site.at.location(file.path.shared()),
+        analysis_context: home.blocker.into(),
+        fixes: vec![],
+        uncertain: true,
+    }
+}
+
 /// Ends every code of every site of the universe in the final `program`, or gives it the uncertifiable row of the code's own rule. Run once per build,
 /// after every producer and pass that adds or removes a row and before the reachability queries over the rows. A site ends for a code only by an
 /// ending that answers that code (a row of its table, an SC9012, a finding of a rule the dialect's policy says claims it, the compiler's discard) or by a
@@ -795,6 +807,8 @@ pub(crate) fn account<'a>(
     let dialect = ctx.dialect;
     let logging = proof_log::enabled();
     let mut rows = Vec::new();
+    // SC7001's rule is a static-defect family (`StaticDefectKind::MissingEffectFunction`), not a static-violation rule: its home row is a defect.
+    let mut defects = Vec::new();
     {
         let endings = Endings::of(program);
         let mut filed: HashSet<(&str, u32, u32, SiteCode)> = HashSet::default();
@@ -819,7 +833,11 @@ pub(crate) fn account<'a>(
                             })
                     });
                 if !silenced && filed.insert((path, site.at.start, site.at.end, code)) {
-                    rows.push(unaccounted_row(file, site, code));
+                    if code == SiteCode::MissingEffectFn {
+                        defects.push(unaccounted_defect(file, site, code));
+                    } else {
+                        rows.push(unaccounted_row(file, site, code));
+                    }
                 }
             }
         }
@@ -834,6 +852,7 @@ pub(crate) fn account<'a>(
     // In the universe's order, after the rows the program holds: the findings
     // are ordered by place when they are projected.
     program.static_violations.extend(rows);
+    program.static_defects.extend(defects);
     // The universe is the one list of the build's sites: the passes that run after this one (batch 11, slice 9B) read it rather than list it again.
     universe
 }
