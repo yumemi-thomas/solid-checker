@@ -193,6 +193,23 @@ the value still will not update).
 
 A call in a layer of a function a memo or effect compute names by its binding runs under that compute's observer (ADR 0517).
 
+## Every call ends (ADR 0985)
+
+Every call the dialect answers as `resolve` or `until` (whatever the callee is spelled; found from the call's resolved primitive), and every reference to one that is a value (`pick(resolve)`, `[until]`, `Reflect.apply(resolve, ..)`: the value-use census's `SC9012 primitive-value` ends it), is a site of the proof universe with its own code (`RESOLVE_IN_REACTIVE_SCOPE`, `UNTIL_IN_REACTIVE_SCOPE`). A site ends in a row (a violation: a tracked scope holds the call; an obligation: nothing places it), in a typed silence that names why no observer is active where it runs, or in the uncertifiable row `resolve-scope-unaccounted`. A silence carries the span it rests on:
+
+| silence | what proves it | premise span |
+| --- | --- | --- |
+| `past-suspension` | the call follows an `await` on every path: a later task | the `await` |
+| `step-resumed` | an action's step runs from the continuation of a `yield` of a promise | the `yield` |
+| `step-callers-untracked` | every invocation of the action is enumerated and none runs under an observer | each caller (the step, when only handlers reference the action) |
+| `slot-runs-elsewhere` | the primitive whose callback holds the call runs it off the caller's stack (`SlotRun::Deferred`: an effect's apply) | that call |
+| `slot-clears-observer` | the primitive runs it in place with the observer cleared (`untrack`, `runWithOwner`, `createRoot`) | that call |
+| `slot-swallows-throw` | a synchronous callback of a primitive that takes what it throws (`isPending`) | that call |
+| `role-*` | the role classifier's nine roles that clear the observer (component body, plain and unwindowed untracked callbacks, effect apply, event handler, directive apply, module initialization, deferred callback outside tracked JSX, discarded code) | the call |
+
+The slot answer matches the dialect's `slot_run` with no wildcard: a slot that runs in place with the caller's observer and lets the throw through, one the dialect does not state, and a computation slot the tracked-scope proof did not place are obligations, never silence. An async callback of `isPending` stays ADR 0959's obligation. `SOLID_CHECKER_IR_ABLATE_SILENCE=all` turns every silent call into `resolve-scope-unaccounted` (an obligation, never a violation): `site_accounting_process` pins it on `fixtures/reactive-ir/resolve-until-slots`.
+
+
 ## A stored throw needs a read that reports it
 
 A throw here stored on a computation without a proven read that reports it is `computation-error-unobserved` ([ADR 0893](../decisions.md#adr-0893), as in [static-dynamic-async-source](static-dynamic-async-source.md)).

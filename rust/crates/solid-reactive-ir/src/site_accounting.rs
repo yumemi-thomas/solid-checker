@@ -208,6 +208,39 @@ site_silences! {
     /// A creation the dialect says throws on an effect's apply, inside the callback of an exact owner-setting primitive (`runWithOwner`, `createRoot`, a
     /// computation's compute): an owner is current.
     EffectCreationOwnerSetAround => "leaf_universe.account.effect-creation-owner-set-around",
+    /// A `resolve`/`until` call (SC2004, SC2005) written past an `await` its function reaches on every path: a later task, with no observer (ADR 0612; the
+    /// premise is the `await`).
+    ResolvePastSuspension => "static_api.resolve_scope.past-suspension",
+    /// A `resolve`/`until` call in an action's step that every run reaches from a `yield` of a promise (ADR 0547; the premise is the `yield`).
+    ResolveStepResumed => "static_api.resolve_scope.step-resumed",
+    /// A `resolve`/`until` call in an action's step whose every invocation is enumerated and none runs under an observer (ADR 0614; the premises are the calls).
+    ResolveStepCallersUntracked => "static_api.resolve_scope.step-callers-untracked",
+    /// The callback holding a `resolve`/`until` call runs elsewhere than on the stack of the call that took it (the dialect's `SlotRun::Deferred`; the premise
+    /// is that call).
+    ResolveSlotRunsElsewhere => "static_api.resolve_scope.slot-runs-elsewhere",
+    /// The callback holding the call runs in place with the observer cleared (`untrack`, `runWithOwner`, `createRoot`; `SlotObserver::Clears`).
+    ResolveSlotClearsObserver => "static_api.resolve_scope.slot-clears-observer",
+    /// The callback holding the call is synchronous and its primitive takes what it throws (`isPending`; `SlotThrows::Swallows`): the guard's plain throw is no
+    /// report.
+    ResolveSlotSwallowsThrow => "static_api.resolve_scope.slot-swallows-throw",
+    /// The role classifier placed the call in a component body or a plain callback of one (`UntrackedRendering`), where no observer is active.
+    ResolveRoleUntrackedRendering => "static_api.resolve_scope.role-untracked-rendering",
+    /// The role is a callback that runs untracked (`UntrackedCallback`).
+    ResolveRoleUntrackedCallback => "static_api.resolve_scope.role-untracked-callback",
+    /// The role is untracked with no window (`UntrackedUnwindowed`: `untrack`, `runWithOwner`, `createRoot`).
+    ResolveRoleUntrackedUnwindowed => "static_api.resolve_scope.role-untracked-unwindowed",
+    /// The role is an effect's apply callback (`EffectApply`).
+    ResolveRoleEffectApply => "static_api.resolve_scope.role-effect-apply",
+    /// The role is an event handler (`EventCallback`).
+    ResolveRoleEventCallback => "static_api.resolve_scope.role-event-callback",
+    /// The role is a directive's application (`DirectiveApply`).
+    ResolveRoleDirectiveApply => "static_api.resolve_scope.role-directive-apply",
+    /// The role is module initialization (`ModuleInitialization`).
+    ResolveRoleModuleInitialization => "static_api.resolve_scope.role-module-initialization",
+    /// The role is a deferred callback outside tracked JSX (`DeferredCallback`).
+    ResolveRoleDeferredCallback => "static_api.resolve_scope.role-deferred-callback",
+    /// The role is code the compiler discarded (`DiscardedRendering`).
+    ResolveRoleDiscardedRendering => "static_api.resolve_scope.role-discarded-rendering",
 }
 
 impl SiteSilence {
@@ -217,7 +250,7 @@ impl SiteSilence {
     pub(crate) const fn codes(self) -> &'static [SiteCode] {
         use SiteCode::{
             ActionCall, CleanupForbidden, EffectCreation, OnFlush, PrimitiveForbidden,
-            ReactiveWrite, StoreWrite, StrictRead,
+            ReactiveWrite, ResolveInScope, StoreWrite, StrictRead, UntilInScope,
         };
         match self {
             // The reads: an accessor's call, a store or props member Get.
@@ -287,6 +320,23 @@ impl SiteSilence {
             Self::OwnerCurrent
             | Self::EffectCreationRunsOffApply
             | Self::EffectCreationOwnerSetAround => &[EffectCreation],
+            // The resolve/until universe (slice 7): the observer guard of the primitive the site's table names. A silence is a proof about the guard where the
+            // call runs, so it answers the code of the primitive at the site; a `resolve` site never lists `until`'s code, and the two codes are separate sites.
+            Self::ResolvePastSuspension
+            | Self::ResolveStepResumed
+            | Self::ResolveStepCallersUntracked
+            | Self::ResolveSlotRunsElsewhere
+            | Self::ResolveSlotClearsObserver
+            | Self::ResolveSlotSwallowsThrow
+            | Self::ResolveRoleUntrackedRendering
+            | Self::ResolveRoleUntrackedCallback
+            | Self::ResolveRoleUntrackedUnwindowed
+            | Self::ResolveRoleEffectApply
+            | Self::ResolveRoleEventCallback
+            | Self::ResolveRoleDirectiveApply
+            | Self::ResolveRoleModuleInitialization
+            | Self::ResolveRoleDeferredCallback
+            | Self::ResolveRoleDiscardedRendering => &[ResolveInScope, UntilInScope],
             // The passes that remove a row: the codes the removed row's ending answered.
             Self::ApplyNeverRuns
             | Self::ClosedProgramExportDischarge

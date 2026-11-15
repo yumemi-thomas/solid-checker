@@ -189,3 +189,55 @@ fn a_read_no_strict_read_window_holds_ends_on_the_fact_that_says_so() {
     );
     assert_eq!(module_scope.len(), 1, "{module_scope:?}");
 }
+
+/// The rows dropping `silence` adds to the fixture `name`: each an uncertifiable SC2004 or SC2005 row with the resolve universe's blocker, nothing else moved.
+fn resolve_rows_the_silence_ends(typefacts: &str, silence: &str) -> BTreeSet<String> {
+    let name = "resolve-until-slots";
+    let named = check(typefacts, name, None, &[]);
+    let ablated = check(typefacts, name, Some(silence), &[]);
+    let before = named.iter().map(key).collect::<BTreeSet<_>>();
+    let after = ablated.iter().map(key).collect::<BTreeSet<_>>();
+    assert!(before.is_subset(&after), "an answer was lost");
+    let added = after.difference(&before).cloned().collect::<BTreeSet<_>>();
+    for row in &added {
+        assert!(
+            (row.contains("SC2004") || row.contains("SC2005"))
+                && row.contains("\"uncertifiable\"")
+                && row.contains("resolve-scope-unaccounted"),
+            "dropping `{silence}` moved an answer that is no unaccounted resolve/until call: {row}"
+        );
+    }
+    added
+}
+
+/// ADR 0985: every `resolve` and `until` call of the fixture ends in a row or a typed silence; each silence dropped on its own leaves its calls an
+/// obligation (never a violation), and dropping them all does so for every silent cell and moves no violation.
+#[test]
+fn a_resolve_or_until_call_no_silence_ends_is_an_obligation_never_a_violation() {
+    let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("arm the real Type Facts process");
+    let name = "resolve-until-slots";
+    let named = check(&typefacts, name, None, &[]);
+    assert!(
+        unaccounted(&named, "resolve-scope-unaccounted").is_empty(),
+        "a call is unaccounted with every silence named"
+    );
+    // The cells: pairs of the twins, `resolve` and `until`.
+    let per_silence = [
+        ("static_api.resolve_scope.slot-swallows-throw", 2),
+        ("static_api.resolve_scope.slot-clears-observer", 6),
+        ("static_api.resolve_scope.role-deferred-callback", 2),
+        ("static_api.resolve_scope.past-suspension", 2),
+        ("static_api.resolve_scope.step-resumed", 2),
+        ("static_api.resolve_scope.step-callers-untracked", 4),
+    ];
+    for (silence, rows) in per_silence {
+        let added = resolve_rows_the_silence_ends(&typefacts, silence);
+        assert_eq!(added.len(), rows, "{silence}: {added:?}");
+    }
+    let all = resolve_rows_the_silence_ends(&typefacts, "all");
+    assert_eq!(
+        all.len(),
+        per_silence.iter().map(|(_, rows)| rows).sum::<usize>(),
+        "{all:?}"
+    );
+}
