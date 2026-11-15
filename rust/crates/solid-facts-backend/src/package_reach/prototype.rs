@@ -29,7 +29,6 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
-use std::time::SystemTime;
 
 use solid_facts::compiler::{COMPILER_FACTS_PROTOCOL, ExecutionMap};
 use solid_facts::core::{Generation, SourceHash};
@@ -44,28 +43,39 @@ pub(super) struct Closure {
     pub(super) reads_receiver: bool,
 }
 
-/// A file's answer, kept for the process while its length and modification time hold: a package several closures load is asked once.
-type Kept = Mutex<HashMap<PathBuf, ((u64, Option<SystemTime>), Result<UnseenCode, String>)>>;
+/// A file's answer, kept for the process while its stamp holds ([`crate::reviewed_packages::file_stamp`]): a package several closures load is asked once.
+type Kept = Mutex<
+    HashMap<
+        PathBuf,
+        (
+            crate::reviewed_packages::FileStamp,
+            Result<UnseenCode, String>,
+        ),
+    >,
+>;
 
 /// Whether the file names `Object.prototype` or builds code as a string, by the rule the analysis asks of the files of the program ([`solid_reactive_ir::unseen_code_in`]), on
 /// the file's own facts. `Err` where the file does not parse.
 pub(super) fn routes_in(file: &Path) -> Result<UnseenCode, String> {
     static KEPT: OnceLock<Kept> = OnceLock::new();
     let metadata = fs::metadata(file).map_err(|error| error.to_string())?;
-    let stamp = (metadata.len(), metadata.modified().ok());
+    let stamp = crate::reviewed_packages::file_stamp(&metadata);
     let kept = KEPT.get_or_init(Mutex::default);
-    if let Some((kept_stamp, answer)) = kept
-        .lock()
-        .map_err(|_| "answer cache poisoned".to_owned())?
-        .get(file)
+    if let Some(stamp) = stamp
+        && let Some((kept_stamp, answer)) = kept
+            .lock()
+            .map_err(|_| "answer cache poisoned".to_owned())?
+            .get(file)
         && *kept_stamp == stamp
     {
         return answer.clone();
     }
     let answer = ask(file);
-    kept.lock()
-        .map_err(|_| "answer cache poisoned".to_owned())?
-        .insert(file.to_path_buf(), (stamp, answer.clone()));
+    if let Some(stamp) = stamp {
+        kept.lock()
+            .map_err(|_| "answer cache poisoned".to_owned())?
+            .insert(file.to_path_buf(), (stamp, answer.clone()));
+    }
     answer
 }
 

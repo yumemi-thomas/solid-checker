@@ -821,6 +821,7 @@ fn package_reach(
         written_any: false,
         accessors_written: BTreeSet::new(),
         accessors_written_any: false,
+        unread: false,
         unseen: None,
         reads_receiver: false,
         // Only a package the program loads is asked what its code runs that the build does not see (a package only a declaration names loads nothing the program runs):
@@ -837,6 +838,9 @@ fn package_reach(
     let closed = problems
         .iter()
         .all(|problem| matches!(problem, PackageReach::ReachesSolid { .. }));
+    // ADR 1002: code of the closure that nobody read may write any global and define an accessor for any: what the files that were read write says nothing of
+    // it. Unavailable source is no evidence that a global is the standard library's.
+    let unread = walk.unread;
     Closure {
         reach: problems.first().cloned().unwrap_or(PackageReach::Clear),
         problems,
@@ -847,9 +851,9 @@ fn package_reach(
         },
         global_writes: solid_facts::module_reach::GlobalWrites {
             names: walk.written.into_iter().collect(),
-            any_name: walk.written_any,
+            any_name: walk.written_any || unread,
             accessor_names: walk.accessors_written.into_iter().collect(),
-            accessors_any_name: walk.accessors_written_any,
+            accessors_any_name: walk.accessors_written_any || unread,
         },
         // A receiver matters only where the closure was read to its end and runs nothing unseen (the consumer asks for it only then).
         unseen: prototype::Closure {
@@ -1334,6 +1338,9 @@ struct Walk<'s, 'd, 'm> {
     /// The globals the files read may define an accessor for on the global object, and whether one may be defined under a name the syntax does not fix.
     accessors_written: BTreeSet<String>,
     accessors_written_any: bool,
+    /// Whether the closure holds code nobody read (ADR 1002): a load by a computed name, a load no installed file answers, a file the parser refuses, a native
+    /// module, a manifest the walk does not read, or files past the closure limit. Kept apart from `problems`, which keeps only the first [`MAX_PROBLEMS`].
+    unread: bool,
     /// The first place in walk order the closure was found to run code the build does not see, and whether any file read holds a `this` or a `super`.
     unseen: Option<UnseenId>,
     reads_receiver: bool,
@@ -1405,6 +1412,18 @@ impl Walk<'_, '_, '_> {
     }
 
     fn note_problem(&mut self, problem: ProblemId) {
+        self.unread |= matches!(
+            self.memo.problem(problem),
+            PackageReach::Undecided {
+                blocker: ReachBlocker::MissingSource
+                    | ReachBlocker::NativeModule
+                    | ReachBlocker::Unparseable
+                    | ReachBlocker::DynamicLoad
+                    | ReachBlocker::ManifestUnread
+                    | ReachBlocker::ClosureLimit,
+                ..
+            }
+        );
         if self.problems.len() < MAX_PROBLEMS && self.noted.insert(problem.0) {
             self.problems.push(problem);
         }

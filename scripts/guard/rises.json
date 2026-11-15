@@ -3778,6 +3778,94 @@
    "adr": "ADR 0998",
    "fact": "a value a package the build does not read returned, walked forward to a call or Get in project code that nothing tracks or places",
    "why": "ADR 0981's rule followed a read back through a call, a member, an operand and a plain binding only"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-unread-packages",
+   "key": "SC2002 package-may-call-action",
+   "from": 21,
+   "to": 24,
+   "adr": "ADR 1002",
+   "fact": "A package closure with code nobody read is a writer of any global (the setTimeout and Object.assign calls beside dynpkg, lostpkg and dep-router), and a package value handed as a named JSX attribute is followed to the project component's or context consumer's read; the other rises of dependency-value-flow are the rows of the four new cells' own components."
+  },
+  {
+   "fixture": "reactive-ir/dependency-value-flow",
+   "key": "SC1001 package-value-read",
+   "from": 8,
+   "to": 11,
+   "adr": "ADR 1002",
+   "fact": "A package closure with code nobody read is a writer of any global (the setTimeout and Object.assign calls beside dynpkg, lostpkg and dep-router), and a package value handed as a named JSX attribute is followed to the project component's or context consumer's read; the other rises of dependency-value-flow are the rows of the four new cells' own components."
+  },
+  {
+   "fixture": "reactive-ir/dependency-value-flow",
+   "key": "SC2002 package-may-call-action",
+   "from": 13,
+   "to": 19,
+   "adr": "ADR 1002",
+   "fact": "A package closure with code nobody read is a writer of any global (the setTimeout and Object.assign calls beside dynpkg, lostpkg and dep-router), and a package value handed as a named JSX attribute is followed to the project component's or context consumer's read; the other rises of dependency-value-flow are the rows of the four new cells' own components."
+  },
+  {
+   "fixture": "reactive-ir/dependency-value-flow",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 11,
+   "to": 20,
+   "adr": "ADR 1002",
+   "fact": "A package closure with code nobody read is a writer of any global (the setTimeout and Object.assign calls beside dynpkg, lostpkg and dep-router), and a package value handed as a named JSX attribute is followed to the project component's or context consumer's read; the other rises of dependency-value-flow are the rows of the four new cells' own components."
+  },
+  {
+   "fixture": "reactive-ir/dependency-value-flow",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 11,
+   "to": 20,
+   "adr": "ADR 1002",
+   "fact": "A package closure with code nobody read is a writer of any global (the setTimeout and Object.assign calls beside dynpkg, lostpkg and dep-router), and a package value handed as a named JSX attribute is followed to the project component's or context consumer's read; the other rises of dependency-value-flow are the rows of the four new cells' own components."
+  },
+  {
+   "fixture": "reactive-ir/accessor-provenance",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 6,
+   "to": 7,
+   "adr": "ADR 1003",
+   "fact": "A promise handler handed as a parameter, a member of a project object, a conditional, a bound function or a spread is followed to the functions it may be, and the handler argument itself is a site where not every function can be named."
+  },
+  {
+   "fixture": "reactive-ir/after-await-rowless-ends",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 8,
+   "to": 9,
+   "adr": "ADR 1003",
+   "fact": "A promise handler handed as a parameter, a member of a project object, a conditional, a bound function or a spread is followed to the functions it may be, and the handler argument itself is a site where not every function can be named."
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-causes",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 5,
+   "to": 7,
+   "adr": "ADR 1003",
+   "fact": "A promise handler handed as a parameter, a member of a project object, a conditional, a bound function or a spread is followed to the functions it may be, and the handler argument itself is a site where not every function can be named."
+  },
+  {
+   "fixture": "reactive-ir/project-callback-uses",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 1003",
+   "fact": "A promise handler handed as a parameter, a member of a project object, a conditional, a bound function or a spread is followed to the functions it may be, and the handler argument itself is a site where not every function can be named."
+  },
+  {
+   "fixture": "reactive-ir/read-handed-by-name",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 1,
+   "to": 3,
+   "adr": "ADR 1003",
+   "fact": "A promise handler handed as a parameter, a member of a project object, a conditional, a bound function or a spread is followed to the functions it may be, and the handler argument itself is a site where not every function can be named."
+  },
+  {
+   "fixture": "reactive-ir/then-unplaced-chain",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 1003",
+   "fact": "A promise handler handed as a parameter, a member of a project object, a conditional, a bound function or a spread is followed to the functions it may be, and the handler argument itself is a site where not every function can be named."
   }
  ]
 }
