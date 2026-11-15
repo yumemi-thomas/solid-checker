@@ -228,7 +228,8 @@ fn getter_relation(
     let innermost = holders().min_by_key(|function| function.span.end - function.span.start);
     // Whether the element renders what it is handed in place, under the owner of its own render: a dialect control-flow element (`stored_throw::element_prop_handled`'s list),
     // `Match` only as `Switch`'s direct child, a context provider.
-    let in_place_element = renders_in_place(file, lookup, element);
+    let in_place_element = renders_in_place(file, lookup, element)
+        || slot_read_in_own_computation(file, lookup, element, span);
     if let Some(function) =
         outermost.filter(|function| handed_to_component(file, element, function.span))
     {
@@ -281,6 +282,43 @@ fn renders_in_place(
         Some(_) => false,
         None => lookup.is_context_reference(file.path.as_str(), element.name.span),
     }
+}
+
+/// ADR 0992: whether the slot of `element` that holds `span` (a prop's value, or its children) is one the dialect says the Solid-owned component reads only in a
+/// computation of its own, under an owner it creates ([`solid_dialect::Dialect::component_entry`]: `Portal`'s `children`, a memo under `createOwner()`): a creation written
+/// directly there is evaluated by that read, as in a dialect control-flow element, so it is no getter that runs where an unknown reader calls it. The tag must resolve
+/// exactly (every declaration in the dialect's packages under one export name); a namespaced attribute, a spread and any other slot answer no.
+fn slot_read_in_own_computation(
+    file: &solid_facts::FileFacts,
+    lookup: &SemanticLookup<'_>,
+    element: &JsxElementFact,
+    span: Span,
+) -> bool {
+    use solid_dialect::{ComponentEntry, ComponentSlot};
+    if element
+        .spreads
+        .iter()
+        .any(|spread| spread.span.contains(span))
+    {
+        return false;
+    }
+    let prop = match element
+        .attributes
+        .iter()
+        .find(|attribute| attribute.span.contains(span))
+    {
+        Some(attribute) if attribute.namespace.is_none() => {
+            let Some(name) = file.source_text(attribute.name) else {
+                return false;
+            };
+            name
+        }
+        Some(_) => return false,
+        None if element.children.iter().any(|child| child.contains(span)) => "children",
+        None => return false,
+    };
+    lookup.component_entry_of_tag(file, element, ComponentSlot::Prop(prop))
+        == Some(ComponentEntry::ReadTrackedUnderOwner)
 }
 
 /// Whether `element`, a `Match`, is a direct child of a `Switch`, which reads its props in its own memo.

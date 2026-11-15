@@ -28,7 +28,7 @@
   "SC1002 package-finding-at-entry": 17,
   "SC1002 package-operation-after-await": 3,
   "SC1002 parameter-initializer-unplaced": 8,
-  "SC1002 read-after-await-unaccounted": 660,
+  "SC1002 read-after-await-unaccounted": 661,
   "SC1002 search-depth-limit": 1,
   "SC1002 tuple-iteration-written": 82,
   "SC1002 unresolved-invocation": 93,
@@ -104,7 +104,7 @@
   "SC3001 function-run-unplaced": 36,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 4,
-  "SC3001 leaf-operation-unaccounted": 6471,
+  "SC3001 leaf-operation-unaccounted": 6479,
   "SC3001 leaf-owner-unproven": 67,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
@@ -116,7 +116,7 @@
   "SC4001 handler-member-unresolved": 39,
   "SC4001 handler-spread-unresolved": 59,
   "SC4001 owner-allocation-unproven": 23,
-  "SC4001 owner-callers-unenumerated": 3277,
+  "SC4001 owner-callers-unenumerated": 3286,
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 13,
@@ -150,7 +150,7 @@
   "SC5001 source-module-unresolved": 1,
   "SC5001 source-pending-unproven": 341,
   "SC5003 async-options-opaque": 37,
-  "SC5003 async-provenance-unproven": 135,
+  "SC5003 async-provenance-unproven": 143,
   "SC5003 async-read-caught": 4,
   "SC5003 async-read-unaccounted": 349,
   "SC5003 call-attributed-read": 100,
@@ -205,7 +205,7 @@
   "SC9005 host-input-unreadable": 3,
   "SC9005 package-source-unavailable": 64,
   "SC9012 async-prop-getter": 3,
-  "SC9012 closed-parameter-member-dispatch": 68,
+  "SC9012 closed-parameter-member-dispatch": 69,
   "SC9012 composite-callee-unresolved": 9,
   "SC9012 computed-call-target-unresolved": 23,
   "SC9012 created-accessor-read-unproven": 1,
@@ -2219,6 +2219,71 @@
     "open": "reactive-ir/async-boundary-call-attributed"
    },
    "note": "the site `f284()` in `const f285 = () => f284();` is exactly sixteen closure layers below `f300()`, the call in the memo's compute (the chain's last layer): the climb used to set the bound at the sixteenth crossing whether or not a seventeenth layer sat above, and now ends at the memo's callback (a function that is no layer), where the site is placed in a tracked, suspendable computation read under `<Loading>`. The memo is read under `<Loading>`, so the read is inside a loading boundary (Chrome reports no ASYNC_OUTSIDE_LOADING_BOUNDARY)."
+  },
+  {
+   "fixture": "reactive-ir/context-package-lazy",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0992",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::entered_by_tags_only",
+   "fixtures": {
+    "proved": "reactive-ir/context-package-lazy",
+    "open": "reactive-ir/lazy-entry-owner"
+   },
+   "note": "`Local` is the default export of a module loaded only by the literal `lazy(() => import(\"./Local\"))` in a closed program: the dialect says `lazy` renders its loaded export under an owner (`Dialect::component_entry`, rc.21), so a render is the one entry and the layer is closed. `lazy-entry-owner` holds the key where the loader is a variable, a `.then`, an alias, a rebound export or another read names it. Chrome rc.21 (`fixtures/runtime-oracle/lazy-entry-owner`): `Page` reports nothing, the twin also called from a timer reports NO_OWNER_CLEANUP and is a violation."
+  },
+  {
+   "fixture": "reactive-ir/context-package-lazy",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 0992",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::entered_by_tags_only",
+   "fixtures": {
+    "proved": "reactive-ir/context-package-lazy",
+    "open": "reactive-ir/owner-call-jsx-sites"
+   },
+   "note": "the same site: the render effect `{props.children}` of `Local` is created under the owner `lazy`'s render makes, so no apply's stack runs it."
+  },
+  {
+   "fixture": "reactive-ir/stored-throw-value-mount",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 0992",
+   "proof": "rust/crates/solid-reactive-ir/src/package_hand_off.rs::element_hands",
+   "fixtures": {
+    "proved": "reactive-ir/stored-throw-value-mount",
+    "open": "reactive-ir/dynamic-component-owner"
+   },
+   "note": "`Handled` and `Reported` are the exact `component` value of `<Dynamic>`, which the dialect says calls a function in a memo of its own (`Dialect::component_entry`, rc.21): the package hand-off no longer takes the value for one handed to a package nothing here reads, and the owner emission takes the render for the entry. `dynamic-component-owner` holds the rows where the component is also stored and called, or reached through a namespace tag, or a project component named `Dynamic`. The SC4002 violation at `Reported` stays."
+  },
+  {
+   "fixture": "uncertifiable-repro/other-rules",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 3,
+   "to": 2,
+   "adr": "ADR 0992",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/jsx_sites.rs::slot_read_in_own_computation",
+   "fixtures": {
+    "proved": "uncertifiable-repro/other-rules",
+    "open": "reactive-ir/portal-children-owner"
+   },
+   "note": "`clean-portal-show`: the tracked `{text()}` is written directly in a `Portal`'s children, which the dialect says are read in a memo under `createOwner()` (`Dialect::component_entry`, rc.21), so it is no getter that runs on an unknown stack. `portal-children-owner` holds the rows for `mount` (read again on an apply's stack) and for a project component named `Portal`. Chrome rc.21 (`fixtures/runtime-oracle/portal-children-owner`): no diagnostic; `portal-mount-owner` reports PRIMITIVE_IN_EFFECT_CALLBACK, covered."
+  },
+  {
+   "fixture": "uncertifiable-repro/other-rules",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 3,
+   "to": 2,
+   "adr": "ADR 0992",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/jsx_sites.rs::slot_read_in_own_computation",
+   "fixtures": {
+    "proved": "uncertifiable-repro/other-rules",
+    "open": "reactive-ir/portal-children-owner"
+   },
+   "note": "the same site, the SC6002 half."
   }
  ],
  "renames": []

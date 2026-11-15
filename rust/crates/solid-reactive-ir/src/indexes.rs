@@ -1241,6 +1241,15 @@ impl<'a> SemanticLookup<'a> {
             .is_some_and(|hand_outs| hand_outs.named(path, function))
     }
 
+    /// ADR 0992: [`Self::hands_out_by_name`], for a function handed out only through `lazy` loaders the dialect says render their export under an owner
+    /// ([`crate::attribution::NamespaceHandOuts::named_only_by_lazy_render`]).
+    pub(crate) fn handed_out_only_by_lazy_render(&self, path: &str, function: Span) -> bool {
+        self.note_namespace_hand_outs_of(path);
+        self.namespace_hand_outs
+            .get()
+            .is_some_and(|hand_outs| hand_outs.named_only_by_lazy_render(path, function))
+    }
+
     /// Whether the module at `path`'s namespace escapes with no name the
     /// analysis can read (ADR 0347, amendment). Until the census is set, nothing does.
     pub(crate) fn escapes_unnamed(&self, path: &str) -> bool {
