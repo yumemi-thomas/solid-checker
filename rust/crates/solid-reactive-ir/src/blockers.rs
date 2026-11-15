@@ -150,6 +150,9 @@ pub(crate) const LEAF_OPERATION_UNACCOUNTED: &str = "leaf-operation-unaccounted"
 /// Batch 11, slice 6: a creation (`createMemo`, `createEffect`, `createRoot`, ...) the dialect says throws PRIMITIVE_IN_EFFECT_CALLBACK on an effect apply's
 /// stack, with no SC6002 row, SC9012, discard or named silence: whether an apply runs it with no owner set is not decided.
 pub(crate) const EFFECT_CREATION_UNACCOUNTED: &str = "effect-creation-unaccounted";
+/// Batch 11, slice 7 (ADR 0985): a `resolve` or `until` call (SC2004, SC2005) with no row, SC9012, discard or named silence: whether an observer is active where it
+/// runs is not decided.
+pub(crate) const RESOLVE_SCOPE_UNACCOUNTED: &str = "resolve-scope-unaccounted";
 /// Batch 11, slice 4: a setter call whose source may be an optimistic one that has not answered (or whose primitive is not resolved) with no SC2009
 /// row, SC9012, discard or named silence: the code's own uncertifiable row.
 pub(crate) const OPTIMISTIC_WRITE_UNACCOUNTED: &str = "optimistic-write-unaccounted";

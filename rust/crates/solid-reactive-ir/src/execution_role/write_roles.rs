@@ -3374,6 +3374,16 @@ pub(crate) fn suspension_through_in_place_layers(
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> Option<bool> {
+    suspension_through_layers_proof(file, span, lookup).map(|(proven, _)| proven)
+}
+
+/// [`suspension_through_in_place_layers`] with the `await` its `Some(true)` rests on (`(true, Some(await))`; a layer call
+/// that follows an await while the helper also hands its callback on is `(false, Some(await))`, the proof of nothing).
+fn suspension_through_layers_proof(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<(bool, Option<Span>)> {
     let mut calls = Vec::new();
     let climb = climb_in_place_layers_recording(file, span, lookup, false, None, &mut calls)?;
     if climb.exhausted {
@@ -3381,14 +3391,30 @@ pub(crate) fn suspension_through_in_place_layers(
     }
     let mut answer = None;
     for call in calls {
-        if follows_dominating_await(file, call) || follows_try_head_await(file, call, lookup) {
-            return Some(!climb.among_others);
+        if let Some(awaited) = dominating_await_before(file, call)
+            .or_else(|| try_head_await_before(file, call, lookup))
+        {
+            return Some((!climb.among_others, Some(awaited)));
         }
         if may_follow_suspension(file, call) {
-            answer = Some(false);
+            answer = Some((false, None));
         }
     }
     answer
+}
+
+/// The `await` [`past_suspension`]'s `Some(true)` rests on: the one a layer's call follows on every path, or the one that
+/// dominates `span` or heads the `try` whose `catch` holds it. `None` where the answer is not `Some(true)`, so a caller that
+/// must name the proof (a typed silence, ADR 0985) gets none and keeps its obligation.
+pub(crate) fn past_suspension_witness(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    if let Some((true, Some(awaited))) = suspension_through_layers_proof(file, span, lookup) {
+        return Some(awaited);
+    }
+    dominating_await_before(file, span).or_else(|| try_head_await_before(file, span, lookup))
 }
 
 /// [`suspension_through_in_place_layers`] with `span`'s own function: whether

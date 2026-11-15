@@ -62,6 +62,7 @@
 mod handlers;
 mod library_call;
 mod member_reads;
+mod timer_handle;
 
 use solid_facts::FileFacts;
 use solid_facts::ast::ArgumentValueKind;
