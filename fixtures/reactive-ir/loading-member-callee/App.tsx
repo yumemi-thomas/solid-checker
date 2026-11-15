@@ -1,4 +1,5 @@
 import { createMemo } from "solid-js";
+import { render } from "@solidjs/web";
 import * as H from "./helpers";
 import { run } from "./helpers";
 import { helpers as Api } from "./barrel";
@@ -52,4 +53,11 @@ function Handed(props: { run: (cb: () => unknown) => number }) {
   return <p>{(() => { props.run(() => { slow(); }); return 1; })()}</p>;
 }
 
-export { Named, Namespace, Reexport, DefaultMember, LiteralMethod, Stored, Replaced, Handed };
+render(() => <Named />, document.body);
+render(() => <Namespace />, document.body);
+render(() => <Reexport />, document.body);
+render(() => <DefaultMember />, document.body);
+render(() => <LiteralMethod />, document.body);
+render(() => <Stored />, document.body);
+render(() => <Replaced />, document.body);
+render(() => <Handed run={(cb) => { cb(); return 1; }} />, document.body);
