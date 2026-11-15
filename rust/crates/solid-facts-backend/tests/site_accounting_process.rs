@@ -292,11 +292,36 @@ fn a_static_api_call_no_silence_ends_is_an_obligation_never_a_violation() {
         );
     }
     let per_silence = [
-        ("static_api.effect_function.slot-callable", &["SC7001"][..], "effect-fn-unaccounted", 9),
-        ("static_api.effect_function.tsc-rejected", &["SC7001"][..], "effect-fn-unaccounted", 1),
-        ("static_api.sync_option.not-asserted", &["SC7002"][..], "sync-option-unaccounted", 12),
-        ("static_api.sync_option.tsc-reports", &["SC7002"][..], "sync-option-unaccounted", 1),
-        ("static_api.sync_option.computation-not-async", &["SC7002"][..], "sync-option-unaccounted", 2),
+        (
+            "static_api.effect_function.slot-callable",
+            &["SC7001"][..],
+            "effect-fn-unaccounted",
+            9,
+        ),
+        (
+            "static_api.effect_function.tsc-rejected",
+            &["SC7001"][..],
+            "effect-fn-unaccounted",
+            1,
+        ),
+        (
+            "static_api.sync_option.not-asserted",
+            &["SC7002"][..],
+            "sync-option-unaccounted",
+            12,
+        ),
+        (
+            "static_api.sync_option.tsc-reports",
+            &["SC7002"][..],
+            "sync-option-unaccounted",
+            1,
+        ),
+        (
+            "static_api.sync_option.computation-not-async",
+            &["SC7002"][..],
+            "sync-option-unaccounted",
+            2,
+        ),
     ];
     for (silence, ids, blocker, rows) in per_silence {
         let added = ablation_rows(&typefacts, fixture, silence, ids, blocker);
@@ -304,7 +329,13 @@ fn a_static_api_call_no_silence_ends_is_an_obligation_never_a_violation() {
     }
     // The dynamic fixture: a static `dynamic` call whose source is proven synchronous (four of them) ends in a silence.
     let dynamic = "rc9-static-dynamic-async";
-    assert!(unaccounted(&check(&typefacts, dynamic, None, &[]), "dynamic-static-unaccounted").is_empty());
+    assert!(
+        unaccounted(
+            &check(&typefacts, dynamic, None, &[]),
+            "dynamic-static-unaccounted"
+        )
+        .is_empty()
+    );
     let added = ablation_rows(
         &typefacts,
         dynamic,

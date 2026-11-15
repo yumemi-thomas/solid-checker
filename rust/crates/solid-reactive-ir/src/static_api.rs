@@ -208,50 +208,48 @@ impl StaticApiContext<'_> {
         file: &FileFacts,
         call: &solid_facts::ast::CallFact,
     ) -> Option<StaticSource> {
-            let argument = call.arguments.first()?;
-            let lookup = self.lookup;
-            // A spread of an exact one-element tuple has no options slot, so
-            // nothing there can say `sync`.
-            let spread_tuple = file
-                .ast
-                .spreads
-                .iter()
-                .find(|spread| argument.spread && spread.span == argument.span)
-                .and_then(|spread| lookup.entity_at(file.path.as_str(), spread.argument))
-                .and_then(|entity| entity.tuple_shape)
-                .and_then(typefacts::TupleShape::exact_length);
-            if spread_tuple == Some(1) && call.arguments.len() == 1 {
-                return None;
-            }
-            // `createSignal(0, options)` has no computation: only a value
-            // that may be a function can return anything.
-            let entity = lookup.entity_at(file.path.as_str(), argument.span);
-            if !argument.spread
-                && (matches!(
-                    argument.runtime_value_kind,
-                    solid_facts::ast::RuntimeValueKind::Primitive
-                        | solid_facts::ast::RuntimeValueKind::Nullish
-                ) || entity.and_then(|entity| entity.callability)
-                    == Some(typefacts::Callability::NonCallable))
-            {
-                return None;
-            }
-            if computation_is_async(lookup, file, argument.span) {
-                let open =
-                    crate::owners::computation_may_answer_sync(lookup, file, argument.span);
-                return Some(if open {
-                    StaticSource::Open
-                } else {
-                    StaticSource::Promise("")
-                });
-            }
-            // ADR 0865: `handleAsync` probes `Symbol.asyncIterator` as well
-            // as `then`, unlike the static `dynamic()` check.
-            Some(match static_source_state(file, argument, self) {
-                StaticSource::AsyncIterable => StaticSource::Promise(""),
-                state => state,
-            })
-    
+        let argument = call.arguments.first()?;
+        let lookup = self.lookup;
+        // A spread of an exact one-element tuple has no options slot, so
+        // nothing there can say `sync`.
+        let spread_tuple = file
+            .ast
+            .spreads
+            .iter()
+            .find(|spread| argument.spread && spread.span == argument.span)
+            .and_then(|spread| lookup.entity_at(file.path.as_str(), spread.argument))
+            .and_then(|entity| entity.tuple_shape)
+            .and_then(typefacts::TupleShape::exact_length);
+        if spread_tuple == Some(1) && call.arguments.len() == 1 {
+            return None;
+        }
+        // `createSignal(0, options)` has no computation: only a value
+        // that may be a function can return anything.
+        let entity = lookup.entity_at(file.path.as_str(), argument.span);
+        if !argument.spread
+            && (matches!(
+                argument.runtime_value_kind,
+                solid_facts::ast::RuntimeValueKind::Primitive
+                    | solid_facts::ast::RuntimeValueKind::Nullish
+            ) || entity.and_then(|entity| entity.callability)
+                == Some(typefacts::Callability::NonCallable))
+        {
+            return None;
+        }
+        if computation_is_async(lookup, file, argument.span) {
+            let open = crate::owners::computation_may_answer_sync(lookup, file, argument.span);
+            return Some(if open {
+                StaticSource::Open
+            } else {
+                StaticSource::Promise("")
+            });
+        }
+        // ADR 0865: `handleAsync` probes `Symbol.asyncIterator` as well
+        // as `then`, unlike the static `dynamic()` check.
+        Some(match static_source_state(file, argument, self) {
+            StaticSource::AsyncIterable => StaticSource::Promise(""),
+            state => state,
+        })
     }
 }
 
@@ -2233,7 +2231,11 @@ enum SyncOptionState {
     TscReports(Span),
 }
 
-fn sync_option_state(file: &FileFacts, call: &solid_facts::ast::CallFact, index: usize) -> SyncOptionState {
+fn sync_option_state(
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+) -> SyncOptionState {
     use solid_dialect::OptionLiteral;
     use solid_facts::TscSilence;
     let literal = crate::call_option_literal(file, call, index, "sync");
@@ -2260,7 +2262,10 @@ fn sync_option_state(file: &FileFacts, call: &solid_facts::ast::CallFact, index:
             .iter()
             .map(|span| file.tsc_silence_at(span.start))
             .collect::<Vec<_>>();
-        if let Some(position) = states.iter().position(|state| *state == TscSilence::Reports) {
+        if let Some(position) = states
+            .iter()
+            .position(|state| *state == TscSilence::Reports)
+        {
             return SyncOptionState::TscReports(later[position]);
         }
         // Every later key is suppressed by a directive both compilers read: TypeScript says nothing, so the runtime's last key decides.

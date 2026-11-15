@@ -178,7 +178,7 @@ pub(crate) fn classify_effect_call(
                 }
             }
         };
-        let silence = (missing_effect_function == ProofStatus::No).then(|| match apply {
+        let silence = (missing_effect_function == ProofStatus::No).then_some(match apply {
             // `No` through a visible argument is a callable one; through an invalid call it is TypeScript's.
             ExpandedArgument::Visible(argument) if call_is_valid => {
                 EffectSilence::SlotCallable(argument.span)
@@ -225,7 +225,7 @@ pub(crate) fn classify_effect_call(
     } else {
         suppressed_effect_function_status(file, call, apply, slot, lookup)
     };
-    let silence = (missing_effect_function == ProofStatus::No).then(|| match apply {
+    let silence = (missing_effect_function == ProofStatus::No).then_some(match apply {
         Some(argument) if call_is_valid => EffectSilence::SlotCallable(argument.span),
         Some(argument) => suppressed_silence(file, argument, slot, lookup),
         None => EffectSilence::TscRejected(call.callee),

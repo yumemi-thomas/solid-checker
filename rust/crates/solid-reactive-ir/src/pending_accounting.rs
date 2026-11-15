@@ -380,8 +380,8 @@ pub(crate) fn account_pending_reads(
                         through: Some(reference.clone()),
                         accessor: format!("{name}()").into(),
                         declaration: declaration.clone(),
-                            boundary_only: false,
-                        },
+                        boundary_only: false,
+                    },
                     &mut sites,
                 );
             }
@@ -417,8 +417,8 @@ pub(crate) fn account_pending_reads(
                     through: Some(callee.clone()),
                     accessor: format!("{name}()").into(),
                     declaration: declaration.clone(),
-                            boundary_only: false,
-                        },
+                    boundary_only: false,
+                },
                 &mut sites,
             );
         }
@@ -439,8 +439,8 @@ pub(crate) fn account_pending_reads(
                     through: None,
                     accessor: read.accessor.clone(),
                     declaration: read.declaration.clone(),
-                            boundary_only: false,
-                        },
+                    boundary_only: false,
+                },
                 &mut sites,
             );
         }
@@ -504,8 +504,8 @@ pub(crate) fn account_pending_reads(
                     through: Some(through),
                     accessor: reach.accessor.clone(),
                     declaration: reach.declaration.clone(),
-                            boundary_only: false,
-                        },
+                    boundary_only: false,
+                },
                 &mut sites,
             );
         }
