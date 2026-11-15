@@ -695,6 +695,8 @@ export const SPEC = {
     variants: ["memo", "effect"], recallVariants: Object.keys(SYNC_COMPUTES), contexts: ["body", "root", "untrack", "memo", "jsx"], bindings: BINDINGS, setup: () => [],
     // ADR 0989: the legal side (recall grids): `{ sync: true, ...optOver }` where `optOver.sync` is `false` (Chrome rc.21 reads the last `sync`: quiet), on a memo and on an effect.
     recallLegal: ["body", "root", "memo"], recallLegalVariants: ["opt-spread", "opt-spread-effect"],
+    // These contexts run the call, so the plain `sync: true` variants report here (they are the misuse cells): only the spread variants are legal.
+    variantOnlyLegal: { body: ["opt-spread", "opt-spread-effect"], root: ["opt-spread", "opt-spread-effect"], memo: ["opt-spread", "opt-spread-effect"] },
     contextLine: (variant) => SYNC_COMPUTE_LINES[variant],
     call: (node) => (SYNC_COMPUTES[node.variant] ? api("createMemo", SYNC_COMPUTES[node.variant])
       : node.variant === "opt-spread" ? api("createMemo", "async () => 1, { sync: true, ...optOver }")
