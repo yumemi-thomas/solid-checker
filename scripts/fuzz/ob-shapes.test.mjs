@@ -12,7 +12,7 @@ import { recallLegalShapes } from "./legal.mjs";
 import { BASE_ONLY_CONTEXTS, SPEC } from "./misuse.mjs";
 import { censusCells, judge, recallShapes, siteOf } from "./matrix.mjs";
 import { isValid } from "./model.mjs";
-import { OB_CODES, OB_CONSTRUCT_NAMES_A, OB_CONSTRUCT_NAMES_C, OB_CONTEXTS, OB_CONTEXT_NAMES, OB_HOSTS, obParts, obPlacement, obShape } from "./ob-shapes.mjs";
+import { OB_CODES, OB_CONSTRUCT_NAMES_A, OB_CONSTRUCT_NAMES_C, OB_CONTEXTS, OB_CONTEXT_NAMES, OB_HOSTS, OB_LEAF_OF, obParts, obPlacement, obShape } from "./ob-shapes.mjs";
 
 // ADR 0963: the object-boundary shapes, a researcher's 64 Chrome false cleans on main 9e5a45080 as generator cells with their twins that never run the construct.
 
@@ -27,10 +27,10 @@ const AWAIT = "UNTRACKED_READ_AFTER_AWAIT";
 const LEAF = "CLEANUP_IN_FORBIDDEN_SCOPE";
 
 describe("the ob contexts", () => {
-  it("are 29 family A constructs on four hosts and nine family C forms on one, each with its twin, each name parsed back", () => {
+  it("are 29 family A constructs on four hosts and nine family C forms on three (the apply and, ADR 0990, the two leaves), each with its twin, each name parsed back", () => {
     expect(OB_CONSTRUCT_NAMES_A).toHaveLength(29);
     expect(OB_CONSTRUCT_NAMES_C).toHaveLength(9);
-    expect(OB_CONTEXT_NAMES).toHaveLength(29 * 4 * 2 + 9 * 2);
+    expect(OB_CONTEXT_NAMES).toHaveLength(29 * 4 * 2 + 9 * 3 * 2);
     for (const name of OB_CONTEXT_NAMES) {
       const parts = obParts(name);
       expect(parts, name).not.toBeNull();
@@ -39,7 +39,7 @@ describe("the ob contexts", () => {
       expect(parts.family).toBe(OB_HOSTS[parts.host]);
     }
     // a construct of one family on a host of the other, an unknown host, an unknown construct, another family's name
-    for (const other of ["ob-getter-apply", "ob-exp-fn-same-settled", "ob-getter-body", "ob-getters-settled", "ob-getter-settled-never-never", "pl-untrack-settled", "tw-owner-null-call-first-tracked"]) expect(obParts(other), other).toBeNull();
+    for (const other of ["ob-getter-apply", "ob-exp-fn-same-settled", "ob-exp-fn-same-memo-async", "ob-getter-body", "ob-getters-settled", "ob-getter-settled-never-never", "pl-untrack-settled", "tw-owner-null-call-first-tracked"]) expect(obParts(other), other).toBeNull();
   });
   it("are placed for SC1002's two async computes, SC3001's three codes on the two leaves, and SC6002 and SC2008 on the apply, and for no other code", () => {
     const placement = obPlacement();
@@ -52,7 +52,11 @@ describe("the ob contexts", () => {
       expect(placement[code].misuse.every((name) => hosts.includes(obParts(name).host))).toBe(true);
     }
     expect(OB_CODES[AWAIT]).toEqual(["memo-async", "effect-async"]);
-    expect(OB_CODES[LEAF]).toEqual(["settled", "tracked"]);
+    // ADR 0990: the three leaf codes also take family C on the leaf hosts (`tracked-exp`, `settled-exp`: the leaf's callback calls the exported helper)
+    expect(OB_CODES[LEAF]).toEqual(["settled", "tracked", "settled-exp", "tracked-exp"]);
+    expect(OB_CODES.FLUSH_IN_TRACKED_QUEUE_CALLBACK).toEqual(["settled", "tracked", "settled-exp", "tracked-exp"]);
+    expect(OB_CODES.PRIMITIVE_IN_FORBIDDEN_SCOPE).toEqual(["settled", "tracked", "settled-exp", "tracked-exp"]);
+    expect(OB_LEAF_OF).toEqual({ "settled-exp": "settled", "tracked-exp": "tracked" });
     expect(OB_CODES.FLUSH_IN_EFFECT_CALLBACK).toEqual(["apply"]);
   });
   it("are cells of SPEC on their side, a few base shapes only, and not the census's", () => {
@@ -160,6 +164,40 @@ describe("the family A programs", () => {
       expect(built.neutral, `${code}/${context}`).toBe(true);
       expect(built.sites, `${code}/${context}`).toHaveLength(1);
     }
+  });
+});
+
+describe("the family C programs on the leaf hosts (ADR 0990)", () => {
+  const run = (code, context) => {
+    const { program, built } = textOf(code, context);
+    expect(isValid(program), context).toBe(true);
+    return { text: lines(built.text), built };
+  };
+  it("call the exported helper from the leaf owner's callback, in the file or through an import", () => {
+    const tracked = run(LEAF, "ob-exp-fn-same-tracked-exp");
+    expect(tracked.text).toContain("export function hx1() {");
+    expect(tracked.text).toContain("createTrackedEffect(() => {");
+    expect(tracked.text).toContain("hx1();");
+    expect(tracked.text.indexOf("export function hx1() {")).toBeLessThan(tracked.text.indexOf("createTrackedEffect(() => {"));
+    const settled = run("PRIMITIVE_IN_FORBIDDEN_SCOPE", "ob-exp-const-alias-settled-exp");
+    expect(settled.text).toContain("onSettled(() => {");
+    expect(settled.text).toContain('import { hx1 as hl1 } from "./App";');
+    expect(settled.text).toContain("hl1();");
+    const reexport = run("FLUSH_IN_TRACKED_QUEUE_CALLBACK", "ob-exp-fn-reexport-tracked-exp");
+    expect(reexport.text).toContain('import { hx1 as hl1 } from "./lib";');
+    expect(reexport.built.files["lib.ts"]).toBe('export { hx1 } from "./App";\n');
+    expect(run(LEAF, "ob-exp-fn-import-settled-exp").text).toContain("export { hx1 as hn1 };");
+  });
+  it("leave the helper uncalled in the twin, in each of the nine forms on each leaf", () => {
+    for (const form of OB_CONSTRUCT_NAMES_C) for (const host of Object.keys(OB_LEAF_OF)) {
+      const twin = run(LEAF, `ob-${form}-${host}-never`).text;
+      expect(twin.some((line) => /^void h[xnl]1;$/.test(line)), `${form}/${host}`).toBe(true);
+      expect(twin.some((line) => /^h[xnl]1\(\);$/.test(line)), `${form}/${host}`).toBe(false);
+    }
+  });
+  it("take the direct binding bare or in an `iife`, as the apply host's cells do", () => {
+    expect(recallShapes(LEAF, "ob-exp-fn-same-tracked-exp").map((shape) => `${shape.binding}/${shape.layer}`).sort()).toEqual(["direct/iife", "direct/none"]);
+    expect(obShape("ob-exp-fn-same-tracked-exp", { binding: "alias", layer: "none" })).toBe(false);
   });
 });
 
