@@ -1374,7 +1374,7 @@ export function describeUse(node, signals) {
 const packageUses = new WeakMap();
 function describePackageUse(node, base, sigs) {
   if (packageUses.has(node)) return packageUses.get(node);
-  const moved = packageSite(base, node.pkg.entry, MODULE, { own: node.pkg.own, sigs });
+  const moved = packageSite(base, node.pkg.entry, MODULE, { own: node.pkg.own, sigs, phantom: node.pkg.phantom });
   const out = { ...base, text: moved.text, solid: moved.solid, web: moved.web, namespaces: moved.namespaces, moduleLines: moved.moduleLines, preludeLines: [], contextLine: undefined, importLines: moved.importLines, files: moved.files, pkgFiles: moved.pkgFiles };
   packageUses.set(node, out);
   return out;
@@ -2295,7 +2295,7 @@ function buildOne(kit, plan = {}) {
   const pkg = plan.pkg === undefined ? undefined : parsePkg(plan.pkg);
   if (pkg && !PKG_ENTRIES.includes(pkg.entry)) throw new Error(`unknown package entry ${plan.pkg}`);
   if (plan.pkg !== undefined && binding !== "direct") throw new Error(`a package site takes the direct binding, not ${binding}`);
-  const site = use(code, { variant, bind: binding, sigs: sigs.map((s) => s.name), site: true, witness: null, ...(plan.source === "package-export" ? { ctx: CONTEXT_PACKAGE.exportName } : plan.source === "package-hook" ? { hook: CONTEXT_PACKAGE.hookName } : plan.source === "package-component" ? { component: CONTEXT_PACKAGE.componentName } : plan.source === "package-handed" ? { handed: CONTEXT_PACKAGE.hookName } : plan.source === "package-holder" ? { holder: CONTEXT_PACKAGE.className } : {}), ...(pkg ? { pkg: { entry: pkg.entry, ...(pkg.own ? { own: true } : {}) } } : {}) });
+  const site = use(code, { variant, bind: binding, sigs: sigs.map((s) => s.name), site: true, witness: null, ...(plan.source === "package-export" ? { ctx: CONTEXT_PACKAGE.exportName } : plan.source === "package-hook" ? { hook: CONTEXT_PACKAGE.hookName } : plan.source === "package-component" ? { component: CONTEXT_PACKAGE.componentName } : plan.source === "package-handed" ? { handed: CONTEXT_PACKAGE.hookName } : plan.source === "package-holder" ? { holder: CONTEXT_PACKAGE.className } : {}), ...(pkg ? { pkg: { entry: pkg.entry, ...(pkg.own ? { own: true } : {}), ...(pkg.phantom ? { phantom: true } : {}) } } : {}) });
   let stmts = [expr(site)];
   for (const l of layer === "none" ? [] : layer.split("+")) stmts = applyLayer(l, stmts, kit);
   const placed = inContext(context, stmts, kit);

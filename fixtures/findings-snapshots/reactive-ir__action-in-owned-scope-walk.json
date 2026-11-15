@@ -211,11 +211,11 @@
       "fixes": 0
     },
     {
-      "rule": "action-called-in-owned-scope",
-      "code": "SC2002",
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
       "kind": "uncertifiable",
-      "blocker": "package-may-call-action",
-      "severity": "error",
+      "blocker": "package-value-read",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/action-in-owned-scope-walk/App.tsx",
       "start": 5930,
       "end": 5938,
@@ -228,8 +228,41 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/action-in-owned-scope-walk/App.tsx",
+      "start": 5930,
+      "end": 5938,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-walk/App.tsx",
       "start": 5989,
       "end": 5999,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-walk/App.tsx",
+      "start": 5989,
+      "end": 5999,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-walk/App.tsx",
+      "start": 6047,
+      "end": 6059,
       "fixes": 0
     },
     {
@@ -384,6 +417,17 @@
       "path": "fixtures/reactive-ir/action-in-owned-scope-walk/App.tsx",
       "start": 6787,
       "end": 6790,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-walk/App.tsx",
+      "start": 6845,
+      "end": 6849,
       "fixes": 0
     },
     {

@@ -563,15 +563,6 @@
    "certified": false
   },
   {
-   "id": "values/d8-pkg-plain-store-handoff",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": false
-  },
-  {
    "id": "values/d9-this-getter",
    "item": "R-carrier: census row at the carrier, none at the read or write",
    "outcome": "false-clean",

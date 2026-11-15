@@ -8,7 +8,7 @@ import { cellList, componentSide, plainShape, recallShapes, shapeId } from "./ma
 import { legalCells, legalId, recallLegalShapes } from "./legal.mjs";
 import { MODULE, SOURCES, SPEC, parentSource, sourcesOf } from "./misuse.mjs";
 import { validate, walk } from "./model.mjs";
-import { COMPONENT_ENTRIES, PKG_ENTRIES, freeNames, packageSite, parsePkg, pkgShapesOf } from "./package-site.mjs";
+import { COMPONENT_ENTRIES, PKG_ENTRIES, freeNames, packageSite, parsePkg, phantomShapesOf, pkgShapesOf } from "./package-site.mjs";
 import { packageCells } from "./package-cells.mjs";
 import { PACKAGE_SITE_EXEMPT_CONTEXTS, PACKAGE_SITE_EXEMPT_SOURCES, packageSiteOf } from "./package-site-coverage.mjs";
 
@@ -114,8 +114,33 @@ describe("a program with its site in a package", () => {
     expect(pkgShapesOf([])).toEqual(PKG_ENTRIES);
     expect(pkgShapesOf([{ name: "w1", setter: "setW1" }])).toEqual(PKG_ENTRIES.flatMap((entry) => [entry, `${entry}-own`]));
     expect(pkgShapesOf([{ name: "a1", setter: "setA1", kind: "async" }])).toEqual(PKG_ENTRIES);
-    expect(parsePkg("jsx-inner-own")).toEqual({ entry: "jsx-inner", own: true });
-    expect(parsePkg("call")).toEqual({ entry: "call", own: false });
+    expect(parsePkg("jsx-inner-own")).toEqual({ entry: "jsx-inner", own: true, phantom: false });
+    expect(parsePkg("call")).toEqual({ entry: "call", own: false, phantom: false });
+    // ADR 0981: the manifest axis, `-phantom` after the value mode.
+    expect(parsePkg("call-own-phantom")).toEqual({ entry: "call", own: true, phantom: true });
+    expect(parsePkg("hop-phantom")).toEqual({ entry: "hop", own: false, phantom: true });
+    expect(phantomShapesOf([{ name: "w1", setter: "setW1" }])).toEqual(pkgShapesOf([{ name: "w1", setter: "setW1" }]).map((shape) => `${shape}-phantom`));
+  });
+  it("names no Solid package in a phantom manifest, and every other byte is the declared package's", () => {
+    for (const entry of PKG_ENTRIES) {
+      const declared = packageSite(base(), entry, MODULE).pkgFiles["fz-site"];
+      const phantom = packageSite(base(), entry, MODULE, { phantom: true }).pkgFiles["fz-site"];
+      expect(JSON.parse(declared["package.json"]).peerDependencies, entry).toEqual({ "solid-js": "^2.0.0-rc.21" });
+      const manifest = JSON.parse(phantom["package.json"]);
+      expect(manifest.peerDependencies, entry).toBeUndefined();
+      expect(manifest.dependencies, entry).toBeUndefined();
+      expect({ ...phantom, "package.json": null }, entry).toEqual({ ...declared, "package.json": null });
+    }
+  });
+  it("writes the phantom manifest into the generated case (ADR 0981), and the declared one without the suffix", () => {
+    for (const [pkg, peer] of [["call", true], ["call-phantom", false], ["tagged-own", true], ["tagged-own-phantom", false]]) {
+      const built = buildCase(program("STRICT_READ_UNTRACKED", "body", { variant: "signal", pkg }));
+      const manifest = JSON.parse(built.packages["fz-site"]["package.json"]);
+      expect(manifest.peerDependencies !== undefined, pkg).toBe(peer);
+      expect(manifest.dependencies, pkg).toBeUndefined();
+      // The site's code is the same either way; a package that creates its own values imports `solid-js` (a handed one need not).
+      if (pkg.includes("-own")) expect(built.packages["fz-site"]["index.js"], pkg).toMatch(/from "solid-js"/);
+    }
   });
   it("takes the direct binding only, and an entry it knows", () => {
     expect(() => program("REACTIVE_WRITE_IN_OWNED_SCOPE", "body", { variant: "signal", binding: "alias", pkg: "call" })).toThrow(/direct binding/);
@@ -129,10 +154,12 @@ describe("a program with its site in a package", () => {
 describe("the package site's grid shapes", () => {
   it("cross the plain shape of each cell with every entry, and name them", () => {
     const shapes = recallShapes("CONTEXT_NOT_FOUND", "body").filter((shape) => shape.pkg);
-    expect(shapes.map((shape) => shape.pkg).sort()).toEqual([...PKG_ENTRIES].sort());
+    // ADR 0981: and again with the phantom manifest.
+    expect(shapes.map((shape) => shape.pkg).sort()).toEqual([...PKG_ENTRIES, ...PKG_ENTRIES.map((entry) => `${entry}-phantom`)].sort());
     // A template with signals takes each entry in both value modes.
     const writes = recallShapes("REACTIVE_WRITE_IN_OWNED_SCOPE", "body").filter((shape) => shape.pkg && shape.variant === "signal");
-    expect(writes.map((shape) => shape.pkg).sort()).toEqual(PKG_ENTRIES.flatMap((entry) => [entry, `${entry}-own`]).sort());
+    const modes = PKG_ENTRIES.flatMap((entry) => [entry, `${entry}-own`]);
+    expect(writes.map((shape) => shape.pkg).sort()).toEqual([...modes, ...modes.map((shape) => `${shape}-phantom`)].sort());
     for (const shape of shapes) expect(plainShape({ ...shape, pkg: undefined })).toBe(true);
     const cell = cellList({ codes: ["CONTEXT_NOT_FOUND"], recall: true }).find((one) => one.context === "body");
     expect(shapes.map((shape) => shapeId(cell, shape))).toContain("mx-context-not-found-body-x-direct-none-pk-tagged");
@@ -193,7 +220,7 @@ describe("package-cells", () => {
     const units = packageCells({ codes: ["CONTEXT_NOT_FOUND"] });
     expect(units).toHaveLength(1);
     expect(units[0]).toMatchObject({ grid: "mx-recall", code: "CONTEXT_NOT_FOUND" });
-    expect(units[0].ids).toHaveLength(91);
+    expect(units[0].ids).toHaveLength(182);
     expect(units[0].ids.every((id) => /^mx-context-not-found-.*-pk-/.test(id))).toBe(true);
     expect(units[0].contexts).toEqual(["body", "memo", "render-compute", "root", "jsx", "show", "for"]);
     const both = packageCells({ codes: ["NO_OWNER_EFFECT"], entries: ["call"] });

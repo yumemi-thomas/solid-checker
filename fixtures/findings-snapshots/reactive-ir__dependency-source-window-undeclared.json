@@ -24,6 +24,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-window-undeclared/App.tsx",
+      "start": 348,
+      "end": 379,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -32,6 +43,17 @@
       "path": "fixtures/reactive-ir/dependency-source-window-undeclared/App.tsx",
       "start": 348,
       "end": 379,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-window-undeclared/App.tsx",
+      "start": 413,
+      "end": 425,
       "fixes": 0
     },
     {
@@ -46,6 +68,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-window-undeclared/App.tsx",
+      "start": 584,
+      "end": 615,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -54,6 +87,17 @@
       "path": "fixtures/reactive-ir/dependency-source-window-undeclared/App.tsx",
       "start": 584,
       "end": 615,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-window-undeclared/App.tsx",
+      "start": 649,
+      "end": 661,
       "fixes": 0
     },
     {
@@ -68,6 +112,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-window-undeclared/App.tsx",
+      "start": 800,
+      "end": 833,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -76,6 +131,17 @@
       "path": "fixtures/reactive-ir/dependency-source-window-undeclared/App.tsx",
       "start": 800,
       "end": 833,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-window-undeclared/App.tsx",
+      "start": 867,
+      "end": 879,
       "fixes": 0
     },
     {
@@ -90,6 +156,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-window-undeclared/App.tsx",
+      "start": 1003,
+      "end": 1035,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -98,6 +175,17 @@
       "path": "fixtures/reactive-ir/dependency-source-window-undeclared/App.tsx",
       "start": 1003,
       "end": 1035,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-window-undeclared/App.tsx",
+      "start": 1069,
+      "end": 1081,
       "fixes": 0
     },
     {
@@ -112,6 +200,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-window-undeclared/App.tsx",
+      "start": 1234,
+      "end": 1267,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -120,6 +219,17 @@
       "path": "fixtures/reactive-ir/dependency-source-window-undeclared/App.tsx",
       "start": 1234,
       "end": 1267,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-window-undeclared/App.tsx",
+      "start": 1301,
+      "end": 1313,
       "fixes": 0
     },
     {
@@ -134,6 +244,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-window-undeclared/App.tsx",
+      "start": 1466,
+      "end": 1501,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -142,6 +263,17 @@
       "path": "fixtures/reactive-ir/dependency-source-window-undeclared/App.tsx",
       "start": 1466,
       "end": 1501,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-window-undeclared/App.tsx",
+      "start": 1535,
+      "end": 1547,
       "fixes": 0
     },
     {
@@ -156,6 +288,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-window-undeclared/App.tsx",
+      "start": 1703,
+      "end": 1733,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -164,6 +307,17 @@
       "path": "fixtures/reactive-ir/dependency-source-window-undeclared/App.tsx",
       "start": 1703,
       "end": 1733,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-window-undeclared/App.tsx",
+      "start": 1767,
+      "end": 1779,
       "fixes": 0
     },
     {
@@ -178,6 +332,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-window-undeclared/App.tsx",
+      "start": 1922,
+      "end": 1953,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -186,6 +351,17 @@
       "path": "fixtures/reactive-ir/dependency-source-window-undeclared/App.tsx",
       "start": 1922,
       "end": 1953,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-window-undeclared/App.tsx",
+      "start": 1987,
+      "end": 1999,
       "fixes": 0
     },
     {
@@ -211,6 +387,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-window-undeclared/Review.tsx",
+      "start": 383,
+      "end": 411,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -219,6 +406,17 @@
       "path": "fixtures/reactive-ir/dependency-source-window-undeclared/Review.tsx",
       "start": 383,
       "end": 411,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-window-undeclared/Review.tsx",
+      "start": 445,
+      "end": 457,
       "fixes": 0
     },
     {
@@ -233,6 +431,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-window-undeclared/Review.tsx",
+      "start": 615,
+      "end": 647,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -244,6 +453,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-window-undeclared/Review.tsx",
+      "start": 681,
+      "end": 693,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -252,6 +472,17 @@
       "path": "fixtures/reactive-ir/dependency-source-window-undeclared/Review.tsx",
       "start": 681,
       "end": 693,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-window-undeclared/Review.tsx",
+      "start": 856,
+      "end": 886,
       "fixes": 0
     },
     {
@@ -277,6 +508,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-window-undeclared/Review.tsx",
+      "start": 920,
+      "end": 932,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -285,6 +527,17 @@
       "path": "fixtures/reactive-ir/dependency-source-window-undeclared/Review.tsx",
       "start": 920,
       "end": 932,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-window-undeclared/Review.tsx",
+      "start": 1074,
+      "end": 1103,
       "fixes": 0
     },
     {
@@ -307,6 +560,17 @@
       "path": "fixtures/reactive-ir/dependency-source-window-undeclared/Review.tsx",
       "start": 1087,
       "end": 1102,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-window-undeclared/Review.tsx",
+      "start": 1137,
+      "end": 1149,
       "fixes": 0
     },
     {

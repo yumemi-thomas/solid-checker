@@ -576,6 +576,227 @@ pub fn prepare(
     }))
 }
 
+/// What one source file loads: its bare runtime imports and its relative specifiers.
+struct FileLoads {
+    bare: BTreeSet<String>,
+    relative: BTreeSet<String>,
+}
+
+/// ADR 0981: whether the code of a package whose manifest names no Solid package imports one.
+enum SolidReach {
+    /// Its entry closure, or that of a package it loads, imports a Solid package.
+    Imports,
+    /// Every file of the closures was read and none loads a Solid package.
+    Never,
+    /// A file, an entry or an import the scan cannot follow: nothing is said, and the package stays what it was.
+    Undecided(UnanalyzableReason, String),
+}
+
+/// The text a refusal of an undecided or empty scan starts with, so a package selected after all drops it.
+const NO_DEMAND_DETAIL: &str =
+    "its manifest's dependencies and peerDependencies name no Solid package";
+
+/// ADR 0981: decides, for a package that declares no Solid package, whether its entry closure imports one anyway (a phantom
+/// dependency: `import { createMemo } from "solid-js"` in a package whose manifest names no peer).
+///
+/// A Solid package here is read off the module an import resolves to ([`runtime_package_root`], then the manifest name of
+/// that directory), never off how the specifier is spelled: the dialect's runtime, a package of an ecosystem scope, or one whose
+/// manifest declares either ([`prepare_all`]'s own test). A package the entry closure loads that is none of these is read the
+/// same way, so a wrapper that only re-exports a phantom package is found. The reads are those of [`walk`]: the same entry
+/// ([`select_entry`]), the same relative closure inside the package, and one shared limit of [`MAX_CLOSURE_FILES`] files for
+/// everything one question reads.
+struct SolidImports<'a> {
+    excluded: &'a BTreeSet<String>,
+    ecosystem_scopes: &'a [&'a str],
+    host: &'a Host,
+    files: std::collections::BTreeMap<PathBuf, Option<std::rc::Rc<FileLoads>>>,
+    verdicts: std::collections::BTreeMap<(PathBuf, String), std::rc::Rc<SolidReach>>,
+    declared: std::collections::BTreeMap<PathBuf, bool>,
+}
+
+impl<'a> SolidImports<'a> {
+    fn new(
+        excluded: &'a BTreeSet<String>,
+        ecosystem_scopes: &'a [&'a str],
+        host: &'a Host,
+    ) -> Self {
+        Self {
+            excluded,
+            ecosystem_scopes,
+            host,
+            files: std::collections::BTreeMap::new(),
+            verdicts: std::collections::BTreeMap::new(),
+            declared: std::collections::BTreeMap::new(),
+        }
+    }
+
+    fn is_solid_name(&self, name: &str) -> bool {
+        self.excluded.contains(name)
+            || self
+                .ecosystem_scopes
+                .iter()
+                .any(|scope| name.starts_with(scope))
+    }
+
+    /// Whether the manifest at `root` names the runtime or an ecosystem package among its `dependencies` or `peerDependencies`.
+    fn declares_solid(&mut self, root: &Path) -> bool {
+        if let Some(known) = self.declared.get(root) {
+            return *known;
+        }
+        let declared = fs::read(root.join("package.json"))
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<Ordered>(&bytes).ok())
+            .is_some_and(|manifest| {
+                ["dependencies", "peerDependencies"]
+                    .into_iter()
+                    .any(|field| {
+                        matches!(manifest.get(field), Some(Ordered::Object(map))
+                        if map.iter().any(|(name, _)| self.is_solid_name(name)))
+                    })
+            });
+        self.declared.insert(root.to_path_buf(), declared);
+        declared
+    }
+
+    fn loads(&mut self, file: &Path) -> Option<std::rc::Rc<FileLoads>> {
+        if let Some(known) = self.files.get(file) {
+            return known.clone();
+        }
+        let loads = fs::read_to_string(file).ok().and_then(|source| {
+            let facts =
+                solid_facts::ast::extract(file.to_string_lossy().into_owned(), &source).ok()?;
+            Some(std::rc::Rc::new(FileLoads {
+                bare: runtime_bare_imports(&facts),
+                relative: relative_modules(&facts),
+            }))
+        });
+        self.files.insert(file.to_path_buf(), loads.clone());
+        loads
+    }
+
+    fn reach(&mut self, root: &Path, subpath: &str) -> std::rc::Rc<SolidReach> {
+        let key = (root.to_path_buf(), subpath.to_owned());
+        if let Some(known) = self.verdicts.get(&key) {
+            return known.clone();
+        }
+        let verdict = std::rc::Rc::new(self.scan(root, subpath));
+        self.verdicts.insert(key, verdict.clone());
+        verdict
+    }
+
+    fn scan(&mut self, root: &Path, subpath: &str) -> SolidReach {
+        let mut packages = VecDeque::from([(root.to_path_buf(), subpath.to_owned())]);
+        let mut seen_packages = BTreeSet::new();
+        let mut visited = BTreeSet::<PathBuf>::new();
+        let mut undecided: Option<(UnanalyzableReason, String)> = None;
+        while let Some((root, subpath)) = packages.pop_front() {
+            if !seen_packages.insert((root.clone(), subpath.clone())) {
+                continue;
+            }
+            let entry = match select_entry(&root, &subpath, self.host) {
+                Ok(entry) => entry,
+                Err((kind, reason)) => {
+                    undecided.get_or_insert((kind, format!("{}: {reason}", root.display())));
+                    continue;
+                }
+            };
+            let mut queue = VecDeque::from([entry]);
+            while let Some(file) = queue.pop_front() {
+                if !visited.insert(file.clone()) {
+                    continue;
+                }
+                if visited.len() > MAX_CLOSURE_FILES {
+                    return SolidReach::Undecided(
+                        UnanalyzableReason::ClosureLimit,
+                        format!("closure exceeds {MAX_CLOSURE_FILES} files"),
+                    );
+                }
+                let Some(loads) = self.loads(&file) else {
+                    undecided.get_or_insert((
+                        UnanalyzableReason::ClosureUnavailable,
+                        format!("{} cannot be read or parsed", file.display()),
+                    ));
+                    continue;
+                };
+                for module in &loads.bare {
+                    let Some((name, package_subpath)) = split_bare_specifier(module) else {
+                        continue;
+                    };
+                    if name.starts_with("node:") {
+                        continue;
+                    }
+                    let loaded = match runtime_package_root(&file, &name) {
+                        // An alias, a virtual module or a builtin: no installed package.
+                        Ok(None) => continue,
+                        Ok(Some(loaded)) => loaded,
+                        Err(()) => {
+                            undecided.get_or_insert((
+                                UnanalyzableReason::ResolutionUnavailable,
+                                format!(
+                                    "{} loads {module:?}, whose package manifest cannot be read",
+                                    file.display()
+                                ),
+                            ));
+                            continue;
+                        }
+                    };
+                    let Some(installed) = package_name_of_root(&loaded) else {
+                        undecided.get_or_insert((
+                            UnanalyzableReason::ManifestUnavailable,
+                            format!(
+                                "{} loads {module:?}: the package at {} has no readable name",
+                                file.display(),
+                                loaded.display()
+                            ),
+                        ));
+                        continue;
+                    };
+                    if self.is_solid_name(&installed) {
+                        return SolidReach::Imports;
+                    }
+                    // A workspace package linked into `node_modules` is project code, not a dependency.
+                    if !loaded
+                        .components()
+                        .any(|component| component.as_os_str() == "node_modules")
+                    {
+                        continue;
+                    }
+                    if self.declares_solid(&loaded) {
+                        return SolidReach::Imports;
+                    }
+                    packages.push_back((loaded, package_subpath));
+                }
+                let directory = file.parent().map(Path::to_path_buf);
+                for module in &loads.relative {
+                    let Some(target) = directory
+                        .as_deref()
+                        .and_then(|directory| resolve_relative(directory, module))
+                    else {
+                        // A stylesheet or another asset loads no code.
+                        if !asset_specifier(module) {
+                            undecided.get_or_insert((
+                                UnanalyzableReason::ClosureUnavailable,
+                                format!(
+                                    "{} imports {module:?}, which resolves to no source file",
+                                    file.display()
+                                ),
+                            ));
+                        }
+                        continue;
+                    };
+                    if target.starts_with(&root) {
+                        queue.push_back(target);
+                    }
+                }
+            }
+        }
+        match undecided {
+            Some((kind, reason)) => SolidReach::Undecided(kind, reason),
+            None => SolidReach::Never,
+        }
+    }
+}
+
 /// ADR 0291: select every Solid package the project loads at run time, and
 /// every Solid package those load in turn, each from where its importer
 /// resolves it.
@@ -605,20 +826,10 @@ pub fn prepare_all(
     unredirected
         .runtime_packages
         .extend(excluded.iter().cloned());
-    let solid_package = |root: &Path| {
-        let Some(manifest) = fs::read(root.join("package.json"))
-            .ok()
-            .and_then(|bytes| serde_json::from_slice::<Ordered>(&bytes).ok())
-        else {
-            return false;
-        };
-        ["dependencies", "peerDependencies"].into_iter().any(|field| {
-            matches!(manifest.get(field), Some(Ordered::Object(map)) if map.iter().any(|(name, _)| {
-                excluded.contains(name)
-                    || ecosystem_scopes.iter().any(|scope| name.starts_with(scope))
-            }))
-        })
-    };
+    let mut solid = SolidImports::new(excluded, ecosystem_scopes, host);
+    // A package that declares no Solid package, left off source, with the requests it was refused for: a later request of it (another
+    // subpath) may find its code importing one, and then the earlier ones are selected too.
+    let mut declined = std::collections::BTreeMap::<PathBuf, Vec<(PathBuf, String)>>::new();
     let mut queue = VecDeque::from(requests);
     let mut not_solid = BTreeSet::<PathBuf>::new();
     let mut seen_requests = BTreeSet::new();
@@ -655,15 +866,49 @@ pub fn prepare_all(
             not_solid.insert(root);
             continue;
         }
-        if !names_by_root.contains_key(&root) && !solid_package(&root) {
-            notes.refuse(
-                &name,
-                Some(&root),
-                UnanalyzableReason::NotSelected(SelectionFailure::NoDemand),
-                "its manifest's dependencies and peerDependencies name no Solid package",
-            );
-            not_solid.insert(root);
-            continue;
+        // ADR 0981: a manifest naming no Solid package does not say the code loads none (a phantom dependency, a wrapper of one): the
+        // package is a Solid package for selection when its entry closure imports one. An undecided scan keeps the refusal.
+        if !names_by_root.contains_key(&root) && !solid.declares_solid(&root) {
+            match &*solid.reach(&root, &subpath) {
+                SolidReach::Imports => {
+                    if let Some(earlier) = declined.remove(&root) {
+                        notes.refusals.retain(|refusal| {
+                            refusal.root.as_deref() != Some(root.as_path())
+                                || !refusal.detail.starts_with(NO_DEMAND_DETAIL)
+                        });
+                        for request in earlier {
+                            seen_requests.remove(&request);
+                            queue.push_front(request);
+                        }
+                    }
+                }
+                SolidReach::Never => {
+                    notes.refuse(
+                        &name,
+                        Some(&root),
+                        UnanalyzableReason::NotSelected(SelectionFailure::NoDemand),
+                        NO_DEMAND_DETAIL,
+                    );
+                    declined
+                        .entry(root.clone())
+                        .or_default()
+                        .push((importer.clone(), specifier.clone()));
+                    continue;
+                }
+                SolidReach::Undecided(kind, reason) => {
+                    notes.refuse(
+                        &name,
+                        Some(&root),
+                        *kind,
+                        format!("{NO_DEMAND_DETAIL}, and whether its code imports one is undecided: {reason}"),
+                    );
+                    declined
+                        .entry(root.clone())
+                        .or_default()
+                        .push((importer.clone(), specifier.clone()));
+                    continue;
+                }
+            }
         }
         // A package reached through an unredirected binding stays off source
         // (`without_unredirected_packages`): one known to be is not walked.
@@ -743,6 +988,7 @@ pub fn prepare_all(
     let unsupported_names = unsupported
         .iter()
         .chain(&not_solid)
+        .chain(declined.keys())
         .filter_map(|root| package_name_of_root(root))
         .collect::<BTreeSet<_>>();
     for (root, name) in &names_by_root {
@@ -1358,6 +1604,38 @@ fn select(entry: &Ordered, host: &Host, depth: usize, star: Option<&str>) -> Opt
     }
 }
 
+/// The relative specifiers a file loads statically or by a literal load: the edges [`walk`] follows.
+fn relative_modules(facts: &solid_facts::ast::AstFacts) -> BTreeSet<String> {
+    facts
+        .imports
+        .iter()
+        .filter(|import| !import.type_only)
+        .map(|import| import.module.as_str())
+        .chain(
+            facts
+                .exports
+                .iter()
+                .filter(|export| !export.type_only)
+                .filter_map(|export| export.module.as_deref()),
+        )
+        .chain(
+            facts
+                .import_equals
+                .iter()
+                .filter(|edge| !edge.type_only)
+                .map(|edge| edge.module.as_str()),
+        )
+        .chain(
+            facts
+                .module_loads
+                .iter()
+                .filter_map(|edge| edge.specifier.as_deref()),
+        )
+        .filter(|module| module.starts_with("./") || module.starts_with("../"))
+        .map(str::to_owned)
+        .collect()
+}
+
 /// Every file `entry` reaches through relative static imports and
 /// re-exports, inside `root`, the bare runtime imports of those files into
 /// `bare`, and their unsupported runtime bindings into `unredirected`.
@@ -1404,34 +1682,7 @@ fn walk(
                 .map(|module| (file.clone(), module)),
         );
         unredirected.extend(unredirected_packages(&facts));
-        let modules = facts
-            .imports
-            .iter()
-            .filter(|import| !import.type_only)
-            .map(|import| import.module.as_str())
-            .chain(
-                facts
-                    .exports
-                    .iter()
-                    .filter(|export| !export.type_only)
-                    .filter_map(|export| export.module.as_deref()),
-            )
-            .chain(
-                facts
-                    .import_equals
-                    .iter()
-                    .filter(|edge| !edge.type_only)
-                    .map(|edge| edge.module.as_str()),
-            )
-            .chain(
-                facts
-                    .module_loads
-                    .iter()
-                    .filter_map(|edge| edge.specifier.as_deref()),
-            )
-            .filter(|module| module.starts_with("./") || module.starts_with("../"))
-            .map(str::to_owned)
-            .collect::<BTreeSet<_>>();
+        let modules = relative_modules(&facts);
         let directory = file
             .parent()
             .ok_or_else(|| unavailable("closure file has no directory".to_owned()))?;

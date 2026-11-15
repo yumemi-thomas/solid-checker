@@ -33,6 +33,17 @@
       "start": 80,
       "end": 111,
       "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-walk-budget-reexport/App.tsx",
+      "start": 103,
+      "end": 110,
+      "fixes": 0
     }
   ]
 }

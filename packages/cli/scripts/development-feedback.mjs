@@ -372,7 +372,9 @@ export function inspectDevelopmentFeedback(project, { capture = null, analyze, f
     // The runtime the caller executes: `feedback run` serves a client-rendered
     // development build to Chromium, so packages are analyzed for that runtime
     // (ADR 0297's source default) rather than for every host.
-    ...(runtime ? ["--runtime-target", runtime.target, "--runtime-build", runtime.build, "--rendering", runtime.rendering] : [])
+    ...(runtime ? ["--runtime-target", runtime.target, "--runtime-build", runtime.build, "--rendering", runtime.rendering,
+      // The selection a case pins (`check --dependency-source`): the packages the build reads as source instead of ADR 0297's default.
+      ...(runtime.dependencySources ?? []).flatMap(name => ["--dependency-source", name])] : [])
   ], { timeoutMs });
   const context = { binary, timeoutMs };
   if (native.error || native.signal || ![0, 1].includes(native.status)) throw nativeFailure(snapshot.manifest.project, snapshot, native, context);
@@ -449,7 +451,7 @@ export const developmentFeedbackHelp = `Development feedback (experimental)
   solid-checker feedback run --project <tsconfig.json> --scenario <scenario.json>
     --browser <chromium-path> [--tooling <directory>] [--compare-project <tsconfig.json>]
     [--root <directory>] [--config <file>] [--execution-cache <directory>]
-    [--source-instrumentation on|off]
+    [--source-instrumentation on|off] [--dependency-source <package>]...
   solid-checker feedback batch --browser <chromium-path> --tooling <directory>
     [--execution-cache <directory>] [--source-instrumentation on|off]
     [--native-timeout <seconds>] [--native-bin <path>]
@@ -461,7 +463,9 @@ Scenarios may contain interactions without assertions or comparison projects.
 The manifest command creates a capture template before application execution.
 --execution-cache reuses the browser half of a run whose inputs, development models
 and recorded runtime inputs are unchanged; findings always come from this run.
-batch reads one JSON job per stdin line ({"project", "scenario", "report", "cwd"?}), runs
+--dependency-source (repeatable) is the native checker's flag of that name: the packages the build reads as
+source in place of the default selection (ADR 0297), for the run's client-rendered development build.
+batch reads one JSON job per stdin line ({"project", "scenario", "report", "cwd"?, "dependencySources"?}), runs
 each as \`feedback run\` would in this process, writes its document to "report", and
 answers {"report", "exitCode", "retire"} per job, then {"closed": true} at the end.
 It shares the tooling, the browser process and the browser's pin across jobs, and
@@ -474,6 +478,12 @@ native analysis; --native-bin selects the native checker (also SOLID_CHECKER_NAT
 Use a release build: a debug build is roughly 19x slower. SOLID_CHECKER_TIMINGS=1 adds
 the native per-phase timings to the report.
 `;
+
+// A package specifier (or `*`), exactly as the native checker's `--dependency-source` takes it; the native side judges what it names.
+function dependencySourceName(value) {
+  assert(typeof value === "string" && value !== "" && !/\s/.test(value) && !value.startsWith("-"), `--dependency-source takes a package specifier, not ${JSON.stringify(value)}`);
+  return value;
+}
 
 function sourceInstrumentationOption(value = "on") {
   assert(["on", "off"].includes(value), "--source-instrumentation takes on or off");
@@ -488,12 +498,13 @@ export async function developmentFeedback(args) {
   const manifest = args[0] === "manifest", live = args[0] === "run";
   if (manifest || live) args = args.slice(1);
   let project, capture;
-  const options = new Map();
+  const options = new Map(), dependencySources = [];
   for (let index = 0; index < args.length; index++) {
     const name = args[index];
-    assert((live ? ["--project", "--scenario", "--browser", "--tooling", "--compare-project", "--root", "--config", "--native-timeout", "--native-bin", "--execution-cache", "--source-instrumentation"]
+    assert((live ? ["--project", "--scenario", "--browser", "--tooling", "--compare-project", "--root", "--config", "--native-timeout", "--native-bin", "--execution-cache", "--source-instrumentation", "--dependency-source"]
       : ["--project", "--capture", "--native-timeout", "--native-bin"]).includes(name), `Unknown feedback option ${name}`);
     assert(args[index + 1] && !args[index + 1].startsWith("--"), `${name} requires a value`);
+    if (name === "--dependency-source") { dependencySources.push(dependencySourceName(args[++index])); continue; }
     assert(!options.has(name), `Duplicate feedback option ${name}`);
     options.set(name, args[index + 1]);
     if (name === "--project") { assert(!project, "Duplicate project option"); project = args[++index]; }
@@ -516,7 +527,7 @@ export async function developmentFeedback(args) {
       const result = await runBrowserFeedback({ project, scenarioPath: options.get("--scenario"),
         browserPath: options.get("--browser"), toolingRoot: options.get("--tooling"), comparisonProject: options.get("--compare-project"),
         root: options.get("--root"), config: options.get("--config"), executionCacheDirectory: options.get("--execution-cache"),
-        sourceInstrumentation: sourceInstrumentationOption(options.get("--source-instrumentation")) });
+        sourceInstrumentation: sourceInstrumentationOption(options.get("--source-instrumentation")), dependencySources });
       process.stdout.write(JSON.stringify(result, null, 2) + "\n"); process.exitCode = result.nativeExitCode; return;
     }
     const result = manifest ? captureTemplate(feedbackSnapshot(project))
@@ -569,13 +580,16 @@ async function feedbackBatch(args) {
       const job = JSON.parse(line);
       assert(typeof job.project === "string" && typeof job.scenario === "string" && typeof job.report === "string"
         && (job.cwd === undefined || typeof job.cwd === "string")
-        && Object.keys(job).every(key => ["project", "scenario", "report", "cwd"].includes(key)), "A batch job is {project, scenario, report, cwd?}");
+        && Object.keys(job).every(key => ["project", "scenario", "report", "cwd", "dependencySources"].includes(key))
+        && (job.dependencySources === undefined || (Array.isArray(job.dependencySources) && job.dependencySources.length > 0)),
+      "A batch job is {project, scenario, report, cwd?, dependencySources?}");
+      const dependencySources = (job.dependencySources ?? []).map(dependencySourceName);
       let document, exitCode, retire;
       // A job's `cwd` is the working directory a separate `feedback run` would have had.
       const home = process.cwd();
       try {
         if (job.cwd) process.chdir(job.cwd);
-        ({ report: document, retire } = await batch.run({ project: job.project, scenarioPath: job.scenario, sourceInstrumentation }));
+        ({ report: document, retire } = await batch.run({ project: job.project, scenarioPath: job.scenario, sourceInstrumentation, dependencySources }));
         exitCode = document.nativeExitCode;
       } catch (error) {
         document = failedRunDocument(job.project, error, true);

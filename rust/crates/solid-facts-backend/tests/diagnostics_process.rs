@@ -60,15 +60,18 @@ fn conditional_package_getters_require_every_alternative() {
         "../../../../fixtures/reactive-ir/dependency-source-integrity-getter/Conditional.tsx"
     );
     let rows = report["findings"].as_array().unwrap();
+    // ADR 0981: every read of a member of an object a selected package made is also a site of the unread-package pass (SC2002, uncertifiable: the package's getter may
+    // call an action wherever the read runs), so each site's rows are pinned whole: the SC1001 answer and that obligation, and nothing else.
+    let unread = ("SC2002", "uncertifiable");
     for (name, expected) in [
-        ("BothKnown", Some(("SC1001", "violation"))),
-        ("UnknownBranch", Some(("SC9012", "uncertifiable"))),
-        ("InertBranch", Some(("SC9012", "uncertifiable"))),
-        ("TrackedConditional", None),
-        ("DestructuredObject", Some(("SC1001", "violation"))),
-        ("RenamedObject", Some(("SC1001", "violation"))),
-        ("MutableObject", Some(("SC9012", "uncertifiable"))),
-        ("TrackedObject", None),
+        ("BothKnown", vec![("SC1001", "violation"), unread]),
+        ("UnknownBranch", vec![unread, ("SC9012", "uncertifiable")]),
+        ("InertBranch", vec![unread, ("SC9012", "uncertifiable")]),
+        ("TrackedConditional", vec![unread]),
+        ("DestructuredObject", vec![("SC1001", "violation"), unread]),
+        ("RenamedObject", vec![("SC1001", "violation"), unread]),
+        ("MutableObject", vec![("SC9012", "uncertifiable")]),
+        ("TrackedObject", vec![unread]),
     ] {
         let function = source.find(&format!("export function {name}(")).unwrap();
         let expression = if name == "RenamedObject" {
@@ -77,7 +80,7 @@ fn conditional_package_getters_require_every_alternative() {
             "location.search"
         };
         let site = function + source[function..].find(expression).unwrap();
-        let selected = rows
+        let mut selected = rows
             .iter()
             .filter(|row| {
                 row["primaryLocation"]["path"]
@@ -85,16 +88,12 @@ fn conditional_package_getters_require_every_alternative() {
                     .is_some_and(|p| p.ends_with("/Conditional.tsx"))
                     && row["primaryLocation"]["startByte"].as_u64() == Some(site as u64)
             })
+            .map(|row| (row["id"].as_str().unwrap(), row["kind"].as_str().unwrap()))
             .collect::<Vec<_>>();
-        assert_eq!(
-            selected.len(),
-            usize::from(expected.is_some()),
-            "{name}: {selected:#?}"
-        );
-        if let Some((code, kind)) = expected {
-            assert_eq!(selected[0]["id"], code, "{name}");
-            assert_eq!(selected[0]["kind"], kind, "{name}");
-        }
+        selected.sort_unstable();
+        let mut expected = expected;
+        expected.sort_unstable();
+        assert_eq!(selected, expected, "{name}");
     }
 }
 
@@ -1608,8 +1607,13 @@ fn returned_store_tuple_veto_preserves_uncertifiable_candidates() {
         ),
         (
             "dependency-source-proxy-store",
+            // ADR 0981: the four project calls and reads that enter dep-query (a package read as source whose entry the analysis does not follow) are sites of the unread-package pass.
             vec![
                 ("uncertifiable", "SC1001"),
+                ("uncertifiable", "SC2002"),
+                ("uncertifiable", "SC2002"),
+                ("uncertifiable", "SC2002"),
+                ("uncertifiable", "SC2002"),
                 ("uncertifiable", "SC9012"),
                 ("uncertifiable", "SC9012"),
                 ("uncertifiable", "SC9012"),

@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/test-runner-vitest/variants/curried-argument/App.test.tsx",
+      "start": 454,
+      "end": 558,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -32,6 +43,17 @@
       "path": "fixtures/reactive-ir/test-runner-vitest/variants/curried-argument/App.test.tsx",
       "start": 476,
       "end": 494,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/test-runner-vitest/variants/curried-argument/App.test.tsx",
+      "start": 684,
+      "end": 767,
       "fixes": 0
     },
     {
