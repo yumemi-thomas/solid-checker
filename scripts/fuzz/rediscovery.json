@@ -24439,5 +24439,37 @@
    "mx-optimistic-write-before-load-body-assigned-alias-helper"
   ],
   "rediscovered": "main 9878ba9d7 (release) on `focus.mjs --grids mx-recall,lg-recall --split-codes --codes LOADING_ON_ACCESSOR,OPTIMISTIC_WRITE_BEFORE_LOAD`: 36 false-clean, all the new `assigned` recall variant; this head: 0 (mx-recall OPTIMISTIC 1,426 agree, 1,334 recall-gap as before; lg-recall 1,146 uncertifiable, 54 clean). The callback-return and factory forms were already obligations (SC9012) on main, so the generator does not separate them; the fixture rc21-optimistic-setter-forms and the oracle case pin all four forms"
+ },
+ {
+  "finding": "SC7002 `sync-computation-received-async` was a violation for `createMemo(async () => 1, { sync: true, ...optOver })` and for the same options on `createEffect`, `createSignal`, `createOptimistic`, `createRenderEffect` and `createTrackedEffect` where `optOver.sync` is `false`: the rule took `sync: true` from ANY literal `true` property, and the runtime reads the LAST `sync` (a spread after the literal, or a later duplicate key, decides). Chrome rc.21 reports nothing for these programs.",
+  "found": "the coordinator's duplicate-key ruling for slice 8b (the check of `{ sync: true, sync: false }` against Chrome) and the pattern lane's `syncopt/d1`, `d3`, `d4`, `s-*`: 14 false positives on main; also `createTrackedEffect(async () => ..., { sync: true })`, a plain false positive: its node's compute returns `undefined` (`@solidjs/signals@2.0.0-rc.21` `dist/dev.js:2878-2892`), so SYNC_NODE_RECEIVED_ASYNC is never raised there.",
+  "fixed": "ADR 0989 (`static_api.rs` `sync_option_state`): the V arm needs the exact literal's last `sync` to be `true` (`call_option_literal`); a spread, computed key or non-literal options keep the existing uncertifiable arm; a duplicate `sync` key is TypeScript's (TS1117) unless a directive silences it, then the last one decides; `createTrackedEffect` left `supports_sync_option`.",
+  "grid": "lg-recall",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "lg-sync-node-received-async-body-opt-spread-direct-none",
+   "lg-sync-node-received-async-body-opt-spread-effect-direct-none",
+   "lg-sync-node-received-async-root-opt-spread-direct-none",
+   "lg-sync-node-received-async-memo-opt-spread-effect-direct-none"
+  ],
+  "rediscovered": "the recall legal cells `opt-spread` and `opt-spread-effect` (body, root, memo; every binding and layer; `lg-recall`): main false positives, this head none (uncertifiable at the site). Not generatable: the duplicate key needs a `@ts-ignore` line before the call (the generator's `contextLine` is a module-level declaration, not a directive on the call's line) and `createTrackedEffect(async ...)` makes Chrome throw an invalid-cleanup Error that disturbs the program; the lane programs `syncopt/d1`, `d2`, `s-tracked-*`, `t1` hold both (main: 14 false positives, this head: 0)."
+ },
+ {
+  "finding": "A `createRenderEffect` whose compute is async (`createRenderEffect(async () => 1, () => {})`, or one that returns a Promise) outside any `<Loading>` raised ASYNC_OUTSIDE_LOADING_BOUNDARY in Chrome rc.21 (a render effect pending with no boundary above it: `notifyEffectStatus`, `dist/dev.js:2672-2700`, `EFFECT_RENDER` only) and had no SC5003 row of any kind: the pending accounting's sites are reads of pending sources, and a compute is no read. Certified false clean on main (`certified: false` because other rows stood at the call, none of them SC5003's).",
+  "found": "the lane programs of slice 8b's sync-option probes: the render-effect variants showed the code with no rule claiming it (`syncopt/r0-render-async-plain`, `r1-render-async-false`, `r5-render-promise-returning`); the SC7002 false positive had masked it in the `{ sync: true, ...over }` variants.",
+  "fixed": "ADR 0989 (`pending_accounting.rs`, site (5); `static_api::render_effect_computes_not_proven_sync`, the dialect's `render_effect_compute`): the callee of every render effect whose compute is not proven synchronous is a site of SC5003 alone, ended by the cover walk's `UnderLoading`, a discarded region or a reviewed fresh stack, else an uncertifiable `async-read-unaccounted` row. Always an obligation, never a violation: that the call runs inside the mount's enforcement window, with no boundary above, is not proven.",
+  "outside": "the generator has no render-effect-compute shape (ASYNC_OUTSIDE_LOADING_BOUNDARY's cells read an async source); `patterns/syncopt/r0`, `r1`, `r5` hold the programs (main: false clean, this head: an obligation), with `r2` (createEffect: Chrome quiet), `r3` (a read of an async memo: covered on both), `r4` (a synchronous compute) and `w0` (wrapped in `<Loading>`) as twins."
+ },
+ {
+  "finding": "UNTRACKED_READ_AFTER_AWAIT false clean (pattern lane api/v49-await-accessor): the accessor itself came out of an await, `const f = await Promise.resolve(c); await 0; return f();` in an async memo, and the call past the second await had no row; Chrome rc.21 reports it. The lane listed it in open-defects.json from 516acd229 (ADR 0815's position rule) until this entry.",
+  "found": "the pattern lane (scripts/fuzz/patterns/api/v49-await-accessor, audit program); seen passing by Research C on main 2026-11-15, confirmed by make fuzz-patterns on 23ad6b7f4 plus ADR 0986's tree (FIXED api/v49-await-accessor)",
+  "fixed": "between 516acd229 (the lane reports false-clean) and 9d875bff0 (the lane reports fine); not bisected to a commit",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "mx-untracked-read-after-await-memo-async-use-await-forwarded-direct-none",
+   "mx-untracked-read-after-await-effect-async-use-await-forwarded-direct-none"
+  ],
+  "rediscovered": "focus.mjs --codes UNTRACKED_READ_AFTER_AWAIT --grids mx-recall,lg-recall -- --contexts memo-async,effect-async (the arguments of make fuzz-focus CODES=UNTRACKED_READ_AFTER_AWAIT FUZZ_GRIDS=mx-recall,lg-recall, narrowed to the two contexts), 1,822 programs, on the new AWAIT_USES variants `use-await-forwarded` (mx: the call past the second await) and `use-await-forwarded-unread` (the same forward, never called; legal in lg), layer none only (`layers`: the variant's `await` cannot sit in a closure, helper or iife layer): the 516acd229 release build exits 1 with 26 false-clean programs, both ids of this entry among them (the lane program api/v49-await-accessor is a false clean there too); the head of this branch (23ad6b7f4 plus ADR 0986) exits 0, `nothing needs a look`: both ids recall-gap (uncertifiable, never silent), the twins not-fired in mx and uncertifiable in lg, oracle 22 compared, 0 behaviour differences."
  }
 ]

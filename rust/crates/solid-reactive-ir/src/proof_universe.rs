@@ -260,6 +260,12 @@ pub(crate) enum SiteCode {
     ResolveInScope,
     /// UNTIL_IN_REACTIVE_SCOPE: an `until` call with an observer active (SC2005; batch 11, slice 7).
     UntilInScope,
+    /// MISSING_EFFECT_FN: a call of an effect primitive that meets no callable effect function (SC7001; batch 11, slice 8b).
+    MissingEffectFn,
+    /// SYNC_NODE_RECEIVED_ASYNC: a call that asserts `sync: true` over a computation that returns a thenable (SC7002; batch 11, slice 8b).
+    SyncNodeAsync,
+    /// DYNAMIC_STATIC_PROMISE: a static-form `dynamic` call whose source returns a promise (SC2007; batch 11, slice 8b).
+    DynamicStaticPromise,
 }
 
 /// The uncertifiable row a code gets when nothing ends it: the rule's id, name and blocker, and the noun its message uses.
@@ -272,7 +278,7 @@ pub(crate) struct Home {
 
 impl SiteCode {
     /// Every code of the universe, in the order the proof log writes them.
-    pub(crate) const ALL: [Self; 13] = [
+    pub(crate) const ALL: [Self; 16] = [
         Self::StrictRead,
         Self::ReactiveWrite,
         Self::OptimisticWrite,
@@ -286,6 +292,9 @@ impl SiteCode {
         Self::LoadingOnAccessor,
         Self::ResolveInScope,
         Self::UntilInScope,
+        Self::MissingEffectFn,
+        Self::SyncNodeAsync,
+        Self::DynamicStaticPromise,
     ];
 
     pub(crate) const fn runtime_code(self) -> RuntimeCode {
@@ -303,6 +312,9 @@ impl SiteCode {
             Self::LoadingOnAccessor => RuntimeCode::LoadingOnAccessor,
             Self::ResolveInScope => RuntimeCode::ResolveInReactiveScope,
             Self::UntilInScope => RuntimeCode::UntilInReactiveScope,
+            Self::MissingEffectFn => RuntimeCode::MissingEffectFn,
+            Self::SyncNodeAsync => RuntimeCode::SyncNodeReceivedAsync,
+            Self::DynamicStaticPromise => RuntimeCode::DynamicStaticPromise,
         }
     }
 
@@ -392,6 +404,24 @@ impl SiteCode {
                 blocker: crate::blockers::RESOLVE_SCOPE_UNACCOUNTED,
                 noun: "until call",
             },
+            Self::MissingEffectFn => Home {
+                id: "SC7001",
+                rule: "missing-effect-function",
+                blocker: crate::blockers::EFFECT_FN_UNACCOUNTED,
+                noun: "effect call",
+            },
+            Self::SyncNodeAsync => Home {
+                id: "SC7002",
+                rule: "sync-computation-received-async",
+                blocker: crate::blockers::SYNC_OPTION_UNACCOUNTED,
+                noun: "call with a sync option",
+            },
+            Self::DynamicStaticPromise => Home {
+                id: "SC2007",
+                rule: "static-dynamic-async-source",
+                blocker: crate::blockers::DYNAMIC_STATIC_UNACCOUNTED,
+                noun: "static dynamic call",
+            },
         }
     }
 }
@@ -412,6 +442,10 @@ const CREATION_AND_EFFECT_CODES: &[SiteCode] =
 /// The code lists of a resolve/until site (batch 11, slice 7): the observer guard of the one primitive the call is.
 const RESOLVE_CODES: &[SiteCode] = &[SiteCode::ResolveInScope];
 const UNTIL_CODES: &[SiteCode] = &[SiteCode::UntilInScope];
+/// The code lists of the static-API sites (batch 11, slice 8b).
+const EFFECT_FN_CODES: &[SiteCode] = &[SiteCode::MissingEffectFn];
+const SYNC_OPTION_CODES: &[SiteCode] = &[SiteCode::SyncNodeAsync];
+const DYNAMIC_STATIC_CODES: &[SiteCode] = &[SiteCode::DynamicStaticPromise];
 /// A leaf operation at a call the walk could not place (`UnmodelledSlot`): any forbidden operation, so both of a leaf owner's codes.
 const CLEANUP_AND_CREATION_CODES: &[SiteCode] =
     &[SiteCode::CleanupForbidden, SiteCode::PrimitiveForbidden];
@@ -424,7 +458,7 @@ const LOADING_ON_HOLD_CODES: &[SiteCode] = &[SiteCode::LoadingOnOutsideHold];
 /// One site: where it is, what kind it is, and the other spans a row that
 /// answers for it may sit at.
 pub(crate) struct Site {
-    /// `read`, `write`, `action`, `store-write`, `on-flush`, `owner-call` or `resolve`.
+    /// `read`, `write`, `action`, `store-write`, `on-flush`, `owner-call`, `resolve`, `effect-fn`, `sync-option` or `dynamic-static`.
     pub(crate) table: &'static str,
     /// What the source is: `accessor`, `store`, `props`, `setter`, `action` or
     /// `primitive`.
@@ -1212,6 +1246,40 @@ fn primitive_call_sites<'a>(ctx: &AnalysisContext<'a>, found: &mut Vec<(&'a File
                         codes,
                     },
                 ));
+            }
+            // Batch 11, slice 8b (ADR 0989): the static API's calls, one table per family, found from the resolved primitive and the dialect's own questions:
+            // a call of an effect primitive (the slot where an effect function is read), of one that takes `sync`, and a `dynamic` call in its static form.
+            for (table, applies, codes) in [
+                (
+                    "effect-fn",
+                    dialect.effect_function_slot(primitive).is_some(),
+                    EFFECT_FN_CODES,
+                ),
+                (
+                    "sync-option",
+                    dialect.supports_sync_option(primitive)
+                        && dialect.options_argument(primitive).is_some(),
+                    SYNC_OPTION_CODES,
+                ),
+                (
+                    "dynamic-static",
+                    dialect.static_dynamic_form(primitive).is_some(),
+                    DYNAMIC_STATIC_CODES,
+                ),
+            ] {
+                if applies {
+                    found.push((
+                        file,
+                        Site {
+                            table,
+                            source: "primitive",
+                            via: "call",
+                            at: call.callee,
+                            alternates: vec![call.span],
+                            codes,
+                        },
+                    ));
+                }
             }
             let codes = owner_call_codes(dialect, file, call, primitive, client_build);
             if codes.is_empty() {

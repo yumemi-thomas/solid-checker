@@ -1007,6 +1007,14 @@ pub(super) fn standard_call_name(call: &ResolvedCall) -> Option<&str> {
         .map(|declaration| declaration.qualified_name.as_ref())
 }
 
+/// The standard declarations a promise handler call resolves to (ADR 0976, S3): the callback it takes runs when its promise settles.
+pub(crate) fn is_promise_handler_name(name: &str) -> bool {
+    matches!(
+        name,
+        "Promise.then" | "Promise.catch" | "Promise.finally" | "PromiseLike.then"
+    )
+}
+
 pub(super) fn resolved_parameter(call: &ResolvedCall, argument: usize) -> Option<&ParameterFact> {
     call.arguments
         .iter()

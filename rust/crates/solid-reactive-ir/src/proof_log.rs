@@ -466,6 +466,15 @@ pub(crate) enum PremiseKind {
     /// site creates a computation, so the effect callback's guard (`inEffectCallback && context === null`) does not meet it (batch 11, slice 6). The span is the
     /// function.
     OwnerContextCurrent,
+    /// An argument the dialect's slot reads is provably callable (a function, a bundle whose `effect` is one, a type whose only runtime domain is callable), so no
+    /// missing-function throw is raised for it (ADR 0989). The span is the argument.
+    ArgumentShape,
+    /// The options argument is an exact object literal whose last `sync` property is `false`, or that names none, or the argument is absent or nullish: the call does not
+    /// assert `sync: true` (ADR 0989). The span is the options argument (or the call, where there is none).
+    OptionsLiteral,
+    /// A computation or a `dynamic` source is proven to answer synchronously: a closed return type with no thenable, a sync generator, or a value that is no function
+    /// (`StaticSource::Sync`), so nothing the guard looks for is returned (ADR 0989). The span is the function, or the argument that is no function.
+    StaticSourceState,
     /// A fact about the whole program a census answers (a primitive no file of the project names, in which no leaf scope opens), asked of the site's own span
     /// (batch 11, slice 6). The span is the site.
     ProgramCensus,

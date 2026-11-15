@@ -693,8 +693,15 @@ export const SPEC = {
   },
   SYNC_NODE_RECEIVED_ASYNC: {
     variants: ["memo", "effect"], recallVariants: Object.keys(SYNC_COMPUTES), contexts: ["body", "root", "untrack", "memo", "jsx"], bindings: BINDINGS, setup: () => [],
+    // ADR 0989: the legal side (recall grids): `{ sync: true, ...optOver }` where `optOver.sync` is `false` (Chrome rc.21 reads the last `sync`: quiet), on a memo and on an effect.
+    recallLegal: ["body", "root", "memo"], recallLegalVariants: ["opt-spread", "opt-spread-effect"],
+    // These contexts run the call, so the plain `sync: true` variants report here (they are the misuse cells): only the spread variants are legal.
+    variantOnlyLegal: { body: ["opt-spread", "opt-spread-effect"], root: ["opt-spread", "opt-spread-effect"], memo: ["opt-spread", "opt-spread-effect"] },
     contextLine: (variant) => SYNC_COMPUTE_LINES[variant],
-    call: (node) => (SYNC_COMPUTES[node.variant] ? api("createMemo", SYNC_COMPUTES[node.variant]) : node.variant === "effect" ? api("createEffect", "async () => 1, () => {}, { sync: true }") : api("createMemo", "async () => 1, { sync: true }")),
+    call: (node) => (SYNC_COMPUTES[node.variant] ? api("createMemo", SYNC_COMPUTES[node.variant])
+      : node.variant === "opt-spread" ? api("createMemo", "async () => 1, { sync: true, ...optOver }")
+      : node.variant === "opt-spread-effect" ? api("createEffect", "async () => 1, () => {}, { sync: true, ...optOver }")
+      : node.variant === "effect" ? api("createEffect", "async () => 1, () => {}, { sync: true }") : api("createMemo", "async () => 1, { sync: true }")),
   },
   UNTRACKED_READ_AFTER_AWAIT: { recallContexts: ["memo-async-loop", "memo-async-for-await", "memo-async-finally", "effect-async-loop", "effect-async-for-await", "effect-async-finally"],
     contexts: ["memo-async", "effect-async"], bindings: ["direct", "alias", "destructured", "wrapper"],
@@ -802,6 +809,8 @@ for (const [code, variants] of Object.entries(FLIP_READ_VARIANTS)) {
   spec.recallLegalVariants = [...(spec.recallLegalVariants ?? []), ...legal.map(([variant]) => variant)];
   spec.legalVariantContexts = { ...spec.legalVariantContexts, ...Object.fromEntries(legal.map(([variant, { legal }]) => [variant, legal])) };
   spec.recallVariants = [...(spec.recallVariants ?? []), ...Object.keys(variants)];
+  // A variant that cannot sit in every layer (its text holds an `await`, which a closure, helper or `iife` layer would put in a function that is not `async`) names its layers.
+  spec.variantLayers = { ...spec.variantLayers, ...Object.fromEntries(Object.entries(variants).filter(([, { layers }]) => layers).map(([variant, { layers }]) => [variant, layers])) };
   for (const [variant, { only, contexts, legal = [] }] of Object.entries(variants)) if (only) for (const context of [...contexts, ...legal]) (spec.contextOnly ??= {})[context] = [...(spec.contextOnly?.[context] ?? []), variant];
   spec.variantContexts = { ...spec.variantContexts, ...Object.fromEntries(Object.entries(variants).map(([variant, { contexts, legal = [] }]) => [variant, [...contexts, ...legal]])) };
 }
