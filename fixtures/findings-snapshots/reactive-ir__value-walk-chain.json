@@ -9649,39 +9649,6 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/value-walk-chain/caught-past-budget.tsx",
-      "start": 8162,
-      "end": 8168,
-      "fixes": 0
-    },
-    {
-      "rule": "pending-async-unsuspendable-read",
-      "code": "SC5001",
-      "kind": "uncertifiable",
-      "blocker": "source-pending-unproven",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/value-walk-chain/caught-past-budget.tsx",
-      "start": 8162,
-      "end": 8168,
-      "fixes": 0
-    },
-    {
-      "rule": "async-outside-loading-boundary",
-      "code": "SC5003",
-      "kind": "uncertifiable",
-      "blocker": "async-read-unaccounted",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/value-walk-chain/caught-past-budget.tsx",
-      "start": 8162,
-      "end": 8168,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -12913,17 +12880,6 @@
       "path": "fixtures/reactive-ir/value-walk-chain/settled-past-budget.tsx",
       "start": 8128,
       "end": 8134,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/value-walk-chain/settled-past-budget.tsx",
-      "start": 8157,
-      "end": 8163,
       "fixes": 0
     },
     {

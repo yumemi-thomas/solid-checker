@@ -148,8 +148,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-climb-depth/App.tsx",
-      "start": 3470,
-      "end": 3768,
+      "start": 3552,
+      "end": 3850,
       "fixes": 0
     },
     {
@@ -159,8 +159,40 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-climb-depth/App.tsx",
-      "start": 3470,
-      "end": 3768,
+      "start": 3552,
+      "end": 3850,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/write-climb-depth/App.tsx",
+      "start": 3721,
+      "end": 3725,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-climb-depth/App.tsx",
+      "start": 4101,
+      "end": 4414,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-climb-depth/App.tsx",
+      "start": 4101,
+      "end": 4414,
       "fixes": 0
     },
     {
@@ -170,8 +202,8 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/write-climb-depth/App.tsx",
-      "start": 3639,
-      "end": 3643,
+      "start": 4279,
+      "end": 4283,
       "fixes": 0
     },
     {
