@@ -11,6 +11,7 @@
 import { buildCase } from "./emit.mjs";
 import { clone, getAt, isValid, num } from "./model.mjs";
 import { STACKED_PAIRS, isRepeat } from "./stacked.mjs";
+import { APP_FILE, fileOfLabel, lineOfLabel } from "./site-judge.mjs";
 
 /** The lines of a site: where its misuse is written and the lines of a wrapper's inner call (matrix.mjs `regionOf`). */
 const regionOf = (site) => [site.line, ...(site.aux ?? [])].filter((line) => Number.isInteger(line));
@@ -26,9 +27,11 @@ const samePath = (one, other) => Array.isArray(one) && Array.isArray(other) && o
 export function repeatTwins({ judged, offSite, built, program, pairs = STACKED_PAIRS }) {
   const requests = [];
   for (const [index, claim] of judged.filter((row) => isRepeat(row, pairs)).entries()) {
-    const [rule, line] = [claim.finding.split("@")[0], Number(claim.finding.split("@")[1])];
+    const [rule, line] = [claim.finding.split("@")[0], lineOfLabel(claim.finding)];
     const request = { label: claim.finding, rule, first: claim.first };
     const refuse = (why) => requests.push({ ...request, refused: why });
+    // ADR 0993: the twin removes a read of App.tsx's tree; a claim in another project file has no twin (it never holds).
+    if (fileOfLabel(claim.finding) !== APP_FILE) { refuse("the claim is in another file of the program"); continue; }
     if (!program || !built?.sites) { refuse("no program tree"); continue; }
     const findings = offSite.filter((finding) => finding.rule === rule && finding.line === line);
     // The site the claim stands on, and the site holding the first report's own read: one each, and not the same.

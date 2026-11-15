@@ -31,6 +31,7 @@ import { callStarts, frameStarts, statementAt } from "./call-starts.mjs";
 import { registrationPositions } from "./registration.mjs";
 import { partlySilentRules, besideCode, codeOfUncaught, codeRules, codesForRule, coversCodeAt, declinesCode, appStack, withheldAtStack, withStarts, ignoredRules, isPlacelessCode, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
 import { loggedEvents, offSiteVerdicts, runtimeEvents } from "./classify.mjs";
+import { APP_FILE, findingsIn, framesIn, lineOfLabel, positionFile, programFindings } from "./site-judge.mjs";
 import { pairOf, stackedSplit } from "./stacked.mjs";
 import { repeatTwins, twinHolds } from "./repeat-twin.mjs";
 import { hitCount } from "./hits.mjs";
@@ -117,18 +118,18 @@ export function judge(input) {
   // positive: a violation the runtime contradicts is one whatever else the row found, and `beside` is an `agree` with that violation in it.
   const scored = ["agree", "recall-gap", "not-fired", "wrong-rule"].includes(verdict.outcome);
   const primary = verdict.detail?.beside ? "agree" : verdict.outcome;
-  if (wrong.length && scored) return { outcome: "false-positive", detail: { ...detail, primary, rules: [...new Set(wrong.map((row) => row.finding.split("@")[0]))], at: wrong.map((row) => Number(row.finding.split("@")[1])) } };
-  if (stacked.length && scored) return { outcome: "stacked-claim", detail: { ...detail, primary, pairs: [...new Set(stacked.map(pairOf))].sort(), at: stacked.map((row) => Number(row.finding.split("@")[1])) } };
+  if (wrong.length && scored) return { outcome: "false-positive", detail: { ...detail, primary, rules: [...new Set(wrong.map((row) => row.finding.split("@")[0]))], at: wrong.map((row) => lineOfLabel(row.finding)) } };
+  if (stacked.length && scored) return { outcome: "stacked-claim", detail: { ...detail, primary, pairs: [...new Set(stacked.map(pairOf))].sort(), at: stacked.map((row) => lineOfLabel(row.finding)) } };
   // Halted claim (classify.mjs `haltPlace`, coordinator's ruling, Part 17): Solid's REACTIVITY_HALTED placed before every hit of the V's lines.
   // Counted and listed by id with its own exact ratchet (open-defects.mjs `haltedClaim`); never a pass.
   const haltedRows = judged.filter((row) => row.verdict === "halted");
-  if (haltedRows.length && scored) return { outcome: "halted-claim", detail: { ...detail, primary, rules: [...new Set(haltedRows.map((row) => row.finding.split("@")[0]))], at: haltedRows.map((row) => Number(row.finding.split("@")[1])) } };
+  if (haltedRows.length && scored) return { outcome: "halted-claim", detail: { ...detail, primary, rules: [...new Set(haltedRows.map((row) => row.finding.split("@")[0]))], at: haltedRows.map((row) => lineOfLabel(row.finding)) } };
   // A violation the rule's code may confirm but Chrome gave it no line (`unplaced`): unjudged, listed by id, never cleared (Part 16).
   const unplaced = judged.filter((row) => row.verdict === "unjudged" && /(?:^|-)unplaced$/.test(row.why ?? ""));
   // A halt with no ordering evidence (`haltPlace` "unordered"): the row is `unplaced`, never a halted claim (coordinator's ruling).
   const unordered = judged.filter((row) => row.verdict === "unjudged" && row.why === "halt-unordered");
-  if (unordered.length && scored) return { outcome: "unplaced", detail: { ...detail, primary, why: "halt-unordered", rules: [...new Set(unordered.map((row) => row.finding.split("@")[0]))], at: unordered.map((row) => Number(row.finding.split("@")[1])) } };
-  if (unplaced.length && scored) return { outcome: "unjudged-claim", detail: { ...detail, primary, rules: [...new Set(unplaced.map((row) => row.finding.split("@")[0]))], at: unplaced.map((row) => Number(row.finding.split("@")[1])) } };
+  if (unordered.length && scored) return { outcome: "unplaced", detail: { ...detail, primary, why: "halt-unordered", rules: [...new Set(unordered.map((row) => row.finding.split("@")[0]))], at: unordered.map((row) => lineOfLabel(row.finding)) } };
+  if (unplaced.length && scored) return { outcome: "unjudged-claim", detail: { ...detail, primary, rules: [...new Set(unplaced.map((row) => row.finding.split("@")[0]))], at: unplaced.map((row) => lineOfLabel(row.finding)) } };
   return { outcome: verdict.outcome, detail };
 }
 
@@ -147,8 +148,13 @@ function judgeParts(input) {
   const claiming = codeRules[input.code] ?? [];
   // A rule that stands beside the row's code (codes.mjs `besideCode`, ADR 0483) makes a claim the code's throw hides: the runtime stops first.
   const judgedAtSite = (finding) => verdict.outcome === "not-fired" || !(claiming.includes(finding.rule) || standsBeside(input.code, finding, runtime));
-  const offSite = checker.findings.filter((finding) => finding.kind === "violation" && !ignoredRules.includes(finding.rule) && (!inLines(finding, region) || judgedAtSite(finding)));
-  const siteFindings = checker.findings.filter((finding) => finding.kind === "violation" && !ignoredRules.includes(finding.rule) && !offSite.includes(finding));
+  // ADR 0993: every project file's violations are judged, each in its own file (`programFindings`): one is at the site only in the site's file (App.tsx's
+  // unless the site names another), the others are away from it.
+  const siteFile = positionFile(site);
+  const violations = programFindings(checker).filter((finding) => finding.kind === "violation" && !ignoredRules.includes(finding.rule));
+  const atRegion = (finding) => positionFile(finding) === siteFile && inLines(finding, region);
+  const offSite = violations.filter((finding) => !atRegion(finding) || judgedAtSite(finding));
+  const siteFindings = violations.filter((finding) => !offSite.includes(finding));
   const judged = offSiteVerdicts({ findings: offSite, built, program, runtime, plan: built.plan, siteFindings }).filter((row) => row.verdict !== "substantiated" && !(row.verdict === "unjudged" && row.why === "no-counterpart"));
   return { verdict, offSite, judged };
 }
@@ -230,7 +236,9 @@ function judgeSite({ code, site, typecheck: typed, checker, runtime, others = []
   const failureTags = failureCode && codeOfUncaught(failure.message) ? [{ code: failureCode, source: "thrown", positions: failure.positions ?? [] }] : [];
   const known = runtimeEvents(runtime);
   const events = [...known, ...[...thrownTags, ...loggedTags, ...failureTags].filter((tag) => !known.some((event) => event.code === tag.code && event.source === "thrown"))].filter((event) => event.code === code);
-  const attributed = (event) => event.positions.filter((position) => position.file === "App.tsx" || position.file === undefined);
+  // ADR 0993: the site's frames are the site file's (App.tsx's unless the site names another project file).
+  const siteFile = positionFile(site);
+  const attributed = (event) => framesIn(event.positions, siteFile);
   const atSite = events.filter((event) => attributed(event).some((position) => region.includes(position.line)));
   // A diagnostic with no authored position at all (or, for a placeless code, any position): Solid spoke and the harness cannot say
   // where. With one site in the file that is this site. Chrome lists such codes in `unattributed`.
@@ -238,7 +246,7 @@ function judgeSite({ code, site, typecheck: typed, checker, runtime, others = []
   const unattributed = (runtime.unattributed ?? []).map(String).includes(code);
   // A combination program's other uses are legal sites of other codes: a finding on their lines is theirs, never this site's.
   const elsewhere = (finding) => others.some((lines) => inLines(finding, lines)) && !inLines(finding, region);
-  const relevant = checker.findings.filter((finding) => !ignoredRules.includes(finding.rule) && !elsewhere(finding));
+  const relevant = findingsIn(checker, siteFile).filter((finding) => !ignoredRules.includes(finding.rule) && !elsewhere(finding));
   // Another claimed code Chrome reports on the site's lines (a store link written in a body is a strict read too): the checker
   // missed it when no finding of its rules is in the file (`false-clean`), or declined it (`recall-gap`). The target's outcome
   // does not see it, so it is counted on its own, on a `not-fired` program too (ADR 0615).
@@ -314,7 +322,9 @@ function judgeSite({ code, site, typecheck: typed, checker, runtime, others = []
   const placedIn = (stack) => stack.some((frame) => Number.isInteger(frame.column));
   if (placedCode && !stacks.some(placedIn) && !Object.keys(moduleTexts).some((file) => stacksIn(file).some(placedIn))) return { outcome: "unplaced", detail: { placed, findings: relevant.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`) } };
   const claimingViolation = relevant.find((finding) => finding.kind === "violation" && rules.includes(finding.rule) && (placedCode ? recordedAt(finding) : inLines(finding, region)))
-    ?? (placedCode ? moduleFindings.find((finding) => finding.kind === "violation" && rules.includes(finding.rule) && recordedAt(finding)) : relevant.find((finding) => finding.kind === "violation" && rules.includes(finding.rule)));
+    ?? (placedCode ? moduleFindings.find((finding) => finding.kind === "violation" && rules.includes(finding.rule) && recordedAt(finding))
+      // A code Chrome cannot place is judged by file, as App.tsx's: a violation of the rule in any project file of the program is the claim (ADR 0993).
+      : relevant.find((finding) => finding.kind === "violation" && rules.includes(finding.rule)) ?? moduleFindings.find((finding) => finding.kind === "violation" && rules.includes(finding.rule)));
   const inModule = (finding) => (finding.file ?? "App.tsx") !== "App.tsx";
   const where = (finding) => `${inModule(finding) ? `${finding.file}:` : ""}${finding.line}`;
   const remote = Boolean(claimingViolation) && (inModule(claimingViolation) || !inLines(claimingViolation, region));

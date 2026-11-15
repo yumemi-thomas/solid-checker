@@ -32,7 +32,7 @@
 //
 // An uncertifiable finding is never a claim; at a runtime diagnostic it counts as covering it
 // (the checker said it could not prove), the way the runtime oracle's `covered-uncertifiable` does.
-import { isUnplaceable, placelessExcess, runtimeDiagnosticRows, siteKey } from "./site-judge.mjs";
+import { APP_FILE, framesIn, isUnplaceable, labelOf, linesIn, placelessExcess, positionFile, runtimeDiagnosticRows, siteKey } from "./site-judge.mjs";
 import { withholdingRules, codeOfLogged, codeOfThrown, codeRules, codesForRule, consequenceCodes, ignoredRules, isDefectCode, isPlacelessCode, policyOf, sameDefectFamily, ruleHasRuntimeCounterpart, coversCodeAt, appStack, inFileOf, isProgramModule, withheldAtStack, withStarts } from "./codes.mjs";
 import { ORDER_LIMIT, hitCount } from "./hits.mjs";
 import { callStarts, frameStarts } from "./call-starts.mjs";
@@ -290,23 +290,30 @@ export function offSiteVerdicts({ findings, built, program, runtime, plan, siteF
   // Whether a violation's lines ran, for the placeless count: false only when the ledger shows they did not (a counter on its lines at zero,
   // or its host never entered); anything unknown counts as a site.
   const ranState = (finding) => {
+    // The counters are App.tsx's: a module's lines (ADR 0993) are of unknown run.
+    if (positionFile(finding) !== APP_FILE) return null;
     const on = counted.filter((site) => inSpan(finding, site.line));
     if (on.length) return on.every((site) => hitCount(hits, site.hit) === 0) ? false : null;
     const host = hostEntry(built?.ledger, finding.line);
     return host && hitCount(hits, host.hit) === 0 ? false : null;
   };
-  const asSite = (finding) => ({ rule: finding.rule, file: "App.tsx", line: finding.line, column: finding.column, finding });
+  // ADR 0993: a finding is judged in its own file (`finding.file`, App.tsx's when it has none): the frames of that file, its text, its counters.
+  const inFile = (finding) => positionFile(finding);
+  const asSite = (finding) => ({ rule: finding.rule, file: inFile(finding), line: finding.line, column: finding.column, finding });
   // The diagnostics Chrome raised, not merged by stack. None names its file (`loc` carries a path the host chose), so each counts for every file:
   // the budget is never smaller than the run's.
   const raised = (runtime.diagnostics ?? []).map((diagnostic) => ({ code: diagnostic.code }));
   const excess = placelessExcess([...findings, ...siteFindings].map(asSite), raised, { ran: (site) => ranState(site.finding) });
   return findings.map((finding) => {
-    const label = `${finding.rule}@${finding.line}`;
+    const label = labelOf(finding);
+    const file = inFile(finding);
     if (!ruleHasRuntimeCounterpart(finding.rule) || finding.runtimeSilent) return { finding: label, verdict: "unjudged", why: "no-counterpart" };
     const codes = codesForRule(finding.rule);
     const reportedAll = events.filter((event) => codes.includes(event.code));
-    const appLines = (event) => event.positions.filter((position) => position.file === "App.tsx" || position.file === undefined).map((position) => position.line);
-    const connected = reportedAll.some((event) => appLines(event).some((line) => inSpan(finding, line) || registered(line).some((at) => inSpan(finding, at))));
+    // The registering call's position is a line of App.tsx's tree (`registered`): a module's finding has none.
+    const registeredAt = (line) => (file === APP_FILE ? registered(line) : []);
+    const appLines = (event) => linesIn(event.positions, file);
+    const connected = reportedAll.some((event) => appLines(event).some((line) => inSpan(finding, line) || registeredAt(line).some((at) => inSpan(finding, at))));
     // A placeless code has no line of its own (ASYNC_OUTSIDE_LOADING_BOUNDARY names the first pending effect's owner path): reported
     // anywhere in the file, it is the finding's (ADR 0641).
     const placelessNames = [...reportedAll.map((event) => event.code), ...unattributedCodes(runtime).filter((code) => codes.includes(code))].filter(isPlacelessCode);
@@ -319,22 +326,24 @@ export function offSiteVerdicts({ findings, built, program, runtime, plan, siteF
     const reported = over ? reportedAll.filter((event) => !isUnplaceable(event.code)) : reportedAll;
     const unattributed = over ? unattributedCodes(runtime).filter((code) => !isUnplaceable(code)) : unattributedCodes(runtime);
     // A disturbed run: the verdict an undisturbed one would get, then what the disturbance changes (see above).
-    const atSpan = events.filter((event) => appLines(event).some((line) => inSpan(finding, line) || registered(line).some((at) => inSpan(finding, at))));
+    const atSpan = events.filter((event) => appLines(event).some((line) => inSpan(finding, line) || registeredAt(line).some((at) => inSpan(finding, at))));
     const first = (atSpan.find((event) => event.source === "thrown") ?? atSpan[0])?.code ?? null;
     // The rule's code reported only off these lines (`unconnected`) does not confirm this finding (coordinator, Part 16): a `repeat`, unless a
     // report of it has no authored line, which may be this finding's (`unplaced`, unjudged).
-    const unplacedRuleCode = reported.some((event) => !appLines(event).length) || unattributed.some((code) => codes.includes(code));
+    // A report with a frame in no project file at all (App.tsx or a module) is unplaced; one placed in another file of the program is that file's (ADR 0993).
+    const placedAnywhere = (event) => event.positions.some((position) => Number.isInteger(position.line));
+    const unplacedRuleCode = reported.some((event) => (file === APP_FILE ? !appLines(event).length : !placedAnywhere(event))) || unattributed.some((code) => codes.includes(code));
     // Solid reports some codes once (a second untracked read after an await, a second store write): the code elsewhere may be this finding's
     // too. A `repeat` (first = the code reported) scores like a stacked claim: proved only by a pair's twin (stacked.mjs), else false.
     // Review of 1d6abdb80: a twin proves a code reports once per source, not that this finding reads the same one (`await x; a(); b();`
     // warns per source). A repeat needs the first report to name the finding's accessor or store key: the identifier chain at Chrome's
     // innermost authored frame equals the one at the finding's start (`r1`, `s1.v`). No text to read, or another source: a false positive.
-    const text = String(built?.files?.["App.tsx"] ?? built?.text ?? "").split("\n");
+    const text = String((file === APP_FILE ? (built?.files?.[APP_FILE] ?? built?.text) : built?.files?.[file]) ?? "").split("\n");
     // ADR 0938: a prop's innermost frame is the parent's compiled getter, the expression of a component attribute (`<C1 r1={r1()} />`);
     // the read that ran it (`props.r1`, the finding's kind of source) is the next authored frame, which is compared as well.
     // The frames of an event that read the finding's source: the first report's own reads, which a twin of the repeat blanks (`firstAt`, ADR 0953 option c).
     const sameFrames = (event) => {
-      const authored = event.positions.filter((position) => position.file === "App.tsx" || position.file === undefined);
+      const authored = framesIn(event.positions, file);
       const mine = sourceExprAt(text, finding.line, finding.column);
       if (!mine) return [];
       const frames = authored.slice(0, attributeGetterFrame(text, authored[0]) ? 2 : 1);
@@ -360,6 +369,12 @@ export function offSiteVerdicts({ findings, built, program, runtime, plan, siteF
       if (verdict.verdict === "unjudged") return { finding: label, verdict: "unjudged", why: `disturbed-${verdict.why}` };
       return verdict;
     };
+    // A module's lines carry no counter (the printed program's instrumentation is App.tsx's): nothing says whether they ran, so an unaccounted violation
+    // there is a candidate as the grids' site judge counts one of unknown run (site-judge.mjs `ran`: unknown counts as ran), `why: "module"` (ADR 0993).
+    if (file !== APP_FILE) {
+      if (reported.length || unattributed.some((code) => codes.includes(code))) return halted(unconnected());
+      return halted({ finding: label, verdict: "false-positive", why: "module" });
+    }
     const covered = counted.filter((site) => inSpan(finding, site.line));
     // No counter on the line (a JSX tag or attribute): its host's entry says whether it ran (ADR 0641). The host is the innermost
     // function entry at or above the line; the ledger has no end lines, so a line after a closed closure takes the component's.
