@@ -1627,3 +1627,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/slot-swallows-named-callback/node_modules/**
 !fixtures/reactive-ir/static-api-silences/node_modules/
 !fixtures/reactive-ir/static-api-silences/node_modules/**
+!fixtures/reactive-ir/resolve-until-own-computation/node_modules/
+!fixtures/reactive-ir/resolve-until-own-computation/node_modules/**

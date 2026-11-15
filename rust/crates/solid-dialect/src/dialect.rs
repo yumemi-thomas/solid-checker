@@ -519,6 +519,16 @@ pub trait Dialect: Sync {
         None
     }
 
+    /// ADR 0997: whether the callback at `argument`, which the primitive runs elsewhere than on the stack of the call that took it
+    /// ([`SlotRun::Deferred`]), runs with an observer active. `Deferred` is the attribution answer (whose reads the callback subscribes): it
+    /// says nothing of the observer where the callback runs. `Some(false)`: no observer is active there (a queue, a disposal, an event);
+    /// `Some(true)`: the callback is the compute of a node the primitive creates, so one always is (`resolve`, `until`: `watch(fn, …)`);
+    /// `None`: not stated, and a proof that needs "no observer" keeps its obligation. The default states nothing.
+    fn deferred_slot_observer(&self, primitive: Primitive, argument: usize) -> Option<bool> {
+        let _ = (primitive, argument);
+        None
+    }
+
     /// ADR 0893: whether `primitive` fails with a plain `throw`, no diagnostic
     /// emitted at the call: what says so is whatever reports the error.
     fn plain_throw(&self, primitive: Primitive) -> bool {

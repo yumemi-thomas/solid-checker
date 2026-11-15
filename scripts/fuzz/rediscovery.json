@@ -24502,5 +24502,11 @@
    "mx-settled-cleanup-unowned-owner-null-x-direct-none-pk-lazy-call-proj"
   ],
   "rediscovered": "the judge of main 8e05f2a1c on the 79 project-site programs (focus.mjs recall grids, Chrome, the oracle confirming the 31 mx programs): 6 false-clean (these ids), 18 agree, 6 recall-gap, 1 not-fired; this head: 6 agree, 24 agree in all, nothing else moved (the 48 lg programs are uncertifiable on both). Re-judged from stored outputs (the audit's Chrome records read-only, the checker rerun, no browser): 585,976 programs with a project module, 579,038 identical, 0 moved, 6,938 without a stored record; the 4,679 dfa6c5dec oracle records with an `unattributed` code: 3,425 regenerated, 0 outcome moved"
+ },
+ {
+  "finding": "RESOLVE_IN_REACTIVE_SCOPE and UNTIL_IN_REACTIVE_SCOPE false cleans: a `resolve` or `until` call written in the callback of `resolve`, in the predicate of `until` or in `from`'s subscribe function ended in the silence `static_api.resolve_scope.slot-runs-elsewhere` (ADR 0985: `SlotRun::Deferred`, read as \"no observer is active there\"); `resolve` and `until` run their callback as the compute of a `watch` node, and `from`'s subscribe function runs inside the computation that consumes the iterator, so Chrome rc.21 throws the guard's error at each",
+  "found": "the Fable review of main dfa6c5dec..48b5ecf6a (2026-11-15), by reading `static_api::slot_answer` against `@solidjs/signals@2.0.0-rc.21` `dist/dev.js:3588` and `:3741`, then the runtime oracle (4 of 4 sites `unproven-clean`)",
+  "fixed": "ADR 0997 (`Dialect::deferred_slot_observer`; `static_api::slot_answer` ends a deferred slot only on a stated \"none\"; `ScopeAnswer::OwnComputation`)",
+  "outside": "the grids have no context that is legal for the plain call and misuse for a call nested in it (a handler or a timer is a legal cell of both codes), and no `from` consumer; the pattern lane holds the shape: `patterns/resolve/r21-in-resolve-callback`, `r22-in-until-predicate`, `r23-in-from-subscribe`, `u21`, `u22`, `u23` (6 of 6 false clean on main 48b5ecf6a, fine on ADR 0997's head) and the legal twins `r24-untrack-in-resolve-callback`, `u24` (fine on both), `make fuzz-patterns ARGS=\"--only resolve/r2,resolve/u2\"`"
  }
 ]

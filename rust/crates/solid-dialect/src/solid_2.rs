@@ -494,6 +494,33 @@ impl Dialect for Solid2 {
         }
     }
 
+    // ADR 0997, read on `@solidjs/signals@2.0.0-rc.21` `dist/dev.js` and probed in Chrome:
+    // - `resolve(fn)` (`:3588`) and `until(fn)` (`:3741`) hand `fn` to `watch(fn, …)` inside a root: `fn` is that node's compute, and an
+    //   observer is active on every run. `resolve(() => resolve(…))`, `resolve(() => until(…))` and `until(() => resolve(…))` throw the
+    //   guard's error from a click handler.
+    // - An effect's apply, `onCleanup`, `onSettled`, `createReaction`, `onFlush`, `onHydrationEnd` and an action's step run from a queue,
+    //   a disposal or a later task with no observer (a `flush()` under a computation is `callback_runs_drained_by_flush`'s, asked apart;
+    //   `onCleanup(() => resolve(…))` in a memo that re-runs is quiet).
+    // - `from(subscribe)` runs `subscribe` where its iterator is started, which is inside the computation that consumes it
+    //   (`createMemo(() => from(set => { resolve(…) }))` throws); `lazy`, `lazyModule` and `clientOnly` run their loader where the
+    //   component first renders or where `preload()` or the returned read is called. None of the four is stated.
+    fn deferred_slot_observer(&self, primitive: Primitive, argument: usize) -> Option<bool> {
+        match (primitive, argument) {
+            (Primitive::Resolve | Primitive::Until, 0) => Some(true),
+            (Primitive::CreateEffect | Primitive::CreateRenderEffect, 1)
+            | (
+                Primitive::OnCleanup
+                | Primitive::OnSettled
+                | Primitive::CreateReaction
+                | Primitive::OnFlush
+                | Primitive::OnHydrationEnd
+                | Primitive::Action,
+                0,
+            ) => Some(false),
+            _ => None,
+        }
+    }
+
     // rc.21: `resolve` and `until` from `createTrackedEffect` throw "Cannot call
     // resolve inside a reactive scope", the observer guard, with no leaf-owner
     // mechanism (Chrome, ADR 0641). rc.17 is measured otherwise (ADR 0614).

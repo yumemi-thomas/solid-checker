@@ -1,0 +1,3 @@
+{
+  "note": "ADR 0997: a resolve/until call in the callback of resolve or until runs under that primitive's own computation: Chrome throws at each (covered-uncertifiable, computation-error-unobserved). An effect's apply, a memo's cleanup and an untrack inside a resolve callback are quiet."
+}
