@@ -49,8 +49,8 @@
       "start": 501,
       "end": 519,
       "fixes": 0,
-      "message": "this call runs code of `dep-dialog-context`, a package this build does not read as source, where an owner may be active; its closure loads a Solid package (dep-dialog-context/dist/index.js loads solid-js), so whether it calls a Solid action (which throws `ACTION_CALLED_IN_OWNED_SCOPE` in the dev build) is not proven",
-      "hint": "Call the package from an event handler, an effect's apply function or onSettled; or let the build read the package as source (a declared host with the Solid Vite plugin reads the packages that name Solid)."
+      "message": "this call runs code of `dep-dialog-context`, a package this build reads as source, whose code no analysis follows from this site, where an owner may be active; its closure loads a Solid package (dep-dialog-context/dist/index.js loads solid-js), so whether it calls a Solid action (which throws `ACTION_CALLED_IN_OWNED_SCOPE` in the dev build) is not proven",
+      "hint": "Call the package from an event handler, an effect's apply function or onSettled."
     },
     {
       "rule": "missing-owner",
