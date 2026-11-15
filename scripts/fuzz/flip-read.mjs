@@ -43,6 +43,9 @@ export const SYNC_COMPUTES = {
 };
 
 export const SYNC_COMPUTE_LINES = {
+  // ADR 0989: the runtime reads the LAST `sync`, so a spread after a literal `true` that sets `false` is legal; the checker made it a violation.
+  "opt-spread": "const optOver: { sync?: boolean } = { sync: false };",
+  "opt-spread-effect": "const optOver: { sync?: boolean } = { sync: false };",
   "cmp-async-gen-named": "async function* cmpGen() { yield 1; }",
   "cmp-async-gen-member": "const cmpHolder = { async *g() { yield 1; } };",
   "cmp-async-iter-class": "class CmpIter { async *[Symbol.asyncIterator]() { yield 1; } }",
