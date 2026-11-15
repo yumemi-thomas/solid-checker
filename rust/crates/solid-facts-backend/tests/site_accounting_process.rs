@@ -198,7 +198,18 @@ fn resolve_rows_the_silence_ends(typefacts: &str, silence: &str) -> BTreeSet<Str
     let before = named.iter().map(key).collect::<BTreeSet<_>>();
     let after = ablated.iter().map(key).collect::<BTreeSet<_>>();
     assert!(before.is_subset(&after), "an answer was lost");
-    let added = after.difference(&before).cloned().collect::<BTreeSet<_>>();
+    let mut added = after.difference(&before).cloned().collect::<BTreeSet<_>>();
+    // Dropping every silence also drops other families' (a `createMemo` call's `sync` option, ADR 0989): their unaccounted rows are theirs.
+    if silence == "all" {
+        added.retain(|row| {
+            let resolve = row.contains("SC2004") || row.contains("SC2005");
+            assert!(
+                resolve || row.contains("-unaccounted"),
+                "dropping every silence moved an answer that is no unaccounted row: {row}"
+            );
+            resolve
+        });
+    }
     for row in &added {
         assert!(
             (row.contains("SC2004") || row.contains("SC2005"))
@@ -282,7 +293,8 @@ fn a_static_api_call_no_silence_ends_is_an_obligation_never_a_violation() {
     }
     let per_silence = [
         ("static_api.effect_function.slot-callable", &["SC7001"][..], "effect-fn-unaccounted", 9),
-        ("static_api.sync_option.not-asserted", &["SC7002"][..], "sync-option-unaccounted", 11),
+        ("static_api.effect_function.tsc-rejected", &["SC7001"][..], "effect-fn-unaccounted", 1),
+        ("static_api.sync_option.not-asserted", &["SC7002"][..], "sync-option-unaccounted", 12),
         ("static_api.sync_option.tsc-reports", &["SC7002"][..], "sync-option-unaccounted", 1),
         ("static_api.sync_option.computation-not-async", &["SC7002"][..], "sync-option-unaccounted", 2),
     ];
