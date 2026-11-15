@@ -11,7 +11,8 @@ use typefacts::Location;
 
 use crate::effect_api::{ProofStatus, classify_effect_call};
 use crate::execution_role::{
-    ClimbStop, RootBodyGuard, SlotClimb, allowed_callback_spans, semantic_write_execution_role,
+    ClimbStop, InPlaceStop, RootBodyGuard, SlotClimb, allowed_callback_spans, climb_in_place_layers,
+    semantic_write_execution_role,
 };
 use crate::identity::SymbolId;
 use crate::indexes::{EntitySymbols, SemanticLookup};
@@ -1555,6 +1556,7 @@ fn walk_limit_context(limited: &Cell<Option<&'static str>>) -> String {
 /// the function that holds a `resolve`/`until` call.
 const ENTRY_DEPTH: usize = 4;
 
+#[deny(clippy::wildcard_enum_match_arm)]
 fn resolve_tracked_scope_within(
     file: &FileFacts,
     call: &solid_facts::ast::CallFact,
@@ -1573,22 +1575,37 @@ fn resolve_tracked_scope_within(
     // the outermost layer's call, with the callback's observer active; not in
     // a parameter list, not after an await.
     let at = match crate::execution_role::climb_in_place_layers(file, call.span, context.lookup) {
-        // A library callback may run zero times (ADR 0493 review), so it is
-        // not crossed.
-        Some(climb)
-            if !climb.exhausted
-                && !climb.in_list
-                && climb.suspended.is_none()
-                && !crate::execution_role::climb_crosses_library_callback(
-                    file,
-                    call.span,
-                    climb.at,
-                    context.lookup,
-                ) =>
-        {
-            climb.at
-        }
-        _ => call.span,
+        Some(climb) => match climb.stop {
+            // Layers past the bound are unread: the walk asks from the site itself, where the entries walk's depth limit and
+            // `resolve_scope_answer`'s own bound check owe the obligation.
+            InPlaceStop::Bound => call.span,
+            // Every other stop leaves the climb at the call inside the layer it stopped at, which is where the tracked-scope proof
+            // asks: the stop says what stands beyond (a function that is none of the layers, module scope, a generator, a timer,
+            // JSX the compiler places), and the walk's own checks below place that. A library callback may run zero times (ADR
+            // 0493 review), so it is not crossed, and neither is a layer holding the site in its parameter list or after an await.
+            InPlaceStop::NoFunction
+            | InPlaceStop::Generator
+            | InPlaceStop::Within
+            | InPlaceStop::FreshStack
+            | InPlaceStop::Elsewhere
+            | InPlaceStop::Withheld
+            | InPlaceStop::JsxPlaced => {
+                if climb.in_list.is_none()
+                    && climb.suspended.is_none()
+                    && !crate::execution_role::climb_crosses_library_callback(
+                        file,
+                        call.span,
+                        climb.at,
+                        context.lookup,
+                    )
+                {
+                    climb.at
+                } else {
+                    call.span
+                }
+            }
+        },
+        None => call.span,
     };
     if let Some((container, index)) =
         file.ast
@@ -1858,6 +1875,7 @@ fn slot_answer(
 /// consumer that may run it later. A tracked role [`resolve_tracked_scope`]
 /// did not place (a named callback, `createMemo(read)`), `Unreported` (whose
 /// mix may hold a tracked run) and `Unknown` are obligations.
+#[deny(clippy::wildcard_enum_match_arm)]
 fn resolve_scope_answer(
     file: &FileFacts,
     call: &solid_facts::ast::CallFact,
@@ -1891,9 +1909,28 @@ fn resolve_scope_answer(
     // ADR 0857: a call or a standard-library carrier that may run the function
     // holding the call (an empty or unknown receiver too) under an observer:
     // whether it runs is open.
-    let at = crate::execution_role::climb_in_place_layers(file, call.span, context.lookup)
-        .filter(|climb| !climb.exhausted && !climb.in_list && climb.suspended.is_none())
-        .map_or(call.span, |climb| climb.at);
+    let at = match climb_in_place_layers(file, call.span, context.lookup) {
+        Some(climb) => match climb.stop {
+            // The climb stopped at the bound: the layers past it are unread, so the entries are asked from the call itself, a
+            // walk that ends at its own depth limit with an obligation (`limited`).
+            InPlaceStop::Bound => call.span,
+            // Every other stop leaves the climb at the call inside the layer it stopped at, where the entries are asked.
+            InPlaceStop::NoFunction
+            | InPlaceStop::Generator
+            | InPlaceStop::Within
+            | InPlaceStop::FreshStack
+            | InPlaceStop::Elsewhere
+            | InPlaceStop::Withheld
+            | InPlaceStop::JsxPlaced => {
+                if climb.in_list.is_none() && climb.suspended.is_none() {
+                    climb.at
+                } else {
+                    call.span
+                }
+            }
+        },
+        None => call.span,
+    };
     if resolve_scope_of_entries(file, at, allowed, context, ENTRY_DEPTH, false, limited).is_some() {
         return ScopeAnswer::Unplaced;
     }
@@ -1906,11 +1943,20 @@ fn resolve_scope_answer(
     // times, so `resolve_tracked_scope` does not climb it; when the layers
     // beyond it reach a compute a tracked position names by its binding, the
     // call runs under that observer whenever it runs: an obligation.
-    if let Some(climb) =
-        crate::execution_role::climb_in_place_layers(file, call.span, context.lookup)
-        && !climb.exhausted
-        && !climb.in_list
+    if let Some(climb) = climb_in_place_layers(file, call.span, context.lookup)
+        && climb.in_list.is_none()
         && climb.suspended.is_none()
+        && match climb.stop {
+            // Past the bound the layers are unread: the entries walk above already owes the obligation.
+            InPlaceStop::Bound => false,
+            InPlaceStop::NoFunction
+            | InPlaceStop::Generator
+            | InPlaceStop::Within
+            | InPlaceStop::FreshStack
+            | InPlaceStop::Elsewhere
+            | InPlaceStop::Withheld
+            | InPlaceStop::JsxPlaced => true,
+        }
         && crate::owners::containing_body_function(&file.ast, climb.at).is_some_and(|function| {
             context.lookup.function_component_status(file, function)
                 == crate::indexes::ComponentStatus::No
@@ -2291,6 +2337,7 @@ fn action_step_body_bounded(
 /// class or object literal written inside a function. A layer proven to run
 /// elsewhere (after an await, a scheduled callback, a kept listener, a
 /// generator) is not crossed: the enclosing proof refuses it as before.
+#[deny(clippy::wildcard_enum_match_arm)]
 fn action_step_body_unplaced(
     file: &FileFacts,
     site: Span,
@@ -2300,13 +2347,27 @@ fn action_step_body_unplaced(
     if depth == 0 {
         return None;
     }
-    let at = match crate::execution_role::climb_in_place_layers(file, site, context.lookup) {
-        Some(climb) if climb.in_list || climb.suspended.is_some() => return None,
-        Some(climb) if climb.exhausted => {
-            return action_step_body_bounded(file, climb.at, context, depth - 1)
-                .map(|(body, _)| body);
-        }
-        Some(climb) => climb.at,
+    let at = match climb_in_place_layers(file, site, context.lookup) {
+        // A layer proven to run elsewhere (the site in its parameter list, or after an await in it) is not crossed: the enclosing
+        // proof refuses it, as it did before the climb.
+        Some(climb) if climb.in_list.is_some() || climb.suspended.is_some() => return None,
+        Some(climb) => match climb.stop {
+            // The bound: outer layers unread, so the position is asked again from where the climb stopped.
+            InPlaceStop::Bound => {
+                return action_step_body_bounded(file, climb.at, context, depth - 1)
+                    .map(|(body, _)| body);
+            }
+            // The climb stops at the call inside the layer it stopped at, and the checks below ask the function around it:
+            // a generator (an obligation when it may be stepped), a member or a handed-on closure (`run_unplaced`), or a function
+            // that is none of those (`None`, which no proof of a step reaches).
+            InPlaceStop::NoFunction
+            | InPlaceStop::Generator
+            | InPlaceStop::Within
+            | InPlaceStop::FreshStack
+            | InPlaceStop::Elsewhere
+            | InPlaceStop::Withheld
+            | InPlaceStop::JsxPlaced => climb.at,
+        },
         None => site,
     };
     let function = crate::owners::owning_function(&file.ast, at)
@@ -2343,6 +2404,7 @@ fn action_step_body_unplaced(
 /// obligation: a sync generator called in place (its body runs where its
 /// iterator is stepped), and a named function some exact call of which runs
 /// in a step (other calls may run elsewhere, and the proof is lexical).
+#[deny(clippy::wildcard_enum_match_arm)]
 fn action_step_body_through(
     file: &FileFacts,
     site: Span,
@@ -2352,11 +2414,21 @@ fn action_step_body_through(
     if depth == 0 {
         return None;
     }
-    let at = match crate::execution_role::climb_in_place_layers(file, site, context.lookup) {
-        Some(climb) if !climb.exhausted && !climb.in_list && climb.suspended.is_none() => climb.at,
-        Some(_) => {
-            return None;
-        }
+    let at = match climb_in_place_layers(file, site, context.lookup) {
+        // A layer holding the site in its parameter list, or after an await in it, is not crossed: the enclosing proof refuses it.
+        Some(climb) if climb.in_list.is_some() || climb.suspended.is_some() => return None,
+        Some(climb) => match climb.stop {
+            // The bound: `action_step_body_unplaced` is the net that asks again from where the climb stopped, as an obligation.
+            InPlaceStop::Bound => return None,
+            // The climb stops at the call inside the layer it stopped at, and the checks below ask the function around it.
+            InPlaceStop::NoFunction
+            | InPlaceStop::Generator
+            | InPlaceStop::Within
+            | InPlaceStop::FreshStack
+            | InPlaceStop::Elsewhere
+            | InPlaceStop::Withheld
+            | InPlaceStop::JsxPlaced => climb.at,
+        },
         None => site,
     };
     let function = crate::owners::owning_function(&file.ast, at)
@@ -2505,18 +2577,30 @@ fn unplaced_step<'s, 'f: 's>(
     {
         return false;
     }
-    let at = match crate::execution_role::climb_in_place_layers(file, site, lookup) {
+    let at = match climb_in_place_layers(file, site, lookup) {
         // So after one in a layer in place.
-        Some(climb) if climb.suspended == Some(true) => return false,
-        // The layers that run in place end at a call in other code: ask
-        // there. A layer holding the site in its parameter list (ADR 0454)
-        // runs it when a call omits the argument, and an await on some paths
-        // leaves the others on the stack.
-        Some(climb) if climb.at != site => {
-            pending.push((file, climb.at));
-            return false;
-        }
-        Some(_) | None => site,
+        Some(climb) if climb.suspended_on_every_path() => return false,
+        Some(climb) => match climb.stop {
+            // The layers that run in place end at a call in other code: ask there, from where the climb stopped (the bound
+            // included: a chain of closures runs in place one call after another, however long). A layer holding the site in
+            // its parameter list (ADR 0454) runs it when a call omits the argument, and an await on some paths leaves the
+            // others on the stack.
+            InPlaceStop::Bound
+            | InPlaceStop::NoFunction
+            | InPlaceStop::Generator
+            | InPlaceStop::Within
+            | InPlaceStop::FreshStack
+            | InPlaceStop::Elsewhere
+            | InPlaceStop::Withheld
+            | InPlaceStop::JsxPlaced => {
+                if climb.at != site {
+                    pending.push((file, climb.at));
+                    return false;
+                }
+                site
+            }
+        },
+        None => site,
     };
     // The function a parameter default or a generator's body runs in: the
     // first runs at each call, the second where the iterator is drained,
@@ -2693,14 +2777,27 @@ fn unplaced_member_step<'s, 'f: 's>(
     if member_route_runs(routes, file, site, lookup) {
         return true;
     }
-    // A climb the layer bound stopped (`exhausted`) answers where it stopped, and the walk asks from there: a chain of named
-    // closures runs in place one call after another, however long.
-    let at = match crate::execution_role::climb_in_place_layers(file, site, lookup) {
-        Some(climb) if climb.at != site => {
-            pending.push((file, climb.at));
-            return false;
-        }
-        Some(_) | None => site,
+    let at = match climb_in_place_layers(file, site, lookup) {
+        Some(climb) => match climb.stop {
+            // A climb the layer bound stopped answers where it stopped, and the walk asks from there: a chain of named closures
+            // runs in place one call after another, however long. Every other stop ends the climb at the call inside the layer
+            // it stopped at, where the walk asks as well.
+            InPlaceStop::Bound
+            | InPlaceStop::NoFunction
+            | InPlaceStop::Generator
+            | InPlaceStop::Within
+            | InPlaceStop::FreshStack
+            | InPlaceStop::Elsewhere
+            | InPlaceStop::Withheld
+            | InPlaceStop::JsxPlaced => {
+                if climb.at != site {
+                    pending.push((file, climb.at));
+                    return false;
+                }
+                site
+            }
+        },
+        None => site,
     };
     let Some(function) = crate::owners::owning_function(&file.ast, at) else {
         return false;
@@ -2802,20 +2899,34 @@ fn runs_unplaced_once(
     } {
         return Some(crate::blockers::FUNCTION_RUN_UNPLACED);
     }
-    let at = match crate::execution_role::climb_in_place_layers(file, site, lookup) {
-        Some(climb) if climb.in_list || climb.suspended.is_some() => return None,
-        Some(climb) if climb.exhausted => return Some(crate::blockers::SEARCH_DEPTH_LIMIT),
-        // The layers that run in place end at a call in other code: ask
-        // there.
-        Some(climb) if climb.at != site => {
-            let Some(depth) = depth.checked_sub(1) else {
-                return Some(crate::blockers::SEARCH_DEPTH_LIMIT);
-            };
-            return runs_unplaced_through_callers(
-                file, climb.at, lookup, depth, ownerless, routes, memo,
-            );
-        }
-        Some(_) | None => site,
+    let at = match climb_in_place_layers(file, site, lookup) {
+        // A site in a parameter list, or after an await in its layer, runs when a call omits the argument or on a later task:
+        // `unplaced_run`'s own checks above answer the first, the after-await proof the second.
+        Some(climb) if climb.in_list.is_some() || climb.suspended.is_some() => return None,
+        Some(climb) => match climb.stop {
+            // The bound: outer layers unread, so nothing places the run: an obligation.
+            InPlaceStop::Bound => return Some(crate::blockers::SEARCH_DEPTH_LIMIT),
+            // The layers that run in place end at a call in other code: ask there. A climb the stop ended at the function that
+            // holds the site (it crossed no layer: `at == site`) asks the function itself below.
+            InPlaceStop::NoFunction
+            | InPlaceStop::Generator
+            | InPlaceStop::Within
+            | InPlaceStop::FreshStack
+            | InPlaceStop::Elsewhere
+            | InPlaceStop::Withheld
+            | InPlaceStop::JsxPlaced => {
+                if climb.at != site {
+                    let Some(depth) = depth.checked_sub(1) else {
+                        return Some(crate::blockers::SEARCH_DEPTH_LIMIT);
+                    };
+                    return runs_unplaced_through_callers(
+                        file, climb.at, lookup, depth, ownerless, routes, memo,
+                    );
+                }
+                site
+            }
+        },
+        None => site,
     };
     let function = crate::owners::owning_function(&file.ast, at)
         .filter(|function| function.body.contains(at))?;
@@ -3089,7 +3200,7 @@ fn action_step_body_at(
     ) {
         Some(SlotClimb { climb, stop }) => {
             // A site in a parameter list, or one after an await in its layer, is not claimed.
-            if climb.in_list || climb.suspended.is_some() {
+            if climb.in_list.is_some() || climb.suspended.is_some() {
                 return None;
             }
             match stop {

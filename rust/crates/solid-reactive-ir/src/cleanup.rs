@@ -850,7 +850,7 @@ pub(super) fn leaf_owner_operations_for_file(
                 else {
                     return false;
                 };
-                if climb.in_list
+                if climb.in_list.is_some()
                     || climb.suspended.is_some()
                     || !direct_callback_runs(callback_file, leaf_callback.span, climb.at)
                 {

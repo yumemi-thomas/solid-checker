@@ -1328,7 +1328,7 @@ pub(super) fn inline_callback_execution_role(
         .min_by_key(|function| function.span.end - function.span.start)
         .map(|function| function.span);
     let climb = super::write_roles::climb_in_place_layers_within(file, span, lookup, named)
-        .filter(|climb| !climb.exhausted && !climb.in_list && climb.suspended.is_none());
+        .filter(|climb| !climb.bound() && climb.in_list.is_none() && climb.suspended.is_none());
     let among_others = climb.as_ref().is_some_and(|climb| climb.among_others);
     let at = climb.map_or(span, |climb| climb.at);
     file.ast.arguments_containing(at).find_map(|(call, index)| {

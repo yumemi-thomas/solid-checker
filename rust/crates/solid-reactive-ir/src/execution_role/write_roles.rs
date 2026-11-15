@@ -1018,7 +1018,7 @@ pub(super) fn runs_off_callback_stack(
     };
     let climbed = match climb_in_place_layers(file, span, lookup) {
         None => Some(span),
-        Some(climb) if !climb.exhausted && !climb.in_list && climb.suspended.is_none() => {
+        Some(climb) if !climb.bound() && climb.in_list.is_none() && climb.suspended.is_none() => {
             Some(climb.at)
         }
         Some(_) => None,
@@ -1223,7 +1223,7 @@ pub(crate) fn inside_rerun_effect_cleanup(
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     let at = match in_place_run_site(file, span, lookup) {
-        Some((climb, _)) if climb.exhausted => return true,
+        Some((climb, _)) if climb.bound() => return true,
         Some((climb, _)) => climb.at,
         None => span,
     };
@@ -3386,7 +3386,7 @@ fn suspension_through_layers_proof(
 ) -> Option<(bool, Option<Span>)> {
     let mut calls = Vec::new();
     let climb = climb_in_place_layers_recording(file, span, lookup, false, None, &mut calls)?;
-    if climb.exhausted {
+    if climb.bound() {
         return None;
     }
     let mut answer = None;
@@ -3620,22 +3620,76 @@ fn sole_call_of_named_function(
     (!escapes).then_some(call.span)
 }
 
+/// How many function layers one climb crosses before it says where it stopped (ADR 0532, ADR 0988).
+pub(crate) const IN_PLACE_LAYER_BOUND: usize = 16;
+
+/// Why a climb through in-place layers stopped (ADR 0988): every exit of the loop is one of these, so a consumer that decides on the climb
+/// matches it with no wildcard and an exit nobody decided is a compile error, not a silent `None`. The model is [`ClimbStop`] (ADR 0959) for
+/// the slot climb; this is the in-place climb's own.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum InPlaceStop {
+    /// No function holds the code any more: it is written at module scope, or in an instance field initializer.
+    NoFunction,
+    /// The function that holds the code is a generator: its body runs where its iterator is stepped, which the climb does not follow.
+    Generator,
+    /// The function that holds the code is the one the climb was asked not to cross (`within`).
+    Within,
+    /// The function is run on a fresh stack by a reviewed scheduler (`setTimeout(fn)`): no owner or observer reaches it.
+    FreshStack,
+    /// The function is stored, handed on or run by a call the climb does not know: nothing proves where it runs.
+    Elsewhere,
+    /// The function is an argument of a call the census withholds (an impostor): it proves no run.
+    Withheld,
+    /// The layer is called in a JSX expression: the compiler places that expression, not the code around the element.
+    JsxPlaced,
+    /// A seventeenth layer would have been crossed: outer layers are unread and no placement is proven. Only that: sixteen
+    /// layers that end at a function that is no layer, or at module scope, are not the bound.
+    Bound,
+}
+
+impl InPlaceStop {
+    /// Whether a walk asking "is this code my own site?" owes an obligation at this stop: the stops that prove nothing about where the
+    /// code runs (the bound; a generator body that may be stepped), against the stops that are the code's own position, the compiler's
+    /// or the dialect's, or a layer another walk owns. Matched with no wildcard: a new stop is decided here.
+    #[deny(clippy::wildcard_enum_match_arm)]
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) const fn owes_obligation(self) -> bool {
+        match self {
+            Self::Bound | Self::Generator => true,
+            Self::NoFunction
+            | Self::Within
+            | Self::FreshStack
+            | Self::Elsewhere
+            | Self::Withheld
+            | Self::JsxPlaced => false,
+        }
+    }
+}
+
+/// A site on the climb follows an await of its own layer: on every path, or possibly.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct Suspension {
+    /// The await is on every path to the site (a later task, no owner or observer), not only on some.
+    pub(crate) every: bool,
+    /// The `await` that proves it, when the proof names one (a possible one has none).
+    pub(crate) after: Option<Span>,
+}
+
 /// Where a site runs once the function layers around it that run in place
-/// ([`layer_run`]) are crossed (ADR 0469).
+/// ([`layer_run`]) are crossed (ADR 0469), and why the climb stopped there (ADR 0988). `None` from a climb where it crossed no layer at all.
 pub(crate) struct InPlaceClimb {
-    /// The bound left outer layers unread: no placement role is proven.
-    pub(crate) exhausted: bool,
     /// The call of the outermost layer crossed: the site runs on its stack.
     pub(crate) at: Span,
-    /// A layer holds the climbed site in its parameter list (ADR 0454): it
-    /// runs only when its call omits the argument.
-    pub(crate) in_list: bool,
+    /// Why the climb stopped at `at`.
+    pub(crate) stop: InPlaceStop,
+    /// A layer holds the climbed site in its parameter list (ADR 0454): it runs only when its call omits the argument. The span is
+    /// that layer.
+    pub(crate) in_list: Option<Span>,
     /// A helper on the way also hands its callback on or keeps it
     /// ([`LayerRun::InPlaceAmongOthers`]): one run is in place.
     pub(crate) among_others: bool,
-    /// A site on the way follows an await in its layer: on every path
-    /// (`Some(true)`), or possibly (`Some(false)`).
-    pub(crate) suspended: Option<bool>,
+    /// A site on the way follows an await in its layer.
+    pub(crate) suspended: Option<Suspension>,
     /// ADR 0874: the climb crossed a call the census withholds, which only
     /// [`in_place_run_site_placing`] does: a row it places is undecided.
     pub(crate) withheld: bool,
@@ -3644,6 +3698,31 @@ pub(crate) struct InPlaceClimb {
     /// async callback's code before its first await run in place, shapes no proof reads. The placement the climb gives
     /// is an obligation.
     pub(crate) unmodelled: bool,
+}
+
+impl InPlaceClimb {
+    /// The climb reached the bound: outer layers unread (ADR 0988: a seventeenth layer exists).
+    pub(crate) fn bound(&self) -> bool {
+        self.stop == InPlaceStop::Bound
+    }
+
+    /// A site on the way follows an await on every path to it.
+    pub(crate) fn suspended_on_every_path(&self) -> bool {
+        self.suspended.is_some_and(|suspension| suspension.every)
+    }
+
+    /// The merge of the next segment of one longer climb into this one: the flags of both (the stops are the caller's).
+    pub(crate) fn merge_flags(&mut self, next: &Self) {
+        self.in_list = self.in_list.or(next.in_list);
+        self.among_others |= next.among_others;
+        self.withheld |= next.withheld;
+        self.suspended = match (self.suspended, next.suspended) {
+            (Some(first), _) if first.every => Some(first),
+            (_, Some(second)) if second.every => Some(second),
+            (Some(first), _) => Some(first),
+            (None, second) => second,
+        };
+    }
 }
 
 /// ADR 0493 review: whether the climb from `span` to `to` crosses a layer that
@@ -3659,7 +3738,8 @@ pub(crate) fn climb_crosses_library_callback(
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     let mut at = span;
-    for _ in 0..16 {
+    // The retrace crosses as many layers as the climb does (ADR 0988): `to` reached after the last of them is reached, not unread.
+    for _ in 0..=IN_PLACE_LAYER_BOUND {
         if at == to {
             return false;
         }
@@ -3938,8 +4018,8 @@ pub(crate) fn pending_apply_first_read_from(
     let ast = &file.ast;
     let at = match climb_in_place_layers(file, site, lookup) {
         Some(climb)
-            if !climb.exhausted
-                && !climb.in_list
+            if !climb.bound()
+                && climb.in_list.is_none()
                 && !climb.among_others
                 && climb.suspended.is_none()
                 && !climb_crosses_library_callback(file, site, climb.at, lookup) =>
@@ -4837,7 +4917,7 @@ pub(crate) fn in_place_layer_calls(
 }
 
 /// [`climb_in_place_layers_within`], appending to `passed` the call of each
-/// layer crossed, innermost first.
+/// layer crossed, innermost first. `None` where it crossed no layer.
 fn climb_in_place_layers_recording(
     file: &solid_facts::FileFacts,
     span: Span,
@@ -4846,21 +4926,42 @@ fn climb_in_place_layers_recording(
     within: Option<Span>,
     passed: &mut Vec<Span>,
 ) -> Option<InPlaceClimb> {
+    let climb = climb_layers(file, span, lookup, crossing, within, passed);
+    (climb.at != span).then_some(climb)
+}
+
+/// The climb itself, always answered: where it stopped and why, whether or not it crossed a layer (ADR 0988).
+pub(super) fn climb_layers(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    crossing: bool,
+    within: Option<Span>,
+    passed: &mut Vec<Span>,
+) -> InPlaceClimb {
     let mut climb = InPlaceClimb {
-        exhausted: false,
         at: span,
-        in_list: false,
+        stop: InPlaceStop::NoFunction,
+        in_list: None,
         among_others: false,
         suspended: None,
         withheld: false,
         unmodelled: false,
     };
-    // Bounded: each step moves to the call that holds the previous function.
-    for step in 0..16 {
+    // Bounded: each step moves to the call that holds the previous function. The step after the last one crossed asks the same
+    // question of the next layer and, where it would be crossed too, says so (`Bound`): a climb that ends at a function that is
+    // no layer, or at module scope, after sixteen layers is not bounded.
+    for step in 0..=IN_PLACE_LAYER_BOUND {
         let Some(function) = crate::owners::owning_function(&file.ast, climb.at) else {
+            climb.stop = InPlaceStop::NoFunction;
             break;
         };
-        if function.generator || within == Some(function.span) {
+        if function.generator {
+            climb.stop = InPlaceStop::Generator;
+            break;
+        }
+        if within == Some(function.span) {
+            climb.stop = InPlaceStop::Within;
             break;
         }
         let call = match layer_run(file, function, lookup) {
@@ -4874,7 +4975,18 @@ fn climb_in_place_layers_recording(
                 climb.withheld = true;
                 call
             }
-            LayerRun::FreshStack | LayerRun::Elsewhere | LayerRun::Withheld(_) => break,
+            LayerRun::FreshStack => {
+                climb.stop = InPlaceStop::FreshStack;
+                break;
+            }
+            LayerRun::Elsewhere => {
+                climb.stop = InPlaceStop::Elsewhere;
+                break;
+            }
+            LayerRun::Withheld(_) => {
+                climb.stop = InPlaceStop::Withheld;
+                break;
+            }
         };
         // A layer called in a JSX expression runs where the compiler places
         // that expression (an insert's tracked computation), which the
@@ -4889,24 +5001,48 @@ fn climb_in_place_layers_recording(
             .jsx_containing(call)
             .any(|element| own.is_none_or(|function| function.span.contains(element.span)))
         {
+            climb.stop = InPlaceStop::JsxPlaced;
             break;
         }
-        climb.in_list |= !function.body.contains(climb.at);
-        if follows_unconditional_await(file, climb.at)
-            || follows_dominating_await(file, climb.at)
-            || follows_try_head_await(file, climb.at, lookup)
-        {
-            climb.suspended = Some(true);
+        // A seventeenth layer to cross: the bound.
+        if step == IN_PLACE_LAYER_BOUND {
+            climb.stop = InPlaceStop::Bound;
+            break;
+        }
+        if !function.body.contains(climb.at) {
+            climb.in_list = climb.in_list.or(Some(function.span));
+        }
+        let every = unconditional_await_before(file, climb.at)
+            .or_else(|| dominating_await_before(file, climb.at))
+            .or_else(|| try_head_await_before(file, climb.at, lookup));
+        if every.is_some() {
+            climb.suspended = Some(Suspension {
+                every: true,
+                after: every,
+            });
         } else if climb.suspended.is_none()
             && (follows_any_suspension(file, climb.at) || may_follow_own_await(file, climb.at))
         {
-            climb.suspended = Some(false);
+            climb.suspended = Some(Suspension {
+                every: false,
+                after: None,
+            });
         }
         climb.at = call;
         passed.push(call);
-        climb.exhausted = step == 15;
     }
-    (climb.at != span).then_some(climb)
+    climb
+}
+
+/// Why the climb from `span` stops, whether or not it crosses a layer (ADR 0988): the same climb [`climb_in_place_layers`] makes.
+#[cfg(test)]
+pub(crate) fn climb_stop(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    within: Option<Span>,
+) -> InPlaceStop {
+    climb_layers(file, span, lookup, false, within, &mut Vec::new()).stop
 }
 
 /// ADR 0628: the call that runs `function` in place, one layer of
@@ -4973,6 +5109,9 @@ pub(crate) fn in_place_run_calls(
     passed
 }
 
+/// How many generator steps [`in_place_run_site`] follows after the layers around the site (ADR 0516).
+const GENERATOR_STEP_BOUND: usize = 8;
+
 fn in_place_run_site_recording(
     file: &solid_facts::FileFacts,
     span: Span,
@@ -4982,32 +5121,24 @@ fn in_place_run_site_recording(
     passed: &mut Vec<Span>,
 ) -> Option<(InPlaceClimb, bool)> {
     let mut climb = InPlaceClimb {
-        exhausted: false,
         at: span,
-        in_list: false,
+        stop: InPlaceStop::NoFunction,
+        in_list: None,
         among_others: false,
         suspended: None,
         withheld: false,
         unmodelled: false,
     };
     let mut through_generator = false;
-    for step in 0..8 {
-        if let Some(next) =
-            climb_in_place_layers_recording(file, climb.at, lookup, crossing, within, passed)
-        {
-            climb.in_list |= next.in_list;
-            climb.among_others |= next.among_others;
-            climb.withheld |= next.withheld;
-            climb.suspended = match (climb.suspended, next.suspended) {
-                (Some(true), _) | (_, Some(true)) => Some(true),
-                (Some(false), _) | (_, Some(false)) => Some(false),
-                (None, None) => None,
-            };
-            climb.at = next.at;
-            if next.exhausted {
-                climb.exhausted = true;
-                break;
-            }
+    // Each round climbs the layers and, where the code is then in the body of a generator whose iterator the program steps, crosses
+    // that step. The round after the last one crossed asks the same question and says `Bound` where it would cross again (ADR 0988).
+    for step in 0..=GENERATOR_STEP_BOUND {
+        let next = climb_layers(file, climb.at, lookup, crossing, within, passed);
+        climb.merge_flags(&next);
+        climb.at = next.at;
+        climb.stop = next.stop;
+        if next.stop == InPlaceStop::Bound {
+            break;
         }
         let Some(created) = crate::owners::owning_function(&file.ast, climb.at)
             .filter(|function| {
@@ -5018,10 +5149,13 @@ fn in_place_run_site_recording(
         else {
             break;
         };
+        if step == GENERATOR_STEP_BOUND {
+            climb.stop = InPlaceStop::Bound;
+            break;
+        }
         through_generator = true;
         climb.at = created.span;
         passed.push(created.span);
-        climb.exhausted = step == 7;
     }
     (climb.at != span).then_some((climb, through_generator))
 }

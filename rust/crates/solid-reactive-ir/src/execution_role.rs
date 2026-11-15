@@ -527,7 +527,7 @@ fn ref_applied_read_role(
             // of that call, so the read is unplaced there, never the deferred
             // role the callback's position gives it.
             let (climb, through_generator) = in_place_run_site(file, span, lookup)?;
-            if climb.exhausted {
+            if climb.bound() {
                 return Some(ExecutionRole::Unknown);
             }
             let function = containing_ast_function(&file.ast, climb.at)?;
@@ -554,7 +554,7 @@ fn ref_applied_read_role(
         ));
     }
     if let Some((climb, through_generator)) = climb {
-        match climb.suspended {
+        match climb.suspended.map(|suspension| suspension.every) {
             Some(true) => {
                 return Some(role_arm!(
                     "execution_role.ref_applied_read_role.unreported",
@@ -567,7 +567,7 @@ fn ref_applied_read_role(
                     ExecutionRole::Unknown
                 ));
             }
-            None if climb.in_list || through_generator => {
+            None if climb.in_list.is_some() || through_generator => {
                 return Some(role_arm!(
                     "execution_role.ref_applied_read_role.unknown-3",
                     ExecutionRole::Unknown
@@ -693,7 +693,7 @@ pub(crate) fn dynamic_component_entry(
     let mut climbed = false;
     for _ in 0..32 {
         if let Some((climb, generator)) = in_place_run_site(file, span, lookup) {
-            if generator || climb.suspended.is_some() || climb.in_list || climb.among_others {
+            if generator || climb.suspended.is_some() || climb.in_list.is_some() || climb.among_others {
                 return None;
             }
             span = climb.at;

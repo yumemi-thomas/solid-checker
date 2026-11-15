@@ -931,7 +931,7 @@ pub(crate) fn generator_step_resumption(
         span
     } else {
         let climb = super::write_roles::climb_in_place_layers(file, span, lookup)?;
-        if climb.exhausted || climb.in_list {
+        if climb.bound() || climb.in_list.is_some() {
             return containing_ast_function(ast, climb.at)
                 .is_some_and(|function| function.generator)
                 .then_some(false);
@@ -1220,8 +1220,8 @@ pub(super) fn named_callback_write_role(
     // A library callback may run zero times (ADR 0493 review): no rejection.
     let at = match super::write_roles::climb_in_place_layers(file, span, lookup) {
         Some(climb)
-            if !climb.exhausted
-                && !climb.in_list
+            if !climb.bound()
+                && climb.in_list.is_none()
                 && climb.suspended.is_none()
                 && !super::write_roles::climb_crosses_library_callback(
                     file, span, climb.at, lookup,
@@ -1439,7 +1439,7 @@ fn layered_window_after_awaits(
     let Some(climb) = climb_in_place_layers(file, span, lookup) else {
         return role;
     };
-    if climb.exhausted {
+    if climb.bound() {
         return role_arm!(
             "body_roles.layered_window_after_awaits.climb-exhausted",
             ExecutionRole::Unknown
@@ -1455,7 +1455,7 @@ fn layered_window_after_awaits(
     } else {
         None
     };
-    match (climb.suspended, landing) {
+    match (climb.suspended.map(|suspension| suspension.every), landing) {
         (Some(true), _) | (_, Some(true)) if !climb.among_others && !climb.withheld => role_arm!(
             "body_roles.layered_window_after_awaits.unreported",
             ExecutionRole::Unreported

@@ -848,7 +848,7 @@ pub(crate) fn inside_class_member(
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     let at = match super::in_place_run_site(file, span, lookup) {
-        Some((climb, _)) if climb.exhausted => return true,
+        Some((climb, _)) if climb.bound() => return true,
         Some((climb, _)) => climb.at,
         None => span,
     };

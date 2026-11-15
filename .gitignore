@@ -1573,3 +1573,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/after-await-store-alias/node_modules/**
 !fixtures/reactive-ir/resolve-until-slots/node_modules/
 !fixtures/reactive-ir/resolve-until-slots/node_modules/**
+!fixtures/reactive-ir/in-place-depth/node_modules/
+!fixtures/reactive-ir/in-place-depth/node_modules/**
