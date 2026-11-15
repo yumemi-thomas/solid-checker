@@ -223,7 +223,7 @@
   "rust/crates/solid-reactive-ir/src/local_access.rs": {
     "file_slots": 4,
     "file_by_path": 5,
-    "hashmap-iteration": 4
+    "hashmap-iteration": 6
   },
   "rust/crates/solid-reactive-ir/src/name_matcher.rs": {
     "hashmap-iteration": 1

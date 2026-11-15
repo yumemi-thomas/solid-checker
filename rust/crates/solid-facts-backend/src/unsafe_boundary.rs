@@ -4,35 +4,24 @@
 //! has no equivalent in `std`; the crate denies `unsafe_code` everywhere else.
 #![allow(unsafe_code)]
 
-/// Asks the system allocator to return currently free pages to the OS.
-#[cfg(target_os = "macos")]
-pub(crate) fn reclaim_allocator_pages() {
-    use std::ffi::c_void;
-
-    unsafe extern "C" {
-        fn malloc_default_zone() -> *mut c_void;
-        fn malloc_zone_pressure_relief(zone: *mut c_void, goal: usize) -> usize;
-    }
-
-    // SAFETY: both functions are process-wide libSystem allocator operations.
-    // The default zone pointer is supplied by the allocator itself and remains
-    // valid for the duration of this call. A zero goal requests best effort.
-    unsafe {
-        malloc_zone_pressure_relief(malloc_default_zone(), 0);
-    }
-}
-
-/// Asks the system allocator to return currently free pages to the OS.
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
+/// Asks the process allocator (mimalloc, ADR 0994) for its ordinary maintenance pass: free
+/// pages and empty segments go back to the OS. The libSystem and glibc calls this replaced
+/// (`malloc_zone_pressure_relief`, `malloc_trim`) no longer see the checker's allocations.
+/// Not the forced pass (`mi_collect(true)`): after each of 40 edited requests of a
+/// 1,000-file project it left the daemon at 2.4 GB resident, against 0.67 GB with this one
+/// (and 0.85 GB with the system allocator).
+#[cfg(unix)]
 pub(crate) fn reclaim_allocator_pages() {
     unsafe extern "C" {
-        fn malloc_trim(pad: usize) -> i32;
+        fn mi_collect(force: bool);
     }
 
-    // SAFETY: malloc_trim is a process-wide glibc allocator maintenance call.
-    // Zero asks glibc to retain no additional top-of-heap padding.
+    // SAFETY: mi_collect takes no pointer and is a process-wide mimalloc maintenance call,
+    // safe from any thread; `false` is the pass mimalloc itself makes now and then. The symbol
+    // is in the static mimalloc that `mimalloc-safe` links into every checker binary, which is
+    // the global allocator.
     unsafe {
-        malloc_trim(0);
+        mi_collect(false);
     }
 }
 

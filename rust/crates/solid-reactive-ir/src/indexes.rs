@@ -1423,6 +1423,13 @@ impl<'a> SemanticLookup<'a> {
         files.get(index).filter(|own| std::ptr::eq(*own, file))
     }
 
+    /// The positions in [`Self::files`] of the files whose path is exactly `path`, in file order
+    /// (ADR 0994): the files a scan comparing every file's path finds. It reads no file; a caller
+    /// that scans every file notes that read itself.
+    pub(crate) fn slots_of_path(&self, path: &str) -> &[usize] {
+        self.file_table.slots_of_path(path)
+    }
+
     /// How many functions the program's files hold (every file's
     /// [`solid_facts::ast::AstFacts::functions`]). ADR 0546: it chooses how
     /// the site-reach query computes its answers, which are the same either

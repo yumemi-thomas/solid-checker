@@ -63,6 +63,12 @@ struct StageSummary {
     solve_and_snapshot: Distribution,
 }
 
+/// ADR 0994: mimalloc is the process allocator (the system one made malloc and free about a
+/// sixth of the CPU of a first build). No `unsafe` here: the allocator is the crate's.
+#[cfg(not(target_family = "wasm"))]
+#[global_allocator]
+static ALLOCATOR: mimalloc_safe::MiMalloc = mimalloc_safe::MiMalloc;
+
 fn main() {
     if let Err(error) = run() {
         eprintln!("solid-checker-cold-start-bench: {error}");

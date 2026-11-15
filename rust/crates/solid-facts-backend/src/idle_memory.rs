@@ -6,7 +6,7 @@
 //! client. This module keeps the platform-specific mechanism behind one small
 //! lifecycle operation.
 
-/// Asks the system allocator to return currently free pages to the OS.
+/// Asks the process allocator (mimalloc, ADR 0994) to return currently free pages to the OS.
 ///
 /// Call this only after a materialized response has been flushed. Cached
 /// responses allocate no comparable temporary graph and should stay off this
@@ -15,10 +15,6 @@ pub(crate) fn reclaim_idle_pages() {
     reclaim_platform_pages();
 }
 
-#[cfg(any(target_os = "macos", all(target_os = "linux", target_env = "gnu")))]
 fn reclaim_platform_pages() {
     crate::unsafe_boundary::reclaim_allocator_pages();
 }
-
-#[cfg(not(any(target_os = "macos", all(target_os = "linux", target_env = "gnu"))))]
-fn reclaim_platform_pages() {}
