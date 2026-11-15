@@ -803,6 +803,8 @@ for (const [code, variants] of Object.entries(FLIP_READ_VARIANTS)) {
   spec.recallLegalVariants = [...(spec.recallLegalVariants ?? []), ...legal.map(([variant]) => variant)];
   spec.legalVariantContexts = { ...spec.legalVariantContexts, ...Object.fromEntries(legal.map(([variant, { legal }]) => [variant, legal])) };
   spec.recallVariants = [...(spec.recallVariants ?? []), ...Object.keys(variants)];
+  // A variant that cannot sit in every layer (its text holds an `await`, which a closure, helper or `iife` layer would put in a function that is not `async`) names its layers.
+  spec.variantLayers = { ...spec.variantLayers, ...Object.fromEntries(Object.entries(variants).filter(([, { layers }]) => layers).map(([variant, { layers }]) => [variant, layers])) };
   for (const [variant, { only, contexts, legal = [] }] of Object.entries(variants)) if (only) for (const context of [...contexts, ...legal]) (spec.contextOnly ??= {})[context] = [...(spec.contextOnly?.[context] ?? []), variant];
   spec.variantContexts = { ...spec.variantContexts, ...Object.fromEntries(Object.entries(variants).map(([variant, { contexts, legal = [] }]) => [variant, [...contexts, ...legal]])) };
 }
