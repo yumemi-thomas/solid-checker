@@ -205,6 +205,16 @@ pub enum OwnerRequirementRole {
     Boundary,
 }
 
+/// Which form of `dynamic(source, options)` a call is, as the dialect's `call_form` classifies it (ADR 0989): the static form calls `source`
+/// once and renders what it returns, and a form the options do not decide may be it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StaticDynamicForm {
+    /// `{ static: true }` is the literal.
+    Static,
+    /// The options cannot be read (`dynamic(source, options)`): the call may hold `static: true`.
+    MayBeStatic,
+}
+
 /// What one call's arguments prove about one boolean option key, as the
 /// engine read it for [`Dialect::call_form`].
 ///

@@ -470,6 +470,21 @@ impl Dialect for Solid2 {
         self.triple_exports == releases::TripleExports::Rc21
     }
 
+    // ADR 0989: `createRenderEffect(compute, apply)` makes an `EFFECT_RENDER` node of `compute` (`@solidjs/signals@2.0.0-rc.21` `dist/dev.js:2672-2700`,
+    // `notifyEffectStatus`: the report is made `else if (this._type === EFFECT_RENDER)`); `createEffect` is `EFFECT_USER` and reports nothing there (Chrome rc.21).
+    fn render_effect_compute(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::CreateRenderEffect
+    }
+
+    // ADR 0989: `call_form` answers `DynamicStatic` for a literal `static: true` and `DynamicUnknownForm` for options that may hold it.
+    fn static_dynamic_form(&self, primitive: Primitive) -> Option<crate::StaticDynamicForm> {
+        match primitive {
+            Primitive::DynamicStatic => Some(crate::StaticDynamicForm::Static),
+            Primitive::DynamicUnknownForm => Some(crate::StaticDynamicForm::MayBeStatic),
+            _ => None,
+        }
+    }
+
     // ADR 0985: both open with `if (getObserver()) throw` (`resolve`: `@solidjs/signals` `dist/dev.js:4738`; `until`: `:2718`).
     fn observer_guard_code(&self, primitive: Primitive) -> Option<RuntimeCode> {
         match primitive {
@@ -1817,13 +1832,19 @@ impl Dialect for Solid2 {
     /// types, and probing confirms a `sync: true` async store derive never
     /// emits `SYNC_NODE_RECEIVED_ASYNC` — the option is inert there, so a
     /// rule keyed on it would flag runtime-legal code.
+    ///
+    /// ADR 0989: not `createTrackedEffect`. Its node's compute is a wrapper that returns `undefined`: the callback's return is only
+    /// checked as a cleanup (`@solidjs/signals@2.0.0-rc.21` `dist/dev.js:2878-2892`, `trackedEffect`'s `computed(() => {…
+    /// staleValues(fn) … node._cleanup = cleanup }, { ...options, lazy: true })`), and `SYNC_NODE_RECEIVED_ASYNC` is raised in
+    /// `handleAsync` on the node's compute result (`dist/dev-shared.js:3769-3812`, the `CONFIG_SYNC` check at `:3797`), which for a
+    /// tracked effect is never a thenable. `sync` is forwarded and inert for this diagnostic, as for the store family. Chrome rc.21:
+    /// `createTrackedEffect(async () => …, { sync: true })` raises nothing.
     fn supports_sync_option(&self, primitive: Primitive) -> bool {
         matches!(
             primitive,
             Primitive::CreateMemo
                 | Primitive::CreateSignal
                 | Primitive::CreateOptimistic
-                | Primitive::CreateTrackedEffect
                 | Primitive::CreateEffect
                 | Primitive::CreateRenderEffect
         )

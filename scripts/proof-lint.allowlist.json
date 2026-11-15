@@ -1161,7 +1161,7 @@
         "why": "`sync` is the key of the options literal of a call whose primitive kind is already resolved and for which the dialect says the option exists (`supports_sync_option(kind)`, `options_argument(kind)`), not an identification of what the call is"
       },
       "primitive-name-match": {
-        "count": 4,
+        "count": 3,
         "why": "pending-review"
       },
       "silent-unmatched-slot": {

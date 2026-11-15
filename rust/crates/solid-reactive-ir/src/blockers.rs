@@ -150,6 +150,12 @@ pub(crate) const LEAF_OPERATION_UNACCOUNTED: &str = "leaf-operation-unaccounted"
 /// Batch 11, slice 6: a creation (`createMemo`, `createEffect`, `createRoot`, ...) the dialect says throws PRIMITIVE_IN_EFFECT_CALLBACK on an effect apply's
 /// stack, with no SC6002 row, SC9012, discard or named silence: whether an apply runs it with no owner set is not decided.
 pub(crate) const EFFECT_CREATION_UNACCOUNTED: &str = "effect-creation-unaccounted";
+/// Batch 11, slice 8b (ADR 0989): a call the site universe lists for a `static_api` rule with no row, SC9012, discard or named silence. SC7001 (a call of an effect
+/// primitive: whether the runtime meets no callable effect function), SC7002 (a call whose primitive takes `sync`: whether it asserts `sync: true` over a computation that
+/// returns a thenable), SC2007 (a `dynamic` call in its static form: whether its source returns a promise).
+pub(crate) const EFFECT_FN_UNACCOUNTED: &str = "effect-fn-unaccounted";
+pub(crate) const SYNC_OPTION_UNACCOUNTED: &str = "sync-option-unaccounted";
+pub(crate) const DYNAMIC_STATIC_UNACCOUNTED: &str = "dynamic-static-unaccounted";
 /// Batch 11, slice 7 (ADR 0985): a `resolve` or `until` call (SC2004, SC2005) with no row, SC9012, discard or named silence: whether an observer is active where it
 /// runs is not decided.
 pub(crate) const RESOLVE_SCOPE_UNACCOUNTED: &str = "resolve-scope-unaccounted";
