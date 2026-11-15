@@ -231,7 +231,7 @@ Exit status: 0 clean; 3 Chrome confirmed a false positive or a `confirmed-unexec
 
 ### Merge gate
 
-`fuzz-pr.yml` runs the census and a covering sample on every pull request that touches the engine or the fuzzer (The tiers, ADR 0615).
+`fuzz-pr.yml` runs the census and a covering sample on every pull request that touches the engine or the fuzzer (The tiers, ADR 0615), as two jobs of one sample (ADR 1001): `smoke` the grids but the census, `smoke-census` the census (`focus.mjs --smoke-leg`); both print the same `cover: ... sha256` line.
 
 To gate a checker change against false positives only, run fast and wide, not deep:
 
@@ -399,7 +399,7 @@ Programs per grid, as the grids generate them (the shapes of `recallShapes` and 
 
 | when | what | programs |
 | --- | --- | --- |
-| every pull request (`fuzz-pr.yml`, `make fuzz-smoke`) | all pairs, the census in them, a recall program's pairs with `code` only (ADR 0916), the ledger's programs, a fixed seed | about 33,200 |
+| every pull request (`fuzz-pr.yml`, `make fuzz-smoke`) | all pairs, the census in them, a recall program's pairs with `code` only (ADR 0916), the ledger's programs, a fixed seed | about 67,100, in two jobs |
 | nightly, or before a merge (`make fuzz-premerge`) | the census, the pairs within each code, a seed of the day nightly | about 69,000 |
 | weekly, or before a release (`fuzz-audit.yml`, `focus.mjs --codes all`) | the full grids | about 1.2 million |
 

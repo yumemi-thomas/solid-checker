@@ -45,6 +45,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { refuseAssumed } from "./lib/assumed.mjs";
+import { readReportFile } from "./lib/corpus-report.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ts = createRequire(join(repo, "packages/cli/package.json"))("typescript");
@@ -3786,7 +3787,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     options[name] = argv[index + 1];
   }
   if (!options.report && !options.repro) throw new Error("--report <sweep.json> or --repro <set directory> is required");
-  const read = (path) => JSON.parse(readFileSync(resolve(path), "utf8"));
+  // A sweep report is read in chunks: a whole corpus report does not fit one string (scripts/lib/corpus-report.mjs).
+  const read = (path) => readReportFile(resolve(path));
   const table = options.cases ? read(options.cases) : { cases: [] };
   const report = options.repro ? sweepSet(resolve(options.repro), resolve(options.checker), resolve(options.typefacts)) : read(options.report);
   const closed = options.repro

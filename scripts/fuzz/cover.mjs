@@ -7,6 +7,7 @@
 //
 // The misuse and the legal grids are one population: `side` is an axis, so a value's pairs are covered on each side it has. A `required` program (the
 // ledger's and rediscovery.json's) comes first and its features are not covered twice.
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { GRIDS } from "./focus-grids.mjs";
@@ -166,6 +167,9 @@ export function sample({ perCode = false, seed = FIXED_SEED, required = [], grid
   return { byGrid, programs: ids.length, population: rows.length, features };
 }
 
+/** A hash of a sample's every id, grid by grid in the grids' order: two jobs that print the same one drew the same sample (ADR 1001). */
+export const coverHash = (written) => createHash("sha256").update(JSON.stringify(Object.entries(written).map(([grid, { ids }]) => [grid, ids]))).digest("hex").slice(0, 16);
+
 /** A sample as `--ids` manifests, one per grid, in `dir`: `{ grid: { path, ids } }`. */
 export function writeSample({ perCode, seed, grids, runSeed, dir }) {
   const started = Date.now();
@@ -177,6 +181,6 @@ export function writeSample({ perCode, seed, grids, runSeed, dir }) {
     writeFileSync(path, `${JSON.stringify({ generator: GENERATOR_VERSION, seed: Number(runSeed), ids })}\n`);
     written[grid] = { path, ids };
   }
-  console.log(`cover: ${perCode ? "per-code" : "all"} pairs, seed ${seed}: ${programs} of ${population} programs for ${features} pairs, chosen in ${Math.round((Date.now() - started) / 1000)}s`);
+  console.log(`cover: ${perCode ? "per-code" : "all"} pairs, seed ${seed}: ${programs} of ${population} programs for ${features} pairs, chosen in ${Math.round((Date.now() - started) / 1000)}s, sha256 ${coverHash(written)}`);
   return written;
 }

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
-import { DEFAULT_GRIDS, GRIDS, HOST_LIMIT, diskFilled, hostArgs, hostLimits, noRoom, parse, readGrid, roleLogPath, roomAt, runGridProcess, unitPlaces, unitProblems } from "./focus.mjs";
+import { DEFAULT_GRIDS, GRIDS, HOST_LIMIT, SMOKE_LEGS, diskFilled, hostArgs, hostLimits, noRoom, parse, readGrid, roleLogPath, roomAt, runGridProcess, unitPlaces, unitProblems } from "./focus.mjs";
 
 describe("hostLimits", () => {
   it("caps every pool by default, on any machine, and takes every core only when named", () => {
@@ -59,6 +59,28 @@ describe("the grid process", () => {
     const options = parse(["--codes", "all", "--split-codes", "--prune-cases", "--grid-timeout", "5", "--heap-mb", "2048"]);
     expect(options).toMatchObject({ codes: "all", splitCodes: true, pruneCases: true, gridTimeout: "5", heapMb: "2048" });
     expect(() => parse(["--smoke", "--split-codes"])).toThrow(/--split-codes/);
+  });
+
+  it("splits the smoke into two legs that partition the grids, each drawing the one cover over every grid (ADR 1001)", () => {
+    const all = Object.keys(GRIDS);
+    expect([...SMOKE_LEGS.rest, ...SMOKE_LEGS.census].sort()).toEqual([...all].sort());
+    expect(SMOKE_LEGS.rest.filter((grid) => SMOKE_LEGS.census.includes(grid))).toEqual([]);
+    expect(SMOKE_LEGS.census).toEqual(["mx-census"]);
+    for (const leg of Object.keys(SMOKE_LEGS)) {
+      const options = parse(["--smoke", "--smoke-leg", leg]);
+      expect(options.grids).toBe(SMOKE_LEGS[leg].join(","));
+      expect(options.coverGrids).toBe(all.join(","));
+      expect(options.cover).toBe("all");
+    }
+    // the smoke without a leg is the one job it was: every grid run and sampled
+    expect(parse(["--smoke"]).grids).toBe(all.join(","));
+    expect(parse(["--smoke"]).coverGrids).toBeUndefined();
+    expect(() => parse(["--smoke-leg", "census", "--codes", "A"])).toThrow(/--smoke/);
+    expect(() => parse(["--smoke", "--smoke-leg", "nope"])).toThrow(/no smoke leg/);
+    expect(() => parse(["--smoke", "--smoke-leg", "rest", "--grids", "mx-base"])).toThrow(/sets --grids/);
+    expect(() => parse(["--smoke", "--smoke-leg", "rest", "--cover-grids", "mx-base"])).toThrow(/sets --grids/);
+    expect(() => parse(["--codes", "A", "--cover-grids", "mx-base"])).toThrow(/needs --cover/);
+    expect(() => parse(["--codes", "A", "--cover", "all", "--cover-grids", "nope"])).toThrow(/no grid nope/);
   });
 
   it("streams the process's output to its log while it runs, passes the heap, and kills it at the deadline", () => {

@@ -33,12 +33,13 @@
 // report is a baseline, and no prediction is one.
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { AssumedReportError, refuseAssumed } from "./lib/assumed.mjs";
 import { assertManifestProvenance } from "./lib/corpus-manifest.mjs";
+import { readReportFile, writeReportFile } from "./lib/corpus-report.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const options = {
@@ -84,9 +85,9 @@ for (const row of rows) {
 }
 if (options["order-from"]) {
   const key = (row) => `${row.app}\0${row.project}`;
-  const previous = new Map(
-    JSON.parse(readFileSync(resolve(options["order-from"]), "utf8")).results.map((row) => [key(row), row.wallMs]),
-  );
+  // The earlier report is read a project at a time: only the wall time of each is kept (a whole corpus report does not fit one string).
+  const previous = new Map();
+  readReportFile(resolve(options["order-from"]), { onResult: (row) => previous.set(key(row), row.wallMs) });
   // Longest first; a project the earlier report lacks is assumed slow.
   rows.sort((left, right) => (previous.get(key(right)) ?? Number.MAX_SAFE_INTEGER) - (previous.get(key(left)) ?? Number.MAX_SAFE_INTEGER));
 }
@@ -184,7 +185,7 @@ const kinds = {};
 for (const result of results) {
   for (const finding of result.findings) kinds[finding.kind] = (kinds[finding.kind] ?? 0) + 1;
 }
-const summary = {
+const head = {
   checker,
   checkerSha256: sha256(checker),
   producer: typefacts,
@@ -200,8 +201,7 @@ const summary = {
   findingKinds: kinds,
   exitErrors: results.filter((result) => result.exitCode !== 0).length,
   parseErrors: results.filter((result) => result.parseError !== null).length,
-  results,
 };
-writeFileSync(resolve(options.out), `${JSON.stringify(summary, null, 2)}\n`);
-const { results: _, ...head } = summary;
+// One project at a time: the whole report is longer than the longest string V8 makes once the corpus is large.
+writeReportFile(resolve(options.out), head, results);
 console.log(JSON.stringify(head, null, 2));

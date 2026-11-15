@@ -19,3 +19,8 @@ export const GRIDS = {
   // The census (matrix.mjs censusCells): every (code, context) no cell lists, plain shapes, a default grid (about 3,200 programs, a minute or two).
   "mx-census": ["matrix.mjs", "--census"],
 };
+/**
+ * The two jobs of the pull request's smoke (ADR 1001): `rest` runs every grid but the census, `census` runs the census. Each computes the cover over
+ * every grid (`--cover-grids`), so the two jobs' programs are the one sample, split by grid.
+ */
+export const SMOKE_LEGS = { rest: Object.keys(GRIDS).filter((grid) => grid !== "mx-census"), census: ["mx-census"] };
