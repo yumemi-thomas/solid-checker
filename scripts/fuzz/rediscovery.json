@@ -24486,5 +24486,21 @@
   "fixed": "ADR 0992 (`Dialect::component_entry`, the rc.21 triple only): Portal's tracked children, the literal `lazy` loader's export, `Dynamic`'s `component`; `clean-portal-show` restored, `clean-lazy-route` stays held",
   "outside": "the grids print every site in App.tsx, and the judge maps a Chrome frame and a checker row only through App.tsx's ledger; a component entered by `lazy`, `Dynamic` or a `Portal` needs its body in a second PROJECT module (`site1.tsx`), where the checker's row and Chrome's frame are unplaced to the judge. Built and run (project-site mode of package-site.mjs: `lazy`, `dynamic-el` and `lazy-call` on the NO_OWNER_* codes and SETTLED_CLEANUP_UNOWNED, 79 programs, both grids, Chrome, main 09f905f78 against this head): identical verdicts on both builds, and 6 `false-clean` rows on SETTLED_CLEANUP_UNOWNED (lazy-call-proj, mx) on both, each a checker VIOLATION at `site1.tsx:4` that Chrome confirms and the judge does not read. The shape is judge-limited (docs/open-work.md), so it is not wired into the grids yet: it is wired once ADR 0993's judge lands (every project module judged like App.tsx); the generator (`package-site.mjs` `-proj` entries, `projectShapesOf`) and its unit tests are in place. The checks: fixtures/reactive-ir/{lazy-entry-owner,portal-children-owner,dynamic-component-owner}, and the Chrome oracle cases fixtures/runtime-oracle/{lazy-entry-owner,portal-children-owner,portal-mount-owner,dynamic-component-owner}, each with the twin a false clean would hide in (a component also called from a timer or an apply, also read through a namespace, a `mount` read on an apply's stack): 0 unproven-clean.",
   "rediscovered": "no grid program: the fixtures and oracle cases above (main 09f905f78 answers an uncertifiable row at the lazy/Dynamic/Portal sites they pin; this head is silent there and covers every twin)"
+ },
+ {
+  "finding": "a judge miss, not a checker defect: the grids' judges read a checker row and a Chrome frame in a second PROJECT module (`site1.tsx`) only through App.tsx, so SETTLED_CLEANUP_UNOWNED's `lazy-call-proj` cells scored `false-clean` where the checker reports SC4001 at `site1.tsx:4:13` and Chrome reports the code (ADR 0993)",
+  "found": "ADR 0992's project-site cells (package-site.mjs `-proj` entries, 79 programs, Chrome, both grids), and Mac 15's `lazy-call-proj` run on SETTLED_CLEANUP_UNOWNED",
+  "fixed": "ADR 0993 (site-judge.mjs `programFindings`/`framesIn`/`splitChecker`, classify.mjs `offSiteVerdicts`, matrix.mjs `judgeSite`/`judgeParts`, legal.mjs `judgeLegal`/`withOffSite`; the cells are wired into the recall grids by matrix.mjs `packageShapes`)",
+  "grid": "mx-recall",
+  "code": "SETTLED_CLEANUP_UNOWNED",
+  "ids": [
+   "mx-settled-cleanup-unowned-handler-x-direct-none-pk-lazy-call-proj",
+   "mx-settled-cleanup-unowned-timer-x-direct-none-pk-lazy-call-proj",
+   "mx-settled-cleanup-unowned-then-x-direct-none-pk-lazy-call-proj",
+   "mx-settled-cleanup-unowned-micro-x-direct-none-pk-lazy-call-proj",
+   "mx-settled-cleanup-unowned-async-x-direct-none-pk-lazy-call-proj",
+   "mx-settled-cleanup-unowned-owner-null-x-direct-none-pk-lazy-call-proj"
+  ],
+  "rediscovered": "the judge of main 8e05f2a1c on the 79 project-site programs (focus.mjs recall grids, Chrome, the oracle confirming the 31 mx programs): 6 false-clean (these ids), 18 agree, 6 recall-gap, 1 not-fired; this head: 6 agree, 24 agree in all, nothing else moved (the 48 lg programs are uncertifiable on both). Re-judged from stored outputs (the audit's Chrome records read-only, the checker rerun, no browser): 585,976 programs with a project module, 579,038 identical, 0 moved, 6,938 without a stored record; the 4,679 dfa6c5dec oracle records with an `unattributed` code: 3,425 regenerated, 0 outcome moved"
  }
 ]

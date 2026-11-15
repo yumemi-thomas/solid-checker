@@ -28,7 +28,7 @@ import { assertFindingsMapped } from "./checker.mjs";
 import { disturbances, offSiteVerdicts, runtimeEvents } from "./classify.mjs";
 import { pairOf, stackedSplit } from "./stacked.mjs";
 import { codeRules, codesForRule, ignoredRules, ruleHasRuntimeCounterpart } from "./codes.mjs";
-import { accountViolations } from "./site-judge.mjs";
+import { APP_FILE, accountViolations, framesIn, labelOf, lineOfLabel, positionFile, programFindings, splitChecker } from "./site-judge.mjs";
 import { checkTypedAway, typeRejectedRows, typedAwayVerdict, typedOnPurpose } from "./tsc-overlap.mjs";
 import { buildCase } from "./emit.mjs";
 import { generateProgram } from "./generate.mjs";
@@ -64,7 +64,8 @@ const RUN_CLAIMING_RULES = ["pending-async-unsuspendable-read"];
  * Judges one legal program at its site.
  * @param {{ code: string, site: object, typecheck: object, checker: object, runtime: object, plan?: object }} input
  */
-export function judgeLegal({ code, site, typecheck: typed, checker, runtime, plan, atSite: siteScoped = false, evaluated = false }) {
+export function judgeLegal({ code, site, typecheck: typed, checker: whole, runtime, plan, atSite: siteScoped = false, evaluated = false }) {
+  const checker = splitChecker(whole);
   // A program tsc rejects is no evidence, but a checker violation on the rejected code is surfaced (tsc-overlap.mjs).
   if (typed && typed.ok === false) return typedAwayVerdict({ typed, checker, region: regionOf(site), rules: codeRules[code] ?? [] });
   if (!checker?.ok) return { outcome: "harness", detail: { why: `checker: ${String(checker?.error ?? "not run").slice(0, 120)}` } };
@@ -73,14 +74,17 @@ export function judgeLegal({ code, site, typecheck: typed, checker, runtime, pla
   // A program whose runtime failed before reporting anything (a module that would not load) says nothing about legality.
   if (runtime.failure && !events.length && !(hitCount(runtime.hits ?? null, site.hit) > 0)) return { outcome: "harness", detail: { why: `runtime: ${String(runtime.failure.message).slice(0, 120)}` } };
   const region = regionOf(site);
-  const relevant = checker.findings.filter((finding) => !ignoredRules.includes(finding.rule));
-  const violations = relevant.filter((finding) => finding.kind === "violation");
-  const atSite = violations.filter((finding) => inLines(finding, region));
-  const stray = violations.filter((finding) => !inLines(finding, region)).map((finding) => `${finding.rule}@${finding.line}`);
+  // ADR 0993: every project file's rows (`programFindings`), each in its own file: a row is at the site only in the site's file (App.tsx's unless the site names another).
+  const siteFile = positionFile(site);
+  const all = programFindings(checker).filter((finding) => !ignoredRules.includes(finding.rule));
+  const relevant = all.filter((finding) => positionFile(finding) === siteFile);
+  const violations = all.filter((finding) => finding.kind === "violation");
+  const atSite = violations.filter((finding) => positionFile(finding) === siteFile && inLines(finding, region));
+  const stray = violations.filter((finding) => !atSite.includes(finding)).map(labelOf);
   const detail = { findings: relevant.filter((finding) => inLines(finding, region)).map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`), ...(stray.length ? { stray } : {}) };
   // `atSite` (a combination program): only a diagnostic on the use's own lines says that use is not legal; another use of the file
   // may provoke the same code on purpose (a `-guarded-rerun` read is a strict read Solid reports).
-  const onSite = (event) => !siteScoped || event.positions.some((position) => (position.file === "App.tsx" || position.file === undefined) && region.includes(position.line));
+  const onSite = (event) => !siteScoped || framesIn(event.positions, siteFile).some((position) => region.includes(position.line));
   if (events.some((event) => event.code === code && onSite(event))) return { outcome: "not-legal", detail: { ...detail, reported: [...new Set(events.map((event) => event.code))] } };
   // A run-claiming violation anywhere (a call attributed the read in a closure) whose codes the runtime never reports (ADR 0504 review).
   const claimedRuns = violations.filter((finding) => RUN_CLAIMING_RULES.includes(finding.rule) && !events.some((event) => codesForRule(finding.rule).includes(event.code)));
@@ -88,7 +92,7 @@ export function judgeLegal({ code, site, typecheck: typed, checker, runtime, pla
   // one at the site whose counter is 0 in a run that did not fail never ran (`xs.forEach(hf)` over `JSON.parse("[]")`): `unexecuted`,
   // never a false positive or a pass. ADR 0504's review had scored it a false positive.
   // Not where the checker can evaluate that it never runs (`evaluated`: `if (false)`, `[].forEach`): there the violation is wrong (R21).
-  const neverRan = (finding) => !evaluated && inLines(finding, region) && !runtime.failure && hitCount(runtime.hits ?? null, site.hit) === 0;
+  const neverRan = (finding) => !evaluated && positionFile(finding) === siteFile && inLines(finding, region) && !runtime.failure && hitCount(runtime.hits ?? null, site.hit) === 0;
   if (claimedRuns.length && !disturbances(runtime, plan ?? { clicks: [] }).length) {
     const ran = claimedRuns.filter((finding) => !neverRan(finding));
     if (!ran.length) return { outcome: "unexecuted", detail: { ...detail, why: "a run-claiming violation at a site whose counter is 0" } };
@@ -106,11 +110,11 @@ export function judgeLegal({ code, site, typecheck: typed, checker, runtime, pla
   // A violation of a rule the runtime can contradict, none of whose codes the runtime reports anywhere.
   // ADR 0979: a violation at the site is accounted for by a diagnostic at that site (site-judge.mjs), not by a code of its rule reported anywhere in the
   // file: the code reported at another line used to excuse it. A placeless code accounts for as many sites as the run raised diagnostics of it.
-  const asSite = (finding) => ({ rule: finding.rule, line: finding.line, endLine: finding.endLine, column: finding.column, finding });
+  const asSite = (finding) => ({ rule: finding.rule, file: positionFile(finding), line: finding.line, endLine: finding.endLine, column: finding.column, finding });
   const loose = new Set(accountViolations({
     violations: atSite.filter((finding) => ruleHasRuntimeCounterpart(finding.rule)).map(asSite),
     diagnostics: events.map((event) => ({ code: event.code, frames: event.positions })),
-    ran: (violation) => (hitCount(runtime.hits ?? null, site.hit) === 0 && inLines(violation.finding, region) ? false : null),
+    ran: (violation) => (hitCount(runtime.hits ?? null, site.hit) === 0 && positionFile(violation.finding) === siteFile && inLines(violation.finding, region) ? false : null),
     alsoCounted: violations.filter((finding) => !atSite.includes(finding)).map(asSite),
   }).filter((row) => row.verdict === "unaccounted").map((row) => row.violation.finding));
   const contradicted = atSite.filter((finding) => loose.has(finding));
@@ -165,26 +169,29 @@ function judgeUses(built, uses, input) {
  * `offSiteVerdicts`): one whose lines ran where the runtime reported no code of its rule anywhere makes a program that was otherwise
  * `clean`, `uncertifiable` or `unexecuted` a `false-positive` (`detail.primary` keeps the uses' own outcome).
  */
-function withOffSite(verdict, uses, { built, program, checker, runtime, plan }) {
+function withOffSite(verdict, uses, { built, program, checker: whole, runtime, plan }) {
+  const checker = splitChecker(whole);
   if (!checker?.ok || !runtime || !["clean", "uncertifiable", "unexecuted", "false-positive"].includes(verdict.outcome)) return verdict;
-  const regions = uses.map(regionOf);
-  const offSite = checker.findings.filter((finding) => finding.kind === "violation" && !ignoredRules.includes(finding.rule) && !regions.some((region) => inLines(finding, region)));
-  const siteFindings = checker.findings.filter((finding) => finding.kind === "violation" && !ignoredRules.includes(finding.rule) && !offSite.includes(finding));
+  // ADR 0993: the violations of every project file; a use's region is in its own file (App.tsx's unless the use names another).
+  const atUse = (finding) => uses.some((use) => positionFile(use) === positionFile(finding) && inLines(finding, regionOf(use)));
+  const violations = programFindings(checker).filter((finding) => finding.kind === "violation" && !ignoredRules.includes(finding.rule));
+  const offSite = violations.filter((finding) => !atUse(finding));
+  const siteFindings = violations.filter((finding) => !offSite.includes(finding));
   const judged = offSiteVerdicts({ findings: offSite, built, program, runtime, plan: plan ?? built.plan, siteFindings }).filter((row) => row.verdict !== "substantiated" && !(row.verdict === "unjudged" && row.why === "no-counterpart"));
   if (!judged.length) return verdict;
   const detail = { ...verdict.detail, offSite: judged.map((row) => `${row.finding}:${row.verdict}${row.first ? `<${row.first}` : ""}${row.why ? `(${row.why})` : ""}`) };
   // A stacked violation (classify.mjs, stacked.mjs): a false positive unless its pair is proved, then a `stacked-claim`.
   const { wrong, stacked } = stackedSplit(judged);
   const unplaced = judged.filter((row) => row.verdict === "unjudged" && /(?:^|-)unplaced$/.test(row.why ?? ""));
-  if (!wrong.length && !stacked.length && unplaced.length && verdict.outcome !== "false-positive") return { outcome: "unjudged-claim", detail: { ...detail, primary: verdict.outcome, rules: [...new Set(unplaced.map((row) => row.finding.split("@")[0]))], at: unplaced.map((row) => Number(row.finding.split("@")[1])) } };
+  if (!wrong.length && !stacked.length && unplaced.length && verdict.outcome !== "false-positive") return { outcome: "unjudged-claim", detail: { ...detail, primary: verdict.outcome, rules: [...new Set(unplaced.map((row) => row.finding.split("@")[0]))], at: unplaced.map((row) => lineOfLabel(row.finding)) } };
   // Halted claim and a halt with no ordering evidence (classify.mjs `haltPlace`), as the matrix grid judges them.
   const haltedRows = judged.filter((row) => row.verdict === "halted");
   const unordered = judged.filter((row) => row.verdict === "unjudged" && row.why === "halt-unordered");
-  if (!wrong.length && unordered.length && verdict.outcome !== "false-positive") return { outcome: "unplaced", detail: { ...detail, primary: verdict.outcome, why: "halt-unordered", rules: [...new Set(unordered.map((row) => row.finding.split("@")[0]))], at: unordered.map((row) => Number(row.finding.split("@")[1])) } };
-  if (!wrong.length && stacked.length && verdict.outcome !== "false-positive") return { outcome: "stacked-claim", detail: { ...detail, primary: verdict.outcome, pairs: [...new Set(stacked.map(pairOf))].sort(), at: stacked.map((row) => Number(row.finding.split("@")[1])) } };
-  if (!wrong.length && haltedRows.length && verdict.outcome !== "false-positive") return { outcome: "halted-claim", detail: { ...detail, primary: verdict.outcome, rules: [...new Set(haltedRows.map((row) => row.finding.split("@")[0]))], at: haltedRows.map((row) => Number(row.finding.split("@")[1])) } };
+  if (!wrong.length && unordered.length && verdict.outcome !== "false-positive") return { outcome: "unplaced", detail: { ...detail, primary: verdict.outcome, why: "halt-unordered", rules: [...new Set(unordered.map((row) => row.finding.split("@")[0]))], at: unordered.map((row) => lineOfLabel(row.finding)) } };
+  if (!wrong.length && stacked.length && verdict.outcome !== "false-positive") return { outcome: "stacked-claim", detail: { ...detail, primary: verdict.outcome, pairs: [...new Set(stacked.map(pairOf))].sort(), at: stacked.map((row) => lineOfLabel(row.finding)) } };
+  if (!wrong.length && haltedRows.length && verdict.outcome !== "false-positive") return { outcome: "halted-claim", detail: { ...detail, primary: verdict.outcome, rules: [...new Set(haltedRows.map((row) => row.finding.split("@")[0]))], at: haltedRows.map((row) => lineOfLabel(row.finding)) } };
   if (!wrong.length || verdict.outcome === "false-positive") return { outcome: verdict.outcome, detail };
-  return { outcome: "false-positive", detail: { ...detail, primary: verdict.outcome, rules: [...new Set(wrong.map((row) => row.finding.split("@")[0]))], at: wrong.map((row) => Number(row.finding.split("@")[1])) } };
+  return { outcome: "false-positive", detail: { ...detail, primary: verdict.outcome, rules: [...new Set(wrong.map((row) => row.finding.split("@")[0]))], at: wrong.map((row) => lineOfLabel(row.finding)) } };
 }
 
 /** The cells: every code with legal contexts, each legal context; `recall` adds the contexts only the recall grids list (`recallLegal`). */
