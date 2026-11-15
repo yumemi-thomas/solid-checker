@@ -190,6 +190,82 @@ fn a_read_no_strict_read_window_holds_ends_on_the_fact_that_says_so() {
     assert_eq!(module_scope.len(), 1, "{module_scope:?}");
 }
 
+/// The lines of the rows the accounting files for `blocker`, each an uncertifiable row of `id`, never a violation.
+fn unaccounted_lines(findings: &[serde_json::Value], blocker: &str, id: &str) -> BTreeSet<u64> {
+    findings
+        .iter()
+        .filter(|finding| finding["analysisContext"] == blocker)
+        .map(|finding| {
+            assert_eq!(finding["id"], id, "the row is the rule's own");
+            assert_eq!(finding["kind"], "uncertifiable", "never a violation");
+            finding["primaryLocation"]["line"].as_u64().unwrap()
+        })
+        .collect()
+}
+
+/// The 1-based line of the first occurrence of `anchor`.
+fn line_of(source: &str, anchor: &str) -> u64 {
+    let at = source
+        .find(anchor)
+        .unwrap_or_else(|| panic!("no `{anchor}`"));
+    source[..at].matches('\n').count() as u64 + 1
+}
+
+/// ADR 0987 (slice 8a): the exits of SC5006 and SC5007 are typed silences. Every site of `total-decision-silences` ends in one and files no row; dropping a silence
+/// (the mutation hook) files exactly the rows of its sites, and of its rule, and `all` files them all.
+#[test]
+fn a_loading_boundary_exit_is_a_named_silence_and_unnamed_it_is_an_uncertifiable_row() {
+    const HOLD: &str = "loading-on-outside-hold-unaccounted";
+    const ACCESSOR: &str = "loading-on-accessor-unaccounted";
+    const NAMES_NOTHING: &str = "loading_hold.loading_on_outside_hold_obligations.on-names-nothing";
+    const HOLDS_NOTHING: &str =
+        "loading_hold.loading_on_outside_hold_obligations.holds-no-async-source";
+    const NOT_FUNCTION: &str = "loading_hold.loading_on_accessor.on-not-function";
+    let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("arm the real Type Facts process");
+    let name = "total-decision-silences";
+    let source = std::fs::read_to_string(fixture(name).join("App.tsx")).unwrap();
+    let names_nothing = line_of(&source, "<Loading fallback={0} on={1}>");
+    let holds_nothing = line_of(&source, "<Loading fallback={0} on={count()}>");
+    let namespace = line_of(&source, "<S.Loading fallback={0} on={2}>");
+    let hand_call = line_of(&source, "Loading({ fallback: 0, on: 3 })");
+    let sites = BTreeSet::from([names_nothing, holds_nothing, namespace, hand_call]);
+    let rows = |findings: &[serde_json::Value]| {
+        (
+            unaccounted_lines(findings, HOLD, "SC5006"),
+            unaccounted_lines(findings, ACCESSOR, "SC5007"),
+        )
+    };
+    // Named: no row of either family and no finding of either rule, and the three silences end the sites.
+    let named = check(&typefacts, name, None, &[]);
+    assert_eq!(rows(&named), (BTreeSet::new(), BTreeSet::new()));
+    assert!(
+        named
+            .iter()
+            .all(|finding| finding["id"] != "SC5006" && finding["id"] != "SC5007"),
+        "a silent exit filed a finding"
+    );
+    // Dropping one silence files the rows of the sites it ended, of its own rule.
+    for (id, hold, accessor) in [
+        (
+            NAMES_NOTHING,
+            BTreeSet::from([names_nothing, namespace, hand_call]),
+            BTreeSet::new(),
+        ),
+        (
+            HOLDS_NOTHING,
+            BTreeSet::from([holds_nothing]),
+            BTreeSet::new(),
+        ),
+        (NOT_FUNCTION, BTreeSet::new(), sites.clone()),
+    ] {
+        let ablated = check(&typefacts, name, Some(id), &[]);
+        assert_eq!(rows(&ablated), (hold, accessor), "ablating {id}");
+    }
+    // All of them: every site is an uncertifiable row of each rule.
+    let all = check(&typefacts, name, Some("all"), &[]);
+    assert_eq!(rows(&all), (sites.clone(), sites), "ablating all");
+}
+
 /// The rows dropping `silence` adds to the fixture `name`: each an uncertifiable SC2004 or SC2005 row with the resolve universe's blocker, nothing else moved.
 fn resolve_rows_the_silence_ends(typefacts: &str, silence: &str) -> BTreeSet<String> {
     let name = "resolve-until-slots";

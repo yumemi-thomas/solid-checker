@@ -166,6 +166,16 @@
       "why": "an optimistic setter call whose REACTIVE_WRITE_IN_OWNED_SCOPE code was ended before only by SC2009's row: SC2001 `write-unaccounted` now stands beside the violation (no false clean); the proof is the optimistic setter's own write guard",
       "at": "fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx:29:23"
     },
+    "reactive-ir/rc21-optimistic-setter-forms|fixtures/reactive-ir/rc21-optimistic-setter-forms/App.tsx|488-498|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "an optimistic setter call whose REACTIVE_WRITE_IN_OWNED_SCOPE code was ended before only by SC2009's row: SC2001 `write-unaccounted` now stands beside the violation (no false clean); the proof is the optimistic setter's own write guard",
+      "at": "fixtures/reactive-ir/rc21-optimistic-setter-forms/App.tsx:9:3"
+    },
+    "reactive-ir/rc21-optimistic-setter-forms|fixtures/reactive-ir/rc21-optimistic-setter-forms/App.tsx|675-685|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "an optimistic setter call whose REACTIVE_WRITE_IN_OWNED_SCOPE code was ended before only by SC2009's row: SC2001 `write-unaccounted` now stands beside the violation (no false clean); the proof is the optimistic setter's own write guard",
+      "at": "fixtures/reactive-ir/rc21-optimistic-setter-forms/App.tsx:17:3"
+    },
     "reactive-ir/render-time-reads|fixtures/reactive-ir/render-time-reads/App.tsx|780-787|C2/reporting-decision-no-row": {
       "owner": "Phase D follow-up (a value-flow proof; ADR 0936)",
       "why": "the returned `finish` is only passed to `String(...)` here, but its binding is referenced (returned) and no local fact proves no caller calls it: an uncertifiable `strict-read-unaccounted` row until a proof names the uncalled-return end",
