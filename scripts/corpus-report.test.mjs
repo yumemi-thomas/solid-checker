@@ -92,54 +92,68 @@ describe("a report longer than V8's longest string", () => {
   const bulk = (index) => ({ app: `app-${index}`, project: "tsconfig.json", wallMs: 1000 - index, filler: "x".repeat(rowBytes), findings: [] });
 
   test("is written and read back, in chunks", { timeout: 300000 }, () => {
-    const path = join(root, "huge.json");
-    writeReportFile(path, head(), Array.from({ length: rows }, (_, index) => bulk(index)));
-    assert.ok(statSync(path).size > constants.MAX_STRING_LENGTH, "the report is over the longest string");
-    assert.throws(() => readFileSync(path, "utf8"), (error) => error.code === "ERR_STRING_TOO_LONG" || /string longer|Invalid string length/.test(error.message), "a whole-file read is the failure this module avoids");
-    const seen = [];
-    const rest = readReportFile(path, { onResult: (row) => seen.push([row.app, row.wallMs, row.filler.length, row.filler.slice(-3)]) });
-    assert.deepEqual(rest, head());
-    assert.equal(seen.length, rows);
-    assert.deepEqual(seen[0], ["app-0", 1000, rowBytes, "xxx"]);
-    assert.deepEqual(seen.at(-1), [`app-${rows - 1}`, 1000 - (rows - 1), rowBytes, "xxx"]);
+    // About 550 MB in a directory of its own, removed whatever happens.
+    const dir = mkdtempSync(join(root, "huge-"));
+    try {
+      const path = join(dir, "huge.json");
+      writeReportFile(path, head(), Array.from({ length: rows }, (_, index) => bulk(index)));
+      assert.ok(statSync(path).size > constants.MAX_STRING_LENGTH, "the report is over the longest string");
+      // The control: a whole-file read cannot give this report back. How it fails depends on the machine (ERR_STRING_TOO_LONG where the read
+      // is attempted, ENOMEM where the buffer cannot be allocated), so the test asserts only that it throws.
+      assert.throws(() => readFileSync(path, "utf8"), Error, "a whole-file read is the failure this module avoids");
+      const seen = [];
+      const rest = readReportFile(path, { onResult: (row) => seen.push([row.app, row.wallMs, row.filler.length, row.filler.slice(-3)]) });
+      assert.deepEqual(rest, head());
+      assert.equal(seen.length, rows);
+      assert.deepEqual(seen[0], ["app-0", 1000, rowBytes, "xxx"]);
+      assert.deepEqual(seen.at(-1), [`app-${rows - 1}`, 1000 - (rows - 1), rowBytes, "xxx"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test("the sweep script writes it, and `--order-from` reads it back", { timeout: 600000 }, () => {
     // `rows` projects, each with a checker answer of about 46 MB: the report the sweep ends up with is over the limit, as the corpus's now is.
-    const apps = join(root, "apps");
-    const projects = Array.from({ length: rows }, (_, index) => ({ app: `app${index}`, root: `app${index}`, project: "tsconfig.json" }));
-    for (const project of projects) {
-      mkdirSync(join(apps, project.root), { recursive: true });
-      writeFileSync(join(apps, project.root, "tsconfig.json"), "{}\n");
+    // The corpus, the checker's answer (46 MB) and the two reports (about 550 MB each, the second replacing the first) live in a directory of their own, removed whatever happens.
+    const dir = mkdtempSync(join(root, "sweep-"));
+    try {
+      const apps = join(dir, "apps");
+      const projects = Array.from({ length: rows }, (_, index) => ({ app: `app${index}`, root: `app${index}`, project: "tsconfig.json" }));
+      for (const project of projects) {
+        mkdirSync(join(apps, project.root), { recursive: true });
+        writeFileSync(join(apps, project.root, "tsconfig.json"), "{}\n");
+      }
+      const commit = "35c4cc6b7c932f5dee5815b37d3601e7dff90b58";
+      writeFileSync(join(dir, "manifest.json"), JSON.stringify({
+        configuration: { runtimeTarget: "browser", runtimeBuild: "development", rendering: "csr" },
+        apps: Object.fromEntries(projects.map((project) => [project.app, { repository: `https://example.test/${project.app}`, commit }])),
+        projects,
+      }));
+      writeFileSync(join(dir, "typefacts"), "producer\n");
+      const answer = cleanReport();
+      // One long string in the one finding: the sweep keeps `findings` whole, so the report holds `rows` copies.
+      answer.findings[0].message = "y".repeat(rowBytes);
+      const checker = fakeChecker(dir, answer);
+      const out = join(dir, "sweep.json");
+      const run = (extra) => spawnSync(process.execPath, [
+        new URL("./corpus-sweep.mjs", import.meta.url).pathname, "--manifest", join(dir, "manifest.json"), "--apps-root", apps, "--checker", checker,
+        "--typefacts", join(dir, "typefacts"), "--jobs", "2", "--out", out, ...extra,
+      ], { encoding: "utf8", maxBuffer: 1 << 26, env: { ...process.env, NODE_OPTIONS: "--max-old-space-size=8000" } });
+      const first = run([]);
+      assert.equal(first.status, 0, first.stderr.slice(-2000));
+      assert.ok(statSync(out).size > constants.MAX_STRING_LENGTH, "the sweep report is over the longest string");
+      const head1 = JSON.parse(first.stdout);
+      assert.equal(head1.projectCount, rows);
+      assert.equal(head1.findingCount, rows);
+      let count = 0;
+      const rest = readReportFile(out, { onResult: (row) => { count += 1; assert.equal(row.findings[0].message.length, rowBytes); } });
+      assert.equal(count, rows);
+      assert.equal(rest.projectCount, rows);
+      // The second sweep takes the first as its order: it reads the over-limit report and runs.
+      const second = run(["--order-from", out]);
+      assert.equal(second.status, 0, second.stderr.slice(-2000));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
-    const commit = "35c4cc6b7c932f5dee5815b37d3601e7dff90b58";
-    writeFileSync(join(root, "manifest.json"), JSON.stringify({
-      configuration: { runtimeTarget: "browser", runtimeBuild: "development", rendering: "csr" },
-      apps: Object.fromEntries(projects.map((project) => [project.app, { repository: `https://example.test/${project.app}`, commit }])),
-      projects,
-    }));
-    writeFileSync(join(root, "typefacts"), "producer\n");
-    const answer = cleanReport();
-    // One long string in the one finding: the sweep keeps `findings` whole, so the report holds `rows` copies.
-    answer.findings[0].message = "y".repeat(rowBytes);
-    const checker = fakeChecker(root, answer);
-    const out = join(root, "sweep.json");
-    const run = (extra) => spawnSync(process.execPath, [
-      new URL("./corpus-sweep.mjs", import.meta.url).pathname, "--manifest", join(root, "manifest.json"), "--apps-root", apps, "--checker", checker,
-      "--typefacts", join(root, "typefacts"), "--jobs", "2", "--out", out, ...extra,
-    ], { encoding: "utf8", maxBuffer: 1 << 26, env: { ...process.env, NODE_OPTIONS: "--max-old-space-size=8000" } });
-    const first = run([]);
-    assert.equal(first.status, 0, first.stderr.slice(-2000));
-    assert.ok(statSync(out).size > constants.MAX_STRING_LENGTH, "the sweep report is over the longest string");
-    const head1 = JSON.parse(first.stdout);
-    assert.equal(head1.projectCount, rows);
-    assert.equal(head1.findingCount, rows);
-    let count = 0;
-    const rest = readReportFile(out, { onResult: (row) => { count += 1; assert.equal(row.findings[0].message.length, rowBytes); } });
-    assert.equal(count, rows);
-    assert.equal(rest.projectCount, rows);
-    // The second sweep takes the first as its order: it reads the over-limit report and runs.
-    const second = run(["--order-from", out]);
-    assert.equal(second.status, 0, second.stderr.slice(-2000));
   });
 });
