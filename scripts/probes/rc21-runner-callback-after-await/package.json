@@ -1,0 +1,7 @@
+{
+  "name": "rc21-runner-callback-after-await",
+  "private": true,
+  "type": "module",
+  "scripts": { "probe": "vitest run" },
+  "devDependencies": { "vitest": "5.0.5", "solid-js": "2.0.0-rc.21", "@solidjs/signals": "2.0.0-rc.21" }
+}
