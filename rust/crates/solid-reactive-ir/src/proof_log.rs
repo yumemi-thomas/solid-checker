@@ -291,6 +291,12 @@ pub(crate) enum PremiseKind {
     /// The user's rule options disable the rule (ADR 0440): a choice, not a
     /// fact about the code.
     UserRuleOption,
+    /// ADR 0987: the boundary's `on` is a literal that names nothing (no identifier, no call): the value's span.
+    OptionLiteral,
+    /// ADR 0987: no async source is read under the boundary and every child of it is seen: the children's span.
+    BoundaryHoldsNoAsync,
+    /// ADR 0987: the compiler's callability of the `on` value is non-callable (never a function): the value's span.
+    OnValueNotCallable,
     /// The finding's file is under a dependency source root; the package is
     /// not the project's code (ADR 0284, `ProjectFacts::dependency_source_root`).
     DependencySourceRoot,

@@ -53,6 +53,24 @@ pub(crate) fn source_may_be_async(
         != crate::owners::ComputationProvenance::Sync
 }
 
+/// ADR 0636 and 0987: the setter of an optimistic creation (`createOptimistic`, `createOptimisticStore`) throws before the first answer unless the creation has
+/// one: a first argument that is a data value, or a declared loading value. The one decision, asked wherever a setter is recorded (a declaration, an assignment's
+/// destructuring, a callback's result): a recording that left it unasked would read as a synchronous source by absence from `async_sources`, which is no proof.
+pub(crate) fn optimistic_setter_is_async(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    created: &solid_facts::ast::CallFact,
+    primitive: Option<Primitive>,
+) -> bool {
+    matches!(
+        primitive,
+        Some(Primitive::CreateOptimistic | Primitive::CreateOptimisticStore)
+    ) && created.arguments.first().is_some_and(|argument| {
+        // A sync compute may read a pending source: only a data value has its answer.
+        !argument.runtime_value_kind.is_data_literal()
+    }) && !first_answer_options(lookup, file, created, primitive).declared_loading
+}
+
 pub(crate) fn returned_source_facts(
     lookup: &SemanticLookup<'_>,
     origin: &FileFacts,
@@ -367,15 +385,7 @@ pub(crate) fn discover_file_sources(
                 }
                 // ADR 0636: the setter of an optimistic async source refuses a
                 // write before the first answer; a declared value is an answer.
-                if matches!(
-                    resolved,
-                    Some(Primitive::CreateOptimistic | Primitive::CreateOptimisticStore)
-                ) && call.arguments.first().is_some_and(|argument| {
-                    // A sync compute may read a pending source: only a data
-                    // value has its answer.
-                    !argument.runtime_value_kind.is_data_literal()
-                }) && !first_answer_options(lookup, file, call, resolved).declared_loading
-                {
+                if optimistic_setter_is_async(lookup, file, call, resolved) {
                     result.async_sources.push(symbol.clone());
                 }
             }
@@ -461,6 +471,10 @@ pub(crate) fn discover_file_sources(
                 result
                     .source_primitives
                     .push((setter_symbol.clone(), primitive.into()));
+            }
+            // ADR 0987: the declaration's decision, asked here too.
+            if optimistic_setter_is_async(lookup, file, call, resolved) {
+                result.async_sources.push(setter_symbol.clone());
             }
         }
     }

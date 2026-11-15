@@ -149,6 +149,11 @@ pub(crate) const EFFECT_CREATION_UNACCOUNTED: &str = "effect-creation-unaccounte
 /// Batch 11, slice 4: a setter call whose source may be an optimistic one that has not answered (or whose primitive is not resolved) with no SC2009
 /// row, SC9012, discard or named silence: the code's own uncertifiable row.
 pub(crate) const OPTIMISTIC_WRITE_UNACCOUNTED: &str = "optimistic-write-unaccounted";
+/// ADR 0987: a boundary entry with an `on` (`<Loading on>`, `Loading({ on })`, `createLoadingBoundary`, the boundary named as a value) with no SC5006 finding and no named
+/// silence: whether a re-armed boundary waits on a source a frame reader outside it also holds is not decided.
+pub(crate) const LOADING_ON_OUTSIDE_HOLD_UNACCOUNTED: &str = "loading-on-outside-hold-unaccounted";
+/// ADR 0987: the same for SC5007: whether the `on` handed to the boundary is a function (which the boundary never calls) is not decided.
+pub(crate) const LOADING_ON_ACCESSOR_UNACCOUNTED: &str = "loading-on-accessor-unaccounted";
 /// ADR 0838: a pending rule's claim at a read no producer accounted for: no
 /// row of that rule, no SC9012 at the read, no recorded reason.
 pub(crate) const ASYNC_READ_UNACCOUNTED: &str = "async-read-unaccounted";

@@ -906,7 +906,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         &mut draft.static_defects,
         &mut draft.site_ends,
     );
-    let site_ends = std::mem::take(&mut draft.site_ends);
+    let mut site_ends = std::mem::take(&mut draft.site_ends);
     let owner_view = draft.owner_view.take();
     let mut program = draft.into_program(factory_instances);
     program.execution_paths = crate::execution_paths::execution_paths(
@@ -917,8 +917,12 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     );
     // ADR 0517: a `<Loading on>` whose hold is not proven its own; ADR 0624: one
     // handed a function.
-    let holds =
-        crate::loading_hold::loading_on_outside_hold_obligations(facts, &program, semantic_lookup);
+    let holds = crate::loading_hold::loading_on_outside_hold_obligations(
+        facts,
+        &program,
+        semantic_lookup,
+        &mut site_ends,
+    );
     program.static_violations.extend(holds);
     // ADR 0936: every site of the universe ends in a row, a census obligation,
     // the compiler's discard or a silence its producer named, or gets an
