@@ -42,7 +42,7 @@ import { GENERATOR_VERSION, generateProgram } from "./generate.mjs";
 import {
   BASE_ONLY_CONTEXTS, CALLBACK_CONTEXTS, CALLBACK_FORMS, CBP_CONTEXTS, LAYERS, PAIR_CALLBACKS, PAIR_LAYERS, PAIR_MOUNTS, PAIR_SETS, PAIR_SOURCES, PROMISE_SWALLOWS, legalVariantsOf, variantsOf, MISUSE_CODES, MOUNTS, RECALL_LAYERS, RECALL_TEMPLATE_CODES, SOURCE_AXES, SPEC, TEMPLATE_CODES,
   gridBindingsOf, gridVariantsOf, recallBindingsOf, recallContextsOf, recallLegalOf, recallVariantsOf, bindingsOf, sourcesOf, sourcesOption, fireShape } from "./misuse.mjs";
-import { COMPONENT_ENTRIES, parsePkg, pkgShapesOf } from "./package-site.mjs";
+import { COMPONENT_ENTRIES, parsePkg, phantomShapesOf, pkgShapesOf } from "./package-site.mjs";
 import { LATER_MOUNTS, RECALL_MOUNTS, WRAP_MOUNTS } from "./mounts.mjs";
 import { PL_CONTEXT_NAMES } from "./primitive-layer-shapes.mjs";
 import { ENTRY_CONTEXT_NAMES } from "./entry-shapes.mjs";
@@ -467,8 +467,12 @@ export function packageShapes(code, context, base, { legal = false } = {}) {
   const cells = legal ? SPEC[code].legal ?? [] : SPEC[code].contexts;
   if (!cells.includes(context)) return [];
   const component = componentSide(code) === (legal ? "legal" : "misuse");
-  return base.filter(plainShape).flatMap((shape) => pkgShapesOf(SPEC[code].setup(shape.variant, (prefix) => `${prefix}1`))
-    .filter((pkg) => component || !COMPONENT_ENTRIES.includes(parsePkg(pkg).entry)).map((pkg) => ({ ...shape, pkg })));
+  // ADR 0981: each shape again with the phantom manifest (`pk-manifest=phantom`), the declared ones first.
+  return base.filter(plainShape).flatMap((shape) => {
+    const sigs = SPEC[code].setup(shape.variant, (prefix) => `${prefix}1`);
+    return [...pkgShapesOf(sigs), ...phantomShapesOf(sigs)]
+      .filter((pkg) => component || !COMPONENT_ENTRIES.includes(parsePkg(pkg).entry)).map((pkg) => ({ ...shape, pkg }));
+  });
 }
 function recallAxesOf(code, context, base, variants, options = {}) {
   const shapes = recallShapesOf(code, context, base, variants, options);

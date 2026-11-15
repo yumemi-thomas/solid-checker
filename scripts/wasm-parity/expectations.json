@@ -711,6 +711,14 @@
           "endByte": 248
         },
         {
+          "id": "SC2002",
+          "rule": "action-called-in-owned-scope",
+          "kind": "uncertifiable",
+          "path": "<root>/App.tsx",
+          "startByte": 234,
+          "endByte": 248
+        },
+        {
           "id": "SC9012",
           "rule": "reactive-dispatch-unresolved",
           "kind": "uncertifiable",
@@ -727,6 +735,14 @@
           "endByte": 248
         },
         {
+          "id": "SC2002",
+          "rule": "action-called-in-owned-scope",
+          "kind": "uncertifiable",
+          "path": "<root>/App.tsx",
+          "startByte": 66,
+          "endByte": 77
+        },
+        {
           "id": "SC1001",
           "rule": "strict-read-untracked",
           "kind": "uncertifiable",
@@ -738,7 +754,7 @@
       "metrics": {
         "filesAnalyzed": 3,
         "functionsAnalyzed": 7,
-        "proofObligations": 10,
+        "proofObligations": 15,
         "cachedSummaries": 0,
         "unresolvedObligations": 3
       },
@@ -797,12 +813,28 @@
       },
       "findings": [
         {
+          "id": "SC2002",
+          "rule": "action-called-in-owned-scope",
+          "kind": "uncertifiable",
+          "path": "<root>/App.tsx",
+          "startByte": 239,
+          "endByte": 252
+        },
+        {
           "id": "SC4002",
           "rule": "missing-context-provider",
           "kind": "uncertifiable",
           "path": "<root>/App.tsx",
           "startByte": 239,
           "endByte": 252
+        },
+        {
+          "id": "SC2002",
+          "rule": "action-called-in-owned-scope",
+          "kind": "uncertifiable",
+          "path": "<root>/App.tsx",
+          "startByte": 285,
+          "endByte": 300
         },
         {
           "id": "SC9012",
@@ -813,6 +845,22 @@
           "endByte": 300
         },
         {
+          "id": "SC2002",
+          "rule": "action-called-in-owned-scope",
+          "kind": "uncertifiable",
+          "path": "<root>/App.tsx",
+          "startByte": 363,
+          "endByte": 371
+        },
+        {
+          "id": "SC2002",
+          "rule": "action-called-in-owned-scope",
+          "kind": "uncertifiable",
+          "path": "<root>/App.tsx",
+          "startByte": 371,
+          "endByte": 383
+        },
+        {
           "id": "SC3001",
           "rule": "leaf-owner-forbidden-call",
           "kind": "uncertifiable",
@@ -843,6 +891,14 @@
           "path": "<root>/App.tsx",
           "startByte": 383,
           "endByte": 391
+        },
+        {
+          "id": "SC2002",
+          "rule": "action-called-in-owned-scope",
+          "kind": "uncertifiable",
+          "path": "<root>/node_modules/dep-wrap/index.jsx",
+          "startByte": 135,
+          "endByte": 148
         },
         {
           "id": "SC4002",
@@ -888,7 +944,7 @@
       "metrics": {
         "filesAnalyzed": 4,
         "functionsAnalyzed": 14,
-        "proofObligations": 16,
+        "proofObligations": 27,
         "cachedSummaries": 0,
         "unresolvedObligations": 1
       },

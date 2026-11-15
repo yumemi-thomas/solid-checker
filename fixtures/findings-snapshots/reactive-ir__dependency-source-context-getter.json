@@ -2,6 +2,17 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-context-getter/App.tsx",
+      "start": 315,
+      "end": 328,
+      "fixes": 0
+    },
+    {
       "rule": "missing-context-provider",
       "code": "SC4002",
       "kind": "uncertifiable",
@@ -13,6 +24,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-context-getter/App.tsx",
+      "start": 361,
+      "end": 376,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -21,6 +43,28 @@
       "path": "fixtures/reactive-ir/dependency-source-context-getter/App.tsx",
       "start": 361,
       "end": 376,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-context-getter/App.tsx",
+      "start": 540,
+      "end": 551,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-context-getter/App.tsx",
+      "start": 540,
+      "end": 567,
       "fixes": 0
     },
     {
@@ -57,6 +101,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-context-getter/App.tsx",
+      "start": 695,
+      "end": 705,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -65,6 +120,17 @@
       "path": "fixtures/reactive-ir/dependency-source-context-getter/App.tsx",
       "start": 695,
       "end": 705,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-context-getter/App.tsx",
+      "start": 708,
+      "end": 721,
       "fixes": 0
     },
     {
@@ -79,6 +145,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-context-getter/App.tsx",
+      "start": 867,
+      "end": 880,
+      "fixes": 0
+    },
+    {
       "rule": "missing-context-provider",
       "code": "SC4002",
       "kind": "uncertifiable",
@@ -87,6 +164,17 @@
       "path": "fixtures/reactive-ir/dependency-source-context-getter/App.tsx",
       "start": 867,
       "end": 880,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-context-getter/App.tsx",
+      "start": 899,
+      "end": 917,
       "fixes": 0
     },
     {
@@ -101,6 +189,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-context-getter/App.tsx",
+      "start": 1341,
+      "end": 1354,
+      "fixes": 0
+    },
+    {
       "rule": "missing-context-provider",
       "code": "SC4002",
       "kind": "uncertifiable",
@@ -109,6 +208,28 @@
       "path": "fixtures/reactive-ir/dependency-source-context-getter/App.tsx",
       "start": 1341,
       "end": 1354,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-context-getter/App.tsx",
+      "start": 1369,
+      "end": 1384,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-context-getter/App.tsx",
+      "start": 1477,
+      "end": 1490,
       "fixes": 0
     },
     {
@@ -123,6 +244,28 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-context-getter/App.tsx",
+      "start": 1526,
+      "end": 1541,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-context-getter/App.tsx",
+      "start": 1683,
+      "end": 1694,
+      "fixes": 0
+    },
+    {
       "rule": "missing-context-provider",
       "code": "SC4002",
       "kind": "uncertifiable",
@@ -131,6 +274,39 @@
       "path": "fixtures/reactive-ir/dependency-source-context-getter/App.tsx",
       "start": 1683,
       "end": 1694,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-context-getter/App.tsx",
+      "start": 1714,
+      "end": 1728,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-context-getter/App.tsx",
+      "start": 1744,
+      "end": 1763,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-context-getter/App.tsx",
+      "start": 1943,
+      "end": 1956,
       "fixes": 0
     },
     {
@@ -161,6 +337,17 @@
       "kind": "uncertifiable",
       "blocker": "package-finding-at-entry",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-source-context-getter/App.tsx",
+      "start": 2483,
+      "end": 2491,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
       "path": "fixtures/reactive-ir/dependency-source-context-getter/App.tsx",
       "start": 2483,
       "end": 2491,

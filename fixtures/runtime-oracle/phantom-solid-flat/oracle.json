@@ -1,0 +1,5 @@
+{
+  "note": "ADR 0981: dep-router imports solid-js and declares nothing. The pin is the selection the default makes of it (`dependency-phantom-solid`): `feedback run` never takes the default, `--feedback-facts` is not an ordinary analysis (ADR 0297).",
+  "packages": ["dep-router"],
+  "dependencySources": ["dep-router"]
+}

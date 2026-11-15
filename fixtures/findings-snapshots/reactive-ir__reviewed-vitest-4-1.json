@@ -2,6 +2,83 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 707,
+      "end": 725,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 732,
+      "end": 752,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 763,
+      "end": 792,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 803,
+      "end": 845,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 852,
+      "end": 879,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 885,
+      "end": 905,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 914,
+      "end": 946,
+      "fixes": 0
+    },
+    {
       "rule": "action-called-in-owned-scope",
       "code": "SC2002",
       "kind": "uncertifiable",
@@ -13,6 +90,83 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 952,
+      "end": 974,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 1211,
+      "end": 1229,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 1274,
+      "end": 1306,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 1328,
+      "end": 1358,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 1439,
+      "end": 1475,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 1482,
+      "end": 1513,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 1519,
+      "end": 1551,
+      "fixes": 0
+    },
+    {
       "rule": "action-called-in-owned-scope",
       "code": "SC2002",
       "kind": "uncertifiable",
@@ -21,6 +175,17 @@
       "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
       "start": 2106,
       "end": 2136,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 2507,
+      "end": 2526,
       "fixes": 0
     },
     {
@@ -46,6 +211,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 2550,
+      "end": 2571,
+      "fixes": 0
+    },
+    {
       "rule": "action-called-in-owned-scope",
       "code": "SC2002",
       "kind": "uncertifiable",
@@ -65,6 +241,17 @@
       "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
       "start": 2550,
       "end": 2579,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 2583,
+      "end": 2614,
       "fixes": 0
     },
     {
@@ -90,6 +277,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 2635,
+      "end": 2669,
+      "fixes": 0
+    },
+    {
       "rule": "action-called-in-owned-scope",
       "code": "SC2002",
       "kind": "uncertifiable",
@@ -109,6 +307,17 @@
       "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
       "start": 2635,
       "end": 2674,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 2678,
+      "end": 2696,
       "fixes": 0
     },
     {
@@ -134,6 +343,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 2747,
+      "end": 2765,
+      "fixes": 0
+    },
+    {
       "rule": "action-called-in-owned-scope",
       "code": "SC2002",
       "kind": "uncertifiable",
@@ -153,6 +373,17 @@
       "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
       "start": 2747,
       "end": 2772,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 2776,
+      "end": 2797,
       "fixes": 0
     },
     {
@@ -178,6 +409,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 2804,
+      "end": 2829,
+      "fixes": 0
+    },
+    {
       "rule": "action-called-in-owned-scope",
       "code": "SC2002",
       "kind": "uncertifiable",
@@ -197,6 +439,17 @@
       "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
       "start": 2804,
       "end": 2832,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 2866,
+      "end": 2883,
       "fixes": 0
     },
     {
@@ -222,6 +475,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 2898,
+      "end": 2923,
+      "fixes": 0
+    },
+    {
       "rule": "action-called-in-owned-scope",
       "code": "SC2002",
       "kind": "uncertifiable",
@@ -241,6 +505,17 @@
       "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
       "start": 2898,
       "end": 2926,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 2930,
+      "end": 2965,
       "fixes": 0
     },
     {
@@ -277,6 +552,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 2974,
+      "end": 2992,
+      "fixes": 0
+    },
+    {
       "rule": "action-called-in-owned-scope",
       "code": "SC2002",
       "kind": "uncertifiable",
@@ -307,6 +593,17 @@
       "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
       "start": 2974,
       "end": 2988,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 3150,
+      "end": 3159,
       "fixes": 0
     },
     {

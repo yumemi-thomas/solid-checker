@@ -2,6 +2,17 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-package-selected-wrap/App.tsx",
+      "start": 239,
+      "end": 252,
+      "fixes": 0
+    },
+    {
       "rule": "missing-context-provider",
       "code": "SC4002",
       "kind": "uncertifiable",
@@ -10,6 +21,17 @@
       "path": "fixtures/reactive-ir/context-package-selected-wrap/App.tsx",
       "start": 239,
       "end": 252,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-package-selected-wrap/App.tsx",
+      "start": 285,
+      "end": 300,
       "fixes": 0
     },
     {
@@ -29,6 +51,17 @@
       "kind": "uncertifiable",
       "blocker": "package-finding-at-entry",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/context-package-selected-wrap/App.tsx",
+      "start": 363,
+      "end": 371,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
       "path": "fixtures/reactive-ir/context-package-selected-wrap/App.tsx",
       "start": 363,
       "end": 371,
@@ -62,6 +95,17 @@
       "kind": "uncertifiable",
       "blocker": "package-finding-at-entry",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/context-package-selected-wrap/App.tsx",
+      "start": 371,
+      "end": 383,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
       "path": "fixtures/reactive-ir/context-package-selected-wrap/App.tsx",
       "start": 371,
       "end": 383,

@@ -107,6 +107,92 @@ describe("callStarts", () => {
     expect(frame({ line: 2, column: 1 }, 0)).toContainEqual(expect.objectContaining({ line: 2, column: 6, handed: true }));
     expect(frame({ line: 3, column: 1 }, 0)).toEqual(expect.not.arrayContaining([expect.objectContaining({ handed: true })]));
   });
+  // ADR 0981 (a judge position correction): Chrome (rc.21) puts the frame of a native or dependency read of what a `new`, a component element or `createComponent`
+  // was handed on the statement's first token, not in the callee, so the value handed there is the withholding's place, as a call's argument is.
+  it("hands a `new`'s arguments to a frame on its keyword, as to one on its callee", () => {
+    const frame = frameStarts('import { Pkg } from "fz-pkg";\nimport { Local } from "./local";\nnew Pkg(r1, r2);\nnew Local(r1);');
+    for (const column of [1, 5]) expect(frame({ line: 3, column }, 0)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ line: 3, column: 9, handed: true, index: 0, noTarget: true }), expect.objectContaining({ line: 3, column: 13, handed: true, index: 1 })]));
+    // A frame deeper in the stack is not the constructor's read, and a project class is open (its body is authored).
+    expect(frame({ line: 3, column: 1 }, 1)).toEqual(expect.not.arrayContaining([expect.objectContaining({ handed: true })]));
+    expect(frame({ line: 4, column: 1 }, 0)).toContainEqual(expect.objectContaining({ line: 4, column: 11, handed: true, noTarget: false }));
+    // The keyword is also where an enclosing call's callee starts (`new Function(s)(a)`): that call's argument stays handed, beside the constructor's.
+    const nested = frameStarts('const x = new Function("g", "return g()")(a);');
+    expect(nested({ line: 1, column: 11 }, 0)).toEqual(expect.arrayContaining([expect.objectContaining({ column: 43, handed: true }), expect.objectContaining({ column: 24, handed: true })]));
+  });
+  it("marks the arguments of a dependency's function, constructor, element and createComponent, and no project function's", () => {
+    const frame = frameStarts('import { Pkg, run } from "fz-pkg";\nimport { Local } from "./local";\nimport { createComponent } from "solid-js";\nrun(a);\nLocal(a);\nnew Pkg(a);\n<Pkg v={a} />;\ncreateComponent(Pkg, { a });');
+    const marked = (line) => frame({ line, column: 1 }, 0).filter((place) => place.handed).map((place) => place.dependency === true);
+    expect(marked(4)).toEqual([true]);
+    expect(marked(5)).toEqual([false]);
+    expect(marked(6)).toEqual([true]);
+    expect(marked(7)).toEqual([true]);
+    expect(marked(8)).toEqual([true, true, true]);
+  });
+  it("hands a dependency element's attribute and spread values to a frame on its `<`, and no other element's", () => {
+    const frame = frameStarts('import { Pkg } from "fz-pkg";\nimport { Show } from "solid-js";\nimport { Local } from "./local";\n<Pkg v={r1} {...rest} w="s" n={1} />;\n<Show when={r1}>x</Show>;\n<Local v={r1} />;\n<div class={r1} />;');
+    const handed = (line) => frame({ line, column: 1 }, 0).filter((place) => place.handed);
+    // The expressions of `v` and the spread, not the literal `w="s"`'s string (`n={1}` is an expression: its literal is handed like any argument).
+    expect(handed(4).map((place) => place.column)).toEqual([9, 17, 32]);
+    expect(frame({ line: 4, column: 3 }, 0)).toContainEqual(expect.objectContaining({ line: 4, column: 9, handed: true }));
+    expect(frame({ line: 4, column: 1 }, 1).filter((place) => place.handed)).toEqual([]);
+    // A Solid component, a project component and an intrinsic element have an authored frame (or none that reads native code): nothing is handed.
+    for (const line of [5, 6, 7]) expect(handed(line), String(line)).toEqual([]);
+  });
+  it("hands what a dependency's call was handed to a frame on a member of its result, and what Reflect.apply forwards to a dependency's function", () => {
+    const frame = frameStarts('import { make1, run } from "fz-pkg";\nimport { own } from "./own";\nmake1(a).value;\nmake1(a)[k];\nown(a).value;\nReflect.apply(run, undefined, [s]);\nReflect.apply(own, undefined, [s]);');
+    const handed = (line, column) => frame({ line, column }, 0).filter((place) => place.handed);
+    expect(handed(3, 8)).toEqual([expect.objectContaining({ line: 3, column: 7, index: 0, dependency: true })]);
+    expect(handed(4, 8)).toEqual([expect.objectContaining({ line: 4, column: 7, index: 0, dependency: true })]);
+    // A project function's result, a frame on the property itself and a frame deeper in the stack hand nothing.
+    expect(handed(5, 6)).toEqual([]);
+    expect(handed(3, 10)).toEqual([]);
+    expect(frame({ line: 3, column: 8 }, 1).filter((place) => place.handed)).toEqual([]);
+    // `Reflect.apply(run, …)` forwards to a dependency, `Reflect.apply(own, …)` to a project function (a store write's target is then its first argument only).
+    expect(handed(6, 1).filter((place) => place.dependency === true).map((place) => place.column)).toEqual([15, 20, 31, 32]);
+    expect(handed(7, 1).filter((place) => place.dependency === true)).toEqual([]);
+  });
+  // ADR 0981: a project helper that calls one of its own parameters (`f(...args)`) runs what the caller handed it, and the read's top frame is in the helper while the
+  // call of the helper is a deeper frame: the arguments of that call are what was forwarded, but only to a deeper frame whose nearer frame is in such a call.
+  it("hands the arguments of a project helper's call to the deeper frame, when the nearer frame is its call of its own parameter", () => {
+    const source = 'import { site1 } from "fz-pkg";\nfunction apply1(f, ...args) { return f(...args); }\nfunction keep(f) { return 1; }\nuntrack(() => { apply1(site1, setW1); });\nkeep(site1, setW1);\nfunction twice(f) { f(); return 2; }\ntwice(site1, setW1);';
+    const frame = frameStarts(source);
+    const handed = (at, depth, inner) => frame(at, depth, inner).filter((place) => place.handed).map((place) => [place.line, place.column]);
+    // The helper's `f(...args)` starts at line 2 column 38 (its `return` at 31); the call `apply1(` is line 4 column 17; `site1` is column 24 and `setW1` column 31.
+    expect(handed({ line: 4, column: 17 }, 1, { line: 2, column: 38 })).toEqual([[4, 24], [4, 31]]);
+    // The nearer frame is the helper's, not in a call of its parameter (`return` of a helper that calls nothing of its own): nothing is handed.
+    expect(handed({ line: 4, column: 17 }, 1, { line: 2, column: 31 })).toEqual([]);
+    // A helper that does not call its parameter (`keep`), or one that does where the nearer frame is not in that call (`twice`'s `return`): nothing; in the call, its arguments.
+    expect(handed({ line: 5, column: 1 }, 1, { line: 3, column: 20 })).toEqual([]);
+    expect(handed({ line: 7, column: 1 }, 1, { line: 6, column: 26 })).toEqual([]);
+    expect(handed({ line: 7, column: 1 }, 1, { line: 6, column: 21 })).toEqual([[7, 7], [7, 14]]);
+    // No nearer frame, a nearer frame of another file, and the top frame (the call's own callee) keep the rules they had.
+    expect(handed({ line: 4, column: 17 }, 1, undefined)).toEqual([]);
+    expect(handed({ line: 4, column: 17 }, 1, { line: 2, column: 38, file: "other.ts" })).toEqual([]);
+    expect(handed({ line: 4, column: 17 }, 0)).toEqual([[4, 24], [4, 31]]);
+  });
+  it("hands the attribute values of a tag a project binding holds as dynamic(...) or lazy(...), like a dependency's element, and not another binding's", () => {
+    const frame = frameStarts('import { dynamic } from "@solidjs/web";\nimport { lazy } from "solid-js";\nimport { Site1 } from "fz-pkg";\nconst Dyn = dynamic(() => Site1);\nconst Lz = lazy(() => import("fz-pkg"));\nconst Plain = () => null;\n<Dyn v={a} />;\n<Lz v={a} />;\n<Plain v={a} />;');
+    const handed = (line) => frame({ line, column: 1 }, 0).filter((place) => place.handed).map((place) => place.dependency === true);
+    expect(handed(7)).toEqual([true]);
+    expect(handed(8)).toEqual([true]);
+    expect(handed(9)).toEqual([]);
+  });
+  it("marks a handed bare identifier, and the identifiers a props object or an array holds, for a dependency's call", () => {
+    const frame = frameStarts('import { run, writeHeld } from "fz-pkg";\nimport { createComponent } from "solid-js";\nrun(s1, holder.c, (s2));\ncreateComponent(run, { s1, a: s2, b: holder.c });\nReflect.apply(run, undefined, [s1, holder.c]);');
+    const bare = (line) => frame({ line, column: 1 }, 0).filter((place) => place.handed).map((place) => [place.column, place.bare === true]);
+    expect(bare(3)).toEqual([[5, true], [9, false], [19, true]]);
+    expect(bare(4)).toEqual([[17, true], [22, false], [24, true], [31, true]]);
+    expect(bare(5)).toEqual([[15, true], [20, true], [31, false], [32, true]]);
+  });
+  it("hands createComponent's arguments when it renders a dependency's component, and not for Solid's, a project's or an unknown component", () => {
+    const frame = frameStarts('import { createComponent } from "solid-js";\nimport { Pkg } from "fz-pkg";\nimport { Local } from "./local";\ncreateComponent(Pkg, { r1 });\ncreateComponent(Local, { r1 });\ncreateComponent(Unknown, { r1 });\ncreateComponent(Pkg);');
+    expect(frame({ line: 4, column: 1 }, 0).filter((place) => place.handed)).toEqual([
+      expect.objectContaining({ line: 4, column: 17, index: 0, noTarget: true }), expect.objectContaining({ line: 4, column: 22, index: 1, noTarget: true }),
+      expect.objectContaining({ line: 4, column: 24, index: 2, noTarget: true, bare: true })]);
+    for (const line of [5, 6, 7]) expect(frame({ line, column: 1 }, 0).filter((place) => place.handed), String(line)).toEqual([]);
+    expect(frame({ line: 4, column: 1 }, 1).filter((place) => place.handed)).toEqual([]);
+  });
   it("gives an element's frame the whole pattern, never another element", () => {
     const at = callStarts("const { a, b } = st;\nconst [{ c }, d] = xs;\n({ e, f } = st);");
     expect(at(1, 12)).toEqual([{ line: 1, column: 12 }, { line: 1, column: 7 }]);
