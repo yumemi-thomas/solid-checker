@@ -691,6 +691,47 @@ fn an_unchanged_project_updates_nothing() {
     assert_eq!(check(&retyped, &mut retained), Some(1));
 }
 
+/// ADR 0994: a file's own path answers by its allocation's address, and the answer is the string's:
+/// a copy of the path (another allocation) takes the string route to the same id, a path no file
+/// holds answers none, and `slots_of_path` lists what a scan comparing every file's path finds.
+#[test]
+fn a_files_own_path_answers_as_its_string_does() {
+    let project = Project {
+        files: fixture_sources(FIXTURES[1]),
+        schemes: HashMap::default(),
+        unreferenced: Vec::new(),
+    };
+    let facts = facts(&project).unwrap();
+    let table = super::FileTable::new(&facts.files);
+    for (slot, file) in facts.files.iter().enumerate() {
+        let own = file.path.as_str();
+        let copy = own.to_owned();
+        assert_eq!(table.id_of(own), Some(table.slot_id(slot)));
+        assert_eq!(table.id_of(&copy), table.id_of(own));
+        let scanned = facts
+            .files
+            .iter()
+            .enumerate()
+            .filter(|(_, other)| other.path.as_str() == own)
+            .map(|(at, _)| at)
+            .collect::<Vec<_>>();
+        assert_eq!(table.slots_of_path(own), scanned.as_slice());
+        assert_eq!(table.slots_of_path(&copy), scanned.as_slice());
+        // A prefix of the path shares its address and not its length.
+        assert_eq!(table.id_of(&own[..own.len() - 1]), None);
+    }
+    assert_eq!(table.id_of("/fixture/no-such-file.ts"), None);
+    assert!(table.slots_of_path("/fixture/no-such-file.ts").is_empty());
+    // The same table under another interner answers the same files.
+    let again = table.reinterned(crate::base::file_table::FileInterner::default());
+    for file in &facts.files {
+        assert_eq!(
+            again.id_of(file.path.as_str()).map(|id| again.path_of(id)),
+            Some(file.path.as_str())
+        );
+    }
+}
+
 #[test]
 fn a_contribution_reads_only_its_own_file() {
     // The same file in two projects contributes the same entries: nothing

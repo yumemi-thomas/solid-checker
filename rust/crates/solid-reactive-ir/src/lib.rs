@@ -78,6 +78,22 @@ mod owners;
 /// No answer depends on iteration order: the default hasher already
 /// randomized it on every run.
 pub type HashMap<K, V> = std::collections::HashMap<K, V, rustc_hash::FxBuildHasher>;
+
+/// The value held under `key`, made by `init` when there is none: what
+/// `map.entry(key.to_owned()).or_insert_with(init)` answers, without allocating
+/// the key for a question that finds it (ADR 0994: a per-file table asked once per
+/// reference paid a copy of the path and its free each time).
+pub(crate) fn get_or_insert_with_str<'m, V>(
+    map: &'m mut HashMap<String, V>,
+    key: &str,
+    init: impl FnOnce() -> V,
+) -> &'m mut V {
+    if !map.contains_key(key) {
+        map.insert(key.to_owned(), init());
+    }
+    map.get_mut(key)
+        .expect("the key was found or has just been inserted")
+}
 /// See [`HashMap`].
 pub type HashSet<T> = std::collections::HashSet<T, rustc_hash::FxBuildHasher>;
 

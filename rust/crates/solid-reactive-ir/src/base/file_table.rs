@@ -57,6 +57,21 @@ pub(crate) struct FileTable {
     slots: HashMap<FileId, Vec<usize>>,
     /// Distinct ids in the order of their first slot.
     ids: Vec<FileId>,
+    /// ADR 0994: each slot's own path allocation, held so that its address names
+    /// those bytes for as long as the table lives.
+    held: Vec<Arc<str>>,
+    /// The id of a path by the address and length of the allocation a slot's file
+    /// holds it in: the answer to a question asked with the file's own path
+    /// (`file.path.as_str()`, the path of a location made from it) without hashing
+    /// and comparing the string. An address and length of a held, immutable
+    /// allocation name one string, so a hit is the answer the string would give;
+    /// every other `&str` misses and takes the string's route.
+    by_address: HashMap<(usize, usize), FileId>,
+}
+
+/// The key [`FileTable::by_address`] holds `path` under.
+fn address_of(path: &str) -> (usize, usize) {
+    (path.as_ptr() as usize, path.len())
 }
 
 impl FileTable {
@@ -70,6 +85,8 @@ impl FileTable {
         let mut slot_ids = Vec::with_capacity(files.len());
         let mut slots = HashMap::<FileId, Vec<usize>>::default();
         let mut ids = Vec::with_capacity(files.len());
+        let mut held = Vec::with_capacity(files.len());
+        let mut by_address = HashMap::<(usize, usize), FileId>::default();
         for (slot, file) in files.iter().enumerate() {
             let id = interner.intern(file.path.as_str());
             slot_ids.push(id);
@@ -78,12 +95,17 @@ impl FileTable {
                 ids.push(id);
             }
             entry.push(slot);
+            let shared = file.path.shared();
+            by_address.insert(address_of(&shared), id);
+            held.push(shared);
         }
         Self {
             interner,
             slot_ids,
             slots,
             ids,
+            held,
+            by_address,
         }
     }
 
@@ -97,6 +119,7 @@ impl FileTable {
         let mut slot_ids = Vec::with_capacity(self.slot_ids.len());
         let mut slots = HashMap::<FileId, Vec<usize>>::default();
         let mut ids = Vec::with_capacity(self.ids.len());
+        let mut by_address = HashMap::<(usize, usize), FileId>::default();
         for (slot, id) in self.slot_ids.iter().enumerate() {
             let id = interner.intern(self.interner.path(*id));
             slot_ids.push(id);
@@ -105,12 +128,15 @@ impl FileTable {
                 ids.push(id);
             }
             entry.push(slot);
+            by_address.insert(address_of(&self.held[slot]), id);
         }
         Self {
             interner,
             slot_ids,
             slots,
             ids,
+            held: self.held.clone(),
+            by_address,
         }
     }
 
@@ -127,6 +153,12 @@ impl FileTable {
     /// The slots carrying `id`, in file order.
     pub(crate) fn slots_of(&self, id: FileId) -> &[usize] {
         self.slots.get(&id).map_or(&[], Vec::as_slice)
+    }
+
+    /// The slots whose file has exactly this path, in file order: what a scan of every slot
+    /// comparing the path finds, without the scan (ADR 0994).
+    pub(crate) fn slots_of_path(&self, path: &str) -> &[usize] {
+        self.id_of(path).map_or(&[], |id| self.slots_of(id))
     }
 
     /// Which of its id's slots `slot` is (0 for the first).
@@ -148,6 +180,17 @@ impl FileTable {
     }
 
     pub(crate) fn id_of(&self, path: &str) -> Option<FileId> {
+        // ADR 0994: a file's own path answers by its address; a debug build asks the string too.
+        if let Some(id) = self.by_address.get(&address_of(path)) {
+            debug_assert_eq!(
+                self.interner
+                    .get(path)
+                    .filter(|id| self.slots.contains_key(id)),
+                Some(*id),
+                "the address of {path} names another file than its string"
+            );
+            return Some(*id);
+        }
         self.interner
             .get(path)
             .filter(|id| self.slots.contains_key(id))

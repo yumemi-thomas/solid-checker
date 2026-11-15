@@ -1188,13 +1188,33 @@ pub(crate) fn optimistic_async_setter(
                 )
             )
     };
-    dialect.refuses_optimistic_write_before_load()
+    let answer = dialect.refuses_optimistic_write_before_load()
         && rows.get(symbol).is_some_and(|row| {
             optimistic(symbol)
-                || rows
-                    .iter()
-                    .any(|(other, candidate)| candidate.1 == row.1 && optimistic(other.as_str()))
-        })
+                // ADR 0994: an alias holds the creation's declaration, and only a symbol of
+                // `asynchronous` can be `optimistic`, so the creations are asked from that set
+                // (usually a few) and not from every setter row of the program (one per file
+                // here: a scan of all rows per question, each row compared by its path).
+                || asynchronous.iter().any(|other| {
+                    optimistic(other.as_str())
+                        && rows
+                            .get(other.as_str())
+                            .is_some_and(|candidate| candidate.1 == row.1)
+                })
+        });
+    // The scan this replaced, as a debug build's check that the answer is the same.
+    debug_assert_eq!(
+        answer,
+        dialect.refuses_optimistic_write_before_load()
+            && rows.get(symbol).is_some_and(|row| {
+                optimistic(symbol)
+                    || rows.iter().any(|(other, candidate)| {
+                        candidate.1 == row.1 && optimistic(other.as_str())
+                    })
+            }),
+        "optimistic_async_setter({symbol}) differs from the scan of every setter row"
+    );
+    answer
 }
 
 pub(crate) struct LocalAccessContext<'a, 'facts> {
