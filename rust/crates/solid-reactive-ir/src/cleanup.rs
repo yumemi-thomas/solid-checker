@@ -238,7 +238,8 @@ fn slot_callback_operations(
             // nothing for, and so does the observer guard's throw (`resolve`, `until`) where the leaf owner has
             // an observer: the same answer the literal form gets ([`push_crossed`]). In `onSettled` there is none,
             // and the call is the creation the leaf owner refuses, a diagnostic emitted before the throw, which
-            // stays reported.
+            // stays reported. What `resolve` and `until` do under a slot that lets the throw through (`latest`)
+            // is left to the stored-throw pass, which knows the host: an obligation in a tracked effect.
             let plain_throw = match kind {
                 crate::LeafOwnerOperationKind::Flush => true,
                 crate::LeafOwnerOperationKind::ObserverGuarded(_) => {
