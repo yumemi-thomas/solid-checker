@@ -1247,9 +1247,31 @@ fn entered_by_tags_only(
             .iter()
             .any(|element| element.name.span == at || element.closing_name == Some(at))
     };
+    // ADR 0992: a reference that is the exact value of a Solid-owned component's prop the dialect says renders a function under an owner
+    // (`<Dynamic component={X} />`, [`solid_dialect::Dialect::component_entry`]) enters the function by a render, as a tag does.
+    let rendered_prop = |at_file: &solid_facts::FileFacts, at: Span| {
+        lookup
+            .prop_render_sites_at(at_file.path.as_str(), at)
+            .is_some()
+            && !lookup.dialect.component_prop_renderers().is_empty()
+            && lookup
+                .dialect
+                .component_prop_renderers()
+                .iter()
+                .all(|(export, prop)| {
+                    lookup
+                        .dialect
+                        .component_entry(export, solid_dialect::ComponentSlot::Prop(prop))
+                        == Some(solid_dialect::ComponentEntry::RenderedUnderOwner)
+                })
+    };
     // The other files' references the call graph holds (a call, a render) are accounted for; any other reference there is a value flow.
-    if !local.iter().all(|(at, _)| tag_name(*at))
-        || !crate::local_access::foreign_reference_hand_offs(file, function, lookup).is_empty()
+    if !local
+        .iter()
+        .all(|(at, _)| tag_name(*at) || rendered_prop(file, *at))
+        || !crate::local_access::foreign_reference_hand_offs(file, function, lookup)
+            .iter()
+            .all(|(foreign, at, _)| rendered_prop(foreign, *at))
     {
         return false;
     }
@@ -1257,13 +1279,15 @@ fn entered_by_tags_only(
     // export out with no reference naming it, which the entry census (ADR 0347) holds and no tag accounts for. R1, R2 and R3 (the re-review): so does an export that is
     // a specifier (`export { Comp }`) and, in an open program, every export, the namespace census being a closed program's: code the program does not hold calls it.
     // Both are what the read walks ask (ADR 0934: `entered_by_unseen_code`).
-    if crate::execution_role::entered_by_unseen_code(file, function, lookup) {
+    // ADR 0992: a `lazy` loader's render of the export it names (and no other read of it) is a render entry too.
+    if crate::execution_role::entered_by_unseen_code_but_lazy_render(file, function, lookup) {
         return false;
     }
     !local.is_empty()
         || !lookup
             .function_call_site_references(file.path.as_str(), function.span)
             .is_empty()
+        || lookup.handed_out_only_by_lazy_render(file.path.as_str(), function.span)
 }
 
 /// How many calls [`layer_entry_open`] follows out through a closed layer's

@@ -10,6 +10,7 @@
 //     [--oracle-axes code,context,outcome] [--smoke [--sample 0.015] [--sample-seed <n>]] [-- <grid args>]
 //     [--split-codes] [--prune-cases] [--grid-timeout <minutes>] [--heap-mb <MiB>] [--role-log [--roles-against <roles.json>]] [--recall-full]
 //     [--scratch <dir>] [--sample-big <fraction> [--sample-codes A,B] [--sample-big-seed N] [--sample-big-min K]] [--warm-checker]
+//     [--boundary open|closed|both] [--entry namespace|named]
 //     [--budget-ms 1000] [--budget-mb 500] [--idle-stretch-s 10] [--perf-against <earlier run dir> [--perf-threshold 0.2]]
 // `--split-codes`: one grid process per code (`<grid>/<code>/`), so a large grid (mx-recall, 277k programs) stays within a heap and a
 // failure or hang costs one code; `--prune-cases`: delete each grid's `cases/` and `chrome-cases/` once its rows are read (a program is
@@ -65,6 +66,7 @@ import { NODE } from "../lib/node-runtime.mjs";
 import { cpus, platform, totalmem } from "node:os";
 import { cacheState, machineWindow, perfLine, samplerUnavailable, startSampler, unitPerf } from "./perf.mjs";
 import { compareLines, comparePerf, readRun } from "./perf-compare.mjs";
+import { compareRuns, reportLines } from "./boundary-twin.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 export { GRIDS } from "./focus-grids.mjs";
@@ -253,7 +255,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       const key = own[index].replace(/^--/, "").replace(/-([a-z])/g, (_, c) => c.toUpperCase());
       if (key === "smoke") { options.smoke = true; options.codes ??= "all"; index -= 1; continue; }
       if (key === "allCores" || key === "splitCodes" || key === "pruneCases" || key === "roleLog" || key === "recallFull" || key === "recallLean" || key === "warmChecker" || key === "noWarmChecker") { options[key] = true; index -= 1; continue; }
-      if (!["cover", "coverSeed", "oracleCap", "codes", "grids", "seed", "out", "runtimeDiff", "oracleAxes", "sample", "sampleSeed", "checkerBin", "typefacts", "gridTimeout", "heapMb", "rolesAgainst", "scratch", "sampleBig", "sampleCodes", "sampleBigSeed", "sampleBigMin", "budgetMs", "budgetMb", "idleStretchS", "perfAgainst", "perfThreshold", "shard"].includes(key) || own[index + 1] === undefined) throw new Error(`focus.mjs: unknown or empty option ${own[index]}`);
+      if (!["cover", "coverSeed", "oracleCap", "codes", "grids", "seed", "out", "runtimeDiff", "oracleAxes", "sample", "sampleSeed", "checkerBin", "typefacts", "gridTimeout", "heapMb", "rolesAgainst", "scratch", "sampleBig", "sampleCodes", "sampleBigSeed", "sampleBigMin", "budgetMs", "budgetMb", "idleStretchS", "perfAgainst", "perfThreshold", "shard", "boundary", "entry"].includes(key) || own[index + 1] === undefined) throw new Error(`focus.mjs: unknown or empty option ${own[index]}`);
       options[key] = own[index + 1];
     }
     if (!options.codes) throw new Error("focus.mjs: --codes A,B (the codes the change touches)");
@@ -265,6 +267,15 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       if (options.smoke) throw new Error("focus.mjs: --sample-big does not apply to --smoke (a smoke manifest names its programs)");
       if (!(Number(options.sampleBig) > 0 && Number(options.sampleBig) <= 1)) throw new Error(`focus.mjs: --sample-big takes a fraction in (0, 1], not ${options.sampleBig}`);
     } else if (options.sampleCodes || options.sampleBigSeed || options.sampleBigMin) throw new Error("focus.mjs: --sample-codes, --sample-big-seed and --sample-big-min need --sample-big");
+    if (options.boundary !== undefined) {
+      if (!["open", "closed", "both"].includes(options.boundary)) throw new Error(`focus.mjs: --boundary takes open, closed or both, not ${options.boundary}`);
+      // A smoke manifest records the verdicts of the default (closed) project: an open run would only move them.
+      if (options.smoke) throw new Error("focus.mjs: --boundary does not apply to --smoke (its manifests are the default boundary's)");
+    }
+    if (options.entry !== undefined) {
+      if (!["namespace", "named"].includes(options.entry)) throw new Error(`focus.mjs: --entry takes namespace or named, not ${options.entry}`);
+      if (options.smoke) throw new Error("focus.mjs: --entry does not apply to --smoke (its manifests are the default entry's)");
+    }
     if (options.perfThreshold && !options.perfAgainst) throw new Error("focus.mjs: --perf-threshold needs --perf-against");
     if (options.shard !== undefined) {
       if (options.smoke) throw new Error("focus.mjs: --shard does not apply to --smoke (a smoke manifest names its programs)");
@@ -284,10 +295,45 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     return options;
   }
 
+  /**
+   * `--boundary both` (ADR 0990, boundary-twin.mjs): this script twice, closed then open, each in its own directory (`<out>/closed`, `<out>/open`), the open
+   * run without an oracle sample (the sample compares the harness with real Chrome, which does not read the manifest) and with every Chrome record taken
+   * from the runtime cache the closed run filled; then the two runs' rows side by side. Exits 1 when either run needs a look or the twin has a blocker.
+   */
+  function runBoth(argv, options, out) {
+    const split = argv.indexOf("--");
+    const own = split < 0 ? argv : argv.slice(0, split);
+    const rest = split < 0 ? [] : argv.slice(split);
+    const without = [];
+    for (let index = 0; index < own.length; index += 1) {
+      if (own[index] === "--boundary" || own[index] === "--out") { index += 1; continue; }
+      without.push(own[index]);
+    }
+    let status = 0;
+    for (const boundary of ["closed", "open"]) {
+      const dir = join(out, boundary);
+      console.log(`\n== boundary ${boundary}: ${dir}`);
+      const oracle = boundary === "open" ? ["--runtime-diff", "0"] : [];
+      const run = spawnSync(NODE, [fileURLToPath(import.meta.url), ...without, ...oracle, "--boundary", boundary, "--out", dir, ...rest], { stdio: "inherit", env: process.env });
+      if (run.status !== 0) status = run.status ?? 1;
+    }
+    const report = compareRuns(join(out, "closed"), join(out, "open"));
+    writeFileSync(join(out, "boundary-twin.json"), `${JSON.stringify(report, null, 1)}\n`);
+    console.log("\n== boundary twin: closed vs open, each program's Chrome record the same");
+    for (const line of reportLines(report)) console.log(line);
+    console.log(`(${join(out, "boundary-twin.json")})`);
+    process.exitCode = status || (report.blockers.length || report.problems.length ? 1 : 0);
+  }
+
   async function main() {
     const options = parse(process.argv.slice(2));
     const out = resolve(options.out ?? join(tmpdir(), "solid-checker-fuzz-focus.noindex", `${Date.now()}`));
     mkdirSync(out, { recursive: true });
+    if (options.boundary === "both") return runBoth(process.argv.slice(2), options, out);
+    // `--boundary open|closed`: every program's checker project gets that manifest (checker.mjs `boundaryOverride`); the grid processes inherit it.
+    if (options.boundary) process.env.SOLID_CHECKER_FUZZ_BOUNDARY = options.boundary;
+    // `--entry named` (checker.mjs `entryOverride`): the checker project's entry names the exports the namespace loop enters; Chrome's entry is unchanged.
+    if (options.entry) process.env.SOLID_CHECKER_FUZZ_ENTRY = options.entry;
     const tools = [...(options.checkerBin ? ["--checker-bin", options.checkerBin] : []), ...(options.typefacts ? ["--typefacts", options.typefacts] : [])];
     const oracle = options.runtimeDiff === "0" ? [] : ["--runtime-diff", options.runtimeDiff, "--runtime-diff-axes", options.oracleAxes];
     const host = [...hostArgs(options), ...oracle, ...(options.oracleCap ? ["--runtime-diff-cap", options.oracleCap] : [])];

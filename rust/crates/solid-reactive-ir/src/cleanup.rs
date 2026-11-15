@@ -235,9 +235,24 @@ fn slot_callback_operations(
                 continue;
             };
             // `flush()` fails with a plain throw, which a call that takes what its callback throws reports
-            // nothing for. What `resolve` and `until` do under an observer is left to the stored-throw pass,
-            // which knows the host: an obligation in a tracked effect, a refused creation in `onSettled`.
-            if crossed.swallows && matches!(kind, crate::LeafOwnerOperationKind::Flush) {
+            // nothing for, and so does the observer guard's throw (`resolve`, `until`) where the leaf owner has
+            // an observer: the same answer the literal form gets ([`push_crossed`]). In `onSettled` there is none,
+            // and the call is the creation the leaf owner refuses, a diagnostic emitted before the throw, which
+            // stays reported. What `resolve` and `until` do under a slot that lets the throw through (`latest`)
+            // is left to the stored-throw pass, which knows the host: an obligation in a tracked effect.
+            let plain_throw = match kind {
+                crate::LeafOwnerOperationKind::Flush => true,
+                crate::LeafOwnerOperationKind::ObserverGuarded(_) => {
+                    resolution.leaf_has_observer.get()
+                }
+                crate::LeafOwnerOperationKind::Cleanup
+                | crate::LeafOwnerOperationKind::Primitive(_)
+                | crate::LeafOwnerOperationKind::ObserverCacheTracking
+                | crate::LeafOwnerOperationKind::UnresolvedCallback
+                | crate::LeafOwnerOperationKind::UnmodelledSlot
+                | crate::LeafOwnerOperationKind::GeneratorStepped => false,
+            };
+            if crossed.swallows && plain_throw {
                 if !through_async {
                     continue;
                 }
@@ -422,12 +437,14 @@ pub(super) fn leaf_owner_operations_for_file(
     let dialect = lookup.dialect;
     let completions = RefCell::default();
     let entered_async = Cell::new(false);
+    let leaf_has_observer = Cell::new(false);
     let resolution = LeafScopeResolution {
         lookup,
         symbol_names,
         tables,
         completions: &completions,
         entered_async: &entered_async,
+        leaf_has_observer: &leaf_has_observer,
     };
     let mut operations = Vec::new();
     for owner_call in &file.ast.calls {
@@ -487,6 +504,7 @@ pub(super) fn leaf_owner_operations_for_file(
             continue;
         };
         let region = callback_argument.span;
+        leaf_has_observer.set(LeafOwnerOperation::owner_has_observer(&owner.to_string()));
         // 2.0's `onSettled` is a leaf owner only when the call runs under a
         // live children-capable owner; out-of-band it enqueues a plain
         // callback where none of these operations throw. This pass is
@@ -1572,6 +1590,11 @@ struct LeafScopeResolution<'a, 'lookup> {
     /// promise it returns, which no slot that takes what its callback throws (`isPending`) catches (ADR 0960's measure of the
     /// literal form). A walk saves the flag before the callback it asks about and reads it after.
     entered_async: &'a Cell<bool>,
+    /// Whether the leaf owner whose callback the walk is in runs it under an active observer
+    /// ([`LeafOwnerOperation::owner_has_observer`]): set at each leaf creation before its callback is walked. It decides whether
+    /// a `resolve` or `until` reached under a slot that takes what its callback throws is the observer guard's plain throw (the
+    /// slot takes it) or the leaf owner's refused creation (a diagnostic emitted before the throw, which the slot does not).
+    leaf_has_observer: &'a Cell<bool>,
 }
 
 /// A forbidden operation the walk reached, and whether the leaf scope's call

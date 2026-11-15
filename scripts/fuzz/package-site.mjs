@@ -31,6 +31,18 @@ export const SITE_PACKAGE = "fz-site";
 export const PKG_ENTRIES = ["call", "call-inner", "dotcall", "reflect", "tagged", "new", "getter", "callback", "jsx", "jsx-inner", "hop", "dynamic", "lazy"];
 /** The entries that reach the export as a component (its props are the names), and so run the site in a component body of its own. */
 export const COMPONENT_ENTRIES = ["jsx", "jsx-inner", "hop", "dynamic", "lazy"];
+/**
+ * ADR 0992: the project site. The same site as `lazy` or `<Dynamic component={…}>` reaches, in a MODULE OF THE PROJECT (`site1.tsx`) instead of a package, so the
+ * owner emission (ADR 0970) asks whether a render the dialect knows (`Dialect::component_entry`) is the only entry of a project component. `<entry>-proj`:
+ *   lazy        render(() => <SiteLazy1 a={a} />, div), SiteLazy1 = lazy(() => import("./site1")): the component is the module's default export
+ *   dynamic-el  render(() => <Dynamic component={Site1} a={a} />, div): the component is the exact value of `Dynamic`'s `component`
+ *   lazy-call   the same lazy render, and the component also called directly (`Site1({ a, b })`) where the cell puts the site: an entry no render shows (the twin that must
+ *               never be silent in a context that runs the call unowned)
+ */
+export const PROJECT_ENTRIES = ["lazy", "dynamic-el", "lazy-call"];
+export const PROJECT_SUFFIX = "-proj";
+/** Whether a parsed shape (`parsePkg`) reaches the export as a component, so the cell's component side decides it (`lazy-call` also calls it, so it follows the cell's own claim). */
+export const isComponentEntry = ({ entry, project }) => COMPONENT_ENTRIES.includes(entry) || (project && entry === "dynamic-el");
 export const isPackageSite = (node) => node.k === "use" && Boolean(node.pkg);
 
 /**
@@ -54,10 +66,21 @@ export const PHANTOM_SUFFIX = "-phantom";
 /** `"tagged-own"` -> `{ entry: "tagged", own: true, phantom: false }`, `"call-own-phantom"` -> `{ entry: "call", own: true, phantom: true }`. */
 export const parsePkg = (value) => {
   let text = String(value);
+  const project = text.endsWith(PROJECT_SUFFIX);
+  if (project) text = text.slice(0, -PROJECT_SUFFIX.length);
   const phantom = text.endsWith(PHANTOM_SUFFIX);
   if (phantom) text = text.slice(0, -PHANTOM_SUFFIX.length);
-  return text.endsWith("-own") ? { entry: text.slice(0, -4), own: true, phantom } : { entry: text, own: false, phantom };
+  // `project` is named only when set, so a package shape parses as it always did.
+  const mark = project ? { project: true } : {};
+  return text.endsWith("-own") ? { entry: text.slice(0, -4), own: true, phantom, ...mark } : { entry: text, own: false, phantom, ...mark };
 };
+/** ADR 0992: the project-site shapes a grid crosses: each project entry, handed (a project module has no manifest, so no phantom form). */
+export const projectShapesOf = () => PROJECT_ENTRIES.map((entry) => `${entry}${PROJECT_SUFFIX}`);
+/**
+ * ADR 0992: the codes whose question is which owner a component's body runs under: the owner-code grids' project sites. NOT crossed by any grid yet: the judge reads only App.tsx's
+ * ledger, so a row or a Chrome frame in `site1.tsx` is unplaced (docs/open-work.md); the wiring (matrix.mjs `packageShapes`) lands with ADR 0993's judge.
+ */
+export const PROJECT_SITE_CODES = ["NO_OWNER_CLEANUP", "NO_OWNER_EFFECT", "NO_OWNER_CONTEXT", "SETTLED_CLEANUP_UNOWNED"];
 /** Every shape name a grid crosses: the entries handed, and each again with its own values where the template has signals to own. */
 export const pkgShapesOf = (sigs) => PKG_ENTRIES.flatMap((entry) => [entry, ...(ownCapable(sigs) ? [`${entry}-own`] : [])]);
 /** [`pkgShapesOf`] with the phantom manifest: the grids cross these beside the declared ones. */
@@ -140,8 +163,9 @@ const joined = (names) => names.join(", ");
  * @param {{ own?: boolean, sigs?: object[], phantom?: boolean }} options `phantom`: the manifest names no Solid package (ADR 0981)
  * @param {Record<string, string>} moduleNames `{ "solid-js": "S", "@solidjs/web": "W" }`: the namespace names
  */
-export function packageSite(base, entry, moduleNames, { own = false, sigs = [], phantom = false } = {}) {
-  if (!PKG_ENTRIES.includes(entry)) throw new Error(`package-site: unknown entry ${entry}`);
+export function packageSite(base, entry, moduleNames, { own = false, sigs = [], phantom = false, project = false } = {}) {
+  if (!(project ? PROJECT_ENTRIES : PKG_ENTRIES).includes(entry)) throw new Error(`package-site: unknown ${project ? "project " : ""}entry ${entry}`);
+  if (project && (own || phantom)) throw new Error("package-site: a project site takes handed values and no manifest");
   const strip = (line) => line.replaceAll("@@AUX@@", "");
   const prelude = base.preludeLines.map(strip);
   const moduleLines = [...(base.contextLine ? [base.contextLine] : []), ...base.moduleLines.map(strip)];
@@ -166,9 +190,11 @@ export function packageSite(base, entry, moduleNames, { own = false, sigs = [], 
   web.push(...free.filter((name) => WEB_API.has(name) && !web.includes(name)));
   // The site, as a function body: the prelude lines (a binding's alias or wrapper), then the statement.
   const body = [...prelude, `${op};`];
-  const component = COMPONENT_ENTRIES.includes(entry);
+  const component = COMPONENT_ENTRIES.includes(entry) || (project && (entry === "lazy-call" || entry === "dynamic-el"));
   const inner = entry === "call-inner" || entry === "jsx-inner";
-  const param = component ? "__p" : null;
+  // ADR 0992: a project site imports from its own module, and a lazy loader names it.
+  const moduleSpecifier = project ? "./site1" : SITE_PACKAGE;
+  const param = component ? (project ? "__p: any" : "__p") : null;
   const unpack = component && names.length ? [`const { ${joined(names)} } = __p;`] : [];
   const typedParams = names;
   const siteBody = (lines) => [...unpack, ...lines];
@@ -229,17 +255,32 @@ export function packageSite(base, entry, moduleNames, { own = false, sigs = [], 
       } else {
         ts.push(`export function Site1(${param}) {`, ...indent(siteBody(body)), "  return null;", "}");
       }
-      if (entry === "lazy") { ts.push("", "export default Site1;"); exportsDefault = true; }
+      if (entry === "lazy" || entry === "lazy-call") { ts.push("", "export default Site1;"); exportsDefault = true; }
       dts.push("export declare function Site1(props: any): any;", ...(exportsDefault ? ["export default Site1;"] : []));
       if (entry === "hop") { projectSolid.push("createComponent"); call = `createComponent(Site1, { ${joined(names)} })`; }
       // `dynamic` and `lazy` render their component from an effect or a later task, so the element is mounted (`render` into a detached div): an element a
       // statement discards never runs the component (measured: `not-fired` for all 14 programs of the first cell).
       else if (entry === "dynamic") { projectWeb.push("dynamic", "render"); projectLines.push("const SiteDyn1 = dynamic(() => Site1);"); call = `render(() => ${element("SiteDyn1")}, document.createElement("div"))`; }
-      else if (entry === "lazy") { projectSolid.push("lazy"); projectWeb.push("render"); projectLines.push(`const SiteLazy1 = lazy(() => import("${SITE_PACKAGE}"));`); call = `render(() => ${element("SiteLazy1")}, document.createElement("div"))`; }
+      else if (entry === "lazy") { projectSolid.push("lazy"); projectWeb.push("render"); projectLines.push(`const SiteLazy1 = lazy(() => import("${moduleSpecifier}"));`); call = `render(() => ${element("SiteLazy1")}, document.createElement("div"))`; }
+      // ADR 0992 (project entries): `Dynamic`'s `component` is the exact value, and the twin that also calls the component where the cell puts the site.
+      else if (entry === "dynamic-el") { projectWeb.push("Dynamic", "render"); call = `render(() => <Dynamic component={Site1}${attributes ? ` ${attributes}` : ""} />, document.createElement("div"))`; }
+      else if (entry === "lazy-call") { projectSolid.push("lazy"); projectWeb.push("render"); projectLines.push(`const SiteLazy1 = lazy(() => import("${moduleSpecifier}"));`); call = `(render(() => ${element("SiteLazy1")}, document.createElement("div")), Site1({ ${joined(names)} }))`; }
       else call = element("Site1");
     }
   }
-  const exportName = entry === "new" || COMPONENT_ENTRIES.includes(entry) ? "Site1" : entry === "getter" ? "make1" : "site1";
+  const exportName = entry === "new" || component ? "Site1" : entry === "getter" ? "make1" : "site1";
+  if (project) {
+    return {
+      pkgFiles: {},
+      text: call,
+      solid: projectSolid, web: projectWeb, namespaces: [],
+      moduleLines: projectLines,
+      // A lazy loader imports the module where it is used; every other entry (and the twin's direct call) imports the export.
+      importLines: [...(entry === "lazy" ? [] : [`import { ${exportName} } from "${moduleSpecifier}";`]), ...(base.importLines ?? [])],
+      files: { ...(base.files ?? {}), "site1.tsx": `${ts.join("\n").replace(/\n+$/, "")}\n` },
+      names, exportName,
+    };
+  }
   const files = {
     "package.json": `${JSON.stringify({
       name: SITE_PACKAGE, version: "1.0.0", type: "module",

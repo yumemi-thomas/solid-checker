@@ -19,7 +19,8 @@
 //     field-direct, field-iife, field-helper, field-super          a class field's initializer: the site itself, an IIFE, a helper's call, the superclass's field
 //     tagged                                                       the tag function of a tagged template
 //
-//   family C, host `apply` (SC6002, SC2008: an effect's apply): the site is the body of an exported helper
+//   family C, host `apply` (SC6002, SC2008: an effect's apply) and, ADR 0990, the leaf hosts `tracked-exp` and `settled-exp` (SC3001: the callback of `createTrackedEffect` or
+//   `onSettled` calls the helper): the site is the body of an exported helper
 //     exp-fn-same, exp-const-same        `export function h` / `export const h = () =>`, called by the apply in the file
 //     exp-fn-import, exp-const-import    the same, exported under another name by a specifier (`export { hx as h }`) and imported by that name from the module itself
 //     exp-fn-alias, exp-const-alias      the same, imported from the module itself under an alias
@@ -81,7 +82,12 @@ export const OB_CONSTRUCT_NAMES_A = Object.keys(OB_CONSTRUCTS_A);
 export const OB_CONSTRUCT_NAMES_C = ["exp-fn-same", "exp-fn-import", "exp-fn-alias", "exp-fn-reexport", "exp-const-same", "exp-const-import", "exp-const-alias", "exp-const-reexport", "local"];
 
 /** The host each code is placed in, and the construct family the host takes. */
-export const OB_HOSTS = { "memo-async": "A", "effect-async": "A", settled: "A", tracked: "A", apply: "C" };
+export const OB_HOSTS = { "memo-async": "A", "effect-async": "A", settled: "A", tracked: "A", apply: "C", "settled-exp": "C", "tracked-exp": "C" };
+/**
+ * ADR 0990 (batch 11, slice 6's cell): family C on the two leaf hosts. `tracked-exp` and `settled-exp` are the plain `tracked` and `settled` hosts whose callback calls the
+ * exported helper (`ob-exp-fn-same-tracked-exp`): the leaf owner's callback reaches the site through an export, the construct family the leaf codes had only on the apply host.
+ */
+export const OB_LEAF_OF = { "settled-exp": "settled", "tracked-exp": "tracked" };
 /** The hosts of each code: SC1002's two async computes, SC3001's two leaves, the apply of SC6002 and SC2008. */
 export const OB_CODES = {
   UNTRACKED_READ_AFTER_AWAIT: ["memo-async", "effect-async"],
@@ -91,6 +97,8 @@ export const OB_CODES = {
   PRIMITIVE_IN_EFFECT_CALLBACK: ["apply"],
   FLUSH_IN_EFFECT_CALLBACK: ["apply"],
 };
+// ADR 0990: the leaf codes also take family C on the leaf hosts (the exported helper the leaf's callback calls).
+for (const code of ["CLEANUP_IN_FORBIDDEN_SCOPE", "PRIMITIVE_IN_FORBIDDEN_SCOPE", "FLUSH_IN_TRACKED_QUEUE_CALLBACK"]) OB_CODES[code] = [...OB_CODES[code], "settled-exp", "tracked-exp"];
 
 const constructsOf = (host) => (OB_HOSTS[host] === "A" ? OB_CONSTRUCT_NAMES_A : OB_CONSTRUCT_NAMES_C);
 const contextsOf = (host) => constructsOf(host).flatMap((construct) => [`ob-${construct}-${host}`, `ob-${construct}-${host}-never`]);
@@ -153,7 +161,8 @@ export function obContext(context, stmts, kit, place) {
   const { hoisted, importLines, files, called } = helperOf(parts.construct, stmts, kit);
   // Raw text, as ADR 0934's `self[…]()`: the helper is a module-scope name the component's own scope check does not see.
   const apply = [expr(domExpr(parts.never ? `void ${called}` : `${called}()`))];
-  return { body: [expr(prim("effect", fn([ret(num(1))]), { apply: fn(apply) }))], view: [], hoisted, ...(importLines ? { importLines, files: files ?? {} } : files ? { files } : {}) };
+  const placed = OB_LEAF_OF[parts.host] ? place(OB_LEAF_OF[parts.host], apply) : { body: [expr(prim("effect", fn([ret(num(1))]), { apply: fn(apply) }))], view: [] };
+  return { ...placed, hoisted, ...(importLines ? { importLines, files: files ?? {} } : files ? { files } : {}) };
 }
 
 /** `{ [code]: { misuse, legal } }` for SPEC. */

@@ -2696,11 +2696,32 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
                 return Some(true);
             }
         }
+        // ADR 0992: the value of a prop the dialect says a Solid-owned component renders as a function under an owner (`<Dynamic component={X} />`,
+        // `Dialect::component_entry`) is called by that component, which the pinned source says runs it in a memo of its own: no package nothing here reads
+        // runs it. It is not the props object of the component it names (`Receiver::Parameter` follows the other props there), so it is placed, never handed.
+        let rendered_by_dialect = |attribute: &&JsxAttributeFact| {
+            attribute.namespace.is_none()
+                && file.source_text(attribute.name).is_some_and(|prop| {
+                    self.lookup.component_entry_of_tag(
+                        file,
+                        element,
+                        solid_dialect::ComponentSlot::Prop(prop),
+                    ) == Some(solid_dialect::ComponentEntry::RenderedUnderOwner)
+                })
+        };
+        // Holding the value is the cheap test, so it comes first: the dialect is asked only of the attribute that holds it.
+        if element
+            .attributes
+            .iter()
+            .any(|attribute| attribute_holds(attribute) && rendered_by_dialect(&attribute))
+        {
+            placed = true;
+        }
         let component_gets_it = element
             .attributes
             .iter()
             .filter(|attribute| !directive(attribute))
-            .any(attribute_holds)
+            .any(|attribute| attribute_holds(attribute) && !rendered_by_dialect(&attribute))
             || element
                 .spreads
                 .iter()

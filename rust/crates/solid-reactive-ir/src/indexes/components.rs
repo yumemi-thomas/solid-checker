@@ -655,10 +655,7 @@ impl<'a> SemanticLookup<'a> {
         let component = self.entities.at(file.path.as_str(), name)?;
         // The tag symbol's declarations, in any file (a project module
         // augmentation among them).
-        self.note_probe_read(crate::base::memo::probes::Probe::SymbolInfo, || {
-            Self::symbol_key(component.as_str())
-        });
-        let declarations = self.symbols_by_id().get(component.as_str())?.declarations();
+        let declarations = self.tag_declarations(component)?;
         let packages = self.dialect.primitive_defining_packages();
         let (_, prop) = self
             .dialect
@@ -672,6 +669,41 @@ impl<'a> SemanticLookup<'a> {
                     })
             })?;
         Some(prop)
+    }
+
+    /// The declarations of the symbol a tag names, in any file, noting the read for the memo that asks (the one raw read of the symbol table the tag
+    /// questions below share).
+    fn tag_declarations(&self, component: &SymbolId) -> Option<&[typefacts::Declaration]> {
+        self.note_probe_read(crate::base::memo::probes::Probe::SymbolInfo, || {
+            Self::symbol_key(component.as_str())
+        });
+        Some(self.symbols_by_id().get(component.as_str())?.declarations())
+    }
+
+    /// ADR 0992: what the Solid-owned component a tag names does with a value that enters it at `slot`
+    /// ([`solid_dialect::Dialect::component_entry`]). The tag's symbol must have declarations, every one of them in one of the dialect's
+    /// primitive-defining packages under one export name (a project component of the same name, a shadowing local or an unresolved tag answers
+    /// `None`). For a dotted tag (`<Web.Portal>`) the property's symbol is the one asked.
+    pub(crate) fn component_entry_of_tag(
+        &self,
+        file: &FileFacts,
+        element: &solid_facts::ast::JsxElementFact,
+        slot: solid_dialect::ComponentSlot<'_>,
+    ) -> Option<solid_dialect::ComponentEntry> {
+        let component = element
+            .member_property
+            .and_then(|property| self.entities.at(file.path.as_str(), property))
+            .or_else(|| self.entities.at(file.path.as_str(), element.name.span))?;
+        let declarations = self.tag_declarations(component)?;
+        let packages = self.dialect.primitive_defining_packages();
+        let export = declarations.first()?.name.as_ref();
+        if !declarations.iter().all(|declaration| {
+            declared_in_package(declaration.location.path.as_ref(), packages)
+                && declaration.name.as_ref() == export
+        }) {
+            return None;
+        }
+        self.dialect.component_entry(export, slot)
     }
 
     pub(super) fn symbols_by_id(&self) -> &HashMap<&'a str, solid_facts::TypeScriptSymbol<'a>> {

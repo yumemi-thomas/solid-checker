@@ -254,6 +254,12 @@ pub(crate) struct NamespaceHandOuts {
     unnamed: HashSet<String>,
     /// Functions handed out by name, as `(module path, function span)`.
     members: HashSet<(String, Span)>,
+    /// ADR 0992: the members a Solid `lazy` loader hands out and the dialect says it renders under an owner
+    /// ([`solid_dialect::Dialect::component_entry`], `lazy`'s loaded export): the loader is exactly `() => import("…")` of the one project module the
+    /// specifier resolves to, `lazy` is Solid's by its import binding, the export is the `default` (or `options.export`) and a function nothing rebinds.
+    lazy_rendered: HashSet<(String, Span)>,
+    /// The members some other read hands out (a static member read used as a value, a named dynamic-import read that is no such `lazy`).
+    other_named: HashSet<(String, Span)>,
 }
 
 impl NamespaceHandOuts {
@@ -261,6 +267,13 @@ impl NamespaceHandOuts {
     /// by name.
     pub(crate) fn named(&self, path: &str, function: Span) -> bool {
         self.members.contains(&(path.to_string(), function))
+    }
+
+    /// ADR 0992: whether the function is handed out by name only through `lazy` loaders the dialect says render their export under an owner: no other
+    /// read names it, so nothing but those renders enters it by this route.
+    pub(crate) fn named_only_by_lazy_render(&self, path: &str, function: Span) -> bool {
+        let key = (path.to_string(), function);
+        self.lazy_rendered.contains(&key) && !self.other_named.contains(&key)
     }
 
     /// Whether the module at `path`'s namespace escapes with no readable name.
@@ -303,6 +316,17 @@ pub(crate) fn namespace_hand_outs(
         for named in graph.load_members()[index].iter().flatten() {
             hand_outs.members.extend(named.iter().cloned());
         }
+        // ADR 0992: which of those a `lazy` loader renders under an owner, and which another read names.
+        for load in &file.ast.module_loads {
+            let Some(named) = graph.named_load_members(file, load) else {
+                continue;
+            };
+            if graph.renders_lazy_export(file, load, &named) {
+                hand_outs.lazy_rendered.extend(named);
+            } else {
+                hand_outs.other_named.extend(named);
+            }
+        }
         // The member a call invokes is a call, not a hand-out; every other read
         // of a static member in a runtime position hands its value out
         // ([`crate::base::MemberRole::ValueRead`]).
@@ -317,6 +341,9 @@ pub(crate) fn namespace_hand_outs(
             if let Some((target_file, target)) = lookup.function_for_symbol(symbol) {
                 hand_outs
                     .members
+                    .insert((target_file.path.to_string(), target.span));
+                hand_outs
+                    .other_named
                     .insert((target_file.path.to_string(), target.span));
             }
         }
@@ -777,6 +804,45 @@ impl<'a> CallGraph<'a, '_> {
             .into_iter()
             .map(|name| self.exported_function(target_file, name))
             .collect()
+    }
+
+    /// ADR 0992: whether `load` is a Solid `lazy` loader whose one named export the dialect says is rendered under an owner
+    /// ([`solid_dialect::Dialect::component_entry`]), with every function it names a stable one: the consumer is `lazy(() => import("…"), options)` (the
+    /// facts' `Lazy` consumer: the loader is the whole first argument, a concise arrow whose body is the import; the options name no spread, computed key
+    /// or non-literal export), the callee is Solid's `lazy` by its import binding, and the export is a function declaration, or an arrow or function
+    /// expression a `const` holds, that no write rebinds (the module's namespace is live, and `lazy` reads the export once the promise settles).
+    fn renders_lazy_export(
+        &self,
+        file: &solid_facts::FileFacts,
+        load: &solid_facts::ast::ModuleLoadFact,
+        named: &[(String, Span)],
+    ) -> bool {
+        use solid_dialect::{ComponentEntry, ComponentSlot};
+        if !matches!(
+            load.consumer,
+            Some(solid_facts::ast::ModuleLoadConsumer::Lazy { .. })
+        ) || self
+            .lookup
+            .dialect
+            .component_entry("lazy", ComponentSlot::LoadedExport)
+            != Some(ComponentEntry::RenderedUnderOwner)
+        {
+            return false;
+        }
+        let _ = file;
+        !named.is_empty()
+            && named.iter().all(|(path, function)| {
+                self.file(path)
+                    .and_then(|target| {
+                        let function = target
+                            .ast
+                            .functions
+                            .iter()
+                            .find(|candidate| candidate.span == *function)?;
+                        Some(stable_function_binding(target, function))
+                    })
+                    .unwrap_or(false)
+            })
     }
 
     /// The project module a specifier loads, when it names exactly one: the
@@ -2101,6 +2167,33 @@ impl<'a> CallGraph<'a, '_> {
     fn file(&self, path: &str) -> Option<&'a FileFacts> {
         self.lookup.file_by_path(path)
     }
+}
+
+/// ADR 0992: whether the binding that holds `function` is one nothing rebinds: a function declaration no write, redeclaration or `eval` reaches, or the
+/// one identifier of a `const` whose initializer is the function (behind parentheses or TypeScript sugar). A module's export is live, and a `lazy` loader's
+/// export is read once its promise settles, so an export rebound later is not the function this answers for.
+fn stable_function_binding(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> bool {
+    use solid_facts::ast::{BindingShape, FunctionKind};
+    if function.kind == FunctionKind::Declaration {
+        return function
+            .name
+            .as_ref()
+            .is_some_and(|name| !crate::indexes::binding_written(file, name.span));
+    }
+    file.ast
+        .bindings_initializer_containing(function.span)
+        .any(|binding| {
+            binding.immutable
+                && binding.shape == BindingShape::Identifier
+                && binding.names.len() == 1
+                && binding.initializer.is_some_and(|initializer| {
+                    file.ast.peel_ts_sugar_span(initializer) == function.span
+                })
+                && !crate::indexes::binding_written(file, binding.names[0].span)
+        })
 }
 
 /// A module load's named hand-outs ([`CallGraph::named_load_members`]).
