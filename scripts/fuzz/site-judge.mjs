@@ -52,6 +52,19 @@ export const linesIn = (positions, file = APP_FILE) => framesIn(positions, file)
  * sees only App.tsx's.
  */
 export const programFindings = (checker) => [...(checker?.findings ?? []).map((finding) => (finding.file ? finding : { ...finding, file: APP_FILE })), ...(checker?.moduleFindings ?? [])];
+/**
+ * A checker result with App.tsx's rows in `findings` and every other project file's in `moduleFindings`. The fast path's result is that already
+ * (`checker.mjs` `moduleFindings`); the real-Chrome oracle's record lists every file's rows in `findings`, each with its `file`, so the judges that read
+ * either (`judgeChrome` judges the oracle's) first split it: a module's row is never read as App.tsx's by its line.
+ */
+export function splitChecker(checker) {
+  if (!checker?.findings?.some((finding) => fileOf(finding) !== APP_FILE)) return checker;
+  return {
+    ...checker,
+    findings: checker.findings.filter((finding) => fileOf(finding) === APP_FILE),
+    moduleFindings: [...(checker.moduleFindings ?? []), ...checker.findings.filter((finding) => fileOf(finding) !== APP_FILE)],
+  };
+}
 /** The rows of one file. */
 export const findingsIn = (checker, file = APP_FILE) => (file === APP_FILE ? (checker?.findings ?? []) : (checker?.moduleFindings ?? []).filter((finding) => finding.file === file));
 /** A judge row's label for a finding: `rule@line`, with the file in front of the line for a module's (`rule@site1.tsx:4`). App.tsx's keep the label they had. */

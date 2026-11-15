@@ -31,7 +31,7 @@ import { callStarts, frameStarts, statementAt } from "./call-starts.mjs";
 import { registrationPositions } from "./registration.mjs";
 import { partlySilentRules, besideCode, codeOfUncaught, codeRules, codesForRule, coversCodeAt, declinesCode, appStack, withheldAtStack, withStarts, ignoredRules, isPlacelessCode, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
 import { loggedEvents, offSiteVerdicts, runtimeEvents } from "./classify.mjs";
-import { APP_FILE, findingsIn, framesIn, lineOfLabel, positionFile, programFindings } from "./site-judge.mjs";
+import { APP_FILE, findingsIn, framesIn, lineOfLabel, positionFile, programFindings, splitChecker } from "./site-judge.mjs";
 import { pairOf, stackedSplit } from "./stacked.mjs";
 import { repeatTwins, twinHolds } from "./repeat-twin.mjs";
 import { hitCount } from "./hits.mjs";
@@ -43,7 +43,7 @@ import { GENERATOR_VERSION, generateProgram } from "./generate.mjs";
 import {
   BASE_ONLY_CONTEXTS, CALLBACK_CONTEXTS, CALLBACK_FORMS, CBP_CONTEXTS, LAYERS, PAIR_CALLBACKS, PAIR_LAYERS, PAIR_MOUNTS, PAIR_SETS, PAIR_SOURCES, PROMISE_SWALLOWS, legalVariantsOf, variantsOf, MISUSE_CODES, MOUNTS, RECALL_LAYERS, RECALL_TEMPLATE_CODES, SOURCE_AXES, SPEC, TEMPLATE_CODES,
   gridBindingsOf, gridVariantsOf, recallBindingsOf, recallContextsOf, recallLegalOf, recallVariantsOf, bindingsOf, sourcesOf, sourcesOption, fireShape } from "./misuse.mjs";
-import { COMPONENT_ENTRIES, parsePkg, phantomShapesOf, pkgShapesOf } from "./package-site.mjs";
+import { COMPONENT_ENTRIES, PROJECT_SITE_CODES, isComponentEntry, parsePkg, phantomShapesOf, pkgShapesOf, projectShapesOf } from "./package-site.mjs";
 import { LATER_MOUNTS, RECALL_MOUNTS, WRAP_MOUNTS } from "./mounts.mjs";
 import { PL_CONTEXT_NAMES } from "./primitive-layer-shapes.mjs";
 import { ENTRY_CONTEXT_NAMES } from "./entry-shapes.mjs";
@@ -105,7 +105,8 @@ export const regionOf = (site) => [site.line, ...(site.aux ?? [])].filter((line)
  * @param {{ code: string, site: object, typecheck: object, checker: object, runtime: object, built?: object, twins?: Record<string, { holds: boolean, why?: string }> }} input
  * @returns {{ outcome: string, detail?: object }}
  */
-export function judge(input) {
+export function judge(whole) {
+  const input = { ...whole, checker: splitChecker(whole.checker) };
   const { verdict, judged } = judgeParts(input);
   if (!judged?.length) return verdict;
   // ADR 0953, option (c): `input.twins` (finding label -> { holds, why }, repeat-twin.mjs) is what the grid learned by running each repeat claim's twin.
@@ -164,7 +165,8 @@ function judgeParts(input) {
  * The twins that would settle a row's repeat claims (repeat-twin.mjs `repeatTwins`): one request per claim, with the twin program or why none can be
  * built; none for a row with no repeat claim. The grid runs them and judges the row again with `twins` (`settleRepeats`).
  */
-export function twinRequests(input) {
+export function twinRequests(whole) {
+  const input = { ...whole, checker: splitChecker(whole.checker) };
   const { judged, offSite } = judgeParts(input);
   return judged?.length && input.built && input.program ? repeatTwins({ judged, offSite, built: input.built, program: input.program }) : [];
 }
@@ -481,8 +483,10 @@ export function packageShapes(code, context, base, { legal = false } = {}) {
   // ADR 0981: each shape again with the phantom manifest (`pk-manifest=phantom`), the declared ones first.
   return base.filter(plainShape).flatMap((shape) => {
     const sigs = SPEC[code].setup(shape.variant, (prefix) => `${prefix}1`);
-    return [...pkgShapesOf(sigs), ...phantomShapesOf(sigs)]
-      .filter((pkg) => component || !COMPONENT_ENTRIES.includes(parsePkg(pkg).entry)).map((pkg) => ({ ...shape, pkg }));
+    // ADR 0993: the owner codes' project sites too (a module of the project holds the site: `lazy-call-proj`), now that the judges read every project module like App.tsx.
+    const project = PROJECT_SITE_CODES.includes(code) ? projectShapesOf() : [];
+    return [...pkgShapesOf(sigs), ...phantomShapesOf(sigs), ...project]
+      .filter((pkg) => component || !(parsePkg(pkg).project ? isComponentEntry(parsePkg(pkg)) : COMPONENT_ENTRIES.includes(parsePkg(pkg).entry))).map((pkg) => ({ ...shape, pkg }));
   });
 }
 function recallAxesOf(code, context, base, variants, options = {}) {

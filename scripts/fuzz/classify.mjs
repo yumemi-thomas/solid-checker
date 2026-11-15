@@ -302,7 +302,11 @@ export function offSiteVerdicts({ findings, built, program, runtime, plan, siteF
   const asSite = (finding) => ({ rule: finding.rule, file: inFile(finding), line: finding.line, column: finding.column, finding });
   // The diagnostics Chrome raised, not merged by stack. None names its file (`loc` carries a path the host chose), so each counts for every file:
   // the budget is never smaller than the run's.
-  const raised = (runtime.diagnostics ?? []).map((diagnostic) => ({ code: diagnostic.code }));
+  // The real-Chrome oracle's record lists a diagnostic it could not attribute to a file in `unattributed` and not in `diagnostics`, one entry each: that is a report of
+  // the code too (ADR 0993). A code counts as many times as the larger of the two lists says, so a record that holds a report in both lists counts it once.
+  const diagnosed = (runtime.diagnostics ?? []).map((diagnostic) => diagnostic.code);
+  const unattributedRaised = (runtime.unattributed ?? []).map(String);
+  const raised = [...new Set([...diagnosed, ...unattributedRaised])].flatMap((code) => Array.from({ length: Math.max(diagnosed.filter((one) => one === code).length, unattributedRaised.filter((one) => one === code).length) }, () => ({ code })));
   const excess = placelessExcess([...findings, ...siteFindings].map(asSite), raised, { ran: (site) => ranState(site.finding) });
   return findings.map((finding) => {
     const label = labelOf(finding);

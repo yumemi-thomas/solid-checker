@@ -3,7 +3,7 @@ import { offSiteVerdicts } from "./classify.mjs";
 import { judgeLegal } from "./legal.mjs";
 import { judge } from "./matrix.mjs";
 import { judgePattern } from "./patterns.mjs";
-import { APP_FILE, accountViolations, fileOfLabel, findingsIn, framesIn, labelOf, lineOfLabel, linesIn, positionFile, programFindings } from "./site-judge.mjs";
+import { APP_FILE, accountViolations, fileOfLabel, findingsIn, framesIn, labelOf, lineOfLabel, linesIn, positionFile, programFindings, splitChecker } from "./site-judge.mjs";
 
 // ADR 0993: every project source file of a case is judged like App.tsx. Hand-written rows, never a run's: each is a shape a judge read as App.tsx's only
 // (a Chrome frame in `site1.tsx` unplaced, a checker row in `site1.tsx` never read), found by project-site mode `lazy-call-proj` on SETTLED_CLEANUP_UNOWNED.
@@ -66,6 +66,32 @@ describe("the matrix judge: a site in a project module (SETTLED_CLEANUP_UNOWNED,
   it("a diagnostic frame in a package file places nothing in the module", () => {
     const runtime = fire([{ file: "fz-site/index.js", line: 4, column: 13 }, { file: "App.tsx", line: 9, column: 3 }]);
     expect(verdict(mod(row("site1.tsx", "missing-owner", "violation", 4)), runtime)).toMatchObject({ outcome: "agree" });
+  });
+});
+
+describe("the real-Chrome oracle's record lists every file's rows in `findings`", () => {
+  it("splitChecker keeps App.tsx's rows in findings and moves the others to moduleFindings; an App-only result is the same object", () => {
+    const appOnly = { ok: true, findings: [row("App.tsx", "r", "violation", 1)] };
+    expect(splitChecker(appOnly)).toBe(appOnly);
+    const mixed = { ok: true, findings: [row("App.tsx", "r", "violation", 1), row("site1.tsx", "missing-owner", "violation", 4)], moduleFindings: [row("other.ts", "r", "violation", 2)] };
+    const split = splitChecker(mixed);
+    expect(split.findings.map((finding) => finding.file)).toEqual(["App.tsx"]);
+    expect(split.moduleFindings.map((finding) => finding.file)).toEqual(["other.ts", "site1.tsx"]);
+  });
+  it("the matrix judge reads such a record as the fast path's (a module row in findings is the module's, never App.tsx's by its line)", () => {
+    const code = "SETTLED_CLEANUP_UNOWNED";
+    const site = { id: "s1", line: 4, aux: [], file: "site1.tsx" };
+    const runtime = { diagnostics: [{ code, message: "m", positions: [{ file: "site1.tsx", line: 4, column: 13 }] }], errors: [], witnesses: [] };
+    const violation = row("site1.tsx", "missing-owner", "violation", 4);
+    const verdict = (checker) => judge({ code, site, typecheck: { ok: true }, built: { files }, runtime, checker }).outcome;
+    expect(verdict({ ok: true, findings: [violation] })).toBe(verdict({ ok: true, findings: [], moduleFindings: [violation] }));
+    expect(verdict({ ok: true, findings: [violation] })).toBe("agree");
+  });
+  it("the legal judge too", () => {
+    const site = { id: "s1", line: 4, aux: [], file: "site1.tsx", hit: "h1" };
+    const input = (checker) => ({ code: "REACTIVE_WRITE_IN_OWNED_SCOPE", site, typecheck: { ok: true }, runtime: { diagnostics: [], errors: [], witnesses: [], hits: { h1: 1 } }, checker });
+    const violation = row("site1.tsx", "no-write-in-pure-computation", "violation", 4);
+    expect(judgeLegal(input({ ok: true, findings: [violation] })).outcome).toBe(judgeLegal(input({ ok: true, findings: [], moduleFindings: [violation] })).outcome);
   });
 });
 

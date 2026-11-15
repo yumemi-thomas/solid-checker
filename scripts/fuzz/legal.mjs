@@ -28,7 +28,7 @@ import { assertFindingsMapped } from "./checker.mjs";
 import { disturbances, offSiteVerdicts, runtimeEvents } from "./classify.mjs";
 import { pairOf, stackedSplit } from "./stacked.mjs";
 import { codeRules, codesForRule, ignoredRules, ruleHasRuntimeCounterpart } from "./codes.mjs";
-import { APP_FILE, accountViolations, framesIn, labelOf, lineOfLabel, positionFile, programFindings } from "./site-judge.mjs";
+import { APP_FILE, accountViolations, framesIn, labelOf, lineOfLabel, positionFile, programFindings, splitChecker } from "./site-judge.mjs";
 import { checkTypedAway, typeRejectedRows, typedAwayVerdict, typedOnPurpose } from "./tsc-overlap.mjs";
 import { buildCase } from "./emit.mjs";
 import { generateProgram } from "./generate.mjs";
@@ -64,7 +64,8 @@ const RUN_CLAIMING_RULES = ["pending-async-unsuspendable-read"];
  * Judges one legal program at its site.
  * @param {{ code: string, site: object, typecheck: object, checker: object, runtime: object, plan?: object }} input
  */
-export function judgeLegal({ code, site, typecheck: typed, checker, runtime, plan, atSite: siteScoped = false, evaluated = false }) {
+export function judgeLegal({ code, site, typecheck: typed, checker: whole, runtime, plan, atSite: siteScoped = false, evaluated = false }) {
+  const checker = splitChecker(whole);
   // A program tsc rejects is no evidence, but a checker violation on the rejected code is surfaced (tsc-overlap.mjs).
   if (typed && typed.ok === false) return typedAwayVerdict({ typed, checker, region: regionOf(site), rules: codeRules[code] ?? [] });
   if (!checker?.ok) return { outcome: "harness", detail: { why: `checker: ${String(checker?.error ?? "not run").slice(0, 120)}` } };
@@ -168,7 +169,8 @@ function judgeUses(built, uses, input) {
  * `offSiteVerdicts`): one whose lines ran where the runtime reported no code of its rule anywhere makes a program that was otherwise
  * `clean`, `uncertifiable` or `unexecuted` a `false-positive` (`detail.primary` keeps the uses' own outcome).
  */
-function withOffSite(verdict, uses, { built, program, checker, runtime, plan }) {
+function withOffSite(verdict, uses, { built, program, checker: whole, runtime, plan }) {
+  const checker = splitChecker(whole);
   if (!checker?.ok || !runtime || !["clean", "uncertifiable", "unexecuted", "false-positive"].includes(verdict.outcome)) return verdict;
   // ADR 0993: the violations of every project file; a use's region is in its own file (App.tsx's unless the use names another).
   const atUse = (finding) => uses.some((use) => positionFile(use) === positionFile(finding) && inLines(finding, regionOf(use)));
