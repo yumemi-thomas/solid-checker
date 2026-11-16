@@ -1134,23 +1134,49 @@ pub(crate) fn ref_applied_element<'f>(
     function: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
 ) -> Option<&'f solid_facts::ast::JsxElementFact> {
+    let applied = ref_application_of(file, function, lookup)?;
+    file.ast
+        .jsx_elements
+        .iter()
+        .filter(|element| element.span.contains(applied))
+        .min_by_key(|element| element.span.end - element.span.start)
+}
+
+/// The `ref` expression of an intrinsic element whose application receives
+/// `function` ([`ref_applied_element`] says how): the span the compiler's
+/// `DirectiveApply` role names.
+pub(crate) fn ref_application_of(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    ref_applications_of(file, function, lookup)
+        .into_iter()
+        .next()
+}
+
+/// Every such `ref` expression, in source order: a factory two elements call (`ref={directive()}` twice) is applied by both.
+pub(crate) fn ref_applications_of(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<Span> {
     if function.generator {
-        return None;
+        return Vec::new();
     }
     let path = file.path.as_str();
     let same_function = |target_file: &solid_facts::FileFacts,
                          target: &solid_facts::ast::FunctionFact| {
         target_file.path == file.path && target.span == function.span
     };
-    let applied = file
-        .compiler
+    file.compiler
         .callback_roles
         .iter()
         .filter(|callback| {
             callback.role == solid_facts::compiler::CallbackRoleKind::DirectiveApply
                 && ref_application_on_intrinsic(file, callback.span)
         })
-        .find(|callback| {
+        .filter(|callback| {
             yielded_values(file, callback.span).into_iter().any(|leaf| {
                 if leaf == function.span {
                     return true;
@@ -1184,12 +1210,9 @@ pub(crate) fn ref_applied_element<'f>(
                 }
                 false
             })
-        })?;
-    file.ast
-        .jsx_elements
-        .iter()
-        .filter(|element| element.span.contains(applied.span))
-        .min_by_key(|element| element.span.end - element.span.start)
+        })
+        .map(|callback| callback.span)
+        .collect()
 }
 
 /// Whether a JSX expression the compiler lowers evaluates `span`: an element

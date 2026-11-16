@@ -170,7 +170,7 @@ fn plain_throw_unobserved(
 
 fn unobserved_note(unobserved: bool) -> &'static str {
     if unobserved {
-        "; but the throw is stored on a computation or taken by a `try` or an error boundary, and no read that reports it is proven"
+        "; but the throw is stored on a computation or taken by a `try`, an error boundary or a promise that holds it, and no read that reports it is proven"
     } else {
         ""
     }

@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1008: a plain throw (useContext with no owner) that leaves an async function rejects the promise its call returned. Chrome reports it only where nothing holds that promise: discarded, voided, a then with no rejection arm, awaited in a discarded async function. Caught, held, returned, awaited under a try, or handed to Promise.all with a catch: silent, and the checker says uncertifiable (computation-error-unobserved)."
+}

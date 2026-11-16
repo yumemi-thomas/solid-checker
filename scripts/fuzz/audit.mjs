@@ -14,11 +14,14 @@
 //       the grid on the manifest's programs with the differential on every one of them (Chrome against the fast path). `--part i/N`:
 //       part i of the manifest's `parts` (`oracleParts`: the samples are split over the run's runners by their sizes, every N-th id from i).
 //       `report` reads a grid's parts from `<oracle>/<grid>/part-<i>/` (a manifest without `parts`: `<oracle>/<grid>/`).
-//   node scripts/fuzz/audit.mjs report --shards <dir> --oracle <dir> --out <dir> [--against <rows dir>]
+//   node scripts/fuzz/audit.mjs report --shards <dir> --oracle <dir> --out <dir> [--against <rows dir>] [--proved <ledger dir> [--proved-out <dir>]
+//                                      [--proved-bootstrap true] [--proved-expected true]]
 //       the run's verdict: every shard present and whole, what needs a look (focus.mjs PROBLEMS, oracle behaviour differences, an
 //       inconclusive or missing oracle program, an outcome that differs between a shard and its oracle grid), and the programs whose
 //       outcome moved from `--against` (an earlier report's `rows/`; its recall grids only against an earlier audit of the same mode). Writes audit.json, audit.md and rows/<grid>.jsonl.gz; exit 1
-//       when something needs a look.
+//       when something needs a look. `--proved`: the proved-verdict ledger of the last accepted audit (audit-proved.mjs, ADR 1012): a program it holds
+//       that is not proved now is attention unless scripts/fuzz/proved/changes.json names it, and `--proved-out` gets this run's ledger when nothing
+//       went unnamed. The known items of scripts/fuzz/audit-known.json leave the attention list (exact counts).
 //
 // The oracle sample of a whole grid takes, per stratum, the rows with a fast record in the order of `fnv(id)` (runtime-diff.mjs
 // `sampleStrata`); a shard's candidates are the same over its own rows, so the N smallest of all shards' candidates of a stratum are the
@@ -32,6 +35,8 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { GRIDS, hostArgs, parse as parseFocus } from "./focus.mjs";
 import { rowProblem } from "./codes.mjs";
 import { gridStanding, heldLine, manifestIds, readOpenDefects } from "./open-defects.mjs";
+import { applyKnown, auditProved, readAuditLedger, writeAuditLedger } from "./audit-proved.mjs";
+import { readChanges } from "./proved.mjs";
 import { GENERATOR_VERSION } from "./generate.mjs";
 import { BEHAVIOUR_KINDS, parsePerStratum } from "./runtime-diff.mjs";
 import { NODE } from "../lib/node-runtime.mjs";
@@ -198,7 +203,19 @@ function oracle(options, extra) {
   const args = [...heap, join(here, script), "--seed", SEED, "--grid", ...shape, ...recall, "--ids", partManifest, "--runtime-diff", "all", "--runtime-diff-axes", manifest.axes,
     "--out", out, "--checker-bin", options.checkerBin, "--typefacts", options.typefacts, ...hostArgs({ allCores: Boolean(process.env.CI) }), ...extra];
   console.log(`${label}: the runtime differential on ${ids.length} of the grid's ${manifest.ids.length} oracle programs`);
-  return spawnSync(NODE, args, { stdio: "inherit" }).status ?? 1;
+  const status = spawnSync(NODE, args, { stdio: "inherit" }).status ?? 1;
+  // The programs the differential could not judge (a page timeout, a browser bootstrap) run once more, beside the first run's results, with the
+  // default pools instead of every core: only what is still inconclusive is the audit's (readOracle puts the two together; ADR 1012).
+  const residue = readJsonl(join(out, "runtime-diff.jsonl")).filter((result) => result.inconclusive).map((result) => result.id);
+  if (residue.length) {
+    const again = join(mkdtempSync(join(tmpdir(), "fuzz-audit-rerun-")), `${options.grid}.json`);
+    writeFileSync(again, `${JSON.stringify({ ...manifest, part, ids: residue })}\n`);
+    const rerun = args.map((arg) => (arg === partManifest ? again : arg)).filter((arg) => arg !== "--all-cores");
+    rerun[rerun.indexOf("--out") + 1] = join(out, "rerun");
+    console.log(`${label}: ${residue.length} program(s) were inconclusive: run again once`);
+    spawnSync(NODE, [...rerun, ...hostArgs()], { stdio: "inherit" });
+  }
+  return status;
 }
 
 /** Summary fields a grid's oracle parts add up (runtime-diff.mjs `summarize`, and `inconclusive`). */
@@ -220,12 +237,21 @@ export function readOracle(oracleDir, grid, manifest) {
     else if (expected) absent.push(parts > 1 ? `${grid}: no oracle result for part ${part}/${parts} (${expected} programs)` : `${grid}: no oracle result for ${expected} programs`);
   });
   if (!found.length) return { diff: null, oracleRows: [], programRows: [], absent };
+  // A part's rerun (audit oracle: its inconclusive programs once more) replaces those programs' results, in the rows and the differing list.
+  for (const entry of found) {
+    const again = readJson(join(entry.dir, "rerun", "runtime-diff.json"));
+    const againRows = readJsonl(join(entry.dir, "rerun", "runtime-diff.jsonl"));
+    if (!again && !againRows.length) continue;
+    const ids = new Set(againRows.map((result) => result.id));
+    entry.rows = [...readJsonl(join(entry.dir, "runtime-diff.jsonl")).filter((result) => !ids.has(result.id)), ...againRows];
+    entry.diff = { ...entry.diff, differing: [...(entry.diff.differing ?? []).filter((result) => !ids.has(result.id)), ...(again?.differing ?? [])], summary: { ...entry.diff.summary, inconclusive: entry.rows.filter((result) => result.inconclusive).length } };
+  }
   const summary = { ...found[0].diff.summary, byKind: {} };
   for (const key of SUMMED) if (found.some(({ diff }) => diff.summary?.[key] !== undefined)) summary[key] = found.reduce((sum, { diff }) => sum + (diff.summary?.[key] ?? 0), 0);
   for (const { diff } of found) for (const [kind, n] of Object.entries(diff.summary?.byKind ?? {})) summary.byKind[kind] = (summary.byKind[kind] ?? 0) + n;
   return {
     diff: { summary, differing: found.flatMap(({ diff }) => diff.differing ?? []) },
-    oracleRows: found.flatMap(({ dir }) => readJsonl(join(dir, "runtime-diff.jsonl"))),
+    oracleRows: found.flatMap(({ dir, rows }) => rows ?? readJsonl(join(dir, "runtime-diff.jsonl"))),
     programRows: found.flatMap(({ dir }) => readJsonl(join(dir, "programs.jsonl"))),
     absent,
   };
@@ -241,8 +267,10 @@ export function judge({ shards: shardsDir, oracle: oracleDir, against }) {
   if (recall === "mixed") attention.push("the shards' recall grids are of both lean and full modes");
   const grids = {};
   const rows = new Map();
+  const codes = new Map();
   for (const grid of AUDIT_GRIDS) {
     const held = [];
+    const codeOf = new Map();
     const knownOpen = readOpenDefects();
     const outcomes = new Map();
     const tally = {};
@@ -259,6 +287,7 @@ export function judge({ shards: shardsDir, oracle: oracleDir, against }) {
       for (const row of shardRows) {
         if (outcomes.has(row.id)) attention.push(`${grid}: ${row.id} in two shards`);
         outcomes.set(row.id, row.outcome);
+        codeOf.set(row.id, row.code ?? "-");
         tally[row.outcome] = (tally[row.outcome] ?? 0) + 1;
         const problem = rowProblem(row);
         const standing = gridStanding(knownOpen, row, problem, { grid, strict: knownOpen.rows?.complete === true || manifest.has(row.id) });
@@ -291,6 +320,7 @@ export function judge({ shards: shardsDir, oracle: oracleDir, against }) {
     }
     grids[grid] = { programs: outcomes.size, planned, outcomes: tally, oracle };
     rows.set(grid, outcomes);
+    codes.set(grid, codeOf);
   }
   const moves = { against: against ?? null, moved: 0, kinds: {}, examples: [] };
   if (against) {
@@ -314,17 +344,22 @@ export function judge({ shards: shardsDir, oracle: oracleDir, against }) {
       for (const id of before.keys()) if (!outcomes.has(id)) { moves.moved += 1; moves.kinds[`${grid}: gone`] = (moves.kinds[`${grid}: gone`] ?? 0) + 1; }
     }
   }
-  return { count, recall, attention, grids, moves, rows };
+  return { count, recall, attention, grids, moves, rows, codes };
 }
 
 /** The report as Markdown (the workflow's step summary). */
-export function markdown({ count, recall, attention, grids, moves }) {
+export function markdown({ count, recall, attention, grids, moves, known, proved }) {
   const lines = [`# Fuzz audit`, "", `${count ?? "?"} shards; ${recall ?? "full"} recall grids; ${Object.values(grids).reduce((sum, grid) => sum + grid.programs, 0)} programs judged.`, ""];
   lines.push("| grid | programs | outcomes | oracle compared | behaviour | inconclusive |", "|---|---|---|---|---|---|");
   for (const [grid, g] of Object.entries(grids)) lines.push(`| ${grid} | ${g.programs} | ${Object.entries(g.outcomes).map(([k, v]) => `${k} ${v}`).join(", ")} | ${g.oracle?.compared ?? "-"} | ${g.oracle?.behaviour ?? "-"} | ${g.oracle?.inconclusive ?? "-"} |`);
   lines.push("", attention.length ? `## Needs a look (${attention.length})` : "Nothing needs a look.");
   for (const item of attention.slice(0, 100)) lines.push(`- ${item}`);
   if (attention.length > 100) lines.push(`- ... ${attention.length - 100} more (audit.json)`);
+  if (known?.length) {
+    lines.push("", "## Known items (scripts/fuzz/audit-known.json)");
+    for (const entry of known) lines.push(`- ${entry.grid} ${entry.kind} ${entry.item}: ${entry.known} of ${entry.cap ? "at most " : ""}${entry.count}`);
+  }
+  if (proved) lines.push("", `## Proved verdicts: baseline ${proved.baseline ?? "none"}, lost ${proved.losses}, newly proved ${proved.gained}, ${proved.accepted ? "accepted: this run is the next baseline" : "NOT accepted: the baseline stays the earlier one"}${proved.note ? ` (${proved.note})` : ""}`);
   if (moves.against) {
     lines.push("", `## Moved from the earlier run: ${moves.moved}`);
     for (const [kind, n] of Object.entries(moves.kinds).sort((a, b) => b[1] - a[1]).slice(0, 40)) lines.push(`- ${kind}: ${n}`);
@@ -337,11 +372,26 @@ function report(options) {
   const out = resolve(options.out);
   mkdirSync(join(out, "rows"), { recursive: true });
   const result = judge({ shards: resolve(options.shards), oracle: resolve(options.oracle), against: options.against ? resolve(options.against) : undefined });
+  // The known items leave the attention list with their exact counts; a rise or a fall of one is attention (audit-proved.mjs applyKnown).
+  const knownFile = join(here, "audit-known.json");
+  if (existsSync(knownFile)) {
+    const applied = applyKnown(result.attention, readJson(knownFile), result.recall ?? "full");
+    result.attention = applied.attention;
+    result.known = applied.known;
+  }
+  // The proved verdicts (ADR 1012): against the ledger of the last accepted audit; this run's ledger is written only when nothing went unnamed.
+  if (options.proved !== undefined || options.provedBootstrap === "true" || options.provedExpected === "true") {
+    const ledger = readAuditLedger(options.proved ? resolve(options.proved) : null);
+    const check = auditProved({ rows: result.rows, codes: result.codes, ledger, changes: readChanges(), bootstrap: options.provedBootstrap === "true", expected: options.provedExpected === "true" });
+    result.attention.push(...check.attention);
+    result.proved = { baseline: ledger ? [...ledger.grids.values()].reduce((sum, ids) => sum + ids.size, 0) : null, losses: check.losses, gained: check.gained, accepted: check.accepted, ...(check.note ? { note: check.note } : {}) };
+    if (check.accepted && options.provedOut) writeAuditLedger(resolve(options.provedOut), result.rows, result.codes, check.consumed);
+  }
   for (const [grid, outcomes] of result.rows) {
     const text = [...outcomes].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([id, outcome]) => JSON.stringify({ id, outcome })).join("\n");
     writeFileSync(join(out, "rows", `${grid}.jsonl.gz`), gzipSync(`${text}\n`));
   }
-  const { rows, ...summary } = result;
+  const { rows, codes: _codes, ...summary } = result;
   writeFileSync(join(out, "audit.json"), `${JSON.stringify(summary, null, 2)}\n`);
   const md = markdown(result);
   writeFileSync(join(out, "audit.md"), md);

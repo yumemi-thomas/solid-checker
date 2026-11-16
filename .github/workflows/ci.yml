@@ -387,6 +387,7 @@ jobs:
       - run: node scripts/guard/rises.mjs
       - run: node scripts/guard/regress.mjs
       - run: node scripts/guard/base.mjs
+      - run: node scripts/guard/proved.mjs
       - run: bun scripts/proof-lint.mjs
       - run: bun scripts/ir-read-lint.mjs
 

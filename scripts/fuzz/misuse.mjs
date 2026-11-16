@@ -786,7 +786,7 @@ export const SPEC = {
   UNTIL_IN_REACTIVE_SCOPE: { legal: ["handler", "timer"], recallContexts: ["memo-shared"], contexts: ["memo", "render-compute"], bindings: BINDINGS, setup: () => [], call: () => api("until", "() => 1") },
   FLUSH_IN_ACTION: { legal: ["handler", "timer"], recallContexts: ["action-after-yield", "action-shared"], contexts: ["action"], bindings: BINDINGS, setup: () => [], call: () => api("flush") },
   FLUSH_IN_EFFECT_CALLBACK: { legal: ["handler", "timer"], recallContexts: ["effect-apply-rerun", "effect-apply-shared", "evt-apply-dispatch", "evt-apply-helper-dispatch", "evt-apply-window-dispatch", "evt-anchor-apply-listener", ...ANCHOR_MISSES, ...DENIED_FLUSH], recallLegal: ["evt-handler-dispatch", "evt-created-anchor", "timer-from-apply", "micro-from-apply"], contexts: ["effect-apply"], bindings: BINDINGS, setup: () => [], call: () => api("flush") },
-  FLUSH_IN_TRACKED_QUEUE_CALLBACK: { legal: ["handler", "timer"], recallContexts: ["tracked-rerun", "tracked-shared"], contexts: LEAF, bindings: BINDINGS, setup: () => [], call: () => api("flush") },
+  FLUSH_IN_TRACKED_QUEUE_CALLBACK: { legal: ["handler", "timer"], recallContexts: ["tracked-rerun", "tracked-shared", "tracked-sibling-async"], contexts: LEAF, bindings: BINDINGS, setup: () => [], call: () => api("flush") },
   DYNAMIC_STATIC_PROMISE: {
     contexts: ["body", "root", "untrack", "memo"], bindings: BINDINGS, setup: () => [], recallVariants: Object.keys(STATIC_SOURCES),
     call: (node) => api("dynamic", STATIC_SOURCES[node.variant] ?? '() => Promise.resolve("p" as const), { static: true }', { module: "@solidjs/web" }),
@@ -1964,6 +1964,12 @@ function recallContext(context, stmts, kit) {
       const g = kit.name("g");
       const inner = [decl(g, fn(stmts)), expr(prim("cleanup", fn([expr(prim("root", ref(g)))]))), expr(call(ref("dispose"))), ret(ref("dispose"))];
       return { body: [expr(prim("rootd", fn(inner)))], view: [] };
+    }
+    // ADR 1008 (the re-check): a synchronous helper a tracked effect calls, which also calls an `async` function and drops its promise. The site
+    // throws on the effect's stack: the sibling's promise takes nothing of it.
+    case "tracked-sibling-async": {
+      const g = kit.name("g"), load = kit.name("f");
+      return { body: [decl(load, fn([], { async: true })), decl(g, fn([...stmts, expr(call(ref(load)))])), expr(prim("tracked", fn([expr(call(ref(g)))])))], view: [] };
     }
     case "memo-shared": case "effect-apply-shared": case "action-shared": case "tracked-shared": {
       const g = kit.name("g");
