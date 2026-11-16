@@ -143,6 +143,7 @@ throw, are not reads of this kind (no `ContextNotFoundError` leaves them).
 
 `resolve`, `until`, a static `dynamic` source and `useContext` throw with no diagnostic. In a memo or another storing compute the error stays on the node until a read rethrows it. With no proven read that reports it (an effect compute with no `error` arm, intrinsic JSX, a handler, a component body) the row is `computation-error-unobserved`; one entry that reports keeps the violation (ADR 0893). Under a component, the boundary is where it renders that prop (ADR 0937).
 A throw that leaves an `async` function rejects the promise its call returned: it is a violation only where that promise is dropped (an expression statement, `void`, a `then` chain with no rejection arm), awaited, or returned to a call that drops it; a promise that is caught, assigned or handed on leaves the row `computation-error-unobserved` ([ADR 1008](../decisions.md#adr-1008)).
+A function the render runs in place reports where its element does ([ADR 1006](../decisions.md#adr-1006)): one an intrinsic `ref` applies (the literal, an array element, a conditional's branch, the literal an exact same-file factory call returns) and the function child of `For`, `Repeat`, `Show` or `Match`; a boundary above the element still takes the throw.
 
 ## Related
 

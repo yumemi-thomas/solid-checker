@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1006: a function the render runs in place (an intrinsic ref's array element, branch or followed factory result; a For, Repeat or Show function child) throws where its element is created, and Chrome reports it unless a boundary above takes it."
+}
