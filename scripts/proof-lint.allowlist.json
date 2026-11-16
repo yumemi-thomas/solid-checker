@@ -515,6 +515,12 @@
         "why": "`eval` is a spelling used only to REFUSE a proof (a direct eval can reach any local binding without an identifier use): the true branch returns false/None/the unchanged slot, so a miss or a shadowing declaration only makes the check more conservative"
       }
     },
+    "rust/crates/solid-reactive-ir/src/indexes/components.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "a JSX attribute name is syntax, not a symbol; it only narrows which children are dead and keeps fallback/other props live"
+      }
+    },
     "rust/crates/solid-reactive-ir/src/indexes/compound.rs": {
       "name-only-match": {
         "count": 2,

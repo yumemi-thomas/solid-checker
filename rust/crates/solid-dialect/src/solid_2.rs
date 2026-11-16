@@ -2706,13 +2706,31 @@ impl Dialect for Solid2 {
         if self.triple_exports != releases::TripleExports::Rc21 {
             return None;
         }
-        let (literal, never) = match (export, prop) {
-            ("For", "each") => (ExcludingLiteral::EmptyArray, ChildrenNever::RowFunction),
-            ("Repeat", "count") => (ExcludingLiteral::Zero, ChildrenNever::Read),
-            ("Show" | "Match", "when") => (ExcludingLiteral::False, ChildrenNever::Read),
-            _ => return None,
-        };
-        Some(FlowChildrenExclusion { literal, never })
+        // The four (export, prop) rows read above; any other pair excludes nothing (no row, no claim).
+        const ROWS: [(&str, &str, ExcludingLiteral, ChildrenNever); 4] = [
+            (
+                "For",
+                "each",
+                ExcludingLiteral::EmptyArray,
+                ChildrenNever::RowFunction,
+            ),
+            (
+                "Repeat",
+                "count",
+                ExcludingLiteral::Zero,
+                ChildrenNever::Read,
+            ),
+            ("Show", "when", ExcludingLiteral::False, ChildrenNever::Read),
+            (
+                "Match",
+                "when",
+                ExcludingLiteral::False,
+                ChildrenNever::Read,
+            ),
+        ];
+        ROWS.iter()
+            .find(|(row_export, row_prop, _, _)| *row_export == export && *row_prop == prop)
+            .map(|&(_, _, literal, never)| FlowChildrenExclusion { literal, never })
     }
 
     fn computation_read_is_render(&self, primitive: Primitive) -> bool {
