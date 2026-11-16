@@ -9,7 +9,10 @@
 //   - a row names losses ONCE: the digest of every row an accepted audit used is kept in `consumed.json` beside the ledger, and a consumed row names
 //     nothing in a later audit (a row cannot be reused against a later loss of its group);
 //   - the new ledger is written only when every loss was named (`accepted`); otherwise the baseline stays the earlier one, and the run fails.
-// Without a ledger the audit fails ("no proved ledger") unless it is told to bootstrap one (`--proved-bootstrap true`: a manual run on main).
+// Without a ledger the audit fails ("no proved ledger") unless it is told to bootstrap one (`--proved-bootstrap true`: a manual run on main, and the
+// workflow refuses it when an audit-proved artifact of the mode ever existed). A bootstrap spends every row of changes.json that exists (their digests
+// start `consumed`): a row written before the baseline cannot name a loss after it. A ledger that should exist (`--proved-expected true`: main has one)
+// and cannot be read is attention, never "no ledger".
 //
 // KNOWN ITEMS. The audit's "needs a look" held the harness's and the judge's recorded classes next to what is new, so 872 lines were always red and a
 // new line could not stand out. scripts/fuzz/audit-known.json lists a class with an exact count (`count`; `cap: true` for a class that varies with the
@@ -60,9 +63,11 @@ export function writeAuditLedger(dir, rows, codes, consumed) {
  * `changes`: changes.json's `{ rows }`. `{ attention, accepted, losses, consumed, gained }`: `accepted` when every loss was named; `consumed` the
  * digests the earlier ledger kept plus the rows this check used.
  */
-export function auditProved({ rows, codes, ledger, changes = { rows: [] }, bootstrap = false }) {
+export function auditProved({ rows, codes, ledger, changes = { rows: [] }, bootstrap = false, expected = false }) {
   if (!ledger) {
-    if (bootstrap) return { attention: [], accepted: true, losses: 0, consumed: new Set(), gained: 0, note: "no proved ledger: this run is the baseline (bootstrap)" };
+    if (expected) return { attention: ["proved ledger: main has one (the workflow found its artifact) and it could not be read: the run is not held to it and does not replace it"], accepted: false, losses: 0, consumed: new Set(), gained: 0 };
+    // A bootstrap is a baseline from nothing: every row that exists is spent, so none names a later loss.
+    if (bootstrap) return { attention: [], accepted: true, losses: 0, consumed: new Set((changes.rows ?? []).map(digest)), gained: 0, note: "no proved ledger: this run is the baseline (bootstrap)" };
     return { attention: ["no proved ledger: the audit has no baseline of its proved programs to hold this run to; a manual run on main with `proved-bootstrap` writes the first one"], accepted: false, losses: 0, consumed: new Set(), gained: 0 };
   }
   const attention = [];
@@ -115,20 +120,23 @@ export function itemOf(line) {
   return match ? { grid: match[1], kind: match[2], id: match[3] } : null;
 }
 
-/** An entry's count in a recall mode: `count` is a number, or `{ lean, full }` when the classes of the lean and the full audit differ (the recall grids hold other programs). */
-export const countFor = (entry, mode) => (typeof entry.count === "number" ? entry.count : entry.count?.[mode] ?? 0);
+/** The ids an entry stores for a recall mode: `ids` is `{ lean: [...], full: [...] }`. */
+export const idsFor = (entry, mode) => new Set(entry.ids?.[mode] ?? []);
 
 /**
- * The attention lines with the known items taken out (audit-known.json `entries`): `{ attention, known }`. An entry matches the lines of its grid and
- * kind whose id matches its `idRegex`; exact (`count`): fewer or more is attention; `cap`: more is attention. `mode`: the audit's recall mode (lean or full).
+ * The attention lines with the known items taken out (audit-known.json `entries`): `{ attention, known }`. An entry names the exact ids it holds (`ids`, by
+ * recall mode `mode`: lean or full) and matches the lines of its grid and kind whose id matches its `idRegex`. A matched id the entry stores leaves the
+ * list; a matched id it does not store is attention (a new item, or one that took the place of a fixed one: the count alone would not show the swap);
+ * a stored id no longer reported is attention too (a fix is news: remove it, `cap` entries excepted: they accept any subset of their ids).
  */
 export function applyKnown(attention, known, mode = "full") {
-  const entries = (known?.entries ?? []).map((entry) => ({ ...entry, count: countFor(entry, mode) }));
+  const entries = known?.entries ?? [];
   const taken = new Set();
   const out = [];
   const summary = [];
   for (const entry of entries) {
     const pattern = new RegExp(entry.idRegex);
+    const stored = idsFor(entry, mode);
     const matched = [];
     attention.forEach((line, index) => {
       if (taken.has(index)) return;
@@ -136,14 +144,17 @@ export function applyKnown(attention, known, mode = "full") {
       if (item && item.grid === entry.grid && item.kind === entry.kind && pattern.test(item.id)) matched.push({ index, id: item.id });
     });
     matched.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-    const keep = matched.slice(0, entry.count);
-    for (const { index } of keep) taken.add(index);
-    summary.push({ item: entry.item, grid: entry.grid, kind: entry.kind, known: keep.length, count: entry.count, cap: Boolean(entry.cap) });
+    const known = matched.filter((item) => stored.has(item.id));
+    const extra = matched.filter((item) => !stored.has(item.id));
+    for (const { index } of known) taken.add(index);
+    const reported = new Set(matched.map((item) => item.id));
+    const gone = [...stored].filter((id) => !reported.has(id)).sort();
+    summary.push({ item: entry.item, grid: entry.grid, kind: entry.kind, known: known.length, count: stored.size, cap: Boolean(entry.cap) });
     const name = `${entry.grid} ${entry.kind} ${entry.item}`;
-    if (matched.length > entry.count) out.push(`known item ${name} rose: ${matched.length} now, ${entry.count} known; the extra ones: ${matched.slice(entry.count, entry.count + 3).map((item) => item.id).join(", ")}${matched.length - entry.count > 3 ? ", ..." : ""}`);
-    else if (!entry.cap && matched.length < entry.count) out.push(`known item ${name} fell: ${matched.length} now, ${entry.count} known: lower its count in scripts/fuzz/audit-known.json (a fix is news)`);
+    if (extra.length) out.push(`known item ${name}: ${extra.length} id(s) it does not store (${stored.size} stored): ${extra.slice(0, 3).map((item) => item.id).join(", ")}${extra.length > 3 ? ", ..." : ""}`);
+    if (gone.length && !entry.cap) out.push(`known item ${name}: ${gone.length} stored id(s) no longer reported (a fix is news; remove them from scripts/fuzz/audit-known.json): ${gone.slice(0, 3).join(", ")}${gone.length > 3 ? ", ..." : ""}`);
   }
   attention.forEach((line, index) => { if (!taken.has(index)) out.push(line); });
-  // the lines of the extra ones stay (they are the items that stand out), the first `count` of each entry are gone
+  // the lines of the ids an entry does not store stay: they are the items that stand out
   return { attention: out, known: summary };
 }

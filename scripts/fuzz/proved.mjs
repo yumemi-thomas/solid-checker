@@ -35,7 +35,13 @@ export function readLedger(dir = PROVED_DIR) {
   for (const name of readdirSync(dir).sort()) {
     if (name === "changes.json" || !name.endsWith(".json")) continue;
     const file = JSON.parse(readFileSync(join(dir, name), "utf8"));
-    ledger.set(file.grid, new Set(file.ids));
+    const grid = name.replace(/\.json$/, "");
+    // A ledger file names its own grid and lists its ids sorted and distinct (`record` writes it so; scripts/guard/proved.mjs holds the same): another is a hand edit.
+    if (file.grid !== grid) throw new Error(`${join(dir, name)}: its grid is ${JSON.stringify(file.grid)}, the file's is ${grid}`);
+    const ids = file.ids ?? [];
+    if (new Set(ids).size !== ids.length) throw new Error(`${join(dir, name)}: duplicate ids`);
+    if (ids.some((id, index) => index && ids[index - 1] > id)) throw new Error(`${join(dir, name)}: ids are not sorted`);
+    ledger.set(grid, new Set(ids));
   }
   return ledger;
 }

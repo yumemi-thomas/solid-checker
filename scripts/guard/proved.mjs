@@ -68,22 +68,36 @@ export function ledgerProblems({ head, base }) {
 }
 
 const keyOf = (entry) => `${entry.grid}\0${entry.kind}\0${entry.item}`;
-/** An entry's counts by recall mode: a number counts for both. */
-const countsOf = (entry) => (typeof entry.count === "number" ? { lean: entry.count, full: entry.count } : { lean: entry.count?.lean ?? 0, full: entry.count?.full ?? 0 });
+const idSet = (entry, mode) => new Set(entry.ids?.[mode] ?? []);
 
-/** The audit's known list against the base: a new entry or a raised count needs a new ADR and a why. */
+/**
+ * The audit's known list against the base. An entry names the exact ids it holds by recall mode (`ids: { lean, full }`). The only change that needs
+ * no ADR is REMOVING ids (an entry that fell): a new entry, an id added to an entry, a changed `idRegex`, `cap`, grid, kind or item (the key) is a new
+ * item, and needs an `adr` in docs/decisions.md that the base's entry did not already name, and a `why`.
+ */
 export function knownProblems({ head, base, decisions }) {
   const problems = [];
   const before = new Map((base.entries ?? []).map((entry) => [keyOf(entry), entry]));
   for (const entry of head.entries ?? []) {
     const old = before.get(keyOf(entry));
-    const now = countsOf(entry), was = old ? countsOf(old) : null;
-    if (old && now.lean <= was.lean && now.full <= was.full) continue;
     const name = `${entry.grid} ${entry.kind} ${entry.item}`;
-    if (![now.lean, now.full].every((n) => Number.isInteger(n) && n >= 0)) problems.push(`audit-known.json: ${name}: count must be a non-negative integer (or { lean, full })`);
-    if (!inDecisions(decisions, entry.adr)) problems.push(`audit-known.json: ${old ? "raised" : "new"} entry ${name}: ${entry.adr ?? "no adr"} is not an ADR in docs/decisions.md`);
-    else if (old && old.adr === entry.adr) problems.push(`audit-known.json: entry ${name} rose (lean ${was.lean} -> ${now.lean}, full ${was.full} -> ${now.full}) under ${entry.adr}, the ADR the base already named: a rise needs a new ADR`);
-    if (!text(entry.why)) problems.push(`audit-known.json: ${old ? "raised" : "new"} entry ${name} says no why`);
+    for (const mode of ["lean", "full"]) {
+      const ids = entry.ids?.[mode];
+      if (!Array.isArray(ids) || ids.some((id) => !text(id)) || new Set(ids).size !== ids.length || ids.some((id, i) => i && ids[i - 1] > id)) problems.push(`audit-known.json: ${name}: ids.${mode} must be a sorted list of distinct ids`);
+    }
+    let reason = null;
+    if (!old) reason = "new";
+    else if (entry.idRegex !== old.idRegex) reason = "its idRegex changed";
+    else if (Boolean(entry.cap) !== Boolean(old.cap)) reason = "its cap changed";
+    else for (const mode of ["lean", "full"]) {
+      const was = idSet(old, mode);
+      const added = [...idSet(entry, mode)].filter((id) => !was.has(id));
+      if (added.length) { reason = `${added.length} ${mode} id(s) added (${added.slice(0, 2).join(", ")})`; break; }
+    }
+    if (!reason) continue;
+    if (!inDecisions(decisions, entry.adr)) problems.push(`audit-known.json: entry ${name} changed (${reason}): ${entry.adr ?? "no adr"} is not an ADR in docs/decisions.md`);
+    else if (old && old.adr === entry.adr) problems.push(`audit-known.json: entry ${name} changed (${reason}) under ${entry.adr}, the ADR the base already named: any change but removing ids needs a new ADR`);
+    if (!text(entry.why)) problems.push(`audit-known.json: entry ${name} changed (${reason}) and says no why`);
   }
   return problems;
 }
@@ -91,13 +105,21 @@ export function knownProblems({ head, base, decisions }) {
 const read = (file) => readFileSync(join(repo, file), "utf8");
 const PROVED = "scripts/fuzz/proved";
 
-/** The ledger files of a directory (`Map(grid -> Set(ids))`) and, at a revision, of `git ls-tree`. */
-export function ledgersOf(files) {
+/**
+ * The ledger files (`[name, content]`) as `Map(grid -> Set(ids))`, with the problems of their form: a file names its own grid (`file.grid` is the file's
+ * name), lists its ids sorted and distinct (a ledger is written sorted; a duplicate or a disorder is a hand edit).
+ */
+export function ledgersOf(files, problems = []) {
   const map = new Map();
   for (const [name, content] of files) {
     if (name === "changes.json" || !name.endsWith(".json")) continue;
     const file = JSON.parse(content);
-    map.set(file.grid, new Set(file.ids));
+    const grid = name.replace(/\.json$/, "");
+    if (file.grid !== grid) problems.push(`proved ledger ${name}: its grid is ${JSON.stringify(file.grid)}, the file's is ${grid}`);
+    const ids = file.ids ?? [];
+    if (new Set(ids).size !== ids.length) problems.push(`proved ledger ${name}: duplicate ids`);
+    if (ids.some((id, i) => i && ids[i - 1] > id)) problems.push(`proved ledger ${name}: ids are not sorted`);
+    map.set(grid, new Set(ids));
   }
   return map;
 }
@@ -113,7 +135,7 @@ function main(argv) {
   const listing = git("ls-tree", "--name-only", revision, `${PROVED}/`);
   const baseNames = listing ? listing.split("\n").filter((name) => name.endsWith(".json")).map((name) => name.slice(PROVED.length + 1)) : [];
   const baseFiles = baseNames.map((name) => [name, git("show", `${revision}:${PROVED}/${name}`) ?? ""]);
-  const headLedgers = ledgersOf(headFiles), baseLedgers = ledgersOf(baseFiles);
+  const headLedgers = ledgersOf(headFiles, problems), baseLedgers = ledgersOf(baseFiles);
   const parse = (files, name) => { const found = files.find(([n]) => n === name); return found ? JSON.parse(found[1]) : { rows: [] }; };
   problems.push(...changesProblems({ head: parse(headFiles, "changes.json"), base: parse(baseFiles, "changes.json"), decisions, ledgers: headLedgers }));
   problems.push(...ledgerProblems({ head: headLedgers, base: baseLedgers }));

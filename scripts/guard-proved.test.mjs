@@ -56,20 +56,44 @@ test("ledgers: an id the base held and the head lost fails, whatever else the fi
   assert.deepEqual([...ledgersOf([["changes.json", "{}"], ["README.md", "x"]]).keys()], []);
 });
 
-test("audit-known.json: a new entry or a raised count needs a new ADR and a why; a fall is free", () => {
-  const entry = (over = {}) => ({ grid: "mx-recall", kind: "unplaced", item: "pk-lazy", count: 614, adr: "ADR 1012", why: "x", ...over });
-  assert.deepEqual(knownProblems({ head: { entries: [entry()] }, base: { entries: [] }, decisions }), []);
-  assert.deepEqual(knownProblems({ head: { entries: [entry({ count: 600 })] }, base: { entries: [entry()] }, decisions }), []);
-  assert.match(knownProblems({ head: { entries: [entry({ count: 700 })] }, base: { entries: [entry()] }, decisions })[0], /rose \(lean 614 -> 700, full 614 -> 700\) under ADR 1012, the ADR the base already named/);
-  assert.deepEqual(knownProblems({ head: { entries: [entry({ count: 700, adr: "ADR 0803" })] }, base: { entries: [entry()] }, decisions }), []);
-  assert.match(knownProblems({ head: { entries: [entry({ adr: "ADR 9999" })] }, base: { entries: [] }, decisions })[0], /not an ADR in docs\/decisions.md/);
-  assert.match(knownProblems({ head: { entries: [entry({ why: "" })] }, base: { entries: [] }, decisions })[0], /says no why/);
+test("audit-known.json: only removing ids is free; a new entry, an added id, a changed idRegex or cap needs a new ADR and a why", () => {
+  const entry = (over = {}) => ({ grid: "mx-recall", kind: "unplaced", item: "pk-lazy", idRegex: "-pk-lazy", cap: false, ids: { lean: ["a", "b"], full: ["a", "b", "c"] }, adr: "ADR 1012", why: "x", ...over });
+  const check = (head, base) => knownProblems({ head: { entries: [head] }, base: { entries: base ? [base] : [] }, decisions });
+  assert.deepEqual(check(entry(), null), []);
+  assert.deepEqual(check(entry({ ids: { lean: ["a"], full: ["a", "c"] } }), entry()), []);
+  assert.deepEqual(check(entry({ ids: { lean: [], full: [] } }), entry()), []);
+  // an id added needs a new ADR: the same ADR the base named does not do, an unknown one does not either
+  const added = entry({ ids: { lean: ["a", "b"], full: ["a", "b", "c", "d"] } });
+  assert.match(check(added, entry())[0], /changed \(1 full id\(s\) added \(d\)\) under ADR 1012, the ADR the base already named: any change but removing ids needs a new ADR/);
+  assert.deepEqual(check({ ...added, adr: "ADR 0803" }, entry()), []);
+  assert.match(check({ ...added, adr: "ADR 9999" }, entry())[0], /not an ADR in docs\/decisions.md/);
+  assert.match(check({ ...added, adr: "ADR 0803", why: "" }, entry())[0], /says no why/);
+  // the swap: one id fixed, a new one of the class: the count is the same, the id set is not
+  assert.match(check(entry({ ids: { lean: ["a", "b"], full: ["a", "b", "z"] } }), entry())[0], /1 full id\(s\) added \(z\)/);
+  // widening the net or turning an exact entry into a cap needs one too
+  assert.match(check(entry({ idRegex: "-pk-" }), entry())[0], /its idRegex changed/);
+  assert.match(check(entry({ cap: true }), entry())[0], /its cap changed/);
+  assert.deepEqual(check(entry({ cap: true, adr: "ADR 0803" }), entry()), []);
+  // an entry's ids are sorted and distinct, both modes
+  assert.match(check(entry({ ids: { lean: ["b", "a"], full: ["a"] } }), null)[0], /ids\.lean must be a sorted list of distinct ids/);
+  assert.match(check(entry({ ids: { lean: ["a", "a"], full: ["a"] } }), null)[0], /ids\.lean must be a sorted list/);
+  assert.match(check(entry({ ids: { lean: ["a"] } }), null)[0], /ids\.full must be a sorted list/);
+  // another new entry (another key) is new
+  assert.match(check(entry({ item: "other", adr: "ADR 9999" }), entry())[0], /not an ADR/);
 });
 
-test("audit-known.json: a count by recall mode rises per mode", () => {
-  const entry = (count, adr = "ADR 1012") => ({ grid: "mx-recall", kind: "halted-claim", item: "flw", count, adr, why: "x" });
-  assert.deepEqual(knownProblems({ head: { entries: [entry({ lean: 58, full: 98 })] }, base: { entries: [] }, decisions }), []);
-  assert.deepEqual(knownProblems({ head: { entries: [entry({ lean: 50, full: 98 })] }, base: { entries: [entry({ lean: 58, full: 98 })] }, decisions }), []);
-  assert.match(knownProblems({ head: { entries: [entry({ lean: 58, full: 99 })] }, base: { entries: [entry({ lean: 58, full: 98 })] }, decisions })[0], /lean 58 -> 58, full 98 -> 99\) under ADR 1012/);
-  assert.match(knownProblems({ head: { entries: [entry({ lean: -1, full: 98 })] }, base: { entries: [] }, decisions })[0], /non-negative integer/);
+test("ledger files: a file names its own grid and lists its ids sorted and distinct", () => {
+  const problems = [];
+  const good = ledgersOf([["mx-recall.json", JSON.stringify({ grid: "mx-recall", ids: ["a", "b"] })]], problems);
+  assert.deepEqual(problems, []);
+  assert.deepEqual([...good.get("mx-recall")], ["a", "b"]);
+  const bad = [];
+  ledgersOf([["mx-recall.json", JSON.stringify({ grid: "mx-census", ids: ["a"] })]], bad);
+  assert.match(bad[0], /its grid is "mx-census", the file's is mx-recall/);
+  const dup = [];
+  ledgersOf([["mx-recall.json", JSON.stringify({ grid: "mx-recall", ids: ["a", "a"] })]], dup);
+  assert.match(dup[0], /duplicate ids/);
+  const unsorted = [];
+  ledgersOf([["mx-recall.json", JSON.stringify({ grid: "mx-recall", ids: ["b", "a"] })]], unsorted);
+  assert.match(unsorted[0], /ids are not sorted/);
 });

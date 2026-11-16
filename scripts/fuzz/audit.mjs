@@ -15,7 +15,7 @@
 //       part i of the manifest's `parts` (`oracleParts`: the samples are split over the run's runners by their sizes, every N-th id from i).
 //       `report` reads a grid's parts from `<oracle>/<grid>/part-<i>/` (a manifest without `parts`: `<oracle>/<grid>/`).
 //   node scripts/fuzz/audit.mjs report --shards <dir> --oracle <dir> --out <dir> [--against <rows dir>] [--proved <ledger dir> [--proved-out <dir>]
-//                                      [--proved-bootstrap true]]
+//                                      [--proved-bootstrap true] [--proved-expected true]]
 //       the run's verdict: every shard present and whole, what needs a look (focus.mjs PROBLEMS, oracle behaviour differences, an
 //       inconclusive or missing oracle program, an outcome that differs between a shard and its oracle grid), and the programs whose
 //       outcome moved from `--against` (an earlier report's `rows/`; its recall grids only against an earlier audit of the same mode). Writes audit.json, audit.md and rows/<grid>.jsonl.gz; exit 1
@@ -380,9 +380,9 @@ function report(options) {
     result.known = applied.known;
   }
   // The proved verdicts (ADR 1012): against the ledger of the last accepted audit; this run's ledger is written only when nothing went unnamed.
-  if (options.proved !== undefined || options.provedBootstrap === "true") {
+  if (options.proved !== undefined || options.provedBootstrap === "true" || options.provedExpected === "true") {
     const ledger = readAuditLedger(options.proved ? resolve(options.proved) : null);
-    const check = auditProved({ rows: result.rows, codes: result.codes, ledger, changes: readChanges(), bootstrap: options.provedBootstrap === "true" });
+    const check = auditProved({ rows: result.rows, codes: result.codes, ledger, changes: readChanges(), bootstrap: options.provedBootstrap === "true", expected: options.provedExpected === "true" });
     result.attention.push(...check.attention);
     result.proved = { baseline: ledger ? [...ledger.grids.values()].reduce((sum, ids) => sum + ids.size, 0) : null, losses: check.losses, gained: check.gained, accepted: check.accepted, ...(check.note ? { note: check.note } : {}) };
     if (check.accepted && options.provedOut) writeAuditLedger(resolve(options.provedOut), result.rows, result.codes, check.consumed);

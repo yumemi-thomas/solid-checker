@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "vitest";
 
-import { baselineUsable, changesProblems, digestResults, installFingerprint, movesOf, unnamedMoves } from "./guard/corpus.mjs";
+import { baselineUsable, changesProblems, digestResults, installFingerprint, movesOf, staleBinary, unnamedMoves } from "./guard/corpus.mjs";
 
 // ADR 1012: the corpus findings of a branch held to main's, on in-memory sweeps.
 const ROOT = "/corpus/apps/app-a";
@@ -73,12 +73,17 @@ test("corpus-changes.json is append-only against the base, and a new row needs i
 });
 
 test("a baseline built on another machine, or from an older checker, is refused rather than reported as moves", () => {
-  const trees = { rust: "aaa", typefacts: "bbb" };
+  const trees = { rust: "aaa", typefacts: "bbb", manifest: "mmm", sweep: "sss" };
   const baseline = { fingerprint: "darwin-arm64-111111111111", checker: trees };
   assert.equal(baselineUsable({ baseline, fingerprint: "darwin-arm64-111111111111", trees }).ok, true);
   assert.match(baselineUsable({ baseline: null, fingerprint: "darwin-arm64-111111111111", trees }).problem, /no corpus baseline for this machine/);
   assert.match(baselineUsable({ baseline, fingerprint: "linux-arm64-111111111111", trees }).problem, /built on darwin-arm64-111111111111, this machine is linux-arm64-111111111111: refused/);
-  assert.match(baselineUsable({ baseline, fingerprint: "darwin-arm64-111111111111", trees: { rust: "ccc", typefacts: "bbb" } }).problem, /other than the merge base's/);
+  assert.match(baselineUsable({ baseline, fingerprint: "darwin-arm64-111111111111", trees: { ...trees, rust: "ccc" } }).problem, /\(rust\) other than the merge base's/);
+  // another corpus manifest or another sweep script is as stale as another checker
+  assert.match(baselineUsable({ baseline, fingerprint: "darwin-arm64-111111111111", trees: { ...trees, manifest: "nnn" } }).problem, /\(manifest\) other than the merge base's/);
+  assert.match(baselineUsable({ baseline, fingerprint: "darwin-arm64-111111111111", trees: { ...trees, sweep: "ttt", typefacts: "uuu" } }).problem, /\(typefacts, sweep\)/);
+  // a baseline from before the manifest and the sweep entered the key has no such member: stale
+  assert.equal(baselineUsable({ baseline: { ...baseline, checker: { rust: "aaa", typefacts: "bbb" } }, fingerprint: "darwin-arm64-111111111111", trees }).ok, false);
 });
 
 test("the install fingerprint moves with the platform and with any installed package version, and not with the order of packages", () => {
@@ -98,3 +103,13 @@ test("the install fingerprint moves with the platform and with any installed pac
   app("one", [["solid-js", "2.0.0-beta.9"], ["vite", "7.1.1"]]);
   assert.notEqual(installFingerprint(manifest, root, { platform: "darwin", arch: "arm64" }), first);
 });
+
+test("a release binary older than the sources it was built from is refused (its build id is the constant dev)", () => {
+  // The laundering: `node scripts/guard/corpus.mjs record` with the binary of an earlier build would record that checker's findings as HEAD's.
+  const sources = [{ file: "rust/a.rs", ms: 1000 }, { file: "rust/crates/b.rs", ms: 3000 }];
+  assert.equal(staleBinary({ name: "the release checker", binaryMs: 3000, sources }), null);
+  assert.equal(staleBinary({ name: "the release checker", binaryMs: 4000, sources }), null);
+  assert.match(staleBinary({ name: "the release checker", binaryMs: 2999, sources }), /the release checker is older than rust\/crates\/b.rs .*build the release checker again/);
+  assert.equal(staleBinary({ name: "x", binaryMs: 0, sources: [] }), null);
+});
+

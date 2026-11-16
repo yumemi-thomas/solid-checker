@@ -98,3 +98,19 @@ describe("the cover holds the ledger (ADR 1012)", () => {
     expect(perCode.byGrid["mx-base"]).not.toContain("x");
   });
 });
+
+describe("reading a ledger directory", () => {
+  const write = (dir, name, value) => writeFileSync(join(dir, name), JSON.stringify(value));
+  it("refuses a file that names another grid, repeats an id or is not sorted (a hand edit)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "proved-read-"));
+    write(dir, "mx-recall.json", { grid: "mx-recall", ids: ["a", "b"] });
+    expect(readLedger(dir).get("mx-recall")).toEqual(new Set(["a", "b"]));
+    write(dir, "mx-recall.json", { grid: "mx-census", ids: ["a"] });
+    expect(() => readLedger(dir)).toThrow(/its grid is "mx-census", the file's is mx-recall/);
+    write(dir, "mx-recall.json", { grid: "mx-recall", ids: ["a", "a"] });
+    expect(() => readLedger(dir)).toThrow(/duplicate ids/);
+    write(dir, "mx-recall.json", { grid: "mx-recall", ids: ["b", "a"] });
+    expect(() => readLedger(dir)).toThrow(/ids are not sorted/);
+  });
+});
+

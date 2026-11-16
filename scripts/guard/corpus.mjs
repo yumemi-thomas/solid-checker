@@ -25,7 +25,7 @@
 // Exit 1: a lost proof or a proved-clean place lost, unnamed. Exit 2: nothing could be compared (no corpus, no baseline for this machine, a stale one, no base).
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -136,7 +136,10 @@ export function changesProblems({ head, base, decisions }) {
 export function baselineUsable({ baseline, fingerprint, trees }) {
   if (!baseline) return { ok: false, problem: `no corpus baseline for this machine (${fingerprint}): record one from a main checkout with \`node scripts/guard/corpus.mjs record\`; another machine's baseline is not used (the findings differ with the corpus install, ADR 0974)` };
   if (baseline.fingerprint !== fingerprint) return { ok: false, problem: `the baseline was built on ${baseline.fingerprint}, this machine is ${fingerprint}: refused (the findings differ with the corpus install)` };
-  if (!same(baseline.checker, trees)) return { ok: false, problem: `the baseline was recorded from a checker (${baseline.checker?.rust?.slice(0, 10)}) other than the merge base's (${trees.rust?.slice(0, 10)}): main moved since; record it again from a main checkout` };
+  if (!same(baseline.checker, trees)) {
+    const moved = Object.keys(trees).filter((key) => baseline.checker?.[key] !== trees[key]);
+    return { ok: false, problem: `the baseline was recorded from a checker, corpus or sweep (${moved.join(", ")}) other than the merge base's: main moved since; record it again from a main checkout` };
+  }
   return { ok: true, problem: null };
 }
 
@@ -163,8 +166,29 @@ export function installFingerprint(manifest, appsRoot, { platform = process.plat
   return `${platform}-${arch}-${hash.digest("hex").slice(0, 12)}`;
 }
 
-/** The git trees of the engine at `revision`: what a baseline's findings depend on. */
-export const engineTrees = (revision) => ({ rust: git("rev-parse", `${revision}:rust`), typefacts: git("rev-parse", `${revision}:apps/solid-typefacts`) });
+/**
+ * What a baseline's findings depend on, at `revision`: the engine's git trees (rust/, apps/solid-typefacts) and the blobs of the corpus manifest and of the
+ * sweep script, so a baseline recorded against another corpus or another sweep is stale too.
+ */
+export const engineTrees = (revision) => ({
+  rust: git("rev-parse", `${revision}:rust`),
+  typefacts: git("rev-parse", `${revision}:apps/solid-typefacts`),
+  manifest: git("rev-parse", `${revision}:scripts/corpus/rc21-manifest.json`),
+  sweep: git("rev-parse", `${revision}:scripts/corpus-sweep.mjs`),
+});
+
+/**
+ * Whether a release binary is older than the sources it was built from: `sources` is `[{ file, ms }]` (the engine's tracked files), `binaryMs` the
+ * binary's mtime. The checker's build id is the constant `dev` (it names no tree), so a binary built before the last edit of rust/ would sweep the
+ * tree it was built from and be recorded or compared as HEAD's: `make build-checker-release` rebuilds a stale one, and a direct call is refused here.
+ */
+export function staleBinary({ name, binaryMs, sources }) {
+  const newest = sources.reduce((best, source) => (source.ms > best.ms ? source : best), { file: null, ms: -Infinity });
+  return newest.ms > binaryMs ? `${name} is older than ${newest.file} (the build id is the constant "dev", so the binary's age is all there is to compare): build the release checker again` : null;
+}
+
+/** The mtimes of the tracked files under `paths`. */
+const sourcesUnder = (paths) => (git("ls-files", ...paths) ?? "").split("\n").filter(Boolean).map((file) => ({ file, ms: statSync(join(repo, file)).mtimeMs }));
 
 function sweep({ build, manifestPath, appsRoot, checker, typefacts, jobs, out }) {
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
@@ -206,6 +230,9 @@ function main(argv) {
   const checker = resolve(options.checker ?? join(repo, "rust/target/release/solid-checker-rust"));
   const typefacts = resolve(options.typefacts ?? join(repo, "bin/solid-typefacts"));
   if (!existsSync(checker)) return refuse(`no release checker at ${checker}: make build-checker-release`);
+  const stale = staleBinary({ name: "the release checker", binaryMs: statSync(checker).mtimeMs, sources: sourcesUnder(["rust"]) })
+    ?? (existsSync(typefacts) ? staleBinary({ name: "the Type Facts producer", binaryMs: statSync(typefacts).mtimeMs, sources: sourcesUnder(["apps/solid-typefacts"]) }) : "no Type Facts producer: make build-typefacts");
+  if (stale) return refuse(stale);
   const fingerprint = installFingerprint(manifest, appsRoot);
   const trees = engineTrees(base);
   const file = join(repo, BASELINES, `${fingerprint}.json.gz`);
@@ -218,7 +245,7 @@ function main(argv) {
     const builds = {};
     for (const build of only) builds[build] = sweep({ build, manifestPath, appsRoot, checker, typefacts, jobs, out });
     mkdirSync(join(repo, BASELINES), { recursive: true });
-    writeFileSync(file, gzipSync(`${JSON.stringify({ schema: 1, fingerprint, platform: process.platform, arch: process.arch, checker: trees, builtFrom: base, builds })}\n`, { level: 9 }));
+    writeFileSync(file, gzipSync(`${JSON.stringify({ schema: 1, fingerprint, platform: process.platform, arch: process.arch, checker: trees, builtFrom: base, binary: createHash("sha256").update(readFileSync(checker)).digest("hex"), builds })}\n`, { level: 9 }));
     console.log(`corpus baseline ${fingerprint}: ${only.map((build) => `${build} ${builds[build].violations.length} violations, ${Object.keys(builds[build].uncertifiable).length} (project, file, rule) places`).join("; ")}`);
     return;
   }

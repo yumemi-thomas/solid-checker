@@ -74,8 +74,10 @@ jobs:
       earlier: ${{ steps.earlier.outputs.run }}
       earlier-rows: ${{ steps.earlier.outputs.rows-run }}
       earlier-rows-name: ${{ steps.earlier.outputs.rows-name }}
-      # The latest audit of this mode on main that uploaded a proved ledger (its artifact audit-proved-<mode>).
+      # The latest audit of this mode on main that uploaded a proved ledger (its artifact audit-proved-<mode>), found by the artifact's NAME across the
+      # repository (not a window of runs); and how many artifacts of that name there ever were (a bootstrap is allowed only when there were none).
       proved-run: ${{ steps.proved.outputs.run }}
+      proved-ever: ${{ steps.proved.outputs.ever }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -121,19 +123,18 @@ jobs:
           echo "rows-run=$rows" >> "$GITHUB_OUTPUT"
           echo "rows-name=$name" >> "$GITHUB_OUTPUT"
           echo "earlier audit (warm state): ${run:-none}; earlier $RECALL audit (rows): ${rows:-none}"
-      # The proved ledger is main's: only an audit of main's own accepted run advances it, whatever branch this run is on.
+      # The proved ledger is main's: only an audit of main's own accepted run advances it, whatever branch this run is on. The artifact API is asked
+      # by NAME over the whole repository, newest first: `ever` counts every artifact of that name (expired ones too), `run` is the newest unexpired one of main.
       - id: proved
         env:
           GH_TOKEN: ${{ github.token }}
           RECALL: ${{ steps.plan.outputs.recall }}
         run: |
-          run=""
-          for id in $(gh run list -R "$GITHUB_REPOSITORY" -w fuzz-audit.yml -b main -s completed -L 30 --json databaseId -q '.[].databaseId'); do
-            [ "$id" = "$GITHUB_RUN_ID" ] && continue
-            if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id/artifacts?name=audit-proved-$RECALL" -q '.total_count' | grep -qv '^0$'; then run=$id; break; fi
-          done
+          list=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=audit-proved-$RECALL&per_page=100")
+          echo "ever=$(echo "$list" | jq -r '.total_count')" >> "$GITHUB_OUTPUT"
+          run=$(echo "$list" | jq -r '[.artifacts[] | select(.expired == false and .workflow_run.head_branch == "main")][0].workflow_run.id // empty')
           echo "run=$run" >> "$GITHUB_OUTPUT"
-          echo "proved ledger ($RECALL): ${run:-none}"
+          echo "proved ledger ($RECALL): run ${run:-none}, $(echo "$list" | jq -r '.total_count') artifact(s) ever"
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
@@ -342,6 +343,8 @@ jobs:
           path: |
             ${{ runner.temp }}/oracle/${{ matrix.grid }}/*.json
             ${{ runner.temp }}/oracle/${{ matrix.grid }}/*.jsonl
+            ${{ runner.temp }}/oracle/${{ matrix.grid }}/rerun/*.json
+            ${{ runner.temp }}/oracle/${{ matrix.grid }}/rerun/*.jsonl
           retention-days: 30
       - name: Pack the warm state
         if: always()
@@ -389,9 +392,9 @@ jobs:
           path: ${{ runner.temp }}/earlier
           run-id: ${{ needs.build.outputs.earlier-rows }}
           github-token: ${{ github.token }}
+      # A ledger that exists and cannot be downloaded fails the run: it never reads as "no ledger".
       - id: proved
         if: needs.build.outputs.proved-run != ''
-        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: audit-proved-${{ needs.build.outputs.recall }}
@@ -402,6 +405,8 @@ jobs:
         id: report
         env:
           BOOTSTRAP: ${{ inputs.proved-bootstrap && github.ref == 'refs/heads/main' }}
+          PROVED_RUN: ${{ needs.build.outputs.proved-run }}
+          PROVED_EVER: ${{ needs.build.outputs.proved-ever }}
         run: |
           mkdir -p "$RUNNER_TEMP/oracle"
           [ -d "$RUNNER_TEMP/oracle-artifacts/oracle-manifests" ] && mv "$RUNNER_TEMP/oracle-artifacts/oracle-manifests" "$RUNNER_TEMP/oracle/manifests"
@@ -414,8 +419,16 @@ jobs:
           against=()
           [ -d "$RUNNER_TEMP/earlier/rows" ] && against=(--against "$RUNNER_TEMP/earlier/rows")
           proved=(--proved "$RUNNER_TEMP/proved-in" --proved-out "$RUNNER_TEMP/proved-out")
-          [ "$BOOTSTRAP" = true ] && proved+=(--proved-bootstrap true)
+          # A ledger of main exists: the audit must read it (--proved-expected), whatever the download did.
+          [ -n "$PROVED_RUN" ] && proved+=(--proved-expected true)
           status=0
+          if [ "$BOOTSTRAP" = true ]; then
+            # A bootstrap writes a baseline from nothing: allowed only when no audit-proved artifact of this mode ever existed.
+            if [ "${PROVED_EVER:-0}" != 0 ]; then
+              echo "::error::proved-bootstrap refused: ${PROVED_EVER} audit-proved artifact(s) of this mode exist or existed; a baseline is never rewritten from a run"
+              status=1
+            else proved+=(--proved-bootstrap true); fi
+          fi
           node scripts/fuzz/audit.mjs report --shards "$RUNNER_TEMP/shards" --oracle "$RUNNER_TEMP/oracle" --out "$RUNNER_TEMP/report" "${against[@]}" "${proved[@]}" || status=$?
           cat "$RUNNER_TEMP/report/audit.md" >> "$GITHUB_STEP_SUMMARY"
           # The ledger is written only when nothing went unnamed (audit.mjs writes consumed.json last, with it): a main run uploads it below.
