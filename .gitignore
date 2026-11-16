@@ -1653,3 +1653,6 @@ packages/wasm/owned/
 !fixtures/reactive-ir/after-await-handler-forms/node_modules/**
 !fixtures/reactive-ir/after-await-runner-callback/node_modules/
 !fixtures/reactive-ir/after-await-runner-callback/node_modules/**
+
+!fixtures/reactive-ir/dead-literal-rows/node_modules/
+!fixtures/reactive-ir/dead-literal-rows/node_modules/**

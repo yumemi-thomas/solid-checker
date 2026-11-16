@@ -11,9 +11,10 @@
 //! and a fixture or focused regression test.
 
 use crate::{
-    AsyncBoundaryShape, Boundary, CallbackOwner, CleanupRule, CodePolicy, ComponentEntry,
-    ComponentSlot, ContextRole, Dialect, Execution, OwnerRequirementRole, Primitive, ReactiveRole,
-    ResultSlot, RuntimeCode, TrackedCallbackTiming, Version, lookup, reverse,
+    AsyncBoundaryShape, Boundary, CallbackOwner, ChildrenNever, CleanupRule, CodePolicy,
+    ComponentEntry, ComponentSlot, ContextRole, Dialect, ExcludingLiteral, Execution,
+    FlowChildrenExclusion, OwnerRequirementRole, Primitive, ReactiveRole, ResultSlot, RuntimeCode,
+    TrackedCallbackTiming, Version, lookup, reverse,
 };
 
 mod code_policy;
@@ -2693,6 +2694,25 @@ impl Dialect for Solid2 {
             }
             _ => None,
         }
+    }
+
+    /// ADR 1015, read on rc.21 (`solid-js` `dist/solid.dev.js`, `@solidjs/signals` `dist/dev.js`): `For` maps `props.each` with `mapArray` and calls the mapper once per
+    /// item (`updateKeyedMap`), so an empty array calls it never; `props.children` is read once, when `For` maps, so the expression that makes the mapper runs and the
+    /// mapper's body does not. `Repeat` runs `updateRepeat`, which returns before any `_map` call when `count` is `0` (`newLen === 0`), and its mapper reads `props.children`
+    /// as its default parameter, so nothing of the children is read. `Show` reads `props.children` only when `props.when` is truthy (`if (c) { const child = props.children`),
+    /// and `Switch` reads a `Match`'s `children` only when it selects that `Match`, which a `when` that is `false` never is. Another value of the prop (`[1]`, `1`, `true`, a
+    /// name, a call) may run them: no other value is excluded.
+    fn flow_children_exclusion(&self, export: &str, prop: &str) -> Option<FlowChildrenExclusion> {
+        if self.triple_exports != releases::TripleExports::Rc21 {
+            return None;
+        }
+        let (literal, never) = match (export, prop) {
+            ("For", "each") => (ExcludingLiteral::EmptyArray, ChildrenNever::RowFunction),
+            ("Repeat", "count") => (ExcludingLiteral::Zero, ChildrenNever::Read),
+            ("Show" | "Match", "when") => (ExcludingLiteral::False, ChildrenNever::Read),
+            _ => return None,
+        };
+        Some(FlowChildrenExclusion { literal, never })
     }
 
     fn computation_read_is_render(&self, primitive: Primitive) -> bool {

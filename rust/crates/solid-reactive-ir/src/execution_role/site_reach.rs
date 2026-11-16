@@ -134,6 +134,32 @@ struct Approximation<'a> {
 /// `MayRun` (ADR 0560: and every later answer of the query is undecided).
 const DEPTH_LIMIT: usize = 64;
 
+/// ADR 1015: whether `span` is written in a part of a flow component's children that a literal prop keeps from ever running
+/// ([`SemanticLookup::flow_dead_children`]: `<For each={[]}>`'s row function, `<Repeat count={0}>`'s and `<Show when={false}>`'s children). The element must
+/// be the Solid-owned component exactly; anything else, and any other value of the prop, may run.
+fn in_dead_flow_children(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast
+        .jsx_elements
+        .iter()
+        .filter(|element| element.span.contains(span))
+        .any(|element| {
+            lookup
+                .flow_dead_children(file, element)
+                .iter()
+                .any(|dead| dead.contains(span))
+        })
+}
+
+/// Whether the syntax of `file`, with the literal flow props of ADR 1015, rules `span` out: after an unconditional exit, in an arm a literal test rules out
+/// ([`solid_facts::ast::AstFacts::unreachable_contains`]), or in the children a flow component's literal prop keeps from running.
+fn statically_dead(file: &solid_facts::FileFacts, span: Span, lookup: &SemanticLookup<'_>) -> bool {
+    file.ast.unreachable_contains(span) || in_dead_flow_children(file, span, lookup)
+}
+
 /// ADR 0696 (owner's ruling): a function a component's prop holds, whose every
 /// call in the component is [`behind_absent_prop`].
 fn prop_runs_only_behind_absent_prop(
@@ -313,7 +339,7 @@ impl<'l, 'a> SiteReach<'l, 'a> {
     }
 
     fn site_within(&self, file: &solid_facts::FileFacts, site: Span) -> Reach {
-        if file.ast.unreachable_contains(site) {
+        if statically_dead(file, site, self.lookup) {
             return Reach::Unreached(UnreachedReason::DeadCode);
         }
         // ADR 0696: a fact of the whole program.
@@ -565,7 +591,7 @@ impl<'l, 'a> SiteReach<'l, 'a> {
         function: &solid_facts::ast::FunctionFact,
     ) -> bool {
         // Never created: written where nothing runs.
-        if file.ast.unreachable_contains(function.span) {
+        if statically_dead(file, function.span, self.lookup) {
             return false;
         }
         if let Some(class) = class_of_member(file, function)
@@ -1468,7 +1494,7 @@ enum SyntaxReach<'a> {
 
 impl<'a> SyntaxReach<'a> {
     fn of(file: &'a solid_facts::FileFacts, site: Span, lookup: &SemanticLookup<'_>) -> Self {
-        if file.ast.unreachable_contains(site) {
+        if statically_dead(file, site, lookup) {
             return Self::DeadCode;
         }
         let owner = crate::owners::owning_function(&file.ast, site);
