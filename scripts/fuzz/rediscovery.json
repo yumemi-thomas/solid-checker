@@ -24590,5 +24590,19 @@
   "code": "PENDING_ASYNC_FORBIDDEN_SCOPE",
   "ids": ["mx-pending-async-forbidden-scope-settled-x-direct-none-cb-bundle", "mx-pending-async-forbidden-scope-settled-x-alias-closure-cb-bundle", "mx-pending-async-forbidden-scope-tracked-x-alias-iife-cb-bundle", "mx-pending-async-forbidden-scope-tracked-rerun-x-alias-helper-cb-bundle"],
   "rediscovered": "main 0799a4629 recall-gap, this build agree: 4 of 4 (84 of the code's 84 `bundle` gaps in mx-recall, 82 in mx-pairs)"
+ },
+ {
+  "finding": "no defect reproduced: review F1 of ADR 1009. `handed_from_closed_bundle` never checked that the property is the key's final value, so a bundle `{ run: () => { user(); }, ...extra }` or `{ run: () => { user(); }, [k]: () => {} }` handed to `onSettled` was taken for the function the primitive runs (Chrome runs the replacement and is silent). The reviewer's snippets stay uncertifiable on 4dd928e93 because a later stage keeps such a literal open (the function answered true, instrumented); no program of the grids differs between the builds",
+  "found": "the medium review of proof E (4dd928e93, 2026-11-16), F1",
+  "fixed": "ADR 1009 review fix (`flow_helpers.rs` `property_is_final_value`, used by `handed_from_closed_bundle` and `origin_member_ignores_receiver`)",
+  "grid": "lg-recall",
+  "code": "PENDING_ASYNC_FORBIDDEN_SCOPE",
+  "ids": [
+   "lg-pending-async-forbidden-scope-dead-bundle-spread-x-direct-none",
+   "lg-pending-async-forbidden-scope-dead-bundle-spread-x-alias-none",
+   "lg-pending-async-forbidden-scope-dead-bundle-computed-x-direct-none",
+   "lg-pending-async-forbidden-scope-dead-bundle-computed-x-alias-none"
+  ],
+  "rediscovered": "main 5b950fce6, 4dd928e93 and this build: uncertifiable on all four (the 2,400 programs of the two `dead-bundle-*` contexts, all codes: {clean 144, uncertifiable 2,136, unexecuted 120}, identical outcomes on the three builds); the cells hold the shape against a later change. The 120 unexecuted are SYNC_NODE_RECEIVED_ASYNC, a violation in a bundle function the spread or computed key replaces, also on main (a separate defect, reported)"
  }
 ]

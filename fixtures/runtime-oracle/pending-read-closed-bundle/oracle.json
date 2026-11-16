@@ -1,3 +1,3 @@
 {
-  "note": "ADR 1009: a function that is a plain property of a const object literal nothing else reaches, handed to onSettled or createTrackedEffect as bundle.key, runs there: Chrome reports PENDING_ASYNC_FORBIDDEN_SCOPE at a pending read in it. A bundle that is passed on, written, computed, a let, a method, aliased or nested keeps an obligation."
+  "note": "ADR 1009: a function that is a plain property of a const object literal nothing else reaches, handed to onSettled or createTrackedEffect as bundle.key, runs there: Chrome reports PENDING_ASYNC_FORBIDDEN_SCOPE at a pending read in it. A bundle that is passed on, written, computed, a let, a method, aliased or nested keeps an obligation. Review F1/F2: a bundle whose property a later spread or computed key replaces, an onSettled that is shadowed, a callee that is no primitive: Chrome is silent, the obligation stays; the hand-off through `!`, `as any` and a namespace call is a violation."
 }

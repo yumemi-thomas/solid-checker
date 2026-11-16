@@ -5859,6 +5859,11 @@ impl LocalAccessContext<'_, '_> {
         }) else {
             return false;
         };
+        // The member's final value (ADR 1009 review F1): a later spread, a later key with no static name or a later property of
+        // the same key may replace it, and then the primitive runs another function.
+        if !crate::execution_role::property_is_final_value(file, property) {
+            return false;
+        }
         let Some(key) = file.source_text(property.key) else {
             return false;
         };
@@ -5887,7 +5892,11 @@ impl LocalAccessContext<'_, '_> {
             return false;
         };
         let name = binding.names[0].span;
-        if crate::indexes::binding_exported(file, name) {
+        // Both export questions: `binding_exported` reads `export { x as y }` and `export default x`, `flow_binding_exported` an
+        // exported declaration and a top-level binding of a script (global to every other script).
+        if crate::indexes::binding_exported(file, name)
+            || crate::execution_role::flow_binding_exported(file, name)
+        {
             return false;
         }
         let mut handed = false;
