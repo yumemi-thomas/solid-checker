@@ -68,6 +68,22 @@ impl SemanticLookup<'_> {
             .is_some()
     }
 
+    /// Whether `call` registers a callback that a reviewed runner schedules ([`TestRunnerCallback::Scheduled`]) and the runner is one whose published JavaScript was
+    /// read (ADR 0438 cites the bytes of vitest, playwright, jest-circus, mocha and `node:test`): `bun:test` is native, its entry says so by the unproven suite-body
+    /// timing, and no bytes show how it calls a test or a hook. ADR 1004 asks this; the earlier callers of [`Self::test_runner_callback`] are unchanged.
+    pub(crate) fn test_runner_schedules_by_read_bytes(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+    ) -> bool {
+        self.test_runner_callback(file, call) == Some(TestRunnerCallback::Scheduled)
+            && Self::registration_root(file, call.callee)
+                .and_then(|(root, _)| self.registration_root_runner(file, root))
+                .is_some_and(|(_, bodies)| {
+                    bodies != crate::runtime_semantics::SuiteBodyRun::Unproven
+                })
+    }
+
     /// Whether `callee` ends in a member that takes data and returns the
     /// registration function (`describe.each`, `it.skipIf`): a call of it is
     /// the preliminary call of a curried registration, never the registration.

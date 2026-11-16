@@ -351,7 +351,7 @@ fn suite_body_runs_it(
 ///   where the component reads it, a tracked region is a render effect: N3, as `continuation_function` asks of the code after an await).
 ///
 /// A function written around the call is not asked: what it holds runs once per run of the call, and the callback still runs from the scheduler or the runner.
-fn runs_when_the_call_runs(file: &FileFacts, span: Span, call: Span) -> bool {
+pub(crate) fn runs_when_the_call_runs(file: &FileFacts, span: Span, call: Span) -> bool {
     let mut written_in_the_call = file
         .ast
         .functions_owning(span)

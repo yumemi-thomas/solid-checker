@@ -1,0 +1,10 @@
+[
+ {
+  "test": "flight",
+  "text": "[UNTRACKED_READ_AFTER_AWAIT] \"count\" was first read after an `await` in an async computation, so it is not a dependency: the computation will not re-run when it changes. Read it before the first `await`, or wrap the read in untrack() if a one-time value is intended."
+ },
+ {
+  "test": "named-again",
+  "text": "[UNTRACKED_READ_AFTER_AWAIT] \"count\" was first read after an `await` in an async computation, so it is not a dependency: the computation will not re-run when it changes. Read it before the first `await`, or wrap the read in untrack() if a one-time value is intended."
+ }
+]
