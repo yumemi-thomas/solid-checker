@@ -611,6 +611,10 @@ impl Walk<'_, '_> {
                 && self.site(file, at, depth) == ThrowEnd::Reported)
             || file
                 .ast
+                .function_at(at)
+                .is_some_and(|function| self.render_runs(file, function, depth))
+            || file
+                .ast
                 .arguments_containing(at)
                 .find(|(call, index)| {
                     *index == 1 && file.ast.peel_ts_sugar_span(call.arguments[*index].span) == at
@@ -620,6 +624,28 @@ impl Walk<'_, '_> {
                         .resolved_callee_call(file, call.callee)
                         .is_some_and(crate::runtime_semantics::add_event_listener_call)
                 })
+    }
+
+    /// ADR 1006: the render runs the function held here, in place, where an
+    /// element is created, so its throw ends where that element's does. An
+    /// intrinsic `ref` applies every function its expression yields, an array
+    /// element, a branch, or the literal a followed factory call returns
+    /// ([`crate::owners::ref_application_of`]), synchronously while the
+    /// element is created. A dialect control-flow tag runs its function child
+    /// under an owner of its own inside the tag's compute, which the render
+    /// around the element reads ([`crate::owners::control_flow_parent`]).
+    fn render_runs(&self, file: &FileFacts, function: &FunctionFact, depth: usize) -> bool {
+        let lookup = self.context.lookup;
+        let applied = crate::owners::ref_applications_of(file, function, lookup);
+        // The tag's compute stores what its child throws: only a render that
+        // reads the tag's result reports it.
+        let flow = crate::owners::control_flow_parent(file, function, lookup)
+            .map(|element| element.span)
+            .filter(|element| written_in_returned_jsx(file, *element, lookup));
+        applied
+            .into_iter()
+            .chain(flow)
+            .any(|at| self.site(file, at, depth) == ThrowEnd::Reported)
     }
 
     /// `reference` is a whole argument of a project function, or a prop of a
@@ -962,6 +988,73 @@ impl Walk<'_, '_> {
                 .push((file.path.to_string(), function.span));
         }
         end
+    }
+}
+
+/// ADR 1006: `element` is written in place in the JSX its function returns, so the render of that JSX reads it: the element
+/// is the `return`'s argument or the arrow's expression body, or a direct child element (no expression container, no
+/// attribute, no fragment) of one that is, through intrinsic elements and the tags that render their children in place (the
+/// dialect's control-flow and boundary tags, a context provider; ADR 0937's list). An element held in a binding, passed as a
+/// prop or an argument, written in a child expression, or a child of a project component is not: nothing says its result is
+/// read (`const rows = <For …/>` with `rows` never inserted is silent in Chrome).
+fn written_in_returned_jsx(
+    file: &FileFacts,
+    element: Span,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    if ast
+        .jsx_fragments
+        .iter()
+        .any(|fragment| fragment.contains(element))
+    {
+        return false;
+    }
+    let function_of = |span: Span| {
+        crate::owners::containing_body_function(ast, span).map(|function| function.span)
+    };
+    let mut at = element;
+    loop {
+        let parent = ast
+            .jsx_elements
+            .iter()
+            .filter(|parent| parent.span != at && parent.span.contains(at))
+            .min_by_key(|parent| parent.span.end - parent.span.start);
+        let Some(parent) = parent else {
+            let returned = |returned: &solid_facts::ast::ReturnFact| {
+                returned
+                    .argument
+                    .is_some_and(|argument| ast.peel_ts_sugar_span(argument) == at)
+            };
+            return ast.returns.iter().any(returned)
+                || ast
+                    .functions
+                    .iter()
+                    .filter_map(|function| function.expression_return.as_ref())
+                    .any(returned);
+        };
+        if !parent.children.contains(&at) || function_of(at) != function_of(parent.span) {
+            return false;
+        }
+        if crate::owners::is_component_element(file, parent) {
+            let in_place = matches!(
+                crate::owners::element_primitive(lookup, file, parent),
+                Some(
+                    Primitive::Errored
+                        | Primitive::For
+                        | Primitive::Index
+                        | Primitive::Repeat
+                        | Primitive::Show
+                        | Primitive::Switch
+                        | Primitive::Match
+                        | Primitive::Loading
+                )
+            ) || lookup.is_context_reference(file.path.as_str(), parent.name.span);
+            if !in_place {
+                return false;
+            }
+        }
+        at = parent.span;
     }
 }
 

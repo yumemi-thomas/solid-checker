@@ -387,6 +387,7 @@ A package function whose same-operation creation calls cover every exit between 
 
 A context read past an await in a compute that stores its error throws where only a read reports it; without a proven read it is `computation-error-unobserved`, not a violation (ADR 0893).
 A throw that leaves an `async` function rejects the promise its call returned: it is a violation only where that promise is dropped (an expression statement, `void`, a `then` chain with no rejection arm), awaited, or returned to a call that drops it; a promise that is caught, assigned or handed on leaves the row `computation-error-unobserved` ([ADR 1008](../decisions.md#adr-1008)).
+A function the render runs in place reports where its element does ([ADR 1006](../decisions.md#adr-1006)): one an intrinsic `ref` applies (the literal, an array element, a conditional's branch, the literal an exact same-file factory call returns) and the function child of `For`, `Repeat`, `Show` or `Match`; a boundary above the element still takes the throw.
 A generator's body runs where its iterator is stepped. An owner operation after a `yield` of the generator around it runs on a later step, which the owner walk does not follow: uncertifiable, whatever owner the generator's call had (ADR 0866).
 
 Every owner-requiring call ends in a finding or a named proof that its owner context is settled: an owned-only context, a providing region, code that never runs, or a callback proven to return no cleanup. A call with neither is uncertifiable (`execution-context-unaccounted`, ADR 0886).

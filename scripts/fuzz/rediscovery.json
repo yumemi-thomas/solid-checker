@@ -24563,5 +24563,14 @@
   "found": "Mac 19, 2026-11-16, Chrome-checking the ref forms of ADR 1006 (runtime oracle: `static-only` at the caught twin, the discarded twin fires NO_OWNER_CONTEXT)",
   "fixed": "ADR 1008 (`stored_throw.rs` `Walk::rejection`: a throw that leaves an `async` function reports only where the call's promise is dropped, awaited, or returned to a call that drops it)",
   "outside": "a grid cell is a program that is legal or one a diagnostic reports, and a promise that swallows a plain throw is neither (misuse.mjs `PROMISE_SWALLOWS`, the note at `ASYNC_FAMILY_PLACEMENT`: its silence is no measure), so no cell holds a caught `async` function around a plain-throw site: 0 of 237,272 grid programs move between the builds. The pattern lane holds the shapes: `patterns/asyncthrow/a01`-`a45` (25 false positive on main 87b324e2f, 45 of 45 fine on ADR 1008's head). The false clean the first form of the fix made (a synchronous helper with an `async` sibling call lost its SC3001 row) is a grid context: `tracked-sibling-async` of FLUSH_IN_TRACKED_QUEUE_CALLBACK in mx-recall, 411 lean programs, 0 agree on that build and 90 on the head (`mx-flush-in-tracked-queue-callback-tracked-sibling-async-x-direct-none` among them), `make fuzz-patterns ARGS=\"--only asyncthrow/\"`"
+ },
+ {
+  "finding": "no defect: a recall gap. A plain throw (`useContext` with no owner) in a function an intrinsic `ref` applies as an array element, a conditional's branch or a factory's result, or written in a `For` row, was `computation-error-unobserved` since ADR 0893: its walk knew only the `ref` attribute's own literal as a function the render runs. Chrome rc.21 reports NO_OWNER_CONTEXT at each; the 11-05 full audit had them as violations",
+  "found": "the recall-gap ranking of the full audit of main 78ddeb849 (run 43739577046, 2026-11-16): all 2,964 programs of the recall grid's `ref-array`, `ref-cond`, `ref-factory` and `ref-row` contexts recall gaps, 2,480 of them `agree` in the 11-05 full audit",
+  "fixed": "ADR 1006 (`stored_throw.rs` `render_runs`: the functions `ref_application_of` names and a control-flow tag's function child report where their element does)",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CONTEXT",
+  "ids": ["mx-no-owner-context-ref-array-x-direct-none", "mx-no-owner-context-ref-cond-x-direct-none", "mx-no-owner-context-ref-factory-x-direct-none", "mx-no-owner-context-ref-row-x-direct-none"],
+  "rediscovered": "main 581bd7b18 recall-gap, this build agree: 4 of 4 (and 2,448 of the four contexts' 2,964 programs; the `portal` and `dynamic` mounts stay recall gaps)"
  }
 ]
