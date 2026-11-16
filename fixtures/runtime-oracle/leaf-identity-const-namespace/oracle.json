@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1007: a leaf operation named through a `const` object pattern over a namespace import of solid-js (plain key, no default, no nesting) is the primitive: Chrome reports PRIMITIVE_IN_FORBIDDEN_SCOPE, CLEANUP_IN_FORBIDDEN_SCOPE and the tracked effect's flush throw at each. A `let`, a default, a nested or computed pattern and a held namespace's member fire too and stay obligations."
+}

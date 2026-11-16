@@ -1496,9 +1496,16 @@ pub(crate) fn files_as_flush_operation(
 /// ADR 0711: whether the binder confirms the primitive attributed to `call`:
 /// the callee is a named import binding whose imported name is that
 /// primitive's, or a non-computed member of a namespace import of a module the
-/// dialect owns whose property is. Anything else (a local alias, a wrapper's
-/// value, an import whose target the producer could not read) proves no
-/// identity, whatever symbol the producer put at the callee.
+/// dialect owns whose property is. ADR 1007: or the slot of a `const` object
+/// pattern the file never rebinds, whose key is a plain identifier that names
+/// the primitive, over such a namespace or a `const` that holds it
+/// (`const { createEffect: make } = S; make(…)`, `const N = S; const {
+/// createEffect: make } = N`). Anything else proves no identity, whatever
+/// symbol the producer put at the callee: a `let`, a default, a nested or
+/// computed pattern, a declarator written in a `switch` case clause (a jump to
+/// a later clause skips it), a member of a held namespace
+/// (`N.createEffect(…)`: the member form is the import's own binding only), a
+/// wrapper's value, an import whose target the producer could not read.
 fn primitive_identity_proven(
     dialect: &dyn solid_dialect::Dialect,
     file: &FileFacts,
@@ -1506,6 +1513,52 @@ fn primitive_identity_proven(
     primitive: &PrimitiveName,
 ) -> bool {
     primitive_identity_proven_at(dialect, file, call.callee, primitive)
+}
+
+/// How many `const` holders of a namespace are read through (`const A = S; const B = A;`).
+const NAMESPACE_HOLDER_DEPTH: usize = 4;
+
+/// ADR 1007: the value at `value` is a namespace import of a module the dialect owns: the import's own binding, or a `const`
+/// identifier whose initializer is one, read through at most `depth` holders (none at zero: the import alone). A `const` is never
+/// rebound, and a module namespace object is frozen, so the holder names the same exports for the life of the module. The
+/// reference is resolved by the binder, so a block-scoped `const S` that shadows the import is another declaration.
+fn dialect_namespace_value(
+    dialect: &dyn solid_dialect::Dialect,
+    file: &FileFacts,
+    value: Span,
+    depth: usize,
+) -> bool {
+    use solid_facts::ast::{BindingShape, ImportKind};
+    let ast = &file.ast;
+    let Some(declaration) = ast.reference_declaration(ast.peel_ts_sugar_span(value)) else {
+        return false;
+    };
+    let imported = ast.imports.iter().any(|import| {
+        dialect.owns_module(import.module.as_str())
+            && import.bindings.iter().any(|binding| {
+                binding.local.span == declaration && binding.kind == ImportKind::Namespace
+            })
+    });
+    if imported {
+        return true;
+    }
+    let Some(depth) = depth.checked_sub(1) else {
+        return false;
+    };
+    ast.identifier_binding(declaration).is_some_and(|binding| {
+        binding.immutable
+            && !binding.in_switch_case
+            && binding.shape == BindingShape::Identifier
+            && binding.names.len() == 1
+            && binding.names[0].span == declaration
+            && binding.initializer.is_some_and(|initializer| {
+                let initializer = ast.peel_ts_sugar_span(initializer);
+                ast.identifiers
+                    .iter()
+                    .any(|identifier| identifier.span == initializer)
+                    && dialect_namespace_value(dialect, file, initializer, depth)
+            })
+    })
 }
 
 /// [`primitive_identity_proven`] for the value at `callee`, whether or not a
@@ -1516,38 +1569,53 @@ pub(crate) fn primitive_identity_proven_at(
     callee: Span,
     primitive: &PrimitiveName,
 ) -> bool {
-    use solid_facts::ast::ImportKind;
+    use solid_facts::ast::{BindingShape, ImportKind};
     let Some(kind) = primitive.primitive() else {
         return false;
     };
     let ast = &file.ast;
     let names = |name: &str| dialect.primitive(name) == Some(kind);
-    let binding_at = |declaration: Span| {
-        ast.imports.iter().find_map(|import| {
-            import
-                .bindings
-                .iter()
-                .find(|binding| binding.local.span == declaration)
-                .map(|binding| (import, binding))
-        })
-    };
     let callee = ast.peel_ts_sugar_span(callee);
     if let Some(member) = ast.member_at(callee) {
-        let object = ast.peel_ts_sugar_span(member.object);
-        return ast
-            .reference_declaration(object)
-            .and_then(binding_at)
-            .is_some_and(|(import, binding)| {
-                binding.kind == ImportKind::Namespace
-                    && dialect.owns_module(import.module.as_str())
-                    && file.source_text(member.property).is_some_and(names)
-            });
+        return ast.computed_members.binary_search(&member.span).is_err()
+            && file.source_text(member.property).is_some_and(names)
+            // The import's own binding only: a held namespace is read as a pattern's source, never as a member's object.
+            && dialect_namespace_value(dialect, file, member.object, 0);
     }
-    ast.reference_declaration(callee)
-        .and_then(binding_at)
-        .is_some_and(|(_, binding)| {
-            binding.kind != ImportKind::Namespace && binding.imported.as_deref().is_some_and(names)
+    let Some(declaration) = ast.reference_declaration(callee) else {
+        return false;
+    };
+    let named_import = ast.imports.iter().any(|import| {
+        import.bindings.iter().any(|binding| {
+            binding.local.span == declaration
+                && binding.kind != ImportKind::Namespace
+                && binding.imported.as_deref().is_some_and(names)
         })
+    });
+    if named_import {
+        return true;
+    }
+    // ADR 1007: `const { createEffect: make } = S`: the slot's key is a plain identifier that names the primitive, the pattern
+    // holds no default (the slot would be the default's value where the export is `undefined`), no nested pattern and no
+    // computed key, and the initializer is the namespace itself.
+    ast.bindings.iter().any(|binding| {
+        binding.immutable
+            // A jump to a later clause enters the scope without running the declarator: the slot is not initialized there.
+            && !binding.in_switch_case
+            && binding.shape == BindingShape::Object
+            && binding.object_slots.iter().any(|slot| {
+                slot.local.span == declaration
+                    && slot.plain_identifier_key
+                    && names(slot.property.as_str())
+            })
+            && file.source_text(binding.pattern).is_some_and(|pattern| {
+                let inner = pattern.trim().strip_prefix('{').unwrap_or(pattern);
+                !inner.contains(['=', '[', '{'])
+            })
+            && binding.initializer.is_some_and(|initializer| {
+                dialect_namespace_value(dialect, file, initializer, NAMESPACE_HOLDER_DEPTH)
+            })
+    })
 }
 
 /// Whether the dialect forbids this primitive call under a leaf owner.

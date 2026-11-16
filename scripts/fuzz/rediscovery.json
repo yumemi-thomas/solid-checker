@@ -24574,6 +24574,15 @@
   "rediscovered": "main 581bd7b18 recall-gap, this build agree: 4 of 4 (and 2,448 of the four contexts' 2,964 programs; the `portal` and `dynamic` mounts stay recall gaps)"
  },
  {
+  "finding": "no defect: a recall gap. A leaf operation (a creation, `onCleanup`, `flush`) in a leaf owner, named through a `const` object pattern over a namespace import of solid-js (`const { createEffect: make } = S`), was `leaf-operation-identity-unproven` since ADR 0711: only a named import or a namespace member confirmed the primitive. Chrome rc.21 reports the code at each; the 11-05 full audit had them as violations",
+  "found": "the recall-gap ranking of the full audit of main 78ddeb849 (run 43739577046, 2026-11-16): 2,705 programs of the `destructured` and `ns-*` bindings lost their SC3001 violation at #173",
+  "fixed": "ADR 1007 (`cleanup.rs` `primitive_identity_proven_at`: a `const` object pattern over the namespace, plain key, no default, no nesting, and a `const` that holds the namespace)",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+  "ids": ["mx-primitive-in-forbidden-scope-tracked-effect-destructured-chain-5", "mx-primitive-in-forbidden-scope-tracked-effect-ns-held-none", "mx-primitive-in-forbidden-scope-tracked-effect-ns-exported-none", "mx-primitive-in-forbidden-scope-tracked-effect-ns-rest-none"],
+  "rediscovered": "main 581bd7b18 recall-gap, this build agree (4,530 programs of the leaf-operation codes gain the violation; `ns-let`, `ns-default`, `ns-nested` and the re-export bindings stay recall gaps)"
+ },
+ {
   "finding": "ASYNC_OUTSIDE_LOADING_BOUNDARY: 24 mx-recall programs, `module-ns` layer, contexts show / jsx / flush-iife / named-flush-call (6 each), lost their proved SC5003 violation to ADR 0978 (#234): a closure handed to `H.h1(cb)`, a member of a namespace import whose function calls it in the render, was read by `layer_cover` as handed to a call the analysis does not resolve (`function_called_at` names only an identifier callee), so the cover answered Unresolved and the finding became uncertifiable, blocker `mount-unresolved`. `agree` became `recall-gap`; the siblings reached through a named import, a default import, a barrel or `export *` kept their violation.",
   "found": "the audit of main 78ddeb849 (CI run 43739577046) against the last green audit (aa4702650): the id-level comparison with the W audit of dfa6c5dec found 24 mx-recall ids agree there and recall-gap in the CI audit; bisected over the 29 first-parent merges dfa6c5dec..78ddeb849 to #234 (dbb5e7612); read with the proof log: the only difference at the site is SC5003 violation -> uncertifiable `mount-unresolved`.",
   "fixed": "ADR 1011 (`loading_entries.rs` `layer_cover`: a closure handed to a member callee `project_callee_at_parameter` resolves exactly is read as part of the function around the call, the callee's body walked for its own boundary, `async_context.rs` `callee_boundary`); fixture `loading-member-callee` (`Namespace`), pattern programs `membercallee/*`; the 24 ids are `agree` again, Chrome compares the same.",
