@@ -13,9 +13,9 @@ audit of main 78ddeb849, `module-ns` layer, lost at #234). And the closure was n
 `App.tsx` mounts every component, so no mount is unresolved; no `Loading` stands in the caller. Chrome (rc.21) warns ASYNC_OUTSIDE_LOADING_BOUNDARY at
 the `slow()` read of every component whose callee runs the closure with no boundary around it; the snapshot pins the placement per component:
 
-- violation at the read: `Named` and `NamedReexport` (identifier callees: the control), `Namespace` (the claim), `Forward` (a chain of two project functions);
+- violation at the read: `Named` and `NamedReexport` (identifier callees: the control), `Namespace` (the claim), `Forward` and `PassOn` (a chain of two project functions: the callee passes the closure on to one that calls it);
 - uncertifiable, no violation: `NsInBoundary`, `NsInBoundaryBlock`, `IdInBoundary`, `IdInBoundaryBlock` (the callee's own boundary catches the read: Chrome is
-  quiet), `ForwardBoundary` (the function the closure is passed on to has it), `Later` (`queueMicrotask(cb)`: not a call of the parameter), `Maybe`, `PassOn`,
+  quiet), `ForwardBoundary` (the function the closure is passed on to has it), `Later` (`queueMicrotask(cb)`: not a call of the parameter), `Maybe` (a call on a flag),
   `Stored` (the callee stores the closure: Chrome is quiet), `Replaced` (an assignment replaced the literal's method), `Shadowed` (a local `H` whose method never
   calls the closure), `Handed` (the callee is a prop: no project function resolves);
 - uncertifiable, not claimed: `Reexport` (`export * as helpers`, imported by name), `DefaultMember` (a default export's method), `LiteralMethod`: Chrome warns at

@@ -18,7 +18,7 @@ const slow = createMemo(async () => {
 // analysis does not see, so a boundary may hold it: the read is uncertifiable, never a violation.
 
 // First group: the callee is a project function the analysis resolves exactly and the call graph places the closure in: it calls it in the
-// render, or hands it down a chain of project functions that do (`Forward`). `Named` and `NamedReexport` are the identifier controls (they held before); `Namespace` is `H.run(cb)` of a namespace import
+// render, or hands it down a chain of project functions that do (`Forward`, `PassOn`). `Named` and `NamedReexport` are the identifier controls (they held before); `Namespace` is `H.run(cb)` of a namespace import
 // (a violation until ADR 1011's fix was an SC5003 `mount-unresolved`). The member shapes below it (a re-exported namespace, a default
 // import's method, a literal's method) are resolved by no call edge to the closure, so they stay uncertifiable: pinned, not claimed.
 function Named() {
@@ -47,7 +47,7 @@ function LiteralMethod() {
 }
 
 // Second group: the callee is not resolved exactly, or its own body puts a boundary around its calls of the parameter, or does not call it
-// where it runs (a closure it stores, runs later, passes on, calls only on a flag), so the read is uncertifiable and no violation stands at it.
+// where it runs (a closure it stores, runs later, calls only on a flag), so the read is uncertifiable and no violation stands at it.
 // Chrome is quiet at the reads of `NsInBoundary`, `NsInBoundaryBlock`, `IdInBoundary` and `IdInBoundaryBlock`: the callee's boundary catches them.
 function NsInBoundary() {
   return <p>{(() => { H.exprArrow(() => { slow(); }); return 1; })()}</p>;
