@@ -24638,5 +24638,11 @@
   "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
   "ids": ["mx-flush-in-tracked-queue-callback-tracked-x-wrapper-none-m-dynamic", "mx-flush-in-tracked-queue-callback-tracked-rerun-x-wrapper-none-m-dynamic"],
   "rediscovered": "measured after the review (the owner's order): main recall-gap, this build agree, on the `-m-dynamic` programs"
+ },
+ {
+  "finding": "a false positive of ADR 1016's first build b0bfc89fd (never on main): a plain throw (`flush()` in `createTrackedEffect`) in a component mounted through `const D = dynamic(() => C)` was proved (SC3001) where `<D />` is written but never renders: `<Show when={false}><D /></Show>`, `{false && <D />}`, `if (false) return <D />`, `<For each={[]}>{() => <D />}</For>`. Every tag counted as a mount; reach was not asked. Chrome rc.21 is silent (C never mounts)",
+  "found": "the bundle review of claude/batch-2026-11-17 (2026-11-17); then the fixture and the oracle case here (violation, Chrome `static-only`, on b0bfc89fd; uncertifiable and silent on the fix)",
+  "fixed": "ADR 1016 amended (`stored_throw.rs` `dynamic_mount_tags`: only tags `SiteReach` says may run count, ADRs 0458 and 1015)",
+  "outside": "the grid's `-m-dynamic` mount writes `<D1 />` in returned JSX only, never under a dead branch or a literal-dead flow child, so no cell holds the shape; the fixture `stored-throw-dynamic-mount` (`MountsNeverShown`, `MountsFalseAnd`, `MountsDeadReturn`, `MountsEmptyRows`) and the oracle case of the same name hold it"
  }
 ]
