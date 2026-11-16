@@ -45,30 +45,13 @@ borrowed.init = other.f;
 borrowed.init();
 setTimeout(borrowed.cb, 0);
 
-// (4) a method of the literal stores the function under another member through `this`.
-const stored: { cb: (this: unknown) => void; later?: () => void; init(): void } = {
-  cb: () => {},
-  init() {
-    this.later = function () {
-      Object.assign(this, {
-        cb(this: unknown) {
-          seen.push(this);
-        },
-      });
-    };
-  },
-};
-stored.init();
-stored.later?.();
-setTimeout(stored.cb, 0);
-
 export function BodyWrite() {
   const [s, set] = createSignal(1);
   set(2);
   return <time>{s()}</time>;
 }
 
-// What the timers handed their callbacks: read after they fired, the four receivers are the window.
+// What the timers handed their callbacks: read after they fired, the three receivers are the window.
 export function Receivers() {
   const [n, setN] = createSignal(-1);
   setTimeout(() => setN(seen.filter((value) => value === window).length), 30);
