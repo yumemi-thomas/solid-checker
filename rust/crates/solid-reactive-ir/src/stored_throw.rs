@@ -1052,7 +1052,13 @@ fn promise_chain_unheld(
             .ast
             .member_at(file.ast.peel_ts_sugar_span(next.callee))
             .and_then(|member| file.source_text(member.property))
-            .is_some_and(|name| name == "finally" || (name == "then" && next.arguments.len() < 2))
+            // A spread may hand `then` its rejection arm (`then(...arms)`).
+            .is_some_and(|name| {
+                name == "finally"
+                    || (name == "then"
+                        && next.arguments.len() < 2
+                        && !next.arguments.iter().any(|argument| argument.spread))
+            })
             && lookup
                 .resolved_callee_call(file, next.callee)
                 .is_some_and(crate::runtime_semantics::promise_handler_call);

@@ -195,3 +195,48 @@ export function DeepHelperCaught() {
   createTrackedEffect(() => { run(); });
   return <div></div>;
 }
+
+// The re-check of ADR 1008. Violations: a synchronous helper's `resolve` or `flush` throws on the tracked effect's stack, whatever
+// `async` sibling the helper also calls; a returned promise its caller drops; an `async` function a handler calls and drops.
+export function SyncHelperResolveSiblingAsync() {
+  const load = async () => {};
+  const run = () => { void resolve(() => 2); void load(); };
+  createTrackedEffect(() => { run(); });
+  return <div></div>;
+}
+
+export function SyncHelperFlushSiblingAsync() {
+  const load = async () => {};
+  // One line: Chrome's frame for the throw is `flush`'s, and the row stands at the helper's call.
+  const run = () => { flush(); void load(); }; createTrackedEffect(() => { run(); });
+  return <div></div>;
+}
+
+export function SiblingAsyncFirst() {
+  const load = async () => {};
+  const run = () => { void load(); flush(); }; createTrackedEffect(() => { run(); });
+  return <div></div>;
+}
+
+export function ReturnedDropped() {
+  const start = () => (async () => { await Promise.resolve(); useContext(Ctx); })();
+  return <p ref={() => { start(); }}>x</p>;
+}
+
+export function HandlerLiteral() {
+  return <button onClick={() => { (async () => { await Promise.resolve(); useContext(Ctx); })(); }}>x</button>;
+}
+
+// Obligations: a spread may hand `then` its rejection arm, and a synchronous function an `async` helper calls throws into that
+// helper's promise.
+export function ThenSpreadArms() {
+  const arms = [() => {}, () => {}] as const;
+  return <p ref={() => { (async () => { await Promise.resolve(); useContext(Ctx); })().then(...arms); }}>x</p>;
+}
+
+export function AsyncHelperInnerSyncCaught() {
+  const inner = () => { void resolve(() => 3); };
+  const run = async () => { inner(); };
+  createTrackedEffect(() => { run().catch(() => {}); });
+  return <div></div>;
+}
