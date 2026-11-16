@@ -1,7 +1,7 @@
 import { createMemo } from "solid-js";
 import { render } from "@solidjs/web";
 import * as H from "./helpers";
-import { both, exprArrow, ignore, inBoundary, run } from "./helpers";
+import { both, branch, exprArrow, ignore, inBoundary, returned, run, viaArguments } from "./helpers";
 import { createLoadingBoundary } from "solid-js/internal";
 import { go } from "./reexport";
 import { helpers as Api } from "./barrel";
@@ -106,7 +106,9 @@ function Handed(props: { run: (cb: () => unknown) => number }) {
 }
 
 // ADR 1011 (review of the first cut): the callee's boundary decides only where it holds EVERY use of the parameter that can run the closure.
-// Chrome warns at the read of each of these components (a bare call runs in the render): a violation stands.
+// Chrome warns at the read of each of these components (a bare call runs in the render): a violation stands. The member forms of `branch`, `returned` and
+// `viaArguments` are not claimed (a conditional or returned call is not proved to run in the render: `call-attributed-read`, as `Maybe`); the identifier forms were
+// violations on main and must stay.
 function BothNs() {
   return <p>{(() => { H.both(() => { slow(); }); return 1; })()}</p>;
 }
@@ -115,16 +117,16 @@ function BothId() {
   return <p>{(() => { both(() => { slow(); }); return 1; })()}</p>;
 }
 
-function BranchNs() {
-  return <p>{(() => { H.branch(() => { slow(); }, false); return 1; })()}</p>;
+function BranchId() {
+  return <p>{(() => { branch(() => { slow(); }, false); return 1; })()}</p>;
 }
 
-function ReturnedNs() {
-  return <p>{(() => { H.returned(() => { slow(); })(); return 1; })()}</p>;
+function ReturnedId() {
+  return <p>{(() => { returned(() => { slow(); })(); return 1; })()}</p>;
 }
 
-function ViaArgumentsNs() {
-  return <p>{(() => { try { H.viaArguments(() => { slow(); }); } catch {} return 1; })()}</p>;
+function ViaArgumentsId() {
+  return <p>{(() => { viaArguments(() => { slow(); }); return 1; })()}</p>;
 }
 
 // An identifier callee is the function its name runs only where nothing replaces it. `wrapLet` is reassigned to a function that runs the
@@ -171,8 +173,8 @@ render(() => <Shadowed />, document.body);
 render(() => <Handed run={(cb) => { cb(); return 1; }} />, document.body);
 render(() => <BothNs />, document.body);
 render(() => <BothId />, document.body);
-render(() => <BranchNs />, document.body);
-render(() => <ReturnedNs />, document.body);
-render(() => <ViaArgumentsNs />, document.body);
+render(() => <BranchId />, document.body);
+render(() => <ReturnedId />, document.body);
+render(() => <ViaArgumentsId />, document.body);
 render(() => <WrapLet />, document.body);
 render(() => <ViaWrap />, document.body);

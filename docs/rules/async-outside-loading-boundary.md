@@ -156,14 +156,16 @@ edge places is uncertifiable (blocker `mount-unresolved`), never uncovered: the 
 of the props (a function-valued `children`, a method, `on`), an array element, a class element,
 a tag function, a closure handed to a call whose target the analysis does not resolve
 (`Loading.call(null, props)`, `[Loading][0](props)`, a wrapper's `props`).
-A closure handed to a call to a project function the analysis resolves (an identifier callee, or a member it resolves exactly: a namespace
-import's member, ADR 1011) is read as part of the function around the call, and the callee's body is walked for its own boundary: a call of
-the parameter inside a `Loading` or a `createLoadingBoundary` the callee writes covers it, as does a chain of project functions that hand the
-parameter on (sixteen hand-offs at most). The read stays proven when every call of the parameter reaches the callee's top with no boundary
-around it. A parameter the callee stores, aliases, never calls or passes to anything but a project function, an `async` or generator callee, a
-callee the analysis does not resolve exactly (a method an assignment replaced, a function the component is handed) leaves it uncertifiable;
-so do a re-exported namespace's member, a default import's method and a literal's method, whose closure no call edge places in the callee
-(blocker `call-attributed-read`).
+A closure handed to a call to a project function the analysis resolves exactly (an identifier callee whose binding nothing replaces, or a
+member it resolves exactly: a namespace import's member, ADR 1011) is read as part of the function around the call, and the callee's body is
+walked for its own boundary. It is covered when a `Loading` or `createLoadingBoundary` the callee writes holds every use of the parameter, or a
+chain of project functions that hand it on does (sixteen hand-offs at most). The read stays proven when any use runs the closure with no
+boundary around it (a callee that holds one call and runs another bare, a returned `() => cb()`), or no use shows a boundary. A parameter the
+callee stores, aliases, never calls or reads through `arguments`, an `async` or generator callee, a binding something writes or an initializer
+that is not the function (`const f = wrap((cb) => ..)`) leave what the walk knew before: the closure is part of the caller's function. A boundary
+on some uses with the rest not known leaves it uncertifiable, as do a callee the analysis does not resolve exactly (a method an assignment
+replaced, a function the component is handed), a re-exported namespace's member, a default import's method and a literal's method, whose closure
+no call edge places in the callee (blocker `call-attributed-read`).
 
 ## A render effect's own compute (ADR 0989)
 
