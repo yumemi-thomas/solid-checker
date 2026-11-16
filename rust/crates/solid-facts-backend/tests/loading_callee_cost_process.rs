@@ -15,7 +15,8 @@ use solid_facts_backend::{
 use solid_reactive_ir::{AnalysisInputs, RuleOptions};
 
 /// The fixture's declarations (`solid-js`, `solid-js/internal`, `@solidjs/web`, the JSX namespace), copied from the published typings.
-const STUB: &str = include_str!("../../../../fixtures/reactive-ir/loading-member-callee/solid-js.d.ts");
+const STUB: &str =
+    include_str!("../../../../fixtures/reactive-ir/loading-member-callee/solid-js.d.ts");
 
 const TSCONFIG: &str = r#"{"compilerOptions":{"jsx":"preserve","module":"ESNext","moduleResolution":"Bundler","lib":["DOM","ES2023"],"strict":true,"target":"ES2022"},"include":["*.ts","*.tsx"]}"#;
 
@@ -92,8 +93,9 @@ fn a_recursive_visitor_is_walked_once() {
     .unwrap();
     let mut walks = Vec::new();
     // Components x reads x recursive calls; the largest is the shape that took minutes (and three calls, hours).
-    for (version, (components, reads, children)) in
-        [(1, 1, 2), (8, 3, 2), (24, 3, 3), (24, 3, 6)].into_iter().enumerate()
+    for (version, (components, reads, children)) in [(1, 1, 2), (8, 3, 2), (24, 3, 3), (24, 3, 6)]
+        .into_iter()
+        .enumerate()
     {
         let source = program(components, reads, children);
         fs::write(&app, &source).unwrap();
