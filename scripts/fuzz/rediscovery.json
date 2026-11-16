@@ -24557,5 +24557,18 @@
    "mx-store-write-outside-setter-timer-nested-push-alias-handoff-map-cb-alias",
    "mx-store-write-outside-setter-timer-deferred-micro-direct-handoff-member-cb-alias"
   ]
+ },
+ {
+  "finding": "STORE_WRITE_OUTSIDE_SETTER, the other half of ADR 1013's finding: a timer handed a member of a `const` object literal (`const cb1 = { cb: () => { … } }; setTimeout(cb1.cb, 0)`) withdrew every primitive's slots (`callback_seen` refused every member, so the callback was any function, which a timer calls with the window as `this`), and a proved store write fell to an uncertifiable `tuple-iteration-written` row where Chrome rc.21 reports the write: the 462 `-cb-bundle` programs of the `timer` context (mx-pairs 330, mx-recall 132), agree at aa4702650 and recall-gap at 6e33e0b08",
+  "found": "the bisect of the lost violations (2026-11-16), with ADR 1013: the same drop at 281ae31d3 (the merge of ADR 0803 step 2), the callback written as a member instead of an alias",
+  "fixed": "ADR 1014 (`accessor_provenance/mutation_sites.rs` `literal_member_function`: a member of a `const` object literal under ADR 0279's facts, `execution_role::member_runs_declared_method`)",
+  "grid": "mx-pairs",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-timer-assign-direct-handoff-foreach-cb-bundle",
+   "mx-store-write-outside-setter-timer-nested-assign-alias-handoff-wrapper-cb-bundle",
+   "mx-store-write-outside-setter-timer-nested-push-alias-handoff-map-cb-bundle",
+   "mx-store-write-outside-setter-timer-deferred-micro-direct-handoff-member-cb-bundle"
+  ]
  }
 ]

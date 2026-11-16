@@ -454,7 +454,7 @@ fn declared_in<'a, W: crate::indexes::CalleeWorld<'a> + ?Sized>(
 /// member of that name, and the receiver is a `const` bound to the object
 /// literal that holds the method, or to `new C()` of the exact class that
 /// declares it.
-pub(super) fn member_runs_declared_method(
+pub(crate) fn member_runs_declared_method(
     file: &solid_facts::FileFacts,
     callee: Span,
     method_file: &solid_facts::FileFacts,
