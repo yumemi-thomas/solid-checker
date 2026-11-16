@@ -15,6 +15,13 @@ name: Fuzz audit
 #           samples are split over at most 20 jobs, the account's concurrent runners, the largest part split first: audit.mjs oracleParts, ADR 0620)
 #   report  the verdict (fails when something needs a look) and the outcomes that moved from the earlier audit
 #
+# The proved verdicts (ADR 1012): the report holds the run to the PROVED LEDGER, the programs the last accepted audit on main proved (agree on a
+# misuse grid, clean on a legal one; artifact audit-proved-<mode>). A program of it that is not proved now fails the audit unless a row of
+# scripts/fuzz/proved/changes.json names it, and this run's proved set becomes the next ledger (a main run uploads it) only when nothing went
+# unnamed: a red audit never hands its losses on as the next baseline. A manual run on main with `proved-bootstrap` writes the first ledger.
+# The known items of scripts/fuzz/audit-known.json leave the needs-a-look list with their exact counts; an oracle program that comes back
+# inconclusive is run once more inside its oracle job (audit.mjs oracle), and only the residue counts.
+#
 # Each shard keeps its warm state between runs: the fuzzer's runtime and type-check caches (keyed by program bytes and the
 # tools, never the checker) and the npm installs and browser those keys hash by size and mtime (cache.mjs treeStat), in a pax tar
 # that keeps sub-second mtimes. The state is reused only under the same lockfiles and runner image; otherwise the shard installs
@@ -36,6 +43,10 @@ on:
       shards:
         description: Shards (one runner each; at most 20 run at once)
         default: "40"
+      proved-bootstrap:
+        description: Write the first proved-verdict ledger from this run (a manual run on main, when there is none)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -63,6 +74,8 @@ jobs:
       earlier: ${{ steps.earlier.outputs.run }}
       earlier-rows: ${{ steps.earlier.outputs.rows-run }}
       earlier-rows-name: ${{ steps.earlier.outputs.rows-name }}
+      # The latest audit of this mode on main that uploaded a proved ledger (its artifact audit-proved-<mode>).
+      proved-run: ${{ steps.proved.outputs.run }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -108,6 +121,19 @@ jobs:
           echo "rows-run=$rows" >> "$GITHUB_OUTPUT"
           echo "rows-name=$name" >> "$GITHUB_OUTPUT"
           echo "earlier audit (warm state): ${run:-none}; earlier $RECALL audit (rows): ${rows:-none}"
+      # The proved ledger is main's: only an audit of main's own accepted run advances it, whatever branch this run is on.
+      - id: proved
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RECALL: ${{ steps.plan.outputs.recall }}
+        run: |
+          run=""
+          for id in $(gh run list -R "$GITHUB_REPOSITORY" -w fuzz-audit.yml -b main -s completed -L 30 --json databaseId -q '.[].databaseId'); do
+            [ "$id" = "$GITHUB_RUN_ID" ] && continue
+            if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id/artifacts?name=audit-proved-$RECALL" -q '.total_count' | grep -qv '^0$'; then run=$id; break; fi
+          done
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "proved ledger ($RECALL): ${run:-none}"
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
@@ -363,7 +389,19 @@ jobs:
           path: ${{ runner.temp }}/earlier
           run-id: ${{ needs.build.outputs.earlier-rows }}
           github-token: ${{ github.token }}
+      - id: proved
+        if: needs.build.outputs.proved-run != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: audit-proved-${{ needs.build.outputs.recall }}
+          path: ${{ runner.temp }}/proved-in
+          run-id: ${{ needs.build.outputs.proved-run }}
+          github-token: ${{ github.token }}
       - name: Report
+        id: report
+        env:
+          BOOTSTRAP: ${{ inputs.proved-bootstrap && github.ref == 'refs/heads/main' }}
         run: |
           mkdir -p "$RUNNER_TEMP/oracle"
           [ -d "$RUNNER_TEMP/oracle-artifacts/oracle-manifests" ] && mv "$RUNNER_TEMP/oracle-artifacts/oracle-manifests" "$RUNNER_TEMP/oracle/manifests"
@@ -375,13 +413,24 @@ jobs:
           done
           against=()
           [ -d "$RUNNER_TEMP/earlier/rows" ] && against=(--against "$RUNNER_TEMP/earlier/rows")
+          proved=(--proved "$RUNNER_TEMP/proved-in" --proved-out "$RUNNER_TEMP/proved-out")
+          [ "$BOOTSTRAP" = true ] && proved+=(--proved-bootstrap true)
           status=0
-          node scripts/fuzz/audit.mjs report --shards "$RUNNER_TEMP/shards" --oracle "$RUNNER_TEMP/oracle" --out "$RUNNER_TEMP/report" "${against[@]}" || status=$?
+          node scripts/fuzz/audit.mjs report --shards "$RUNNER_TEMP/shards" --oracle "$RUNNER_TEMP/oracle" --out "$RUNNER_TEMP/report" "${against[@]}" "${proved[@]}" || status=$?
           cat "$RUNNER_TEMP/report/audit.md" >> "$GITHUB_STEP_SUMMARY"
+          # The ledger is written only when nothing went unnamed (audit.mjs writes consumed.json last, with it): a main run uploads it below.
+          [ -f "$RUNNER_TEMP/proved-out/consumed.json" ] && echo "proved=true" >> "$GITHUB_OUTPUT"
           exit $status
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: audit-report-${{ needs.build.outputs.recall }}
           path: ${{ runner.temp }}/report
+          retention-days: 90
+      # Main's accepted run is the next proved-verdict baseline (90 days; every nightly renews it).
+      - uses: actions/upload-artifact@v4
+        if: always() && github.ref == 'refs/heads/main' && steps.report.outputs.proved == 'true'
+        with:
+          name: audit-proved-${{ needs.build.outputs.recall }}
+          path: ${{ runner.temp }}/proved-out
           retention-days: 90

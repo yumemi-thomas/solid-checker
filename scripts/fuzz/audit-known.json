@@ -2,33 +2,70 @@
  "note": "The audit's known items (ADR 1012): classes the audit reports and a person has seen, with their exact counts by recall mode (audit-proved.mjs applyKnown). An item an entry matches leaves the audit's needs-a-look list; more than its count is attention (the extra ids), fewer than an exact count is attention too (lower it: a fix is news); `cap` allows fewer. A raised count needs a new ADR (scripts/guard/proved.mjs). Counts: the lean audit at 356c97405 (2,189,322 programs) and the full audit at 78ddeb849 (3,257,929).",
  "entries": [
   {
-   "grid": "mx-recall", "kind": "unplaced", "item": "pk-lazy", "idRegex": "-pk-lazy",
-   "count": { "lean": 163, "full": 326 },
-   "adr": "ADR 1012", "work": "brief 09, the package half",
+   "grid": "mx-recall",
+   "kind": "unplaced",
+   "item": "pk-lazy",
+   "idRegex": "-pk-lazy",
+   "count": {
+    "lean": 163,
+    "full": 326
+   },
+   "adr": "ADR 1012",
+   "work": "brief 09, the package half",
    "why": "A throw in a lazily loaded package's module: Chrome reports the code and its stack holds no App frame, so the oracle cannot place it at a site (placed: unplaced, ADR 0815). The checker's rows are uncertifiable at the site (package-behavior-unavailable, leaf-owner-forbidden-call); nothing is a false clean."
   },
   {
-   "grid": "mx-recall", "kind": "unplaced", "item": "pk-call-shapes", "idRegex": "-pk-(?!lazy)",
-   "count": { "lean": 144, "full": 288 },
-   "adr": "ADR 1012", "work": "brief 09, the package half",
-   "why": "The package-call shapes of the recall grid (dotcall, tagged, reflect, getter, call, call-inner, new, callback, with their own and phantom twins) in the deferred contexts of STORE_WRITE_OUTSIDE_SETTER: the throw is raised inside the package and Chrome's stack holds no App frame at the site (placed: unplaced). Recorded with pk-lazy under the owner's ruling; the cause of these non-lazy shapes is the same unplaced class, not a measured claim about the package."
+   "grid": "mx-recall",
+   "kind": "unplaced",
+   "item": "pk-call-shapes",
+   "idRegex": "-pk-(?!lazy)",
+   "count": {
+    "lean": 144,
+    "full": 288
+   },
+   "adr": "ADR 1012",
+   "work": "docs/open-work.md: unplaced package-call shapes in deferred store-write contexts",
+   "why": "The package-call shapes of the recall grid (dotcall, tagged, reflect, getter, call, call-inner, new, callback, with their own and phantom twins) in the deferred contexts of STORE_WRITE_OUTSIDE_SETTER end `unplaced`: the oracle reports the code and cannot place it at a site (placed: unplaced, ADR 0815). The CAUSE IS NOT MEASURED: it is its own item, not the lazy-package ruling's (brief 09, the package half, covers pk-lazy only). Counted exactly so that a new shape stands out."
   },
   {
-   "grid": "mx-recall", "kind": "halted-claim", "item": "flw-flow-for-async", "idRegex": "flw-flow-for-async",
-   "count": { "lean": 58, "full": 98 },
-   "adr": "ADR 1012", "work": "scripts/fuzz/classify.mjs halted claims",
+   "grid": "mx-recall",
+   "kind": "halted-claim",
+   "item": "flw-flow-for-async",
+   "idRegex": "flw-flow-for-async",
+   "count": {
+    "lean": 58,
+    "full": 98
+   },
+   "adr": "ADR 1012",
+   "work": "scripts/fuzz/classify.mjs halted claims",
    "why": "SETTLED_CLEANUP_UNOWNED in a flow row after an async step: the run halts before the site (REACTIVITY_HALTED, offSite missing-owner@halted(halt-before-site)), the program is not-fired. 58 at the lean audit 63725c6bf and now; the full audit holds 98 because the full recall grid generates 40 more of the same family (the mounts `m-for`, `m-show`, `m-child` variants the lean grid omits): 58 of the 98 are the lean audit's own ids, 40 were absent from it. The 2 ledgered R-halted rows are not counted here."
   },
   {
-   "grid": "mx-census", "kind": "oracle inconclusive", "item": "page-timeouts", "idRegex": "^mx-",
-   "count": { "lean": 66, "full": 66 }, "cap": true,
-   "adr": "ADR 1012", "work": "audit oracle rerun",
+   "grid": "mx-census",
+   "kind": "oracle inconclusive",
+   "item": "page-timeouts",
+   "idRegex": "^mx-",
+   "count": {
+    "lean": 66,
+    "full": 66
+   },
+   "cap": true,
+   "adr": "ADR 1012",
+   "work": "audit oracle rerun",
    "why": "The Chrome differential cannot judge 66 census programs (page.waitForFunction and feedback-bootstrap timeouts of 12 s: mount-named, patch-global and similar contexts), the same 66 in the lean audit at 356c97405 and the full one at 78ddeb849: deterministic, so a rerun is not expected to clear them. The shard outcome of each stands; only the oracle comparison is missing."
   },
   {
-   "grid": "mx-recall", "kind": "oracle inconclusive", "item": "page-timeouts", "idRegex": "^mx-",
-   "count": { "lean": 28, "full": 91 }, "cap": true,
-   "adr": "ADR 1012", "work": "audit oracle rerun",
+   "grid": "mx-recall",
+   "kind": "oracle inconclusive",
+   "item": "page-timeouts",
+   "idRegex": "^mx-",
+   "count": {
+    "lean": 28,
+    "full": 91
+   },
+   "cap": true,
+   "adr": "ADR 1012",
+   "work": "audit oracle rerun",
    "why": "The Chrome differential's page timeouts and feedback-bootstrap timeouts on recall programs (12 s), 28 in the lean audit at 356c97405 and 91 in the full one at 78ddeb849. audit.mjs oracle runs each inconclusive program once more and only the residue counts; the cap is the count before that rerun and is lowered once an audit reports the residue."
   }
  ]
