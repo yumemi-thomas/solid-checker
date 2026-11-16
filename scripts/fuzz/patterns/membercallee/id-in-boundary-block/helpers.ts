@@ -30,3 +30,19 @@ export function maybe(cb: () => unknown, on: boolean) {
 export function passOn(cb: () => unknown) {
   return run(cb);
 }
+
+// A callee that hands the closure down a chain: the first is held by no boundary (Chrome warns), the second ends in one (Chrome is quiet).
+export function forward(cb: () => unknown) {
+  return inner(cb);
+}
+function inner(cb: () => unknown) {
+  cb();
+  return 1;
+}
+export function forwardBoundary(cb: () => unknown) {
+  return innerBoundary(cb);
+}
+function innerBoundary(cb: () => unknown) {
+  createLoadingBoundary(() => cb(), () => 0);
+  return 1;
+}

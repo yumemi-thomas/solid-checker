@@ -18,7 +18,7 @@ const slow = createMemo(async () => {
 // analysis does not see, so a boundary may hold it: the read is uncertifiable, never a violation.
 
 // First group: the callee is a project function the analysis resolves exactly and the call graph places the closure in: it calls it in the
-// render. `Named` and `NamedReexport` are the identifier controls (they held before); `Namespace` is `H.run(cb)` of a namespace import
+// render, or hands it down a chain of project functions that do (`Forward`). `Named` and `NamedReexport` are the identifier controls (they held before); `Namespace` is `H.run(cb)` of a namespace import
 // (a violation until ADR 1011's fix was an SC5003 `mount-unresolved`). The member shapes below it (a re-exported namespace, a default
 // import's method, a literal's method) are resolved by no call edge to the closure, so they stay uncertifiable: pinned, not claimed.
 function Named() {
@@ -77,6 +77,14 @@ function PassOn() {
   return <p>{(() => { H.passOn(() => { slow(); }); return 1; })()}</p>;
 }
 
+function Forward() {
+  return <p>{(() => { H.forward(() => { slow(); }); return 1; })()}</p>;
+}
+
+function ForwardBoundary() {
+  return <p>{(() => { H.forwardBoundary(() => { slow(); }); return 1; })()}</p>;
+}
+
 function Stored() {
   return <p>{(() => { H.keep(() => { slow(); }); return 1; })()}</p>;
 }
@@ -109,6 +117,8 @@ render(() => <IdInBoundaryBlock />, document.body);
 render(() => <Later />, document.body);
 render(() => <Maybe />, document.body);
 render(() => <PassOn />, document.body);
+render(() => <Forward />, document.body);
+render(() => <ForwardBoundary />, document.body);
 render(() => <Stored />, document.body);
 render(() => <Replaced />, document.body);
 render(() => <Shadowed />, document.body);
