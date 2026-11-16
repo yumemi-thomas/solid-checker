@@ -300,11 +300,11 @@ fn callee_boundary(
                 }
             }
         };
-        match found {
-            Some(LoadingCover::Covered) => return Some(LoadingCover::Covered),
-            Some(other) => result = Some(other),
-            None => {}
+        if matches!(found, Some(LoadingCover::Covered)) {
+            return found;
         }
+        // Unresolved is kept; a use that reaches the callee's top with no boundary says nothing.
+        result = found.or(result);
     }
     result
 }
