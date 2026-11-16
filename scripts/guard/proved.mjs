@@ -8,7 +8,8 @@
 //      `from` is the grid's proved outcome, `to` another, `count` the most losses it names). A row that names an id the ledger does not hold names nothing.
 //   2. a ledger never loses an id: an id at the base that is not in the head's file of that grid is a failure (a lost proof stays in the ledger, named
 //      by a row; nothing is ever forgotten by editing the file).
-//   3. scripts/fuzz/audit-known.json (the audit's known items, exact counts): a NEW entry, or one whose count rose against the base, needs an `adr`
+//   3. scripts/guard/corpus-changes.json (the corpus guard's naming file, scripts/guard/corpus.mjs) is append-only against the base, a new row with its shape and ADR.
+//   4. scripts/fuzz/audit-known.json (the audit's known items, exact counts): a NEW entry, or one whose count rose against the base, needs an `adr`
 //      in docs/decisions.md that the base's entry did not already name, and a `why`. A count may fall without one.
 // No base is a failure, never a pass (COUNT_BASE=<rev> names one). A base with no scripts/fuzz/proved at all is the change that introduces it.
 //
@@ -20,6 +21,7 @@ import { fileURLToPath } from "node:url";
 
 import { baseCandidates, git, helpOf, repo } from "./base-revision.mjs";
 import { isProved } from "../fuzz/proved.mjs";
+import { CHANGES as CORPUS_CHANGES, changesProblems as corpusChangesProblems } from "./corpus.mjs";
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const adrNumber = (adr) => /^(?:ADR )?(\d{4})$/.exec(adr ?? "")?.[1];
@@ -115,6 +117,9 @@ function main(argv) {
   const parse = (files, name) => { const found = files.find(([n]) => n === name); return found ? JSON.parse(found[1]) : { rows: [] }; };
   problems.push(...changesProblems({ head: parse(headFiles, "changes.json"), base: parse(baseFiles, "changes.json"), decisions, ledgers: headLedgers }));
   problems.push(...ledgerProblems({ head: headLedgers, base: baseLedgers }));
+  // The corpus guard's naming file (scripts/guard/corpus.mjs) is held the same way here, where no corpus is needed: append-only, new rows with their ADR.
+  const baseCorpus = git("show", `${revision}:${CORPUS_CHANGES}`);
+  if (existsSync(join(repo, CORPUS_CHANGES))) problems.push(...corpusChangesProblems({ head: JSON.parse(read(CORPUS_CHANGES)), base: baseCorpus ? JSON.parse(baseCorpus) : { rows: [] }, decisions }));
   const known = "scripts/fuzz/audit-known.json";
   const baseKnown = git("show", `${revision}:${known}`);
   if (existsSync(join(repo, known))) problems.push(...knownProblems({ head: JSON.parse(read(known)), base: baseKnown ? JSON.parse(baseKnown) : { entries: [] }, decisions }));

@@ -13,13 +13,14 @@
 //     "newly-uncertifiable", build: "std" | "dev" | "both", count, adr, why }, `count` the most it names (rows of a group add up), the ADR in docs/decisions.md.
 // Other movement (more rows where some stood, a violation added, a row gone) is printed, never a failure.
 //
-// THE BASELINE (scripts/guard/corpus/<fingerprint>.json). Findings differ with the corpus install (ADR 0974: +1,176 rows between two Macs on the same commit), so
+// THE BASELINE (scripts/guard/corpus/<fingerprint>.json.gz). Findings differ with the corpus install (ADR 0974: +1,176 rows between two Macs on the same commit), so
 // a baseline names where it was built: the platform, the architecture and a hash of the installed packages of every app (the names and versions under each
 // app's node_modules), and `check` refuses a baseline built elsewhere rather than report the moves of another install. It also names the checker it was built
 // from (the git trees of rust/ and apps/solid-typefacts at main's tip when it was recorded), and `check` refuses one older than the merge base's checker: main
 // moves with every ADR, and a stale baseline would report the earlier ADR's moves as this branch's. `record` writes it, and only from a tree whose checker is
-// the merge base's (a main checkout or a branch with no engine change), because a baseline is main's findings. Aggregate U counts and exact Vs keep a baseline
-// (std and dev) near 2 MB, under .githooks/pre-commit's 5 MB.
+// the merge base's (a main checkout or a branch with no engine change), because a baseline is main's findings. Aggregate U counts and exact Vs make a baseline
+// of both builds 4.4 MB of JSON (212 violations and 22,250 (project, file, rule) places a build), so it is stored gzipped (deterministically: no mtime), under
+// .githooks/pre-commit's 5 MB by a wide margin.
 //
 // Exit 1: a lost proof or a proved-clean place lost, unnamed. Exit 2: nothing could be compared (no corpus, no baseline for this machine, a stale one, no base).
 import { spawnSync } from "node:child_process";
@@ -28,6 +29,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFil
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { gunzipSync, gzipSync } from "node:zlib";
 
 import { baseCandidates, git, helpOf, repo } from "./base-revision.mjs";
 import { readReportFile } from "../lib/corpus-report.mjs";
@@ -206,7 +208,7 @@ function main(argv) {
   if (!existsSync(checker)) return refuse(`no release checker at ${checker}: make build-checker-release`);
   const fingerprint = installFingerprint(manifest, appsRoot);
   const trees = engineTrees(base);
-  const file = join(repo, BASELINES, `${fingerprint}.json`);
+  const file = join(repo, BASELINES, `${fingerprint}.json.gz`);
   const jobs = Number(options.jobs ?? 4);
   const out = mkdtempSync(join(tmpdir(), "corpus-guard-"));
   const only = options.build ? [options.build] : ["std", "dev"];
@@ -216,11 +218,11 @@ function main(argv) {
     const builds = {};
     for (const build of only) builds[build] = sweep({ build, manifestPath, appsRoot, checker, typefacts, jobs, out });
     mkdirSync(join(repo, BASELINES), { recursive: true });
-    writeFileSync(file, `${JSON.stringify({ schema: 1, fingerprint, platform: process.platform, arch: process.arch, checker: trees, builtFrom: base, builds })}\n`);
+    writeFileSync(file, gzipSync(`${JSON.stringify({ schema: 1, fingerprint, platform: process.platform, arch: process.arch, checker: trees, builtFrom: base, builds })}\n`, { level: 9 }));
     console.log(`corpus baseline ${fingerprint}: ${only.map((build) => `${build} ${builds[build].violations.length} violations, ${Object.keys(builds[build].uncertifiable).length} (project, file, rule) places`).join("; ")}`);
     return;
   }
-  const baseline = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : null;
+  const baseline = existsSync(file) ? JSON.parse(gunzipSync(readFileSync(file)).toString("utf8")) : null;
   const usable = baselineUsable({ baseline, fingerprint, trees });
   if (!usable.ok) return refuse(usable.problem);
   const moves = {};
