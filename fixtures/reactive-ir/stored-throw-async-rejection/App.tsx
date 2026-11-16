@@ -1,4 +1,4 @@
-import { createContext, createMemo, createRenderEffect, untrack, useContext } from "solid-js";
+import { createContext, createMemo, createRenderEffect, createTrackedEffect, flush, resolve, untrack, until, useContext } from "solid-js";
 
 // A default: a read with no owner throws NoOwnerError.
 const Ctx = createContext(7);
@@ -118,4 +118,80 @@ export function EffectCaught() {
 export function MemoCaught() {
   const m = createMemo(() => { (async () => { await Promise.resolve(); useContext(Ctx); })().catch(() => {}); return 1; });
   return <div>{m()}</div>;
+}
+
+// The review of ADR 1008. Violations: a handler's and a `ref`'s return value is dropped by the host, and a helper's promise by its call.
+const fromHandler = async () => {
+  await Promise.resolve();
+  useContext(Ctx);
+};
+
+const fromRef = async () => {
+  await Promise.resolve();
+  useContext(Ctx);
+};
+
+export function HandlerReturned() {
+  return <button onClick={() => fromHandler()}>x</button>;
+}
+
+export function RefReturned() {
+  return <p ref={() => fromRef()}>x</p>;
+}
+
+export function HelperResolveDiscarded() {
+  const run = async () => { void resolve(() => 1); };
+  createTrackedEffect(() => { run(); });
+  return <div></div>;
+}
+
+// Obligations: an `await` of what `catch` or a two-armed `then` returns, a named `async` function a primitive runs, and a
+// helper's `resolve`, `until` or `flush` whose promise the tracked effect catches.
+export function AwaitCatch() {
+  return <p ref={() => { (async () => { await (async () => { await Promise.resolve(); useContext(Ctx); })().catch(() => {}); })(); }}>x</p>;
+}
+
+export function AwaitThenArms() {
+  return <p ref={() => { (async () => { await (async () => { await Promise.resolve(); useContext(Ctx); })().then(() => {}, () => {}); })(); }}>x</p>;
+}
+
+export function UntrackNamedCaught() {
+  const run = async () => { await Promise.resolve(); useContext(Ctx); };
+  return <p ref={() => { untrack(run).catch(() => {}); }}>x</p>;
+}
+
+export function UntrackAliasCaught() {
+  const run = async () => { await Promise.resolve(); useContext(Ctx); };
+  const again = run;
+  return <p ref={() => { untrack(again).catch(() => {}); }}>x</p>;
+}
+
+export function HelperResolveCaught() {
+  const run = async () => { void resolve(() => 1); };
+  createTrackedEffect(() => { run().catch(() => {}); });
+  return <div></div>;
+}
+
+export function HelperUntilCaught() {
+  const run = async () => { void until(() => 1); };
+  createTrackedEffect(() => { run().catch(() => {}); });
+  return <div></div>;
+}
+
+export function HelperFlushCaught() {
+  const run = async () => { flush(); };
+  createTrackedEffect(() => { run().catch(() => {}); });
+  return <div></div>;
+}
+
+export function LiteralResolveCaught() {
+  createTrackedEffect(() => { (async () => { void resolve(() => 1); })().catch(() => {}); });
+  return <div></div>;
+}
+
+export function DeepHelperCaught() {
+  const inner = async () => { void resolve(() => 1); };
+  const run = () => { inner().catch(() => {}); };
+  createTrackedEffect(() => { run(); });
+  return <div></div>;
 }

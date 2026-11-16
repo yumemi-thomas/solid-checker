@@ -339,6 +339,7 @@ fn push_reached(
                     sites,
                     computation_error_unobserved: false,
                     stop: None,
+                    through_async: false,
                 }
             };
         for stepper in steppers.into_iter().filter(|stepper| *stepper != at) {
@@ -370,6 +371,7 @@ fn push_reached(
             sites: Vec::new(),
             computation_error_unobserved: false,
             stop: None,
+            through_async: false,
         });
     }
 }
@@ -421,6 +423,9 @@ fn push_crossed(
         operation.uncertain = true;
         operation.possible = true;
     }
+    // ADR 1008: only an operation reached through a call carries it (`via`); one written in the leaf scope's own callback is
+    // walked from where it is written.
+    operation.through_async = through_async && operation.via.is_some();
     operations.push(operation);
 }
 
@@ -572,6 +577,7 @@ pub(super) fn leaf_owner_operations_for_file(
                         sites,
                         computation_error_unobserved: false,
                         stop: None,
+                        through_async: false,
                     });
                 }
                 if complete {
@@ -590,6 +596,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     sites: Vec::new(),
                     computation_error_unobserved: false,
                     stop: None,
+                    through_async: false,
                 });
                 continue;
             }
@@ -622,6 +629,7 @@ pub(super) fn leaf_owner_operations_for_file(
                 sites: Vec::new(),
                 computation_error_unobserved: false,
                 stop: None,
+                through_async: false,
             });
             continue;
         };
@@ -833,6 +841,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     sites: Vec::new(),
                     computation_error_unobserved: false,
                     stop: None,
+                    through_async: false,
                 },
                 crossed.as_ref(),
                 false,
@@ -961,6 +970,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     sites: Vec::new(),
                     computation_error_unobserved: false,
                     stop: None,
+                    through_async: false,
                 });
                 continue;
             }
@@ -1019,6 +1029,7 @@ pub(super) fn leaf_owner_operations_for_file(
                             identity_unproven: false,
                             sites: Vec::new(),
                             computation_error_unobserved: false,
+                            through_async: false,
                             // The two stops that owe an obligation (`owes_obligation`), named for the cause a what-if run can assume.
                             stop: stop.and_then(|stop| match stop {
                                 ClimbStop::UnmodelledInPlace => {
@@ -1164,6 +1175,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     sites: Vec::new(),
                     computation_error_unobserved: false,
                     stop: None,
+                    through_async: false,
                 },
                 crossed.as_ref(),
                 false,
@@ -1214,6 +1226,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     sites,
                     computation_error_unobserved: false,
                     stop: None,
+                    through_async: false,
                 });
             }
             if !complete {
@@ -1230,6 +1243,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     sites: Vec::new(),
                     computation_error_unobserved: false,
                     stop: None,
+                    through_async: false,
                 });
             }
         }

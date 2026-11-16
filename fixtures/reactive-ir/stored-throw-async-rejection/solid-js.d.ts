@@ -2,6 +2,7 @@ declare namespace JSX {
   // `ref` is the published `Ref<T>` of `@solidjs/web` 2.0.0-rc.21 narrowed to the forms the cases use: a callback, an array of them, or nothing.
   type RefCallback = (element: HTMLElement) => void;
   interface IntrinsicElements {
+    button: { onClick?: () => void; children?: unknown };
     div: { children?: unknown };
     p: { ref?: RefCallback | RefCallback[] | undefined; children?: unknown };
   }
@@ -77,6 +78,9 @@ declare module "solid-js" {
   export function createMemo<T>(compute: ComputeFunction<undefined | NoInfer<T>, T>, options?: MemoOptions<T>): SourceAccessor<T>;
   export function createEffect<T>(compute: ComputeFunction<undefined | NoInfer<T>, T>, effectFn: EffectFunction<NoInfer<T>, T> | EffectBundle<NoInfer<T>, T>, options?: EffectOptions): void;
   export function resolve<T>(fn: () => T): Promise<T>;
+  // `flush` from `@solidjs/signals/dist/types/core/scheduler.d.ts`.
+  export function flush(): void;
+  export function flush<T>(fn: () => T): T;
   export function isPending(fn: () => any): boolean;
   export function createRenderEffect<T>(compute: ComputeFunction<undefined | NoInfer<T>, T>, effectFn: EffectFunction<NoInfer<T>, T>): void;
   export function createTrackedEffect(compute: () => void | (() => void), options?: BaseEffectOptions): void;

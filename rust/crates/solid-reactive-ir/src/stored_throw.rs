@@ -127,13 +127,82 @@ pub(crate) fn mark_owner_requirements(
                 .observer_guarded()
                 .then_some(Thrower::UnderObserver)
         };
+        // ADR 1008: reached through a call into an `async` function, the throw is a rejection made on the way.
+        let rejected = operation.through_async
+            && thrower.is_some_and(|thrower| {
+                rejection_unobserved(&context, &operation.location, &operation.sites, thrower)
+            });
         if !operation.uncertain
-            && thrower.is_some_and(|thrower| unobserved(&operation.location, thrower))
+            && (rejected
+                || (!operation.through_async
+                    && thrower.is_some_and(|thrower| unobserved(&operation.location, thrower))))
         {
             operation.uncertain = true;
             operation.computation_error_unobserved = true;
         }
     }
+}
+
+/// ADR 1008: a leaf operation anchored at the helper call it is reached through (`anchor`, the call's callee), the walk to it
+/// having entered an `async` function. The throw rejects a promise made on the way. It is followed only where that promise is the
+/// anchored call's own: the callee resolves to one `async` project function (or is its literal), every place the operation is
+/// written lies in that function, and no other `async` function is around any of them. Then the call is read as any call of an
+/// `async` function is ([`Walk::call_end`]). Anything else (an `async` function deeper in the chain, whose promise a helper may
+/// catch) is unobserved: an obligation.
+fn rejection_unobserved(
+    context: &StaticApiContext<'_>,
+    anchor: &crate::Location,
+    sites: &[crate::Location],
+    thrower: Thrower,
+) -> bool {
+    let lookup = context.lookup;
+    let Some(file) = lookup.file_by_path(anchor.path.as_ref()) else {
+        return true;
+    };
+    let span_of = |location: &crate::Location| {
+        Some(Span::new(
+            u32::try_from(location.start_byte).ok()?,
+            u32::try_from(location.end_byte).ok()?,
+        ))
+    };
+    let Some(at) = span_of(anchor) else {
+        return true;
+    };
+    let Some(call) = file.ast.calls.iter().find(|call| {
+        file.ast.peel_ts_sugar_span(call.callee) == at
+            || call.callee == at
+            || (call.construct && Span::new(call.span.start, call.callee.end) == at)
+    }) else {
+        return true;
+    };
+    let callee = file.ast.peel_ts_sugar_span(call.callee);
+    let Some((helper_file, helper)) = file
+        .ast
+        .function_at(callee)
+        .map(|literal| (file, literal))
+        .or_else(|| lookup.function_called_at(file.path.as_str(), callee))
+    else {
+        return true;
+    };
+    let own = helper.r#async
+        && !sites.is_empty()
+        && sites.iter().all(|site| {
+            site.path.as_ref() == helper_file.path.as_str()
+                && span_of(site).is_some_and(|site| {
+                    helper.span.contains(site)
+                        && helper_file
+                            .ast
+                            .functions_owning(site)
+                            .filter(|function| function.r#async)
+                            .all(|function| function.span == helper.span)
+                })
+        });
+    if !own {
+        return true;
+    }
+    let allowed = crate::execution_role::allowed_callback_spans(file, lookup);
+    let walk = Walk::new(&allowed, context, thrower);
+    walk.call_end(file, call, true, THROW_DEPTH) == ThrowEnd::Unobserved
 }
 
 struct Walk<'w, 'c> {
@@ -245,14 +314,24 @@ impl Walk<'_, '_> {
             crate::execution_role::direct_callback_runs(file, call.arguments[*index].span, at)
         }) {
             self.returned.set(returned);
-            let end = self.argument(file, container, index, at, depth);
+            let end = self.argument(file, container, index, at, false, depth);
             self.returned.set(false);
             return end;
         }
         let function = crate::owners::containing_body_function(&file.ast, at);
-        if returned {
+        // A handler's or a `ref`'s return value is dropped by the host: the
+        // rejection is unhandled there, and the walk goes on as for a throw.
+        let host_drops = function.is_some_and(|function| {
+            file.compiler.callback_roles.iter().any(|callback| {
+                callback.span == function.span
+                    && (callback.role == CallbackRoleKind::EventHandler
+                        || (callback.role == CallbackRoleKind::DirectiveApply
+                            && crate::owners::ref_application_on_intrinsic(file, callback.span)))
+            })
+        });
+        if returned && !host_drops {
             // The promise is the value of the function around the call: a
-            // handler's, a component's or a JSX expression's is not followed.
+            // component's or a JSX expression's is not followed.
             return match function {
                 Some(function)
                     if lookup.function_component_status(file, function) == ComponentStatus::No
@@ -421,6 +500,7 @@ impl Walk<'_, '_> {
         container: &CallFact,
         index: usize,
         at: Span,
+        named_rejects: bool,
         depth: usize,
     ) -> ThrowEnd {
         let lookup = self.context.lookup;
@@ -437,8 +517,10 @@ impl Walk<'_, '_> {
         }
         // ADR 1008: a primitive that runs an `async` callback inline returns
         // the promise its throw rejects (`untrack(async () => …)`).
-        // Or the callback returns such a promise (`returned`).
+        // Or the callback returns such a promise (`returned`), or is a named
+        // `async` function whose entries are being read (`named_rejects`).
         let rejects = self.returned.take()
+            || named_rejects
             || file
                 .ast
                 .function_at(file.ast.peel_ts_sugar_span(container.arguments[index].span))
@@ -735,7 +817,7 @@ impl Walk<'_, '_> {
                 (None, Some((call, index)))
                     if lookup.primitive_at_call(file, call.span).is_some() =>
                 {
-                    self.argument(file, call, index, at, depth)
+                    self.argument(file, call, index, at, self.rejects.get(), depth)
                 }
                 (None, Some(_)) => self.reference(file, at, depth),
                 (None, None) => continue,
@@ -865,7 +947,7 @@ impl Walk<'_, '_> {
                             self.alias_end(file, reference, depth)
                                 .unwrap_or_else(|| self.reference(file, reference, depth))
                         },
-                        |(call, index)| self.argument(file, call, index, reference, depth),
+                        |(call, index)| self.argument(file, call, index, reference, rejects, depth),
                     ),
             };
             match entry {
@@ -926,14 +1008,29 @@ fn returned_value(file: &FileFacts, call: Span) -> bool {
             .any(is)
 }
 
-/// `await call`: the rejection is rethrown where the `await` is written.
-/// Parentheses or a comment between read as not awaited.
+/// `await call`: the rejection is rethrown where the `await` is written. A
+/// type wrapper or a comment between reads as not awaited.
 fn awaited(file: &FileFacts, call: &CallFact) -> bool {
-    file.source_text(Span::new(0, call.span.start))
-        .and_then(|before| before.trim_end().strip_suffix("await"))
-        .is_some_and(|before| {
-            !before.ends_with(|last: char| last.is_alphanumeric() || last == '_' || last == '$')
-        })
+    // The `await`'s operand is the call itself, through parentheses and type
+    // wrappers: `await f().catch(…)` awaits what `catch` returns.
+    file.ast.awaits.iter().any(|awaited| {
+        awaited.contains(call.span)
+            && file
+                .source_text(Span::new(awaited.start, call.span.start))
+                .and_then(|before| before.strip_prefix("await"))
+                .is_some_and(|between| {
+                    between
+                        .chars()
+                        .all(|between| between.is_whitespace() || between == '(')
+                })
+            && file
+                .source_text(Span::new(call.span.end, awaited.end))
+                .is_some_and(|after| {
+                    after
+                        .chars()
+                        .all(|after| after.is_whitespace() || after == ')')
+                })
+    })
 }
 
 /// Whether the promise a standard `then`, `catch` or `finally` call returns

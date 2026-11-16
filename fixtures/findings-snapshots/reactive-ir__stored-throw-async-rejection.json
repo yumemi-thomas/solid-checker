@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 239,
-      "end": 249,
+      "start": 283,
+      "end": 293,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 415,
-      "end": 425,
+      "start": 459,
+      "end": 469,
       "fixes": 0
     },
     {
@@ -27,8 +27,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 548,
-      "end": 558,
+      "start": 592,
+      "end": 602,
       "fixes": 0
     },
     {
@@ -37,8 +37,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 647,
-      "end": 657,
+      "start": 691,
+      "end": 701,
       "fixes": 0
     },
     {
@@ -47,8 +47,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 794,
-      "end": 804,
+      "start": 838,
+      "end": 848,
       "fixes": 0
     },
     {
@@ -57,8 +57,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 915,
-      "end": 925,
+      "start": 959,
+      "end": 969,
       "fixes": 0
     },
     {
@@ -67,8 +67,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 1049,
-      "end": 1059,
+      "start": 1093,
+      "end": 1103,
       "fixes": 0
     },
     {
@@ -77,8 +77,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 1225,
-      "end": 1235,
+      "start": 1269,
+      "end": 1279,
       "fixes": 0
     },
     {
@@ -88,8 +88,8 @@
       "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 1450,
-      "end": 1460,
+      "start": 1494,
+      "end": 1504,
       "fixes": 0
     },
     {
@@ -99,8 +99,8 @@
       "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 1580,
-      "end": 1590,
+      "start": 1624,
+      "end": 1634,
       "fixes": 0
     },
     {
@@ -110,8 +110,8 @@
       "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 1731,
-      "end": 1741,
+      "start": 1775,
+      "end": 1785,
       "fixes": 0
     },
     {
@@ -121,8 +121,8 @@
       "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 1892,
-      "end": 1902,
+      "start": 1936,
+      "end": 1946,
       "fixes": 0
     },
     {
@@ -132,8 +132,8 @@
       "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 2060,
-      "end": 2070,
+      "start": 2104,
+      "end": 2114,
       "fixes": 0
     },
     {
@@ -143,8 +143,8 @@
       "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 2238,
-      "end": 2248,
+      "start": 2282,
+      "end": 2292,
       "fixes": 0
     },
     {
@@ -154,8 +154,8 @@
       "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 2421,
-      "end": 2431,
+      "start": 2465,
+      "end": 2475,
       "fixes": 0
     },
     {
@@ -165,8 +165,8 @@
       "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 2565,
-      "end": 2575,
+      "start": 2609,
+      "end": 2619,
       "fixes": 0
     },
     {
@@ -176,8 +176,8 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 2753,
-      "end": 2779,
+      "start": 2797,
+      "end": 2823,
       "fixes": 0
     },
     {
@@ -187,8 +187,8 @@
       "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 2761,
-      "end": 2771,
+      "start": 2805,
+      "end": 2815,
       "fixes": 0
     },
     {
@@ -198,8 +198,8 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 2925,
-      "end": 2933,
+      "start": 2969,
+      "end": 2977,
       "fixes": 0
     },
     {
@@ -209,8 +209,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 2977,
-      "end": 2987,
+      "start": 3021,
+      "end": 3031,
       "fixes": 0
     },
     {
@@ -220,8 +220,8 @@
       "blocker": "value-escaped-from-untrack",
       "severity": "warning",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 3181,
-      "end": 3253,
+      "start": 3225,
+      "end": 3297,
       "fixes": 0
     },
     {
@@ -231,8 +231,8 @@
       "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 3228,
-      "end": 3238,
+      "start": 3272,
+      "end": 3282,
       "fixes": 0
     },
     {
@@ -242,8 +242,8 @@
       "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 3392,
-      "end": 3402,
+      "start": 3436,
+      "end": 3446,
       "fixes": 0
     },
     {
@@ -253,8 +253,8 @@
       "blocker": "value-escaped-from-untrack",
       "severity": "warning",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 3418,
-      "end": 3425,
+      "start": 3462,
+      "end": 3469,
       "fixes": 0
     },
     {
@@ -264,8 +264,8 @@
       "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 3564,
-      "end": 3574,
+      "start": 3608,
+      "end": 3618,
       "fixes": 0
     },
     {
@@ -274,8 +274,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 3817,
-      "end": 3827,
+      "start": 3861,
+      "end": 3871,
       "fixes": 0
     },
     {
@@ -284,8 +284,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 4042,
-      "end": 4052,
+      "start": 4086,
+      "end": 4096,
       "fixes": 0
     },
     {
@@ -295,8 +295,8 @@
       "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 4263,
-      "end": 4273,
+      "start": 4307,
+      "end": 4317,
       "fixes": 0
     },
     {
@@ -306,8 +306,279 @@
       "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
-      "start": 4443,
-      "end": 4453,
+      "start": 4487,
+      "end": 4497,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
+      "start": 4771,
+      "end": 4781,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
+      "start": 4851,
+      "end": 4861,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
+      "start": 5122,
+      "end": 5129,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
+      "start": 5122,
+      "end": 5129,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
+      "start": 5173,
+      "end": 5176,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
+      "start": 5533,
+      "end": 5543,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
+      "start": 5711,
+      "end": 5721,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
+      "start": 5870,
+      "end": 5880,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-escaped-from-untrack",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
+      "start": 5915,
+      "end": 5933,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
+      "start": 6050,
+      "end": 6060,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-escaped-from-untrack",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
+      "start": 6116,
+      "end": 6136,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
+      "start": 6234,
+      "end": 6241,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
+      "start": 6234,
+      "end": 6241,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
+      "start": 6285,
+      "end": 6288,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2005",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
+      "start": 6408,
+      "end": 6413,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
+      "start": 6408,
+      "end": 6413,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2005",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
+      "start": 6457,
+      "end": 6460,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
+      "start": 6575,
+      "end": 6582,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
+      "start": 6617,
+      "end": 6620,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
+      "start": 6741,
+      "end": 6779,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
+      "start": 6760,
+      "end": 6767,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
+      "start": 6760,
+      "end": 6767,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
+      "start": 6901,
+      "end": 6908,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
+      "start": 6901,
+      "end": 6908,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-async-rejection/App.tsx",
+      "start": 7002,
+      "end": 7005,
       "fixes": 0
     }
   ]
