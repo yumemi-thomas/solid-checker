@@ -24546,6 +24546,19 @@
   "outside": "the fuzz harness runs its programs in Chrome with no test runner, and a grid program imports no runner package, so no cell holds a registered callback; the shapes are held by the fixture `fixtures/reactive-ir/after-await-runner-callback`, the oracle case `fixtures/runtime-oracle/after-await-runner-callback` (the stack semantics in Chrome, with a loop written like a runner's) and the probe `scripts/probes/rc21-runner-callback-after-await` (vitest's own runner on V8)"
  },
  {
+  "finding": "STORE_WRITE_OUTSIDE_SETTER (and any code that rests on a primitive's array-pattern slots): a timer handed a `const` that names an arrow (`const cb1 = cb2; setTimeout(cb1, 0)`) withdrew every primitive's slots (ADR 0803 step 2 took the callback for any function, which a timer calls with the window as `this`), so a proved store write fell to an uncertifiable `tuple-iteration-written` row where Chrome rc.21 reports the write: the 462 `-cb-alias` programs of the `timer` context (mx-pairs 330, mx-recall 132) moved from agree to recall-gap between the audits of aa4702650 and 6e33e0b08",
+  "found": "the bisect of the lost violations (2026-11-16): 3 ids per group of the audit's list over the 272 first-parent commits of #173's branch; the drop is at 281ae31d3 (the merge of ADR 0803 step 2), and hand-made variants of `mx-store-write-outside-setter-timer-assign-direct-handoff-apply-cb-alias` isolate the alias (the timer handed `cb2` itself, a literal, or `queueMicrotask(cb1)` keeps the violation)",
+  "fixed": "ADR 1013 (`accessor_provenance/mutation_sites.rs` `callback_seen`: a `const` initialized with another value is asked as that value)",
+  "grid": "mx-pairs",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-timer-assign-direct-handoff-foreach-cb-alias",
+   "mx-store-write-outside-setter-timer-nested-assign-alias-handoff-wrapper-cb-alias",
+   "mx-store-write-outside-setter-timer-nested-push-alias-handoff-map-cb-alias",
+   "mx-store-write-outside-setter-timer-deferred-micro-direct-handoff-member-cb-alias"
+  ]
+ },
+ {
   "finding": "a false positive of the plain-throw rules (SC4001, SC4002, SC2004, SC2005, the static `dynamic` source, SC3001's `flush` in a tracked effect): a site in an `async` function whose promise is caught, held or handed on (`(async () => { await 0; useContext(Ctx); })().catch(() => {})` in a `ref`, a handler, an effect's or a memo's compute) was a violation; Chrome rc.21 reports nothing, the throw only rejects that promise",
   "found": "Mac 19, 2026-11-16, Chrome-checking the ref forms of ADR 1006 (runtime oracle: `static-only` at the caught twin, the discarded twin fires NO_OWNER_CONTEXT)",
   "fixed": "ADR 1008 (`stored_throw.rs` `Walk::rejection`: a throw that leaves an `async` function reports only where the call's promise is dropped, awaited, or returned to a call that drops it)",

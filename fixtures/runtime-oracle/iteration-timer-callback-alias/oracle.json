@@ -1,0 +1,1 @@
+{"note": "ADR 1013: a timer handed a const alias of an arrow (`const again = run; setTimeout(again, 0)`) hands the window to no code, so the slots of `createSignal` and `createStore` stay exact: REACTIVE_WRITE_IN_OWNED_SCOPE at `set(2)` and STORE_WRITE_OUTSIDE_SETTER at the store write are covered by violations (they were uncertifiable, `tuple-iteration-written`, before)"}
