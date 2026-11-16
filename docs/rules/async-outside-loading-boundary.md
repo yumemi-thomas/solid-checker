@@ -143,6 +143,8 @@ A named function a carrier provably runs at a tracked position reads there, with
 
 A source no fact proves async, a `lazy` tag, and a read in a method nothing places are uncertifiable, blocker `async-provenance-unproven` for the first two (ADRs 0665-0667). So is a source whose compute reads what it was handed (`createMemo(() => props.get())`) or names an async source in a function form: it is pending while that is, and a settled caller is not followed yet (ADR 0802). A hook's tuple slot is the accessor it names, so its read is proved or certified by that source (ADR 0801). A `Loading` covers what it holds, not what sits beside it (ADR 0668).
 
+A read in a function that is an object member is uncertifiable (ADR 0667), unless a closed `const` bundle hands that member to a primitive (`const bundle = { run: () => … }; onSettled(bundle.run)`, the object never passed, written, aliased or exported): it then runs where that primitive runs its callback ([ADR 1009](../decisions.md#adr-1009)).
+
 A flow element that is no JSX child and no component's return may never render, and rc.21 is silent then: its read is uncertifiable, blocker `carrier-run-unproven` (ADR 0892).
 
 A boundary the program enters by a call covers what Solid renders inside it (ADR 0978): the

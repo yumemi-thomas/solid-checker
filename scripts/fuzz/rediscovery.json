@@ -24581,5 +24581,14 @@
   "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
   "ids": ["mx-primitive-in-forbidden-scope-tracked-effect-destructured-chain-5", "mx-primitive-in-forbidden-scope-tracked-effect-ns-held-none", "mx-primitive-in-forbidden-scope-tracked-effect-ns-exported-none", "mx-primitive-in-forbidden-scope-tracked-effect-ns-rest-none"],
   "rediscovered": "main 581bd7b18 recall-gap, this build agree (4,530 programs of the leaf-operation codes gain the violation; `ns-let`, `ns-default`, `ns-nested` and the re-export bindings stay recall gaps)"
+ },
+ {
+  "finding": "no defect: a recall gap. A pending read in a function a `const` object literal holds and hands to a leaf owner (`const cb = { cb: () => { a(); } }; onSettled(cb.cb)`) was `invocation-context-unproven` since ADR 0667: a read in an object member was open whatever held the object. Chrome rc.21 reports PENDING_ASYNC_FORBIDDEN_SCOPE at each; the 11-05 full audit had them as violations",
+  "found": "the recall-gap ranking of the full audit of main 78ddeb849 (run 43739577046, 2026-11-16) and W4's bisect of #173 (commit 3ffbc91b5, ADRs 0665-0668): the `bundle` callback form of PENDING_ASYNC_FORBIDDEN_SCOPE, 84 programs in mx-recall and 12 in mx-pairs",
+  "fixed": "ADR 1009 (`local_access.rs` `handed_from_closed_bundle`: a plain data property of a `const` object literal that only ever hands that key to a primitive has the primitive's callback position for its place)",
+  "grid": "mx-recall",
+  "code": "PENDING_ASYNC_FORBIDDEN_SCOPE",
+  "ids": ["mx-pending-async-forbidden-scope-settled-x-direct-none-cb-bundle", "mx-pending-async-forbidden-scope-settled-x-alias-closure-cb-bundle", "mx-pending-async-forbidden-scope-tracked-x-alias-iife-cb-bundle", "mx-pending-async-forbidden-scope-tracked-rerun-x-alias-helper-cb-bundle"],
+  "rediscovered": "main 0799a4629 recall-gap, this build agree: 4 of 4 (84 of the code's 84 `bundle` gaps in mx-recall, 82 in mx-pairs)"
  }
 ]

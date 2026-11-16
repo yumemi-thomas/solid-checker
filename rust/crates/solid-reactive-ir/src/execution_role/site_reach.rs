@@ -870,6 +870,17 @@ pub(crate) fn unplaced_run(
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
+    unplaced_run_but(file, span, lookup, &|_| false)
+}
+
+/// [`unplaced_run`], a function written as an object member that `placed` answers for left out (ADR 1009: the caller proves
+/// where such a member runs). Every other layer is asked as before.
+pub(crate) fn unplaced_run_but(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    placed: &dyn Fn(&solid_facts::ast::FunctionFact) -> bool,
+) -> bool {
     if matches!(SiteReach::new(lookup).site(file, span), Reach::Unreached(_)) {
         return false;
     }
@@ -880,9 +891,10 @@ pub(crate) fn unplaced_run(
         .any(|element| element.value.is_some_and(|value| value.contains(span)))
         || ast.functions_owning(span).any(|function| {
             let value = function.span;
-            ast.object_properties
+            (ast.object_properties
                 .iter()
                 .any(|property| ast.peel_ts_sugar_span(property.value) == value)
+                && !placed(function))
                 || ast.array_literals.iter().any(|literal| {
                     ast.array_literal_at(*literal).is_some_and(|array| {
                         array
