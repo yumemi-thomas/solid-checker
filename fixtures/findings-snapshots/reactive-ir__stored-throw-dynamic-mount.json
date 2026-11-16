@@ -8,8 +8,8 @@
       "blocker": "component-identity-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
-      "start": 650,
-      "end": 660,
+      "start": 661,
+      "end": 671,
       "fixes": 0
     },
     {
@@ -19,8 +19,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
-      "start": 947,
-      "end": 966,
+      "start": 958,
+      "end": 977,
       "fixes": 0
     },
     {
@@ -30,8 +30,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
-      "start": 947,
-      "end": 966,
+      "start": 958,
+      "end": 977,
       "fixes": 0
     },
     {
@@ -41,8 +41,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
-      "start": 979,
-      "end": 986,
+      "start": 990,
+      "end": 997,
       "fixes": 0
     },
     {
@@ -52,8 +52,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
-      "start": 979,
-      "end": 986,
+      "start": 990,
+      "end": 997,
       "fixes": 0
     },
     {
@@ -62,8 +62,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
-      "start": 979,
-      "end": 984,
+      "start": 990,
+      "end": 995,
       "fixes": 0
     },
     {
@@ -73,8 +73,8 @@
       "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
-      "start": 1254,
-      "end": 1264,
+      "start": 1265,
+      "end": 1275,
       "fixes": 0
     },
     {
@@ -84,8 +84,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
-      "start": 1418,
-      "end": 1433,
+      "start": 1429,
+      "end": 1444,
       "fixes": 0
     },
     {
@@ -95,8 +95,8 @@
       "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
-      "start": 1486,
-      "end": 1496,
+      "start": 1497,
+      "end": 1507,
       "fixes": 0
     },
     {
@@ -106,8 +106,8 @@
       "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
-      "start": 1659,
-      "end": 1669,
+      "start": 1670,
+      "end": 1680,
       "fixes": 0
     },
     {
@@ -117,8 +117,8 @@
       "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
-      "start": 1881,
-      "end": 1891,
+      "start": 1892,
+      "end": 1902,
       "fixes": 0
     },
     {
@@ -128,8 +128,8 @@
       "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
-      "start": 2071,
-      "end": 2081,
+      "start": 2082,
+      "end": 2092,
       "fixes": 0
     },
     {
@@ -139,8 +139,8 @@
       "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
-      "start": 2252,
-      "end": 2262,
+      "start": 2263,
+      "end": 2273,
       "fixes": 0
     },
     {
@@ -150,8 +150,19 @@
       "blocker": "primitive-value",
       "severity": "warning",
       "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
-      "start": 2305,
-      "end": 2312,
+      "start": 2316,
+      "end": 2323,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "primitive-alias-call",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 2376,
+      "end": 2387,
       "fixes": 0
     },
     {
@@ -161,8 +172,8 @@
       "blocker": "withheld-object-member",
       "severity": "warning",
       "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
-      "start": 2365,
-      "end": 2376,
+      "start": 2376,
+      "end": 2387,
       "fixes": 0
     },
     {
@@ -172,8 +183,8 @@
       "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
-      "start": 2456,
-      "end": 2466,
+      "start": 2467,
+      "end": 2477,
       "fixes": 0
     },
     {
@@ -183,8 +194,8 @@
       "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
-      "start": 2640,
-      "end": 2650,
+      "start": 2651,
+      "end": 2661,
       "fixes": 0
     },
     {
@@ -194,8 +205,228 @@
       "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
-      "start": 2894,
-      "end": 2904,
+      "start": 2905,
+      "end": 2915,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 3212,
+      "end": 3231,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 3212,
+      "end": 3231,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 3244,
+      "end": 3251,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 3244,
+      "end": 3251,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 3244,
+      "end": 3249,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 3425,
+      "end": 3444,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 3425,
+      "end": 3444,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 3457,
+      "end": 3464,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 3457,
+      "end": 3464,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 3457,
+      "end": 3462,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 3632,
+      "end": 3651,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 3632,
+      "end": 3651,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 3664,
+      "end": 3671,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 3664,
+      "end": 3671,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 3664,
+      "end": 3669,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 3850,
+      "end": 3869,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 3850,
+      "end": 3869,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 3882,
+      "end": 3889,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 3882,
+      "end": 3889,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 3882,
+      "end": 3887,
       "fixes": 0
     }
   ]

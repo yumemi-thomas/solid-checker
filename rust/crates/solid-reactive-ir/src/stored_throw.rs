@@ -1742,7 +1742,16 @@ fn dynamic_mount_tags(
             (None, false) => return None,
         }
     }
-    Some(tags)
+    // A tag no execution reaches mounts nothing (`<Show when={false}>`,
+    // `false && <D />`, after a `return`): only the tags reach analysis says may
+    // run count, as for a component's own tag (ADRs 0458 and 1015). With none
+    // left, nothing above every tag reports: the end is unobserved.
+    let reach = SiteReach::new(lookup);
+    Some(
+        tags.into_iter()
+            .filter(|tag| reach.site(file, *tag) == Reach::MayRun)
+            .collect(),
+    )
 }
 
 /// `reference` is exactly the `component` of a `Dynamic`, the one prop that is

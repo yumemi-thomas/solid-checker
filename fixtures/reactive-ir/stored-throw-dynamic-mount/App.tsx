@@ -1,4 +1,4 @@
-import { Errored, createContext, createTrackedEffect, flush, useContext } from "solid-js";
+import { Errored, For, Show, createContext, createTrackedEffect, flush, useContext } from "solid-js";
 import { dynamic } from "@solidjs/web";
 import * as web from "@solidjs/web";
 import { dynamic as projectDynamic } from "./other";
@@ -118,3 +118,50 @@ function Exported() {
   return <p>x</p>;
 }
 export const ExportedMount = dynamic(() => Exported);
+
+// Obligations: `<D />` is written where it never renders, so `C` never mounts (Chrome is silent). Only the tags reach analysis says may run
+// count; with none, the throw is unobserved.
+function NeverShown() {
+  createTrackedEffect(() => {
+    flush();
+  });
+  return <p>x</p>;
+}
+export function MountsNeverShown() {
+  const D = dynamic(() => NeverShown);
+  return <Show when={false}><D /></Show>;
+}
+
+function FalseAnd() {
+  createTrackedEffect(() => {
+    flush();
+  });
+  return <p>x</p>;
+}
+export function MountsFalseAnd() {
+  const D = dynamic(() => FalseAnd);
+  return <div>{false && <D />}</div>;
+}
+
+function DeadReturn() {
+  createTrackedEffect(() => {
+    flush();
+  });
+  return <p>x</p>;
+}
+export function MountsDeadReturn() {
+  const D = dynamic(() => DeadReturn);
+  if (false) return <D />;
+  return <p>y</p>;
+}
+
+function EmptyRows() {
+  createTrackedEffect(() => {
+    flush();
+  });
+  return <p>x</p>;
+}
+export function MountsEmptyRows() {
+  const D = dynamic(() => EmptyRows);
+  return <For each={[]}>{() => <D />}</For>;
+}
