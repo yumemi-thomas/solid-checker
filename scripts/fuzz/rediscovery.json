@@ -24624,5 +24624,59 @@
   "found": "the coordinator's fifth probe, reading `receiver_is_a_nested_class_instance` (2026-11-16); run on the release build of 932a43c90, then the fixtures here (violation on that build, uncertifiable on the fix)",
   "fixed": "ADR 1014's second amendment, narrowed (`execution_role/callback_standing.rs` `receiver_is_a_nested_class_instance`: a constructor's body or a field's initializer only, no other non-arrow function between)",
   "outside": "the grid generators write a class in a literal's member only with a constructor that stores an arrow (the `handoff-assign-this-cb-bundle` cells, still proved) and never take a method off a prototype, so no cell holds the shape; the fixtures `iteration-written-slots/variants/handed-timer-callback-member-class-method` and `-class-field` hold it"
+ },
+ {
+  "finding": "a false positive: a write in a callback handed to a standard-library iteration of a literal nothing can fill (`[].forEach(f)`, `[1].reduce(f)`, `Array.from([], f)`, `new Set().forEach(f)`, `\"x\".replace(\"z\", f)`) was a violation although the callback never runs and Chrome is silent",
+  "found": "full CI audit run 43739577046 (lg-recall, legal programs: the checker's violation at a site Chrome never runs), re-confirmed on main 993e83f74 with the release checker and Chrome",
+  "fixed": "ADR 1019 (`carrier_runs.rs` `carrier_provably_never_runs`, `handed_to_idle_carrier`; `site_reach.rs` reads the hand-off as reaching nothing, so a violation in the callback is uncertifiable `function-unentered`)",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-tbl-array-foreach-zero-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-tbl-readonlyarray-map-zero-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-tbl-array-reduce-zero-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-tbl-arrayconstructor-from-zero-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-tbl-uint8arrayconstructor-from-zero-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-tbl-set-foreach-zero-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-tbl-map-foreach-zero-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-tbl-string-replace-zero-signal-direct-none"
+  ],
+  "rediscovered": "main 993e83f74 unexecuted (the 39 `tbl-*-zero` contexts, the three codes: 195 programs, Chrome's sample 117 of 117 never ran the site), this build uncertifiable (185; the 10 `tbl-nodelist*-zero` programs stay, a stated remaining false positive). `make fuzz-focus` exits 0 on both builds: an `unexecuted` row is not gated until ADR 1018's oracle guard"
+ },
+ {
+  "finding": "a false positive: an action call in a callback handed to a standard-library iteration of a literal nothing can fill (`[].forEach(f)`, `[1].reduce(f)`, `Array.from([], f)`, `new Set().forEach(f)`, `\"x\".replace(\"z\", f)`) was a violation although the callback never runs and Chrome is silent",
+  "found": "full CI audit run 43739577046 (lg-recall, legal programs: the checker's violation at a site Chrome never runs), re-confirmed on main 993e83f74 with the release checker and Chrome",
+  "fixed": "ADR 1019 (`carrier_runs.rs` `carrier_provably_never_runs`, `handed_to_idle_carrier`; `site_reach.rs` reads the hand-off as reaching nothing, so a violation in the callback is uncertifiable `function-unentered`)",
+  "grid": "lg-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-action-called-in-owned-scope-tbl-array-foreach-zero-x-direct-none",
+   "lg-action-called-in-owned-scope-tbl-readonlyarray-map-zero-x-direct-none",
+   "lg-action-called-in-owned-scope-tbl-array-reduce-zero-x-direct-none",
+   "lg-action-called-in-owned-scope-tbl-arrayconstructor-from-zero-x-direct-none",
+   "lg-action-called-in-owned-scope-tbl-uint8arrayconstructor-from-zero-x-direct-none",
+   "lg-action-called-in-owned-scope-tbl-set-foreach-zero-x-direct-none",
+   "lg-action-called-in-owned-scope-tbl-map-foreach-zero-x-direct-none",
+   "lg-action-called-in-owned-scope-tbl-string-replace-zero-x-direct-none"
+  ],
+  "rediscovered": "main 993e83f74 unexecuted (the 39 `tbl-*-zero` contexts, the three codes: 195 programs, Chrome's sample 117 of 117 never ran the site), this build uncertifiable (185; the 10 `tbl-nodelist*-zero` programs stay, a stated remaining false positive). `make fuzz-focus` exits 0 on both builds: an `unexecuted` row is not gated until ADR 1018's oracle guard"
+ },
+ {
+  "finding": "a false positive: `onFlush` in a callback handed to a standard-library iteration of a literal nothing can fill (`[].forEach(f)`, `[1].reduce(f)`, `Array.from([], f)`, `new Set().forEach(f)`, `\"x\".replace(\"z\", f)`) was a violation although the callback never runs and Chrome is silent",
+  "found": "full CI audit run 43739577046 (lg-recall, legal programs: the checker's violation at a site Chrome never runs), re-confirmed on main 993e83f74 with the release checker and Chrome",
+  "fixed": "ADR 1019 (`carrier_runs.rs` `carrier_provably_never_runs`, `handed_to_idle_carrier`; `site_reach.rs` reads the hand-off as reaching nothing, so a violation in the callback is uncertifiable `function-unentered`)",
+  "grid": "lg-recall",
+  "code": "ON_FLUSH_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-on-flush-in-owned-scope-tbl-array-foreach-zero-x-direct-none",
+   "lg-on-flush-in-owned-scope-tbl-readonlyarray-map-zero-x-direct-none",
+   "lg-on-flush-in-owned-scope-tbl-array-reduce-zero-x-direct-none",
+   "lg-on-flush-in-owned-scope-tbl-arrayconstructor-from-zero-x-direct-none",
+   "lg-on-flush-in-owned-scope-tbl-uint8arrayconstructor-from-zero-x-direct-none",
+   "lg-on-flush-in-owned-scope-tbl-set-foreach-zero-x-direct-none",
+   "lg-on-flush-in-owned-scope-tbl-map-foreach-zero-x-direct-none",
+   "lg-on-flush-in-owned-scope-tbl-string-replace-zero-x-direct-none"
+  ],
+  "rediscovered": "main 993e83f74 unexecuted (the 39 `tbl-*-zero` contexts, the three codes: 195 programs, Chrome's sample 117 of 117 never ran the site), this build uncertifiable (185; the 10 `tbl-nodelist*-zero` programs stay, a stated remaining false positive). `make fuzz-focus` exits 0 on both builds: an `unexecuted` row is not gated until ADR 1018's oracle guard"
  }
 ]

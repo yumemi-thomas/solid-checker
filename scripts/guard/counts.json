@@ -45,8 +45,8 @@
   "SC1007 unchecked-native-handler-value": 2,
   "SC2001 binding-before-initialization": 3,
   "SC2001 component-identity-unproven": 9,
-  "SC2001 function-run-unplaced": 466,
-  "SC2001 function-unentered": 2,
+  "SC2001 function-run-unplaced": 468,
+  "SC2001 function-unentered": 10,
   "SC2001 lazy-compute-unread": 7,
   "SC2001 owned-write-option-unread": 4,
   "SC2001 package-finding-at-entry": 5,
@@ -56,6 +56,7 @@
   "SC2001 write-unaccounted": 12,
   "SC2002 action-handed-to-package": 1,
   "SC2002 function-run-unplaced": 22,
+  "SC2002 function-unentered": 1,
   "SC2002 lazy-compute-unread": 1,
   "SC2002 package-finding-at-entry": 71,
   "SC2002 package-may-call-action": 1221,
@@ -80,7 +81,7 @@
   "SC2005 async-slot-unmodelled": 2,
   "SC2005 computation-error-unobserved": 6,
   "SC2005 function-run-unplaced": 6,
-  "SC2006 flush-in-action-unaccounted": 459,
+  "SC2006 flush-in-action-unaccounted": 458,
   "SC2006 function-run-unplaced": 78,
   "SC2006 package-finding-at-entry": 1,
   "SC2006 parameter-initializer-unplaced": 14,
@@ -89,7 +90,7 @@
   "SC2007 computation-error-unobserved": 3,
   "SC2007 static-source-unproven": 7,
   "SC2008 callee-callback-timing": 1,
-  "SC2008 flush-in-effect-unaccounted": 493,
+  "SC2008 flush-in-effect-unaccounted": 492,
   "SC2008 function-run-unplaced": 38,
   "SC2008 generator-step-unplaced": 6,
   "SC2008 handler-dispatch-unproven": 23,
@@ -105,19 +106,20 @@
   "SC3001 function-run-unplaced": 36,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 7,
-  "SC3001 leaf-operation-unaccounted": 6559,
+  "SC3001 leaf-operation-unaccounted": 6556,
   "SC3001 leaf-owner-unproven": 67,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
+  "SC3002 function-unentered": 1,
   "SC4001 async-flight-error-unobserved": 4,
   "SC4001 component-identity-unproven": 14,
   "SC4001 computation-error-unobserved": 30,
-  "SC4001 function-run-unplaced": 262,
+  "SC4001 function-run-unplaced": 256,
   "SC4001 function-unentered": 3,
   "SC4001 handler-member-unresolved": 39,
   "SC4001 handler-spread-unresolved": 59,
   "SC4001 owner-allocation-unproven": 23,
-  "SC4001 owner-callers-unenumerated": 3312,
+  "SC4001 owner-callers-unenumerated": 3318,
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 13,
@@ -176,7 +178,7 @@
   "SC5008 pending-read-unresolved": 23,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5008,
+  "SC6002 effect-creation-unaccounted": 5006,
   "SC6002 effect-owner-unproven": 31,
   "SC6002 function-run-unplaced": 48,
   "SC6002 generator-step-unplaced": 1,
@@ -2364,6 +2366,102 @@
     "open": "reactive-ir/iteration-written-slots-handed-timer-callback-member-written"
    },
    "note": "the reads of the accessors whose slots the withdrawal held: with the slots exact, each is a plain signal read and the pending-read obligation has nothing to stand on."
+  },
+  {
+   "fixture": "reactive-ir/leaf-carrier-provably-runs",
+   "key": "SC4001 function-run-unplaced",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 1019",
+   "kind": "relabel",
+   "relabeledTo": "SC4001 owner-callers-unenumerated"
+  },
+  {
+   "fixture": "reactive-ir/owner-carrier-provably-runs",
+   "key": "SC4001 function-run-unplaced",
+   "from": 12,
+   "to": 7,
+   "adr": "ADR 1019",
+   "kind": "relabel",
+   "relabeledTo": "SC4001 owner-callers-unenumerated"
+  },
+  {
+   "fixture": "reactive-ir/resolve-inline-entries",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 29,
+   "to": 27,
+   "adr": "ADR 1019",
+   "proof": "rust/crates/solid-reactive-ir/src/carrier_runs.rs::carrier_provably_never_runs",
+   "fixtures": {
+    "proved": "reactive-ir/resolve-inline-entries",
+    "open": "reactive-ir/resolve-inline-entries"
+   },
+   "note": "the `Empty` case: `([] as number[]).map(Row)` never calls `Row`, so the `flush(() => resolve(...))` in it never runs and its obligation ends at `OwnerCallNeverRuns`/`FlushSafe::NeverRuns` (SiteReach), as for syntactically dead code (ADR 0458); the open twin is the fixture's own `PropsReceiver`-style cases, which keep the key."
+  },
+  {
+   "fixture": "reactive-ir/resolve-inline-entries",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 23,
+   "to": 22,
+   "adr": "ADR 1019",
+   "proof": "rust/crates/solid-reactive-ir/src/carrier_runs.rs::carrier_provably_never_runs",
+   "fixtures": {
+    "proved": "reactive-ir/resolve-inline-entries",
+    "open": "reactive-ir/resolve-inline-entries"
+   },
+   "note": "the `Empty` case: `([] as number[]).map(Row)` never calls `Row`, so the `flush(() => resolve(...))` in it never runs and its obligation ends at `OwnerCallNeverRuns`/`FlushSafe::NeverRuns` (SiteReach), as for syntactically dead code (ADR 0458); the open twin is the fixture's own `PropsReceiver`-style cases, which keep the key."
+  },
+  {
+   "fixture": "reactive-ir/resolve-inline-entries",
+   "key": "SC2006 flush-in-action-unaccounted",
+   "from": 6,
+   "to": 5,
+   "adr": "ADR 1019",
+   "proof": "rust/crates/solid-reactive-ir/src/carrier_runs.rs::carrier_provably_never_runs",
+   "fixtures": {
+    "proved": "reactive-ir/resolve-inline-entries",
+    "open": "reactive-ir/resolve-inline-entries"
+   },
+   "note": "the `Empty` case: `([] as number[]).map(Row)` never calls `Row`, so the `flush(() => resolve(...))` in it never runs and its obligation ends at `OwnerCallNeverRuns`/`FlushSafe::NeverRuns` (SiteReach), as for syntactically dead code (ADR 0458); the open twin is the fixture's own `PropsReceiver`-style cases, which keep the key."
+  },
+  {
+   "fixture": "reactive-ir/resolve-inline-entries",
+   "key": "SC2008 flush-in-effect-unaccounted",
+   "from": 6,
+   "to": 5,
+   "adr": "ADR 1019",
+   "proof": "rust/crates/solid-reactive-ir/src/carrier_runs.rs::carrier_provably_never_runs",
+   "fixtures": {
+    "proved": "reactive-ir/resolve-inline-entries",
+    "open": "reactive-ir/resolve-inline-entries"
+   },
+   "note": "the `Empty` case: `([] as number[]).map(Row)` never calls `Row`, so the `flush(() => resolve(...))` in it never runs and its obligation ends at `OwnerCallNeverRuns`/`FlushSafe::NeverRuns` (SiteReach), as for syntactically dead code (ADR 0458); the open twin is the fixture's own `PropsReceiver`-style cases, which keep the key."
+  },
+  {
+   "fixture": "reactive-ir/unplaced-site-obligations",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 51,
+   "to": 50,
+   "adr": "ADR 1019",
+   "proof": "rust/crates/solid-reactive-ir/src/carrier_runs.rs::carrier_provably_never_runs",
+   "fixtures": {
+    "proved": "reactive-ir/unplaced-site-obligations",
+    "open": "reactive-ir/unplaced-site-obligations"
+   },
+   "note": "`ReduceCallback`: `[1].reduce(cb)` with no initial value returns the element without calling `cb`, so the `resolve` in it never runs and its obligation ends at `OwnerCallNeverRuns` (SiteReach), as for syntactically dead code (ADR 0458); the other sites of the fixture keep the key."
+  },
+  {
+   "fixture": "reactive-ir/unplaced-site-obligations",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 51,
+   "to": 50,
+   "adr": "ADR 1019",
+   "proof": "rust/crates/solid-reactive-ir/src/carrier_runs.rs::carrier_provably_never_runs",
+   "fixtures": {
+    "proved": "reactive-ir/unplaced-site-obligations",
+    "open": "reactive-ir/unplaced-site-obligations"
+   },
+   "note": "`ReduceCallback`: `[1].reduce(cb)` with no initial value returns the element without calling `cb`, so the `resolve` in it never runs and its obligation ends at `OwnerCallNeverRuns` (SiteReach), as for syntactically dead code (ADR 0458); the other sites of the fixture keep the key."
   }
  ],
  "renames": []

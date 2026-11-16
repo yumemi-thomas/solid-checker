@@ -17,11 +17,13 @@
 //!   or decorator that could reach it through `this`;
 //! - it is bound to a name (a `function` declaration, a `const`/`let` holding
 //!   it) that is not exported, no module calls direct `eval`, and every
-//!   reference to that name is itself unreached, in a type query, or the
-//!   returned value of an IIFE whose result is discarded; and every call or
-//!   render the call graph resolves to it is unreached;
+//!   reference to that name is itself unreached, in a type query, the
+//!   returned value of an IIFE whose result is discarded, or (ADR 1019)
+//!   handed to a standard-library carrier that provably never runs it
+//!   (`[].forEach(f)`, `new Set().forEach(f)`, `Array.from([], f)`); and
+//!   every call or render the call graph resolves to it is unreached;
 //! - it is an anonymous function returned by an IIFE whose result is
-//!   discarded.
+//!   discarded, or handed to such a carrier.
 //!
 //! A function at module scope is entered by modules and hosts this does not
 //! follow, and its module-surface rules are ADR 0445's: it may run. Anything
@@ -597,7 +599,15 @@ impl<'l, 'a> SiteReach<'l, 'a> {
         }
         match function_declaration_span(file, function) {
             Some(declaration) => !self.binding_unreached(file, function, declaration),
-            None => !returned_by_discarded_iife(file, function.span),
+            // ADR 1019: a literal handed to a carrier that never runs it goes nowhere.
+            None => {
+                !returned_by_discarded_iife(file, function.span)
+                    && !crate::carrier_runs::handed_to_idle_carrier(
+                        file,
+                        function.span,
+                        self.lookup,
+                    )
+            }
         }
     }
 
@@ -642,8 +652,9 @@ impl<'l, 'a> SiteReach<'l, 'a> {
     }
 
     /// Whether every reference to the name declared at `declaration` is
-    /// unreached, erased (a type query) or a value an IIFE returns into a
-    /// discarded result.
+    /// unreached, erased (a type query), a value an IIFE returns into a
+    /// discarded result, or (ADR 1019) handed to a standard-library carrier
+    /// that provably never runs it ([`crate::carrier_runs::handed_to_idle_carrier`]).
     fn references_unreached(&self, file: &solid_facts::FileFacts, declaration: Span) -> bool {
         file.ast
             .reference_identifiers_to(declaration)
@@ -653,6 +664,11 @@ impl<'l, 'a> SiteReach<'l, 'a> {
                     .iter()
                     .any(|query| query.contains(reference.span))
                     || returned_by_discarded_iife(file, reference.span)
+                    || crate::carrier_runs::handed_to_idle_carrier(
+                        file,
+                        reference.span,
+                        self.lookup,
+                    )
                     || (self.lazy_reads
                         && lazy_creation(file, reference.span, self.lookup)
                             .is_some_and(|call| !self.lazy_read_proven(file, call)))

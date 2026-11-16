@@ -1,0 +1,26 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-site-empty-collection-shadowed/App.tsx",
+      "start": 374,
+      "end": 381,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-site-empty-collection-shadowed/App.tsx",
+      "start": 629,
+      "end": 636,
+      "fixes": 0
+    }
+  ]
+}
