@@ -87,28 +87,31 @@ pub(crate) fn mark_owner_requirements(
     let context = crate::static_api::context_of(ctx);
     let lookup = context.lookup;
     let mut allowed = std::collections::HashMap::new();
-    let mut unobserved = |location: &crate::Location, thrower: Thrower| {
-        let Some(file) = lookup.file_by_path(location.path.as_ref()) else {
-            return false;
+    // `through`: the places a leaf operation is written, for one reached through a call into an `async` function
+    // (ADR 1008); a location that cannot be read is unobserved there, as every undecided end of that walk is.
+    let mut unobserved =
+        |location: &crate::Location, thrower: Thrower, through: Option<&[crate::Location]>| {
+            let Some(file) = lookup.file_by_path(location.path.as_ref()) else {
+                return through.is_some();
+            };
+            let Some(at) = span_of(location) else {
+                return through.is_some();
+            };
+            let allowed = allowed
+                .entry(file.path.to_string())
+                .or_insert_with(|| crate::execution_role::allowed_callback_spans(file, lookup));
+            match through {
+                Some(sites) => rejection_unobserved(&context, file, at, sites, allowed, thrower),
+                None => throw_end(file, at, allowed, &context, thrower) == ThrowEnd::Unobserved,
+            }
         };
-        let (Ok(start), Ok(end)) = (
-            u32::try_from(location.start_byte),
-            u32::try_from(location.end_byte),
-        ) else {
-            return false;
-        };
-        let allowed = allowed
-            .entry(file.path.to_string())
-            .or_insert_with(|| crate::execution_role::allowed_callback_spans(file, lookup));
-        throw_end(file, Span::new(start, end), allowed, &context, thrower) == ThrowEnd::Unobserved
-    };
     for requirement in &mut draft.missing_owners {
         if !requirement.uncertain
             && matches!(
                 requirement.operation,
                 Operation::ContextRead | Operation::ContextProvider
             )
-            && unobserved(&requirement.location, Thrower::Always)
+            && unobserved(&requirement.location, Thrower::Always, None)
         {
             requirement.uncertain = true;
             requirement.computation_error_unobserved = true;
@@ -128,19 +131,24 @@ pub(crate) fn mark_owner_requirements(
                 .then_some(Thrower::UnderObserver)
         };
         // ADR 1008: reached through a call into an `async` function, the throw is a rejection made on the way.
-        let rejected = operation.through_async
-            && thrower.is_some_and(|thrower| {
-                rejection_unobserved(&context, &operation.location, &operation.sites, thrower)
-            });
+        let through = operation
+            .through_async
+            .then_some(operation.sites.as_slice());
         if !operation.uncertain
-            && (rejected
-                || (!operation.through_async
-                    && thrower.is_some_and(|thrower| unobserved(&operation.location, thrower))))
+            && thrower.is_some_and(|thrower| unobserved(&operation.location, thrower, through))
         {
             operation.uncertain = true;
             operation.computation_error_unobserved = true;
         }
     }
+}
+
+/// The span of a location.
+fn span_of(location: &crate::Location) -> Option<Span> {
+    Some(Span::new(
+        u32::try_from(location.start_byte).ok()?,
+        u32::try_from(location.end_byte).ok()?,
+    ))
 }
 
 /// ADR 1008: a leaf operation anchored at the helper call it is reached through (`anchor`, the call's callee), the walk to it
@@ -151,23 +159,13 @@ pub(crate) fn mark_owner_requirements(
 /// catch) is unobserved: an obligation.
 fn rejection_unobserved(
     context: &StaticApiContext<'_>,
-    anchor: &crate::Location,
+    file: &FileFacts,
+    at: Span,
     sites: &[crate::Location],
+    allowed: &[Span],
     thrower: Thrower,
 ) -> bool {
     let lookup = context.lookup;
-    let Some(file) = lookup.file_by_path(anchor.path.as_ref()) else {
-        return true;
-    };
-    let span_of = |location: &crate::Location| {
-        Some(Span::new(
-            u32::try_from(location.start_byte).ok()?,
-            u32::try_from(location.end_byte).ok()?,
-        ))
-    };
-    let Some(at) = span_of(anchor) else {
-        return true;
-    };
     let Some(call) = file.ast.calls.iter().find(|call| {
         file.ast.peel_ts_sugar_span(call.callee) == at
             || call.callee == at
@@ -200,8 +198,7 @@ fn rejection_unobserved(
     if !own {
         return true;
     }
-    let allowed = crate::execution_role::allowed_callback_spans(file, lookup);
-    let walk = Walk::new(&allowed, context, thrower);
+    let walk = Walk::new(allowed, context, thrower);
     walk.call_end(file, call, true, THROW_DEPTH) == ThrowEnd::Unobserved
 }
 
