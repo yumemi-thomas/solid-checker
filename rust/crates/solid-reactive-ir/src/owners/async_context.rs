@@ -35,16 +35,18 @@ pub(super) fn loading_cover_at(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     visited: &mut HashSet<(String, Span)>,
 ) -> LoadingCover {
-    loading_cover_from(lookup, file, span, None, symbol_names, visited)
+    loading_cover_from(lookup, file, span, None, None, symbol_names, visited)
 }
 
 /// [`loading_cover_at`], where `outside` is a `Loading` element the walk has already left through its `fallback`: that element does not hold
-/// the position, which is where it stands.
+/// the position, which is where it stands; and `stop` is a function the walk goes no further out than (ADR 1011: a callee's body, whose own
+/// boundary is what the walk looks for): reaching it with no boundary found is `Uncovered`.
 fn loading_cover_from(
     lookup: &SemanticLookup<'_>,
     file: &solid_facts::FileFacts,
     span: Span,
     outside: Option<Span>,
+    stop: Option<Span>,
     symbol_names: &HashMap<SymbolId, SymbolId>,
     visited: &mut HashSet<(String, Span)>,
 ) -> LoadingCover {
@@ -77,7 +79,15 @@ fn loading_cover_from(
         fallback_of = Some(element.span);
     }
     if let Some(element) = fallback_of {
-        return loading_cover_from(lookup, file, element, Some(element), symbol_names, visited);
+        return loading_cover_from(
+            lookup,
+            file,
+            element,
+            Some(element),
+            stop,
+            symbol_names,
+            visited,
+        );
     }
     // ADR 0668: a component covers a site only as its child, and only where the
     // `Loading` holds what it renders of `children`: `<App />` covers neither its
@@ -149,6 +159,10 @@ fn loading_cover_from(
     let mut enclosing = file.ast.functions_owning(span).collect::<Vec<_>>();
     enclosing.sort_by_key(|function| function.span.end - function.span.start);
     for function in enclosing {
+        if Some(function.span) == stop {
+            // The callee's body is reached with no boundary of its own around the position.
+            return LoadingCover::Uncovered;
+        }
         if !visited.insert((file.path.as_str().to_owned(), function.span)) {
             // Already being resolved on this chain: it adds no information.
             return LoadingCover::Uncovered;
@@ -168,7 +182,15 @@ fn loading_cover_from(
                 LoadingCover::Uncovered
             };
             for (caller_file, callee) in call_sites {
-                match loading_cover_at(lookup, caller_file, callee, symbol_names, visited) {
+                match loading_cover_from(
+                    lookup,
+                    caller_file,
+                    callee,
+                    None,
+                    stop,
+                    symbol_names,
+                    visited,
+                ) {
                     LoadingCover::Covered => return LoadingCover::Covered,
                     LoadingCover::Unresolved => result = LoadingCover::Unresolved,
                     LoadingCover::Uncovered => {}
@@ -184,16 +206,65 @@ fn loading_cover_from(
         // member, an array element, a class element, a tag function, a closure handed to a call the analysis does not resolve) is run where
         // the analysis does not see, so a boundary may hold it: never read as uncovered.
         if let Some(layer) = crate::loading_entries::layer_cover(lookup, file, function) {
-            return match layer {
-                crate::loading_entries::LayerCover::Covered => LoadingCover::Covered,
-                crate::loading_entries::LayerCover::Unresolved => LoadingCover::Unresolved,
+            match layer {
+                crate::loading_entries::LayerCover::Covered => return LoadingCover::Covered,
+                crate::loading_entries::LayerCover::Unresolved => return LoadingCover::Unresolved,
                 crate::loading_entries::LayerCover::Outward(at) => {
-                    loading_cover_from(lookup, file, at, None, symbol_names, visited)
+                    return loading_cover_from(lookup, file, at, None, stop, symbol_names, visited);
                 }
-            };
+                crate::loading_entries::LayerCover::Callee {
+                    file: callee_file,
+                    function: callee,
+                    parameter,
+                } => {
+                    // ADR 1011: the closure is part of the function around the call unless the callee's own body puts a boundary around
+                    // its calls of the parameter (`exprArrow(cb) { createLoadingBoundary(() => cb(), ..) }`).
+                    if let Some(cover) =
+                        callee_boundary(lookup, callee_file, callee, parameter, symbol_names, visited)
+                    {
+                        return cover;
+                    }
+                }
+            }
         }
     }
     LoadingCover::Unresolved
+}
+
+/// ADR 1011: what a project callee's own body says of a closure it is handed as parameter `parameter`: `Some(Covered)` when a boundary holds
+/// its calls of the parameter, `Some(Unresolved)` where that is not known (the parameter is passed on, stored, aliased or never called, the
+/// callee is `async` or a generator, a call of it may be held by code the walk does not follow), and `None` when every call of the parameter
+/// reaches the callee's top with no boundary around it: the closure is then part of the function around the call, as an identifier callee's
+/// always was.
+fn callee_boundary(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    callee: &solid_facts::ast::FunctionFact,
+    parameter: usize,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    visited: &mut HashSet<(String, Span)>,
+) -> Option<LoadingCover> {
+    let calls = match crate::loading_entries::parameter_calls(lookup, file, callee, parameter) {
+        Some(calls) if !calls.is_empty() => calls,
+        _ => return Some(LoadingCover::Unresolved),
+    };
+    let mut result = None;
+    for call in calls {
+        match loading_cover_from(
+            lookup,
+            file,
+            call,
+            None,
+            Some(callee.span),
+            symbol_names,
+            visited,
+        ) {
+            LoadingCover::Covered => return Some(LoadingCover::Covered),
+            LoadingCover::Unresolved => result = Some(LoadingCover::Unresolved),
+            LoadingCover::Uncovered => {}
+        }
+    }
+    result
 }
 
 /// ADR 0668: whether `object`, the object of a member read in `component`'s

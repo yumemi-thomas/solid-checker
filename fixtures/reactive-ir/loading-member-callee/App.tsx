@@ -1,7 +1,7 @@
 import { createMemo } from "solid-js";
 import { render } from "@solidjs/web";
 import * as H from "./helpers";
-import { run } from "./helpers";
+import { exprArrow, inBoundary, run } from "./helpers";
 import { go } from "./reexport";
 import { helpers as Api } from "./barrel";
 import util from "./util";
@@ -46,7 +46,37 @@ function LiteralMethod() {
   return <p>{(() => { bus.run(() => { slow(); }); return 1; })()}</p>;
 }
 
-// Second group: the callee is not resolved exactly, so the read is uncertifiable and no violation stands at it.
+// Second group: the callee is not resolved exactly, or its own body puts a boundary around its calls of the parameter, or does not call it
+// where it runs (a closure it stores, runs later, passes on, calls only on a flag), so the read is uncertifiable and no violation stands at it.
+// Chrome is quiet at the reads of `NsInBoundary`, `NsInBoundaryBlock`, `IdInBoundary` and `IdInBoundaryBlock`: the callee's boundary catches them.
+function NsInBoundary() {
+  return <p>{(() => { H.exprArrow(() => { slow(); }); return 1; })()}</p>;
+}
+
+function NsInBoundaryBlock() {
+  return <p>{(() => { H.inBoundary(() => { slow(); }); return 1; })()}</p>;
+}
+
+function IdInBoundary() {
+  return <p>{(() => { exprArrow(() => { slow(); }); return 1; })()}</p>;
+}
+
+function IdInBoundaryBlock() {
+  return <p>{(() => { inBoundary(() => { slow(); }); return 1; })()}</p>;
+}
+
+function Later() {
+  return <p>{(() => { H.later(() => { slow(); }); return 1; })()}</p>;
+}
+
+function Maybe() {
+  return <p>{(() => { H.maybe(() => { slow(); }, true); return 1; })()}</p>;
+}
+
+function PassOn() {
+  return <p>{(() => { H.passOn(() => { slow(); }); return 1; })()}</p>;
+}
+
 function Stored() {
   return <p>{(() => { H.keep(() => { slow(); }); return 1; })()}</p>;
 }
@@ -72,6 +102,13 @@ render(() => <Namespace />, document.body);
 render(() => <Reexport />, document.body);
 render(() => <DefaultMember />, document.body);
 render(() => <LiteralMethod />, document.body);
+render(() => <NsInBoundary />, document.body);
+render(() => <NsInBoundaryBlock />, document.body);
+render(() => <IdInBoundary />, document.body);
+render(() => <IdInBoundaryBlock />, document.body);
+render(() => <Later />, document.body);
+render(() => <Maybe />, document.body);
+render(() => <PassOn />, document.body);
 render(() => <Stored />, document.body);
 render(() => <Replaced />, document.body);
 render(() => <Shadowed />, document.body);

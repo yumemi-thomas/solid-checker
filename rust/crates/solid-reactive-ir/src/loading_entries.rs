@@ -277,40 +277,90 @@ pub(crate) fn unresolved_tag(
 }
 
 /// What a function layer says of the reads written in it.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum LayerCover {
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum LayerCover<'a> {
     /// The boundary holds them: Solid renders this layer inside it.
     Covered,
     /// The layer renders outside the boundary it was handed to (a `fallback`): the walk goes on from `at`, the call that made the boundary.
     Outward(Span),
     /// Code the analysis does not follow runs this layer, so where it renders is not known.
     Unresolved,
+    /// ADR 1011: the layer is an argument of a call to a project function whose body is read. It is read as part of the function around the
+    /// call, unless the callee's own body holds a boundary for it: the cover walk goes through the callee's calls of the parameter first
+    /// (`owners::async_context::callee_boundary`).
+    Callee {
+        file: &'a FileFacts,
+        function: &'a FunctionFact,
+        parameter: usize,
+    },
 }
 
-/// ADR 1011: whether the member callee of `call` is a project function whose body is read, resolved the way every other pass resolves a call's
-/// target (`project_callee_at_parameter`), with the argument at `position` landing in its parameter exactly. `function_called_at` names only
-/// an identifier callee (its own comment: a member callee "names its own value through other facts"), so a closure handed to `H.run(cb)`,
-/// `Api.run(cb)` of a re-exported namespace, or `bus.run(cb)` of a literal's method was read as handed to a call the analysis does not resolve:
-/// a violation it proved (Chrome: ASYNC_OUTSIDE_LOADING_BOUNDARY) became an SC5003 uncertifiable `mount-unresolved`. What the analysis resolves
-/// exactly is read as the identifier callee is; a callee it does not resolve, a method an assignment or an escape may have replaced, a binding
-/// that is not current and a spread before the argument stay unresolved (fail closed).
-fn runs_project_member(
-    lookup: &SemanticLookup<'_>,
+/// ADR 1011: the project function a member callee names, resolved the way every other pass resolves a call's target
+/// (`project_callee_at_parameter`), with the argument at `position` landing in its parameter exactly. `function_called_at` names only an
+/// identifier callee (its own comment: a member callee "names its own value through other facts"), so a closure handed to `H.run(cb)` of a
+/// namespace import read as handed to a call the analysis does not resolve: a violation it proved (Chrome: ASYNC_OUTSIDE_LOADING_BOUNDARY)
+/// became an SC5003 uncertifiable `mount-unresolved`. What the analysis resolves exactly is read as the identifier callee is; a callee it
+/// does not resolve, a method an assignment or an escape may have replaced, a binding that is not current and a spread before the argument
+/// stay unresolved (fail closed).
+fn project_member<'a>(
+    lookup: &SemanticLookup<'a>,
     file: &FileFacts,
     call: &solid_facts::ast::CallFact,
     position: usize,
-) -> bool {
+) -> Option<(&'a FileFacts, &'a FunctionFact)> {
     crate::execution_role::project_callee_at_parameter(file, call, position, lookup)
-        .is_some_and(|(_, _, exact)| exact)
+        .filter(|(_, _, exact)| *exact)
+        .map(|(file, function, _)| (file, function))
+}
+
+/// ADR 1011: the calls of `function`'s parameter `index` written in its body (nested closures included), by span; `None` where the parameter
+/// is used in any other way (passed on, stored, aliased, written, called with `new`), is not a plain identifier, or the function may run it
+/// later (`async`, a generator): then what the callee does with the closure is not known.
+pub(crate) fn parameter_calls(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    function: &FunctionFact,
+    index: usize,
+) -> Option<Vec<Span>> {
+    use solid_facts::ast::{BindingShape, IdentifierRole};
+    if function.r#async || function.generator || function.rest_parameter {
+        return None;
+    }
+    let parameter = function.parameters.get(index)?;
+    if parameter.shape != BindingShape::Identifier
+        || parameter.initializer.is_some()
+        || parameter.names.len() != 1
+    {
+        return None;
+    }
+    let name = parameter.names[0].span;
+    let path = file.path.as_str();
+    let symbol = lookup.entities().at(path, name)?;
+    if crate::indexes::binding_written(file, name) {
+        return None;
+    }
+    let mut calls = Vec::new();
+    for identifier in file.ast.identifiers.iter().filter(|identifier| {
+        identifier.role == IdentifierRole::Reference
+            && function.span.contains(identifier.span)
+            && lookup.entities().at(path, identifier.span) == Some(symbol)
+    }) {
+        let call = file.ast.calls_with_peeled_callee(identifier.span).next()?;
+        if call.construct {
+            return None;
+        }
+        calls.push(call.span);
+    }
+    Some(calls)
 }
 
 /// What the layer `function` is, when a call edge does not place it. `None` leaves it "part of the function around it": a callback of a dialect
 /// primitive that runs it where it is written, a function the JSX hands to a component, a standard library callback.
-pub(crate) fn layer_cover(
-    lookup: &SemanticLookup<'_>,
+pub(crate) fn layer_cover<'a>(
+    lookup: &SemanticLookup<'a>,
     file: &FileFacts,
     function: &FunctionFact,
-) -> Option<LayerCover> {
+) -> Option<LayerCover<'a>> {
     let ast = &file.ast;
     let own = function.span;
     let boundary = lookup.dialect.async_boundary_shape()?;
@@ -334,13 +384,30 @@ pub(crate) fn layer_cover(
             || lookup
                 .standard_library_declaration(file, call, typefacts::CallKind::Call)
                 .is_some()
-            || lookup
-                .function_called_at(file.path.as_str(), call.callee)
-                .is_some()
-            || runs_project_member(lookup, file, call, position)
         {
-            // A primitive that runs it where it is written, the standard library, a project function whose body is read.
+            // A primitive that runs it where it is written, the standard library.
             continue;
+        }
+        // A project function whose body is read (an identifier callee, or a member the analysis resolves exactly): the closure is read as part
+        // of the function around the call, unless the callee's body puts a boundary around its calls of the parameter. A spread before the
+        // argument leaves the parameter it fills unknown.
+        if call
+            .arguments
+            .iter()
+            .take(position.saturating_add(1))
+            .any(|argument| argument.spread)
+        {
+            return Some(LayerCover::Unresolved);
+        }
+        if let Some((callee_file, callee)) = lookup
+            .function_called_at(file.path.as_str(), call.callee)
+            .or_else(|| project_member(lookup, file, call, position))
+        {
+            return Some(LayerCover::Callee {
+                file: callee_file,
+                function: callee,
+                parameter: position,
+            });
         }
         return Some(LayerCover::Unresolved);
     }
