@@ -295,6 +295,7 @@ fn push_reached(
     complete: bool,
     crossed: Option<&Crossed>,
     through_async: bool,
+    sync_sites: &[typefacts::Location],
     step_unproven: bool,
     lookup: &SemanticLookup<'_>,
 ) {
@@ -339,6 +340,7 @@ fn push_reached(
                     sites,
                     computation_error_unobserved: false,
                     stop: None,
+                    through_async: false,
                 }
             };
         for stepper in steppers.into_iter().filter(|stepper| *stepper != at) {
@@ -349,12 +351,12 @@ fn push_reached(
                 through_async,
             );
         }
-        push_crossed(
-            operations,
-            operation(kind, at, sites),
-            crossed,
-            through_async,
-        );
+        // ADR 1008: the operation is a rejection only where every reach of it was inside an `async` function; one reached
+        // with none on the way throws on this stack, whatever sibling the walk also entered.
+        let rejected = !sites.is_empty() && !sites.iter().any(|site| sync_sites.contains(site));
+        let mut reached = operation(kind, at, sites);
+        reached.through_async = through_async && rejected;
+        push_crossed(operations, reached, crossed, through_async);
     }
     if !complete {
         operations.push(LeafOwnerOperation {
@@ -370,6 +372,7 @@ fn push_reached(
             sites: Vec::new(),
             computation_error_unobserved: false,
             stop: None,
+            through_async: false,
         });
     }
 }
@@ -437,6 +440,8 @@ pub(super) fn leaf_owner_operations_for_file(
     let dialect = lookup.dialect;
     let completions = RefCell::default();
     let entered_async = Cell::new(false);
+    let async_depth = Cell::new(0);
+    let sync_sites = RefCell::default();
     let leaf_has_observer = Cell::new(false);
     let resolution = LeafScopeResolution {
         lookup,
@@ -444,6 +449,8 @@ pub(super) fn leaf_owner_operations_for_file(
         tables,
         completions: &completions,
         entered_async: &entered_async,
+        async_depth: &async_depth,
+        sync_sites: &sync_sites,
         leaf_has_observer: &leaf_has_observer,
     };
     let mut operations = Vec::new();
@@ -572,6 +579,7 @@ pub(super) fn leaf_owner_operations_for_file(
                         sites,
                         computation_error_unobserved: false,
                         stop: None,
+                        through_async: false,
                     });
                 }
                 if complete {
@@ -590,6 +598,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     sites: Vec::new(),
                     computation_error_unobserved: false,
                     stop: None,
+                    through_async: false,
                 });
                 continue;
             }
@@ -622,6 +631,7 @@ pub(super) fn leaf_owner_operations_for_file(
                 sites: Vec::new(),
                 computation_error_unobserved: false,
                 stop: None,
+                through_async: false,
             });
             continue;
         };
@@ -833,6 +843,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     sites: Vec::new(),
                     computation_error_unobserved: false,
                     stop: None,
+                    through_async: false,
                 },
                 crossed.as_ref(),
                 false,
@@ -961,6 +972,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     sites: Vec::new(),
                     computation_error_unobserved: false,
                     stop: None,
+                    through_async: false,
                 });
                 continue;
             }
@@ -1019,6 +1031,7 @@ pub(super) fn leaf_owner_operations_for_file(
                             identity_unproven: false,
                             sites: Vec::new(),
                             computation_error_unobserved: false,
+                            through_async: false,
                             // The two stops that owe an obligation (`owes_obligation`), named for the cause a what-if run can assume.
                             stop: stop.and_then(|stop| match stop {
                                 ClimbStop::UnmodelledInPlace => {
@@ -1053,6 +1066,7 @@ pub(super) fn leaf_owner_operations_for_file(
                 let mut kinds = Vec::new();
                 let mut visited = Vec::new();
                 let outer_async = resolution.entered_async.replace(false);
+                let outer_sync = resolution.sync_sites.take();
                 let complete = helper_forbidden_operations(
                     resolution,
                     callback_file,
@@ -1065,6 +1079,7 @@ pub(super) fn leaf_owner_operations_for_file(
                 );
                 let through_async = resolution.entered_async.get();
                 resolution.entered_async.set(outer_async || through_async);
+                let sync_sites = resolution.sync_sites.replace(outer_sync);
                 if kinds.is_empty() && complete {
                     continue;
                 }
@@ -1078,6 +1093,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     complete,
                     crossed.as_ref(),
                     through_async,
+                    &sync_sites,
                     step_unproven(call.span),
                     lookup,
                 );
@@ -1110,6 +1126,7 @@ pub(super) fn leaf_owner_operations_for_file(
                         named_complete,
                         crossed.as_ref(),
                         false,
+                        &[],
                         step_unproven(call.span),
                         lookup,
                     );
@@ -1164,6 +1181,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     sites: Vec::new(),
                     computation_error_unobserved: false,
                     stop: None,
+                    through_async: false,
                 },
                 crossed.as_ref(),
                 false,
@@ -1214,6 +1232,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     sites,
                     computation_error_unobserved: false,
                     stop: None,
+                    through_async: false,
                 });
             }
             if !complete {
@@ -1230,6 +1249,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     sites: Vec::new(),
                     computation_error_unobserved: false,
                     stop: None,
+                    through_async: false,
                 });
             }
         }
@@ -1590,6 +1610,13 @@ struct LeafScopeResolution<'a, 'lookup> {
     /// promise it returns, which no slot that takes what its callback throws (`isPending`) catches (ADR 0960's measure of the
     /// literal form). A walk saves the flag before the callback it asks about and reads it after.
     entered_async: &'a Cell<bool>,
+    /// ADR 1008: how many `async` functions the walk is inside of, from the leaf scope's call down to the body it is reading.
+    /// `entered_async` is sticky for a whole walk (a sibling `void load()` sets it); this is the path to one operation.
+    async_depth: &'a Cell<u32>,
+    /// ADR 1008: the operations the walk in progress reached with no `async` function on the way ([`Self::async_depth`] zero),
+    /// by where they are written: what such an operation throws propagates on the leaf scope's stack, whatever else the walk
+    /// visited. An anchor saves the list before its walk and reads it after.
+    sync_sites: &'a RefCell<Vec<typefacts::Location>>,
     /// Whether the leaf owner whose callback the walk is in runs it under an active observer
     /// ([`LeafOwnerOperation::owner_has_observer`]): set at each leaf creation before its callback is walked. It decides whether
     /// a `resolve` or `until` reached under a slot that takes what its callback throws is the observer guard's plain throw (the
@@ -1608,6 +1635,26 @@ type Reached = Vec<(
     bool,
     Vec<typefacts::Location>,
 )>;
+
+/// ADR 1008: one more `async` function around the body being read, for as long as the value lives.
+struct AsyncScope<'a>(Option<&'a Cell<u32>>);
+
+impl<'a> AsyncScope<'a> {
+    fn enter(depth: &'a Cell<u32>, entered: bool) -> Self {
+        if entered {
+            depth.set(depth.get() + 1);
+        }
+        Self(entered.then_some(depth))
+    }
+}
+
+impl Drop for AsyncScope<'_> {
+    fn drop(&mut self) {
+        if let Some(depth) = self.0 {
+            depth.set(depth.get().saturating_sub(1));
+        }
+    }
+}
 
 /// `sites`: where the operation is written (ADR 0942). An operation reached through a helper is reported at the helper call, so the site
 /// itself is kept to let another rule's hand-off to this one (SC4001's `LeafOwned`) find its row.
@@ -2540,10 +2587,17 @@ fn function_forbidden_operations(
     if depth == 0 {
         return false;
     }
+    // ADR 1008: a body read inside an `async` function and the same body read with none on the way are two entries: the
+    // second one's operations throw on the leaf scope's stack.
+    let inside_async = helper.r#async || resolution.async_depth.get() > 0;
     let key = (
         helper_file.path.as_str().to_owned(),
         helper.span,
-        entry_key(entry, &exact_this),
+        format!(
+            "{}{}",
+            entry_key(entry, &exact_this),
+            if inside_async { "|async" } else { "" }
+        ),
     );
     if visited.contains(&key) {
         return true;
@@ -2553,6 +2607,12 @@ fn function_forbidden_operations(
     if helper.r#async {
         resolution.entered_async.set(true);
     }
+    let _inside = AsyncScope::enter(resolution.async_depth, helper.r#async);
+    let reached_sync = |site: &typefacts::Location| {
+        if !inside_async {
+            resolution.sync_sites.borrow_mut().push(site.clone());
+        }
+    };
     let dialect = lookup.dialect;
     let entities = lookup.entities();
     // The parameter list runs on entry: its defaults, top-level or nested in
@@ -2658,12 +2718,14 @@ fn function_forbidden_operations(
             }
             let guaranteed =
                 reached_on_every_call(resolution, helper_file, helper, site.span, entry);
+            let written = location(helper_file.path.shared(), site.span);
+            reached_sync(&written);
             record(
                 kinds,
                 crate::LeafOwnerOperationKind::Primitive("JSX".into()),
                 guaranteed,
                 false,
-                vec![location(helper_file.path.shared(), site.span)],
+                vec![written],
             );
         }
     }
@@ -2769,13 +2831,9 @@ fn function_forbidden_operations(
             // ADR 0711: an attribution the binder does not confirm is
             // possible only.
             let proven = primitive_identity_proven(dialect, helper_file, inner, &primitive);
-            record(
-                kinds,
-                kind,
-                guaranteed && proven,
-                !proven,
-                vec![location(helper_file.path.shared(), inner.span)],
-            );
+            let written = location(helper_file.path.shared(), inner.span);
+            reached_sync(&written);
+            record(kinds, kind, guaranteed && proven, !proven, vec![written]);
         }
     }
     // ADR 0537: a tagged template written in the body calls its tag there.
