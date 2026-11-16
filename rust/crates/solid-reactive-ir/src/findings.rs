@@ -382,7 +382,7 @@ impl Finding {
         }
         if requirement.computation_error_unobserved {
             message.push_str(
-                "; but the throw is stored on a computation or taken by a `try` or an error boundary, and no read that reports it is proven",
+                "; but the throw is stored on a computation or taken by a `try`, an error boundary or a promise that holds it, and no read that reports it is proven",
             );
         }
         if requirement.flight_error_unobserved {

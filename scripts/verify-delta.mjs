@@ -254,12 +254,13 @@ export const CHECKS = {
       "the one-way uncertifiable count (endstage-report.md 1b): the ledger matches the snapshots, and a fall " +
       "against the base (per fixture and per path, ADR 0995) names an ADR, a proof and a fixture on each side; its rises are named per fixture and fact " +
       "(ADR 0955), an unnamed one printed and never a failure; a removed violation needs a regress row, and the frozen judge, " +
-      "the proof gate's candidates and the held cases are held against the base",
+      "the proof gate's candidates and the held cases are held against the base; the fuzz grids' proved-verdict ledger and its naming file only grow (ADR 1012)",
     commands: [
       ["node", "scripts/guard/count.mjs"],
       ["node", "scripts/guard/rises.mjs"],
       ["node", "scripts/guard/regress.mjs"],
       ["node", "scripts/guard/base.mjs"],
+      ["node", "scripts/guard/proved.mjs"],
     ],
   },
   "witnesses": {
@@ -443,6 +444,17 @@ export const ROWS = [
     prefix: "scripts/uncertifiable-causes.mjs",
     owner: "the uncertifiable-cause classifier (reproduction set self-check; HELD_CAP is held against the base by scripts/guard/base.mjs)",
     checks: ["repro-causes", "guard-count"],
+  },
+  // The proved-verdict ledger and the audit's known list are held against the merge base (scripts/guard/proved.mjs, ADR 1012).
+  {
+    prefix: "scripts/fuzz/proved/",
+    owner: "the proved-verdict ledger of the fuzz grids (a lost proof needs a changes row)",
+    checks: ["fuzz-tests", "guard-count"],
+  },
+  {
+    prefix: "scripts/fuzz/audit-known.json",
+    owner: "the audit's known items (exact counts; a rise needs a new ADR)",
+    checks: ["fuzz-tests", "guard-count"],
   },
   // The frozen judge rows and tables are held against the merge base (scripts/guard/base.mjs, ADR 0995).
   {
