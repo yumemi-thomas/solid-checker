@@ -1050,7 +1050,13 @@ const THUNK_PLACEMENT = {
  */
 export const FIRE_CONTEXTS = { "fire-helper-timer": "timer", "fire-helper-micro": "micro", "fire-helper-then": "then", "fire-store-handler": "handler", "fire-store-body": "body", "fire-store-timer": "timer", "fire-return-handler": "handler", "fire-return-body": "body" };
 export const HANDLER_CONTEXTS = { "handler-named-const": "handler", "handler-named-function": "handler", "handler-tuple": "handler" };
-export const DEAD_CONTEXTS = ["dead-if", "dead-after-return", "dead-and-false", "dead-comp-never"];
+/**
+ * ADR 1009 review F1: the closed-bundle form with the property REPLACED after it (`{ run: () => { <site> }, ...extra }`, `{ run: () => { <site> }, [k]: () => {} }`),
+ * handed to `onSettled` as `bundle.run`: the primitive runs the replacement, so the site never runs, Chrome is silent and the cell is legal for every code. A checker
+ * that took the bundle's function for the one `onSettled` runs reports the pending read there.
+ */
+export const DEAD_BUNDLE_CONTEXTS = ["dead-bundle-spread", "dead-bundle-computed"];
+export const DEAD_CONTEXTS = ["dead-if", "dead-after-return", "dead-and-false", "dead-comp-never", ...DEAD_BUNDLE_CONTEXTS];
 const EQUIVALENT_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code) => !SPEC[code].typedAway && !SPEC[code].recallOnly).map((code) => {
   const spec = SPEC[code];
   const placed = (kind) => Object.entries({ ...FIRE_CONTEXTS, ...HANDLER_CONTEXTS }).filter(([, base]) => (kind === "misuse" ? spec.contexts : spec.legal ?? []).includes(base)).map(([context]) => context);
@@ -2156,6 +2162,13 @@ function recallContext(context, stmts, kit) {
     // The block form (`false && (() => { …; return 1; })()`): a lone assignment after `false &&` would not parse.
     case "dead-and-false": return { body: [contain("and-false", 9, [...stmts, ret(num(1))])], view: [] };
     case "dead-comp-never": return { body: [contain("comp-never", 9, [...stmts, ret(jsx())])], view: [] };
+    case "dead-bundle-spread": case "dead-bundle-computed": {
+      const bundle = kit.name("bd"), over = kit.name("bx");
+      const spread = context === "dead-bundle-spread";
+      const head = `${spread ? `const ${over}: { run?: () => void } = { run: () => {} };` : `const ${over}: string = "run";`}\nconst ${bundle} = { run: () => `;
+      const close = `, ${spread ? `...${over}` : `[${over}]: () => {}`} };\nonSettled(${bundle}.run);`;
+      return { body: [contain("frame", 9, stmts, { head, close, imports: ["onSettled"] })], view: [] };
+    }
     case "tracked-rerun": {
       const t = trigger();
       return { body: [expr(prim("tracked", fn([expr(read(t.name)), ...stmts])))], view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t] };

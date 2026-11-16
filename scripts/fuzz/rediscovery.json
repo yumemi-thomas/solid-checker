@@ -24679,5 +24679,28 @@
   "found": "the independent review of ADR 1011 at 17afe6c88 (probes rev-1011c); the pattern lane programs `membercallee/{both-ns,both-id,branch-id,returned-id,via-arguments-id,wrap-let,via-wrap}` carry the shapes against real Chrome rc.21.",
   "fixed": "ADR 1011 (`owners/async_context.rs` `callee_held` and `Held`: the uses are combined, one that runs the closure with no boundary decides; `loading_entries.rs` `project_callee`: an identifier callee is trusted only where `function_value_is_current_in` holds, else main's answer; `parameter_uses` refuses a body that reads `arguments`). Fixture `loading-member-callee` (`BothNs`, `BothId`, `ViaArgumentsId`, `WrapLet`, `ViaWrap`: violations; `BranchId` and `ReturnedId`, uncertifiable on main too, are pinned).",
   "outside": "no generator writes it: a boundary inside the helper that receives the closure is outside the grids' layer axis. The pattern lane (`membercallee/{both-ns,both-id,via-arguments-id,wrap-let,via-wrap}`, Chrome rc.21 warns at each) carries the shapes but cannot fail the build that had them: a proved violation lost to uncertifiable is a recall-gap, not a problem outcome, and the lane reads it as fine (the second cut, 17afe6c88, passes it 22/22). The gate is the fixture `loading-member-callee` snapshot (`BothNs`, `BothId`, `ViaArgumentsId`, `WrapLet`, `ViaWrap` are violations; the second cut made each `call-attributed-read`), and main's ADR 1012 `regress` guard for any such shape that exists on main."
+ },
+ {
+  "finding": "no defect: a recall gap. A pending read in a function a `const` object literal holds and hands to a leaf owner (`const cb = { cb: () => { a(); } }; onSettled(cb.cb)`) was `invocation-context-unproven` since ADR 0667: a read in an object member was open whatever held the object. Chrome rc.21 reports PENDING_ASYNC_FORBIDDEN_SCOPE at each; the 11-05 full audit had them as violations",
+  "found": "the recall-gap ranking of the full audit of main 78ddeb849 (run 43739577046, 2026-11-16) and W4's bisect of #173 (commit 3ffbc91b5, ADRs 0665-0668): the `bundle` callback form of PENDING_ASYNC_FORBIDDEN_SCOPE, 84 programs in mx-recall and 12 in mx-pairs",
+  "fixed": "ADR 1009 (`local_access.rs` `handed_from_closed_bundle`: a plain data property of a `const` object literal that only ever hands that key to a primitive has the primitive's callback position for its place)",
+  "grid": "mx-recall",
+  "code": "PENDING_ASYNC_FORBIDDEN_SCOPE",
+  "ids": ["mx-pending-async-forbidden-scope-settled-x-direct-none-cb-bundle", "mx-pending-async-forbidden-scope-settled-x-alias-closure-cb-bundle", "mx-pending-async-forbidden-scope-tracked-x-alias-iife-cb-bundle", "mx-pending-async-forbidden-scope-tracked-rerun-x-alias-helper-cb-bundle"],
+  "rediscovered": "main 0799a4629 recall-gap, this build agree: 4 of 4 (84 of the code's 84 `bundle` gaps in mx-recall, 82 in mx-pairs)"
+ },
+ {
+  "finding": "no defect reproduced: review F1 of ADR 1009. `handed_from_closed_bundle` never checked that the property is the key's final value, so a bundle `{ run: () => { user(); }, ...extra }` or `{ run: () => { user(); }, [k]: () => {} }` handed to `onSettled` was taken for the function the primitive runs (Chrome runs the replacement and is silent). The reviewer's snippets stay uncertifiable on 4dd928e93 because a later stage keeps such a literal open (the function answered true, instrumented); no program of the grids differs between the builds",
+  "found": "the medium review of proof E (4dd928e93, 2026-11-16), F1",
+  "fixed": "ADR 1009 review fix (`flow_helpers.rs` `property_is_final_value`, used by `handed_from_closed_bundle` and `origin_member_ignores_receiver`)",
+  "grid": "lg-recall",
+  "code": "PENDING_ASYNC_FORBIDDEN_SCOPE",
+  "ids": [
+   "lg-pending-async-forbidden-scope-dead-bundle-spread-x-direct-none",
+   "lg-pending-async-forbidden-scope-dead-bundle-spread-x-alias-none",
+   "lg-pending-async-forbidden-scope-dead-bundle-computed-x-direct-none",
+   "lg-pending-async-forbidden-scope-dead-bundle-computed-x-alias-none"
+  ],
+  "rediscovered": "main 5b950fce6, 4dd928e93 and this build: uncertifiable on all four (the 2,400 programs of the two `dead-bundle-*` contexts, all codes: {clean 144, uncertifiable 2,136, unexecuted 120}, identical outcomes on the three builds); the cells hold the shape against a later change. The 120 unexecuted are SYNC_NODE_RECEIVED_ASYNC, a violation in a bundle function the spread or computed key replaces, also on main (a separate defect, reported)"
  }
 ]
