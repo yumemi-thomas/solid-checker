@@ -142,6 +142,12 @@ struct Walk<'w, 'c> {
     thrower: Thrower,
     /// ADR 0914: where the walk ended [`ThrowEnd::Open`].
     stops: std::cell::RefCell<Stops>,
+    /// ADR 1008: the function whose entries are being read is `async`: its
+    /// throw rejects the promise each call of it returns.
+    rejects: std::cell::Cell<bool>,
+    /// ADR 1008: the call the walk goes on from is what its function returns,
+    /// and its promise takes a rejection: that function's calls return it.
+    returned: std::cell::Cell<bool>,
 }
 
 /// The places a walk could not go on from.
@@ -161,6 +167,8 @@ impl<'w, 'c> Walk<'w, 'c> {
             context,
             thrower,
             stops: std::cell::RefCell::default(),
+            rejects: std::cell::Cell::new(false),
+            returned: std::cell::Cell::new(false),
         }
     }
 }
@@ -189,6 +197,8 @@ impl Walk<'_, '_> {
     }
 
     fn site(&self, file: &FileFacts, site: Span, depth: usize) -> ThrowEnd {
+        // ADR 1008: `site` is a call whose promise its function returns.
+        let mut returned = self.returned.take();
         let Some(depth) = depth.checked_sub(1) else {
             return ThrowEnd::Unobserved;
         };
@@ -225,12 +235,41 @@ impl Walk<'_, '_> {
         if caught(file, site) || caught(file, at) {
             return ThrowEnd::Unobserved;
         }
+        if at != site {
+            match self.layers_rejection(file, site, returned) {
+                None => return ThrowEnd::Unobserved,
+                Some(carried) => returned = carried,
+            }
+        }
         if let Some((container, index)) = file.ast.arguments_containing(at).find(|(call, index)| {
             crate::execution_role::direct_callback_runs(file, call.arguments[*index].span, at)
         }) {
-            return self.argument(file, container, index, at, depth);
+            self.returned.set(returned);
+            let end = self.argument(file, container, index, at, depth);
+            self.returned.set(false);
+            return end;
         }
         let function = crate::owners::containing_body_function(&file.ast, at);
+        if returned {
+            // The promise is the value of the function around the call: a
+            // handler's, a component's or a JSX expression's is not followed.
+            return match function {
+                Some(function)
+                    if lookup.function_component_status(file, function) == ComponentStatus::No
+                        && !file
+                            .compiler
+                            .callback_roles
+                            .iter()
+                            .any(|callback| callback.span == function.span) =>
+                {
+                    self.returned.set(true);
+                    let end = self.entries(file, function, depth);
+                    self.returned.set(false);
+                    end
+                }
+                _ => ThrowEnd::Unobserved,
+            };
+        }
         if self.tracked_jsx(file, at, function) {
             return if handled_above(file, at, lookup, MOUNT_DEPTH) {
                 ThrowEnd::Unobserved
@@ -262,6 +301,98 @@ impl Walk<'_, '_> {
             };
         }
         self.entries(file, function, depth)
+    }
+
+    /// ADR 1008: a throw that leaves an `async` function rejects the promise
+    /// the call returned; nothing propagates on the caller's stack. Where the
+    /// rejection of the promise `call` made goes: rethrown at an `await` of
+    /// the call, unhandled because nothing holds the promise or a chain on it
+    /// ([`promise_chain_unheld`]), or returned by the function around the
+    /// call, whose own calls then return it. A promise that is assigned,
+    /// passed on or given a handler is kept: whether anything reports its
+    /// rejection is not read.
+    fn rejection(&self, file: &FileFacts, call: &CallFact) -> Rejection {
+        if awaited(file, call) {
+            Rejection::Rethrown
+        } else if returned_value(file, call.span) {
+            Rejection::Returned
+        } else if promise_chain_unheld(file, call, self.context.lookup) {
+            Rejection::Unhandled
+        } else {
+            Rejection::Kept
+        }
+    }
+
+    /// The end of a throw that reaches `call`: with `rejects`, the call ran
+    /// an `async` function (or one that returns such a promise) and its
+    /// promise takes the throw.
+    fn call_end(&self, file: &FileFacts, call: &CallFact, rejects: bool, depth: usize) -> ThrowEnd {
+        if rejects {
+            match self.rejection(file, call) {
+                Rejection::Kept => return ThrowEnd::Unobserved,
+                Rejection::Returned => self.returned.set(true),
+                Rejection::Rethrown | Rejection::Unhandled => {}
+            }
+        }
+        let end = self.site(file, call.span, depth);
+        self.returned.set(false);
+        end
+    }
+
+    /// [`Self::call_end`] for the call at `span`; a span that is no call (a
+    /// tagged template) keeps a rejection.
+    fn span_end(&self, file: &FileFacts, span: Span, rejects: bool, depth: usize) -> ThrowEnd {
+        match file.ast.calls.iter().find(|call| call.span == span) {
+            Some(call) => self.call_end(file, call, rejects, depth),
+            None if rejects => ThrowEnd::Unobserved,
+            None => self.site(file, span, depth),
+        }
+    }
+
+    /// ADR 1008: the layers the in-place climb from `site` crossed, read for
+    /// the promise that takes the throw: a layer that is `async`, or returns
+    /// such a promise (`returned`, of the first), or is run by an `async`
+    /// project function. `None` where one keeps the promise, or where the
+    /// walk cannot name it (an `async` callback a project helper calls);
+    /// else whether the outermost layer's call is itself returned.
+    fn layers_rejection(&self, file: &FileFacts, site: Span, returned: bool) -> Option<bool> {
+        let lookup = self.context.lookup;
+        let mut inside = site;
+        let mut carried = returned;
+        for call in crate::execution_role::in_place_layer_calls(file, site, lookup) {
+            let layer = crate::owners::owning_function(&file.ast, inside)?;
+            inside = call;
+            let fact = file.ast.calls.iter().find(|fact| fact.span == call);
+            // The function the call names: the layer itself (an IIFE, a named
+            // closure), or a helper that calls the layer in its own body.
+            let named = fact.and_then(|fact| {
+                let callee = file.ast.peel_ts_sugar_span(fact.callee);
+                if callee == layer.span {
+                    return Some((file, layer));
+                }
+                lookup.function_called_at(file.path.as_str(), callee)
+            });
+            let own = named.is_some_and(|(named_file, named)| {
+                named_file.path == file.path && named.span == layer.span
+            });
+            let layer_rejects = layer.r#async || std::mem::take(&mut carried);
+            let helper_async = !own && named.is_some_and(|(_, helper)| helper.r#async);
+            if layer_rejects && !own && named.is_some() {
+                // The layer's promise is the value of a call inside a project
+                // helper, which is not read.
+                return None;
+            }
+            if layer_rejects || helper_async {
+                // A standard callee returns what it makes of the promise
+                // (`map`'s array), or nothing (`forEach`).
+                match fact.map(|fact| self.rejection(file, fact)) {
+                    None | Some(Rejection::Kept) => return None,
+                    Some(Rejection::Returned) => carried = true,
+                    Some(Rejection::Rethrown | Rejection::Unhandled) => {}
+                }
+            }
+        }
+        Some(carried)
     }
 
     fn tracked_jsx(&self, file: &FileFacts, at: Span, function: Option<&FunctionFact>) -> bool {
@@ -304,8 +435,16 @@ impl Walk<'_, '_> {
         if dialect.callback_swallows_throw(primitive, index) {
             return ThrowEnd::Unobserved;
         }
+        // ADR 1008: a primitive that runs an `async` callback inline returns
+        // the promise its throw rejects (`untrack(async () => …)`).
+        // Or the callback returns such a promise (`returned`).
+        let rejects = self.returned.take()
+            || file
+                .ast
+                .function_at(file.ast.peel_ts_sugar_span(container.arguments[index].span))
+                .is_some_and(|callback| callback.r#async);
         if dialect.inline_callback_keeps_observer(primitive, index) {
-            return self.site(file, container.span, depth);
+            return self.call_end(file, container, rejects, depth);
         }
         let execution =
             crate::owners::callback_execution_at_call(file, container, primitive, index, lookup);
@@ -328,8 +467,10 @@ impl Walk<'_, '_> {
                 }
             }
             Some(Execution::Inline) if !(observer && deferred) => {
-                self.site(file, container.span, depth)
+                self.call_end(file, container, rejects, depth)
             }
+            // A primitive not read here takes the promise.
+            _ if rejects => ThrowEnd::Unobserved,
             _ => self.open(),
         }
     }
@@ -533,7 +674,7 @@ impl Walk<'_, '_> {
             .find(|call| !call.construct && file.ast.peel_ts_sugar_span(call.callee) == at)
             .map_or_else(
                 || self.host_runs(file, at, depth) || self.holder_reports(file, at, depth),
-                |call| self.site(file, call.span, depth) == ThrowEnd::Reported,
+                |call| self.call_end(file, call, self.rejects.get(), depth) == ThrowEnd::Reported,
             )
     }
 
@@ -590,7 +731,7 @@ impl Walk<'_, '_> {
                 .iter()
                 .find(|call| !call.construct && file.ast.peel_ts_sugar_span(call.callee) == at);
             let entry = match (called, argument) {
-                (Some(call), _) => self.site(file, call.span, depth),
+                (Some(call), _) => self.call_end(file, call, self.rejects.get(), depth),
                 (None, Some((call, index)))
                     if lookup.primitive_at_call(file, call.span).is_some() =>
                 {
@@ -654,7 +795,24 @@ impl Walk<'_, '_> {
 
     /// Per entry: one that reports decides.
     fn entries(&self, file: &FileFacts, function: &FunctionFact, depth: usize) -> ThrowEnd {
+        // ADR 1008: the calls of an `async` function read below return the
+        // promise its throw rejects.
+        let outer = self
+            .rejects
+            .replace(function.r#async || self.returned.take());
+        let end = self.function_entries(file, function, depth);
+        self.rejects.set(outer);
+        end
+    }
+
+    fn function_entries(
+        &self,
+        file: &FileFacts,
+        function: &FunctionFact,
+        depth: usize,
+    ) -> ThrowEnd {
         let lookup = self.context.lookup;
+        let rejects = self.rejects.get();
         // A literal with no binding has no value to be current (ADR 0857).
         let rebound = crate::owners::function_binding_name(file, function).is_some()
             && !lookup.function_value_is_current(file, function);
@@ -665,7 +823,7 @@ impl Walk<'_, '_> {
         if let Some(call) = file.ast.calls.iter().find(|call| {
             !call.construct && file.ast.peel_ts_sugar_span(call.callee) == function.span
         }) {
-            return self.site(file, call.span, depth);
+            return self.call_end(file, call, rejects, depth);
         }
         let hand_offs = crate::local_access::function_reference_hand_offs(file, function, lookup)
             .unwrap_or_else(|| {
@@ -689,9 +847,11 @@ impl Walk<'_, '_> {
                             && file.ast.peel_ts_sugar_span(call.callee) == reference
                     })
                     .map_or(ThrowEnd::Unobserved, |call| {
-                        self.site(file, call.span, depth)
+                        self.call_end(file, call, rejects, depth)
                     }),
-                HandOff::Inline(carrier) => self.site(file, carrier, depth),
+                // The carrier returns what it makes of the promise (`map`'s
+                // array, `call`'s result), or nothing (`forEach`).
+                HandOff::Inline(carrier) => self.span_end(file, carrier, rejects, depth),
                 HandOff::FreshStack => self.fresh_stack(file, reference),
                 _ => file
                     .ast
@@ -732,6 +892,45 @@ impl Walk<'_, '_> {
 fn voided(file: &FileFacts, call: &CallFact) -> bool {
     file.source_text(Span::new(0, call.span.start))
         .and_then(|before| before.trim_end().strip_suffix("void"))
+        .is_some_and(|before| {
+            !before.ends_with(|last: char| last.is_alphanumeric() || last == '_' || last == '$')
+        })
+}
+
+/// ADR 1008: where the rejection of a promise a call made goes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Rejection {
+    /// Assigned, passed on, or given a handler: not read.
+    Kept,
+    /// `await call`: thrown again where the `await` is written.
+    Rethrown,
+    /// The value the function around the call returns.
+    Returned,
+    /// Nothing holds the promise: the host reports the rejection.
+    Unhandled,
+}
+
+/// `return call`, or the call as an arrow's expression body.
+fn returned_value(file: &FileFacts, call: Span) -> bool {
+    let is = |returned: &solid_facts::ast::ReturnFact| {
+        returned
+            .argument
+            .is_some_and(|argument| file.ast.peel_ts_sugar_span(argument) == call)
+    };
+    file.ast.returns.iter().any(is)
+        || file
+            .ast
+            .functions
+            .iter()
+            .filter_map(|function| function.expression_return.as_ref())
+            .any(is)
+}
+
+/// `await call`: the rejection is rethrown where the `await` is written.
+/// Parentheses or a comment between read as not awaited.
+fn awaited(file: &FileFacts, call: &CallFact) -> bool {
+    file.source_text(Span::new(0, call.span.start))
+        .and_then(|before| before.trim_end().strip_suffix("await"))
         .is_some_and(|before| {
             !before.ends_with(|last: char| last.is_alphanumeric() || last == '_' || last == '$')
         })
