@@ -106,9 +106,9 @@ function Handed(props: { run: (cb: () => unknown) => number }) {
 }
 
 // ADR 1011 (review of the first cut): the callee's boundary decides only where it holds EVERY use of the parameter that can run the closure.
-// Chrome warns at the read of each of these components (a bare call runs in the render): a violation stands. The member forms of `branch`, `returned` and
-// `viaArguments` are not claimed (a conditional or returned call is not proved to run in the render: `call-attributed-read`, as `Maybe`); the identifier forms were
-// violations on main and must stay.
+// Chrome warns at the read of each of these components (a bare call runs in the render). Violations, as on main (the second cut lost them): `BothNs`,
+// `BothId`, `ViaArgumentsId`, `WrapLet`, `ViaWrap`. `BranchId` and `ReturnedId` are uncertifiable on main too (`call-attributed-read`: a call on a flag, or in a
+// closure the callee returns, is not proved to run in the render, as `Maybe`): pinned, not claimed, and the walk must not turn them into a violation.
 function BothNs() {
   return <p>{(() => { H.both(() => { slow(); }); return 1; })()}</p>;
 }
