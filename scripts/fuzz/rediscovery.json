@@ -24588,5 +24588,11 @@
   "found": "the independent review of ADR 1014's first build (42104c910, 2026-11-16), probed on a debug build; then the fixture and the oracle case here (violation on that build, uncertifiable on the fix)",
   "fixed": "ADR 1014's amendment (`accessor_provenance/mutation_sites.rs` `literal_member_function`: a string key is compared unquoted)",
   "outside": "the grid generators write no computed store into a `const` object literal, no literal method that hands `this` on and no duplicate key, so no cell holds the shape; the fixture `iteration-written-slots/variants/handed-timer-callback-member-quoted-duplicate` and the oracle case `iteration-timer-member-replaced` hold it"
+ },
+ {
+  "finding": "a false positive of ADR 1014's pushed build 3f33a1a15 (never on main): REACTIVE_WRITE_IN_OWNED_SCOPE proved (SC2001) in a program where a timer is handed `bundle.cb` after a function was stored under ANOTHER member of the holder and called on it (`bundle.init = function () { Object.assign(this, { cb() { … this … } }) }; bundle.init()`, the same with `Object.defineProperty(this, \"cb\", …)`, and `bundle.init = other.f`): the receiver hand-off was read inside the literal only, and a function assigned after it has the holder as its `this` too. ADR 0279's own hole (`member_runs_declared_method`), as the two above",
+  "found": "the coordinator's fourth probe on the review's fixes (2026-11-16), run on the release build of 3f33a1a15; then the fixtures and the oracle case here (violation on that build, uncertifiable on the fix)",
+  "fixed": "ADR 1014's second amendment (`execution_role/callback_standing.rs` `holder_member_assigned`, and `literal_hands_its_receiver_on` refusing `this.m = …`, in ADR 0279's `member_runs_declared_method_in`)",
+  "outside": "the grid generators assign no member of a `const` object literal that a timer or a call is then resolved through, so no cell holds the shape; the fixtures `iteration-written-slots/variants/handed-timer-callback-member-method-added`, `-method-added-define`, `-method-borrowed` and `-this-method` and the oracle case `iteration-timer-member-method-added` hold it"
  }
 ]
