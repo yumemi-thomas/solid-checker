@@ -337,11 +337,11 @@ fn callee_held(
         return Held::Neutral;
     }
     if walk.stack.len() >= CALLEE_DEPTH {
-        // A chain longer than the walk goes is not read: the closure may be held further down (Unresolved, never part of the caller). The answer
-        // rests on where the walk began, so it is kept out of the memo.
+        // A chain longer than the walk goes is not read: the walk takes no evidence from it (an identifier callee keeps the answer it always had, a
+        // member callee stays Unresolved: `Held::Neutral` at the callee arm). The answer rests on where the walk began, so it is kept out of the memo.
         walk.tainted
             .insert((String::new(), Span::new(0, 0), usize::MAX));
-        return Held::Mixed;
+        return Held::Neutral;
     }
     let Some(uses) = crate::loading_entries::parameter_uses(lookup, file, callee, parameter)
         .filter(|uses| !uses.is_empty())
