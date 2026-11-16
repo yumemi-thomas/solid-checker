@@ -24633,5 +24633,51 @@
   "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
   "ids": ["mx-flush-in-tracked-queue-callback-tracked-x-wrapper-none-m-dynamic", "mx-flush-in-tracked-queue-callback-tracked-rerun-x-wrapper-none-m-dynamic"],
   "rediscovered": "measured after the review (the owner's order): main recall-gap, this build agree, on the `-m-dynamic` programs"
+ },
+ {
+  "finding": "ASYNC_OUTSIDE_LOADING_BOUNDARY: 24 mx-recall programs, `module-ns` layer, contexts show / jsx / flush-iife / named-flush-call (6 each), lost their proved SC5003 violation to ADR 0978 (#234): a closure handed to `H.h1(cb)`, a member of a namespace import whose function calls it in the render, was read by `layer_cover` as handed to a call the analysis does not resolve (`function_called_at` names only an identifier callee), so the cover answered Unresolved and the finding became uncertifiable, blocker `mount-unresolved`. `agree` became `recall-gap`; the siblings reached through a named import, a default import, a barrel or `export *` kept their violation.",
+  "found": "the audit of main 78ddeb849 (CI run 43739577046) against the last green audit (aa4702650): the id-level comparison with the W audit of dfa6c5dec found 24 mx-recall ids agree there and recall-gap in the CI audit; bisected over the 29 first-parent merges dfa6c5dec..78ddeb849 to #234 (dbb5e7612); read with the proof log: the only difference at the site is SC5003 violation -> uncertifiable `mount-unresolved`.",
+  "fixed": "ADR 1011 (`loading_entries.rs` `layer_cover`: a closure handed to a member callee `project_callee_at_parameter` resolves exactly is read as part of the function around the call, the callee's body walked for its own boundary, `async_context.rs` `callee_boundary`); fixture `loading-member-callee` (`Namespace`), pattern programs `membercallee/*`; the 24 ids are `agree` again, Chrome compares the same.",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-flush-iife-x-alias-module-ns",
+   "mx-async-outside-loading-boundary-flush-iife-x-destructured-module-ns",
+   "mx-async-outside-loading-boundary-flush-iife-x-direct-module-ns",
+   "mx-async-outside-loading-boundary-flush-iife-x-hook-member-module-ns",
+   "mx-async-outside-loading-boundary-flush-iife-x-hook-module-ns",
+   "mx-async-outside-loading-boundary-flush-iife-x-tuple-module-ns",
+   "mx-async-outside-loading-boundary-jsx-x-alias-module-ns",
+   "mx-async-outside-loading-boundary-jsx-x-destructured-module-ns",
+   "mx-async-outside-loading-boundary-jsx-x-direct-module-ns",
+   "mx-async-outside-loading-boundary-jsx-x-hook-member-module-ns",
+   "mx-async-outside-loading-boundary-jsx-x-hook-module-ns",
+   "mx-async-outside-loading-boundary-jsx-x-tuple-module-ns",
+   "mx-async-outside-loading-boundary-named-flush-call-x-alias-module-ns",
+   "mx-async-outside-loading-boundary-named-flush-call-x-destructured-module-ns",
+   "mx-async-outside-loading-boundary-named-flush-call-x-direct-module-ns",
+   "mx-async-outside-loading-boundary-named-flush-call-x-hook-member-module-ns",
+   "mx-async-outside-loading-boundary-named-flush-call-x-hook-module-ns",
+   "mx-async-outside-loading-boundary-named-flush-call-x-tuple-module-ns",
+   "mx-async-outside-loading-boundary-show-x-alias-module-ns",
+   "mx-async-outside-loading-boundary-show-x-destructured-module-ns",
+   "mx-async-outside-loading-boundary-show-x-direct-module-ns",
+   "mx-async-outside-loading-boundary-show-x-hook-member-module-ns",
+   "mx-async-outside-loading-boundary-show-x-hook-module-ns",
+   "mx-async-outside-loading-boundary-show-x-tuple-module-ns"
+  ],
+  "rediscovered": "the build that had it (#234 to main 78ddeb849) answers `recall-gap` on these ids and the fix `agree`, but `make fuzz-focus` cannot fail on it: `recall-gap` is not a problem outcome (codes.mjs PROBLEMS) and no smoke manifest holds a recall grid, so only the audit's `agree -> recall-gap` moves (and an id-level comparison of two audits) see it; the fixture `loading-member-callee` is the gate: its `Namespace` component's SC5003 is a violation in the snapshot and `make coverage` fails on the old build."
+ },
+ {
+  "finding": "SC5003 false positive on main since ADR 0978 (#234): a closure handed to a project function whose body wraps its calls of the parameter in a boundary of its own (`export function exprArrow(cb) { createLoadingBoundary(() => cb(), () => 0); return 1 }`, or the block-bodied `inBoundary`) was read by `layer_cover` as part of the function around the call, and its callee was never walked, so a read in it (`exprArrow(() => { slow(); })` with no `Loading` in the caller) was a VIOLATION of async-outside-loading-boundary where the callee's boundary catches it and Chrome (rc.21) reports no ASYNC_OUTSIDE_LOADING_BOUNDARY. The identifier callee form (`function_called_at`) had it since #234; the namespace-member form had it in ADR 1011's first cut (db2ae965a), caught by its review before merge.",
+  "found": "the independent review of ADR 1011 (db2ae965a): helpers.tsx with `exprArrow` and `inBoundary`, App `<p>{(() => { H.exprArrow(() => { slow(); }); return 1; })()}</p>`; confirmed in real Chrome rc.21 by the pattern lane programs `membercallee/id-in-boundary`, `id-in-boundary-block` (main 78ddeb849: `false-positive`, Chrome codes []).",
+  "fixed": "ADR 1011 (`owners/async_context.rs` `callee_held`, `loading_entries.rs` `LayerCover::Callee`, `parameter_uses`, `passed_cover`): the walk goes through every use of the callee's parameter, bounded to its body and memoized per callee parameter, before the closure is read as part of the caller; a boundary on every use covers, a use run bare keeps the violation, a parameter passed on is followed into the project function it goes to, and a parameter the callee stores, aliases, never calls or reads through `arguments` (or an `async` or generator callee) leaves main's answer. Pattern programs `membercallee/{id,ns}-in-boundary{,-block}` and fixture `loading-member-callee` (`NsInBoundary*`, `IdInBoundary*`).",
+  "outside": "no generator writes it: the layer axis of the grids hands the closure to a helper (`helper`, `module-helper`, `module-ns`, ...) that only calls it, and a boundary is written in the program's own components (`lf-*` cells), never inside the helper that receives the closure; the shape lives in the pattern lane (`membercallee/`), where the pattern lane's judge fails it on the build that had it."
+ },
+ {
+  "finding": "SC5003 proved violations lost by ADR 1011's second cut (17afe6c88), before merge: the callee's boundary was trusted on the first use that has one, though another use runs the closure bare (`both(cb) { cb(); createLoadingBoundary(() => cb(), ..) }`; the review also named `branch(cb, false)` with a bare `cb()` on the other branch and a callee that also returns `() => cb()`, which are uncertifiable on main too, so they lose nothing); an identifier callee's Covered was trusted without the exactness a member callee gets (a `let` reassigned to a function that runs the closure bare, `const wrapped = ignore((cb) => ..)`, whose value is what `ignore` returns); and a body that runs the parameter as `arguments[0]()` was invisible to `parameter_uses`. Each moved a violation Chrome (rc.21) reports to uncertifiable or to silence.",
+  "found": "the independent review of ADR 1011 at 17afe6c88 (probes rev-1011c); the pattern lane programs `membercallee/{both-ns,both-id,branch-id,returned-id,via-arguments-id,wrap-let,via-wrap}` carry the shapes against real Chrome rc.21.",
+  "fixed": "ADR 1011 (`owners/async_context.rs` `callee_held` and `Held`: the uses are combined, one that runs the closure with no boundary decides; `loading_entries.rs` `project_callee`: an identifier callee is trusted only where `function_value_is_current_in` holds, else main's answer; `parameter_uses` refuses a body that reads `arguments`). Fixture `loading-member-callee` (`BothNs`, `BothId`, `ViaArgumentsId`, `WrapLet`, `ViaWrap`: violations; `BranchId` and `ReturnedId`, uncertifiable on main too, are pinned).",
+  "outside": "no generator writes it: a boundary inside the helper that receives the closure is outside the grids' layer axis. The pattern lane (`membercallee/{both-ns,both-id,via-arguments-id,wrap-let,via-wrap}`, Chrome rc.21 warns at each) carries the shapes but cannot fail the build that had them: a proved violation lost to uncertifiable is a recall-gap, not a problem outcome, and the lane reads it as fine (the second cut, 17afe6c88, passes it 22/22). The gate is the fixture `loading-member-callee` snapshot (`BothNs`, `BothId`, `ViaArgumentsId`, `WrapLet`, `ViaWrap` are violations; the second cut made each `call-attributed-read`), and main's ADR 1012 `regress` guard for any such shape that exists on main."
  }
 ]
