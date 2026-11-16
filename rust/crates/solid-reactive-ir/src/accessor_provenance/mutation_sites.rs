@@ -1714,7 +1714,11 @@ fn literal_member_function<'a>(
                 .any(|outer| outer.span != property.span && outer.span.contains(property.span))
         })
         .filter(|property| {
-            property.computed || holder_file.source_text(property.key) == Some(name)
+            // A key written as a string names the same property (`"cb": f` after `cb: g` replaces it: the review's third point); a computed key may.
+            property.computed
+                || holder_file
+                    .source_text(property.key)
+                    .is_some_and(|key| key.trim_matches(['"', '\'', '`']) == name)
         });
     let property = own.next()?;
     if own.next().is_some() || property.computed || !(property.data || property.method) {

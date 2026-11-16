@@ -24570,5 +24570,23 @@
    "mx-store-write-outside-setter-timer-nested-push-alias-handoff-map-cb-bundle",
    "mx-store-write-outside-setter-timer-deferred-micro-direct-handoff-member-cb-bundle"
   ]
+ },
+ {
+  "finding": "a false positive of ADR 1014's first build (never on main): REACTIVE_WRITE_IN_OWNED_SCOPE proved (SC2001) in a program where a timer is handed `bundle.cb` after `bundle[key] = function () { … this … }` with a key no literal and no string constant names: the member was taken for the literal's arrow, so the window was taken to reach no code and the slots stayed exact, though the function the timer calls reads its `this`. The hole is ADR 0279's own (`member_runs_declared_method`): the index of assigned member names records nothing for such a write. No violation of main was found to rest on it (two oracle probes through call resolution: uncertifiable on main, controls included)",
+  "found": "the independent review of ADR 1014's first build (42104c910, 2026-11-16), probed on a debug build; then the fixture and the oracle case here (violation on that build, uncertifiable on the fix)",
+  "fixed": "ADR 1014's amendment (`execution_role/callback_standing.rs` `holder_written_by_unnamed_key`, in ADR 0279's `member_runs_declared_method_in`)",
+  "outside": "the grid generators write no computed store into a `const` object literal, no literal method that hands `this` on and no duplicate key, so no cell holds the shape; the fixture `iteration-written-slots/variants/handed-timer-callback-member-computed-write` and the oracle case `iteration-timer-member-replaced` hold it"
+ },
+ {
+  "finding": "a false positive of ADR 1014's first build (never on main): the same proof where a method of the literal hands its receiver on (`init() { Object.assign(this, { cb() { … this … } }) }`, `Object.defineProperty(this, \"cb\", …)`): the holder reaches code through no reference of its binding, and that code replaces the member with no assignment. ADR 0279's own hole, as above",
+  "found": "the independent review of ADR 1014's first build (42104c910, 2026-11-16), probed on a debug build; then the fixture and the oracle case here (violation on that build, uncertifiable on the fix)",
+  "fixed": "ADR 1014's amendment (`execution_role/callback_standing.rs` `literal_hands_its_receiver_on`, in ADR 0279's `member_runs_declared_method_in`)",
+  "outside": "the grid generators write no computed store into a `const` object literal, no literal method that hands `this` on and no duplicate key, so no cell holds the shape; the fixture `iteration-written-slots/variants/handed-timer-callback-member-this-assign` and `-this-define` and the oracle case `iteration-timer-member-replaced` hold it"
+ },
+ {
+  "finding": "a false positive of ADR 1014's first build (never on main, and only on a program `tsc` rejects with TS1117 unless the error is expected): `{ cb: () => {}, \"cb\": function () { … this … } }`: the key comparison read the source text, so the quoted duplicate was no property of the name and the first one was taken though the last wins",
+  "found": "the independent review of ADR 1014's first build (42104c910, 2026-11-16), probed on a debug build; then the fixture and the oracle case here (violation on that build, uncertifiable on the fix)",
+  "fixed": "ADR 1014's amendment (`accessor_provenance/mutation_sites.rs` `literal_member_function`: a string key is compared unquoted)",
+  "outside": "the grid generators write no computed store into a `const` object literal, no literal method that hands `this` on and no duplicate key, so no cell holds the shape; the fixture `iteration-written-slots/variants/handed-timer-callback-member-quoted-duplicate` and the oracle case `iteration-timer-member-replaced` hold it"
  }
 ]

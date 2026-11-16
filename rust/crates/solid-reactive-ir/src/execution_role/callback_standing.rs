@@ -464,6 +464,69 @@ pub(crate) fn member_runs_declared_method(
     member_runs_declared_method_in(lookup, file, callee, method_file, method)
 }
 
+/// ADR 1014 (the review's first hole, in ADR 0279 itself): whether some reference of the holder declared at `declaration` is the object of a computed member
+/// that is written and whose key no literal and no string constant names (`bundle[key] = f`, `bundle[key] ||= f`): the write may replace any member, and the
+/// index of assigned member names (`member_name_assigned`) records no name for it.
+fn holder_written_by_unnamed_key(file: &solid_facts::FileFacts, declaration: Span) -> bool {
+    file.ast
+        .reference_declarations
+        .iter()
+        .filter(|(_, bound)| *bound == declaration)
+        .any(|(reference, _)| {
+            file.ast.members.iter().any(|member| {
+                file.ast.peel_ts_sugar_span(member.object) == *reference
+                    && file
+                        .ast
+                        .computed_members
+                        .binary_search(&member.span)
+                        .is_ok()
+                    && !file
+                        .ast
+                        .literal_computed_members
+                        .iter()
+                        .any(|literal| literal.span == member.span)
+                    && crate::indexes::constant_string_key(file, member.property).is_none()
+                    && file
+                        .ast
+                        .write_targets
+                        .iter()
+                        .any(|target| file.ast.peel_ts_sugar_span(*target) == member.span)
+            })
+        })
+}
+
+/// ADR 1014 (the review's second hole, in ADR 0279 itself): whether a function written in the object literal at `literal` uses its receiver as anything but
+/// the object of a non-computed member (`Object.assign(this, …)`, `Object.defineProperty(this, "m", …)`, `const self = this`, `return this`, `this[key]`).
+/// The holder then reaches code through no reference of its binding, and that code may replace a member with no assignment that names it. `this.m` and
+/// `this.m(…)` read a member, and `this.m = f` is an assignment the index of member names holds. A file whose receivers cannot be read hands it on.
+fn literal_hands_its_receiver_on(file: &solid_facts::FileFacts, literal: Span) -> bool {
+    let Some(text) = file.source_text(literal) else {
+        return true;
+    };
+    if !text.contains("this") && !text.contains("super") {
+        return false;
+    }
+    let Some(receivers) = solid_facts::ast::receiver_expression_spans(
+        std::path::Path::new(file.path.as_str()),
+        &file.source,
+    ) else {
+        return true;
+    };
+    receivers
+        .into_iter()
+        .filter(|receiver| literal.contains(*receiver))
+        .any(|receiver| {
+            !file.ast.members.iter().any(|member| {
+                file.ast.peel_ts_sugar_span(member.object) == receiver
+                    && file
+                        .ast
+                        .computed_members
+                        .binary_search(&member.span)
+                        .is_err()
+            })
+        })
+}
+
 /// [`member_runs_declared_method`] over a callee world.
 pub(super) fn member_runs_declared_method_in<'a, W: crate::indexes::CalleeWorld<'a> + ?Sized>(
     world: &W,
@@ -536,7 +599,10 @@ pub(super) fn member_runs_declared_method_in<'a, W: crate::indexes::CalleeWorld<
     }
     let initializer = binding_file.ast.peel_ts_sugar_span(initializer);
     if binding.initializer_value_kind == solid_facts::ast::RuntimeValueKind::Object {
-        return binding_file.path == method_file.path && initializer.contains(method.span);
+        return binding_file.path == method_file.path
+            && initializer.contains(method.span)
+            && !holder_written_by_unnamed_key(binding_file, declaration)
+            && !literal_hands_its_receiver_on(binding_file, initializer);
     }
     let Some(construction) = binding_file
         .ast
