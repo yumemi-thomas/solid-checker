@@ -25,6 +25,8 @@
    "mx-missing-effect-fn-action-from-tracked-cast-fn-direct-none": {"outcome":"stacked-claim","cause":"R-stacked","pairs":["MISSING_EFFECT_FN|leaf-owner-forbidden-call"]},
    "mx-missing-effect-fn-tracked-shared-cast-any-direct-none": {"outcome":"stacked-claim","cause":"R-stacked","pairs":["MISSING_EFFECT_FN|leaf-owner-forbidden-call"]},
    "mx-missing-effect-fn-tracked-shared-cast-fn-direct-none": {"outcome":"stacked-claim","cause":"R-stacked","pairs":["MISSING_EFFECT_FN|leaf-owner-forbidden-call"]},
+   "mx-missing-effect-fn-tracked-sibling-async-cast-any-direct-none": {"outcome":"stacked-claim","cause":"R-stacked","pairs":["MISSING_EFFECT_FN|leaf-owner-forbidden-call"]},
+   "mx-missing-effect-fn-tracked-sibling-async-cast-fn-direct-none": {"outcome":"stacked-claim","cause":"R-stacked","pairs":["MISSING_EFFECT_FN|leaf-owner-forbidden-call"]},
    "mx-no-owner-boundary-tracked-shared-errored-direct-none": {"outcome":"stacked-claim","cause":"R-stacked","pairs":["PRIMITIVE_IN_FORBIDDEN_SCOPE|missing-owner"]},
    "mx-no-owner-boundary-tracked-shared-loading-direct-none": {"outcome":"stacked-claim","cause":"R-stacked","pairs":["PRIMITIVE_IN_FORBIDDEN_SCOPE|missing-owner"]},
    "mx-no-owner-cleanup-tracked-shared-x-direct-none": {"outcome":"stacked-claim","cause":"R-stacked","pairs":["CLEANUP_IN_FORBIDDEN_SCOPE|missing-owner"]},
@@ -162,7 +164,8 @@
    "mx-sync-node-received-async-tracked-rerun-effect-direct-none": {"outcome":"stacked-claim","cause":"R-stacked","pairs":["PRIMITIVE_IN_FORBIDDEN_SCOPE|sync-computation-received-async"]},
    "mx-sync-node-received-async-tracked-rerun-memo-direct-none": {"outcome":"stacked-claim","cause":"R-stacked","pairs":["PRIMITIVE_IN_FORBIDDEN_SCOPE|sync-computation-received-async"]},
    "mx-sync-node-received-async-tracked-shared-effect-direct-none": {"outcome":"stacked-claim","cause":"R-stacked","pairs":["PRIMITIVE_IN_FORBIDDEN_SCOPE|missing-owner","PRIMITIVE_IN_FORBIDDEN_SCOPE|sync-computation-received-async"]},
-   "mx-sync-node-received-async-tracked-shared-memo-direct-none": {"outcome":"stacked-claim","cause":"R-stacked","pairs":["PRIMITIVE_IN_FORBIDDEN_SCOPE|sync-computation-received-async"]}
+   "mx-sync-node-received-async-tracked-shared-memo-direct-none": {"outcome":"stacked-claim","cause":"R-stacked","pairs":["PRIMITIVE_IN_FORBIDDEN_SCOPE|sync-computation-received-async"]},
+   "mx-sync-node-received-async-tracked-sibling-async-memo-direct-none": {"outcome":"stacked-claim","cause":"R-stacked","pairs":["PRIMITIVE_IN_FORBIDDEN_SCOPE|sync-computation-received-async"]}
   },
   "mx-recall": {
    "mx-settled-cleanup-unowned-flw-flow-for-async-x-direct-none": {"outcome":"halted-claim","cause":"R-halted","rules":["missing-owner"]},

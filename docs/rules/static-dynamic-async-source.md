@@ -121,6 +121,7 @@ A throw inside a generator stepped by an async caller rejects that caller's flig
 ## A stored throw needs a read that reports it
 
 `resolve`, `until`, a static `dynamic` source and `useContext` throw with no diagnostic. In a memo or another storing compute the error stays on the node until a read rethrows it. With no proven read that reports it (an effect compute with no `error` arm, intrinsic JSX, a handler, a component body) the row is `computation-error-unobserved`; one entry that reports keeps the violation (ADR 0893). A class constructor or method with no entry found, written in such a compute, is read as the site would be (ADR 0914).
+A throw that leaves an `async` function rejects the promise its call returned: it is a violation only where that promise is dropped (an expression statement, `void`, a `then` chain with no rejection arm), awaited, or returned to a call that drops it; a promise that is caught, assigned or handed on leaves the row `computation-error-unobserved` ([ADR 1008](../decisions.md#adr-1008)).
 
 ## Every call ends (ADR 0989)
 

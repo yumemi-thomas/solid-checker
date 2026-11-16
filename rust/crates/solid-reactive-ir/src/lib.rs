@@ -838,6 +838,11 @@ pub struct LeafOwnerOperation {
     /// nothing else: no default build reads it, it is in no report and in no serialized form.
     #[serde(skip)]
     pub stop: Option<LeafStop>,
+    /// ADR 1008: the walk from the helper call this operation anchors at entered an `async` function before it reached the
+    /// operation, so what the operation throws is a rejection of a promise made on the way, not a throw on the leaf scope's
+    /// stack. In no report and in no serialized form.
+    #[serde(skip)]
+    pub through_async: bool,
 }
 
 /// Why the slot climb of the leaf-owner walk owes an obligation: the two stops of [`execution_role::ClimbStop`] that do

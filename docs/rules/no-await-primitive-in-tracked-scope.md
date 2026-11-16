@@ -215,3 +215,4 @@ The slot answer matches the dialect's `slot_run` with no wildcard: a slot that r
 ## A stored throw needs a read that reports it
 
 A throw here stored on a computation without a proven read that reports it is `computation-error-unobserved` ([ADR 0893](../decisions.md#adr-0893), as in [static-dynamic-async-source](static-dynamic-async-source.md)).
+A throw that leaves an `async` function rejects the promise its call returned: it is a violation only where that promise is dropped (an expression statement, `void`, a `then` chain with no rejection arm), awaited, or returned to a call that drops it; a promise that is caught, assigned or handed on leaves the row `computation-error-unobserved` ([ADR 1008](../decisions.md#adr-1008)).

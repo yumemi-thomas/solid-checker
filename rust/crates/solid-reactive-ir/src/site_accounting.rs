@@ -1010,6 +1010,7 @@ mod tests {
             sites: Vec::new(),
             computation_error_unobserved: false,
             stop: None,
+            through_async: false,
         }
     }
 

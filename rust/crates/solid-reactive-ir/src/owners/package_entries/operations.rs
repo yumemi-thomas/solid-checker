@@ -369,6 +369,7 @@ pub(crate) fn package_operation_claims(
                 sites: vec![operation.location.clone()],
                 computation_error_unobserved: false,
                 stop: None,
+                through_async: false,
             });
         }
         if contexts.apply {
