@@ -95,9 +95,8 @@ export function ignore(_inner: (cb: () => unknown) => number) {
   };
 }
 
-// Callees the review of the third cut asked for (ADR 1011). A closure whose body reads `arguments.length` beside a boundary: the walk cannot read the
-// body (`arguments`), a member callee stays uncertifiable (Chrome is quiet), an identifier callee keeps main's answer (not pinned: main reports a violation
-// there that Chrome does not: `docs/open-work.md`).
+// Callees the review of the third cut asked for (ADR 1011). A callee whose body reads `arguments.length` beside a boundary: the count runs nothing, the
+// walk reads the body, and the boundary holds the only call (Chrome is quiet): uncertifiable in both forms (main reported a violation for the identifier).
 export function argLen(cb: () => unknown) {
   createLoadingBoundary(() => cb(), () => 0);
   return arguments.length;

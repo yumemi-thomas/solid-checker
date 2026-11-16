@@ -1,7 +1,7 @@
 import { createMemo } from "solid-js";
 import { render } from "@solidjs/web";
 import * as H from "./helpers";
-import { both, branch, chain0, exprArrow, forwardBoundary, ignore, inBoundary, mixed, returned, run, viaArguments, visitBoundary } from "./helpers";
+import { argLen, both, branch, chain0, exprArrow, forwardBoundary, ignore, inBoundary, mixed, returned, run, viaArguments, visitBoundary } from "./helpers";
 import * as J from "./jsxhelpers";
 import { jsxBoundary } from "./jsxhelpers";
 import { createLoadingBoundary } from "solid-js/internal";
@@ -190,6 +190,12 @@ function ArgLenNs() {
   return <p>{(() => { H.argLen(() => { slow(); }); return 1; })()}</p>;
 }
 
+// The identifier form: main reported a violation here, Chrome (rc.21) is quiet (`membercallee/arglen-id`): `arguments.length` runs nothing, so the walk
+// reads the body and the boundary holds the only call.
+function ArgLenId() {
+  return <p>{(() => { argLen(() => { slow(); }); return 1; })()}</p>;
+}
+
 function Chain17() {
   return <p>{(() => { chain0(() => { slow(); }); return 1; })()}</p>;
 }
@@ -229,3 +235,4 @@ render(() => <MixedNs />, document.body);
 render(() => <MixedId />, document.body);
 render(() => <ArgLenNs />, document.body);
 render(() => <Chain17 />, document.body);
+render(() => <ArgLenId />, document.body);

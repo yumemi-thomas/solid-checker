@@ -347,10 +347,16 @@ pub(crate) fn parameter_uses<'f>(
     {
         return None;
     }
-    // `arguments[0]()` runs the parameter without naming it: a body that reads `arguments` is not read.
+    // `arguments[0]()` runs the parameter without naming it: a body that reads `arguments` is not read, unless the read is only its count
+    // (`arguments.length`, a non-computed member read, which runs nothing).
     if file.ast.identifiers.iter().any(|identifier| {
         function.span.contains(identifier.span)
             && file.source_text(identifier.span) == Some("arguments")
+            && !file.ast.members.iter().any(|member| {
+                member.object == identifier.span
+                    && !file.ast.computed_members.contains(&member.span)
+                    && file.source_text(member.property) == Some("length")
+            })
     }) {
         return None;
     }
