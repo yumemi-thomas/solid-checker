@@ -24618,5 +24618,11 @@
   "found": "the coordinator's fourth probe on the review's fixes (2026-11-16), run on the release build of 3f33a1a15; then the fixtures and the oracle case here (violation on that build, uncertifiable on the fix)",
   "fixed": "ADR 1014's second amendment (`execution_role/callback_standing.rs` `holder_member_assigned`, and `literal_hands_its_receiver_on` refusing `this.m = …`, in ADR 0279's `member_runs_declared_method_in`)",
   "outside": "the grid generators assign no member of a `const` object literal that a timer or a call is then resolved through, so no cell holds the shape; the fixtures `iteration-written-slots/variants/handed-timer-callback-member-method-added`, `-method-added-define`, `-method-borrowed` and `-this-method` and the oracle case `iteration-timer-member-method-added` (the first three) hold it"
+ },
+ {
+  "finding": "a false positive of ADR 1014's pushed build 932a43c90 (never on main): the same proof where a class METHOD written inside the literal is taken off the prototype and stored as a member (`{ init: class { m() { this.later = other.f } }.prototype.m }`): called on the holder its `this` is the holder, and the store through `this` was excused as a write of the class's instance. The same holds for a `function` in a field initializer taken off an instance",
+  "found": "the coordinator's fifth probe, reading `receiver_is_a_nested_class_instance` (2026-11-16); run on the release build of 932a43c90, then the fixtures here (violation on that build, uncertifiable on the fix)",
+  "fixed": "ADR 1014's second amendment, narrowed (`execution_role/callback_standing.rs` `receiver_is_a_nested_class_instance`: a constructor's body or a field's initializer only, no other non-arrow function between)",
+  "outside": "the grid generators write a class in a literal's member only with a constructor that stores an arrow (the `handoff-assign-this-cb-bundle` cells, still proved) and never take a method off a prototype, so no cell holds the shape; the fixtures `iteration-written-slots/variants/handed-timer-callback-member-class-method` and `-class-field` hold it"
  }
 ]

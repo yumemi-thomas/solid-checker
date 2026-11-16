@@ -552,21 +552,47 @@ fn literal_hands_its_receiver_on(file: &solid_facts::FileFacts, literal: Span) -
         })
 }
 
-/// Whether a `this` inside an object literal is the instance (or the constructor) of a class written inside that literal: it lies in the function or the
-/// initializer of an element of such a class, where `this` is rebound. A store through it (`constructor() { this.m = f }`) writes the instance, never
-/// the literal's holder. A `this` in the class's heritage or in a computed key is the enclosing one and is not excused.
+/// Whether a `this` inside an object literal is provably the instance (or the constructor) of a class written inside that literal: it lies in the body
+/// of such a class's constructor or in a field's initializer, with no other non-arrow function between (that one has a `this` of its own). A store
+/// through it (`constructor() { this.m = f }`) writes the instance, never the literal's holder. A method, a getter and a setter are not excused: taken
+/// off the prototype and written into the literal (`{ init: class { m() { … } }.prototype.m }`) each is a plain function whose `this` is the holder.
+/// Nor is a `this` in the class's heritage or in a computed key, which is the enclosing one.
 fn receiver_is_a_nested_class_instance(
     file: &solid_facts::FileFacts,
     literal: Span,
     receiver: Span,
 ) -> bool {
+    use solid_facts::ast::{ClassElementKind, FunctionKind};
     file.ast
         .classes
         .iter()
         .filter(|class| literal.contains(class.span))
         .flat_map(|class| class.elements.iter())
-        .filter_map(|element| element.value)
-        .any(|value| value.contains(receiver))
+        .filter_map(|element| {
+            let constructor = match element.kind {
+                ClassElementKind::Constructor => true,
+                ClassElementKind::Field => false,
+                ClassElementKind::Method
+                | ClassElementKind::Getter
+                | ClassElementKind::Setter
+                | ClassElementKind::StaticBlock
+                | ClassElementKind::IndexSignature => return None,
+            };
+            Some((constructor, element.value?))
+        })
+        .any(|(constructor, value)| {
+            value.contains(receiver)
+                && file
+                    .ast
+                    .functions
+                    .iter()
+                    .filter(|function| {
+                        function.kind != FunctionKind::Arrow
+                            && value.contains(function.span)
+                            && function.span.contains(receiver)
+                    })
+                    .all(|function| constructor && function.span == value)
+        })
 }
 
 /// [`member_runs_declared_method`] over a callee world.
