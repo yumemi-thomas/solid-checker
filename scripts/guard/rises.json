@@ -3866,6 +3866,30 @@
    "to": 2,
    "adr": "ADR 1003",
    "fact": "A promise handler handed as a parameter, a member of a project object, a conditional, a bound function or a spread is followed to the functions it may be, and the handler argument itself is a site where not every function can be named."
+  },
+  {
+   "fixture": "reactive-ir/dispatch-and-copies",
+   "key": "SC9012 function-prototype-callee-unresolved",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1014",
+   "fact": "the slots are no longer withdrawn (tuple-iteration-written), so the row keeps the blocker of its own cause"
+  },
+  {
+   "fixture": "reactive-ir/dispatch-and-copies",
+   "key": "SC9012 value-held-in-binding",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1014",
+   "fact": "the slots are no longer withdrawn (tuple-iteration-written), so the row keeps the blocker of its own cause"
+  },
+  {
+   "fixture": "reactive-ir/dispatch-and-copies",
+   "key": "SC9012 value-use-unclassified",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 1014",
+   "fact": "the slots are no longer withdrawn (tuple-iteration-written), so the row keeps the blocker of its own cause"
   }
  ]
 }

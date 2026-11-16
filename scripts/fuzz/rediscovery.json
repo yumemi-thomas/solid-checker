@@ -24581,5 +24581,48 @@
   "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
   "ids": ["mx-primitive-in-forbidden-scope-tracked-effect-destructured-chain-5", "mx-primitive-in-forbidden-scope-tracked-effect-ns-held-none", "mx-primitive-in-forbidden-scope-tracked-effect-ns-exported-none", "mx-primitive-in-forbidden-scope-tracked-effect-ns-rest-none"],
   "rediscovered": "main 581bd7b18 recall-gap, this build agree (4,530 programs of the leaf-operation codes gain the violation; `ns-let`, `ns-default`, `ns-nested` and the re-export bindings stay recall gaps)"
+ },
+ {
+  "finding": "STORE_WRITE_OUTSIDE_SETTER, the other half of ADR 1013's finding: a timer handed a member of a `const` object literal (`const cb1 = { cb: () => { … } }; setTimeout(cb1.cb, 0)`) withdrew every primitive's slots (`callback_seen` refused every member, so the callback was any function, which a timer calls with the window as `this`), and a proved store write fell to an uncertifiable `tuple-iteration-written` row where Chrome rc.21 reports the write: the 462 `-cb-bundle` programs of the `timer` context (mx-pairs 330, mx-recall 132), agree at aa4702650 and recall-gap at 6e33e0b08",
+  "found": "the bisect of the lost violations (2026-11-16), with ADR 1013: the same drop at 281ae31d3 (the merge of ADR 0803 step 2), the callback written as a member instead of an alias",
+  "fixed": "ADR 1014 (`accessor_provenance/mutation_sites.rs` `literal_member_function`: a member of a `const` object literal under ADR 0279's facts, `execution_role::member_runs_declared_method`)",
+  "grid": "mx-pairs",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-timer-assign-direct-handoff-foreach-cb-bundle",
+   "mx-store-write-outside-setter-timer-nested-assign-alias-handoff-wrapper-cb-bundle",
+   "mx-store-write-outside-setter-timer-nested-push-alias-handoff-map-cb-bundle",
+   "mx-store-write-outside-setter-timer-deferred-micro-direct-handoff-member-cb-bundle"
+  ]
+ },
+ {
+  "finding": "a false positive of ADR 1014's first build (never on main): REACTIVE_WRITE_IN_OWNED_SCOPE proved (SC2001) in a program where a timer is handed `bundle.cb` after `bundle[key] = function () { … this … }` with a key no literal and no string constant names: the member was taken for the literal's arrow, so the window was taken to reach no code and the slots stayed exact, though the function the timer calls reads its `this`. The hole is ADR 0279's own (`member_runs_declared_method`): the index of assigned member names records nothing for such a write. No violation of main was found to rest on it (two oracle probes through call resolution: uncertifiable on main, controls included)",
+  "found": "the independent review of ADR 1014's first build (42104c910, 2026-11-16), probed on a debug build; then the fixture and the oracle case here (violation on that build, uncertifiable on the fix)",
+  "fixed": "ADR 1014's amendment (`execution_role/callback_standing.rs` `holder_written_by_unnamed_key`, in ADR 0279's `member_runs_declared_method_in`)",
+  "outside": "the grid generators write no computed store into a `const` object literal, no literal method that hands `this` on and no duplicate key, so no cell holds the shape; the fixture `iteration-written-slots/variants/handed-timer-callback-member-computed-write` and the oracle case `iteration-timer-member-replaced` hold it"
+ },
+ {
+  "finding": "a false positive of ADR 1014's first build (never on main): the same proof where a method of the literal hands its receiver on (`init() { Object.assign(this, { cb() { … this … } }) }`, `Object.defineProperty(this, \"cb\", …)`): the holder reaches code through no reference of its binding, and that code replaces the member with no assignment. ADR 0279's own hole, as above",
+  "found": "the independent review of ADR 1014's first build (42104c910, 2026-11-16), probed on a debug build; then the fixture and the oracle case here (violation on that build, uncertifiable on the fix)",
+  "fixed": "ADR 1014's amendment (`execution_role/callback_standing.rs` `literal_hands_its_receiver_on`, in ADR 0279's `member_runs_declared_method_in`)",
+  "outside": "the grid generators write no computed store into a `const` object literal, no literal method that hands `this` on and no duplicate key, so no cell holds the shape; the fixture `iteration-written-slots/variants/handed-timer-callback-member-this-assign` and `-this-define` and the oracle case `iteration-timer-member-replaced` hold it"
+ },
+ {
+  "finding": "a false positive of ADR 1014's first build (never on main, and only on a program `tsc` rejects with TS1117 unless the error is expected): `{ cb: () => {}, \"cb\": function () { … this … } }`: the key comparison read the source text, so the quoted duplicate was no property of the name and the first one was taken though the last wins",
+  "found": "the independent review of ADR 1014's first build (42104c910, 2026-11-16), probed on a debug build; then the fixture and the oracle case here (violation on that build, uncertifiable on the fix)",
+  "fixed": "ADR 1014's amendment (`accessor_provenance/mutation_sites.rs` `literal_member_function`: a string key is compared unquoted)",
+  "outside": "the grid generators write no computed store into a `const` object literal, no literal method that hands `this` on and no duplicate key, so no cell holds the shape; the fixture `iteration-written-slots/variants/handed-timer-callback-member-quoted-duplicate` and the oracle case `iteration-timer-member-replaced` hold it"
+ },
+ {
+  "finding": "a false positive of ADR 1014's pushed build 3f33a1a15 (never on main): REACTIVE_WRITE_IN_OWNED_SCOPE proved (SC2001) in a program where a timer is handed `bundle.cb` after a function was stored under ANOTHER member of the holder and called on it (`bundle.init = function () { Object.assign(this, { cb() { … this … } }) }; bundle.init()`, the same with `Object.defineProperty(this, \"cb\", …)`, and `bundle.init = other.f`): the receiver hand-off was read inside the literal only, and a function assigned after it has the holder as its `this` too. ADR 0279's own hole (`member_runs_declared_method`), as the two above",
+  "found": "the coordinator's fourth probe on the review's fixes (2026-11-16), run on the release build of 3f33a1a15; then the fixtures and the oracle case here (violation on that build, uncertifiable on the fix)",
+  "fixed": "ADR 1014's second amendment (`execution_role/callback_standing.rs` `holder_member_assigned`, and `literal_hands_its_receiver_on` refusing `this.m = …`, in ADR 0279's `member_runs_declared_method_in`)",
+  "outside": "the grid generators assign no member of a `const` object literal that a timer or a call is then resolved through, so no cell holds the shape; the fixtures `iteration-written-slots/variants/handed-timer-callback-member-method-added`, `-method-added-define`, `-method-borrowed` and `-this-method` and the oracle case `iteration-timer-member-method-added` (the first three) hold it"
+ },
+ {
+  "finding": "a false positive of ADR 1014's pushed build 932a43c90 (never on main): the same proof where a class METHOD written inside the literal is taken off the prototype and stored as a member (`{ init: class { m() { this.later = other.f } }.prototype.m }`): called on the holder its `this` is the holder, and the store through `this` was excused as a write of the class's instance. The same holds for a `function` in a field initializer taken off an instance",
+  "found": "the coordinator's fifth probe, reading `receiver_is_a_nested_class_instance` (2026-11-16); run on the release build of 932a43c90, then the fixtures here (violation on that build, uncertifiable on the fix)",
+  "fixed": "ADR 1014's second amendment, narrowed (`execution_role/callback_standing.rs` `receiver_is_a_nested_class_instance`: a constructor's body or a field's initializer only, no other non-arrow function between)",
+  "outside": "the grid generators write a class in a literal's member only with a constructor that stores an arrow (the `handoff-assign-this-cb-bundle` cells, still proved) and never take a method off a prototype, so no cell holds the shape; the fixtures `iteration-written-slots/variants/handed-timer-callback-member-class-method` and `-class-field` hold it"
  }
 ]

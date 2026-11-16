@@ -1661,7 +1661,75 @@ fn callback_seen(
         }
     }
     function_value_at(lookup, file, span)
+        .or_else(|| literal_member_function(lookup, file, span))
         .is_some_and(|(callee_file, function)| test(callee_file, function))
+}
+
+/// ADR 1014: the function a member `holder.name` holds, where that is exact: the member's own declaration is a function literal written as a data property or a
+/// method directly in an object literal with no spread, and ADR 0279's facts hold ([`crate::execution_role::member_runs_declared_method`]: `holder` is a `const`
+/// bound to that literal, every reference of it reads a member, no export exposes it, and no assignment anywhere writes a member of that name nor a built-in
+/// prototype). An accessor (its body runs on the read and the value is what it returns), a shorthand, a computed member and a spread beside the property are not
+/// this: [`function_value_at`] keeps saying no for them.
+fn literal_member_function<'a>(
+    lookup: &SemanticLookup<'a>,
+    file: &FileFacts,
+    span: Span,
+) -> Option<(&'a FileFacts, &'a ast::FunctionFact)> {
+    use crate::indexes::CalleeWorld;
+    let span = file.ast.peel_ts_sugar_span(span);
+    let member = file.ast.member_at(span)?;
+    if file.ast.computed_members.binary_search(&span).is_ok() {
+        return None;
+    }
+    let name = member_key(file, member)?;
+    let (holder_file, holder) = CalleeWorld::binding_at_reference(
+        lookup,
+        file,
+        file.ast.peel_ts_sugar_span(member.object),
+    )?;
+    // The literal is the holder's whole initializer and spreads nothing in: a spread after the property may replace it.
+    let literal = holder_file.ast.peel_ts_sugar_span(holder.initializer?);
+    if holder.initializer_value_kind != ast::RuntimeValueKind::Object {
+        return None;
+    }
+    let text = holder_file.source_text(literal)?;
+    if text.contains("...") {
+        return None;
+    }
+    // The literal's own properties of that name: the ones no other property of the literal holds. Exactly one, written with a plain key.
+    let inside = |property: &&ast::ObjectPropertyFact| {
+        literal.contains(property.span) && property.span != literal
+    };
+    let mut own = holder_file
+        .ast
+        .object_properties
+        .iter()
+        .filter(inside)
+        .filter(|property| {
+            !holder_file
+                .ast
+                .object_properties
+                .iter()
+                .filter(inside)
+                .any(|outer| outer.span != property.span && outer.span.contains(property.span))
+        })
+        .filter(|property| {
+            // A key written as a string names the same property (`"cb": f` after `cb: g` replaces it: the review's third point); a computed key may.
+            property.computed
+                || holder_file
+                    .source_text(property.key)
+                    .is_some_and(|key| key.trim_matches(['"', '\'', '`']) == name)
+        });
+    let property = own.next()?;
+    if own.next().is_some() || property.computed || !(property.data || property.method) {
+        return None;
+    }
+    // The property holds the function itself: a getter's or a setter's function is not the member's value, and a shorthand names another binding.
+    let method = function_literal(holder_file, property.value)?;
+    // No binding holds a property's function, so there is no name to ask whether it is current: the member's facts are the currency (nothing writes a
+    // member of that name, and the holder is reached only through member reads).
+    crate::execution_role::member_runs_declared_method(file, span, holder_file, method, lookup)
+        .then_some((holder_file, method))
 }
 
 /// The functions a binding declared with no value can hold, when every write

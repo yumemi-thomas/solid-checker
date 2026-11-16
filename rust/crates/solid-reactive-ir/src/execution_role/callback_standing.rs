@@ -454,7 +454,7 @@ fn declared_in<'a, W: crate::indexes::CalleeWorld<'a> + ?Sized>(
 /// member of that name, and the receiver is a `const` bound to the object
 /// literal that holds the method, or to `new C()` of the exact class that
 /// declares it.
-pub(super) fn member_runs_declared_method(
+pub(crate) fn member_runs_declared_method(
     file: &solid_facts::FileFacts,
     callee: Span,
     method_file: &solid_facts::FileFacts,
@@ -462,6 +462,137 @@ pub(super) fn member_runs_declared_method(
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     member_runs_declared_method_in(lookup, file, callee, method_file, method)
+}
+
+/// ADR 1014 (the review's first hole, in ADR 0279 itself): whether some reference of the holder declared at `declaration` is the object of a computed member
+/// that is written and whose key no literal and no string constant names (`bundle[key] = f`, `bundle[key] ||= f`): the write may replace any member, and the
+/// index of assigned member names (`member_name_assigned`) records no name for it.
+fn holder_written_by_unnamed_key(file: &solid_facts::FileFacts, declaration: Span) -> bool {
+    file.ast
+        .reference_declarations
+        .iter()
+        .filter(|(_, bound)| *bound == declaration)
+        .any(|(reference, _)| {
+            file.ast.members.iter().any(|member| {
+                file.ast.peel_ts_sugar_span(member.object) == *reference
+                    && file
+                        .ast
+                        .computed_members
+                        .binary_search(&member.span)
+                        .is_ok()
+                    && !file
+                        .ast
+                        .literal_computed_members
+                        .iter()
+                        .any(|literal| literal.span == member.span)
+                    && crate::indexes::constant_string_key(file, member.property).is_none()
+                    && file
+                        .ast
+                        .write_targets
+                        .iter()
+                        .any(|target| file.ast.peel_ts_sugar_span(*target) == member.span)
+            })
+        })
+}
+
+/// ADR 1014 (the review's fourth probe, in ADR 0279 itself): whether an assignment writes a member of the holder declared at `declaration` through one of
+/// its references (`bundle.init = function () { Object.assign(this, …) }`, `bundle.init = other.f`): the value may be a function the program then calls
+/// with the holder as its receiver, whose `this` is written outside the literal and reaches code that replaces a member with no assignment that names it.
+/// No fact says what an assigned value may do with a receiver, so any assignment to a member of the holder refuses, whatever it stores.
+fn holder_member_assigned(file: &solid_facts::FileFacts, declaration: Span) -> bool {
+    file.ast.assignments.iter().any(|assignment| {
+        let target = file.ast.peel_ts_sugar_span(assignment.target);
+        file.ast
+            .members
+            .iter()
+            .find(|member| member.span == target)
+            .is_some_and(|member| {
+                file.ast
+                    .reference_declaration(file.ast.peel_ts_sugar_span(member.object))
+                    == Some(declaration)
+            })
+    })
+}
+
+/// ADR 1014 (the review's second hole, in ADR 0279 itself): whether a function written in the object literal at `literal` uses its receiver as anything but
+/// the object of a non-computed member (`Object.assign(this, …)`, `Object.defineProperty(this, "m", …)`, `const self = this`, `return this`, `this[key]`).
+/// The holder then reaches code through no reference of its binding, and that code may replace a member with no assignment that names it. `this.m` and
+/// `this.m(…)` read a member; `this.m = f` is refused too (see the closure). A file whose receivers cannot be read hands it on.
+fn literal_hands_its_receiver_on(file: &solid_facts::FileFacts, literal: Span) -> bool {
+    let Some(text) = file.source_text(literal) else {
+        return true;
+    };
+    if !text.contains("this") && !text.contains("super") {
+        return false;
+    }
+    let Some(receivers) = solid_facts::ast::receiver_expression_spans(
+        std::path::Path::new(file.path.as_str()),
+        &file.source,
+    ) else {
+        return true;
+    };
+    receivers
+        .into_iter()
+        .filter(|receiver| literal.contains(*receiver))
+        .any(|receiver| {
+            // The receiver is the object of a non-computed member that no assignment targets: a read or a call of a member. `this.m = f` stores a value
+            // the program may call with the holder as its receiver, as an assignment through the holder's name does ([`holder_member_assigned`]).
+            !file.ast.members.iter().any(|member| {
+                file.ast.peel_ts_sugar_span(member.object) == receiver
+                    && file
+                        .ast
+                        .computed_members
+                        .binary_search(&member.span)
+                        .is_err()
+                    && (receiver_is_a_nested_class_instance(file, literal, receiver)
+                        || !file.ast.assignments.iter().any(|assignment| {
+                            file.ast.peel_ts_sugar_span(assignment.target) == member.span
+                        }))
+            })
+        })
+}
+
+/// Whether a `this` inside an object literal is provably the instance (or the constructor) of a class written inside that literal: it lies in the body
+/// of such a class's constructor or in a field's initializer, with no other non-arrow function between (that one has a `this` of its own). A store
+/// through it (`constructor() { this.m = f }`) writes the instance, never the literal's holder. A method, a getter and a setter are not excused: taken
+/// off the prototype and written into the literal (`{ init: class { m() { … } }.prototype.m }`) each is a plain function whose `this` is the holder.
+/// Nor is a `this` in the class's heritage or in a computed key, which is the enclosing one.
+fn receiver_is_a_nested_class_instance(
+    file: &solid_facts::FileFacts,
+    literal: Span,
+    receiver: Span,
+) -> bool {
+    use solid_facts::ast::{ClassElementKind, FunctionKind};
+    file.ast
+        .classes
+        .iter()
+        .filter(|class| literal.contains(class.span))
+        .flat_map(|class| class.elements.iter())
+        .filter_map(|element| {
+            let constructor = match element.kind {
+                ClassElementKind::Constructor => true,
+                ClassElementKind::Field => false,
+                ClassElementKind::Method
+                | ClassElementKind::Getter
+                | ClassElementKind::Setter
+                | ClassElementKind::StaticBlock
+                | ClassElementKind::IndexSignature => return None,
+            };
+            Some((constructor, element.value?))
+        })
+        .any(|(constructor, value)| {
+            value.contains(receiver)
+                && file
+                    .ast
+                    .functions
+                    .iter()
+                    .filter(|function| {
+                        function.kind != FunctionKind::Arrow
+                            && value.contains(function.span)
+                            && function.span.contains(receiver)
+                    })
+                    .all(|function| constructor && function.span == value)
+        })
 }
 
 /// [`member_runs_declared_method`] over a callee world.
@@ -536,7 +667,11 @@ pub(super) fn member_runs_declared_method_in<'a, W: crate::indexes::CalleeWorld<
     }
     let initializer = binding_file.ast.peel_ts_sugar_span(initializer);
     if binding.initializer_value_kind == solid_facts::ast::RuntimeValueKind::Object {
-        return binding_file.path == method_file.path && initializer.contains(method.span);
+        return binding_file.path == method_file.path
+            && initializer.contains(method.span)
+            && !holder_written_by_unnamed_key(binding_file, declaration)
+            && !holder_member_assigned(binding_file, declaration)
+            && !literal_hands_its_receiver_on(binding_file, initializer);
     }
     let Some(construction) = binding_file
         .ast
