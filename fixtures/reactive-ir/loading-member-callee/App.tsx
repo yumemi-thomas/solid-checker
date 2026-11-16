@@ -1,7 +1,9 @@
 import { createMemo } from "solid-js";
 import { render } from "@solidjs/web";
 import * as H from "./helpers";
-import { both, branch, exprArrow, ignore, inBoundary, returned, run, viaArguments } from "./helpers";
+import { both, branch, chain0, exprArrow, forwardBoundary, ignore, inBoundary, mixed, returned, run, viaArguments, visitBoundary } from "./helpers";
+import * as J from "./jsxhelpers";
+import { jsxBoundary } from "./jsxhelpers";
 import { createLoadingBoundary } from "solid-js/internal";
 import { go } from "./reexport";
 import { helpers as Api } from "./barrel";
@@ -152,6 +154,46 @@ function ViaWrap() {
   return <p>{(() => { wrapped(() => { slow(); }); return 1; })()}</p>;
 }
 
+// The review of the third cut: shapes the walk must pin. No `Loading` stands in the caller; Chrome is quiet at the reads of `JsxNs`, `JsxId`,
+// `ForwardBoundaryId`, `Visitor` and `ArgLenNs` (a boundary holds the call) and warns at `Alias` and `Chain17` (a bare call runs in the render, as in
+// `Namespace`). `Mixed` has one held use and one the walk cannot place.
+function JsxNs() {
+  return <p>{(() => { J.jsxBoundary(() => { slow(); return "x"; }); return 1; })()}</p>;
+}
+
+function JsxId() {
+  return <p>{(() => { jsxBoundary(() => { slow(); return "x"; }); return 1; })()}</p>;
+}
+
+function ForwardBoundaryId() {
+  return <p>{(() => { forwardBoundary(() => { slow(); }); return 1; })()}</p>;
+}
+
+const K = H;
+function Alias() {
+  return <p>{(() => { K.run(() => { slow(); }); return 1; })()}</p>;
+}
+
+function Visitor() {
+  return <p>{(() => { visitBoundary({ v: 1 }, () => { slow(); }); return 1; })()}</p>;
+}
+
+function MixedNs() {
+  return <p>{(() => { H.mixed(() => { slow(); }); return 1; })()}</p>;
+}
+
+function MixedId() {
+  return <p>{(() => { mixed(() => { slow(); }); return 1; })()}</p>;
+}
+
+function ArgLenNs() {
+  return <p>{(() => { H.argLen(() => { slow(); }); return 1; })()}</p>;
+}
+
+function Chain17() {
+  return <p>{(() => { chain0(() => { slow(); }); return 1; })()}</p>;
+}
+
 render(() => <Named />, document.body);
 render(() => <NamedReexport />, document.body);
 render(() => <Namespace />, document.body);
@@ -178,3 +220,12 @@ render(() => <ReturnedId />, document.body);
 render(() => <ViaArgumentsId />, document.body);
 render(() => <WrapLet />, document.body);
 render(() => <ViaWrap />, document.body);
+render(() => <JsxNs />, document.body);
+render(() => <JsxId />, document.body);
+render(() => <ForwardBoundaryId />, document.body);
+render(() => <Alias />, document.body);
+render(() => <Visitor />, document.body);
+render(() => <MixedNs />, document.body);
+render(() => <MixedId />, document.body);
+render(() => <ArgLenNs />, document.body);
+render(() => <Chain17 />, document.body);

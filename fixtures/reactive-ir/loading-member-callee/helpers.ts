@@ -94,3 +94,86 @@ export function ignore(_inner: (cb: () => unknown) => number) {
     return 0;
   };
 }
+
+// Callees the review of the third cut asked for (ADR 1011). A closure whose body reads `arguments.length` beside a boundary: the walk cannot read the
+// body (`arguments`), a member callee stays uncertifiable (Chrome is quiet), an identifier callee keeps main's answer (not pinned: main reports a violation
+// there that Chrome does not: `docs/open-work.md`).
+export function argLen(cb: () => unknown) {
+  createLoadingBoundary(() => cb(), () => 0);
+  return arguments.length;
+}
+
+// One use held by a boundary and one the walk cannot place (`Reflect.apply`): the closure may be held, uncertifiable.
+export function mixed(cb: () => unknown) {
+  createLoadingBoundary(() => cb(), () => 0);
+  Reflect.apply(cb, null, []);
+  return 1;
+}
+
+// A recursive visitor whose base case is the boundary: the parameter reaches itself and a boundary, uncertifiable (pinned).
+export type Tree = { v: number; left?: Tree; right?: Tree };
+export function visitBoundary(node: Tree | undefined, cb: () => unknown): void {
+  if (!node) {
+    createLoadingBoundary(() => cb(), () => 0);
+    return;
+  }
+  visitBoundary(node.left, cb);
+  visitBoundary(node.right, cb);
+}
+
+// The chain of hand-offs the walk follows is sixteen long (ADR 0988's bound): seventeen functions hand the closure on and the last calls it bare.
+export function chain0(cb: () => unknown): number {
+  return chain1(cb);
+}
+export function chain1(cb: () => unknown): number {
+  return chain2(cb);
+}
+export function chain2(cb: () => unknown): number {
+  return chain3(cb);
+}
+export function chain3(cb: () => unknown): number {
+  return chain4(cb);
+}
+export function chain4(cb: () => unknown): number {
+  return chain5(cb);
+}
+export function chain5(cb: () => unknown): number {
+  return chain6(cb);
+}
+export function chain6(cb: () => unknown): number {
+  return chain7(cb);
+}
+export function chain7(cb: () => unknown): number {
+  return chain8(cb);
+}
+export function chain8(cb: () => unknown): number {
+  return chain9(cb);
+}
+export function chain9(cb: () => unknown): number {
+  return chain10(cb);
+}
+export function chain10(cb: () => unknown): number {
+  return chain11(cb);
+}
+export function chain11(cb: () => unknown): number {
+  return chain12(cb);
+}
+export function chain12(cb: () => unknown): number {
+  return chain13(cb);
+}
+export function chain13(cb: () => unknown): number {
+  return chain14(cb);
+}
+export function chain14(cb: () => unknown): number {
+  return chain15(cb);
+}
+export function chain15(cb: () => unknown): number {
+  return chain16(cb);
+}
+export function chain16(cb: () => unknown): number {
+  return lastBare(cb);
+}
+function lastBare(cb: () => unknown) {
+  cb();
+  return 1;
+}

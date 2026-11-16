@@ -46,7 +46,7 @@ fn loading_cover_from(
     file: &solid_facts::FileFacts,
     span: Span,
     outside: Option<Span>,
-    stop: Option<Span>,
+    stop: Option<(&str, Span)>,
     symbol_names: &HashMap<SymbolId, SymbolId>,
     walk: &mut Walk,
 ) -> LoadingCover {
@@ -159,7 +159,7 @@ fn loading_cover_from(
     let mut enclosing = file.ast.functions_owning(span).collect::<Vec<_>>();
     enclosing.sort_by_key(|function| function.span.end - function.span.start);
     for function in enclosing {
-        if Some(function.span) == stop {
+        if stop == Some((file.path.as_str(), function.span)) {
             // The callee's body is reached with no boundary of its own around the position.
             return LoadingCover::Uncovered;
         }
@@ -219,6 +219,7 @@ fn loading_cover_from(
                     file: callee_file,
                     function: callee,
                     parameter,
+                    member,
                 } => {
                     // ADR 1011: the closure is part of the function around the call, and the callee's body is walked for its own boundary
                     // (`exprArrow(cb) { createLoadingBoundary(() => cb(), ..) }`): a violation is dropped only where a boundary holds every
@@ -226,6 +227,9 @@ fn loading_cover_from(
                     match callee_held(lookup, callee_file, callee, parameter, symbol_names, walk) {
                         Held::Covered => return LoadingCover::Covered,
                         Held::Mixed => return LoadingCover::Unresolved,
+                        // Nothing in the callee's body shows where the closure runs: a member callee stays Unresolved, as it was (a closure the
+                        // walk cannot place in a body is not proved to run in the render); an identifier callee keeps the answer it always had.
+                        Held::Neutral if member => return LoadingCover::Unresolved,
                         Held::Uncovered | Held::Neutral => {}
                     }
                 }
@@ -257,8 +261,8 @@ pub(crate) enum Held {
     Mixed,
     /// A use runs it with no boundary around it: the closure is part of the caller's function, a violation stays.
     Uncovered,
-    /// Nothing shows a boundary or a run (the parameter is stored, aliased, never called, the callee is `async`, the chain is longer than the
-    /// walk goes): what the walk knew before ADR 1011 stands.
+    /// Nothing shows a boundary or a run (the parameter is stored, aliased, never called, the body reads `arguments`, the callee is `async`): the
+    /// walk takes no evidence from the body. A member callee is then Unresolved, an identifier callee keeps what main said (part of the caller).
     Neutral,
 }
 
@@ -333,10 +337,11 @@ fn callee_held(
         return Held::Neutral;
     }
     if walk.stack.len() >= CALLEE_DEPTH {
-        // An answer cut by the depth rests on where the walk began: kept out of the memo.
+        // A chain longer than the walk goes is not read: the closure may be held further down (Unresolved, never part of the caller). The answer
+        // rests on where the walk began, so it is kept out of the memo.
         walk.tainted
             .insert((String::new(), Span::new(0, 0), usize::MAX));
-        return Held::Neutral;
+        return Held::Mixed;
     }
     let Some(uses) = crate::loading_entries::parameter_uses(lookup, file, callee, parameter)
         .filter(|uses| !uses.is_empty())
@@ -361,7 +366,7 @@ fn callee_held(
                     file,
                     call,
                     None,
-                    Some(callee.span),
+                    Some((file.path.as_str(), callee.span)),
                     symbol_names,
                     walk,
                 ) {
@@ -379,6 +384,7 @@ fn callee_held(
                         file: next_file,
                         function: next,
                         parameter: next_parameter,
+                        ..
                     }) => callee_held(lookup, next_file, next, next_parameter, symbol_names, walk),
                 }
             }

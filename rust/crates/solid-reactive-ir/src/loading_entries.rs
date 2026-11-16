@@ -292,6 +292,9 @@ pub(crate) enum LayerCover<'a> {
         file: &'a FileFacts,
         function: &'a FunctionFact,
         parameter: usize,
+        /// The callee is a member (`H.run(cb)`), which the cover walk left Unresolved before ADR 1011: where the callee's body says nothing of the
+        /// closure the walk keeps it Unresolved. An identifier callee was read as part of the caller's function, and keeps that answer.
+        member: bool,
     },
 }
 
@@ -413,10 +416,11 @@ pub(crate) fn passed_cover<'a>(
         return None;
     }
     match project_callee(lookup, file, call, position) {
-        Callee::Current(callee_file, callee) => Some(LayerCover::Callee {
+        Callee::Current(callee_file, callee, member) => Some(LayerCover::Callee {
             file: callee_file,
             function: callee,
             parameter: position,
+            member,
         }),
         Callee::Replaceable | Callee::Unknown => None,
     }
@@ -424,8 +428,8 @@ pub(crate) fn passed_cover<'a>(
 
 /// ADR 1011: the project function a call runs, as far as the walk may trust it.
 enum Callee<'a> {
-    /// The function the callee's name is, which nothing replaces: its parameter at `position` is where the argument lands.
-    Current(&'a FileFacts, &'a FunctionFact),
+    /// The function the callee's name is, which nothing replaces: its parameter at `position` is where the argument lands; whether the callee is a member.
+    Current(&'a FileFacts, &'a FunctionFact, bool),
     /// A function the name resolves to, which is not what a call runs (its binding is written, or the function is only an argument of the
     /// call that made the value): nothing follows.
     Replaceable,
@@ -445,13 +449,13 @@ fn project_callee<'a>(
     if let Some((callee_file, callee)) = lookup.function_called_at(file.path.as_str(), call.callee)
     {
         return if crate::indexes::function_value_is_current_in(callee_file, callee) {
-            Callee::Current(callee_file, callee)
+            Callee::Current(callee_file, callee, false)
         } else {
             Callee::Replaceable
         };
     }
     match project_member(lookup, file, call, position) {
-        Some((callee_file, callee)) => Callee::Current(callee_file, callee),
+        Some((callee_file, callee)) => Callee::Current(callee_file, callee, true),
         None => Callee::Unknown,
     }
 }
@@ -502,10 +506,11 @@ pub(crate) fn layer_cover<'a>(
             return Some(LayerCover::Unresolved);
         }
         return match project_callee(lookup, file, call, position) {
-            Callee::Current(callee_file, callee) => Some(LayerCover::Callee {
+            Callee::Current(callee_file, callee, member) => Some(LayerCover::Callee {
                 file: callee_file,
                 function: callee,
                 parameter: position,
+                member,
             }),
             // An identifier whose function is not what the callee runs (reassigned, wrapped: `const f = wrap((cb) => ..)`): the closure
             // is read as part of the function around the call, as it always was; the body named is not the callee's.
