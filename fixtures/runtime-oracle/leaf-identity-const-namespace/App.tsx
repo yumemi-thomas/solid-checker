@@ -1,5 +1,6 @@
 import { createTrackedEffect } from "solid-js";
 import * as S from "solid-js";
+import * as M from "./mine";
 
 // A `const` over the namespace import: the slot names the primitive by a plain key and is never rebound.
 const { createEffect: makeEffect } = S;
@@ -111,5 +112,48 @@ export function OwnObject() {
 // Silent: the `const` slot called where an owner is current.
 export function OwnedBody() {
   makeEffect(() => 1, () => {});
+  return <div></div>;
+}
+
+// The review of ADR 1007. Obligations or no row: a block-scoped object that shadows the import, a namespace of a project
+// module, a holder of that one, and a `const` written in a `switch` case clause that a later clause uses (a jump to the later
+// clause skips the declarator).
+export function ShadowedNamespace() {
+  const S = { createEffect: (compute: () => number, apply: () => void) => { void compute; void apply; } };
+  const { createEffect: makeShadow } = S;
+  createTrackedEffect(() => {
+    makeShadow(() => 1, () => {});
+  });
+  return <div></div>;
+}
+
+export function ProjectNamespace() {
+  const { createEffect: makeMine } = M;
+  createTrackedEffect(() => {
+    makeMine(() => 1, () => {});
+  });
+  return <div></div>;
+}
+
+export function ProjectNamespaceHeld() {
+  const HeldMine = M;
+  const { createEffect: makeHeldMine } = HeldMine;
+  createTrackedEffect(() => {
+    makeHeldMine(() => 1, () => {});
+  });
+  return <div></div>;
+}
+
+export function SwitchCaseSlot(props: { step: number }) {
+  switch (props.step) {
+    case 0:
+      const { createEffect: makeLate } = S;
+      void makeLate;
+      break;
+    case 1:
+      createTrackedEffect(() => {
+        makeLate(() => 1, () => {});
+      });
+  }
   return <div></div>;
 }

@@ -1496,14 +1496,16 @@ pub(crate) fn files_as_flush_operation(
 /// ADR 0711: whether the binder confirms the primitive attributed to `call`:
 /// the callee is a named import binding whose imported name is that
 /// primitive's, or a non-computed member of a namespace import of a module the
-/// dialect owns whose property is. ADR 1007: or the same two through a `const`
-/// the file never rebinds: a `const` that holds such a namespace
-/// (`const N = S; N.createEffect(…)`), and a `const` object pattern over one
-/// whose slot names the primitive by a plain key
-/// (`const { createEffect: make } = S; make(…)`). Anything else (a `let`, a
-/// default, a nested or computed pattern, a wrapper's value, an import whose
-/// target the producer could not read) proves no identity, whatever symbol the
-/// producer put at the callee.
+/// dialect owns whose property is. ADR 1007: or the slot of a `const` object
+/// pattern the file never rebinds, whose key is a plain identifier that names
+/// the primitive, over such a namespace or a `const` that holds it
+/// (`const { createEffect: make } = S; make(…)`, `const N = S; const {
+/// createEffect: make } = N`). Anything else proves no identity, whatever
+/// symbol the producer put at the callee: a `let`, a default, a nested or
+/// computed pattern, a declarator written in a `switch` case clause (a jump to
+/// a later clause skips it), a member of a held namespace
+/// (`N.createEffect(…)`: the member form is the import's own binding only), a
+/// wrapper's value, an import whose target the producer could not read.
 fn primitive_identity_proven(
     dialect: &dyn solid_dialect::Dialect,
     file: &FileFacts,
@@ -1517,8 +1519,9 @@ fn primitive_identity_proven(
 const NAMESPACE_HOLDER_DEPTH: usize = 4;
 
 /// ADR 1007: the value at `value` is a namespace import of a module the dialect owns: the import's own binding, or a `const`
-/// identifier whose initializer is one, read through at most [`NAMESPACE_HOLDER_DEPTH`] holders. A `const` is never rebound, and
-/// a module namespace object is frozen, so the holder names the same exports for the life of the module.
+/// identifier whose initializer is one, read through at most `depth` holders (none at zero: the import alone). A `const` is never
+/// rebound, and a module namespace object is frozen, so the holder names the same exports for the life of the module. The
+/// reference is resolved by the binder, so a block-scoped `const S` that shadows the import is another declaration.
 fn dialect_namespace_value(
     dialect: &dyn solid_dialect::Dialect,
     file: &FileFacts,
@@ -1544,6 +1547,7 @@ fn dialect_namespace_value(
     };
     ast.identifier_binding(declaration).is_some_and(|binding| {
         binding.immutable
+            && !binding.in_switch_case
             && binding.shape == BindingShape::Identifier
             && binding.names.len() == 1
             && binding.names[0].span == declaration
@@ -1575,7 +1579,8 @@ pub(crate) fn primitive_identity_proven_at(
     if let Some(member) = ast.member_at(callee) {
         return ast.computed_members.binary_search(&member.span).is_err()
             && file.source_text(member.property).is_some_and(names)
-            && dialect_namespace_value(dialect, file, member.object, NAMESPACE_HOLDER_DEPTH);
+            // The import's own binding only: a held namespace is read as a pattern's source, never as a member's object.
+            && dialect_namespace_value(dialect, file, member.object, 0);
     }
     let Some(declaration) = ast.reference_declaration(callee) else {
         return false;
@@ -1595,6 +1600,8 @@ pub(crate) fn primitive_identity_proven_at(
     // computed key, and the initializer is the namespace itself.
     ast.bindings.iter().any(|binding| {
         binding.immutable
+            // A jump to a later clause enters the scope without running the declarator: the slot is not initialized there.
+            && !binding.in_switch_case
             && binding.shape == BindingShape::Object
             && binding.object_slots.iter().any(|slot| {
                 slot.local.span == declaration
