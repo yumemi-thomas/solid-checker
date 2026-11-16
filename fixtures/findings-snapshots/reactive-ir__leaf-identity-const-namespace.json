@@ -1,0 +1,154 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-identity-const-namespace/App.tsx",
+      "start": 1094,
+      "end": 1104,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-identity-const-namespace/App.tsx",
+      "start": 1220,
+      "end": 1230,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-identity-const-namespace/App.tsx",
+      "start": 1350,
+      "end": 1362,
+      "fixes": 1
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-identity-const-namespace/App.tsx",
+      "start": 1472,
+      "end": 1482,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-identity-const-namespace/App.tsx",
+      "start": 1472,
+      "end": 1482,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-identity-const-namespace/App.tsx",
+      "start": 1472,
+      "end": 1480,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-identity-const-namespace/App.tsx",
+      "start": 1586,
+      "end": 1594,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "leaf-callback-opaque",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-identity-const-namespace/App.tsx",
+      "start": 1895,
+      "end": 1913,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-identity-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-identity-const-namespace/App.tsx",
+      "start": 2027,
+      "end": 2034,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-identity-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-identity-const-namespace/App.tsx",
+      "start": 2152,
+      "end": 2163,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-identity-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-identity-const-namespace/App.tsx",
+      "start": 2280,
+      "end": 2290,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "leaf-callback-opaque",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-identity-const-namespace/App.tsx",
+      "start": 2409,
+      "end": 2421,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "leaf-callback-opaque",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-identity-const-namespace/App.tsx",
+      "start": 2537,
+      "end": 2555,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "leaf-callback-opaque",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-identity-const-namespace/App.tsx",
+      "start": 2671,
+      "end": 2675,
+      "fixes": 0
+    }
+  ]
+}
