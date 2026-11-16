@@ -226,7 +226,7 @@ describe("the arms", () => {
 });
 
 describe("what a run reports", () => {
-  test("a violation at a site that never runs is kept apart from the candidate false positives, by one predicate (owner ruling 2026-11-10)", () => {
+  test("a violation at a provably dead site expects U: listed apart, pending ADR 1019, by one predicate (ADR 1018 retires the 2026-11-10 ruling)", () => {
     const row = (pair, code, side, programOutcome, id) => ({ pair, code, side, programOutcome, id });
     const rows = [
       row("table:Array.forEach:b/zero", "REACTIVE_WRITE_IN_OWNED_SCOPE", "legal", "violation", "zero-write"),
@@ -235,12 +235,14 @@ describe("what a run reports", () => {
       row("table:Array.forEach:b/zero", "STRICT_READ_UNTRACKED", "legal", "violation", "zero-read"),
       row("table:Array.forEach:b/zero", "REACTIVE_WRITE_IN_OWNED_SCOPE", "misuse", "clean", "misuse-silent"),
     ];
-    const { silentMisuse, reportedLegal, keptUnexecuted } = problemsOf(rows);
-    assert.deepEqual(keptUnexecuted.map((entry) => entry.id), ["zero-write", "zero-action"]);
+    const { silentMisuse, reportedLegal, pendingDead } = problemsOf(rows);
+    assert.deepEqual(pendingDead.map((entry) => entry.id), ["zero-write", "zero-action"]);
     // A read at such a site is silent (ADR 0563), so a reported read there is a candidate false positive like any other.
     assert.deepEqual(reportedLegal.map((entry) => entry.id), ["handler-write", "zero-read"]);
     assert.deepEqual(silentMisuse.map((entry) => entry.id), ["misuse-silent"]);
-    assert.match(EXPECTED_UNEXECUTED.ruling, /2026-11-10/);
+    assert.match(EXPECTED_UNEXECUTED.ruling, /ADR 1018/);
+    assert.match(EXPECTED_UNEXECUTED.ruling, /retired/);
+    assert.equal(EXPECTED_UNEXECUTED.adr, "ADR 1019");
   });
 });
 

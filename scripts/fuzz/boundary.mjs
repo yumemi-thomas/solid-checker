@@ -527,19 +527,21 @@ function option(argv, name, fallback) {
 }
 
 /**
- * The legal programs whose violation is kept on purpose: the site provably never runs (a carrier called on an empty receiver: the table family's
- * `zero` twin), and the rule still reports the code, because a violation means "wrong if it runs". Owner ruling 2026-11-10 (ADR 0563 keeps the read
- * side asymmetric: a read at such a site is silent). The host's outcome for these is `unexecuted`, which `legal.mjs` reports and does not gate.
- * They are listed apart from the candidate false positives, never as one, and never hidden: a row is here only by this predicate.
+ * The legal programs at a site that provably never runs (a carrier called on an empty receiver: the table family's `zero` twin). ADR 1018: a provably
+ * dead site gives U, never V; the owner's ruling of 2026-11-10 ("a violation means wrong if it runs", which kept these violations) is retired, as ADR 1015
+ * had already done for literal-dead flow children. A violation here is a false positive whose fix is ADR 1019; until it lands such rows are listed
+ * apart, named for that ADR, never as a pass and never hidden. A read at such a site stays silent (ADR 0563), so a reported read there is a candidate
+ * false positive like any other.
  */
 export const EXPECTED_UNEXECUTED = {
-  ruling: "owner ruling 2026-11-10: a violation means \"wrong if it runs\", kept at a site that provably never runs (a zero-run carrier)",
+  ruling: "ADR 1018: a provably dead site gives U, never V (the 2026-11-10 \"wrong if it runs\" ruling is retired); a violation at a zero-run carrier is a false positive, fixed by ADR 1019",
+  adr: "ADR 1019",
   matches: (row) => row.side === "legal" && /:b\/zero$/.test(row.pair) && row.code !== "STRICT_READ_UNTRACKED",
 };
 
 /**
  * The pairs' claims against a run: the misuse programs left clean anywhere (candidate false cleans), the legal programs with a violation
- * (candidate false positives) and, apart, the legal violations the owner keeps at sites that never run (EXPECTED_UNEXECUTED).
+ * (candidate false positives) and, apart, the legal violations at a provably dead site whose fix is pending (EXPECTED_UNEXECUTED: they expect U).
  */
 export function problemsOf(rows) {
   const seen = new Set();
@@ -548,7 +550,7 @@ export function problemsOf(rows) {
   return {
     silentMisuse: unique(rows.filter((row) => row.side === "misuse" && row.programOutcome === "clean")),
     reportedLegal: violating.filter((row) => !EXPECTED_UNEXECUTED.matches(row)),
-    keptUnexecuted: violating.filter((row) => EXPECTED_UNEXECUTED.matches(row)),
+    pendingDead: violating.filter((row) => EXPECTED_UNEXECUTED.matches(row)),
   };
 }
 
@@ -574,13 +576,14 @@ async function main(argv) {
   mkdirSync(work, { recursive: true });
   const rows = await runPairs(allPairs(), { bin, typefacts, install: resolve(option(argv, "--install", join(here, "install"))), work, concurrency: Number(option(argv, "--concurrency", 4)), ablate: argv.includes("--ablate"), only: option(argv, "--only") });
   rmSync(work, { recursive: true, force: true });
-  const { silentMisuse, reportedLegal, keptUnexecuted } = problemsOf(rows);
+  const { silentMisuse, reportedLegal, pendingDead } = problemsOf(rows);
   console.log(`boundary verify: ${rows.length} program(s) over ${allPairs().length} pair(s)`);
   console.log(`  misuse programs with no finding anywhere (candidate false cleans, Chrome decides): ${silentMisuse.length}`);
   for (const row of silentMisuse) console.log(`    ${row.id}  [${row.pair}] arms: ${[...new Set(row.decisions.filter((decision) => decision.arm).map((decision) => decision.arm))].join(", ") || "-"}`);
   console.log(`  legal programs with a violation (candidate false positives, Chrome decides): ${reportedLegal.length}`);
   for (const row of reportedLegal) console.log(`    ${row.id}  [${row.pair}] ${row.program.filter((finding) => finding.kind === "violation").map((finding) => `${finding.id}@${finding.line}`).join(", ")}`);
-  console.log(`  legal programs whose violation the owner keeps at a site that never runs (expected \`unexecuted\`; ${EXPECTED_UNEXECUTED.ruling}): ${keptUnexecuted.length}`);
+  console.log(`  legal programs with a violation at a provably dead site (false positives, U expected; ${EXPECTED_UNEXECUTED.ruling}): ${pendingDead.length}`);
+  for (const row of pendingDead) console.log(`    ${row.id}  [${row.pair}] pending ${EXPECTED_UNEXECUTED.adr}`);
   const snapshot = snapshotOf(rows, { checker: option(argv, "--checker-name") });
   console.log(`  arms seen silent in a clean legal cell: ${Object.keys(snapshot.arms).length}; covered (misuse side never clean): ${coveredArms(snapshot).size}`);
   if (option(argv, "--out")) writeFileSync(option(argv, "--out"), `${JSON.stringify(rows)}\n`);
