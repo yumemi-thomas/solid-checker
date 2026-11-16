@@ -24574,6 +24574,15 @@
   "rediscovered": "main 581bd7b18 recall-gap, this build agree: 4 of 4 (and 2,448 of the four contexts' 2,964 programs; the `portal` and `dynamic` mounts stay recall gaps)"
  },
  {
+  "finding": "no defect: a recall gap. A leaf operation (a creation, `onCleanup`, `flush`) in a leaf owner, named through a `const` object pattern over a namespace import of solid-js (`const { createEffect: make } = S`), was `leaf-operation-identity-unproven` since ADR 0711: only a named import or a namespace member confirmed the primitive. Chrome rc.21 reports the code at each; the 11-05 full audit had them as violations",
+  "found": "the recall-gap ranking of the full audit of main 78ddeb849 (run 43739577046, 2026-11-16): 2,705 programs of the `destructured` and `ns-*` bindings lost their SC3001 violation at #173",
+  "fixed": "ADR 1007 (`cleanup.rs` `primitive_identity_proven_at`: a `const` object pattern over the namespace, plain key, no default, no nesting, and a `const` that holds the namespace)",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+  "ids": ["mx-primitive-in-forbidden-scope-tracked-effect-destructured-chain-5", "mx-primitive-in-forbidden-scope-tracked-effect-ns-held-none", "mx-primitive-in-forbidden-scope-tracked-effect-ns-exported-none", "mx-primitive-in-forbidden-scope-tracked-effect-ns-rest-none"],
+  "rediscovered": "main 581bd7b18 recall-gap, this build agree (4,530 programs of the leaf-operation codes gain the violation; `ns-let`, `ns-default`, `ns-nested` and the re-export bindings stay recall gaps)"
+ },
+ {
   "finding": "STORE_WRITE_OUTSIDE_SETTER, the other half of ADR 1013's finding: a timer handed a member of a `const` object literal (`const cb1 = { cb: () => { … } }; setTimeout(cb1.cb, 0)`) withdrew every primitive's slots (`callback_seen` refused every member, so the callback was any function, which a timer calls with the window as `this`), and a proved store write fell to an uncertifiable `tuple-iteration-written` row where Chrome rc.21 reports the write: the 462 `-cb-bundle` programs of the `timer` context (mx-pairs 330, mx-recall 132), agree at aa4702650 and recall-gap at 6e33e0b08",
   "found": "the bisect of the lost violations (2026-11-16), with ADR 1013: the same drop at 281ae31d3 (the merge of ADR 0803 step 2), the callback written as a member instead of an alias",
   "fixed": "ADR 1014 (`accessor_provenance/mutation_sites.rs` `literal_member_function`: a member of a `const` object literal under ADR 0279's facts, `execution_role::member_runs_declared_method`)",

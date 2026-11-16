@@ -110,6 +110,7 @@ The operation's identity is proven from the binder (ADR 0711): a named import
 whose imported name is the primitive's, or a member of a namespace import of a
 Solid module. Any other attribution (a renamed re-export through a project
 barrel, an import whose target the producer could not read) is uncertifiable.
+A `const` the file never rebinds confirms it too ([ADR 1007](../decisions.md#adr-1007)): the slot of a `const` object pattern over such a namespace, by a plain key with no default and no nesting (`const { createEffect: make } = S`), the namespace being the import or a `const` that holds it. A `let`, a default, a nested or computed pattern, a re-export hop and a `const` alias of a member stay `leaf-operation-identity-unproven`.
 
 A function entered twice under different contexts is walked twice (ADR 0961): the walk's visited set is keyed by how a
 body is entered (the entry kind, whether it is guaranteed, the argument standings the call proves, the class `this` is
