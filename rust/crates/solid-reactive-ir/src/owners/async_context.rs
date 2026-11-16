@@ -219,9 +219,15 @@ fn loading_cover_from(
                 } => {
                     // ADR 1011: the closure is part of the function around the call unless the callee's own body puts a boundary around
                     // its calls of the parameter (`exprArrow(cb) { createLoadingBoundary(() => cb(), ..) }`).
-                    if let Some(cover) =
-                        callee_boundary(lookup, callee_file, callee, parameter, symbol_names, visited)
-                    {
+                    if let Some(cover) = callee_boundary(
+                        lookup,
+                        callee_file,
+                        callee,
+                        parameter,
+                        symbol_names,
+                        visited,
+                        0,
+                    ) {
                         return cover;
                     }
                 }
@@ -231,11 +237,12 @@ fn loading_cover_from(
     LoadingCover::Unresolved
 }
 
-/// ADR 1011: what a project callee's own body says of a closure it is handed as parameter `parameter`: `Some(Covered)` when a boundary holds
-/// its calls of the parameter, `Some(Unresolved)` where that is not known (the parameter is passed on, stored, aliased or never called, the
-/// callee is `async` or a generator, a call of it may be held by code the walk does not follow), and `None` when every call of the parameter
-/// reaches the callee's top with no boundary around it: the closure is then part of the function around the call, as an identifier callee's
-/// always was.
+/// ADR 1011: what a project callee's own body says of a closure it is handed as parameter `parameter`. `Some(Covered)` when a boundary holds
+/// every use of the parameter that can run it, `Some(Unresolved)` where that is not known (the parameter is stored, aliased or never called, a
+/// callee it is passed on to is not a project function the analysis resolves, the callee is `async` or a generator, a call of it may be held by
+/// code the walk does not follow, the chain is longer than the walk goes), and `None` when every call of the parameter reaches the callee's
+/// top with no boundary around it: the closure is then part of the function around the call, as an identifier callee's always was. A
+/// parameter passed on whole (`inner(cb)`, `forward(cb)` down a chain) is followed into the function it goes to.
 fn callee_boundary(
     lookup: &SemanticLookup<'_>,
     file: &solid_facts::FileFacts,
@@ -243,25 +250,60 @@ fn callee_boundary(
     parameter: usize,
     symbol_names: &HashMap<SymbolId, SymbolId>,
     visited: &mut HashSet<(String, Span)>,
+    depth: usize,
 ) -> Option<LoadingCover> {
-    let calls = match crate::loading_entries::parameter_calls(lookup, file, callee, parameter) {
-        Some(calls) if !calls.is_empty() => calls,
+    use crate::loading_entries::{LayerCover, ParameterUse};
+    /// The chain of hand-offs the walk follows (ADR 0988's bound: the seventeenth layer is where it stops).
+    const DEPTH: usize = 16;
+    if depth > DEPTH {
+        return Some(LoadingCover::Unresolved);
+    }
+    let uses = match crate::loading_entries::parameter_uses(lookup, file, callee, parameter) {
+        Some(uses) if !uses.is_empty() => uses,
         _ => return Some(LoadingCover::Unresolved),
     };
     let mut result = None;
-    for call in calls {
-        match loading_cover_from(
-            lookup,
-            file,
-            call,
-            None,
-            Some(callee.span),
-            symbol_names,
-            visited,
-        ) {
-            LoadingCover::Covered => return Some(LoadingCover::Covered),
-            LoadingCover::Unresolved => result = Some(LoadingCover::Unresolved),
-            LoadingCover::Uncovered => {}
+    for parameter_use in uses {
+        let found = match parameter_use {
+            ParameterUse::Call(call) => match loading_cover_from(
+                lookup,
+                file,
+                call,
+                None,
+                Some(callee.span),
+                symbol_names,
+                visited,
+            ) {
+                LoadingCover::Covered => Some(LoadingCover::Covered),
+                LoadingCover::Unresolved => Some(LoadingCover::Unresolved),
+                LoadingCover::Uncovered => None,
+            },
+            ParameterUse::Argument { call, position } => {
+                match crate::loading_entries::passed_cover(lookup, file, call, position) {
+                    LayerCover::Covered => Some(LoadingCover::Covered),
+                    LayerCover::Unresolved | LayerCover::Outward(_) => {
+                        Some(LoadingCover::Unresolved)
+                    }
+                    LayerCover::Callee {
+                        file: next_file,
+                        function: next,
+                        parameter: next_parameter,
+                    } => callee_boundary(
+                        lookup,
+                        next_file,
+                        next,
+                        next_parameter,
+                        symbol_names,
+                        visited,
+                        depth + 1,
+                    ),
+                }
+            }
+        };
+        match found {
+            Some(LoadingCover::Covered) => return Some(LoadingCover::Covered),
+            Some(other) => result = Some(other),
+            None => {}
         }
     }
     result

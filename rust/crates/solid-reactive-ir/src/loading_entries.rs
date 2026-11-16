@@ -313,15 +313,26 @@ fn project_member<'a>(
         .map(|(file, function, _)| (file, function))
 }
 
-/// ADR 1011: the calls of `function`'s parameter `index` written in its body (nested closures included), by span; `None` where the parameter
-/// is used in any other way (passed on, stored, aliased, written, called with `new`), is not a plain identifier, or the function may run it
-/// later (`async`, a generator): then what the callee does with the closure is not known.
-pub(crate) fn parameter_calls(
+/// ADR 1011: how a callee's body uses its parameter.
+pub(crate) enum ParameterUse<'f> {
+    /// A call of the parameter: `cb()`, at this span (nested closures included).
+    Call(Span),
+    /// The parameter as a whole argument of another call: `inner(cb)`.
+    Argument {
+        call: &'f solid_facts::ast::CallFact,
+        position: usize,
+    },
+}
+
+/// ADR 1011: every use of `function`'s parameter `index` in its body; `None` where it is used in any other way (stored, aliased, written, a
+/// member read, called with `new`, an argument after a spread), is not a plain identifier, or the function may run it later (`async`, a
+/// generator): then what the callee does with the closure is not known.
+pub(crate) fn parameter_uses<'f>(
     lookup: &SemanticLookup<'_>,
-    file: &FileFacts,
+    file: &'f FileFacts,
     function: &FunctionFact,
     index: usize,
-) -> Option<Vec<Span>> {
+) -> Option<Vec<ParameterUse<'f>>> {
     use solid_facts::ast::{BindingShape, IdentifierRole};
     if function.r#async || function.generator || function.rest_parameter {
         return None;
@@ -339,19 +350,71 @@ pub(crate) fn parameter_calls(
     if crate::indexes::binding_written(file, name) {
         return None;
     }
-    let mut calls = Vec::new();
-    for identifier in file.ast.identifiers.iter().filter(|identifier| {
+    let ast = &file.ast;
+    let mut uses = Vec::new();
+    for identifier in ast.identifiers.iter().filter(|identifier| {
         identifier.role == IdentifierRole::Reference
             && function.span.contains(identifier.span)
             && lookup.entities().at(path, identifier.span) == Some(symbol)
     }) {
-        let call = file.ast.calls_with_peeled_callee(identifier.span).next()?;
-        if call.construct {
+        if let Some(call) = ast.calls_with_peeled_callee(identifier.span).next() {
+            if call.construct {
+                return None;
+            }
+            uses.push(ParameterUse::Call(call.span));
+            continue;
+        }
+        let (call, position) =
+            ast.arguments_containing(identifier.span)
+                .find(|(call, position)| {
+                    ast.peel_ts_sugar_span(call.arguments[*position].span) == identifier.span
+                })?;
+        if call.construct
+            || call
+                .arguments
+                .iter()
+                .take(position.saturating_add(1))
+                .any(|argument| argument.spread)
+        {
             return None;
         }
-        calls.push(call.span);
+        uses.push(ParameterUse::Argument { call, position });
     }
-    Some(calls)
+    Some(uses)
+}
+
+/// ADR 1011: what a call says of a parameter the callee passes whole as argument `position`: the boundary's primitive holds its first
+/// argument; a project function the analysis resolves is walked in turn ([`LayerCover::Callee`]); anything else (the standard library, another
+/// primitive, a callee not resolved) leaves where the closure runs unknown.
+pub(crate) fn passed_cover<'a>(
+    lookup: &SemanticLookup<'a>,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    position: usize,
+) -> LayerCover<'a> {
+    if let Some(boundary) = lookup.dialect.async_boundary_shape()
+        && lookup.primitive_at_call(file, call.span) == Some(boundary.primitive)
+    {
+        return if position == boundary.held_argument {
+            LayerCover::Covered
+        } else {
+            LayerCover::Unresolved
+        };
+    }
+    if lookup.primitive_at_call(file, call.span).is_some() {
+        return LayerCover::Unresolved;
+    }
+    match lookup
+        .function_called_at(file.path.as_str(), call.callee)
+        .or_else(|| project_member(lookup, file, call, position))
+    {
+        Some((callee_file, callee)) => LayerCover::Callee {
+            file: callee_file,
+            function: callee,
+            parameter: position,
+        },
+        None => LayerCover::Unresolved,
+    }
 }
 
 /// What the layer `function` is, when a call edge does not place it. `None` leaves it "part of the function around it": a callback of a dialect
