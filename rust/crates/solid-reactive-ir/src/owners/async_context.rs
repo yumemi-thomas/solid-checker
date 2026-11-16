@@ -25,7 +25,7 @@ pub(crate) fn read_loading_cover(
     span: Span,
     symbol_names: &HashMap<SymbolId, SymbolId>,
 ) -> LoadingCover {
-    loading_cover_at(lookup, file, span, symbol_names, &mut HashSet::default())
+    loading_cover_at(lookup, file, span, symbol_names, &mut Walk::default())
 }
 
 pub(super) fn loading_cover_at(
@@ -33,9 +33,9 @@ pub(super) fn loading_cover_at(
     file: &solid_facts::FileFacts,
     span: Span,
     symbol_names: &HashMap<SymbolId, SymbolId>,
-    visited: &mut HashSet<(String, Span)>,
+    walk: &mut Walk,
 ) -> LoadingCover {
-    loading_cover_from(lookup, file, span, None, None, symbol_names, visited)
+    loading_cover_from(lookup, file, span, None, None, symbol_names, walk)
 }
 
 /// [`loading_cover_at`], where `outside` is a `Loading` element the walk has already left through its `fallback`: that element does not hold
@@ -48,7 +48,7 @@ fn loading_cover_from(
     outside: Option<Span>,
     stop: Option<Span>,
     symbol_names: &HashMap<SymbolId, SymbolId>,
-    visited: &mut HashSet<(String, Span)>,
+    walk: &mut Walk,
 ) -> LoadingCover {
     let entities = lookup.entities();
     // ADR 0978: a boundary holds what it renders as `children` and under its `on`, not its `fallback`, which renders outside the hold (rc.21
@@ -86,7 +86,7 @@ fn loading_cover_from(
             Some(element),
             stop,
             symbol_names,
-            visited,
+            walk,
         );
     }
     // ADR 0668: a component covers a site only as its child, and only where the
@@ -163,7 +163,10 @@ fn loading_cover_from(
             // The callee's body is reached with no boundary of its own around the position.
             return LoadingCover::Uncovered;
         }
-        if !visited.insert((file.path.as_str().to_owned(), function.span)) {
+        if !walk
+            .places
+            .insert((file.path.as_str().to_owned(), function.span))
+        {
             // Already being resolved on this chain: it adds no information.
             return LoadingCover::Uncovered;
         }
@@ -189,7 +192,7 @@ fn loading_cover_from(
                     None,
                     stop,
                     symbol_names,
-                    visited,
+                    walk,
                 ) {
                     LoadingCover::Covered => return LoadingCover::Covered,
                     LoadingCover::Unresolved => result = LoadingCover::Unresolved,
@@ -210,25 +213,20 @@ fn loading_cover_from(
                 crate::loading_entries::LayerCover::Covered => return LoadingCover::Covered,
                 crate::loading_entries::LayerCover::Unresolved => return LoadingCover::Unresolved,
                 crate::loading_entries::LayerCover::Outward(at) => {
-                    return loading_cover_from(lookup, file, at, None, stop, symbol_names, visited);
+                    return loading_cover_from(lookup, file, at, None, stop, symbol_names, walk);
                 }
                 crate::loading_entries::LayerCover::Callee {
                     file: callee_file,
                     function: callee,
                     parameter,
                 } => {
-                    // ADR 1011: the closure is part of the function around the call unless the callee's own body puts a boundary around
-                    // its calls of the parameter (`exprArrow(cb) { createLoadingBoundary(() => cb(), ..) }`).
-                    if let Some(cover) = callee_boundary(
-                        lookup,
-                        callee_file,
-                        callee,
-                        parameter,
-                        symbol_names,
-                        visited,
-                        0,
-                    ) {
-                        return cover;
+                    // ADR 1011: the closure is part of the function around the call, and the callee's body is walked for its own boundary
+                    // (`exprArrow(cb) { createLoadingBoundary(() => cb(), ..) }`): a violation is dropped only where a boundary holds every
+                    // use of the parameter that can run it, never for want of knowing what the callee does.
+                    match callee_held(lookup, callee_file, callee, parameter, symbol_names, walk) {
+                        Held::Covered => return LoadingCover::Covered,
+                        Held::Mixed => return LoadingCover::Unresolved,
+                        Held::Uncovered | Held::Neutral => {}
                     }
                 }
             }
@@ -237,76 +235,164 @@ fn loading_cover_from(
     LoadingCover::Unresolved
 }
 
-/// ADR 1011: what a project callee's own body says of a closure it is handed as parameter `parameter`. `Some(Covered)` when a boundary holds
-/// every use of the parameter that can run it, `Some(Unresolved)` where that is not known (the parameter is stored, aliased or never called, a
-/// callee it is passed on to is not a project function the analysis resolves, the callee is `async` or a generator, a call of it may be held by
-/// code the walk does not follow, the chain is longer than the walk goes), and `None` when every call of the parameter reaches the callee's
-/// top with no boundary around it: the closure is then part of the function around the call, as an identifier callee's always was. A
-/// parameter passed on whole (`inner(cb)`, `forward(cb)` down a chain) is followed into the function it goes to.
-fn callee_boundary(
+/// ADR 1011: the state of one cover walk. `places` are the functions the walk is in (a place already on the chain adds no information); the
+/// callee walks of one build are memoized in the lookup, and `stack` and `tainted` keep a memoized answer from resting on a walk still in
+/// progress.
+#[derive(Default)]
+pub(crate) struct Walk {
+    places: HashSet<(String, Span)>,
+    stack: Vec<CalleeKey>,
+    tainted: HashSet<CalleeKey>,
+}
+
+/// A callee's parameter: its file, its span, the parameter's index.
+pub(crate) type CalleeKey = (String, Span, usize);
+
+/// ADR 1011: what a callee's own body says of a closure it is handed as one parameter.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Held {
+    /// A boundary holds every use of the parameter that can run it.
+    Covered,
+    /// A boundary holds some use, no use runs it with none around it, and another use is not known: the closure may be held.
+    Mixed,
+    /// A use runs it with no boundary around it: the closure is part of the caller's function, a violation stays.
+    Uncovered,
+    /// Nothing shows a boundary or a run (the parameter is stored, aliased, never called, the callee is `async`, the chain is longer than the
+    /// walk goes): what the walk knew before ADR 1011 stands.
+    Neutral,
+}
+
+/// The callee walks of one build ([`Held`] per callee parameter): a callee that hands its parameter on to itself or to its callers' callees is
+/// walked once, not once per read and per path.
+#[derive(Default)]
+pub(crate) struct CalleeCovers {
+    memo: std::sync::Mutex<HashMap<CalleeKey, Held>>,
+    computed: std::sync::atomic::AtomicU64,
+}
+
+impl CalleeCovers {
+    /// The callee parameters walked so far ([`crate::BuildTimings::callee_walks`]).
+    pub(crate) fn computed(&self) -> u64 {
+        self.computed.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    fn get(&self, key: &CalleeKey) -> Option<Held> {
+        self.memo
+            .lock()
+            .ok()
+            .and_then(|memo| memo.get(key).copied())
+    }
+
+    fn put(&self, key: CalleeKey, held: Held) {
+        if let Ok(mut memo) = self.memo.lock() {
+            memo.insert(key, held);
+        }
+    }
+}
+
+/// How far a parameter is followed down a chain of hand-offs (ADR 0988's bound: the seventeenth layer is where it stops).
+const CALLEE_DEPTH: usize = 16;
+
+/// The uses of a parameter combined: one that runs the closure uncovered decides; otherwise a boundary on every use is `Covered`, on some
+/// `Mixed`, on none `Neutral`.
+fn combine(uses: &[Held]) -> Held {
+    if uses.contains(&Held::Uncovered) {
+        return Held::Uncovered;
+    }
+    let covered = uses.iter().filter(|held| **held == Held::Covered).count();
+    let mixed = uses.contains(&Held::Mixed);
+    if covered == 0 && !mixed {
+        Held::Neutral
+    } else if covered == uses.len() {
+        Held::Covered
+    } else {
+        Held::Mixed
+    }
+}
+
+/// ADR 1011: [`Held`] for the closure handed as parameter `parameter` of `callee`: every use of the parameter in the callee's body
+/// (`loading_entries::parameter_uses`) is a call, whose cover is walked from the call up to the callee's top (`stop`), or the parameter passed
+/// whole into another call, followed into the project function it goes to. A use the walk cannot place adds nothing. Each use is walked with
+/// its own chain of places, so the answer is the callee's alone; it is memoized per callee parameter, and a callee already on the chain
+/// answers `Neutral` and keeps the answers above it out of the memo.
+fn callee_held(
     lookup: &SemanticLookup<'_>,
     file: &solid_facts::FileFacts,
     callee: &solid_facts::ast::FunctionFact,
     parameter: usize,
     symbol_names: &HashMap<SymbolId, SymbolId>,
-    visited: &mut HashSet<(String, Span)>,
-    depth: usize,
-) -> Option<LoadingCover> {
+    walk: &mut Walk,
+) -> Held {
     use crate::loading_entries::{LayerCover, ParameterUse};
-    /// The chain of hand-offs the walk follows (ADR 0988's bound: the seventeenth layer is where it stops).
-    const DEPTH: usize = 16;
-    if depth > DEPTH {
-        return Some(LoadingCover::Unresolved);
+    let key: CalleeKey = (file.path.as_str().to_owned(), callee.span, parameter);
+    if let Some(held) = lookup.callee_covers().get(&key) {
+        return held;
     }
-    let uses = match crate::loading_entries::parameter_uses(lookup, file, callee, parameter) {
-        Some(uses) if !uses.is_empty() => uses,
-        _ => return Some(LoadingCover::Unresolved),
+    if walk.stack.contains(&key) {
+        walk.tainted.insert(key);
+        return Held::Neutral;
+    }
+    if walk.stack.len() >= CALLEE_DEPTH {
+        // An answer cut by the depth rests on where the walk began: kept out of the memo.
+        walk.tainted
+            .insert((String::new(), Span::new(0, 0), usize::MAX));
+        return Held::Neutral;
+    }
+    let Some(uses) = crate::loading_entries::parameter_uses(lookup, file, callee, parameter)
+        .filter(|uses| !uses.is_empty())
+    else {
+        lookup.callee_covers().put(key, Held::Neutral);
+        return Held::Neutral;
     };
-    let mut result = None;
+    lookup
+        .callee_covers()
+        .computed
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    walk.stack.push(key.clone());
+    let outer_tainted = std::mem::take(&mut walk.tainted);
+    let outer_places = std::mem::take(&mut walk.places);
+    let mut parts = Vec::with_capacity(uses.len());
     for parameter_use in uses {
-        let found = match parameter_use {
-            ParameterUse::Call(call) => match loading_cover_from(
-                lookup,
-                file,
-                call,
-                None,
-                Some(callee.span),
-                symbol_names,
-                visited,
-            ) {
-                LoadingCover::Covered => Some(LoadingCover::Covered),
-                LoadingCover::Unresolved => Some(LoadingCover::Unresolved),
-                LoadingCover::Uncovered => None,
-            },
+        parts.push(match parameter_use {
+            ParameterUse::Call(call) => {
+                walk.places.clear();
+                match loading_cover_from(
+                    lookup,
+                    file,
+                    call,
+                    None,
+                    Some(callee.span),
+                    symbol_names,
+                    walk,
+                ) {
+                    LoadingCover::Covered => Held::Covered,
+                    LoadingCover::Unresolved => Held::Mixed,
+                    LoadingCover::Uncovered => Held::Uncovered,
+                }
+            }
             ParameterUse::Argument { call, position } => {
                 match crate::loading_entries::passed_cover(lookup, file, call, position) {
-                    LayerCover::Covered => Some(LoadingCover::Covered),
-                    LayerCover::Unresolved | LayerCover::Outward(_) => {
-                        Some(LoadingCover::Unresolved)
-                    }
-                    LayerCover::Callee {
+                    None => Held::Neutral,
+                    Some(LayerCover::Covered) => Held::Covered,
+                    Some(LayerCover::Unresolved | LayerCover::Outward(_)) => Held::Mixed,
+                    Some(LayerCover::Callee {
                         file: next_file,
                         function: next,
                         parameter: next_parameter,
-                    } => callee_boundary(
-                        lookup,
-                        next_file,
-                        next,
-                        next_parameter,
-                        symbol_names,
-                        visited,
-                        depth + 1,
-                    ),
+                    }) => callee_held(lookup, next_file, next, next_parameter, symbol_names, walk),
                 }
             }
-        };
-        if matches!(found, Some(LoadingCover::Covered)) {
-            return found;
-        }
-        // Unresolved is kept; a use that reaches the callee's top with no boundary says nothing.
-        result = found.or(result);
+        });
     }
-    result
+    walk.stack.pop();
+    walk.places = outer_places;
+    let held = combine(&parts);
+    walk.tainted.remove(&key);
+    if walk.tainted.is_empty() {
+        lookup.callee_covers().put(key, held);
+    }
+    walk.tainted.extend(outer_tainted);
+    held
 }
 
 /// ADR 0668: whether `object`, the object of a member read in `component`'s

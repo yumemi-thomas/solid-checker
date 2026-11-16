@@ -887,6 +887,8 @@ pub(super) struct SemanticLookup<'a> {
     synchronous_flush: OnceLock<Vec<flush_census::FlushSite>>,
     /// Whether any analyzed registration or method read reaches project code.
     listener_project_reach: OnceLock<bool>,
+    /// ADR 1011: what each callee's body says of the closure handed as one parameter, one answer per callee parameter of the build.
+    callee_covers: crate::owners::CalleeCovers,
     /// ADR 0292: whether some file holds a reflective write through a
     /// `prototype`.
     reflective_prototype_write: crate::base::reads::Recorded<bool>,
@@ -1306,6 +1308,7 @@ impl<'a> SemanticLookup<'a> {
             synchronous_event_dispatch: OnceLock::new(),
             synchronous_flush: OnceLock::new(),
             listener_project_reach: OnceLock::new(),
+            callee_covers: crate::owners::CalleeCovers::default(),
             reflective_prototype_write: crate::base::reads::Recorded::new(),
             raw_store_values: crate::base::reads::Recorded::new(),
             objects_assigned_into: crate::base::reads::Recorded::new(),
@@ -2421,6 +2424,10 @@ impl<'a> SemanticLookup<'a> {
                     .collect(),
             }
         })
+    }
+
+    pub(crate) fn callee_covers(&self) -> &crate::owners::CalleeCovers {
+        &self.callee_covers
     }
 
     pub(super) fn entities(&self) -> &'a EntitySymbols {

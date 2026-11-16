@@ -287,7 +287,7 @@ pub(crate) enum LayerCover<'a> {
     Unresolved,
     /// ADR 1011: the layer is an argument of a call to a project function whose body is read. It is read as part of the function around the
     /// call, unless the callee's own body holds a boundary for it: the cover walk goes through the callee's calls of the parameter first
-    /// (`owners::async_context::callee_boundary`).
+    /// (`owners::async_context::callee_held`).
     Callee {
         file: &'a FileFacts,
         function: &'a FunctionFact,
@@ -344,6 +344,13 @@ pub(crate) fn parameter_uses<'f>(
     {
         return None;
     }
+    // `arguments[0]()` runs the parameter without naming it: a body that reads `arguments` is not read.
+    if file.ast.identifiers.iter().any(|identifier| {
+        function.span.contains(identifier.span)
+            && file.source_text(identifier.span) == Some("arguments")
+    }) {
+        return None;
+    }
     let name = parameter.names[0].span;
     let path = file.path.as_str();
     let symbol = lookup.entities().at(path, name)?;
@@ -384,36 +391,68 @@ pub(crate) fn parameter_uses<'f>(
 }
 
 /// ADR 1011: what a call says of a parameter the callee passes whole as argument `position`: the boundary's primitive holds its first
-/// argument; a project function the analysis resolves is walked in turn ([`LayerCover::Callee`]); anything else (the standard library, another
-/// primitive, a callee not resolved) leaves where the closure runs unknown.
+/// argument; a project function the analysis resolves exactly is walked in turn ([`LayerCover::Callee`]); `None` where nothing shows a
+/// boundary or where the closure runs (another primitive, the standard library, a callee the analysis does not resolve or whose function is
+/// not what the name runs): the walk takes no evidence from the call.
 pub(crate) fn passed_cover<'a>(
     lookup: &SemanticLookup<'a>,
     file: &FileFacts,
     call: &solid_facts::ast::CallFact,
     position: usize,
-) -> LayerCover<'a> {
+) -> Option<LayerCover<'a>> {
     if let Some(boundary) = lookup.dialect.async_boundary_shape()
         && lookup.primitive_at_call(file, call.span) == Some(boundary.primitive)
     {
-        return if position == boundary.held_argument {
+        return Some(if position == boundary.held_argument {
             LayerCover::Covered
         } else {
             LayerCover::Unresolved
-        };
+        });
     }
     if lookup.primitive_at_call(file, call.span).is_some() {
-        return LayerCover::Unresolved;
+        return None;
     }
-    match lookup
-        .function_called_at(file.path.as_str(), call.callee)
-        .or_else(|| project_member(lookup, file, call, position))
-    {
-        Some((callee_file, callee)) => LayerCover::Callee {
+    match project_callee(lookup, file, call, position) {
+        Callee::Current(callee_file, callee) => Some(LayerCover::Callee {
             file: callee_file,
             function: callee,
             parameter: position,
-        },
-        None => LayerCover::Unresolved,
+        }),
+        Callee::Replaceable | Callee::Unknown => None,
+    }
+}
+
+/// ADR 1011: the project function a call runs, as far as the walk may trust it.
+enum Callee<'a> {
+    /// The function the callee's name is, which nothing replaces: its parameter at `position` is where the argument lands.
+    Current(&'a FileFacts, &'a FunctionFact),
+    /// A function the name resolves to, which is not what a call runs (its binding is written, or the function is only an argument of the
+    /// call that made the value): nothing follows.
+    Replaceable,
+    /// No project function is resolved exactly.
+    Unknown,
+}
+
+/// [`Callee`] for `call`, argument `position`. An identifier callee is `function_called_at`'s function, trusted only where
+/// `function_value_is_current_in` holds it (a declaration or initializer nothing writes: `let f = (cb) => ..; f = other` and
+/// `const f = ignore((cb) => ..)` are not); a member callee is what `project_callee_at_parameter` resolves exactly.
+fn project_callee<'a>(
+    lookup: &SemanticLookup<'a>,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    position: usize,
+) -> Callee<'a> {
+    if let Some((callee_file, callee)) = lookup.function_called_at(file.path.as_str(), call.callee)
+    {
+        return if crate::indexes::function_value_is_current_in(callee_file, callee) {
+            Callee::Current(callee_file, callee)
+        } else {
+            Callee::Replaceable
+        };
+    }
+    match project_member(lookup, file, call, position) {
+        Some((callee_file, callee)) => Callee::Current(callee_file, callee),
+        None => Callee::Unknown,
     }
 }
 
@@ -462,17 +501,17 @@ pub(crate) fn layer_cover<'a>(
         {
             return Some(LayerCover::Unresolved);
         }
-        if let Some((callee_file, callee)) = lookup
-            .function_called_at(file.path.as_str(), call.callee)
-            .or_else(|| project_member(lookup, file, call, position))
-        {
-            return Some(LayerCover::Callee {
+        return match project_callee(lookup, file, call, position) {
+            Callee::Current(callee_file, callee) => Some(LayerCover::Callee {
                 file: callee_file,
                 function: callee,
                 parameter: position,
-            });
-        }
-        return Some(LayerCover::Unresolved);
+            }),
+            // An identifier whose function is not what the callee runs (reassigned, wrapped: `const f = wrap((cb) => ..)`): the closure
+            // is read as part of the function around the call, as it always was; the body named is not the callee's.
+            Callee::Replaceable => continue,
+            Callee::Unknown => Some(LayerCover::Unresolved),
+        };
     }
     // A member of an object literal: a getter, a method, a function-valued property.
     if let Some(property) = ast

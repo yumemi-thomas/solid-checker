@@ -2126,6 +2126,9 @@ pub struct BuildTimings {
     /// `closure_unplaced`), each computation counted, a kept answer's reuse
     /// not. Deterministic, so the complexity ladder gates on it.
     pub closure_placements: u64,
+    /// ADR 1011: the callee parameters whose body the loading-cover walk read (`owners::async_context::callee_held`), each computed once per
+    /// build, a memoized answer's reuse not. Deterministic, so the complexity tests gate on it.
+    pub callee_walks: u64,
     /// The write walk's caller steps (`execution_role`'s write walk, ADR
     /// 0546): each call site of a function whose entries place a write,
     /// evaluated or folded, and each step of a region fold. Deterministic,

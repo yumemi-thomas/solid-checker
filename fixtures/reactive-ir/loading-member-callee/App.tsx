@@ -1,7 +1,8 @@
 import { createMemo } from "solid-js";
 import { render } from "@solidjs/web";
 import * as H from "./helpers";
-import { exprArrow, inBoundary, run } from "./helpers";
+import { both, exprArrow, ignore, inBoundary, run } from "./helpers";
+import { createLoadingBoundary } from "solid-js/internal";
 import { go } from "./reexport";
 import { helpers as Api } from "./barrel";
 import util from "./util";
@@ -104,6 +105,51 @@ function Handed(props: { run: (cb: () => unknown) => number }) {
   return <p>{(() => { props.run(() => { slow(); }); return 1; })()}</p>;
 }
 
+// ADR 1011 (review of the first cut): the callee's boundary decides only where it holds EVERY use of the parameter that can run the closure.
+// Chrome warns at the read of each of these components (a bare call runs in the render): a violation stands.
+function BothNs() {
+  return <p>{(() => { H.both(() => { slow(); }); return 1; })()}</p>;
+}
+
+function BothId() {
+  return <p>{(() => { both(() => { slow(); }); return 1; })()}</p>;
+}
+
+function BranchNs() {
+  return <p>{(() => { H.branch(() => { slow(); }, false); return 1; })()}</p>;
+}
+
+function ReturnedNs() {
+  return <p>{(() => { H.returned(() => { slow(); })(); return 1; })()}</p>;
+}
+
+function ViaArgumentsNs() {
+  return <p>{(() => { try { H.viaArguments(() => { slow(); }); } catch {} return 1; })()}</p>;
+}
+
+// An identifier callee is the function its name runs only where nothing replaces it. `wrapLet` is reassigned to a function that runs the
+// closure bare, `wrapped` is what `ignore` returns (the same): Chrome warns at both reads, so the violation stays and the boundary written in
+// the first function is not the callee's.
+let wrapLet = (cb: () => unknown) => {
+  createLoadingBoundary(() => cb(), () => 0);
+  return 1;
+};
+wrapLet = (cb: () => unknown) => {
+  cb();
+  return 2;
+};
+function WrapLet() {
+  return <p>{(() => { wrapLet(() => { slow(); }); return 1; })()}</p>;
+}
+
+const wrapped = ignore((cb: () => unknown) => {
+  createLoadingBoundary(() => cb(), () => 0);
+  return 1;
+});
+function ViaWrap() {
+  return <p>{(() => { wrapped(() => { slow(); }); return 1; })()}</p>;
+}
+
 render(() => <Named />, document.body);
 render(() => <NamedReexport />, document.body);
 render(() => <Namespace />, document.body);
@@ -123,3 +169,10 @@ render(() => <Stored />, document.body);
 render(() => <Replaced />, document.body);
 render(() => <Shadowed />, document.body);
 render(() => <Handed run={(cb) => { cb(); return 1; }} />, document.body);
+render(() => <BothNs />, document.body);
+render(() => <BothId />, document.body);
+render(() => <BranchNs />, document.body);
+render(() => <ReturnedNs />, document.body);
+render(() => <ViaArgumentsNs />, document.body);
+render(() => <WrapLet />, document.body);
+render(() => <ViaWrap />, document.body);
