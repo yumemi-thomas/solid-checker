@@ -17,6 +17,7 @@ import { cellList, censusCells, censusShapes, combined, gridShapes, mountsOption
 import { sourcesOption } from "./misuse.mjs";
 import { OPEN_ROWS, answers, readOpenDefects } from "./open-defects.mjs";
 import { fnv } from "./rng.mjs";
+import { readLedger } from "./proved.mjs";
 import { readRediscovery } from "./smoke.mjs";
 
 /** The axes a pair is made of. */
@@ -157,10 +158,18 @@ export function familyIds(rows, required = [], { families = readOpenDefects().gr
   return picks;
 }
 
-/** One sample: the ids of each grid. `required`: the ids that come first, the others are chosen around them, with one of each open family. */
-export function sample({ perCode = false, seed = FIXED_SEED, required = [], grids = SAMPLED_GRIDS, codes, families } = {}) {
+/**
+ * One sample: the ids of each grid. `required`: the ids that come first, the others are chosen around them, with one of each open family. The
+ * pull request's tier (`perCode` false) also holds every program of the proved-verdict ledger (ADR 1012: a cover that moved off a proved program
+ * could lose its proof unseen), added after the greedy cover, so the cover itself does not depend on the ledger: a ledger drawn from a cover
+ * adds nothing to it.
+ */
+export function sample({ perCode = false, seed = FIXED_SEED, required = [], grids = SAMPLED_GRIDS, codes, families, proved = perCode ? new Map() : readLedger() } = {}) {
   const rows = grids.flatMap((grid) => gridRows(grid, { codes }));
   const { ids, features } = cover(rows, { perCode, seed, required: [...required, ...familyIds(rows, required, { seed, ...(families ? { families } : {}) })] });
+  const have = new Set(ids);
+  const exists = new Set(rows.map((row) => row.id));
+  if (!perCode) for (const grid of grids) for (const id of proved.get(grid) ?? []) if (exists.has(id) && !have.has(id)) { ids.push(id); have.add(id); }
   const of = new Map(rows.map((row) => [row.id, row.grid]));
   const byGrid = Object.fromEntries(grids.map((grid) => [grid, []]));
   for (const id of ids) byGrid[of.get(id)].push(id);

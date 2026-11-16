@@ -304,6 +304,15 @@ ir-edit-fuzz-corpus: build-checker-release
 	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) scripts/ir-edit-fuzz.mjs \
 	  --project "$(IR_FUZZ_PROJECT)" --steps $(IR_FUZZ_STEPS) --seed $(IR_FUZZ_SEED)
 
+# ADR 1012: the corpus findings of this tree held to main's (scripts/guard/corpus.mjs): a lost violation, or a (project, file, rule) that was clean and holds an
+# uncertifiable row, fails unless a new row of scripts/guard/corpus-changes.json names it. Release checker, the frozen corpus (CORPUS_APPS=<apps root>, the
+# default is ../solid-checker-rc21-frozen/apps) and a baseline of THIS machine (`node scripts/guard/corpus.mjs record` from a main checkout).
+CORPUS_APPS ?=
+corpus-guard: build-checker-release
+	node scripts/guard/corpus.mjs check $(if $(CORPUS_APPS),--apps-root "$(CORPUS_APPS)")
+
+.PHONY: corpus-guard
+
 # ADR 0955: the corpus delta of a veto or a fail-closed change, scoped by the hazards table (scripts/corpus-delta.mjs): the old build
 # (OLD=<its solid-checker-rust>, built from the base in its own worktree) and this tree's release build on the projects whose old results hold
 # a hazard (DELTA_HAZARDS=OpenMemberWrite,StandardRootHanded) or a blocker kind (DELTA_BLOCKERS=standard-member-impostor), plus 3 controls that

@@ -13,7 +13,11 @@ environment are unchanged.
    `node_modules` (git cannot see it).
 2. `make verify` once before claiming done. Confirm success from its summary:
    a `FAILED during step` line or a missing TOTAL row means it did not pass.
-3. Every commit must be green on its own: a dialect-seam change lands as one
+3. An engine change (`rust/`, `apps/solid-typefacts/`) also runs `make corpus-guard` once (ADR 1012: about 7 to 10 minutes, the frozen corpus and a
+   baseline recorded for this machine): a lost violation, or a (project, file, rule) that was clean and holds an uncertifiable row, fails unless a new row of
+   `scripts/guard/corpus-changes.json` names it. Exit 2 means it compared nothing (no corpus, or no baseline for this machine: `node scripts/guard/corpus.mjs
+   record` from a main checkout); report that, never a pass. It is not in `make verify`: it needs the corpus and a per-machine baseline.
+4. Every commit must be green on its own: a dialect-seam change lands as one
    piece, and a snapshot update lands with the code that moved it.
 
 ## Suspiciously green?

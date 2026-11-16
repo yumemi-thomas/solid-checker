@@ -405,6 +405,17 @@ Programs per grid, as the grids generate them (the shapes of `recallShapes` and 
 
 `cover.mjs` chooses a sample from the grids' shapes, so no run feeds it and no manifest goes stale: a greedy cover of the pairs of `side`, code, context, variant, binding, layer, mount, source, callback and combination, ties broken by a hash of the id under the seed. `--cover all|per-code` and `--cover-seed` ask `focus.mjs` for one (`--codes all`); `--runtime-diff-cap` holds its oracle (`--oracle-cap` here, 25 a grid in a smoke run). A smoke run still compares the programs of the behaviour manifests (`scripts/fuzz/smoke/`) that the sample holds. The pull request's tier must fit its job's hour (ADR 0916): at 33,192 programs it runs in about 25-40 minutes on a runner (15-24 programs a second; 75,091 programs ran 52-85), where every pair of the recall grids, which vary one axis at a time, took 45,000 programs and the whole census 25,900. Those pairs and the whole census stay in the nightly tier.
 
+## Proved verdicts (ADR 1012)
+
+A program whose outcome is proved on main (`agree` on a misuse grid, `clean` on a legal one) cannot stop being proved without a row that names it. The
+smoke fails when a program of `scripts/fuzz/proved/<grid>.json` (the ledger: sorted ids, all eleven grids, held in the cover) is another outcome or has no
+row, unless `scripts/fuzz/proved/changes.json` (append-only against the base, `scripts/guard/proved.mjs`) names its id with an ADR. A move INTO proof is
+allowed and printed (`newly proved`); `node scripts/fuzz/proved.mjs record --from <smoke out dir>` adds the ledger's new ids and never removes one.
+`proved.mjs check --from <dir>` makes the smoke's comparison on a finished run. The nightly audit holds a run to the proved set of the last audit on
+main that lost nothing unnamed (artifact `audit-proved-<mode>`, group rows `{ grid, code, from, to, count, adr, why }` that a loss uses once), and the
+known items of `scripts/fuzz/audit-known.json` (exact counts by recall mode) leave its needs-a-look list. The corpus has its own check, `make
+corpus-guard` (`scripts/guard/corpus.mjs`: a lost violation or a proved-clean place that became uncertifiable, against a baseline of this machine).
+
 ## The census
 
 `mx-census` (`matrix.mjs --census`, `censusCells`, ADR 0615) is the plain shapes of every (code, context) pair no misuse or legal cell lists, judged by the same `judge`: 25,865 programs at a62c14ae1, in a default grid, whole in the nightly tier and its pairs in the pull request's (every (code, context) pair is one). The tables say what a slice measured; the census asks the rest, so a context added for one code meets every other code the run it lands. No table entry is needed and no manifest applies: the runtime says what each pair is, and a pair that earns a cell leaves. Left out, each with its reason in `censusCells`: a code the runtime only throws where a promise swallows it (`PROMISE_SWALLOWS`: silence is no measure there), `handler-mixed` for an async read (it halts the mount before the driven button exists). A shape no template can place throws and stops the run, as on any grid: `planned` holds every shape, and the audit fails on a program it did not judge, so a new such pair gets its reason in `censusCells` or a template that places it.

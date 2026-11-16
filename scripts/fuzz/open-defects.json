@@ -662,7 +662,7 @@
   "certified": 0,
   "certifiedF2": 0,
   "falsePositive": 0,
-  "stackedClaim": 151,
+  "stackedClaim": 153,
   "stackedPairs": {
    "NO_OWNER_CONTEXT|missing-context-provider": 6,
    "MISSING_EFFECT_FN|leaf-owner-forbidden-call": 8,
@@ -670,12 +670,12 @@
    "CLEANUP_IN_FORBIDDEN_SCOPE|missing-owner": 1,
    "PRIMITIVE_IN_EFFECT_CALLBACK|missing-owner": 47,
    "PRIMITIVE_IN_FORBIDDEN_SCOPE|sync-computation-received-async": 51,
-   "PRIMITIVE_IN_EFFECT_CALLBACK|sync-computation-received-async": 44
+   "PRIMITIVE_IN_EFFECT_CALLBACK|sync-computation-received-async": 46
   },
   "unjudgedClaim": 0,
   "haltedClaim": 2,
   "causes": {
-   "R-stacked": 151,
+   "R-stacked": 153,
    "R-unplaced": 8,
    "R-halted": 2
   }
