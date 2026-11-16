@@ -2706,6 +2706,16 @@ impl Dialect for Solid2 {
         primitive == Primitive::CreateEffect
     }
 
+    /// Source: `@solidjs/web@2.0.0-rc.21` `types/index.d.ts:85-157`: `dynamic(source)`
+    /// "returns a stable `Component` whose identity is driven by a reactive
+    /// source ... usable anywhere a normal component is used"; with no options
+    /// (the call form `Dynamic`) the source is read in the instance's own
+    /// computation and the component it returns is rendered there. The static
+    /// form (`DynamicStatic`) calls the source once at the call and is not this.
+    fn dynamic_source_mounts_at_tag(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::Dynamic
+    }
+
     /// Source: `@solidjs/web@2.0.0-rc.9` exports `render(code, element)` and
     /// `hydrate(fn, node)`, whose first argument is the root of the mounted
     /// tree and which have no other caller.

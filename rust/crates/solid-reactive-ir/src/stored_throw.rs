@@ -899,6 +899,24 @@ impl Walk<'_, '_> {
     }
 
     /// Per entry: one that reports decides.
+    /// ADR 1016: a component mounted through `dynamic` at `tags` throws where
+    /// each tag renders, as a component written there does: reported unless a
+    /// boundary above every tag takes it. A throw only under an observer is
+    /// not read here.
+    fn dynamic_mount_end(&self, file: &FileFacts, tags: &[Span]) -> ThrowEnd {
+        if self.thrower == Thrower::UnderObserver {
+            return self.open();
+        }
+        if tags
+            .iter()
+            .all(|tag| handled_above(file, *tag, self.context.lookup, MOUNT_DEPTH))
+        {
+            ThrowEnd::Unobserved
+        } else {
+            ThrowEnd::Reported
+        }
+    }
+
     fn entries(&self, file: &FileFacts, function: &FunctionFact, depth: usize) -> ThrowEnd {
         // ADR 1008: the calls of an `async` function read below return the
         // promise its throw rejects.
@@ -941,6 +959,16 @@ impl Walk<'_, '_> {
         let mut entered = false;
         for (reference, hand_off) in hand_offs {
             entered = true;
+            // ADR 1016: `const D = dynamic(() => C)` used only as a tag runs `C`
+            // as a component at each `<D />`.
+            if let Some(tags) = dynamic_mount_tags(file, reference, lookup) {
+                match self.dynamic_mount_end(file, &tags) {
+                    ThrowEnd::Reported => return ThrowEnd::Reported,
+                    ThrowEnd::Unobserved => end = ThrowEnd::Unobserved,
+                    ThrowEnd::Open => {}
+                }
+                continue;
+            }
             let entry = match hand_off {
                 HandOff::Call => file
                     .ast
@@ -1508,6 +1536,12 @@ fn mounts_handled(
     if !lookup.program_closed && exported {
         return false;
     }
+    // ADR 1016: every use of the component is the source of a `dynamic` mount.
+    if let Some(tags) = dynamic_only_mounts(file, component, lookup) {
+        return tags
+            .iter()
+            .all(|tag| handled_above(file, *tag, lookup, depth));
+    }
     match lookup.function_component_status(file, component) {
         ComponentStatus::Proven => {}
         ComponentStatus::Uncertain => return true,
@@ -1532,10 +1566,18 @@ fn mounts_handled(
         .filter(|reference| !mounts.iter().any(|(_, tag)| *tag == reference.span))
         .filter(|reference| !exported_by_name(file, reference.span))
         .collect::<Vec<_>>();
-    let value_handled = |holder: &FileFacts, reference: Span| {
-        !dynamic_component(holder, reference, lookup)
-            || handled_above(holder, reference, lookup, depth)
-    };
+    // ADR 1016: a `const D = dynamic(() => C)` used only as a tag mounts the
+    // component at each `<D />`, asked as a tag is.
+    let value_handled =
+        |holder: &FileFacts, reference: Span| match dynamic_mount_tags(holder, reference, lookup) {
+            Some(tags) => tags
+                .iter()
+                .all(|tag| handled_above(holder, *tag, lookup, depth)),
+            None => {
+                !dynamic_component(holder, reference, lookup)
+                    || handled_above(holder, reference, lookup, depth)
+            }
+        };
     if !values
         .iter()
         .all(|reference| value_handled(file, reference.span))
@@ -1590,6 +1632,117 @@ fn exported_by_name(file: &FileFacts, at: Span) -> bool {
                     })
             })
     })
+}
+
+/// ADR 1016: the tags `component` is mounted at when every use of it is the
+/// source of a `dynamic` mount ([`dynamic_mount_tags`]): its value is current,
+/// it is not exported, and no other analyzed file names it. `None` otherwise.
+fn dynamic_only_mounts(
+    file: &FileFacts,
+    component: &FunctionFact,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+) -> Option<Vec<Span>> {
+    let name = crate::owners::function_binding_name(file, component)?;
+    if !lookup.function_value_is_current(file, component)
+        || crate::indexes::binding_exported(file, name.span)
+        || file.ast.exports_containing(component.span).next().is_some()
+    {
+        return None;
+    }
+    let elsewhere = lookup
+        .symbol_of_function(file, component)
+        .map(|symbol| lookup.symbol_references(symbol.as_str()))?
+        .into_iter()
+        .any(|location| location.path.as_ref() != file.path.as_str());
+    if elsewhere {
+        return None;
+    }
+    let mut tags = Vec::new();
+    let mut any = false;
+    for reference in file.ast.reference_identifiers_to(name.span) {
+        any = true;
+        tags.extend(dynamic_mount_tags(file, reference.span, lookup)?);
+    }
+    any.then_some(tags)
+}
+
+/// ADR 1016: `reference` is the whole body of a parameterless arrow that is the
+/// only argument of the dialect's `dynamic`, called by a bare name, and that
+/// call initializes a `const` whose every reference is the name of a JSX tag:
+/// the opening tag names, where the component mounts. `None` for anything else
+/// (a `let`, a use of the binding outside a tag, an export, a body that is not
+/// the bare name, a namespace or member callee, a shadowed `dynamic`).
+fn dynamic_mount_tags(
+    file: &FileFacts,
+    reference: Span,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+) -> Option<Vec<Span>> {
+    use solid_facts::ast::{BindingShape, FunctionKind};
+    let ast = &file.ast;
+    let arrow = ast.functions.iter().find(|function| {
+        function.kind == FunctionKind::Arrow
+            && function.expression_body
+            && function.parameters.is_empty()
+            && !function.rest_parameter
+            && !function.r#async
+            && !function.generator
+            && function
+                .expression_return
+                .as_ref()
+                .and_then(|value| value.argument)
+                .is_some_and(|argument| ast.peel_ts_sugar_span(argument) == reference)
+    })?;
+    let call = ast.calls.iter().find(|call| {
+        call.arguments.len() == 1 && ast.peel_ts_sugar_span(call.arguments[0].span) == arrow.span
+    })?;
+    let callee = ast.peel_ts_sugar_span(call.callee);
+    let bare = file.source_text(callee).is_some_and(|text| {
+        !text.is_empty()
+            && text
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
+    });
+    if call.construct
+        || !bare
+        || !lookup
+            .primitive_at_call(file, call.span)
+            .is_some_and(|primitive| lookup.dialect.dynamic_source_mounts_at_tag(primitive))
+    {
+        return None;
+    }
+    let binding = ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && !binding.in_switch_case
+            && binding.shape == BindingShape::Identifier
+            && binding.names.len() == 1
+            && binding
+                .initializer
+                .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == call.span)
+    })?;
+    let name = binding.names[0].span;
+    // `export const D = …`; a `const` inside an exported function is not exported itself.
+    if crate::indexes::binding_exported(file, name) {
+        return None;
+    }
+    // Each reference is an opening tag name (a mount) or a closing one (the same
+    // element); anything else is a value use that refuses the reading.
+    let mut tags = Vec::new();
+    for use_ in ast.reference_identifiers_to(name) {
+        let opening = ast
+            .jsx_elements
+            .iter()
+            .find(|element| element.member_object.is_none() && element.name.span == use_.span);
+        let closing = ast
+            .jsx_elements
+            .iter()
+            .any(|element| element.closing_name == Some(use_.span));
+        match (opening, closing) {
+            (Some(element), _) => tags.push(element.name.span),
+            (None, true) => {}
+            (None, false) => return None,
+        }
+    }
+    Some(tags)
 }
 
 /// `reference` is exactly the `component` of a `Dynamic`, the one prop that is

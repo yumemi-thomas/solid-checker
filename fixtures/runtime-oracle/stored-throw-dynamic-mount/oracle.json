@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1016: a component mounted through `const D = dynamic(() => C)` and `<D />` runs at the tag, so the plain throw in its body (useContext with no provider, flush() in a tracked effect) is reported by the render around the tag unless a boundary above takes it. The checker proves the two bare mounts and keeps every other value form (let, a use outside a tag, a block body, a namespace or member callee, a project or shadowed `dynamic`, an exported const) uncertifiable."
+}

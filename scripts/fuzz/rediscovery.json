@@ -24581,5 +24581,14 @@
   "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
   "ids": ["mx-primitive-in-forbidden-scope-tracked-effect-destructured-chain-5", "mx-primitive-in-forbidden-scope-tracked-effect-ns-held-none", "mx-primitive-in-forbidden-scope-tracked-effect-ns-exported-none", "mx-primitive-in-forbidden-scope-tracked-effect-ns-rest-none"],
   "rediscovered": "main 581bd7b18 recall-gap, this build agree (4,530 programs of the leaf-operation codes gain the violation; `ns-let`, `ns-default`, `ns-nested` and the re-export bindings stay recall gaps)"
+ },
+ {
+  "finding": "no defect: a recall gap. A plain throw (`flush()` in `createTrackedEffect`) in a component mounted through `const D1 = dynamic(() => C1); <D1 />` was `computation-error-unobserved` since 666724c4a (ADR 0893 finished, in #173): only `Dynamic`'s `component` prop was read as a value mount, any other value use counted as handled. Chrome rc.21 reports the throw; the 11-05 audit had these programs agree. FLUSH_IN_TRACKED_QUEUE_CALLBACK is no coded diagnostic in rc.21, so no rule was broken",
+  "found": "W4's bisect of the lost violations between aa4702650 and 6e33e0b08 (2026-11-16), family C: 22 groups, 39 ids, all `-m-dynamic`",
+  "fixed": "ADR 1016 (`stored_throw.rs` `dynamic_mount_tags`, `dynamic_mount_end`, `dynamic_only_mounts`)",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
+  "ids": ["mx-flush-in-tracked-queue-callback-tracked-x-wrapper-none-m-dynamic", "mx-flush-in-tracked-queue-callback-tracked-rerun-x-wrapper-none-m-dynamic"],
+  "rediscovered": "measured after the review (the owner's order): main recall-gap, this build agree, on the `-m-dynamic` programs"
  }
 ]

@@ -1370,6 +1370,14 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// ADR 1016: whether a call of `primitive` with its source as the only
+    /// argument returns a component that, written as a tag, renders the
+    /// component its source returns where the tag is (the non-static
+    /// `dynamic`). Default `false`: no such mount is read.
+    fn dynamic_source_mounts_at_tag(&self, _primitive: Primitive) -> bool {
+        false
+    }
+
     /// Whether this primitive mounts a component tree at a DOM root, taking
     /// the root component (or a function returning it) as its first argument.
     ///
