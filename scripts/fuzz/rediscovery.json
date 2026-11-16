@@ -24572,5 +24572,53 @@
   "code": "NO_OWNER_CONTEXT",
   "ids": ["mx-no-owner-context-ref-array-x-direct-none", "mx-no-owner-context-ref-cond-x-direct-none", "mx-no-owner-context-ref-factory-x-direct-none", "mx-no-owner-context-ref-row-x-direct-none"],
   "rediscovered": "main 581bd7b18 recall-gap, this build agree: 4 of 4 (and 2,448 of the four contexts' 2,964 programs; the `portal` and `dynamic` mounts stay recall gaps)"
+ },
+ {
+  "finding": "a false positive: the read of an async memo in the children of `<For each={[]}>`, `<Repeat count={0}>`, `<Show when={false}>` or `<Match when={false}>` (the literal keeps the children from ever running) was a violation although the children never run and Chrome is silent",
+  "found": "ADR 1015 (owner-approved 2026-11-16): a probe of `useContext` read in the row of `<Repeat count={0}>` and `<For each={[]}>`, both reported by the checker and silent in Chrome",
+  "fixed": "ADR 1015 (`Dialect::flow_children_exclusion`; `site_reach.rs` `in_dead_flow_children`: children a literal prop keeps from running are unreached, so a violation there is uncertifiable `unreached-dead-code`)",
+  "grid": "lg-recall",
+  "code": "PENDING_ASYNC_UNTRACKED_READ",
+  "ids": [
+   "lg-pending-async-untracked-read-dead-flow-for-x-direct-none",
+   "lg-pending-async-untracked-read-dead-flow-for-unkeyed-x-direct-none",
+   "lg-pending-async-untracked-read-dead-flow-show-x-direct-none",
+   "lg-pending-async-untracked-read-dead-flow-show-keyed-x-direct-none",
+   "lg-pending-async-untracked-read-dead-flow-match-x-direct-none",
+   "lg-pending-async-untracked-read-dead-flow-repeat-x-direct-none"
+  ],
+  "rediscovered": "main 5b950fce6 false-positive (252 programs of the code's six `dead-flow` contexts across the shapes), this build uncertifiable; slice measurement (`--contexts dead-flow-*`, all codes, lg-recall, 7,200 programs: main {unexecuted 3,024, uncertifiable 3,096, clean 576, false-positive 504}, `make fuzz-focus` exit 1; this build {uncertifiable 3,636, clean 3,564}, exit 0); the full grid differential runs on the final commit"
+ },
+ {
+  "finding": "a false positive of the same shape: a pending read in a forbidden scope written in the children a literal keeps from running was a violation",
+  "found": "ADR 1015 (owner-approved 2026-11-16): a probe of `useContext` read in the row of `<Repeat count={0}>` and `<For each={[]}>`, both reported by the checker and silent in Chrome",
+  "fixed": "ADR 1015 (`Dialect::flow_children_exclusion`; `site_reach.rs` `in_dead_flow_children`: children a literal prop keeps from running are unreached, so a violation there is uncertifiable `unreached-dead-code`)",
+  "grid": "lg-recall",
+  "code": "PENDING_ASYNC_FORBIDDEN_SCOPE",
+  "ids": [
+   "lg-pending-async-forbidden-scope-dead-flow-for-x-direct-none",
+   "lg-pending-async-forbidden-scope-dead-flow-for-unkeyed-x-direct-none",
+   "lg-pending-async-forbidden-scope-dead-flow-show-x-direct-none",
+   "lg-pending-async-forbidden-scope-dead-flow-show-keyed-x-direct-none",
+   "lg-pending-async-forbidden-scope-dead-flow-match-x-direct-none",
+   "lg-pending-async-forbidden-scope-dead-flow-repeat-x-direct-none"
+  ],
+  "rediscovered": "main 5b950fce6 false-positive (252 programs), this build uncertifiable; same slice measurement as PENDING_ASYNC_UNTRACKED_READ's entry"
+ },
+ {
+  "finding": "SC4002 proven in the children a literal keeps from running (`useContext` with no provider in the row of `<Repeat count={0}>`, `<For each={[]}>`, `<Show when={false}>`, `<Match when={false}>`): the program never runs the read, so Chrome raises nothing; an `unexecuted` outcome",
+  "found": "ADR 1015 (owner-approved 2026-11-16): a probe of `useContext` read in the row of `<Repeat count={0}>` and `<For each={[]}>`, both reported by the checker and silent in Chrome",
+  "fixed": "ADR 1015 (`Dialect::flow_children_exclusion`; `site_reach.rs` `in_dead_flow_children`: children a literal prop keeps from running are unreached, so a violation there is uncertifiable `unreached-dead-code`)",
+  "grid": "lg-recall",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "lg-context-not-found-dead-flow-for-x-direct-none",
+   "lg-context-not-found-dead-flow-for-unkeyed-x-direct-none",
+   "lg-context-not-found-dead-flow-show-x-direct-none",
+   "lg-context-not-found-dead-flow-show-keyed-x-direct-none",
+   "lg-context-not-found-dead-flow-match-x-direct-none",
+   "lg-context-not-found-dead-flow-repeat-x-direct-none"
+  ],
+  "rediscovered": "main 5b950fce6 unexecuted (180 programs), this build uncertifiable; same slice measurement"
  }
 ]

@@ -139,6 +139,8 @@ the same obligation stands at each other entry, with the same blocker:
 A read past an `await` on every path, and a read in a `try` whose `catch` cannot
 throw, are not reads of this kind (no `ContextNotFoundError` leaves them).
 
+A read in the children a literal keeps from running (`<For each={[]}>`'s row function, `<Repeat count={0}>`, `<Show when={false}>`, `<Match when={false}>`, written exactly so, on the Solid-owned component: [ADR 1015](../decisions.md#adr-1015)) never runs, so it is an uncertifiable `unreached-dead-code`, never a violation. `count={n}` with `n` a `const` holding 0, a named empty array, and an element with a spread keep today's "may run" reading and report.
+
 ## A stored throw needs a read that reports it
 
 `resolve`, `until`, a static `dynamic` source and `useContext` throw with no diagnostic. In a memo or another storing compute the error stays on the node until a read rethrows it. With no proven read that reports it (an effect compute with no `error` arm, intrinsic JSX, a handler, a component body) the row is `computation-error-unobserved`; one entry that reports keeps the violation (ADR 0893). Under a component, the boundary is where it renders that prop (ADR 0937).

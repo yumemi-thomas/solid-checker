@@ -1,0 +1,301 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "unreached-dead-code",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/App.tsx",
+      "start": 480,
+      "end": 490,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "unreached-dead-code",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/App.tsx",
+      "start": 622,
+      "end": 632,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "unreached-dead-code",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/App.tsx",
+      "start": 759,
+      "end": 769,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "unreached-dead-code",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/App.tsx",
+      "start": 906,
+      "end": 916,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "unreached-dead-code",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/App.tsx",
+      "start": 1160,
+      "end": 1170,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "unreached-dead-code",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/App.tsx",
+      "start": 1383,
+      "end": 1393,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "unreached-dead-code",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/App.tsx",
+      "start": 1526,
+      "end": 1536,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "unreached-dead-code",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/App.tsx",
+      "start": 1741,
+      "end": 1751,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "unreached-dead-code",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/App.tsx",
+      "start": 1893,
+      "end": 1903,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "unreached-dead-code",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/App.tsx",
+      "start": 2108,
+      "end": 2118,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/App.tsx",
+      "start": 2341,
+      "end": 2351,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/App.tsx",
+      "start": 2482,
+      "end": 2492,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/App.tsx",
+      "start": 2617,
+      "end": 2627,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/App.tsx",
+      "start": 2878,
+      "end": 2888,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/App.tsx",
+      "start": 3052,
+      "end": 3062,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/App.tsx",
+      "start": 3229,
+      "end": 3239,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/App.tsx",
+      "start": 3456,
+      "end": 3466,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/App.tsx",
+      "start": 3844,
+      "end": 3854,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/App.tsx",
+      "start": 3986,
+      "end": 3996,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/App.tsx",
+      "start": 4118,
+      "end": 4128,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/App.tsx",
+      "start": 4350,
+      "end": 4360,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/Shadowed.tsx",
+      "start": 526,
+      "end": 567,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/Shadowed.tsx",
+      "start": 526,
+      "end": 567,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/Shadowed.tsx",
+      "start": 526,
+      "end": 567,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/Shadowed.tsx",
+      "start": 535,
+      "end": 545,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/Shadowed.tsx",
+      "start": 656,
+      "end": 697,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/Shadowed.tsx",
+      "start": 656,
+      "end": 697,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-literal-rows/Shadowed.tsx",
+      "start": 665,
+      "end": 675,
+      "fixes": 0
+    }
+  ]
+}

@@ -1123,3 +1123,80 @@ fn component_entries_are_the_rc21_triples_and_nothing_else() {
         );
     }
 }
+
+/// ADR 1015: a flow component never runs its children when a literal prop says so, read on the rc.21 triple only. Only the three literals of the three props
+/// (and `Match`'s `when`) are answered; every other prop, component and installation states nothing, so the children may run.
+#[test]
+fn flow_children_exclusion_is_three_literals_on_the_rc21_triple() {
+    use crate::{ChildrenNever, ExcludingLiteral, FlowChildrenExclusion};
+    let rc21 = Solid2::RC21;
+    let answer = |export, prop| rc21.flow_children_exclusion(export, prop);
+    // `For` reads `props.children` once when it maps, so only a row function's body is excluded; `Repeat`, `Show` and `Match` never read their children.
+    assert_eq!(
+        answer("For", "each"),
+        Some(FlowChildrenExclusion {
+            literal: ExcludingLiteral::EmptyArray,
+            never: ChildrenNever::RowFunction
+        })
+    );
+    assert_eq!(
+        answer("Repeat", "count"),
+        Some(FlowChildrenExclusion {
+            literal: ExcludingLiteral::Zero,
+            never: ChildrenNever::Read
+        })
+    );
+    for export in ["Show", "Match"] {
+        assert_eq!(
+            answer(export, "when"),
+            Some(FlowChildrenExclusion {
+                literal: ExcludingLiteral::False,
+                never: ChildrenNever::Read
+            }),
+            "{export}"
+        );
+    }
+    for (export, prop) in [
+        // the other props of the same components: `fallback` runs exactly when the children do not
+        ("For", "fallback"),
+        ("For", "children"),
+        ("Repeat", "fallback"),
+        ("Repeat", "from"),
+        ("Show", "fallback"),
+        ("Show", "keyed"),
+        // another component's prop of the same name
+        ("Switch", "when"),
+        ("Errored", "when"),
+        ("Loading", "on"),
+        ("Portal", "children"),
+        ("Dynamic", "component"),
+        ("For", "when"),
+        ("Repeat", "each"),
+        ("Show", "each"),
+        // a name is no evidence (the engine asks only after the declarations are proven the dialect's)
+        ("for", "each"),
+        ("show", "when"),
+    ] {
+        assert_eq!(answer(export, prop), None, "{export} {prop}");
+    }
+    for dialect in [
+        Solid2::CONSERVATIVE,
+        Solid2::RC3,
+        Solid2::RC9,
+        Solid2::RC13,
+        Solid2::RC17,
+    ] {
+        for (export, prop) in [
+            ("For", "each"),
+            ("Repeat", "count"),
+            ("Show", "when"),
+            ("Match", "when"),
+        ] {
+            assert_eq!(
+                dialect.flow_children_exclusion(export, prop),
+                None,
+                "{export} {prop}"
+            );
+        }
+    }
+}

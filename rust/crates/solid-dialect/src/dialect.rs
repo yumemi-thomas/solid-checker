@@ -2146,6 +2146,19 @@ pub trait Dialect: Sync {
         None
     }
 
+    /// ADR 1015: whether the Solid-owned component exported as `export` never runs what it is handed as its children when its prop `prop` holds a LITERAL
+    /// (`For`'s `each={[]}`, `Repeat`'s `count={0}`, `Show`'s and `Match`'s `when={false}`), read from the dialect's pinned source (never from a package's name: the engine
+    /// asks only of a component whose every declaration is in one of this dialect's packages under that export name). `None` states nothing: any other prop,
+    /// any other value and any other component keep the reading that the children may run.
+    fn flow_children_exclusion(
+        &self,
+        export: &str,
+        prop: &str,
+    ) -> Option<crate::FlowChildrenExclusion> {
+        let _ = (export, prop);
+        None
+    }
+
     /// Whether a tag opens the async boundary specifically.
     /// ADR 0892: whether this component reads this prop only inside a
     /// computation of its own, so a tracked getter there suspends it.
