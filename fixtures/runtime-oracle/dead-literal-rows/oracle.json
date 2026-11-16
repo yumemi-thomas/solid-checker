@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1015: children a literal prop keeps from ever running (`<For each={[]}>`, `<Repeat count={0}>`, `<Show when={false}>`, `<Match when={false}>`, also by alias, namespace, parentheses and an assertion, and a live row nested in a dead one) raise no dev diagnostic, so the checker's SC4002 there is uncertifiable (unreached-dead-code), never a violation. Its pair, dead-literal-rows-live, is the same read where the children may run."
+}

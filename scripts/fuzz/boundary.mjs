@@ -25,7 +25,7 @@
 //
 // `boundary.mjs verify` runs every pair through the checker (boundary-scan.mjs) with the role log and checks the claims: the legal side silent,
 // the misuse side not, and each listed arm answering at the legal side. `boundary.mjs report` prints the registry's state.
-import { CALLBACK_CONTEXTS, CALLBACK_FORMS, CONTROL_LAYERS, DEAD_BUNDLE_CONTEXTS, FILE_LAYERS, LAYERS, SPEC } from "./misuse.mjs";
+import { CALLBACK_CONTEXTS, CALLBACK_FORMS, CONTROL_LAYERS, DEAD_BUNDLE_CONTEXTS, DEAD_FLOW_CONTEXTS, FILE_LAYERS, LAYERS, SPEC } from "./misuse.mjs";
 import { RECALL_MOUNTS } from "./mounts.mjs";
 import { DEPTH_FORMS, CHAIN_FORMS, HANDOFF_FORMS } from "./model.mjs";
 import { TABLE_CODES, TABLE_GAPS, TABLE_ROWS, tableContexts } from "./table-shapes.mjs";
@@ -68,7 +68,7 @@ export const PAIRS = {
     { fact: `the \`${fire}\` member's event is delivered in a window (body) or in a handler`, codes: WINDOW_CODES, contexts: [`evt-body-fire-${fire}`, `evt-handler-fire-${fire}`] }])),
   "fire-exactness": { fact: "`focus()` is the lib.dom member, a project method of the same name, or a local function of that name", codes: WINDOW_CODES, contexts: ["evt-body-fire-focus", "evt-body-fire-project", "evt-body-fire-shadow"] },
   // Reachability and callbacks: contexts that differ in whether the site runs (ADR 0458; ADR 0590; the callback-prop axis).
-  "site-reach": { fact: "the same site live in the body, or in code nothing runs (`if (false)`, after a `return`, `false &&`, a component never rendered)", codes: WINDOW_CODES, contexts: ["body", "dead-if", "dead-after-return", "dead-and-false", "dead-comp-never", ...DEAD_BUNDLE_CONTEXTS] },
+  "site-reach": { fact: "the same site live in the body, or in code nothing runs (`if (false)`, after a `return`, `false &&`, a component never rendered, the children of `For each={[]}`, `Repeat count={0}`, `Show when={false}`, `Match when={false}`: ADR 1015; a closed bundle's property a spread or a computed key replaces: ADR 1009)", codes: WINDOW_CODES, contexts: ["body", "dead-if", "dead-after-return", "dead-and-false", "dead-comp-never", ...DEAD_BUNDLE_CONTEXTS, ...DEAD_FLOW_CONTEXTS] },
   "deferred-apply-reruns": { fact: "a deferred effect apply whose compute reads nothing never runs, or its compute reruns and the apply with it", codes: WINDOW_CODES, contexts: ["effect-apply-defer", "effect-apply-defer-rerun"] },
   "callback-prop-call": { fact: "the component calls its callback prop in its body (a window), in a handler, or never", codes: WINDOW_CODES, contexts: ["cbp-body", "cbp-handler", "cbp-never", "cbp-attached"] },
   "primitive-contexts": { quality: "family", fact: "the site in the callback of a primitive the dialect places in a window, out of it, or in a body", codes: WINDOW_CODES,

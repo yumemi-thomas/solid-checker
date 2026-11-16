@@ -406,6 +406,37 @@ pub enum ComponentSlot<'a> {
     LoadedExport,
 }
 
+/// The literal a flow component's prop holds when the component never runs what it was handed as its children (ADR 1015), for
+/// [`crate::Dialect::flow_children_exclusion`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ExcludingLiteral {
+    /// The array literal `[]` (`For`'s `each`).
+    EmptyArray,
+    /// The numeric literal `0` (`Repeat`'s `count`).
+    Zero,
+    /// The boolean literal `false` (`Show`'s and `Match`'s `when`).
+    False,
+}
+
+/// What of a flow component's children the [`ExcludingLiteral`] keeps from running.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ChildrenNever {
+    /// The function written as the children is created and never called: its body never runs, but the expression that makes it is evaluated
+    /// (`For` reads `props.children` once, when it maps).
+    RowFunction,
+    /// The children are never read: whatever they hold, a function or a JSX expression, is not evaluated.
+    Read,
+}
+
+/// A flow component's exclusion of its children by a literal prop, read from the dialect's pinned source.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct FlowChildrenExclusion {
+    /// The literal the prop holds.
+    pub literal: ExcludingLiteral,
+    /// What it keeps from running.
+    pub never: ChildrenNever,
+}
+
 /// What a Solid-owned component does with a value that enters it at a [`ComponentSlot`], read from the dialect's pinned source.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ComponentEntry {

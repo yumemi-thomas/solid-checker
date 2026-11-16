@@ -131,6 +131,7 @@
   "SC4002 owner-unproven": 5,
   "SC4002 package-finding-at-entry": 29,
   "SC4002 provider-not-proven-above": 198,
+  "SC4002 unreached-dead-code": 10,
   "SC5001 async-component-prop": 2,
   "SC5001 async-options-opaque": 18,
   "SC5001 async-provenance-unproven": 14,

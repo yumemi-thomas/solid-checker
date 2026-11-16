@@ -1056,7 +1056,14 @@ export const HANDLER_CONTEXTS = { "handler-named-const": "handler", "handler-nam
  * that took the bundle's function for the one `onSettled` runs reports the pending read there.
  */
 export const DEAD_BUNDLE_CONTEXTS = ["dead-bundle-spread", "dead-bundle-computed"];
-export const DEAD_CONTEXTS = ["dead-if", "dead-after-return", "dead-and-false", "dead-comp-never", ...DEAD_BUNDLE_CONTEXTS];
+/**
+ * ADR 1015: the children a LITERAL prop keeps from ever running (Solid 2's `For each={[]}`, `Repeat count={0}`, `Show when={false}`, `Match when={false}`,
+ * `Dialect::flow_children_exclusion`), the flow element rendered by the view like `flow-<form>` (FLOW_FORMS; model.mjs `flowEl` with `dead`, print.mjs): legal for every
+ * code like the other dead contexts (Chrome raises nothing there; the old build reported SC4002 at a rendered row, the new one answers uncertifiable). The twin that
+ * runs the row (`each={[1]}`, `count={1}`) is the `flow-<form>` context itself; the fixture (`fixtures/reactive-ir/dead-literal-rows`) and its Chrome cases hold both.
+ */
+export const DEAD_FLOW_CONTEXTS = FLOW_FORMS.map((form) => `dead-flow-${form}`);
+export const DEAD_CONTEXTS = ["dead-if", "dead-after-return", "dead-and-false", "dead-comp-never", ...DEAD_BUNDLE_CONTEXTS, ...DEAD_FLOW_CONTEXTS];
 const EQUIVALENT_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code) => !SPEC[code].typedAway && !SPEC[code].recallOnly).map((code) => {
   const spec = SPEC[code];
   const placed = (kind) => Object.entries({ ...FIRE_CONTEXTS, ...HANDLER_CONTEXTS }).filter(([, base]) => (kind === "misuse" ? spec.contexts : spec.legal ?? []).includes(base)).map(([context]) => context);
@@ -2219,6 +2226,9 @@ function recallContext(context, stmts, kit) {
         const el = kit.name("fe");
         return { body: [decl(el, prim("untrack", fn([ret(jsxExpr(flowEl(kit.name("v"), closed, stmts)))])))], view: [mounted(kit.name("v"), domExpr(`{${el}}`))] };
       }
+      // `dead-flow-<form>` (DEAD_FLOW_CONTEXTS, ADR 1015): the same element with the literal that keeps its children from running.
+      const dead = /^dead-flow-(.+)$/.exec(context)?.[1];
+      if (dead && FLOW_FORMS.includes(dead)) return { body: [], view: [flowEl(kit.name("v"), dead, stmts, { dead: true })] };
       // `flow-<form>` (FLOW_CONTEXTS): the site in the body of a flow component's function child.
       const flow = /^flow-(.+)$/.exec(context)?.[1];
       if (flow && FLOW_FORMS.includes(flow)) return { body: [], view: [flowEl(kit.name("v"), flow, stmts)] };

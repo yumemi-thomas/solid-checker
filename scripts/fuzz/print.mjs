@@ -616,6 +616,8 @@ function render(program, instrument) {
         const body = block(item.body, depth + 1, entryFor(item, "flow"), item.awaits ? ["await Promise.resolve();"] : [], [`return <${element} data-view="${item.id}">x</${element}>;`]);
         // `on` (model.mjs flowEl): the condition reads a signal a button sets to 0, which disposes the row or the branch.
         const open = item.on !== undefined ? { for: `<For each={${item.on}() ? [1] : []}>`, show: `<Show when={${item.on}()}>` }[item.flow]
+          // `dead` (ADR 1015, misuse.mjs DEAD_FLOW_CONTEXTS): the literal that keeps the children from running (`Dialect::flow_children_exclusion`).
+          : item.dead ? { for: "<For each={[]}>", "for-unkeyed": "<For each={[]} keyed={false}>", show: "<Show when={false}>", "show-keyed": "<Show when={false} keyed>", match: "<Switch>", repeat: "<Repeat count={0}>" }[item.flow]
           : { for: "<For each={[1]}>", "for-unkeyed": "<For each={[1]} keyed={false}>", show: "<Show when={1}>", "show-keyed": "<Show when={1} keyed>", match: "<Switch>", repeat: "<Repeat count={1}>" }[item.flow];
         const close = { for: "</For>", "for-unkeyed": "</For>", show: "</Show>", "show-keyed": "</Show>", match: "</Switch>", repeat: "</Repeat>" }[item.flow];
         for (const name of { for: ["For"], "for-unkeyed": ["For"], show: ["Show"], "show-keyed": ["Show"], match: ["Switch", "Match"], repeat: ["Repeat"] }[item.flow]) used.add(name);
@@ -623,7 +625,7 @@ function render(program, instrument) {
         // `:1634`, untracked under `"<Show>"`/`"<Match>"`), and the typings reject a zero-arity `Show` child (`NonZeroParams`).
         const bare = `{${item.awaits ? "async " : ""}(${item.flow.startsWith("for") || item.flow === "repeat" ? "" : "_u"}) => ${body}}`;
         const child = item.kid ? `<${item.kid}>${bare}</${item.kid}>` : bare;
-        if (item.flow === "match") return [`${ind(depth)}${open}`, `${ind(depth + 1)}<Match when={1}>${child}</Match>`, `${ind(depth)}${close}`];
+        if (item.flow === "match") return [`${ind(depth)}${open}`, `${ind(depth + 1)}<Match when={${item.dead ? "false" : "1"}}>${child}</Match>`, `${ind(depth)}${close}`];
         return [`${ind(depth)}${open}`, `${ind(depth + 1)}${child}`, `${ind(depth)}${close}`];
       }
       case "ref": {
