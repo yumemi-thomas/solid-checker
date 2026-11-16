@@ -719,6 +719,12 @@
         "why": "pending-review"
       }
     },
+    "rust/crates/solid-reactive-ir/src/loading_entries.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "`arguments` is a spelling used only to refuse a walk (ADR 1011: a callee body that reads the arguments object may run its parameter as `arguments[0]()`, which `parameter_uses` cannot see, so the true branch returns None and the walk takes no evidence); it can only withhold a Covered answer, never prove one or add a finding."
+      }
+    },
     "rust/crates/solid-reactive-ir/src/loading_hold.rs": {
       "default-on-missing": {
         "count": 2,
