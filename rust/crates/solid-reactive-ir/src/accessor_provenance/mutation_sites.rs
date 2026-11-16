@@ -1641,6 +1641,24 @@ fn callback_seen(
         {
             return call_result_seen(lookup, file, inner, frame, depth, test);
         }
+        // ADR 1013: a `const` initialized with another value holds exactly that value, so the question is also the initializer's own (`const cb1 = cb2;
+        // setTimeout(cb1, 0)`: the function `cb2` holds where the binding is initialized, a conditional's arms). Only a yes is taken from it: an
+        // initializer this walk cannot answer leaves the name to the lookup below, as before. A function literal and a call are answered above and
+        // below; a `let`, a pattern and a binding with no value are not followed.
+        if held
+            .and_then(|binding| binding.initializer)
+            .map(|initializer| file.ast.peel_ts_sugar_span(initializer))
+            .filter(|initializer| {
+                *initializer != span
+                    && function_literal(file, *initializer).is_none()
+                    && file.ast.call_at(*initializer).is_none()
+            })
+            .is_some_and(|initializer| {
+                callback_seen(lookup, file, initializer, frame, depth - 1, test)
+            })
+        {
+            return true;
+        }
     }
     function_value_at(lookup, file, span)
         .is_some_and(|(callee_file, function)| test(callee_file, function))
