@@ -5,7 +5,8 @@
 //!
 //! - A statement after one that never completes normally in the same list
 //!   (`return`, `throw`, `break`, `continue`, a block holding one, an `if`
-//!   both of whose arms do, or whose literal test takes one that does). A
+//!   both of whose arms do, or whose literal test takes one that does, a `try`
+//!   whose `finally` does or whose block and `catch` do, ADR 1068). A
 //!   function declaration is hoisted and is not dead there: it can be called
 //!   before the exit. A class declaration is not hoisted, so its static
 //!   blocks and initializers never run.
@@ -166,7 +167,10 @@ fn hoisted(statement: &Statement<'_>) -> bool {
 
 /// Whether `statement` never completes normally, so the statement after it
 /// in its list never runs. A labelled statement may complete through a
-/// `break` to its own label, and `try`, `switch` and loops are not read.
+/// `break` to its own label, and `switch` and loops are not read. A `try`
+/// (ADR 1068) never completes normally when its `finally` block does not, or
+/// when its block does not and neither does its `catch` block, if any: a
+/// `finally` that completes normally keeps the block's abrupt completion.
 fn exits(statement: &Statement<'_>) -> bool {
     match statement {
         Statement::ReturnStatement(_)
@@ -174,6 +178,17 @@ fn exits(statement: &Statement<'_>) -> bool {
         | Statement::BreakStatement(_)
         | Statement::ContinueStatement(_) => true,
         Statement::BlockStatement(block) => block.body.iter().any(exits),
+        Statement::TryStatement(statement) => {
+            statement
+                .finalizer
+                .as_ref()
+                .is_some_and(|finalizer| finalizer.body.iter().any(exits))
+                || (statement.block.body.iter().any(exits)
+                    && statement
+                        .handler
+                        .as_ref()
+                        .is_none_or(|handler| handler.body.body.iter().any(exits)))
+        }
         Statement::IfStatement(statement) => {
             let alternate = || statement.alternate.as_ref().is_some_and(exits);
             match truthy(&statement.test) {

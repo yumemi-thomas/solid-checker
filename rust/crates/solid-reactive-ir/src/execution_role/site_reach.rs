@@ -660,6 +660,10 @@ impl<'l, 'a> SiteReach<'l, 'a> {
         if !self.runs(file, outer) || self.refused(file, function.span) {
             return false;
         }
+        // ADR 1068: the apply of an effect whose compute throws before anything else never receives a value, so it never runs.
+        if after_throwing_value_callback(file, function, self.lookup) {
+            return false;
+        }
         if self.lazy_reads
             && let Some(call) = lazy_creation(file, function.span, self.lookup)
             && !self.lazy_read_proven(file, call)
@@ -1351,6 +1355,62 @@ pub(crate) fn computation_accessor<'f>(
         BindingShape::Array => binding.array_slots.first().and_then(Option::as_ref),
         _ => None,
     }
+}
+
+/// ADR 1068: `function` is a callback argument of a dialect primitive written after one whose return the runtime hands on
+/// (`Dialect::callback_return_is_value`: an effect's compute, whose value the apply receives), and that earlier callback is a
+/// function literal whose body starts with a `throw`: every run of it throws before it returns, so no value is ever handed on
+/// and `function` is never entered. An `error` arm in a bundle runs on that throw and is not this (only a function written
+/// directly as the argument is). `false` for anything else.
+fn after_throwing_value_callback(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    ast.arguments_containing(function.span)
+        .any(|(call, index)| {
+            ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
+                && call.arguments[..index]
+                    .iter()
+                    .all(|argument| !argument.spread)
+                && lookup
+                    .primitive_at_call(file, call.span)
+                    .is_some_and(|primitive| {
+                        call.arguments[..index]
+                            .iter()
+                            .enumerate()
+                            .any(|(earlier, argument)| {
+                                lookup.dialect.callback_return_is_value(primitive, earlier)
+                                    && ast
+                                        .function_at(ast.peel_ts_sugar_span(argument.span))
+                                        .is_some_and(|value| body_starts_with_throw(file, value))
+                            })
+                    })
+        })
+}
+
+/// Whether the first statement of `function`'s block body is a `throw` of its own (no comment or other text before it).
+fn body_starts_with_throw(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> bool {
+    if function.expression_body {
+        return false;
+    }
+    let Some(text) = file.source_text(function.body) else {
+        return false;
+    };
+    let Some(open) = text.find('{') else {
+        return false;
+    };
+    let first = text[open + 1..].len() - text[open + 1..].trim_start().len();
+    let start = function.body.start + u32::try_from(open + 1 + first).unwrap_or(u32::MAX);
+    file.ast.throws.iter().any(|thrown| {
+        thrown.span.start == start
+            && crate::owners::containing_ast_function(&file.ast, thrown.span)
+                .is_some_and(|owner| owner.span == function.span)
+    })
 }
 
 /// ADR 0576: the call that creates a lazy computation whose callback is the

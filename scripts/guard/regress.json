@@ -56,6 +56,14 @@
    "removed": 1,
    "adr": "ADR 1052",
    "why": "part 2: SC6002 is proven at the sync memo's creation (wrapSyncLive, created on an apply's stack), so PRIMITIVE_IN_EFFECT_CALLBACK throws before SYNC_NODE_RECEIVED_ASYNC's probe (Chrome: runtime-oracle/competing-check-sync-memo-apply)"
+  },
+  {
+   "fixture": "reactive-ir/rc13-flush-in-effect-callback",
+   "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
+   "code": "SC2008",
+   "removed": 5,
+   "adr": "ADR 1068",
+   "why": "SC2008 at a flush that provably never runs (after a return, under if (false), in the apply of an effect whose compute throws first, in an effect never registered, in a createRoot init refused in an apply) is uncertifiable under ADR 1018; Chrome reports nothing there (runtime-oracle/flush-in-effect-callback, patterns/deadflush)"
   }
  ]
 }

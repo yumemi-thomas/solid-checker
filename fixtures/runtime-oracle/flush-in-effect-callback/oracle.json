@@ -24,36 +24,6 @@
       "kind": "unreached",
       "reason": "behind `next > 100`, which this run never meets; an unknown condition counts as reachable",
       "owner": "Mac 20"
-    },
-    {
-      "finding": "flush-in-effect-callback App.tsx:149",
-      "kind": "false-positive",
-      "reason": "after a `return`: the flush never runs, so a violation is wrong (ADR 1018); should be uncertifiable",
-      "owner": "Mac 20"
-    },
-    {
-      "finding": "flush-in-effect-callback App.tsx:157",
-      "kind": "false-positive",
-      "reason": "in a callback of `[].forEach`: never runs (ADR 1019 covers other codes, not FLUSH_IN_EFFECT_CALLBACK)",
-      "owner": "Mac 20"
-    },
-    {
-      "finding": "flush-in-effect-callback App.tsx:168",
-      "kind": "false-positive",
-      "reason": "the compute throws, so the apply never runs (ADR 1018)",
-      "owner": "Mac 20"
-    },
-    {
-      "finding": "flush-in-effect-callback App.tsx:239",
-      "kind": "false-positive",
-      "reason": "after a `return` inside `try`: never runs (ADR 1018)",
-      "owner": "Mac 20"
-    },
-    {
-      "finding": "flush-in-effect-callback App.tsx:254",
-      "kind": "false-positive",
-      "reason": "after a `return` that follows a caught throw: never runs (ADR 1018)",
-      "owner": "Mac 20"
     }
   ]
 }
