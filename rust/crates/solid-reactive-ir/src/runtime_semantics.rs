@@ -998,7 +998,11 @@ pub(crate) fn delivers_synchronously(qualified_name: &str) -> bool {
 }
 
 pub(super) fn standard_call_name(call: &ResolvedCall) -> Option<&str> {
-    if call.validity != ResolvedCallValidity::Valid {
+    // ADR 1070: a recovered call names a declaration only where the producer keeps its callee in JavaScript TypeScript does not check
+    // (`resolved_calls.rs` `resolve_one`): the call runs that standard method whatever its argument types.
+    if call.validity != ResolvedCallValidity::Valid
+        && !(call.validity == ResolvedCallValidity::Recovery && call.declaration.is_some())
+    {
         return None;
     }
     call.declaration

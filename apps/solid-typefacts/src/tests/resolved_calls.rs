@@ -232,6 +232,45 @@ const unresolved = takesNumber;\n";
     assert_eq!(calls[2].kind, CallKind::Unknown);
 }
 
+/// ADR 1070: a recovered call in JavaScript that keeps its callee names that callee's declaration (the standard `apply`); the same call in TypeScript names
+/// none. Both keep their arguments unresolved.
+#[test]
+fn a_recovered_javascript_call_names_its_standard_declaration() {
+    let js = "function impl(fn, options) { return fn; }\n\
+export const action = function (...args) { return impl.apply(this, args); };\n";
+    let ts = "function impl(fn: () => void, options?: object) { return fn; }\n\
+export const action = function (this: unknown, ...args: unknown[]) { return impl.apply(this, args); };\n";
+    let scratch = Scratch::new(&[
+        (
+            "tsconfig.json",
+            r#"{"compilerOptions":{"strict":true,"allowJs":true,"checkJs":true,"module":"esnext","target":"esnext"},"include":["*.js","*.ts"]}"#,
+        ),
+        ("calls.js", js),
+        ("typed.ts", ts),
+    ]);
+    let in_js = resolved(&scratch, "calls.js", js, &["impl.apply(this, args)"], false);
+    let in_ts = resolved(&scratch, "typed.ts", ts, &["impl.apply(this, args)"], false);
+    for call in [&in_js[0], &in_ts[0]] {
+        assert_eq!(call.validity, ResolvedCallValidity::Recovery, "{call:?}");
+        assert!(
+            call.arguments
+                .iter()
+                .all(|mapping| mapping.unresolved == Some(ArgumentMappingReason::RecoverySignature)),
+            "{call:?}"
+        );
+    }
+    let declaration = in_js[0]
+        .declaration
+        .as_ref()
+        .expect("a recovered JavaScript call names its callee's declaration");
+    assert!(declaration.standard_library, "{declaration:?}");
+    assert!(
+        declaration.qualified_name.ends_with(".apply"),
+        "{declaration:?}"
+    );
+    assert!(in_ts[0].declaration.is_none(), "{:?}", in_ts[0]);
+}
+
 /// `TestResolvedCallUsesOutermostChainedCall`.
 #[test]
 fn resolved_call_uses_the_outermost_chained_call() {

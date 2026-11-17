@@ -493,6 +493,21 @@ impl CallRun<'_, '_> {
                 || kind == TypePredicateKind::AssertsThis;
         }
         if call.validity != ResolvedCallValidity::Valid {
+            // ADR 1070: a recovered call written in JavaScript that keeps the callee it runs (a real signature, a target: only an argument's type failed) names
+            // that callee's declaration, so a consumer can tell the standard method it is (`formAction.apply(this, args)` in a package's dist file). TypeScript
+            // reports no error in JavaScript a project does not check, so nothing here stands where `tsc` speaks; a recovered call in TypeScript stays without one.
+            // The arguments stay unresolved.
+            if call.validity == ResolvedCallValidity::Recovery
+                && !call.target.is_empty()
+                && signature.addr() != self.env.checker.get_unknown_signature().addr()
+                && get_source_file_of_node(node)
+                    .is_some_and(|file| is_javascript_file_name(file.file_name()))
+            {
+                let declaration = self.current_signature_declaration(signature, target);
+                let resolved = self.resolved_declaration(Some(signature), declaration, target);
+                self.evidence.declaration(resolved.as_deref());
+                call.declaration = resolved.as_deref().cloned();
+            }
             call.arguments =
                 unresolved_mappings(argument_count, ArgumentMappingReason::RecoverySignature);
             return Ok(call);
@@ -1229,4 +1244,11 @@ fn collect_property_writes(node: P<Node>, writes: &mut HashSet<String>) -> bool 
     }
     node.for_each_child(&mut |child| collect_property_writes(child, writes));
     false
+}
+
+/// ADR 1070: a JavaScript source by its name (`.js`, `.jsx`, `.mjs`, `.cjs`), which TypeScript does not report errors in unless a project checks it.
+fn is_javascript_file_name(name: &str) -> bool {
+    [".js", ".jsx", ".mjs", ".cjs"]
+        .iter()
+        .any(|extension| name.ends_with(extension))
 }
