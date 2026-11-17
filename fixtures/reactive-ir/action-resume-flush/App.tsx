@@ -103,3 +103,67 @@ export function CodeBeforeYield() {
   });
   return <div />;
 }
+
+// ADR 1051's review: the operand must be one literal node. `yield` binds looser than `||`, `?:` and `+`, so each of these
+// yields what the whole expression gives: a promise (assimilated, no flush on the apply's stack) or a throw (the step
+// settles the action, no flush). No row.
+function load(): Promise<void> {
+  return Promise.resolve();
+}
+function fail(): string {
+  throw new Error("fail");
+}
+const mode: string = "p";
+export function YieldOrPromise() {
+  const b1 = action(function* () {
+    yield "z" < mode || load() || "";
+    setCount(11);
+  });
+  createEffect(() => 1, () => {
+    b1();
+  });
+  return <div />;
+}
+export function YieldConditionalPromise() {
+  const b2 = action(function* () {
+    yield "p" === mode ? load() : "done";
+    setCount(12);
+  });
+  createEffect(() => 1, () => {
+    b2();
+  });
+  return <div />;
+}
+export function YieldConcatThrows() {
+  const b3 = action(function* () {
+    yield "a" + fail() + "b";
+    setCount(13);
+  });
+  createEffect(() => 1, () => {
+    b3();
+  });
+  return <div />;
+}
+
+// The action calls the generator function before the first step: a parameter list that throws there ends the call, with
+// no step and no flush. No row.
+export function ParameterDestructured() {
+  const b4 = action(function* ({ id }: { id: number } = undefined as any) {
+    yield 1;
+    setCount(id);
+  });
+  createEffect(() => 1, () => {
+    b4();
+  });
+  return <div />;
+}
+export function ParameterDefaultThrows() {
+  const b5 = action(function* (n: string = fail()) {
+    yield 1;
+    setCount(n.length);
+  });
+  createEffect(() => 1, () => {
+    b5();
+  });
+  return <div />;
+}

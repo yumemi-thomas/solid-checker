@@ -1029,6 +1029,11 @@ const ACTION_STEP_PLACEMENT = {
   // The marker is cleared for the step: a memo or root in the body is legal where the apply itself reports.
   PRIMITIVE_IN_EFFECT_CALLBACK: { legal: ACTION_WINDOWED },
 };
+// ADR 1051's review: the first `yield`'s operand is an operator expression whose text starts and ends with a quote and whose
+// value is a promise (`yield "z" < "a" || Promise.resolve() || ""`): the step is assimilated, the body runs in a later step from
+// the promise's continuation, and no flush runs on the apply's stack (no FLUSH_IN_EFFECT_CALLBACK). A write and an action
+// there are legal, as in every step.
+for (const code of ["REACTIVE_WRITE_IN_OWNED_SCOPE", "ACTION_CALLED_IN_OWNED_SCOPE"]) ACTION_STEP_PLACEMENT[code].legal = [...ACTION_STEP_PLACEMENT[code].legal, "action-compound-yield-from-apply"];
 /**
  * The thunk contexts (`--recall` only; ADR 0551): `resolve(fn)` and `until(fn)` run `fn` as the compute of a `computed` under a fresh
  * root (`@solidjs/signals` rc.17 dist/dev.js:2694-2770, :2909), measured in Fable's precision probes (row 43): a write or an action
@@ -1996,9 +2001,9 @@ function recallContext(context, stmts, kit) {
     }
     case "action-after-yield": { const a = kit.name("a"); return { body: [decl(a, prim("action", fn(stmts), { afterYield: true }))], view: [button(kit.name("b"), [expr(call(ref(a)))])] }; }
     // ACTION_STEP_CONTEXTS: the site in an action's first synchronous slice, the action called by the named caller.
-    case "action-from-apply": case "action-plain-yield-from-apply": {
+    case "action-from-apply": case "action-plain-yield-from-apply": case "action-compound-yield-from-apply": {
       const a = kit.name("a");
-      const act = prim("action", fn(stmts), context === "action-plain-yield-from-apply" ? { plainYield: true } : {});
+      const act = prim("action", fn(stmts), context === "action-plain-yield-from-apply" ? { plainYield: true } : context === "action-compound-yield-from-apply" ? { compoundYield: true } : {});
       return { body: [decl(a, act), expr(prim("effect", fn([ret(num(1))]), { apply: fn([expr(call(ref(a)))]) }))], view: [] };
     }
     case "action-from-reaction": {

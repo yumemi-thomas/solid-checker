@@ -581,6 +581,9 @@ function render(program, instrument) {
         // `plainYield` (`action-plain-yield-from-apply`): a plain-value `yield` first; the next step runs synchronously on the same
         // stack (`@solidjs/signals` dist/dev.js:1637), so the body is still in the caller's window.
         if (e.plainYield) return `${callee}(function* () ${block(e.fn.body, depth, entryFor(e.fn, "fn"), ["yield 1;"])})`;
+        // `compoundYield` (`action-compound-yield-from-apply`, ADR 1051's review): an operator expression whose text starts and ends
+        // with a quote but whose value is a promise: the body runs in a later step, from the promise's continuation.
+        if (e.compoundYield) return `${callee}(function* () ${block(e.fn.body, depth, entryFor(e.fn, "fn"), ['yield "z" < "a" || Promise.resolve() || "";'])})`;
         const { head, body } = fnParts(e.fn, depth, "()");
         return `${callee}(function* ${head} ${body})`;
       }

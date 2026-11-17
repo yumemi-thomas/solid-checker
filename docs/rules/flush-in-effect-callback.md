@@ -217,9 +217,11 @@ An action whose generator's first statement is a `yield` of a value that is no t
 stack (`:2198-2208`). A call of such an action (a `const` holding `action(function* …)`) on a `createEffect` apply's stack
 with no owner runs that flush inside the flush draining effects, so the rule reports the call as it reports a `flush()`
 written there; Chrome rc.21 warns FLUSH_IN_EFFECT_CALLBACK at it. Not reported: a first `yield` of a promise or any other
-value that may be a thenable (the step resumes from a continuation), code before the `yield`, an async generator, an
-`onSettled` or tracked-effect caller (the flush throws its own error there), a `createRenderEffect` or `createReaction`
-apply.
+value that may be a thenable (the step resumes from a continuation), an operand that is not one literal node even when its
+text looks like one (`yield "a" + f() + "b"`, `yield "z" < m || load() || ""`: `yield` binds looser than the operators),
+code before the `yield`, a parameter list that may throw when the action calls the generator function (a default that runs
+code, a destructuring pattern), an async generator, an `onSettled` or tracked-effect caller (the flush throws its own error
+there), a `createRenderEffect` or `createReaction` apply.
 
 ## Premises
 
