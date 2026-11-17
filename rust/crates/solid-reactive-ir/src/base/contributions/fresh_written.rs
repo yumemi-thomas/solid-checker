@@ -89,7 +89,7 @@ impl Walk<'_> {
         let file = self.file;
         let ast = &file.ast;
         let value = ast.peel_ts_sugar_span(span);
-        if literal(file, value) {
+        if literal(file, value) || function_literal(file, value) {
             return Some(Fresh::Made);
         }
         if ast.reference_declaration(value).is_none()
@@ -141,6 +141,10 @@ impl Walk<'_> {
         }
         let file = self.file;
         let ast = &file.ast;
+        // ADR 1041: a function declaration's name, never rebound, holds the function object its declaration made.
+        if declared_function(file, declaration) {
+            return Some(Fresh::Made);
+        }
         let Some(binding) = ast
             .identifier_binding(declaration)
             .filter(|binding| binding.immutable || binding.runtime_let)
@@ -391,6 +395,59 @@ fn literal(file: &FileFacts, value: Span) -> bool {
                 .is_some_and(|text| text.starts_with('{') && text.ends_with('}')))
 }
 
+/// ADR 1041: exactly a function or arrow expression (not a method, an accessor or a declaration): each evaluation makes a
+/// new function object, whose own members a write puts on it and on no standard root.
+fn function_literal(file: &FileFacts, value: Span) -> bool {
+    file.ast.functions.iter().any(|function| {
+        function.span == value
+            && function.method_name.is_none()
+            && matches!(
+                function.kind,
+                FunctionKind::Expression | FunctionKind::Arrow
+            )
+    })
+}
+
+/// ADR 1041: whether `declaration` is the name of a function declaration of this file that nothing rebinds: no
+/// assignment or other write names it, no other declaration of the file binds the same name in its place (a second
+/// `function` or a `var` of that name would replace it), and no direct `eval` can reach it. Its binding then holds the
+/// function object the declaration made, wherever it is read (hoisting makes it so before the declaration too).
+fn declared_function(file: &FileFacts, declaration: Span) -> bool {
+    let ast = &file.ast;
+    let Some(function) = ast.functions.iter().find(|function| {
+        function.kind == FunctionKind::Declaration
+            && function
+                .name
+                .as_ref()
+                .is_some_and(|name| name.span == declaration)
+    }) else {
+        return false;
+    };
+    let Some(name) = function
+        .name
+        .as_ref()
+        .and_then(|name| file.source_text(name.span))
+    else {
+        return false;
+    };
+    let rebound_by_name = ast.functions.iter().any(|other| {
+        other.span != function.span
+            && other.kind == FunctionKind::Declaration
+            && other
+                .name
+                .as_ref()
+                .is_some_and(|other| file.source_text(other.span) == Some(name))
+    }) || ast.bindings.iter().any(|binding| {
+        binding
+            .names
+            .iter()
+            .any(|bound| file.source_text(bound.span) == Some(name))
+    });
+    !rebound_by_name
+        && !crate::indexes::binding_written(file, declaration)
+        && no_eval(file).is_some()
+}
+
 /// `Some(())` when no direct `eval` in the file can reach a binding by name.
 fn no_eval(file: &FileFacts) -> Option<()> {
     (!crate::interproc::property_gets::direct_eval_in(file, Span::new(0, u32::MAX))).then_some(())
@@ -593,6 +650,65 @@ mod tests {
             // A return of something else.
             (
                 "export function m(f: any, t: any, v: any) { return [1].reduce((result: any, key: number) => { result[key] = v; return t; }, {}); }",
+                None,
+            ),
+        ] {
+            assert_eq!(verdict(source), expected, "{source}");
+        }
+    }
+
+    /// ADR 1041: a function object the program made (a function or arrow expression, a function declaration nothing
+    /// rebinds), each beside the shape that keeps the write open.
+    #[test]
+    fn a_write_to_a_function_object_the_program_made_reaches_no_root() {
+        for (source, expected) in [
+            // The router's `toAction`: a `const` bound to a function expression, members and symbol keys written.
+            (
+                "const s = Symbol('s'); export function m(u: string) { const fn: any = function (...a: unknown[]) { return a; }; fn.toString = () => u; fn[s] = u; return fn; }",
+                Some(None),
+            ),
+            // An arrow.
+            (
+                "export function m(u: string) { const fn: any = () => u; fn.toString = () => u; return fn; }",
+                Some(None),
+            ),
+            // The router's `query.get = …`: a function declaration, exported, never rebound.
+            (
+                "export function query(k: string) { return k; } query.get = (k: string) => k; query.clear = () => {};",
+                Some(None),
+            ),
+            // The router's `Object.assign(RouterComponent, { match })`: a declaration inside a function.
+            (
+                "export function r() { function RouterComponent() { return null; } return Object.assign(RouterComponent, { match(u: string) { return u; } }); }",
+                Some(None),
+            ),
+            // A parameter: the caller's object, which may be a standard root.
+            (
+                "export function m(fn: any, u: string) { fn.toString = () => u; }",
+                None,
+            ),
+            (
+                "export function m(fn: any, u: string) { Object.assign(fn, { match: () => u }); }",
+                None,
+            ),
+            // A declaration rebound before the write.
+            (
+                "export function query(k: string) { return k; } export function set(t: any) { (query as any) = t; } query.get = (k: string) => k;",
+                None,
+            ),
+            // A second declaration of the name replaces the first.
+            (
+                "function query(k: string) { return k; } function query(k: string) { return k + k; } query.get = (k: string) => k;",
+                None,
+            ),
+            // A `var` of the name.
+            (
+                "declare const t: any; function query(k: string) { return k; } var query = t; query.get = (k: string) => k;",
+                None,
+            ),
+            // A direct `eval` may rebind it.
+            (
+                "export function m(s: string) { function query(k: string) { return k; } eval(s); (query as any).get = (k: string) => k; }",
                 None,
             ),
         ] {
