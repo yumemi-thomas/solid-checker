@@ -477,6 +477,22 @@ export function mergeDocumentStates(messages, final) {
     documents: { loaded: states.length, reported: present.length, lost: states.length - present.length } };
 }
 
+/**
+ * ADR 1029: a browser half recorded without source instrumentation, summarized with THIS run's models: the candidate scopes and the
+ * conflicting leaf models are the only parts of the half the checker's development models reach, and both are recomputed here from the
+ * raw scopes the half kept, so a cached half never carries an earlier checker's models.
+ */
+function withCurrentModels(body, { models, conflictingLeafModels, snapshot }) {
+  const sourceFiles = new Map(snapshot.sources.filter(source => !source.isDeclarationFile).map(source => [resolve(source.fileName), source]));
+  const { conflictingLeafModels: _old, ...coverage } = body.coverage ?? {};
+  return { ...body, coverage: { ...coverage, ...(conflictingLeafModels.size ? { conflictingLeafModels: [...conflictingLeafModels] } : {}),
+    candidateScopes: summarizeCandidateScopes([...models.values()], { instrumented: new Map(), scopes: coverage.rawScopes ?? { rows: [], dropped: 0 },
+      lineOf(path, byte) {
+        const text = sourceFiles.get(path)?.text;
+        return text === undefined ? null : Buffer.from(text).subarray(0, byte).toString().split("\n").length;
+      } }) } };
+}
+
 // `tooling` and `browser` return the (lazily loaded) Vite/Playwright tooling and
 // Chromium: a run whose every project reuses a cached browser half needs neither.
 async function collectProject(project, scenario, tooling, browser, responses = new Map(), runtimeOptions = {}, executionCache = null) {
@@ -501,17 +517,25 @@ async function collectProject(project, scenario, tooling, browser, responses = n
   // TypeScript error count, so its result is keyed on those and reused across
   // checker builds (feedback-execution-cache.mjs). The findings, observations
   // and automatic warnings below always come from this run's analysis.
-  const key = executionCache && executionCacheKey({ ...executionCache.parts, project: realpathSync(project),
-    manifest: snapshot.manifest, sources: snapshot.sources.filter(source => !source.isDeclarationFile)
-      .map(source => [resolve(source.fileName), hash(source.text)]),
-    feedbackFacts: nativeFeedback.analysis.feedbackFacts, typingErrors: snapshot.typingErrors, scenario,
-    responses: [...responses.values()].map(({ served: _served, ...row }) => row), runtimeOptions });
-  let body = key ? executionCache.cache.read(key) : null;
+  // ADR 1029: with the source instrumentation off (the runtime oracle), the browser half does not read the checker at all: the models
+  // only summarize its scopes afterwards (`candidateScopes`, below), so they are not in the key and a checker change reuses the half.
+  // Paths are relative to the project root (the key) or stored as placeholders (the body), so another checkout of the same case hits.
+  const uninstrumented = runtimeOptions.sourceInstrumentation === false;
+  const realRoot = realpathSync(projectRoot);
+  const roots = executionCache ? { "<<sc:project-root>>": realRoot, "<<sc:tooling-root>>": (await tooling()).root } : {};
+  const portable = value => (value === undefined ? value : JSON.parse(JSON.stringify(value).split(realRoot).join("<<sc:project-root>>")));
+  const key = executionCache && executionCacheKey({ ...executionCache.parts, project: relative(realRoot, realpathSync(project)),
+    manifest: portable(snapshot.manifest), sources: snapshot.sources.filter(source => !source.isDeclarationFile)
+      .map(source => [relative(realRoot, resolve(source.fileName)), hash(source.text)]),
+    feedbackFacts: uninstrumented ? null : nativeFeedback.analysis.feedbackFacts, typingErrors: snapshot.typingErrors, scenario: portable(scenario),
+    responses: portable([...responses.values()].map(({ served: _served, ...row }) => row)), runtimeOptions: portable(runtimeOptions) });
+  let body = key ? executionCache.cache.read(key, roots) : null;
   const cacheOutcome = !key ? "off" : body ? "hit" : "miss";
   if (!body) {
-    body = await browserHalf({ projectRoot, snapshot, models, conflictingLeafModels, scenario, tooling, browser, responses, runtimeOptions });
-    if (key && !body.failure) executionCache.cache.write(key, body);
+    body = await browserHalf({ projectRoot, snapshot, models: uninstrumented ? new Map() : models, conflictingLeafModels: uninstrumented ? new Set() : conflictingLeafModels, scenario, tooling, browser, responses, runtimeOptions });
+    if (key && !body.failure) executionCache.cache.write(key, body, roots);
   }
+  if (uninstrumented) body = withCurrentModels(body, { models, conflictingLeafModels, snapshot });
   const { capture, authoredEvents, documentsLost, assertions, typingErrors: _typingErrors, ...execution } = body;
   validateFeedbackInputs(snapshot.manifest);
   const feedback = inspectDevelopmentFeedback(project, { capture, snapshot, analyze: () => ({ status: nativeFeedback.nativeExitCode,
@@ -745,6 +769,7 @@ async function browserHalf({ projectRoot, snapshot, models, conflictingLeafModel
         ...(located.site ? { site: located.site } : { site: null, attribution: located.unmapped.attribution,
           firstPackageFrame: located.unmapped.firstPackageFrame, packages: located.unmapped.packages }) });
     }
+    coverage.rawScopes = raw.scopes;
     coverage.candidateScopes = summarizeCandidateScopes([...models.values()], { instrumented, scopes: raw.scopes,
       lineOf(path, byte) {
         const text = sourceFiles.get(path)?.text;

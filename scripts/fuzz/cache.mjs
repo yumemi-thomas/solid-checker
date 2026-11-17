@@ -4,10 +4,10 @@
 // all of those match, a recorded row is as good as running the program again, so rounds after the first
 // reuse it. Anything that changes the key (a rebuilt checker, a new lockfile, an edit to classify.mjs) makes
 // the old rows unreachable; nothing is ever patched in place.
-import { browserCache, pinnedHeadlessShell } from "../playwright-browser.mjs";
+import { browserCache, buildExecutable, pinnedHeadlessShell } from "../playwright-browser.mjs";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { GENERATOR_VERSION } from "./generate.mjs";
@@ -164,6 +164,48 @@ export function treeStat(directory) {
   return hash.digest("hex");
 }
 
+/**
+ * ADR 1029: what an install holds, by CONTENT, so a fresh clone or a reinstall of the same packages keys the same and a different
+ * package keys apart: npm's record of what it installed (`node_modules/.package-lock.json`, every package's version, resolved URL and
+ * integrity), else the name and version of every package below `node_modules` (a bun or hand install: every `package.json` one level
+ * below `node_modules`, `@scope/` included, recursively through nested `node_modules`). Never a stat: an mtime or an inode says where
+ * and when, not what. An edit to an installed dist file in place is not seen (npm's own record does not move); reinstall instead.
+ */
+export function installedContent(directory) {
+  if (!directory || !existsSync(directory)) return "missing";
+  const record = join(directory, ".package-lock.json");
+  if (existsSync(record)) return sha256(`npm\n${readFileSync(record)}`);
+  const packages = [];
+  const visit = (modules, prefix) => {
+    for (const name of readdirSync(modules).sort()) {
+      if (name.startsWith(".")) continue;
+      const path = join(modules, name);
+      if (name.startsWith("@")) { for (const inner of readdirSync(path).sort()) visitPackage(join(path, inner), `${prefix}${name}/${inner}`); continue; }
+      visitPackage(path, `${prefix}${name}`);
+    }
+  };
+  const visitPackage = (path, name) => {
+    const manifest = join(path, "package.json");
+    if (!existsSync(manifest)) return;
+    let version = "?";
+    try { version = JSON.parse(readFileSync(manifest, "utf8")).version ?? "?"; } catch { version = sha256(readFileSync(manifest)); }
+    packages.push(`${name}@${version}`);
+    if (existsSync(join(path, "node_modules"))) visit(join(path, "node_modules"), `${name}>`);
+  };
+  visit(directory, "");
+  return sha256(`packages\n${packages.join("\n")}`);
+}
+
+const binaryHashes = new Map();
+/** ADR 1029: a file's bytes, hashed once per process for the same path, size and mtime (a browser binary is about 200 MB). */
+export function binaryHash(path) {
+  if (!path || !existsSync(path)) return "missing";
+  const info = statSync(path);
+  const memo = `${path}\0${info.size}\0${info.mtimeMs}`;
+  if (!binaryHashes.has(memo)) binaryHashes.set(memo, fileHash(path));
+  return binaryHashes.get(memo);
+}
+
 /** The runner's settings from the environment (fast/runner.tsx and fast/vitest.config.mjs read them): they change what a record holds. */
 const RUNNER_ENV = ["FUZZ_PAUSE_MS", "FUZZ_FINAL_MS", "FUZZ_FAST_POOL"];
 
@@ -175,8 +217,8 @@ export function installedKey(config, { env = process.env, node = nodeVersion() }
   return sha256(JSON.stringify({
     // The Node that hosts the fast path (scripts/lib/node-runtime.mjs: never bun now; `bun: null` keeps the recorded keys valid).
     node, bun: null, env: Object.fromEntries(RUNNER_ENV.map((name) => [name, env[name] ?? null])),
-    fast: config.fastInstall ? treeStat(join(config.fastInstall, "node_modules")) : "none",
-    oracle: config.install ? treeStat(join(config.install, "node_modules")) : "none",
+    fast: config.fastInstall ? installedContent(join(config.fastInstall, "node_modules")) : "none",
+    oracle: config.install ? installedContent(join(config.install, "node_modules")) : "none",
   }));
 }
 
@@ -186,7 +228,7 @@ export const ORACLE_SOURCES = () => sha256(JSON.stringify([
   // `feedback run`: the CLI's entry, its library and its scripts (the browser driver), and what it has installed.
   ...["bin", "lib", "scripts"].map((dir) => treeHash(join(repo, "packages/cli", dir), (name) => /\.(m?js|cjs|json)$/.test(name) && !/\.test\./.test(name))),
   fileHash(join(repo, "packages/cli/package.json")), fileHash(join(repo, "packages/cli/bun.lock")), fileHash(join(repo, "packages/cli/package-lock.json")),
-  treeStat(join(repo, "packages/cli/node_modules")),
+  installedContent(join(repo, "packages/cli/node_modules")),
 ]));
 
 /**
@@ -197,8 +239,26 @@ export const ORACLE_SOURCES = () => sha256(JSON.stringify([
  * (`executionFiles`), so a generator that grows keeps the records of the programs it still writes.
  */
 export const RECORD_SOURCES = () => sha256(JSON.stringify([
-  ...["fast.mjs", "fast-daemon.mjs", "typecheck.mjs", "checker.mjs", "chrome.mjs", "chrome-host.mjs", "served.mjs", "chrome-host/runner.tsx", "chrome-host/error-listeners.mjs", "hits.mjs", "pipeline.mjs", "cache.mjs"].map((name) => fileHash(join(here, name))),
+  ...["fast.mjs", "fast-daemon.mjs", "typecheck.mjs", "checker.mjs", "chrome.mjs", "chrome-host.mjs", "served.mjs", "chrome-host/runner.tsx", "chrome-host/error-listeners.mjs", "hits.mjs", "pipeline.mjs"].map((name) => fileHash(join(here, name))),
   treeHash(join(here, "fast"), (name) => /\.(mjs|tsx?|json)$/.test(name) && !/\.test\./.test(name)),
+  RECORD_FORMAT,
+]));
+
+/**
+ * ADR 1029: the version of what a stored record holds (`EntryCache` entries, `recordDigest`); bumped when that changes. Before, cache.mjs's
+ * own bytes were in every key, so an edit to a key function or a comment here dropped every record of every grid.
+ */
+export const RECORD_FORMAT = "record-1";
+
+/**
+ * ADR 1029: the sources that make a Chrome record from a case's files, and nothing else: the driver that stages a case and turns the
+ * oracle's row into a record (chrome.mjs, hits.mjs, pipeline.mjs), the Chrome host and what it serves. Not the fast path, not the type
+ * check, not the checker's adapter (checker.mjs): none of them runs in the browser. The oracle and the product's browser half are
+ * `ORACLE_SOURCES`.
+ */
+export const CHROME_RECORD_SOURCES = () => sha256(JSON.stringify([
+  ...["chrome.mjs", "chrome-host.mjs", "served.mjs", "chrome-host/runner.tsx", "chrome-host/error-listeners.mjs", "hits.mjs", "pipeline.mjs"].map((name) => fileHash(join(here, name))),
+  RECORD_FORMAT,
 ]));
 
 /**
@@ -263,7 +323,7 @@ export const TYPECHECK_SOURCES = () => sha256(JSON.stringify(["typecheck.mjs", "
  * the fast path's sources, the Chrome host's and the executor's, the clock and the oracle: an edit to any of those re-ran every type
  * check of every grid.
  */
-export function typecheckEnvironmentKey(config, { code = TYPECHECK_SOURCES(), installed = config.install ? treeStat(join(config.install, "node_modules")) : "none" } = {}) {
+export function typecheckEnvironmentKey(config, { code = TYPECHECK_SOURCES(), installed = config.install ? installedContent(join(config.install, "node_modules")) : "none" } = {}) {
   return sha256(JSON.stringify({ kind: "typecheck", code, tsc: fileHash(config.tsc), oracleLock: fileHash(join(config.install ?? "", "package-lock.json")), installed }));
 }
 
@@ -271,15 +331,16 @@ export function typecheckEnvironmentKey(config, { code = TYPECHECK_SOURCES(), in
 export const typecheckKey = (projectFiles) => sha256(JSON.stringify(["typecheck", Object.entries(projectFiles).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))]));
 
 /** The environment of a Chrome record: the sources that produce it, the oracle and the product scripts it runs, the browser, the oracle install's lockfile. Not the checker. */
-export function chromeEnvironmentKey(config, { code = RECORD_SOURCES(), oracle = ORACLE_SOURCES(), browser = browserKey(config.browser), installed = installedKey({ install: config.install }) } = {}) {
+export function chromeEnvironmentKey(config, { code = CHROME_RECORD_SOURCES(), oracle = ORACLE_SOURCES(), browser = browserKey(config.browser), installed = installedKey({ install: config.install }) } = {}) {
   return sha256(JSON.stringify({ kind: "chrome", code, oracle, browser, installed, oracleLock: fileHash(join(config.install, "package-lock.json")) }));
 }
 
 /** The browser: `--browser`'s file, else the build the oracle picks; its path and every file of its build directory (treeStat). */
 export function browserKey(explicit, home = process.env.HOME) {
-  if (explicit) return JSON.stringify([explicit, treeStat(dirname(explicit))]);
+  // ADR 1029: the browser's executable by content (not its path, not its directory's stat): the same build anywhere keys the same.
+  if (explicit) return JSON.stringify(["explicit", binaryHash(explicit)]);
   const name = defaultBrowserName(home);
-  return JSON.stringify([name, name === "none" ? "none" : treeStat(join(browserCache({ home }), name))]);
+  return JSON.stringify([name, name === "none" ? "none" : binaryHash(buildExecutable(join(browserCache({ home }), name)))]);
 }
 
 /** The browser the oracle picks without `--browser` (scripts/playwright-browser.mjs): the pinned build's directory, "none" when absent. */
@@ -393,7 +454,13 @@ export const cacheableTypecheck = (typed) => Boolean(typed) && !typed.missing &&
 export const cacheableRecord = (record) => Boolean(record) && !["vitest", "chrome-host", "import"].includes(record.failure?.phase);
 
 /** Where the caches live: `--cache-dir`, else `$TMPDIR/solid-checker-fuzz-cache.noindex` (the neutrality baseline's default too). */
-export const cacheDirectory = (options) => resolve(options.cacheDir ?? join(tmpdir(), "solid-checker-fuzz-cache.noindex"));
+/**
+ * ADR 1029: one cache per machine, whatever the clone, worktree or TMPDIR: `--cache-dir`, else `SOLID_CHECKER_FUZZ_CACHE`, else
+ * `~/.cache/solid-checker/fuzz.noindex`. Every entry is keyed by content, so sharing it across checkouts is safe; a run that must not
+ * reuse passes `--no-cache` / `--no-chrome-cache`.
+ */
+export const sharedCacheRoot = (env = process.env, home = homedir()) => resolve(env.SOLID_CHECKER_FUZZ_CACHE || join(home, ".cache/solid-checker/fuzz.noindex"));
+export const cacheDirectory = (options) => resolve(options.cacheDir ?? sharedCacheRoot());
 
 /**
  * Where `feedback run` keeps the browser half of a run (`--execution-cache`, packages/cli/scripts/feedback-execution-cache.mjs), or
@@ -403,8 +470,13 @@ export const cacheDirectory = (options) => resolve(options.cacheDir ?? join(tmpd
  */
 export const browserExecutionCache = (options) => (options.noCache || options.noChromeCache ? undefined : join(cacheDirectory(options), "browser-execution"));
 
-/** The Chrome cache of a run, or null with `--no-chrome-cache`. */
-export const chromeCacheFor = (config, options) => (options.noChromeCache ? null : new EntryCache(cacheDirectory(options), "chrome", chromeEnvironmentKey({ ...config, browser: options.browser ? resolve(options.browser) : undefined })));
+/** The Chrome cache of a run, or null with `--no-chrome-cache`: the case runtime records, and the oracle's execution cache it runs with (ADR 1029). */
+export const chromeCacheFor = (config, options) => {
+  if (options.noChromeCache) return null;
+  const cache = new EntryCache(cacheDirectory(options), "chrome", chromeEnvironmentKey({ ...config, browser: options.browser ? resolve(options.browser) : undefined }));
+  cache.executionDir = browserExecutionCache(options);
+  return cache;
+};
 
 /**
  * The runtime cache of a run (matrix.mjs, run.mjs): Solid's answer on a program (its fast-path records) does not depend on the checker,

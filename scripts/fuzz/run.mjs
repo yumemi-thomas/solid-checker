@@ -28,7 +28,7 @@ import { programSeed } from "./rng.mjs";
 import { shrink } from "./shrink.mjs";
 import { assertFindingsMapped, checkerEnv, checkerWorkDir, keepWorkNamespace } from "./checker.mjs";
 import { requireTypeChecker, resolveTsc, typeErrorRefusal } from "./typecheck.mjs";
-import { fileHash, treeStat, withRuntimeCache, cacheStats } from "./cache.mjs";
+import { binaryHash, fileHash, withRuntimeCache, cacheStats } from "./cache.mjs";
 import { isSite, walk } from "./model.mjs";
 import { availableParallelism } from "node:os";
 import { createFastDaemon } from "./fast-daemon.mjs";
@@ -99,10 +99,10 @@ export function attachDaemon(config, options) {
         env: checkerEnv({ typefacts: config.typefacts, env: Object.fromEntries(["SOLID_CHECKER_RUNTIME_RESOLVER", "SOLID_TYPEFACTS_BIN"].filter((key) => process.env[key]).map((key) => [key, process.env[key]])) }),
         chrome: { browser: options.browser ?? defaultChromium(), install: config.fastInstall, oracleInstall: config.install, pages: Number(options.chromeConcurrency ?? 16) },
       });
-      return { ...config, fastHost: "chrome", fastHostKey: chromeHostKey({ ...settings, executor: "rust", oracleInstall: config.install }, { fileHash, treeStat }), exec: executor, fast: executorChromeHost(executor) };
+      return { ...config, fastHost: "chrome", fastHostKey: chromeHostKey({ ...settings, executor: "rust", oracleInstall: config.install }, { fileHash, binaryHash }), exec: executor, fast: executorChromeHost(executor) };
     }
     // The runtime cache keys a Chrome record by the host's own key too (cache.mjs), so it never answers for Happy DOM or another setting.
-    return { ...config, fastHost: "chrome", fastHostKey: chromeHostKey({ ...settings, oracleInstall: config.install }, { fileHash, treeStat }),
+    return { ...config, fastHost: "chrome", fastHostKey: chromeHostKey({ ...settings, oracleInstall: config.install }, { fileHash, binaryHash }),
       fast: createChromeHost({ install: config.fastInstall, oracleInstall: config.install, concurrency: Number(options.chromeConcurrency ?? 16), ...settings }) };
   }
   if (options.executor === "rust") throw new Error("--executor rust needs --fast-host chrome");
