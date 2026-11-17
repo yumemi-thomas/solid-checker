@@ -1,0 +1,159 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-held-callbacks-open/App.tsx",
+      "start": 715,
+      "end": 725,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-held-callbacks-open/App.tsx",
+      "start": 872,
+      "end": 882,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-held-callbacks-open/App.tsx",
+      "start": 1012,
+      "end": 1022,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-held-callbacks-open/App.tsx",
+      "start": 1164,
+      "end": 1174,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-held-callbacks-open/App.tsx",
+      "start": 1317,
+      "end": 1327,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-held-callbacks-open/App.tsx",
+      "start": 1455,
+      "end": 1465,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-held-callbacks-open/App.tsx",
+      "start": 1621,
+      "end": 1631,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-held-callbacks-open/App.tsx",
+      "start": 1679,
+      "end": 1687,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-held-callbacks-open/App.tsx",
+      "start": 1791,
+      "end": 1801,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-held-callbacks-open/App.tsx",
+      "start": 1948,
+      "end": 1958,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-held-callbacks-open/App.tsx",
+      "start": 1973,
+      "end": 1983,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-held-callbacks-open/App.tsx",
+      "start": 1973,
+      "end": 1983,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-held-callbacks-open/App.tsx",
+      "start": 2068,
+      "end": 2078,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "withheld-object-member",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-held-callbacks-open/App.tsx",
+      "start": 2139,
+      "end": 2143,
+      "fixes": 0
+    }
+  ]
+}

@@ -1,0 +1,87 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-held-callbacks/App.tsx",
+      "start": 550,
+      "end": 560,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-held-callbacks/App.tsx",
+      "start": 680,
+      "end": 690,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-held-callbacks/App.tsx",
+      "start": 801,
+      "end": 811,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-held-callbacks/App.tsx",
+      "start": 984,
+      "end": 994,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-held-callbacks/App.tsx",
+      "start": 1164,
+      "end": 1174,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-held-callbacks/App.tsx",
+      "start": 1294,
+      "end": 1304,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-held-callbacks/App.tsx",
+      "start": 1443,
+      "end": 1453,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-held-callbacks/App.tsx",
+      "start": 1810,
+      "end": 1820,
+      "fixes": 0
+    }
+  ]
+}

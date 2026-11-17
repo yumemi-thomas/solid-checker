@@ -824,26 +824,30 @@ impl Walk<'_, '_> {
             })?;
         let name = binding.names.first()?;
         let lookup = self.context.lookup;
+        let rejects = self.rejects.get();
         let mut end = None;
         for identifier in file.ast.reference_identifiers_to(name.span) {
             let at = identifier.span;
-            let argument = file.ast.arguments_containing(at).find(|(call, index)| {
-                file.ast.peel_ts_sugar_span(call.arguments[*index].span) == at
-            });
-            let called = file
+            // ADR 1044: each use of the copy by the class of its hand-off, as a reference of the function is
+            // (a scheduler, a carrier that runs it inline, a call, a primitive's argument, a further copy). A use
+            // that neither calls, hands nor copies it runs nothing (`void c`).
+            let hand_off = crate::local_access::hand_off_at(file, at, lookup);
+            let argument = file
                 .ast
-                .calls
-                .iter()
-                .find(|call| !call.construct && file.ast.peel_ts_sugar_span(call.callee) == at);
-            let entry = match (called, argument) {
-                (Some(call), _) => self.call_end(file, call, self.rejects.get(), depth),
-                (None, Some((call, index)))
-                    if lookup.primitive_at_call(file, call.span).is_some() =>
-                {
-                    self.argument(file, call, index, at, self.rejects.get(), depth)
+                .arguments_containing(at)
+                .any(|(call, index)| file.ast.peel_ts_sugar_span(call.arguments[index].span) == at);
+            let copied = file
+                .ast
+                .bindings_with_peeled_initializer(at)
+                .any(|binding| {
+                    binding.immutable && binding.shape == solid_facts::ast::BindingShape::Identifier
+                });
+            let entry = match hand_off {
+                HandOff::Call | HandOff::Inline(_) | HandOff::FreshStack => {
+                    self.hand_off_end(file, at, hand_off, rejects, depth)
                 }
-                (None, Some(_)) => self.reference(file, at, depth),
-                (None, None) => continue,
+                _ if argument || copied => self.hand_off_end(file, at, hand_off, rejects, depth),
+                _ => continue,
             };
             match entry {
                 ThrowEnd::Reported => return Some(ThrowEnd::Reported),
@@ -942,6 +946,98 @@ impl Walk<'_, '_> {
         end
     }
 
+    /// ADR 1044: the end of one reference of a held function, by the class of its hand-off (`local_access::hand_off_at`): a direct call, a
+    /// carrier that runs it inline, a fresh-stack scheduler, a primitive's argument, the initializer of a `const` copy, or a member read of
+    /// a closed literal that holds it; anything else is the reference's own end. The one dispatch `function_entries`, `alias_end` and
+    /// the closed literal's member reads share.
+    fn hand_off_end(
+        &self,
+        file: &FileFacts,
+        reference: Span,
+        hand_off: HandOff,
+        rejects: bool,
+        depth: usize,
+    ) -> ThrowEnd {
+        let lookup = self.context.lookup;
+        match hand_off {
+            HandOff::Call => file
+                .ast
+                .calls
+                .iter()
+                .find(|call| {
+                    call.direct_callee
+                        && !call.construct
+                        && file.ast.peel_ts_sugar_span(call.callee) == reference
+                })
+                .map_or(ThrowEnd::Unobserved, |call| {
+                    self.call_end(file, call, rejects, depth)
+                }),
+            // The carrier returns what it makes of the promise (`map`'s
+            // array, `call`'s result), or nothing (`forEach`).
+            HandOff::Inline(carrier) => self.span_end(file, carrier, rejects, depth),
+            HandOff::FreshStack => self.fresh_stack(file, reference),
+            _ => file
+                .ast
+                .arguments_containing(reference)
+                .find(|(call, index)| {
+                    file.ast.peel_ts_sugar_span(call.arguments[*index].span) == reference
+                })
+                .filter(|(call, _)| lookup.primitive_at_call(file, call.span).is_some())
+                .map_or_else(
+                    || {
+                        self.alias_end(file, reference, depth)
+                            .or_else(|| self.closed_member_end(file, reference, rejects, depth))
+                            .unwrap_or_else(|| self.reference(file, reference, depth))
+                    },
+                    |(call, index)| self.argument(file, call, index, reference, rejects, depth),
+                ),
+        }
+    }
+
+    /// ADR 1044: `reference` is the value of a property of a closed `const` object literal (ADR 0351: no spread, computed key, accessor,
+    /// duplicate key, `this` or `__proto__`, not exported, every reference of the binding a plain member read that is neither optional,
+    /// written nor deleted), so the function runs exactly where a member read naming it runs: the end of each read, by its hand-off
+    /// ([`Self::hand_off_end`]). `None` when no closed literal holds it. A member nothing reads runs nothing: unobserved, as before.
+    fn closed_member_end(
+        &self,
+        file: &FileFacts,
+        reference: Span,
+        rejects: bool,
+        depth: usize,
+    ) -> Option<ThrowEnd> {
+        let lookup = self.context.lookup;
+        let reads = file
+            .ast
+            .members
+            .iter()
+            .filter(|member| lookup.closed_member_value(file, member) == Some(reference))
+            .map(|member| member.span)
+            .collect::<Vec<_>>();
+        if reads.is_empty() {
+            return None;
+        }
+        let mut end = ThrowEnd::Unobserved;
+        for read in reads {
+            // The read called (`o.m()`): the member call runs the function on its stack, as a direct call of it does.
+            let entry =
+                match file.ast.calls.iter().find(|call| {
+                    !call.construct && file.ast.peel_ts_sugar_span(call.callee) == read
+                }) {
+                    Some(call) => self.call_end(file, call, rejects, depth),
+                    None => {
+                        let hand_off = crate::local_access::hand_off_at(file, read, lookup);
+                        self.hand_off_end(file, read, hand_off, rejects, depth)
+                    }
+                };
+            match entry {
+                ThrowEnd::Reported => return Some(ThrowEnd::Reported),
+                ThrowEnd::Open => {}
+                ThrowEnd::Unobserved => end = ThrowEnd::Unobserved,
+            }
+        }
+        Some(end)
+    }
+
     fn function_entries(
         &self,
         file: &FileFacts,
@@ -992,38 +1088,7 @@ impl Walk<'_, '_> {
                 }
                 continue;
             }
-            let entry = match hand_off {
-                HandOff::Call => file
-                    .ast
-                    .calls
-                    .iter()
-                    .find(|call| {
-                        call.direct_callee
-                            && !call.construct
-                            && file.ast.peel_ts_sugar_span(call.callee) == reference
-                    })
-                    .map_or(ThrowEnd::Unobserved, |call| {
-                        self.call_end(file, call, rejects, depth)
-                    }),
-                // The carrier returns what it makes of the promise (`map`'s
-                // array, `call`'s result), or nothing (`forEach`).
-                HandOff::Inline(carrier) => self.span_end(file, carrier, rejects, depth),
-                HandOff::FreshStack => self.fresh_stack(file, reference),
-                _ => file
-                    .ast
-                    .arguments_containing(reference)
-                    .find(|(call, index)| {
-                        file.ast.peel_ts_sugar_span(call.arguments[*index].span) == reference
-                    })
-                    .filter(|(call, _)| lookup.primitive_at_call(file, call.span).is_some())
-                    .map_or_else(
-                        || {
-                            self.alias_end(file, reference, depth)
-                                .unwrap_or_else(|| self.reference(file, reference, depth))
-                        },
-                        |(call, index)| self.argument(file, call, index, reference, rejects, depth),
-                    ),
-            };
+            let entry = self.hand_off_end(file, reference, hand_off, rejects, depth);
             match entry {
                 ThrowEnd::Reported => return ThrowEnd::Reported,
                 ThrowEnd::Unobserved => end = ThrowEnd::Unobserved,
