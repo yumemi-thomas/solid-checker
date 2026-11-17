@@ -25110,5 +25110,11 @@
    "mx-no-owner-cleanup-memo-async-for-await-x-alias-chain-13"
   ],
   "rediscovered": "main 0a03da1a2 recall-gap, this build agree (397 programs of each of `memo-async-for-await` and `effect-async-for-await`, 313 of `async-for-await`); the four contexts \u00d7 every code: 6,993 recall-gap to agree, lg-recall 6,366 uncertifiable to clean, nothing needs a look"
+ },
+ {
+  "finding": "a recall gap: the plain throw of CONTEXT_NOT_FOUND, NO_OWNER_CONTEXT, RESOLVE/UNTIL_IN_REACTIVE_SCOPE or FLUSH_IN_TRACKED_QUEUE_CALLBACK in a component under `<Portal>` was read as handled (the Portal counted as a component that may render its children inside a boundary): `computation-error-unobserved` while Chrome reports it",
+  "found": "R2's L3 scan (BRIEF-L3, the `portal` group: 1,178 misuse rows of the six stored-throw codes)",
+  "fixed": "ADR 1043 (`stored_throw.rs` `element_prop_handled`: a prop the dialect says the component reads only in its own memo under an owner, `Portal`'s `children`, renders in place)",
+  "outside": "the lean recall grid demotes the `portal` mount (matrix.mjs `LEAN_DEMOTED`), so no lean id holds the shape; the full grid generates it: `node scripts/fuzz/focus.mjs --codes CONTEXT_NOT_FOUND,NO_OWNER_CONTEXT,RESOLVE_IN_REACTIVE_SCOPE,UNTIL_IN_REACTIVE_SCOPE,FLUSH_IN_TRACKED_QUEUE_CALLBACK --grids mx-recall --recall-full`, e.g. `mx-context-not-found-body-x-direct-none-m-portal`, `mx-no-owner-context-async-x-direct-none-m-portal`, `mx-resolve-in-reactive-scope-memo-x-direct-none-m-portal`, `mx-until-in-reactive-scope-memo-x-direct-none-m-portal`, `mx-flush-in-tracked-queue-callback-tracked-x-direct-none-m-portal`: main 0a03da1a2 recall-gap, this build agree (a 1,000-program misuse sample of the mount: 348 recall-gap to agree, nothing else; 1,000 legal portal programs: no move)"
  }
 ]
