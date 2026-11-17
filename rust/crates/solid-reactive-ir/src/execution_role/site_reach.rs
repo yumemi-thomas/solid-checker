@@ -1220,14 +1220,12 @@ fn class_of_member<'f>(
     })
 }
 
-/// Whether the value at `value` is what a function called where it is
-/// written (an IIFE) returns, and the call's result is discarded: the value
-/// goes nowhere. `return value` in the function's own body, or its expression
-/// body. A generator is not read: its value goes to its iterator.
 /// ADR 1020: `function` is what a callback of a dialect primitive returns (its arrow's expression body, or a `return`'s argument in its
 /// own body) at a position whose return the runtime hands on as a value and never calls (`Dialect::callback_return_is_value`: an
 /// effect's or a memo's compute), and it is not called where it is written: `createEffect(() => () => { … }, (v) => { … })`. A
 /// cleanup an apply returns is called by the runtime, and is not this.
+/// `require_never_called` adds the unused-value proof for the reachability gate;
+/// the competing-diagnostic query asks only for the returned-value shape.
 pub(crate) fn returned_by_primitive_callback(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
