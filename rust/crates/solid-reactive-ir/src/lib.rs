@@ -42,6 +42,7 @@ mod argument_values;
 mod attribution;
 mod base;
 pub mod blocked_by;
+pub mod blocker_census;
 mod blockers;
 mod boundary_defects;
 mod cache;
@@ -1901,6 +1902,9 @@ pub struct Program {
     pub blocked_by: Vec<blocked_by::BlockedRow>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hazards: Vec<blocked_by::HazardSites>,
+    /// ADR 1061: every blocker the analyses found, where the blocker census is on (empty otherwise). Internal JSON only; nothing reads it back.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blocker_census: Vec<blocker_census::CensusRow>,
     /// ADR 0965 (the what-if build only): the blocker kinds this run assumed away; the backend reports no uncertifiable finding of them. Never serialized.
     #[cfg(feature = "what-if")]
     #[serde(skip)]

@@ -306,3 +306,114 @@ pub(crate) fn typed_blockers(
         .collect();
     (rows, hazards)
 }
+
+/// ADR 1061 (the blocker census): for each uncertifiable row of a veto family, every formula that holds it and every hazard each reads, not only the first
+/// formula [`typed_blockers`] names; and the sites of every hazard named, as rows of kind `hazard-site`. A row of the family that no formula holds (a row the
+/// withheld layer marked, a call no standard name resolves) is named so. Diagnostics only.
+pub(crate) fn formula_census(
+    program: &Program,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<crate::blocker_census::CensusRow> {
+    use crate::base::contributions::{handed_root_cause, impostor_cause, impostor_veto};
+    use crate::blocker_census::CensusRow;
+    let hazard = |hazard| lookup.hazard_present(hazard);
+    let files = lookup
+        .files()
+        .iter()
+        .map(|file| (file.path.as_str(), file))
+        .collect::<BTreeMap<_, _>>();
+    let mut rows = Vec::new();
+    let mut ids = BTreeSet::<String>::new();
+    for defect in program
+        .static_defects
+        .iter()
+        .filter(|defect| defect.uncertain)
+    {
+        let Some(kind) = blocked_kind(&defect.analysis_context) else {
+            continue;
+        };
+        let mut blockers = Vec::new();
+        if kind == crate::blockers::STANDARD_MEMBER_IMPOSTOR {
+            let name = match (
+                u32::try_from(defect.location.start_byte),
+                u32::try_from(defect.location.end_byte),
+                files.get(defect.location.path.as_ref()),
+            ) {
+                (Ok(start), Ok(end), Some(file)) => {
+                    let at = Span::new(start, end);
+                    lookup
+                        .resolved_standard_call_name(file, at)
+                        .map(|name| (file, at, name))
+                }
+                _ => None,
+            };
+            match name {
+                None => blockers.push("formula|no-standard-name|".to_owned()),
+                Some((file, at, name)) => {
+                    blockers.push(format!("name|{name}"));
+                    if let Some(fired) = handed_root_cause(name, &hazard) {
+                        for id in fired {
+                            blockers.push(format!("formula|handed-root-patch|{id}"));
+                            ids.insert(id);
+                        }
+                    }
+                    if impostor_veto(file, at, name, hazard, |member| {
+                        lookup.property_may_be_defined_reflectively_as(member)
+                    }) {
+                        for id in impostor_cause(name, &hazard) {
+                            blockers.push(format!("formula|impostor-veto|{id}"));
+                            ids.insert(id);
+                        }
+                    }
+                    if blockers.len() == 1 {
+                        blockers.push("formula|none|".to_owned());
+                    }
+                }
+            }
+        } else if kind == crate::blockers::TUPLE_ITERATION_WRITTEN {
+            for cause in lookup.array_slots_withdrawn_causes() {
+                blockers.push(format!("formula|array-slots-withdrawn|{cause}"));
+                ids.insert(cause.to_owned());
+            }
+        } else {
+            continue;
+        }
+        rows.push(CensusRow::at(&defect.location, kind, blockers));
+    }
+    let mut sites = crate::base::contributions::hazard_sites(
+        lookup.files(),
+        &ids,
+        lookup.fresh_factory_writes_open(),
+        &|key| lookup.projection_draft_key_open(key),
+    );
+    for id in [VISIBLE_ITERATION_WRITE, TUPLE_SLOT_ITERATION_MAY_BE_MUTATED] {
+        if ids.contains(id) {
+            sites.insert(id.to_owned(), tuple_iteration_sites(lookup, id));
+        }
+    }
+    for id in &ids {
+        let at = sites.get(id).map(Vec::as_slice).unwrap_or_default();
+        rows.push(CensusRow {
+            path: String::new(),
+            start: 0,
+            end: 0,
+            kind: "hazard-site".to_owned(),
+            blockers: if at.is_empty() {
+                vec![format!("site|{id}|||||")]
+            } else {
+                at.iter()
+                    .map(|site| {
+                        format!(
+                            "site|{id}|{}|{}|{}|{}",
+                            site.path,
+                            site.start,
+                            site.end,
+                            site.cause.unwrap_or_default()
+                        )
+                    })
+                    .collect()
+            },
+        });
+    }
+    rows
+}

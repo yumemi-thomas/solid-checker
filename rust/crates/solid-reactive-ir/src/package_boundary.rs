@@ -352,6 +352,7 @@ impl PackageBoundary {
             }
             folded.unseen_code.extend(index.unseen_code);
             folded.reads_receiver.extend(index.reads_receiver);
+            folded.census.extend(index.census);
         }
     }
 
