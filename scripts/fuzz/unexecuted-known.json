@@ -8,14 +8,6 @@
    "idRegex": "^lg-[a-z-]+-tbl-nodelist(of)?-foreach-zero-",
    "adr": "ADR 1033",
    "why": "A callback handed to `forEach` of an empty DOM `NodeList`/`NodeListOf` (`document.querySelectorAll` of nothing): it never runs; the checker reports the write, action or onFlush in it (REACTIVE_WRITE_IN_OWNED_SCOPE, ACTION_CALLED_IN_OWNED_SCOPE, ON_FLUSH_IN_OWNED_SCOPE). ADR 1019 left the DOM carriers out; the #270 smoke (run 44001094191) found 6 rows once the tbl-zero entry left. Fix owner: Mac 20."
-  },
-  {
-   "grid": "lg-recall",
-   "kind": "pending-fix",
-   "item": "dead-bundle-sync-node",
-   "idRegex": "^lg-sync-node-received-async-dead-bundle-(spread|computed)-",
-   "adr": "ADR 1034",
-   "why": "SYNC_NODE_RECEIVED_ASYNC (`sync-computation-received-async/violation`) in a function of a `const` bundle that a spread or a computed key keeps from being the property's final value (ADR 1009's `dead-bundle-*` contexts, effect host): the site never runs. The contexts came after the 78ddeb849 seed; the #270 smoke (run 44001094191) found 2 rows. Fix owner: Mac 23."
   }
  ]
 }
