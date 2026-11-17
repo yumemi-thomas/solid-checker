@@ -25855,5 +25855,27 @@
    "mx-sync-node-received-async-tracked-memo-direct-none"
   ],
   "rediscovered": "the merge of ADR 1020's branch (14434c30f) and part 1: stacked-claim (30 programs, ledgered R-stacked); this build: not-fired, and the rows leave open-defects-rows.json, so the old build fails `make fuzz-focus` on them as unlisted stacked claims"
+ },
+ {
+  "finding": "a recall gap: a plain throw (a static `dynamic` promise) in a literal a helper boxes (`function h(cb) { return { cb } }`, `const box = h(() => …); box.cb()` in the component body) was `computation-error-unobserved` while Chrome reports DYNAMIC_STATIC_PROMISE there",
+  "found": "R2's L3 scan (the `fire-store` group: 60 misuse rows of the stored-throw codes); ADR 1049 left it open",
+  "fixed": "ADR 1058 (`indexes/closed_members.rs` `boxed_literal`, `boxing_helper`: `const box = h(f)` with `h` returning `{ cb }` is a closed literal whose `cb` names `f`, ended by ADR 1044's `closed_member_end`)",
+  "grid": "mx-recall",
+  "code": "DYNAMIC_STATIC_PROMISE",
+  "ids": [
+   "mx-dynamic-static-promise-fire-store-body-x-direct-none"
+  ],
+  "rediscovered": "main 5780918b8 recall-gap, this build agree (Chrome on the 40 mx-recall movers: 40 of 40)"
+ },
+ {
+  "finding": "a recall gap: a no-owner context read (`createContext`/`useContext` with no owner) in a literal a helper boxes, run by `box.cb()` from a handler, was uncertifiable while Chrome reports NO_OWNER_CONTEXT there",
+  "found": "R2's L3 scan (the `fire-store` group: 60 misuse rows of the stored-throw codes); ADR 1049 left it open",
+  "fixed": "ADR 1058 (`indexes/closed_members.rs` `boxed_literal`, `boxing_helper`: `const box = h(f)` with `h` returning `{ cb }` is a closed literal whose `cb` names `f`, ended by ADR 1044's `closed_member_end`)",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CONTEXT",
+  "ids": [
+   "mx-no-owner-context-fire-store-handler-x-direct-none"
+  ],
+  "rediscovered": "main 5780918b8 recall-gap, this build agree (SC4001 violation at the site)"
  }
 ]

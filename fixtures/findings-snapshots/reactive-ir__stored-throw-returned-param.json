@@ -155,12 +155,11 @@
     {
       "rule": "static-dynamic-async-source",
       "code": "SC2007",
-      "kind": "uncertifiable",
-      "blocker": "computation-error-unobserved",
+      "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-returned-param/App.tsx",
-      "start": 2537,
-      "end": 2544,
+      "start": 2572,
+      "end": 2579,
       "fixes": 0
     },
     {
@@ -170,8 +169,8 @@
       "blocker": "handed-member-dispatch",
       "severity": "warning",
       "path": "fixtures/reactive-ir/stored-throw-returned-param/App.tsx",
-      "start": 2609,
-      "end": 2615,
+      "start": 2644,
+      "end": 2650,
       "fixes": 0
     }
   ]

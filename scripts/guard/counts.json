@@ -74,7 +74,7 @@
   "SC2003 store-handed-to-package": 1,
   "SC2003 store-operation-may-not-write": 38,
   "SC2003 store-write-unproven": 98,
-  "SC2003 unproven-container-root": 148,
+  "SC2003 unproven-container-root": 149,
   "SC2004 async-slot-unmodelled": 4,
   "SC2004 component-identity-unproven": 1,
   "SC2004 computation-error-unobserved": 26,
@@ -90,7 +90,7 @@
   "SC2006 parameter-initializer-unplaced": 14,
   "SC2006 primitive-alias-call": 2,
   "SC2007 async-flight-error-unobserved": 2,
-  "SC2007 computation-error-unobserved": 7,
+  "SC2007 computation-error-unobserved": 13,
   "SC2007 static-source-unproven": 7,
   "SC2008 callee-callback-timing": 1,
   "SC2008 creation-throws-first": 1,
@@ -232,7 +232,7 @@
   "SC9012 function-call-target-unresolved": 9,
   "SC9012 function-prototype-callee-unresolved": 2,
   "SC9012 function-run-unplaced": 2,
-  "SC9012 handed-member-dispatch": 458,
+  "SC9012 handed-member-dispatch": 467,
   "SC9012 handed-member-read": 72,
   "SC9012 handed-read-after-await": 10,
   "SC9012 import-unresolved": 46,
@@ -3016,6 +3016,19 @@
    "adr": "ADR 1020",
    "kind": "relabel",
    "relabeledTo": "SC7002 creation-throws-first"
+  },
+  {
+   "fixture": "reactive-ir/stored-throw-returned-param",
+   "key": "SC2007 computation-error-unobserved",
+   "from": 4,
+   "to": 3,
+   "adr": "ADR 1058",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes/closed_members.rs::boxed_literal",
+   "fixtures": {
+    "proved": "reactive-ir/stored-throw-returned-param",
+    "open": "reactive-ir/stored-throw-returned-literal"
+   },
+   "note": "`ReturnedInLiteral`: `function boxed(cb) { return { cb } }` boxes the literal, so the closed `const box = boxed(…)` is that literal and `box.cb()` runs it in the component body: an SC2007 violation (Chrome: DYNAMIC_STATIC_PROMISE at the line). The refusals (a helper that also stores, two returns, a spread, a box handed on or written, an imported helper) keep their rows in `stored-throw-returned-literal`."
   }
  ],
  "renames": []

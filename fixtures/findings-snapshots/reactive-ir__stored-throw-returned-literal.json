@@ -1,0 +1,212 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "static-dynamic-async-source",
+      "code": "SC2007",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-returned-literal/App.tsx",
+      "start": 701,
+      "end": 708,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-returned-literal/App.tsx",
+      "start": 773,
+      "end": 779,
+      "fixes": 0
+    },
+    {
+      "rule": "static-dynamic-async-source",
+      "code": "SC2007",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-returned-literal/App.tsx",
+      "start": 865,
+      "end": 872,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-returned-literal/App.tsx",
+      "start": 937,
+      "end": 943,
+      "fixes": 0
+    },
+    {
+      "rule": "static-dynamic-async-source",
+      "code": "SC2007",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-returned-literal/App.tsx",
+      "start": 1246,
+      "end": 1253,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-returned-literal/App.tsx",
+      "start": 1318,
+      "end": 1324,
+      "fixes": 0
+    },
+    {
+      "rule": "static-dynamic-async-source",
+      "code": "SC2007",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-returned-literal/App.tsx",
+      "start": 1529,
+      "end": 1536,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-returned-literal/App.tsx",
+      "start": 1607,
+      "end": 1613,
+      "fixes": 0
+    },
+    {
+      "rule": "static-dynamic-async-source",
+      "code": "SC2007",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-returned-literal/App.tsx",
+      "start": 1793,
+      "end": 1800,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-returned-literal/App.tsx",
+      "start": 1869,
+      "end": 1875,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "blocker": "unproven-container-root",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-returned-literal/App.tsx",
+      "start": 1940,
+      "end": 1946,
+      "fixes": 0
+    },
+    {
+      "rule": "static-dynamic-async-source",
+      "code": "SC2007",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-returned-literal/App.tsx",
+      "start": 2025,
+      "end": 2032,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-returned-literal/App.tsx",
+      "start": 2110,
+      "end": 2116,
+      "fixes": 0
+    },
+    {
+      "rule": "static-dynamic-async-source",
+      "code": "SC2007",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-returned-literal/App.tsx",
+      "start": 2201,
+      "end": 2208,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-returned-literal/App.tsx",
+      "start": 2294,
+      "end": 2300,
+      "fixes": 0
+    },
+    {
+      "rule": "static-dynamic-async-source",
+      "code": "SC2007",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-returned-literal/App.tsx",
+      "start": 2384,
+      "end": 2391,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-returned-literal/App.tsx",
+      "start": 2466,
+      "end": 2472,
+      "fixes": 0
+    },
+    {
+      "rule": "static-dynamic-async-source",
+      "code": "SC2007",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-returned-literal/App.tsx",
+      "start": 2603,
+      "end": 2610,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-returned-literal/App.tsx",
+      "start": 2675,
+      "end": 2681,
+      "fixes": 0
+    }
+  ]
+}

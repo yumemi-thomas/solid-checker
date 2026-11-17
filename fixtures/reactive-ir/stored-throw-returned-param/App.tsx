@@ -86,7 +86,7 @@ export function GeneratorStored() {
   steps.next();
   return <p />;
 }
-// A returned object literal holding the parameter: not this ADR's (open).
+// A returned object literal holding the parameter: a violation since ADR 1058 (the box is a closed literal).
 function boxed(cb: () => void) {
   return { cb };
 }
