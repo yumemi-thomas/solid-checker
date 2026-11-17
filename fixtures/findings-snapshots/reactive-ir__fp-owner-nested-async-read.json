@@ -70,7 +70,8 @@
     {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "site-reach-undecided",
       "severity": "error",
       "path": "fixtures/reactive-ir/fp-owner-nested-async-read/App.tsx",
       "start": 692,

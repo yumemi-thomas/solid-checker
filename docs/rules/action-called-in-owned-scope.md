@@ -26,7 +26,11 @@ ADR 1019), is uncertifiable (ADR 0576).
 An action call in a function no call edge reaches but that may run (called
 from a getter, `toString`, an iterator, a tag, a `Map` slot, a method, a
 constructor or an instance field) is uncertifiable too, never certified (ADR
-0715): Chrome throws when a render runs it. Module initialization (outside
+0715): Chrome throws when a render runs it. A construct-only class (one `new`,
+after it in the same non-async body, outside JSX; no `this`, `super`,
+`extends`) runs its constructor, its instance fields and the method called on
+that `new` there: a call written directly in one takes that body's role (ADR
+1022). Module initialization (outside
 every function, a static block or field) has no owner and is silent.
 An action handed to a project function calling that parameter in its body is
 called at that call; U if only on some paths (ADR 0929).

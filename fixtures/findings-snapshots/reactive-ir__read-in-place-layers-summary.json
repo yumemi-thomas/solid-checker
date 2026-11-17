@@ -130,12 +130,21 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 4102,
-      "end": 4106,
+      "start": 4148,
+      "end": 4157,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
+      "start": 4406,
+      "end": 4413,
       "fixes": 0
     },
     {
@@ -145,8 +154,8 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 4150,
-      "end": 4159,
+      "start": 4926,
+      "end": 4930,
       "fixes": 0
     },
     {
@@ -156,30 +165,8 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 4408,
-      "end": 4415,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 4928,
-      "end": 4932,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 5173,
-      "end": 5177,
+      "start": 5171,
+      "end": 5175,
       "fixes": 0
     },
     {
@@ -189,8 +176,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 5383,
-      "end": 5639,
+      "start": 5381,
+      "end": 5637,
       "fixes": 0
     },
     {
@@ -200,8 +187,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 5383,
-      "end": 5639,
+      "start": 5381,
+      "end": 5637,
       "fixes": 0
     },
     {
@@ -211,8 +198,8 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 5506,
-      "end": 5510,
+      "start": 5504,
+      "end": 5508,
       "fixes": 0
     },
     {
@@ -222,8 +209,8 @@
       "blocker": "value-held-in-binding",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 5822,
-      "end": 5826,
+      "start": 5820,
+      "end": 5824,
       "fixes": 0
     },
     {
@@ -233,8 +220,8 @@
       "blocker": "type-only-source",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 5864,
-      "end": 5869,
+      "start": 5862,
+      "end": 5867,
       "fixes": 0
     },
     {
@@ -244,8 +231,8 @@
       "blocker": "value-held-in-binding",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 6000,
-      "end": 6004,
+      "start": 5998,
+      "end": 6002,
       "fixes": 0
     },
     {
@@ -255,8 +242,8 @@
       "blocker": "parameter-call-argument-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 6319,
-      "end": 6330,
+      "start": 6317,
+      "end": 6328,
       "fixes": 0
     },
     {
@@ -266,8 +253,8 @@
       "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 6375,
-      "end": 6384,
+      "start": 6373,
+      "end": 6382,
       "fixes": 0
     },
     {
@@ -277,8 +264,8 @@
       "blocker": "parameter-call-argument-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 6575,
-      "end": 6586,
+      "start": 6573,
+      "end": 6584,
       "fixes": 0
     },
     {
@@ -288,8 +275,8 @@
       "blocker": "value-held-in-binding",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 6774,
-      "end": 6777,
+      "start": 6772,
+      "end": 6775,
       "fixes": 0
     },
     {
@@ -299,8 +286,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 6815,
-      "end": 6823,
+      "start": 6813,
+      "end": 6821,
       "fixes": 0
     },
     {
@@ -310,8 +297,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 6853,
-      "end": 6859,
+      "start": 6851,
+      "end": 6857,
       "fixes": 0
     },
     {
@@ -321,8 +308,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 6853,
-      "end": 6859,
+      "start": 6851,
+      "end": 6857,
       "fixes": 0
     },
     {
@@ -332,8 +319,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 6853,
-      "end": 6859,
+      "start": 6851,
+      "end": 6857,
       "fixes": 0
     },
     {
@@ -343,8 +330,8 @@
       "blocker": "value-held-in-binding",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 6970,
-      "end": 6973,
+      "start": 6968,
+      "end": 6971,
       "fixes": 0
     },
     {
@@ -354,8 +341,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 7023,
-      "end": 7029,
+      "start": 7021,
+      "end": 7027,
       "fixes": 0
     },
     {
@@ -365,8 +352,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 7023,
-      "end": 7029,
+      "start": 7021,
+      "end": 7027,
       "fixes": 0
     },
     {
@@ -376,8 +363,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 7023,
-      "end": 7029,
+      "start": 7021,
+      "end": 7027,
       "fixes": 0
     },
     {
@@ -387,8 +374,8 @@
       "blocker": "value-use-unclassified",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 7190,
-      "end": 7194,
+      "start": 7188,
+      "end": 7192,
       "fixes": 0
     },
     {
@@ -398,8 +385,8 @@
       "blocker": "value-held-in-binding",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 7199,
-      "end": 7203,
+      "start": 7197,
+      "end": 7201,
       "fixes": 0
     },
     {
@@ -409,8 +396,8 @@
       "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 7249,
-      "end": 7258,
+      "start": 7247,
+      "end": 7256,
       "fixes": 0
     },
     {
@@ -420,8 +407,8 @@
       "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 7434,
-      "end": 7443,
+      "start": 7432,
+      "end": 7441,
       "fixes": 0
     },
     {
@@ -431,8 +418,8 @@
       "blocker": "value-held-in-binding",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 7588,
-      "end": 7591,
+      "start": 7586,
+      "end": 7589,
       "fixes": 0
     },
     {
@@ -441,8 +428,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 7629,
-      "end": 7636,
+      "start": 7627,
+      "end": 7634,
       "fixes": 0
     },
     {
@@ -452,8 +439,8 @@
       "blocker": "value-held-in-binding",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-in-place-layers-summary/App.tsx",
-      "start": 7776,
-      "end": 7779,
+      "start": 7774,
+      "end": 7777,
       "fixes": 0
     },
     {

@@ -707,6 +707,12 @@ packages/wasm/owned/
 !fixtures/reactive-ir/route-components/node_modules/**
 !fixtures/reactive-ir/route-config/node_modules/
 !fixtures/reactive-ir/route-config/node_modules/**
+!fixtures/reactive-ir/route-entries/node_modules/
+!fixtures/reactive-ir/route-entries/node_modules/**
+!fixtures/reactive-ir/route-entries-shadowed/node_modules/
+!fixtures/reactive-ir/route-entries-shadowed/node_modules/**
+!fixtures/reactive-ir/route-entries-namespace/node_modules/
+!fixtures/reactive-ir/route-entries-namespace/node_modules/**
 !fixtures/reactive-ir/route-components/variants/*/node_modules/
 !fixtures/reactive-ir/route-components/variants/*/node_modules/**
 !fixtures/reactive-ir/route-config/variants/*/node_modules/
@@ -1045,6 +1051,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/reactive-handler-frozen-roots/node_modules/**
 !fixtures/reactive-ir/rc21-sync-compute-open/node_modules/
 !fixtures/reactive-ir/rc21-sync-compute-open/node_modules/**
+!fixtures/reactive-ir/returned-closure-unrun/node_modules/
+!fixtures/reactive-ir/returned-closure-unrun/node_modules/**
 !fixtures/reactive-ir/rc21-anonymous-component/node_modules/
 !fixtures/reactive-ir/rc21-anonymous-component/node_modules/**
 !fixtures/reactive-ir/rc21-open-destructure/node_modules/
@@ -1093,6 +1101,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-leaf-identity-unproven/node_modules/**
 !fixtures/reactive-ir/rc21-action-unplaced/node_modules/
 !fixtures/reactive-ir/rc21-action-unplaced/node_modules/**
+!fixtures/reactive-ir/construct-only-class/node_modules/
+!fixtures/reactive-ir/construct-only-class/node_modules/**
 !fixtures/reactive-ir/rc21-setter-unplaced/node_modules/
 !fixtures/reactive-ir/rc21-setter-unplaced/node_modules/**
 !fixtures/reactive-ir/store-for-head-write/node_modules/
@@ -1337,6 +1347,14 @@ packages/wasm/owned/
 !fixtures/reactive-ir/handed-root-patch-definer-key-any/node_modules/**
 !fixtures/reactive-ir/handed-root-patch-shadowed/node_modules/
 !fixtures/reactive-ir/handed-root-patch-shadowed/node_modules/**
+!fixtures/reactive-ir/fresh-written-object/node_modules/
+!fixtures/reactive-ir/fresh-written-object/node_modules/**
+!fixtures/reactive-ir/fresh-written-object-factory-patched/node_modules/
+!fixtures/reactive-ir/fresh-written-object-factory-patched/node_modules/**
+!fixtures/reactive-ir/fresh-written-object-escaped/node_modules/
+!fixtures/reactive-ir/fresh-written-object-escaped/node_modules/**
+!fixtures/reactive-ir/fresh-written-object-shadowed/node_modules/
+!fixtures/reactive-ir/fresh-written-object-shadowed/node_modules/**
 !fixtures/reactive-ir/rc21-listener-bare-global/node_modules/
 !fixtures/reactive-ir/rc21-listener-bare-global/node_modules/**
 !fixtures/reactive-ir/rc21-listener-bare-shadowed/node_modules/
@@ -1666,3 +1684,7 @@ packages/wasm/owned/
 
 !fixtures/reactive-ir/dead-literal-rows/node_modules/
 !fixtures/reactive-ir/dead-literal-rows/node_modules/**
+!fixtures/reactive-ir/tuple-hazard-sites/node_modules/
+!fixtures/reactive-ir/tuple-hazard-sites/node_modules/**
+!fixtures/reactive-ir/tuple-hazard-sites-shadowed/node_modules/
+!fixtures/reactive-ir/tuple-hazard-sites-shadowed/node_modules/**

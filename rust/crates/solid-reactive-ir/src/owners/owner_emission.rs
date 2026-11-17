@@ -1265,13 +1265,21 @@ fn entered_by_tags_only(
                         == Some(solid_dialect::ComponentEntry::RenderedUnderOwner)
                 })
     };
+    // ADR 1025: a reference that is a route definition's `component` an audited `@solidjs/router` renders (ADR 0335's premises:
+    // `createComponent(component, props)` in the route's outlet, a keyed `Show`'s child under `RouteContextObj`, under the `<Router>` tag)
+    // enters the function by a render under an owner, as a tag does. The router's other read of the value (`component.preload?.()`, the
+    // `SERVER_ROUTE` brand) reads a member, which a function every other reference of which is a tag or such a value has none of.
+    let routed = |at_file: &solid_facts::FileFacts, at: Span| {
+        lookup.solid_router_component_value(at_file.path.as_str(), at)
+    };
+    let foreign = crate::local_access::foreign_reference_hand_offs(file, function, lookup);
     // The other files' references the call graph holds (a call, a render) are accounted for; any other reference there is a value flow.
     if !local
         .iter()
-        .all(|(at, _)| tag_name(*at) || rendered_prop(file, *at))
-        || !crate::local_access::foreign_reference_hand_offs(file, function, lookup)
+        .all(|(at, _)| tag_name(*at) || rendered_prop(file, *at) || routed(file, *at))
+        || !foreign
             .iter()
-            .all(|(foreign, at, _)| rendered_prop(foreign, *at))
+            .all(|(other, at, _)| rendered_prop(other, *at) || routed(other, *at))
     {
         return false;
     }
@@ -1284,10 +1292,23 @@ fn entered_by_tags_only(
         return false;
     }
     !local.is_empty()
+        || foreign.iter().any(|(other, at, _)| routed(other, *at))
         || !lookup
             .function_call_site_references(file.path.as_str(), function.span)
             .is_empty()
         || lookup.handed_out_only_by_lazy_render(file.path.as_str(), function.span)
+}
+
+/// ADR 1025: whether `function` is an inline arrow written as a route definition's `component` an audited `@solidjs/router` renders: it has
+/// no binding, so that render is its one entry.
+fn routed_inline(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    function.kind == solid_facts::ast::FunctionKind::Arrow
+        && function_binding_name(file, function).is_none()
+        && lookup.solid_router_component_value(file.path.as_str(), function.span)
 }
 
 /// How many calls [`layer_entry_open`] follows out through a closed layer's
@@ -1352,7 +1373,8 @@ fn layer_entry_open(
             return true;
         }
         if lookup.function_proven_component(file, function)
-            && entered_by_tags_only(file, function, lookup)
+            && (entered_by_tags_only(file, function, lookup)
+                || routed_inline(file, function, lookup))
         {
             return false;
         }

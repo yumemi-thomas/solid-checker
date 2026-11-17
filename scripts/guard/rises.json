@@ -3906,6 +3906,14 @@
    "to": 2,
    "adr": "ADR 1021",
    "fact": "the SC4001 rows at a default or helper that never runs (only a `void` reference) are relabelled from function-run-unplaced to owner-callers-unenumerated: the same finding, still uncertifiable"
+  },
+  {
+   "fixture": "reactive-ir/fp-owner-nested-async-read",
+   "key": "SC1002 site-reach-undecided",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1020",
+   "fact": "a closure a memo compute returns, never called (typeof run() only reads the value): line 23 of ReturnedAsyncClosure is a site no run reaches; Chrome rc.21 reports nothing there (static-only on c2779cb39), and the fixture README itself lists it as a negative. ADR 1020 makes the reach query undecided there"
   }
  ]
 }

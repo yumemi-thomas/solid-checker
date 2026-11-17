@@ -223,6 +223,8 @@ pub(crate) struct HazardSiteAt {
     pub(crate) path: String,
     pub(crate) start: u32,
     pub(crate) end: u32,
+    /// ADR 1027: which disjunct of the hazard the site holds, where the hazard is a disjunction.
+    pub(crate) cause: Option<&'static str>,
 }
 
 /// The sites that contribute each hazard of `ids` (ids of [`handed_root_atoms`] or [`impostor_atoms`]), by path then span,
@@ -230,9 +232,11 @@ pub(crate) struct HazardSiteAt {
 /// (`StandardImpostor(member)`). The others (`StandardRootHanded`, a patch, ...) keep no per-site record, so their sites
 /// are absent, never guessed. Every id is a key of the answer. One pass over `files`: the census's per-file scan runs once
 /// per file, not once per id.
+/// `factory_open` (ADR 1024): the factory form's sites are open writes too.
 pub(crate) fn hazard_sites(
     files: &[FileFacts],
     ids: &BTreeSet<String>,
+    factory_open: bool,
 ) -> BTreeMap<String, Vec<HazardSiteAt>> {
     // The census site each id asks for: its variant and key.
     let wanted = ids
@@ -254,9 +258,9 @@ pub(crate) fn hazard_sites(
         .iter()
         .any(|(_, variant, _)| *variant == "OpenMemberWrite");
     for file in files {
-        let (members, _, open) = impostor_sites(file);
+        let members = impostor_sites(file).0;
         let writes = if reads_writes {
-            open_writes(file, open)
+            open_writes_with_factory(file, factory_open)
         } else {
             Vec::new()
         };
@@ -278,6 +282,7 @@ pub(crate) fn hazard_sites(
                     path: file.path.as_str().to_owned(),
                     start: span.start,
                     end: span.end,
+                    cause: None,
                 }));
             }
         }

@@ -917,6 +917,14 @@ pub trait Dialect: Sync {
     /// nothing in 1.x reads a returned function as a cleanup.
     fn accepts_cleanup_return(&self, primitive: Primitive) -> bool;
 
+    /// ADR 1020: whether what the callback at `argument` of `primitive` returns is a value the runtime hands on and never calls: an
+    /// effect's compute (its value goes to the apply), a memo's compute (its value is stored). A function returned there runs only where
+    /// program code calls that value. Default `false`: no position is read so, and nothing is withheld.
+    fn callback_return_is_value(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
     /// Whether this component renders its children through a callback the
     /// component itself invokes.
     ///

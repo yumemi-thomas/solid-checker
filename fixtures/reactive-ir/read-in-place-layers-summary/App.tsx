@@ -144,9 +144,9 @@ export function CleanupInFactoryBodyHelper() {
   return <div><p ref={dir1()} data-view="v1">x</p></div>;
 }
 
-// Uncertifiable (ADR 0516's answer, never silence): a class member's body is
-// run by a construction or a member call nothing follows, so a helper or a
-// hook's accessor called there is an obligation, as a read written there is.
+// Violations (ADR 1022; ADR 0516's obligations before): each class is
+// construct-only, so its constructor and the method called on its one `new`
+// run in the body, and a helper or a hook's accessor called there is read there.
 
 export function ClassCtorWrapper() {
   const [r1] = createSignal(3);

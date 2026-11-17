@@ -743,7 +743,10 @@ pub(crate) fn collect_project<'facts>(
                 .and_then(|name| {
                     let member = name.rsplit_once('.').map_or(name, |(_, member)| member);
                     let writes = root_writes.get_or_insert_with(|| {
-                        crate::base::contributions::handed_root_writes(files)
+                        crate::base::contributions::handed_root_writes(
+                            files,
+                            ctx.semantic_lookup.fresh_factory_writes_open(),
+                        )
                     });
                     crate::base::contributions::handed_root_detail_in(writes, member)
                 });

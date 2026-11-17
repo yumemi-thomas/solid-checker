@@ -183,7 +183,7 @@ pub(crate) fn inside_instance_field_within(
                     && !element.r#static
                     && element.value.is_some_and(|value| value.contains(span))
             })
-    })
+    }) && super::construct_only_member_run(file, span).is_none()
 }
 
 /// ADR 0963: whether `span` is written directly in the initializer of a class field (an instance field, a static one, an
@@ -203,7 +203,7 @@ pub(crate) fn in_field_initializer(file: &solid_facts::FileFacts, span: Span) ->
                                 .any(|function| function.span.contains(span))
                     })
             })
-    })
+    }) && super::construct_only_member_run(file, span).is_none()
 }
 
 /// Whether `span` sits in a class written inside `function`: its field

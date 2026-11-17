@@ -97,16 +97,32 @@ pub fn route_component_values(
     prototype_written: bool,
 ) -> HashSet<(String, Span)> {
     let mut values = tanstack_values(facts, dialect, install);
-    if !prototype_written {
-        values.extend(router_config_values(
-            facts,
-            dialect,
-            install,
-            references,
-            namespace_exposed,
-        ));
-    }
+    values.extend(solid_router_component_values(
+        facts,
+        dialect,
+        install,
+        references,
+        namespace_exposed,
+        prototype_written,
+    ));
     values
+}
+
+/// ADR 1025: the `@solidjs/router` half of [`route_component_values`] alone ([`router_config_values`], under the same
+/// premises): the values the audited releases render with `createComponent` in a route's outlet, under an owner.
+#[must_use]
+pub fn solid_router_component_values(
+    facts: &ProjectFacts,
+    dialect: &dyn Dialect,
+    install: &RouterInstallEvidence,
+    references: &BindingReferences<'_>,
+    namespace_exposed: Option<&HashSet<String>>,
+    prototype_written: bool,
+) -> HashSet<(String, Span)> {
+    if prototype_written {
+        return HashSet::default();
+    }
+    router_config_values(facts, dialect, install, references, namespace_exposed)
 }
 
 fn tanstack_values(

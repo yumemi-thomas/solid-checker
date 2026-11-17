@@ -2384,6 +2384,12 @@ pub(super) fn callee_callback_timing_within(
         if literal.generator {
             return action_step_timing_unproven(file, literal, execution, lookup, following);
         }
+        // ADR 1022: a placed constructor or method runs at its one `new` or receiver call, written after the class in the
+        // function the class is written in: its timing is that call's.
+        if let Some(run) = super::construct_only_literal_run(file, literal, span) {
+            span = run;
+            continue;
+        }
         // The call the literal is written in: an argument in which the literal
         // is the outermost function (directly, or inside an array or object
         // literal), the innermost such call.

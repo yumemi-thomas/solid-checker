@@ -898,6 +898,8 @@ pub(super) struct SemanticLookup<'a> {
     router_params: crate::base::reads::Recorded<crate::router_params::RouterParamsStatus>,
     /// ADR 0334: the route option values the audited router renders.
     route_component_values: crate::base::reads::Recorded<HashSet<(String, Span)>>,
+    /// ADR 1025: the `@solidjs/router` half of them.
+    solid_router_component_values: crate::base::reads::Recorded<HashSet<(String, Span)>>,
     /// ADR 0209: the property names some assignment in the project writes
     /// (`x.name = …`), and which prototypes it writes through (ADR 0314).
     assigned_member_names: crate::base::reads::Recorded<AssignedMembers>,
@@ -1314,6 +1316,7 @@ impl<'a> SemanticLookup<'a> {
             objects_assigned_into: crate::base::reads::Recorded::new(),
             router_params: crate::base::reads::Recorded::new(),
             route_component_values: crate::base::reads::Recorded::new(),
+            solid_router_component_values: crate::base::reads::Recorded::new(),
             assigned_member_names: crate::base::reads::Recorded::new(),
             reflective_definition_names: crate::base::reads::Recorded::new(),
             returned_invocation_sites: ReturnedInvocationSites::default(),
@@ -2747,7 +2750,13 @@ impl<'a> SemanticLookup<'a> {
                 crate::base::memo::probes::PolledKey::Unit
             });
         }
-        let present = premise || self.hazards_index().contains_key(&hazard);
+        let present = premise || {
+            let index = self.hazards_index();
+            index.contains_key(&hazard)
+                || crate::base::contributions::open_member_write_through_factory(hazard, &|raw| {
+                    index.contains_key(&raw)
+                })
+        };
         // ADR 0950, the one seam: a what-if build answers `false` for a hazard it was told to assume absent. This block does not exist in a default
         // build (`what-if` is in no default, workspace or CI), so nothing there can reach it.
         #[cfg(feature = "what-if")]
@@ -2755,6 +2764,13 @@ impl<'a> SemanticLookup<'a> {
             return false;
         }
         present
+    }
+
+    /// ADR 1024: whether a factory the factory form of the open-write census trusts may not be standard, so that its
+    /// sites are open writes ([`crate::base::contributions::open_member_write_through_factory`]).
+    pub(crate) fn fresh_factory_writes_open(&self) -> bool {
+        let index = self.hazards_index();
+        !crate::base::contributions::fresh_factories_intact(&|raw| index.contains_key(&raw))
     }
 
     /// ADR 0965: the blocker kinds this run assumed away (`--assume Premise(kind)`), each asked of the seam, which is how the run records that it flipped.
@@ -2885,6 +2901,47 @@ impl<'a> SemanticLookup<'a> {
         crate::base::reads::note(crate::base::reads::Section::RouteComponents);
         self.route_component_values()
             .contains(&(path.to_string(), span))
+    }
+
+    /// ADR 1025: whether the value at `span` of `path` is a route definition's `component` an audited `@solidjs/router`
+    /// renders with `createComponent` in a route's outlet (ADR 0335's premises).
+    pub(crate) fn solid_router_component_value(&self, path: &str, span: Span) -> bool {
+        crate::base::reads::note(crate::base::reads::Section::RouteComponents);
+        self.solid_router_component_values
+            .get_or_init(|| {
+                crate::route_components::solid_router_component_values(
+                    self.facts,
+                    self.dialect,
+                    &self.router_install,
+                    &|file, name| self.binding_reference_spans(file, name),
+                    crate::object_members::namespace_exposed_modules(self).as_ref(),
+                    crate::interproc::accessor_provenance::reflective_prototype_write(self),
+                )
+            })
+            .contains(&(path.to_string(), span))
+    }
+
+    /// The compiler's references to the binding named at `name` of `file`, as `(path, span)`; `None` when it knows no
+    /// symbol there.
+    fn binding_reference_spans(
+        &self,
+        file: &solid_facts::FileFacts,
+        name: Span,
+    ) -> Option<Vec<(String, Span)>> {
+        let symbol = self.entities.at(file.path.as_str(), name)?;
+        let references = self.symbol_references_if_present(symbol.as_str())?;
+        references
+            .iter()
+            .map(|reference| {
+                Some((
+                    reference.path.to_string(),
+                    Span::new(
+                        u32::try_from(reference.start_byte).ok()?,
+                        u32::try_from(reference.end_byte).ok()?,
+                    ),
+                ))
+            })
+            .collect()
     }
 
     /// Every route component value (ADR 0334), by path and span.

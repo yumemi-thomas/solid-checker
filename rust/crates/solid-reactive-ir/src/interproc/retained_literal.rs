@@ -86,6 +86,11 @@ pub(super) fn runs_in_unproven_stored_literal(
         if literal.generator {
             return false;
         }
+        // ADR 1022: a placed constructor or method runs at its one `new` or receiver call, as an IIFE runs at its own.
+        if let Some(run) = crate::execution_role::construct_only_literal_run(file, literal, span) {
+            span = run;
+            continue;
+        }
         if file
             .ast
             .arguments_containing(literal.span)
