@@ -25877,5 +25877,11 @@
    "mx-no-owner-context-fire-store-handler-x-direct-none"
   ],
   "rediscovered": "main 5780918b8 recall-gap, this build agree (SC4001 violation at the site)"
+ },
+ {
+  "finding": "not a defect: uncertifiable SC1001 `package-value-read` rows at reads of values `@stylexjs/stylex` 0.19.0's `create`, `defineVars` and their kin return, though those exports throw on every call and return no value (1,808 rows of the rc.21 corpus, inferay)",
+  "found": "R3's lever 7 (the package-value-read census of the rc.21 corpus)",
+  "fixed": "ADR 1063 (premise `stylex-0.19` in `solid-facts-backend/src/reviewed_packages.rs`, `reviewed_api::call_always_throws`, `value_reads.rs`)",
+  "outside": "the grids install no stylex (the fuzz installs hold Solid and the generator's own synthetic packages), and a reading pinned to stylex's published bytes holds for no generated package; fixtures `package-value-stylex` and `package-value-stylex-patched` pin the reading and its digest, and the corpus delta measures it"
  }
 ]

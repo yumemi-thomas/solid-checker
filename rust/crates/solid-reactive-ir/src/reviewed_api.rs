@@ -25,6 +25,77 @@ use crate::pipeline::AnalysisContext;
 /// The id of the premise in `solid-facts-backend/src/reviewed_packages.rs`.
 const VITEST_4_1: &str = "vitest-4.1";
 
+/// ADR 1063: the premise of `@stylexjs/stylex` 0.19.0's runtime, and the exports it shows throw on every call (declared in `lib/es/stylex.d.ts`).
+const STYLEX_0_19: &str = "stylex-0.19";
+const STYLEX_THROWING: &[&str] = &[
+    "create",
+    "createTheme",
+    "defineConsts",
+    "defineVars",
+    "defineMarker",
+    "defaultMarker",
+    "firstThatWorks",
+    "keyframes",
+    "positionTry",
+    "viewTransitionClass",
+    "unstable_conditional",
+    "unstable_defineVarsNested",
+    "unstable_defineConstsNested",
+    "unstable_createThemeNested",
+];
+const STYLEX_DECLARATIONS: &[&str] = &[
+    "node_modules",
+    "@stylexjs",
+    "stylex",
+    "lib",
+    "es",
+    "stylex.d.ts",
+];
+
+/// ADR 1063: whether `call` is a call of a package export the reviewed reading shows throws on every call, so it returns no value and nothing read off its result
+/// ever runs: one of [`STYLEX_THROWING`], named by its own identifier (`create(…)`) or as a member of a namespace or an object (`stylex.create(…)`), where every
+/// declaration the compiler resolves for that name is that export in the pinned `@stylexjs/stylex` declarations and the premise holds for the package. A `new`, a
+/// computed member, a name declared anywhere else, and a version nobody read are not.
+pub(crate) fn call_always_throws(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    call: &CallFact,
+) -> bool {
+    if call.construct || !any_premise_holds(ctx) {
+        return false;
+    }
+    let ast = &file.ast;
+    let callee = ast.peel_ts_sugar_span(call.callee);
+    let named = if let Some(member) = ast.member_at(callee) {
+        if ast.computed_members.binary_search(&callee).is_ok() {
+            return false;
+        }
+        member.property
+    } else if crate::owners::is_identifier_span(file, callee) {
+        callee
+    } else {
+        return false;
+    };
+    let Some(index) = ctx.package_reach else {
+        return false;
+    };
+    let Some(declarations) = ctx.semantic_lookup.alias_root_declarations(file, named) else {
+        return false;
+    };
+    !declarations.is_empty()
+        && declarations.iter().all(|declaration| {
+            let path = declaration.location.path.as_ref();
+            STYLEX_THROWING.contains(&declaration.name.as_ref())
+                && !path.starts_with("bundled:")
+                && path
+                    .split(['/', '\\'])
+                    .collect::<Vec<_>>()
+                    .windows(STYLEX_DECLARATIONS.len())
+                    .any(|window| window == STYLEX_DECLARATIONS)
+                && index.premise_holds(path, STYLEX_0_19)
+        })
+}
+
 /// What a reviewed matcher does with the value it asserts about and with its arguments.
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum Class {

@@ -1609,6 +1609,10 @@ packages/wasm/owned/
 !fixtures/reactive-ir/dependency-phantom-solid-hop/node_modules/**
 !fixtures/reactive-ir/dependency-phantom-solid-plain/node_modules/
 !fixtures/reactive-ir/dependency-phantom-solid-plain/node_modules/**
+!fixtures/reactive-ir/package-value-stylex/node_modules/
+!fixtures/reactive-ir/package-value-stylex/node_modules/**
+!fixtures/reactive-ir/package-value-stylex-patched/node_modules/
+!fixtures/reactive-ir/package-value-stylex-patched/node_modules/**
 !fixtures/reactive-ir/dependency-phantom-solid-reexport/node_modules/
 !fixtures/reactive-ir/dependency-phantom-solid-reexport/node_modules/**
 !fixtures/reactive-ir/dependency-phantom-solid-wrap/node_modules/

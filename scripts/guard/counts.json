@@ -15,7 +15,7 @@
   "SC1001 mount-form-window": 2,
   "SC1001 no-hydration-subtree": 2,
   "SC1001 package-finding-at-entry": 141,
-  "SC1001 package-value-read": 150,
+  "SC1001 package-value-read": 158,
   "SC1001 read-backing-unproven": 385,
   "SC1001 store-handed-to-package": 1,
   "SC1001 strict-read-unaccounted": 18,
