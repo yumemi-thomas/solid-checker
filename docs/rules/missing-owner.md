@@ -115,10 +115,10 @@ primitive positions, each from placed code, keep the proof.
 
 A function that returns JSX is no exception (ADR 0970): it is entered by renders
 alone only where every reference of its binding is a JSX tag. One a reference also
-enters (`pick = view`, a prop, an array element, a router's `component={Home}`, the
+enters (`pick = view`, a prop, an array element, the
 module a `lazy` loader hands back) is a layer like any other, so an owner operation
 or a render effect in it is uncertifiable: the timer, handler or apply that calls it
-through the reference runs it with no owner. The same walk opens a generator's body
+through the reference runs it with no owner. A route definition's `component` an audited `@solidjs/router` renders (ADR 0335's premises) is a render under an owner, as a tag is (ADR 1025): a function every reference of which is a tag or such a value, or an inline arrow written as one, is closed; an exported one stays open in an open program, as any export does. The same walk opens a generator's body
 and any function it calls (a body runs where an iterator is stepped), and keeps an
 owner-creating callback's stop only where nothing references the callback (a named
 function expression that saves itself is run by whoever calls it). A call written in a component element's getter (a prop's value or the children, with no function the element hands to the component between) runs where the component reads the prop, on whatever stack that is, so it places no callee (ADR 0971, the review of #225): the function it calls is a layer entered by a run no edge shows, and an owner operation in it is uncertifiable too (`<Outer slot={makeEffect()} />` with `Outer` reading `props.slot` on an effect's apply). A function the

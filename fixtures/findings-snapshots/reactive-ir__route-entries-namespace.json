@@ -1,0 +1,82 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-entries-namespace/Home.tsx",
+      "start": 269,
+      "end": 278,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-entries-namespace/Home.tsx",
+      "start": 269,
+      "end": 278,
+      "fixes": 0
+    },
+    {
+      "rule": "package-behavior-unavailable",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "blocker": "package-source-unavailable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-entries-namespace/Routes.tsx",
+      "start": 186,
+      "end": 198,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/route-entries-namespace/Routes.tsx",
+      "start": 272,
+      "end": 282,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-entries-namespace/Routes.tsx",
+      "start": 272,
+      "end": 282,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-entries-namespace/Routes.tsx",
+      "start": 272,
+      "end": 282,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-entries-namespace/Routes.tsx",
+      "start": 272,
+      "end": 282,
+      "fixes": 0
+    }
+  ]
+}

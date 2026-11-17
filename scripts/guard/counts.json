@@ -15,7 +15,7 @@
   "SC1001 mount-form-window": 2,
   "SC1001 no-hydration-subtree": 2,
   "SC1001 package-finding-at-entry": 141,
-  "SC1001 package-value-read": 143,
+  "SC1001 package-value-read": 145,
   "SC1001 read-backing-unproven": 380,
   "SC1001 store-handed-to-package": 1,
   "SC1001 strict-read-unaccounted": 18,
@@ -58,7 +58,7 @@
   "SC2002 function-run-unplaced": 22,
   "SC2002 lazy-compute-unread": 1,
   "SC2002 package-finding-at-entry": 71,
-  "SC2002 package-may-call-action": 1221,
+  "SC2002 package-may-call-action": 1223,
   "SC2002 refused-creation-unrun": 1,
   "SC2003 binding-before-initialization": 2,
   "SC2003 build-constant-arm": 2,
@@ -105,19 +105,19 @@
   "SC3001 function-run-unplaced": 36,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 7,
-  "SC3001 leaf-operation-unaccounted": 6579,
+  "SC3001 leaf-operation-unaccounted": 6591,
   "SC3001 leaf-owner-unproven": 67,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
   "SC4001 async-flight-error-unobserved": 4,
-  "SC4001 component-identity-unproven": 14,
+  "SC4001 component-identity-unproven": 15,
   "SC4001 computation-error-unobserved": 30,
   "SC4001 function-run-unplaced": 264,
   "SC4001 function-unentered": 3,
   "SC4001 handler-member-unresolved": 39,
   "SC4001 handler-spread-unresolved": 59,
   "SC4001 owner-allocation-unproven": 23,
-  "SC4001 owner-callers-unenumerated": 3317,
+  "SC4001 owner-callers-unenumerated": 3306,
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 13,
@@ -177,7 +177,7 @@
   "SC5008 pending-read-unresolved": 23,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5012,
+  "SC6002 effect-creation-unaccounted": 5016,
   "SC6002 effect-owner-unproven": 31,
   "SC6002 function-run-unplaced": 48,
   "SC6002 generator-step-unplaced": 1,
@@ -205,7 +205,7 @@
   "SC8014 preference-read-unproven": 7,
   "SC8015 preference-read-unproven": 14,
   "SC9005 host-input-unreadable": 3,
-  "SC9005 package-source-unavailable": 64,
+  "SC9005 package-source-unavailable": 66,
   "SC9012 async-prop-getter": 3,
   "SC9012 closed-parameter-member-dispatch": 69,
   "SC9012 composite-callee-unresolved": 9,
@@ -2365,6 +2365,45 @@
     "open": "reactive-ir/iteration-written-slots-handed-timer-callback-member-written"
    },
    "note": "the reads of the accessors whose slots the withdrawal held: with the slots exact, each is a plain signal read and the pending-read obligation has nothing to stand on."
+  },
+  {
+   "fixture": "reactive-ir/route-config",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 18,
+   "to": 11,
+   "adr": "ADR 1025",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::entered_by_tags_only",
+   "fixtures": {
+    "proved": "reactive-ir/route-config",
+    "open": "reactive-ir/route-entries"
+   },
+   "note": "the route components of the audited router’s `createRouter({ routes })` (ADR 0335’s premises), every reference a route definition’s `component` or a tag, and the inline arrows written as one: the router renders each with `createComponent` in the route’s outlet, under an owner (Chrome rc.21, oracle case `route-entry-owner`). The rows left are the fixture’s escapes; `route-entries` keeps `Shared`, `Preloaded` and the exported `Home` open."
+  },
+  {
+   "fixture": "reactive-ir/route-config-next26",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 4,
+   "to": 0,
+   "adr": "ADR 1025",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::entered_by_tags_only",
+   "fixtures": {
+    "proved": "reactive-ir/route-config-next26",
+    "open": "reactive-ir/route-entries"
+   },
+   "note": "the route components of the audited router’s `createRouter({ routes })` (ADR 0335’s premises), every reference a route definition’s `component` or a tag, and the inline arrows written as one: the router renders each with `createComponent` in the route’s outlet, under an owner (Chrome rc.21, oracle case `route-entry-owner`). The rows left are the fixture’s escapes; `route-entries` keeps `Shared`, `Preloaded` and the exported `Home` open."
+  },
+  {
+   "fixture": "reactive-ir/route-config-use-action-kept",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 4,
+   "to": 0,
+   "adr": "ADR 1025",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::entered_by_tags_only",
+   "fixtures": {
+    "proved": "reactive-ir/route-config-use-action-kept",
+    "open": "reactive-ir/route-entries"
+   },
+   "note": "the route components of the audited router’s `createRouter({ routes })` (ADR 0335’s premises), every reference a route definition’s `component` or a tag, and the inline arrows written as one: the router renders each with `createComponent` in the route’s outlet, under an owner (Chrome rc.21, oracle case `route-entry-owner`). The rows left are the fixture’s escapes; `route-entries` keeps `Shared`, `Preloaded` and the exported `Home` open."
   }
  ],
  "renames": []
