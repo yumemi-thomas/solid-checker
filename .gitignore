@@ -1728,3 +1728,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/fresh-written-function-shadowed/node_modules/**
 !fixtures/reactive-ir/action-plain-yield-layers/node_modules/
 !fixtures/reactive-ir/action-plain-yield-layers/node_modules/**
+!fixtures/reactive-ir/action-resume-flush/node_modules/
+!fixtures/reactive-ir/action-resume-flush/node_modules/**

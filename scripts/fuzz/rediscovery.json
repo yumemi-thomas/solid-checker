@@ -25728,5 +25728,16 @@
    "mx-dynamic-static-promise-fire-return-body-x-direct-none"
   ],
   "rediscovered": "main 2e2b60bb6: recall-gap (uncertifiable, `function-run-unplaced`) on each; ADR 1049's build: agree (60 of 60 fire-return rows)"
+ },
+ {
+  "finding": "no defect: a recall gap. An action whose generator's first statement is `yield 1`, called from a `createEffect` apply (`action-plain-yield-from-apply`), steps again at once inside `inTransaction`, which flushes at action depth 0 (`@solidjs/signals@2.0.0-rc.21` `dist/dev.js:2198-2208`, `:2365`); the queue is already running, so the flush drains nothing and Chrome rc.21 warns FLUSH_IN_EFFECT_CALLBACK at the action's call. No build of the checker reported it",
+  "found": "ADR 1047's oracle case `action-plain-yield-layers` (Chrome reported FLUSH_IN_EFFECT_CALLBACK at each action call, the checker nothing)",
+  "fixed": "ADR 1051 (`static_api.rs` `check_action_resume_flush`, `effect_phase::ownerless_effect_phase_origin_through`)",
+  "grid": "mx-census",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-action-plain-yield-from-apply-x-direct-none"
+  ],
+  "rediscovered": "main 5780918b8 uncertifiable at the site, this build SC2008 violation at the action call, Chrome reporting FLUSH_IN_EFFECT_CALLBACK at that line"
  }
 ]

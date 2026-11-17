@@ -191,9 +191,50 @@ pub(crate) fn ownerless_jsx_effect_phase_origin(
         })
 }
 
+/// ADR 1051: [`ownerless_effect_phase_origin`] for a call whose callee is no import (an action a `const` holds), with the
+/// installed `solid-js` instance read from the call that made the callee (`instance_callee`, the `action` of `const a =
+/// action(…)`, in the same file): the queue the walk proves the apply runs on is that instance's.
+pub(crate) fn ownerless_effect_phase_origin_through(
+    file: &FileFacts,
+    span: Span,
+    instance_callee: Span,
+    instances: &crate::PackageInstanceEvidence,
+    lookup: &SemanticLookup<'_>,
+) -> Option<EffectPhaseOrigin> {
+    walk_to_effect_phase_from(
+        file,
+        span,
+        Some(instance_callee),
+        "",
+        instances,
+        lookup,
+        true,
+    )
+}
+
 fn walk_to_effect_phase(
     file: &FileFacts,
     span: Span,
+    package_root: &str,
+    instances: &crate::PackageInstanceEvidence,
+    lookup: &SemanticLookup<'_>,
+    owner_preserving: bool,
+) -> Option<EffectPhaseOrigin> {
+    walk_to_effect_phase_from(
+        file,
+        span,
+        None,
+        package_root,
+        instances,
+        lookup,
+        owner_preserving,
+    )
+}
+
+fn walk_to_effect_phase_from(
+    file: &FileFacts,
+    span: Span,
+    instance_callee: Option<Span>,
     package_root: &str,
     instances: &crate::PackageInstanceEvidence,
     lookup: &SemanticLookup<'_>,
@@ -228,7 +269,8 @@ fn walk_to_effect_phase(
             undecided: Some(blocker),
         })
     };
-    let Some(flush_instance) = walk.instance_of(file, flush_call.callee) else {
+    let Some(flush_instance) = walk.instance_of(file, instance_callee.unwrap_or(flush_call.callee))
+    else {
         return undecided(&walk);
     };
     walk.flush_instance = flush_instance;

@@ -1075,6 +1075,15 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// ADR 1051: whether a flush made on the stack of `effect`'s apply callback by an action's step resumed after a plain
+    /// `yield` ([`Self::action_step_resumes_after_plain_yield`]) runs inside the flush draining effects with the
+    /// effect-callback marker up, so that it drains nothing and the dev build warns FLUSH_IN_EFFECT_CALLBACK. The default
+    /// claims nothing.
+    fn resumed_action_flush_warns_in_apply(&self, effect: Primitive) -> bool {
+        let _ = effect;
+        false
+    }
+
     /// Whether the `error` member of an exact effect bundle at `argument` of
     /// `primitive` (`{ effect, error }`) runs from the flush's error branch
     /// before the strict-read window opens, with no owner and no

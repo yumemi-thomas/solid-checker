@@ -357,6 +357,87 @@ impl StaticApiContext<'_> {
         )
     }
 
+    /// ADR 1051 (SC2008): a call of an action whose first step ends at a `yield` of a plain value, made on a `createEffect`
+    /// apply's stack with no owner. `action`'s wrapper runs the first step, and the step's result goes to `run`, which steps
+    /// again at once for a value that is no thenable inside `inTransaction`; that flushes when no action step is on the stack
+    /// (`@solidjs/signals@2.0.0-rc.21` `dist/dev.js:2198-2208`, `:2365`). Here the queue is already running, so that flush
+    /// drains nothing and the dev build warns FLUSH_IN_EFFECT_CALLBACK, as for a `flush()` written there. Proved only when
+    /// the `yield` is the generator's first statement (nothing before it can throw or return), the action is a `const` no
+    /// alias or write reaches (`named_action_generator`), the dialect resumes such a step synchronously
+    /// (`action_resuming_yields`), and every run of the call is on an ownerless effect apply's stack
+    /// (`ownerless_effect_phase_origin`: with an owner the call would throw ACTION_CALLED_IN_OWNED_SCOPE first).
+    fn check_action_resume_flush(
+        &self,
+        file: &FileFacts,
+        call: &solid_facts::ast::CallFact,
+        result: &mut StaticDirectiveFileResult,
+    ) {
+        let dialect = self.lookup.dialect;
+        if call.construct
+            || !self.client_build()
+            || !dialect.warns_inside_effect_phase(solid_dialect::Primitive::Flush)
+            || file
+                .ast
+                .call_at(file.ast.peel_ts_sugar_span(call.callee))
+                .is_some()
+        {
+            return;
+        }
+        let Some(generator) = crate::owners::named_action_generator(file, call.callee, self.lookup)
+            .and_then(|span| file.ast.function_at(span))
+        else {
+            return;
+        };
+        let Some((created, _)) =
+            crate::owners::stepped_action_generator(file, generator, self.lookup)
+        else {
+            return;
+        };
+        // The generator's first statement is a `yield` of a plain value: only whitespace between the body's `{` and it.
+        let resuming = crate::owners::action_resuming_yields(file, self.lookup);
+        let Some(first) = file.ast.yields.iter().find(|yielded| {
+            resuming.contains(&yielded.span)
+                && generator.body.contains(yielded.span)
+                && generator.body.start < yielded.span.start
+                && file
+                    .source
+                    .get(generator.body.start as usize + 1..yielded.span.start as usize)
+                    .is_some_and(|before| before.chars().all(char::is_whitespace))
+        }) else {
+            return;
+        };
+        let Some(origin) = crate::effect_phase::ownerless_effect_phase_origin_through(
+            file,
+            call.span,
+            created.callee,
+            self.package_instances,
+            self.lookup,
+        ) else {
+            return;
+        };
+        if origin.mixed
+            || origin.undecided.is_some()
+            || !dialect.resumed_action_flush_warns_in_apply(origin.primitive)
+        {
+            return;
+        }
+        let name = file.source_text(call.callee).unwrap_or("this action");
+        let yielded = file.source_text(first.span).unwrap_or("yield");
+        result.violations.push(StaticViolation {
+            id: "SC2008".into(),
+            rule: "flush-in-effect-callback".into(),
+            message: format!(
+                "{name}() starts an action on {}: its first step stops at `{yielded}`, a value that is no thenable, so the action steps again at once and flushes when that step returns; the queue is already running, so that flush drains nothing (the dev build warns FLUSH_IN_EFFECT_CALLBACK)",
+                origin.callback_label()
+            ),
+            hint: "Start the action from an event handler or other code outside the effect's apply, or let its first step yield a promise (`yield Promise.resolve()`) so it resumes from a continuation.".into(),
+            location: location(file.path.shared(), call.callee),
+            analysis_context: effect_phase_context(&origin, file, call.span),
+            fixes: vec![],
+            uncertain: false,
+        });
+    }
+
     pub(super) fn check_file(&self, file: &FileFacts) -> StaticDirectiveFileResult {
         let mut result = StaticDirectiveFileResult {
             defects: Vec::new(),
@@ -371,6 +452,7 @@ impl StaticApiContext<'_> {
         let allowed = allowed_callback_spans(file, self.lookup);
         let dialect = self.lookup.dialect;
         for call in &file.ast.calls {
+            self.check_action_resume_flush(file, call, &mut result);
             let Some(primitive) = crate::call_primitive_name_cached(
                 self.lookup,
                 file,
