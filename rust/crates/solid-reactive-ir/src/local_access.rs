@@ -4423,6 +4423,21 @@ impl LocalAccessContext<'_, '_> {
                 root_body,
                 write_execution,
             );
+            // ADR 1037: a setter written directly in an inline apply's returned cleanup.
+            if write_execution == ExecutionRole::Unknown
+                && !alias_withheld
+                && let Some((role, effect)) =
+                    crate::execution_role::returned_cleanup_write_role(file, call.span, self.lookup)
+            {
+                result.ends.end_at(
+                    file,
+                    call.span,
+                    SiteSilence::SetterReturnedCleanup,
+                    crate::proof_log::PremiseKind::ReturnedCleanupWriteGuard,
+                    || Some(effect),
+                );
+                write_execution = role;
+            }
             // Where the resolved release's optimistic-store setter meets no
             // owned-scope guard (rc.0), a store setter is reported only when
             // it is proven to be `createStore`'s, whose writes do reach the

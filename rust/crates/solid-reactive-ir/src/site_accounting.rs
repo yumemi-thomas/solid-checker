@@ -92,6 +92,10 @@ site_silences! {
     SetterOptimisticSignalUnguarded => "local_access.push_setter_write.optimistic-signal-unguarded",
     /// An optimistic store setter meets no owned-scope write guard.
     SetterOptimisticStoreUnguarded => "local_access.push_setter_write.optimistic-store-unguarded",
+    /// ADR 1037: a setter written directly in an inline effect apply's returned cleanup meets no owned-scope write guard on any run of it.
+    SetterReturnedCleanup => "local_access.push_setter_write.returned-cleanup",
+    /// ADR 1037: the same for a `refresh`.
+    RefreshReturnedCleanup => "static_api.refresh.returned-cleanup",
     /// A read in a function no call edge reaches, at a tracked position.
     UnreachedReadTrackedPosition => "local_access.unreached_read.named-at-tracked-position",
     /// A read in a function no call edge reaches, placed elsewhere.
@@ -306,9 +310,10 @@ impl SiteSilence {
             | Self::MemberRoleDoesNotReport => &[StrictRead],
             // A setter that meets no owned-scope write guard: the owned-scope write only. An optimistic setter of an async source takes the other
             // branch of `push_setter_write` (SC2009) before it reaches these.
-            Self::SetterOptimisticSignalUnguarded | Self::SetterOptimisticStoreUnguarded => {
-                &[ReactiveWrite]
-            }
+            Self::SetterOptimisticSignalUnguarded
+            | Self::SetterOptimisticStoreUnguarded
+            | Self::SetterReturnedCleanup
+            | Self::RefreshReturnedCleanup => &[ReactiveWrite],
             // A setter or action call outside every function (module initialization has no owner) or in a function nothing reaches: the codes that
             // need an owner. An optimistic write before the load needs none, so a call at module scope keeps that code.
             Self::UnreachedWriteCannotRun => &[ReactiveWrite, ActionCall],
