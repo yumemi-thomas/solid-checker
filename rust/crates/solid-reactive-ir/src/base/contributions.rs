@@ -17,7 +17,7 @@ mod fresh_written;
 use crate::{HashMap, HashSet};
 pub(crate) use blocked_by::*;
 pub(crate) use fresh_written::fresh_factories_intact;
-pub(crate) use fresh_written::{Fresh, fresh_written_object};
+pub(crate) use fresh_written::{Fresh, fresh_written_object, fresh_written_object_drafts};
 
 /// The build-wide inputs a contribution may read besides its file. A change
 /// of any of them is a different cache domain, so a fresh build.
@@ -765,6 +765,15 @@ pub(crate) enum Hazard {
     /// form proves made ([`fresh_written::fresh_written_object`]; value 0): an open write while a factory it trusts may
     /// not be standard ([`open_member_write_through_factory`]).
     FreshFactoryWrite(u32),
+    /// ADR 1053: code writes this key ([`Self::OpenMemberWrite`]'s hash) of the first parameter of a callback passed to a
+    /// call whose callee is this symbol (the hash of its id, [`projection_callee_hash`]; value 0): an open write of the key
+    /// unless the callee is the dialect's `createProjection` ([`projection_draft_write_open`]).
+    ProjectionDraftWrite(u32, u32),
+    /// ADR 1053: the same, for a callee no symbol resolves: an open write of the key.
+    ProjectionDraftWriteUnresolved(u32),
+    /// ADR 1053: the file has some [`Self::ProjectionDraftWrite`] or [`Self::ProjectionDraftWriteUnresolved`] (value 0), so
+    /// a program without it asks no more.
+    ProjectionDraftAny,
     /// ADR 0965 (batch 11; the what-if build only): a typed cause of uncertifiable rows, the `blockedBy.kind` of the rows it blocks (`function-run-unplaced`,
     /// `unresolved-invocation`, ...), as a premise a proof would discharge for all of them. No census holds it and no file has it: the seam answers it present
     /// wherever it is asked, so only an assumption makes it absent, and what that removes is every uncertifiable finding of that kind from the report.
@@ -809,6 +818,10 @@ fn standard_impostor_write(member: &str) -> Hazard {
     Hazard::StandardImpostorWrite(member_hash("", member))
 }
 
+pub(crate) fn open_member_write_hazard(member: &str) -> Hazard {
+    open_member_write(member)
+}
+
 fn open_member_write(member: &str) -> Hazard {
     Hazard::OpenMemberWrite(member_hash("", member))
 }
@@ -832,6 +845,32 @@ pub(crate) fn open_member_write_through_factory(
         _ => return false,
     };
     raw(factory) && !fresh_factories_intact(raw)
+}
+
+/// ADR 1053: [`Hazard::ProjectionDraftWrite`]'s callee key for a symbol id (FNV-1a, as every census key is hashed).
+pub(crate) fn projection_callee_hash(symbol: &str) -> u32 {
+    member_hash("", symbol)
+}
+
+/// ADR 1053: whether `hazard`, an [`Hazard::OpenMemberWrite`], is present through a projection draft: among the census's
+/// `keys` (the hazard index's), a draft write of that key whose callee is not one of `projections` (the hashes of the
+/// symbols the dialect names `createProjection`), or no symbol resolves.
+pub(crate) fn projection_draft_write_open<'k>(
+    hazard: Hazard,
+    keys: impl Iterator<Item = &'k Hazard>,
+    projections: &HashSet<u32>,
+) -> bool {
+    let Hazard::OpenMemberWrite(key) = hazard else {
+        return false;
+    };
+    let mut keys = keys;
+    keys.any(|held| match *held {
+        Hazard::ProjectionDraftWriteUnresolved(written) => written == key,
+        Hazard::ProjectionDraftWrite(written, callee) => {
+            written == key && !projections.contains(&callee)
+        }
+        _ => false,
+    })
 }
 
 fn reflective_definition_sole(key: &str) -> Hazard {
@@ -1794,8 +1833,10 @@ fn spelled_callee(text: &str, name: &str) -> bool {
 /// it did not make ([`fresh_object`]), which is the only way a host global
 /// gains one. `Object.assign` copies, so it is the impostor census's no site,
 /// but it writes its target.
-fn impostor_census(file: &FileFacts) -> Vec<Hazard> {
-    let (members, writers, open, factory) = impostor_sites(file);
+fn impostor_census(
+    file: &FileFacts,
+    (members, writers, open, factory): ImpostorSites,
+) -> Vec<Hazard> {
     let mut factory = factory
         .into_iter()
         .map(|(key, _)| open_write_key(key))
@@ -1837,16 +1878,20 @@ fn open_write_key(key: CensusKey) -> String {
 
 /// The open writes of `file` ([`open_writes`]), and, where `factory_open` (ADR 1024: a factory the factory form trusts
 /// may not be standard), its factory-form sites too.
-fn open_writes_with_factory(file: &FileFacts, factory_open: bool) -> Vec<(String, Span)> {
+/// ADR 1053: where `factory_open` does not hold, a projection-draft site is listed when `drafts_open` holds of its key
+/// (some draft write holds it open, [`projection_draft_write_open`]).
+fn open_writes_with_factory(
+    file: &FileFacts,
+    factory_open: bool,
+    drafts_open: &dyn Fn(&str) -> bool,
+) -> Vec<(String, Span)> {
     let (_, _, open, factory) = impostor_sites(file);
     let mut writes = open_writes(file, open);
-    if factory_open {
-        writes.extend(
-            factory
-                .into_iter()
-                .map(|(key, at)| (open_write_key(key), at)),
-        );
-    }
+    writes.extend(factory.into_iter().filter_map(|(key, at)| {
+        let key = open_write_key(key);
+        (factory_open || (drafts_open(&key) && !fresh_written_object_drafts(file, at).1.is_empty()))
+            .then_some((key, at))
+    }));
     writes
 }
 
@@ -1892,13 +1937,14 @@ fn open_writes(file: &FileFacts, open: Vec<(CensusKey, Span)>) -> Vec<(String, S
 /// [`handed_root_detail_in`] answers each withheld call from. Asked once per build; before, every withheld call re-read every
 /// file's census (on app-game, 70 s of an 85 s analysis).
 /// `factory_open` (ADR 1024): the writes to an object the program made count too, as [`open_writes_with_factory`] says; one answer per build.
-pub(crate) fn handed_root_writes(
-    files: &[FileFacts],
+pub(crate) fn handed_root_writes<'f>(
+    files: &'f [FileFacts],
     factory_open: bool,
-) -> BTreeMap<String, (&FileFacts, Span)> {
+    drafts_open: &dyn Fn(&str) -> bool,
+) -> BTreeMap<String, (&'f FileFacts, Span)> {
     let mut first = BTreeMap::<String, (&FileFacts, Span)>::new();
     for file in files {
-        for (key, at) in open_writes_with_factory(file, factory_open) {
+        for (key, at) in open_writes_with_factory(file, factory_open, drafts_open) {
             let earlier = first.get(&key).is_some_and(|(held, span)| {
                 (held.path.as_str(), span.start) <= (file.path.as_str(), at.start)
             });
@@ -1983,14 +2029,15 @@ pub(crate) fn impostor_detail(
 /// Each census site of the file, by key, and the keys it writes on an object it
 /// did not make.
 #[allow(clippy::type_complexity)]
-fn impostor_sites(
-    file: &FileFacts,
-) -> (
+/// [`impostor_sites`]' answer: the members, the writers, the open writes and the factory-form writes (key, object).
+type ImpostorSites = (
     Vec<(&'static str, Span)>,
     Vec<&'static str>,
     Vec<(CensusKey, Span)>,
     Vec<(CensusKey, Span)>,
-) {
+);
+
+fn impostor_sites(file: &FileFacts) -> ImpostorSites {
     use solid_facts::ast::ClassElementKind;
     let ast = &file.ast;
     let mut members: Vec<(&'static str, Span)> = Vec::new();
@@ -2020,7 +2067,8 @@ fn impostor_sites(
         members.extend(census_member(key).map(|member| (member, at)));
     };
     let mut noted = Vec::new();
-    let mut write = |key: CensusKey, object: Span| match fresh_written_object(file, object) {
+    let mut write = |key: CensusKey, object: Span| match fresh_written_object_drafts(file, object).0
+    {
         Some(Fresh::Made) => {}
         // The writers stay: a host receiver is no factory's, but the form claims no more than it needs.
         Some(Fresh::Factory) => {
@@ -3020,7 +3068,32 @@ pub(crate) fn hazards(view: &FileView<'_>, _constants: &BuildConstants<'_>) -> V
     for (index, patch) in patches.into_iter().enumerate() {
         entries.push((patch, ordinal(index)));
     }
-    for (index, impostor) in impostor_census(file).into_iter().enumerate() {
+    let sites = impostor_sites(file);
+    // ADR 1053: the factory form's projection-draft writes, by key and by the callee each rests on (its symbol; none:
+    // unresolved).
+    let mut drafts = sites
+        .3
+        .iter()
+        .flat_map(|(key, object)| {
+            let key = member_hash("", &open_write_key(key.clone()));
+            fresh_written_object_drafts(file, *object)
+                .1
+                .into_iter()
+                .map(move |callee| match view.symbol_at(callee) {
+                    Some(symbol) => {
+                        Hazard::ProjectionDraftWrite(key, projection_callee_hash(symbol.as_ref()))
+                    }
+                    None => Hazard::ProjectionDraftWriteUnresolved(key),
+                })
+        })
+        .collect::<Vec<_>>();
+    drafts.sort_unstable();
+    drafts.dedup();
+    if !drafts.is_empty() {
+        entries.push((Hazard::ProjectionDraftAny, 0));
+    }
+    entries.extend(drafts.into_iter().map(|draft| (draft, 0)));
+    for (index, impostor) in impostor_census(file, sites).into_iter().enumerate() {
         entries.push((impostor, ordinal(index)));
     }
     for write in writes {

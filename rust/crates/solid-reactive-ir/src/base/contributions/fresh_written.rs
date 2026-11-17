@@ -12,6 +12,11 @@
 //! - **Factory**: the value is also one a standard function made or handed back unchanged: `Object.create(null)`,
 //!   `JSON.parse(text)` (no reviver), the target `Object.assign` returns, and the accumulator of an inline `reduce`
 //!   callback over an array the standard library made, whose seed and every return are such values.
+//! - **Projection draft** (ADR 1053, a factory-form site): the first parameter of an inline callback passed as the first
+//!   argument of a call whose callee is an identifier ([`fresh_written_object_drafts`] hands back the callee). The
+//!   program side keeps it only while every such callee resolves to the dialect's `createProjection`, whose rc.21 source
+//!   calls the callback with a draft wrapper (a new `Proxy` whose traps write the projection's store proxy, whose own traps
+//!   write a backing the store made) or a clone of the store's value (`runProjectionComputed`, `wrapDraft`, `cloneState`).
 //!
 //! The factory form trusts the standard functions of [`FRESH_FACTORIES`]. The premise that makes that trust sound
 //! (the first-patch induction, ADR 1024): take the first moment any write of the factory form puts a member on a
@@ -55,8 +60,31 @@ pub(crate) fn fresh_written_object(file: &FileFacts, span: Span) -> Option<Fresh
         file,
         assumed: Vec::new(),
         site: span,
+        drafts: None,
     }
     .value(span, 0)
+}
+
+/// ADR 1053: [`fresh_written_object`] with the projection-draft form admitted, and the callee span of every call whose
+/// callback's draft the answer rests on. The answer holds only while each callee is the dialect's `createProjection`,
+/// which the program side asks ([`super::Hazard::ProjectionDraftCallee`]).
+pub(crate) fn fresh_written_object_drafts(
+    file: &FileFacts,
+    span: Span,
+) -> (Option<Fresh>, Vec<Span>) {
+    let mut walk = Walk {
+        file,
+        assumed: Vec::new(),
+        site: span,
+        drafts: Some(Vec::new()),
+    };
+    let answer = walk.value(span, 0);
+    let drafts = if answer.is_some() {
+        walk.drafts.unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    (answer, drafts)
 }
 
 /// Whether the program leaves every factory of [`FRESH_FACTORIES`] standard, `hazard` answering the census with every
@@ -75,6 +103,8 @@ struct Walk<'f> {
     assumed: Vec<Span>,
     /// The written object, where a member path's straight-code test is asked.
     site: Span,
+    /// ADR 1053: `Some` where the projection-draft form is admitted: the callee spans the answer rests on.
+    drafts: Option<Vec<Span>>,
 }
 
 fn both(left: Option<Fresh>, right: Option<Fresh>) -> Option<Fresh> {
@@ -149,7 +179,9 @@ impl Walk<'_> {
             .identifier_binding(declaration)
             .filter(|binding| binding.immutable || binding.runtime_let)
         else {
-            return self.accumulator(declaration, depth);
+            return self
+                .accumulator(declaration, depth)
+                .or_else(|| self.projection_draft(declaration));
         };
         if binding.immutable {
             return self.value(binding.initializer?, depth);
@@ -266,6 +298,44 @@ impl Walk<'_> {
         }
         self.assumed.pop();
         answer.map(|_| Fresh::Factory)
+    }
+
+    /// ADR 1053: the first parameter of an inline callback (an identifier, no default, never written; an arrow or a function
+    /// that never names `arguments`, whose sloppy `arguments[0]` would rebind it), the first argument of a call whose callee
+    /// is an identifier (no member, no call). Factory-form: the callee is recorded and the program side keeps the answer only
+    /// while it is the dialect's `createProjection`.
+    fn projection_draft(&mut self, declaration: Span) -> Option<Fresh> {
+        self.drafts.as_ref()?;
+        let file = self.file;
+        let ast = &file.ast;
+        let function = ast.functions.iter().find(|function| {
+            function.parameters.first().is_some_and(|parameter| {
+                parameter.shape == BindingShape::Identifier
+                    && parameter.initializer.is_none()
+                    && parameter.names.first().map(|name| name.span) == Some(declaration)
+            })
+        })?;
+        if (function.kind != FunctionKind::Arrow
+            && file
+                .source_text(function.body)
+                .is_none_or(|body| body.contains("arguments")))
+            || crate::indexes::binding_written(file, declaration)
+        {
+            return None;
+        }
+        no_eval(file)?;
+        let call = ast.calls.iter().find(|call| {
+            !call.construct
+                && call.arguments.first().is_some_and(|argument| {
+                    !argument.spread && ast.peel_ts_sugar_span(argument.span) == function.span
+                })
+        })?;
+        let callee = ast.peel_ts_sugar_span(call.callee);
+        if ast.member_at(callee).is_some() || ast.call_at(callee).is_some() {
+            return None;
+        }
+        self.drafts.as_mut()?.push(callee);
+        Some(Fresh::Factory)
     }
 
     /// An array the standard library made: a literal, `Object.keys`, `values` or `entries` of anything, or such an
@@ -744,6 +814,88 @@ mod tests {
             return None;
         }
         Some((!factory.is_empty()).then_some(Fresh::Factory))
+    }
+
+    /// ADR 1053: the first parameter of an inline callback passed first to a call whose callee is an identifier is a
+    /// factory-form object, resting on that callee; the shapes beside it stay open.
+    #[test]
+    fn a_projection_draft_rests_on_its_callee() {
+        let drafts = |source: &str| {
+            let file = file(source);
+            let (_, _, open, factory) = super::super::impostor_sites(&file);
+            let callees = factory
+                .iter()
+                .flat_map(|(_, object)| super::fresh_written_object_drafts(&file, *object).1)
+                .map(|callee| file.source_text(callee).unwrap_or_default().to_owned())
+                .collect::<Vec<_>>();
+            (open.is_empty(), callees)
+        };
+        // solid-query's `metaProjection`, and a plain member write on the draft.
+        assert_eq!(
+            drafts(
+                "declare function createProjection(f: (d: any) => void, s: object): object; export const m = (x: object) => createProjection((draft: any) => { Object.assign(draft, x); }, {});"
+            ),
+            (true, vec!["createProjection".to_owned()])
+        );
+        assert_eq!(
+            drafts(
+                "declare function cp(f: (d: any) => void, s: object): object; export const m = (k: string, v: unknown) => cp(function (draft: any) { draft[k] = v; }, {});"
+            ),
+            (true, vec!["cp".to_owned()])
+        );
+        for source in [
+            // A member callee, a callee that is a call, the callback second, a spread.
+            "declare const S: any; export const m = (x: object) => S.createProjection((draft: any) => { Object.assign(draft, x); }, {});",
+            "declare const f: any; export const m = (x: object) => f()((draft: any) => { Object.assign(draft, x); }, {});",
+            "declare function cp(s: object, f: (d: any) => void): object; export const m = (x: object) => cp({}, (draft: any) => { Object.assign(draft, x); });",
+            // The parameter written, defaulted, destructured, or reachable through a sloppy function's `arguments`.
+            "declare function cp(f: (d: any) => void, s: object): object; export const m = (t: any, x: object) => cp((draft: any) => { draft = t; Object.assign(draft, x); }, {});",
+            "declare function cp(f: (d?: any) => void, s: object): object; export const m = (t: any, x: object) => cp((draft: any = t) => { Object.assign(draft, x); }, {});",
+            "declare function cp(f: (d: any) => void, s: object): object; export const m = (t: any, x: object) => cp(function (draft: any) { arguments[0] = t; Object.assign(draft, x); }, {});",
+            // A direct `eval` may rebind it.
+            "declare function cp(f: (d: any) => void, s: object): object; export const m = (s: string, x: object) => cp((draft: any) => { eval(s); Object.assign(draft, x); }, {});",
+        ] {
+            assert_eq!(drafts(source), (false, vec![]), "{source}");
+        }
+    }
+
+    /// ADR 1053: a draft write holds its own key open, and only while its callee is not `createProjection`.
+    #[test]
+    fn a_draft_write_opens_only_its_key_under_another_callee() {
+        use super::super::{
+            Hazard, open_member_write_hazard, projection_callee_hash, projection_draft_write_open,
+        };
+        let projection = projection_callee_hash("solid-js::createProjection");
+        let other = projection_callee_hash("solid-js::createMemo");
+        let projections = [projection].into_iter().collect::<crate::HashSet<u32>>();
+        let star = open_member_write_hazard("*");
+        let Hazard::OpenMemberWrite(key) = star else {
+            unreachable!()
+        };
+        let Hazard::OpenMemberWrite(name) = open_member_write_hazard("name") else {
+            unreachable!()
+        };
+        let open = |keys: &[Hazard], asked: Hazard| {
+            projection_draft_write_open(asked, keys.iter(), &projections)
+        };
+        assert!(!open(
+            &[Hazard::ProjectionDraftWrite(key, projection)],
+            star
+        ));
+        assert!(open(
+            &[
+                Hazard::ProjectionDraftWrite(key, projection),
+                Hazard::ProjectionDraftWrite(key, other)
+            ],
+            star
+        ));
+        assert!(open(&[Hazard::ProjectionDraftWriteUnresolved(key)], star));
+        // Another key's draft under another callee opens that key only.
+        assert!(!open(&[Hazard::ProjectionDraftWrite(name, other)], star));
+        assert!(open(
+            &[Hazard::ProjectionDraftWrite(name, other)],
+            open_member_write_hazard("name")
+        ));
     }
 
     /// ADR 1024: each form, and the shape beside it that keeps the write open.

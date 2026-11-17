@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1053: the program's only open write is `Object.assign(draft, …)` in a `createProjection` callback (@tanstack/solid-query's `metaProjection`): rc.21 hands the callback a draft wrapper over the projection's store, so `Number` handed on is never replaced and `Number.isFinite(sf1)` ignores its function argument: no dev diagnostic, and the checker certifies the call (fixture reactive-ir/projection-draft-assign)."
+}

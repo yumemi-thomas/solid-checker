@@ -237,6 +237,7 @@ pub(crate) fn hazard_sites(
     files: &[FileFacts],
     ids: &BTreeSet<String>,
     factory_open: bool,
+    drafts_open: &dyn Fn(&str) -> bool,
 ) -> BTreeMap<String, Vec<HazardSiteAt>> {
     // The census site each id asks for: its variant and key.
     let wanted = ids
@@ -260,7 +261,7 @@ pub(crate) fn hazard_sites(
     for file in files {
         let members = impostor_sites(file).0;
         let writes = if reads_writes {
-            open_writes_with_factory(file, factory_open)
+            open_writes_with_factory(file, factory_open, drafts_open)
         } else {
             Vec::new()
         };
