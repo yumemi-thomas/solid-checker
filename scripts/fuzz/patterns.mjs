@@ -2,11 +2,13 @@
 // review ran and tsc accepted. The generators write shapes, and these are the ones they cannot write yet: each is a held input for the fixes
 // (queue.md), judged on every run against open-defects.json (open-defects.mjs). Chrome judges a program by its reported and thrown codes.
 //
-//   node scripts/fuzz/patterns.mjs [--checker <bin>] [--typefacts <bin>] [--out <dir>] [--only substring[,substring]] [--update]
+//   node scripts/fuzz/patterns.mjs [--checker <bin>] [--typefacts <bin>] [--out <dir>] [--only substring[,substring]] [--update] [--record-proved]
 //
 // A false clean: Chrome reports a claimed code and no finding covers it, `certified` when the program has no uncertifiable finding. A false
 // positive: a violation of a rule with a runtime counterpart none of whose codes Chrome reported; the lane has no hit counters, so whether
 // the site ran is the entry's to say. `--update` rewrites the `patterns` half of the list from this run: for a person, reading the diff.
+// ADR 1030: a program the proved ledger (patterns-proved.json) holds that this run no longer proves by a violation fails the lane, unless
+// the ledger's `changes` names it; `--record-proved` adds this run's proved programs to the ledger.
 import { spawn } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -281,8 +283,32 @@ export function judgePattern({ codes, counts, failure, stacks = {}, positions = 
   if (falseClean.length) return { outcome: "false-clean", codes: falseClean, certified: !relevant.some((finding) => finding.kind === "uncertifiable") };
   if (misplaced.length) return { outcome: "misplaced", codes: misplaced };
   if (unplaced.length) return { outcome: "unplaced", codes: unplaced };
-  return { outcome: "fine", codes: claimed };
+  // ADR 1030: how the program passes. `violation`: every code Chrome reported is covered by a violation (the checker proves it);
+  // `uncertifiable`: some code only by an uncertifiable row (a recall gap the lane reads as fine); `silent`: Chrome reported nothing claimed.
+  const provedCode = (code) => relevant.some((finding) => finding.kind === "violation" && (coversCodeAt(code, finding, atSite(code, finding)) || besideCode[code]?.includes(finding.rule)));
+  return { outcome: "fine", codes: claimed, proof: !claimed.length ? "silent" : claimed.every(provedCode) ? "violation" : "uncertifiable" };
 }
+
+/**
+ * ADR 1030: the lane's proved ledger (scripts/fuzz/patterns-proved.json). `ids`: the programs whose checker answer was a proved violation
+ * of every code Chrome reported (`proof: "violation"`), recorded by `--record-proved` from a run on main; never removed by a run. A program
+ * it holds that is not `fine` with `proof: "violation"` now (a violation lost to uncertifiable or to silence, or the program gone) fails the
+ * lane, unless a row of `changes` names it: `{ ids, adr, why }`, the ADR that expects it (a case that moved on purpose).
+ */
+export const PROVED = join(here, "patterns-proved.json");
+export const readProved = (path = PROVED) => (existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : { ids: [], changes: [] });
+const provedNow = (row) => row?.outcome === "fine" && row.proof === "violation";
+
+/** The ledger's programs that lost their proof in `rows` and no change names; `absent` with a whole run (a ledgered program not run at all). */
+export function lostProofs(rows, proved, { whole = true } = {}) {
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const named = new Set((proved.changes ?? []).flatMap((change) => change.ids ?? []));
+  return (proved.ids ?? []).filter((id) => !named.has(id) && (byId.has(id) ? !provedNow(byId.get(id)) : whole))
+    .map((id) => ({ id, now: byId.get(id) ? `${byId.get(id).outcome}${byId.get(id).proof ? `/${byId.get(id).proof}` : ""}` : "absent" }));
+}
+
+/** The programs proved in `rows` that the ledger does not hold yet (`--record-proved` adds them). */
+export const newProofs = (rows, proved) => rows.filter((row) => provedNow(row) && !(proved.ids ?? []).includes(row.id)).map((row) => row.id);
 
 /** ADR 0696: a program whose rules must stay reported though the run shows nothing: that is its pass, and anything else fails it. */
 export function expectedSilent(verdict, rules) {
@@ -348,7 +374,18 @@ async function main() {
   const stackedFailures = stackedProblems(rows, records, undefined, { only });
   for (const problem of stackedFailures) console.log(`STACKED ${problem}`);
   if (!only) for (const id of absent) console.log(`ABSENT ${id}: listed, and no such program`);
-  process.exit(unlisted.length || fixed.length || stackedFailures.length || (!only && absent.length) ? 1 : 0);
+  // ADR 1030: a proved violation the ledger holds and this run lost fails the lane, unless a change names it.
+  const proved = readProved();
+  if (args.includes("--record-proved")) {
+    const added = newProofs(rows, proved);
+    proved.ids = [...new Set([...(proved.ids ?? []), ...added])].sort();
+    writeFileSync(PROVED, `${JSON.stringify(proved, null, 1)}\n`);
+    console.log(`proved ledger: ${added.length} program(s) added, ${proved.ids.length} held (${PROVED})`);
+  }
+  const lost = lostProofs(rows, proved, { whole: !only });
+  for (const row of lost) console.log(`LOST PROOF ${row.id}: the ledger holds a proved violation, the run gives ${row.now} (name it in patterns-proved.json changes with its ADR if intended)`);
+  console.log(`proved: ${rows.filter(provedNow).length} program(s) proved by a violation; ${(proved.ids ?? []).length} in the ledger; ${lost.length} lost`);
+  process.exit(unlisted.length || fixed.length || stackedFailures.length || lost.length || (!only && absent.length) ? 1 : 0);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) await main();
