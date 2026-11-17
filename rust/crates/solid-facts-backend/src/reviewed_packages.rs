@@ -475,7 +475,11 @@ mod tests {
     fn published_vitest(directory: &Path) -> BTreeMap<String, PathBuf> {
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../../fixtures/reactive-ir/reviewed-vitest-4-1/node_modules");
-        for file in PREMISES[0].files {
+        let vitest = PREMISES
+            .iter()
+            .find(|premise| premise.id == "vitest-4.1")
+            .expect("the vitest premise");
+        for file in vitest.files {
             let below = Path::new("node_modules").join(file.package).join(file.path);
             let bytes = fs::read(fixture.join(file.package).join(file.path))
                 .unwrap_or_else(|error| panic!("{} {}: {error}", file.package, file.path));
