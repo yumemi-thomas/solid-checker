@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1025: route components of the install's `@solidjs/router@2.0.0-next.41` (digest cec58599\u2026cefcef) mount under an owner: the parent `Layout` and an inline child arrow, both matched by `*`, render (each body read is Chrome's STRICT_READ_UNTRACKED, the render witness) and run `onCleanup` with no NO_OWNER_CLEANUP. In this harness the checker keeps its owner rows: the entry enumerates `App.tsx` as a namespace (`Object.entries(mod)`), so ADR 0335's premise is withheld; fixtures/reactive-ir/route-entries pins the closed entries."
+}

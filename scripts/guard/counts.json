@@ -2663,6 +2663,45 @@
     "open": "reactive-ir/construct-only-class"
    },
    "note": "`ClassCtorWrapper` and `ClassMethodHookResult`: each class is construct-only (one `new` in the component body, no `this`), so the helper and the hook's accessor called in its constructor or method are read in the body: SC1001 violations (rc.17 warns, as the fixture's README said); the three rows were the read in `wrapUse`, the call in the constructor and the call in the method."
+  },
+  {
+   "fixture": "reactive-ir/route-config",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 18,
+   "to": 11,
+   "adr": "ADR 1025",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::entered_by_tags_only",
+   "fixtures": {
+    "proved": "reactive-ir/route-config",
+    "open": "reactive-ir/route-entries"
+   },
+   "note": "the route components of the audited router’s `createRouter({ routes })` (ADR 0335’s premises), every reference a route definition’s `component` or a tag, and the inline arrows written as one: the router renders each with `createComponent` in the route’s outlet, under an owner (Chrome rc.21, oracle case `route-entry-owner`). The rows left are the fixture’s escapes; `route-entries` keeps `Shared`, `Preloaded` and the exported `Home` open."
+  },
+  {
+   "fixture": "reactive-ir/route-config-next26",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 4,
+   "to": 0,
+   "adr": "ADR 1025",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::entered_by_tags_only",
+   "fixtures": {
+    "proved": "reactive-ir/route-config-next26",
+    "open": "reactive-ir/route-entries"
+   },
+   "note": "the route components of the audited router’s `createRouter({ routes })` (ADR 0335’s premises), every reference a route definition’s `component` or a tag, and the inline arrows written as one: the router renders each with `createComponent` in the route’s outlet, under an owner (Chrome rc.21, oracle case `route-entry-owner`). The rows left are the fixture’s escapes; `route-entries` keeps `Shared`, `Preloaded` and the exported `Home` open."
+  },
+  {
+   "fixture": "reactive-ir/route-config-use-action-kept",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 4,
+   "to": 0,
+   "adr": "ADR 1025",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::entered_by_tags_only",
+   "fixtures": {
+    "proved": "reactive-ir/route-config-use-action-kept",
+    "open": "reactive-ir/route-entries"
+   },
+   "note": "the route components of the audited router’s `createRouter({ routes })` (ADR 0335’s premises), every reference a route definition’s `component` or a tag, and the inline arrows written as one: the router renders each with `createComponent` in the route’s outlet, under an owner (Chrome rc.21, oracle case `route-entry-owner`). The rows left are the fixture’s escapes; `route-entries` keeps `Shared`, `Preloaded` and the exported `Home` open."
   }
  ],
  "renames": []
