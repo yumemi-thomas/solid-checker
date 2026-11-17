@@ -74,7 +74,7 @@
   "SC2003 store-handed-to-package": 1,
   "SC2003 store-operation-may-not-write": 35,
   "SC2003 store-write-unproven": 98,
-  "SC2003 unproven-container-root": 135,
+  "SC2003 unproven-container-root": 136,
   "SC2004 async-slot-unmodelled": 4,
   "SC2004 component-identity-unproven": 1,
   "SC2004 computation-error-unobserved": 26,
@@ -90,7 +90,7 @@
   "SC2006 parameter-initializer-unplaced": 14,
   "SC2006 primitive-alias-call": 2,
   "SC2007 async-flight-error-unobserved": 2,
-  "SC2007 computation-error-unobserved": 7,
+  "SC2007 computation-error-unobserved": 13,
   "SC2007 static-source-unproven": 7,
   "SC2008 callee-callback-timing": 1,
   "SC2008 flush-in-effect-unaccounted": 508,
@@ -227,7 +227,7 @@
   "SC9012 function-call-target-unresolved": 9,
   "SC9012 function-prototype-callee-unresolved": 2,
   "SC9012 function-run-unplaced": 2,
-  "SC9012 handed-member-dispatch": 458,
+  "SC9012 handed-member-dispatch": 467,
   "SC9012 handed-member-read": 73,
   "SC9012 handed-read-after-await": 10,
   "SC9012 import-unresolved": 38,
@@ -2963,6 +2963,19 @@
     "open": "reactive-ir/leaf-generator-step"
    },
    "note": "A flush in the first step of a generator stepped in a tracked effect (`Reaches`, and `Wrapper` through its helper) throws on that `next()` call's stack, so the effect's compute takes it: violations, as for a flush written there (Chrome: FLUSH_IN_TRACKED_QUEUE_CALLBACK at Reaches' line). `MayStop` keeps its row."
+  },
+  {
+   "fixture": "reactive-ir/stored-throw-returned-param",
+   "key": "SC2007 computation-error-unobserved",
+   "from": 4,
+   "to": 3,
+   "adr": "ADR 1058",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes/closed_members.rs::boxed_literal",
+   "fixtures": {
+    "proved": "reactive-ir/stored-throw-returned-param",
+    "open": "reactive-ir/stored-throw-returned-literal"
+   },
+   "note": "`ReturnedInLiteral`: `function boxed(cb) { return { cb } }` boxes the literal, so the closed `const box = boxed(…)` is that literal and `box.cb()` runs it in the component body: an SC2007 violation (Chrome: DYNAMIC_STATIC_PROMISE at the line). The refusals (a helper that also stores, two returns, a spread, a box handed on or written, an imported helper) keep their rows in `stored-throw-returned-literal`."
   }
  ],
  "renames": []
