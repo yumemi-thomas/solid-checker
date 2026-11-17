@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1033: a callback handed to `forEach` of the `childNodes` of, or a `querySelectorAll` on, an element `document.createElement` makes there (a name with no `-`, no options) never runs: the element has no children. No dev diagnostic, so the checker's SC2001, SC2002 and SC3002 there are uncertifiable (function-unentered), never a violation. Its pair, dead-site-nodelist-live, is the same write where the NodeList holds a node."
+}

@@ -50,7 +50,7 @@ describe("the ledger", () => {
     expect(Array.isArray(UNEXECUTED_KNOWN.entries)).toBe(true);
     for (const entry of [...UNEXECUTED_KNOWN.entries, ...SYNTHETIC.entries]) {
       expect(entry.grid).toMatch(/^lg-/);
-      expect(["explained", "pending-fix"]).toContain(entry.kind);
+      expect(["explained", "pending-fix", "known-false-positive"]).toContain(entry.kind);
       expect(() => new RegExp(entry.idRegex)).not.toThrow();
       expect(entry.adr).toMatch(/^ADR \d{4}$/);
       expect(entry.why.length).toBeGreaterThan(20);
@@ -64,10 +64,17 @@ describe("the ledger", () => {
     for (const entry of UNEXECUTED_KNOWN.entries.filter((e) => e.kind === "pending-fix")) expect(entry1018.slice(0, 4000)).toContain(entry.adr.replace("ADR ", ""));
   });
 
-  it("holds the group the #270 smoke found that no fix covers yet (ADR 1033: an empty DOM NodeList)", () => {
-    expect(unexecutedEntry(legal("lg-action-called-in-owned-scope-tbl-nodelistof-foreach-zero-x-direct-none"))).toMatchObject({ item: "tbl-nodelist-zero", adr: "ADR 1033" });
-    expect(unexecutedEntry(legal("lg-reactive-write-in-owned-scope-tbl-nodelist-foreach-zero-store-direct-none"))).toMatchObject({ item: "tbl-nodelist-zero", adr: "ADR 1033" });
-    // Narrow: another code at a dead bundle, and another empty carrier, are not held.
+  it("a known-false-positive entry names an ADR of docs/decisions.md that says why the site is not proved dead", () => {
+    for (const entry of UNEXECUTED_KNOWN.entries.filter((e) => e.kind === "known-false-positive")) {
+      const number = entry.adr.replace("ADR ", "");
+      expect(decisions).toContain(`<a id="adr-${number}"></a>`);
+    }
+  });
+
+  it("holds the empty NodeListOf of a selector as a known false positive (ADR 1033), and nothing next to it", () => {
+    expect(unexecutedEntry(legal("lg-action-called-in-owned-scope-tbl-nodelistof-foreach-zero-x-direct-none"))).toMatchObject({ kind: "known-false-positive", adr: "ADR 1033" });
+    // ADR 1033 proves the plain NodeList shape dead, so it is no longer held; nor are another code at a dead bundle or another empty carrier.
+    expect(rowProblem(legal("lg-reactive-write-in-owned-scope-tbl-nodelist-foreach-zero-store-direct-none"))).toBe("unexecuted-violation");
     expect(rowProblem(legal("lg-pending-async-forbidden-scope-dead-bundle-spread-x-direct-none"))).toBe("unexecuted-violation");
     expect(rowProblem(legal("lg-action-called-in-owned-scope-tbl-set-foreach-zero-x-direct-none"))).toBe("unexecuted-violation");
   });

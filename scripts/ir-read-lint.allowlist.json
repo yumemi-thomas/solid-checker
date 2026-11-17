@@ -137,7 +137,10 @@
   },
   "rust/crates/solid-reactive-ir/src/indexes/event_delivery.rs": {
     "file_slots": 2,
-    "file_by_path": 6
+    "file_by_path": 6,
+    "pending-review": [
+      "file_by_path site replaced (--allow-rise): unreviewed `(self.file_by_path(path).is_none() && file_name.ends_with(\".d.ts\")).then_some(file_name)`"
+    ]
   },
   "rust/crates/solid-reactive-ir/src/indexes/flush_census.rs": {
     "file_slots": 1

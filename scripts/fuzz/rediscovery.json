@@ -25066,5 +25066,38 @@
    "lg-sync-node-received-async-dead-bundle-spread-memo-wrapper-none"
   ],
   "rediscovered": "`make fuzz-focus CODES=SYNC_NODE_RECEIVED_ASYNC FUZZ_GRIDS=lg-recall` with `-- --contexts dead-bundle-spread,dead-bundle-computed`: main 1b03e7db9 {unexecuted 120}, needs a look (exit 1); this build {uncertifiable 120}, nothing needs a look (exit 0)"
+ },
+ {
+  "finding": "a false positive: a write in a callback handed to `forEach` of the `childNodes` of an element `document.createElement(\"i\")` makes there (no child, so the callback never runs) was a violation, Chrome silent",
+  "found": "ADR 1018's unexecuted guard (the `tbl-nodelist-foreach-zero` rows ADR 1019 left), re-run on main 1b03e7db9's shared build c2779cb39 with Chrome",
+  "fixed": "ADR 1033 (`carrier_runs.rs` `fresh_empty_node_list`, `fresh_empty_node`: the list is empty, so the callback is never entered and the violation is uncertifiable `function-unentered`)",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-tbl-nodelist-foreach-zero-signal-direct-none"
+  ],
+  "rediscovered": "main unexecuted (5 programs of the context, Chrome 5 of 5 never ran the site), `make fuzz-focus` fails (ADR 1018); this build uncertifiable, focus passes with the `tbl-nodelistof` rows ledgered (`known-false-positive`, ADR 1033)"
+ },
+ {
+  "finding": "a false positive: an action call in a callback handed to `forEach` of the `childNodes` of an element `document.createElement(\"i\")` makes there (no child, so the callback never runs) was a violation, Chrome silent",
+  "found": "ADR 1018's unexecuted guard (the `tbl-nodelist-foreach-zero` rows ADR 1019 left), re-run on main 1b03e7db9's shared build c2779cb39 with Chrome",
+  "fixed": "ADR 1033 (`carrier_runs.rs` `fresh_empty_node_list`, `fresh_empty_node`: the list is empty, so the callback is never entered and the violation is uncertifiable `function-unentered`)",
+  "grid": "lg-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-action-called-in-owned-scope-tbl-nodelist-foreach-zero-x-direct-none"
+  ],
+  "rediscovered": "main unexecuted (5 programs of the context, Chrome 5 of 5 never ran the site), `make fuzz-focus` fails (ADR 1018); this build uncertifiable, focus passes with the `tbl-nodelistof` rows ledgered (`known-false-positive`, ADR 1033)"
+ },
+ {
+  "finding": "a false positive: `onFlush` in a callback handed to `forEach` of the `childNodes` of an element `document.createElement(\"i\")` makes there (no child, so the callback never runs) was a violation, Chrome silent",
+  "found": "ADR 1018's unexecuted guard (the `tbl-nodelist-foreach-zero` rows ADR 1019 left), re-run on main 1b03e7db9's shared build c2779cb39 with Chrome",
+  "fixed": "ADR 1033 (`carrier_runs.rs` `fresh_empty_node_list`, `fresh_empty_node`: the list is empty, so the callback is never entered and the violation is uncertifiable `function-unentered`)",
+  "grid": "lg-recall",
+  "code": "ON_FLUSH_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-on-flush-in-owned-scope-tbl-nodelist-foreach-zero-x-direct-none"
+  ],
+  "rediscovered": "main unexecuted (5 programs of the context, Chrome 5 of 5 never ran the site), `make fuzz-focus` fails (ADR 1018); this build uncertifiable, focus passes with the `tbl-nodelistof` rows ledgered (`known-false-positive`, ADR 1033)"
  }
 ]
