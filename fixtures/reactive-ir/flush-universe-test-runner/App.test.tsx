@@ -45,7 +45,7 @@ describe("flush", () => {
     class Late {
       x = flush();
     }
-    void Late;
+    void [Late]; // kept, never used (an array element is no inert use, ADR 1021)
   });
 
   it("a generator", () => {

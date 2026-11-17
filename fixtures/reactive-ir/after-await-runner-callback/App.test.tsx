@@ -95,7 +95,7 @@ it("nested", async () => {
     await pause();
     reads();
   };
-  void later;
+  void [later]; // kept, never used (an array element is no inert use, ADR 1021)
   void [1].map(function* () {
     count();
   });

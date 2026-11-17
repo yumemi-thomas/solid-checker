@@ -1185,6 +1185,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/standard-patches/node_modules/**
 !fixtures/reactive-ir/component-mounted-in-disposal/node_modules/
 !fixtures/reactive-ir/component-mounted-in-disposal/node_modules/**
+!fixtures/reactive-ir/dead-site-unused-class/node_modules/
+!fixtures/reactive-ir/dead-site-unused-class/node_modules/**
 !fixtures/reactive-ir/value-use-census/node_modules/
 !fixtures/reactive-ir/value-use-census/node_modules/**
 !fixtures/reactive-ir/thrown-value-catch/node_modules/

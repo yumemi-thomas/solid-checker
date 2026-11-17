@@ -3890,6 +3890,22 @@
    "to": 2,
    "adr": "ADR 1014",
    "fact": "the slots are no longer withdrawn (tuple-iteration-written), so the row keeps the blocker of its own cause"
+  },
+  {
+   "fixture": "reactive-ir/parameter-list-owner",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 53,
+   "to": 54,
+   "adr": "ADR 1021",
+   "fact": "the SC4001 rows at a default or helper that never runs (only a `void` reference) are relabelled from function-run-unplaced to owner-callers-unenumerated: the same finding, still uncertifiable"
+  },
+  {
+   "fixture": "reactive-ir/rc13-flush-in-effect-callback",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1021",
+   "fact": "the SC4001 rows at a default or helper that never runs (only a `void` reference) are relabelled from function-run-unplaced to owner-callers-unenumerated: the same finding, still uncertifiable"
   }
  ]
 }

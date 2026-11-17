@@ -136,10 +136,12 @@
       "why": "a silent write row whose role no tagged arm answered (no-decision)",
       "at": "fixtures/reactive-ir/own-setter-wrapper-identity/App.tsx:21:33"
     },
-    "reactive-ir/owner-region-no-edge|fixtures/reactive-ir/owner-region-no-edge/App.tsx|5502-5510|C3/untagged": {
+    "reactive-ir/owner-region-no-edge|fixtures/reactive-ir/owner-region-no-edge/App.tsx|5504-5512|C3/untagged": {
       "owner": "proof-log phase B (tag the producing return)",
       "why": "a silent write row whose role no tagged arm answered (untagged)",
-      "at": "fixtures/reactive-ir/owner-region-no-edge/App.tsx:237:5"
+      "at": "fixtures/reactive-ir/owner-region-no-edge/App.tsx:237:5",
+      "adr": "ADR 1021",
+      "note": "the same candidate as at 5502-5510: ADR 1021's edit of the e13 comment above it moved it two bytes"
     },
     "reactive-ir/prop-callback-roles|fixtures/reactive-ir/prop-callback-roles/App.tsx|1221-1235|C3/untagged": {
       "owner": "proof-log phase B (tag the producing return)",

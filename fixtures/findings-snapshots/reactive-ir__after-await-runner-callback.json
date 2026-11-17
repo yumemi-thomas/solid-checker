@@ -194,8 +194,8 @@
       "blocker": "function-call-target-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-runner-callback/App.test.tsx",
-      "start": 3146,
-      "end": 3177,
+      "start": 3213,
+      "end": 3244,
       "fixes": 0
     },
     {
@@ -205,8 +205,8 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-runner-callback/App.test.tsx",
-      "start": 3587,
-      "end": 3599,
+      "start": 3654,
+      "end": 3666,
       "fixes": 0
     },
     {
@@ -216,8 +216,8 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-runner-callback/App.test.tsx",
-      "start": 3600,
-      "end": 3606,
+      "start": 3667,
+      "end": 3673,
       "fixes": 0
     },
     {
@@ -227,8 +227,8 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-runner-callback/App.test.tsx",
-      "start": 3824,
-      "end": 3829,
+      "start": 3891,
+      "end": 3896,
       "fixes": 0
     },
     {
@@ -238,8 +238,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-runner-callback/App.test.tsx",
-      "start": 3929,
-      "end": 3939,
+      "start": 3996,
+      "end": 4006,
       "fixes": 0
     },
     {
