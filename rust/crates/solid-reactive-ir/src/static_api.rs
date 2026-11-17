@@ -1324,6 +1324,29 @@ impl StaticApiContext<'_> {
                             RootBodyGuard::RejectsOutsideDisposal,
                         ),
                     );
+                    // ADR 1037: a `refresh` written directly in an inline apply's returned cleanup.
+                    let role = match (role == crate::ExecutionRole::Unknown)
+                        .then(|| {
+                            crate::execution_role::returned_cleanup_write_role(
+                                file,
+                                call.span,
+                                self.lookup,
+                            )
+                        })
+                        .flatten()
+                    {
+                        Some((placed, effect)) => {
+                            result.ends.end_at(
+                                file,
+                                call.span,
+                                crate::site_accounting::SiteSilence::RefreshReturnedCleanup,
+                                crate::proof_log::PremiseKind::ReturnedCleanupWriteGuard,
+                                || Some(effect),
+                            );
+                            placed
+                        }
+                        None => role,
+                    };
                     if role.reports_disallowed_write() || role.reports_unplaced() {
                         // One record standing for every reachable path.
                         if multiplicity > 0 {
@@ -1435,7 +1458,7 @@ impl StaticApiContext<'_> {
                 execution: if unreached {
                     crate::ExecutionRole::Unknown
                 } else {
-                    crate::local_access::handed_write_execution(
+                    let role = crate::local_access::handed_write_execution(
                         file,
                         call.callee,
                         &allowed,
@@ -1452,7 +1475,35 @@ impl StaticApiContext<'_> {
                             self.lookup,
                             RootBodyGuard::RejectsOutsideDisposal,
                         ),
-                    )
+                    );
+                    // ADR 1037: a `refresh` written directly in an inline apply's returned cleanup.
+                    match (role == crate::ExecutionRole::Unknown)
+                        .then(|| {
+                            crate::execution_role::returned_cleanup_write_role(
+                                file,
+                                call.span,
+                                self.lookup,
+                            )
+                        })
+                        .flatten()
+                    {
+                        Some((placed, effect)) => {
+                            result.ends.end_at(
+                                file,
+                                Span::new(
+                                    call.span.start,
+                                    call.arguments
+                                        .last()
+                                        .map_or(call.span.end, |argument| argument.span.end),
+                                ),
+                                crate::site_accounting::SiteSilence::RefreshReturnedCleanup,
+                                crate::proof_log::PremiseKind::ReturnedCleanupWriteGuard,
+                                || Some(effect),
+                            );
+                            placed
+                        }
+                        None => role,
+                    }
                 },
                 owned_write: self.tables.source_owned_write(symbol).unwrap_or_default(),
                 context: analysis_context(

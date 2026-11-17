@@ -1279,8 +1279,8 @@
         "why": "pending-review"
       },
       "silent-unmatched-slot": {
-        "count": 1,
-        "why": "pending-review"
+        "count": 2,
+        "why": "pending-review; ADR 1044 (`alias_end`): `_ => continue` is a use of the `const` copy that neither calls, hands (no argument), nor copies it (`void a`): it runs nothing, so it adds no end, as the arm it replaced (`(None, None) => continue`) did; every use that may run the function is dispatched"
       },
       "default-on-missing": {
         "count": 2,

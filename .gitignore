@@ -1293,6 +1293,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/stored-throw-value-mount/node_modules/**
 !fixtures/reactive-ir/stored-throw-dynamic-mount/node_modules/
 !fixtures/reactive-ir/stored-throw-dynamic-mount/node_modules/**
+!fixtures/reactive-ir/stored-throw-returned-param/node_modules/
+!fixtures/reactive-ir/stored-throw-returned-param/node_modules/**
 
 !fixtures/reactive-ir/rc21-listener-cross-file/node_modules/
 !fixtures/reactive-ir/rc21-listener-cross-file/node_modules/**
@@ -1325,6 +1327,10 @@ packages/wasm/owned/
 !fixtures/reactive-ir/primitive-indirect-call/node_modules/**
 !fixtures/reactive-ir/stored-throw-class-member-wrapper/node_modules/
 !fixtures/reactive-ir/stored-throw-class-member-wrapper/node_modules/**
+!fixtures/reactive-ir/stored-throw-held-callbacks/node_modules/
+!fixtures/reactive-ir/stored-throw-held-callbacks/node_modules/**
+!fixtures/reactive-ir/stored-throw-held-callbacks-open/node_modules/
+!fixtures/reactive-ir/stored-throw-held-callbacks-open/node_modules/**
 !fixtures/reactive-ir/leaf-scope-by-value-callback/node_modules/
 !fixtures/reactive-ir/leaf-scope-by-value-callback/node_modules/**
 !fixtures/reactive-ir/leaf-generator-step/node_modules/
@@ -1551,6 +1557,10 @@ packages/wasm/owned/
 !fixtures/reactive-ir/owner-call-jsx-getter/node_modules/**
 !fixtures/reactive-ir/owner-call-getter-placed/node_modules/
 !fixtures/reactive-ir/owner-call-getter-placed/node_modules/**
+!fixtures/reactive-ir/effect-cleanup-write-role/node_modules/
+!fixtures/reactive-ir/effect-cleanup-write-role/node_modules/**
+!fixtures/reactive-ir/effect-cleanup-write-role-flush/node_modules/
+!fixtures/reactive-ir/effect-cleanup-write-role-flush/node_modules/**
 !fixtures/reactive-ir/portal-children-owner/node_modules/
 !fixtures/reactive-ir/portal-children-owner/node_modules/**
 !fixtures/reactive-ir/stored-throw-portal/node_modules/

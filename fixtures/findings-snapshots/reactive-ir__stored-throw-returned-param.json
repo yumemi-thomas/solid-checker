@@ -1,0 +1,178 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "static-dynamic-async-source",
+      "code": "SC2007",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-returned-param/App.tsx",
+      "start": 851,
+      "end": 858,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-returned-param/App.tsx",
+      "start": 923,
+      "end": 926,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-returned-param/App.tsx",
+      "start": 993,
+      "end": 1078,
+      "fixes": 0
+    },
+    {
+      "rule": "static-dynamic-async-source",
+      "code": "SC2007",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-returned-param/App.tsx",
+      "start": 1010,
+      "end": 1017,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-returned-param/App.tsx",
+      "start": 1159,
+      "end": 1169,
+      "fixes": 0
+    },
+    {
+      "rule": "static-dynamic-async-source",
+      "code": "SC2007",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-returned-param/App.tsx",
+      "start": 1459,
+      "end": 1466,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-returned-param/App.tsx",
+      "start": 1531,
+      "end": 1534,
+      "fixes": 0
+    },
+    {
+      "rule": "static-dynamic-async-source",
+      "code": "SC2007",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-returned-param/App.tsx",
+      "start": 1746,
+      "end": 1753,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-returned-param/App.tsx",
+      "start": 1838,
+      "end": 1841,
+      "fixes": 0
+    },
+    {
+      "rule": "static-dynamic-async-source",
+      "code": "SC2007",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-returned-param/App.tsx",
+      "start": 1929,
+      "end": 1936,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-returned-param/App.tsx",
+      "start": 2011,
+      "end": 2014,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-returned-param/App.tsx",
+      "start": 2144,
+      "end": 2154,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-returned-param/App.tsx",
+      "start": 2267,
+      "end": 2277,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-returned-param/App.tsx",
+      "start": 2267,
+      "end": 2277,
+      "fixes": 0
+    },
+    {
+      "rule": "static-dynamic-async-source",
+      "code": "SC2007",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-returned-param/App.tsx",
+      "start": 2537,
+      "end": 2544,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-returned-param/App.tsx",
+      "start": 2609,
+      "end": 2615,
+      "fixes": 0
+    }
+  ]
+}
