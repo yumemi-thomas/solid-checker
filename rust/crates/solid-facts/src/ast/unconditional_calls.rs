@@ -183,6 +183,7 @@ fn runs_on_every_module_evaluation(
                     &program.body,
                     nodes.kind(child).span(),
                     true,
+                    Mode::AtLeastOnce,
                 );
             }
             AstKind::ExportNamedDeclaration(_)
@@ -195,7 +196,16 @@ fn runs_on_every_module_evaluation(
                         .value
                         .as_ref()
                         .is_some_and(|value| value.span() == nodes.kind(child).span()) => {}
-            _ if !evaluates_child_once(nodes, scope, parent, child, true, Mode::AtLeastOnce) => {
+            _ if !evaluates_child_once(
+                nodes,
+                scope,
+                parent,
+                child,
+                true,
+                Mode::AtLeastOnce,
+                call,
+            ) =>
+            {
                 return false;
             }
             _ => {}
@@ -341,7 +351,7 @@ fn runs_on_every_completion(
             return matches!(nodes.kind(child), AstKind::FunctionBody(_))
                 || matches!(nodes.kind(owner), AstKind::ArrowFunctionExpression(arrow) if arrow.expression);
         }
-        if !evaluates_child_once(nodes, scope, parent, child, throws_exit, mode) {
+        if !evaluates_child_once(nodes, scope, parent, child, throws_exit, mode, call) {
             return false;
         }
         child = parent;
@@ -371,10 +381,20 @@ fn evaluates_child_once(
     child: NodeId,
     throws_exit: bool,
     mode: Mode,
+    call: NodeId,
 ) -> bool {
     let child_span = nodes.kind(child).span();
     let is = |span: oxc_span::Span| span == child_span;
     let decided = |test: &Expression<'_>| scope.and_then(|scope| scope.truthiness(test));
+    // ADR 1048: the block of a `try` a `catch` guards, when nothing before the call can throw (a throw there would be caught,
+    // and the `try` complete without the call).
+    if mode == Mode::AtLeastOnce
+        && let AstKind::TryStatement(statement) = nodes.kind(parent)
+        && statement.handler.is_some()
+        && is(statement.block.span())
+    {
+        return scope.is_some_and(|scope| guarded_first_call(nodes, scope, &statement.block, call));
+    }
     if mode == Mode::AtLeastOnce
         && let Some(admitted) =
             evaluates_child_at_least_once(nodes.kind(parent), child_span, &decided)
@@ -385,14 +405,14 @@ fn evaluates_child_once(
     if mode == Mode::AtLeastOnce
         && let AstKind::SwitchCase(case) = nodes.kind(parent)
     {
-        return statements_before_exit_free(scope, &case.consequent, child_span, throws_exit);
+        return statements_before_exit_free(scope, &case.consequent, child_span, throws_exit, mode);
     }
     match nodes.kind(parent) {
         AstKind::FunctionBody(body) => {
-            statements_before_exit_free(scope, &body.statements, child_span, throws_exit)
+            statements_before_exit_free(scope, &body.statements, child_span, throws_exit, mode)
         }
         AstKind::BlockStatement(block) => {
-            statements_before_exit_free(scope, &block.body, child_span, throws_exit)
+            statements_before_exit_free(scope, &block.body, child_span, throws_exit, mode)
         }
         AstKind::IfStatement(statement) => {
             is(statement.test.span())
@@ -507,6 +527,77 @@ fn evaluates_child_at_least_once(
     })
 }
 
+/// ADR 1048: whether the call at `call` is the first statement of the guarded `block`, and nothing evaluated before it runs
+/// can throw: no optional chain, a callee that is a hoisted function declaration of the module nothing writes, or an import
+/// from a package (bound before the module's code runs), and arguments that are literals, functions or arrows. A throw there
+/// would be caught and the `try` would complete without the call; the callee's own throw is the call having run.
+fn guarded_first_call(
+    nodes: &AstNodes<'_>,
+    scope: &HostConstantScope<'_, '_>,
+    block: &oxc_ast::ast::BlockStatement<'_>,
+    call: NodeId,
+) -> bool {
+    use oxc_ast::ast::Argument;
+    let AstKind::CallExpression(expression) = nodes.kind(call) else {
+        return false;
+    };
+    let Some(Statement::ExpressionStatement(first)) = block.body.first() else {
+        return false;
+    };
+    if first.expression.get_inner_expression().span() != expression.span || expression.optional {
+        return false;
+    }
+    let Expression::Identifier(callee) = expression.callee.get_inner_expression() else {
+        return false;
+    };
+    let scoping = scope.scoping();
+    let Some(symbol) = callee
+        .reference_id
+        .get()
+        .and_then(|id| scoping.get_reference(id).symbol_id())
+    else {
+        return false;
+    };
+    if scoping
+        .get_resolved_references(symbol)
+        .any(|reference| reference.is_write())
+    {
+        return false;
+    }
+    let declaration = scoping.symbol_declaration(symbol);
+    let bound = match nodes.kind(declaration) {
+        AstKind::Function(function) => function.is_declaration(),
+        AstKind::ImportSpecifier(_) | AstKind::ImportDefaultSpecifier(_) => {
+            let mut at = declaration;
+            loop {
+                let parent = nodes.parent_id(at);
+                if parent == at {
+                    break false;
+                }
+                if let AstKind::ImportDeclaration(import) = nodes.kind(parent) {
+                    let source = import.source.value.as_str();
+                    break !source.starts_with('.') && !source.starts_with('/');
+                }
+                at = parent;
+            }
+        }
+        _ => false,
+    };
+    bound
+        && expression.arguments.iter().all(|argument| match argument {
+            Argument::SpreadElement(_) => false,
+            argument => matches!(
+                argument.to_expression().get_inner_expression(),
+                Expression::NumericLiteral(_)
+                    | Expression::StringLiteral(_)
+                    | Expression::BooleanLiteral(_)
+                    | Expression::NullLiteral(_)
+                    | Expression::ArrowFunctionExpression(_)
+                    | Expression::FunctionExpression(_)
+            ),
+        })
+}
+
 /// ADR 1046: a literal a switch or a counter loop compares: a number, a string or a boolean, through parentheses and
 /// TypeScript's wrappers (`1 as number`), a negated number included.
 #[derive(Clone, Debug, PartialEq)]
@@ -611,6 +702,7 @@ fn statements_before_exit_free(
     statements: &[Statement<'_>],
     child: oxc_span::Span,
     throws_exit: bool,
+    mode: Mode,
 ) -> bool {
     for statement in statements {
         if statement.span() == child {
@@ -620,6 +712,7 @@ fn statements_before_exit_free(
             scope,
             throws_exit,
             found: false,
+            inner: (mode == Mode::AtLeastOnce).then(Inner::default),
         };
         exits.visit_statement(statement);
         if exits.found {
@@ -637,6 +730,46 @@ struct EarlyExit<'f, 's, 'a> {
     scope: Option<&'f HostConstantScope<'s, 'a>>,
     throws_exit: bool,
     found: bool,
+    /// ADR 1048 (`Mode::AtLeastOnce` only): the loops, `switch`es and labels open inside the visited statement, so that a
+    /// `break` or `continue` that leaves only one of them is no way out of the statement. `None`: every one counts.
+    inner: Option<Inner>,
+}
+
+#[derive(Default)]
+struct Inner {
+    loops: usize,
+    switches: usize,
+    labels: Vec<String>,
+}
+
+impl EarlyExit<'_, '_, '_> {
+    /// Whether a jump to `label` (or, with none, to the innermost loop, or for a `break` the innermost `switch` too) leaves the
+    /// visited statement.
+    fn leaves(&self, label: Option<&oxc_ast::ast::LabelIdentifier<'_>>, is_break: bool) -> bool {
+        let Some(inner) = &self.inner else {
+            return true;
+        };
+        match label {
+            Some(label) => !inner.labels.iter().any(|open| open == label.name.as_str()),
+            None => inner.loops == 0 && !(is_break && inner.switches > 0),
+        }
+    }
+
+    fn within(&mut self, kind: u8, walk: impl FnOnce(&mut Self)) {
+        if let Some(inner) = &mut self.inner {
+            match kind {
+                0 => inner.loops += 1,
+                _ => inner.switches += 1,
+            }
+        }
+        walk(self);
+        if let Some(inner) = &mut self.inner {
+            match kind {
+                0 => inner.loops -= 1,
+                _ => inner.switches -= 1,
+            }
+        }
+    }
 }
 
 impl<'v> Visit<'v> for EarlyExit<'_, '_, '_> {
@@ -661,11 +794,50 @@ impl<'v> Visit<'v> for EarlyExit<'_, '_, '_> {
     fn visit_return_statement(&mut self, _: &oxc_ast::ast::ReturnStatement<'v>) {
         self.found = true;
     }
-    fn visit_break_statement(&mut self, _: &oxc_ast::ast::BreakStatement<'v>) {
-        self.found = true;
+    fn visit_break_statement(&mut self, statement: &oxc_ast::ast::BreakStatement<'v>) {
+        self.found |= self.leaves(statement.label.as_ref(), true);
     }
-    fn visit_continue_statement(&mut self, _: &oxc_ast::ast::ContinueStatement<'v>) {
-        self.found = true;
+    fn visit_continue_statement(&mut self, statement: &oxc_ast::ast::ContinueStatement<'v>) {
+        self.found |= self.leaves(statement.label.as_ref(), false);
+    }
+    fn visit_for_statement(&mut self, statement: &oxc_ast::ast::ForStatement<'v>) {
+        self.within(0, |this| {
+            oxc_ast_visit::walk::walk_for_statement(this, statement)
+        });
+    }
+    fn visit_for_in_statement(&mut self, statement: &oxc_ast::ast::ForInStatement<'v>) {
+        self.within(0, |this| {
+            oxc_ast_visit::walk::walk_for_in_statement(this, statement)
+        });
+    }
+    fn visit_for_of_statement(&mut self, statement: &oxc_ast::ast::ForOfStatement<'v>) {
+        self.within(0, |this| {
+            oxc_ast_visit::walk::walk_for_of_statement(this, statement)
+        });
+    }
+    fn visit_while_statement(&mut self, statement: &oxc_ast::ast::WhileStatement<'v>) {
+        self.within(0, |this| {
+            oxc_ast_visit::walk::walk_while_statement(this, statement)
+        });
+    }
+    fn visit_do_while_statement(&mut self, statement: &oxc_ast::ast::DoWhileStatement<'v>) {
+        self.within(0, |this| {
+            oxc_ast_visit::walk::walk_do_while_statement(this, statement)
+        });
+    }
+    fn visit_switch_statement(&mut self, statement: &oxc_ast::ast::SwitchStatement<'v>) {
+        self.within(1, |this| {
+            oxc_ast_visit::walk::walk_switch_statement(this, statement)
+        });
+    }
+    fn visit_labeled_statement(&mut self, statement: &oxc_ast::ast::LabeledStatement<'v>) {
+        if let Some(inner) = &mut self.inner {
+            inner.labels.push(statement.label.name.to_string());
+        }
+        oxc_ast_visit::walk::walk_labeled_statement(self, statement);
+        if let Some(inner) = &mut self.inner {
+            inner.labels.pop();
+        }
     }
     fn visit_throw_statement(&mut self, statement: &oxc_ast::ast::ThrowStatement<'v>) {
         self.found |= self.throws_exit;

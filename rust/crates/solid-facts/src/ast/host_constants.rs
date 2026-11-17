@@ -786,6 +786,11 @@ impl<'s, 'a> HostConstantScope<'s, 'a> {
     /// `null`, string and decimal numeric literals, `!`, parentheses and type
     /// wrappers, a host-constant import, and a never-written `const`.
     #[must_use]
+    /// The scoping the scope was built over (ADR 1048: a guarded call's callee is resolved through it).
+    pub(super) fn scoping(&self) -> &'s Scoping {
+        self.scoping
+    }
+
     pub fn truthiness(&self, expression: &Expression<'_>) -> Option<(bool, bool)> {
         self.truthiness_at(expression, 0, self.window_realm)
     }

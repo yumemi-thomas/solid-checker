@@ -424,10 +424,6 @@ fn at_least_once_admits_labels_finalizers_do_bodies_and_entered_loops() {
             "a()",
         ),
         ("function f() {\n  for (;; a()) { break; }\n}\n", "a()"),
-        (
-            "function f(c) {\n  while (true) { if (c) break; }\n  a();\n}\n",
-            "a()",
-        ),
     ] {
         assert!(
             !synchronous(source, "f").contains(&kept.to_owned()),
@@ -549,5 +545,45 @@ fn at_least_once_admits_counter_loops_and_literal_switch_cases() {
             !unconditional(source, "f").contains(&"a()".to_owned()),
             "{source}"
         );
+    }
+}
+
+fn every_names(source: &str) -> Vec<String> {
+    every(source)
+}
+
+/// ADR 1048: the first statement of a `try` block a `catch` guards runs when nothing before the call can throw; a jump
+/// that leaves only a loop, `switch` or label inside an earlier statement is no way out.
+#[test]
+fn at_least_once_admits_a_guarded_first_call_and_inner_jumps() {
+    let module = "import { onCleanup } from \"solid-js\";\nimport { local } from \"./local\";\n\
+function wrap() {}\nlet moved = () => {};\n\
+function admitted() {\n  try { wrap(); } catch {}\n  try { onCleanup(() => {}); } catch { } finally {}\n}\n\
+function inner(c) {\n  for (const x of c) { if (x) break; }\n  while (c) { continue; }\n  switch (c) { case 1: break; }\n  label: { break label; }\n  wrap(1, \"s\", () => {});\n}\n\
+function refused(c, a) {\n  try { c(); wrap(); } catch {}\n  try { moved(); } catch {}\n  try { local(); } catch {}\n  try { wrap(a.b); } catch {}\n  try { wrap?.(); } catch {}\n  try { wrap(...a); } catch {}\n}\n\
+function leaving(c) {\n  for (const x of c) { if (x) break outer; }\n  wrap(2);\n}\n\
+function continued(c) {\n  switch (c) { case 1: continue; }\n  wrap(3);\n}\n\
+function afterLoop(c) {\n  while (true) { if (c) break; }\n  wrap(4);\n}\n";
+    let calls = every_names(module);
+    // A `break` that leaves only the loop before it: the call runs on every completion (the brief's slice 3 over-count).
+    for call in [
+        "wrap()",
+        "onCleanup(() => {})",
+        "wrap(1, \"s\", () => {})",
+        "wrap(4)",
+    ] {
+        assert!(calls.contains(&call.to_owned()), "{call} in {calls:?}");
+    }
+    for call in [
+        "c()",
+        "moved()",
+        "local()",
+        "wrap(a.b)",
+        "wrap?.()",
+        "wrap(...a)",
+        "wrap(2)",
+        "wrap(3)",
+    ] {
+        assert!(!calls.contains(&call.to_owned()), "{call} in {calls:?}");
     }
 }
