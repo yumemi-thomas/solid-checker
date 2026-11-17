@@ -1831,8 +1831,11 @@ pub(crate) fn inside_non_component_function(
     }) {
         return false;
     }
+    // ADR 1022: a placed constructor or method runs as code of the function its class is written in.
+    let placed = crate::execution_role::construct_only_member_function(file, span);
     file.ast.functions_body_containing(span).any(|function| {
         function_binding_name(file, function).is_some()
+            && Some(function.span) != placed
             && !object_method_escapes(file, function, lookup)
             && !lookup.function_may_be_component(file, function)
     })

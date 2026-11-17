@@ -855,6 +855,8 @@ pub(crate) fn inside_class_member(
     crate::owners::containing_ast_function(&file.ast, at).is_some_and(|function| {
         class_of_member(file, function).is_some()
             && SiteReach::new(lookup).function_runs(file, function)
+            // ADR 1022: placed at its one `new` or receiver call.
+            && !construct_only_placed(file, span)
     })
 }
 
@@ -874,10 +876,12 @@ pub(crate) fn unplaced_run(
         return false;
     }
     let ast = &file.ast;
-    ast.classes
+    // ADR 1022: a construct-only class's member runs at its one `new` or receiver call.
+    (ast.classes
         .iter()
         .flat_map(|class| &class.elements)
         .any(|element| element.value.is_some_and(|value| value.contains(span)))
+        && !construct_only_placed(file, span))
         || ast.functions_owning(span).any(|function| {
             let value = function.span;
             ast.object_properties
@@ -931,10 +935,12 @@ pub(crate) fn runs_implicitly(
         return false;
     }
     let ast = &file.ast;
-    ast.classes
+    // ADR 1022: as in [`unplaced_run`].
+    (ast.classes
         .iter()
         .flat_map(|class| &class.elements)
         .any(|element| element.value.is_some_and(|value| value.contains(span)))
+        && !construct_only_placed(file, span))
         || ast.functions_owning(span).any(|function| {
             let value = function.span;
             ast.object_properties

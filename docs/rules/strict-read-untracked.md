@@ -293,7 +293,9 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   the body or a hook called there is a violation; a factory in a tracked
   attribute, a timer's callback and a stored callback stay silent. A helper or
   a hook's accessor called in a class member's body is an obligation (ADR
-  0516), as is a read in a generator stepped at its own call inside a function
+  0516), unless the class is construct-only (ADR 1022: its one `new`, after
+  it in the same non-async body and outside JSX, runs its constructor and the
+  method called on that `new` there, so the call takes that body's role), as is a read in a generator stepped at its own call inside a function
   an intrinsic `ref` applies.
 - **An effect apply reading an async source stays here (ADR 0467).** A run
   that meets the source pending throws `PENDING_ASYNC_UNTRACKED_READ` instead

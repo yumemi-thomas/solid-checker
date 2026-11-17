@@ -2077,6 +2077,13 @@ pub(super) fn write_role_walk<'f>(
     // (innermost outward) and only then classify normally.
     let mut span = span;
     loop {
+        // ADR 1022: a write written directly in a placed constructor or method runs at its one `new` or receiver call.
+        if super::construct_only_member_function(file, span).is_some()
+            && let Some(run) = super::construct_only_member_run(file, span)
+        {
+            span = run;
+            continue;
+        }
         match write_region_adjustment(file, span, lookup) {
             Some(WriteRegionAdjustment::LeafScope) => {
                 return role_arm!(
