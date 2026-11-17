@@ -25877,5 +25877,11 @@
    "mx-no-owner-context-fire-store-handler-x-direct-none"
   ],
   "rediscovered": "main 5780918b8 recall-gap, this build agree (SC4001 violation at the site)"
+ },
+ {
+  "finding": "a `solid-js` specifier the compiler resolved to a file that is not the package (tsconfig `paths` to a project shim, or into another package) still named its imports after the specifier: SC4001, SC7002, SC7001 proved where nothing Solid runs",
+  "found": "Mac 21's open item from ADR 1054 (probe: paths-mapped shim and local stub)",
+  "fixed": "ADR 1060 (`symbols.rs` `specifier_may_be_package`; SC9012 `dialect-specifier-mapped` at each use)",
+  "outside": "Not generated: every grid program gets the generator's own tsconfig (typecheck.mjs `tsconfigFor`), with no `paths`, and runs under Vite, which does not read `paths`. Pinned by fixtures reactive-ir/solid-specifier-mapped and solid-specifier-mapped-other (violations on fa8f33277, SC9012 here) and the positive twin solid-specifier-mapped-package."
  }
 ]
