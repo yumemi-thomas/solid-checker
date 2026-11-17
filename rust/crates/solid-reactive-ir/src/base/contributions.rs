@@ -756,6 +756,11 @@ pub(crate) enum Hazard {
     /// (the hash of the key, [`member_hash`] with no container) and defines no
     /// other ([`DefinerKey::Sole`]; value 0).
     ReflectiveDefinitionSole(u32),
+    /// ADR 1036: a reflective definer that may define any key on an object only the factory form proves made (value 0):
+    /// [`Self::ReflectiveDefinitionAny`] while a factory may not be standard ([`open_member_write_through_factory`]).
+    FreshFactoryDefinitionAny,
+    /// ADR 1036: the same for a definer called with this literal key ([`Self::ReflectiveDefinitionSole`]'s hash).
+    FreshFactoryDefinitionSole(u32),
     /// ADR 1024: code writes this member (the hash of [`Self::OpenMemberWrite`]'s key) of an object only the factory
     /// form proves made ([`fresh_written::fresh_written_object`]; value 0): an open write while a factory it trusts may
     /// not be standard ([`open_member_write_through_factory`]).
@@ -819,10 +824,14 @@ pub(crate) fn open_member_write_through_factory(
     hazard: Hazard,
     raw: &impl Fn(Hazard) -> bool,
 ) -> bool {
-    let Hazard::OpenMemberWrite(key) = hazard else {
-        return false;
+    let factory = match hazard {
+        Hazard::OpenMemberWrite(key) => Hazard::FreshFactoryWrite(key),
+        // ADR 1036: a definer on a factory-made object.
+        Hazard::ReflectiveDefinitionAny => Hazard::FreshFactoryDefinitionAny,
+        Hazard::ReflectiveDefinitionSole(key) => Hazard::FreshFactoryDefinitionSole(key),
+        _ => return false,
     };
-    raw(Hazard::FreshFactoryWrite(key)) && !fresh_factories_intact(raw)
+    raw(factory) && !fresh_factories_intact(raw)
 }
 
 fn reflective_definition_sole(key: &str) -> Hazard {
@@ -2093,7 +2102,12 @@ fn impostor_sites(
         {
             CensusKey::Named(literal.key.to_string())
         } else {
-            census_key(file, member.property, true)
+            // ADR 1036: a key that is a number or a boolean by its syntax names no member.
+            if fresh_written::index_key(file, member.property) {
+                CensusKey::Named(INDEX_KEY.to_owned())
+            } else {
+                census_key(file, member.property, true)
+            }
         };
         write(key.clone(), member.object);
         note(key, target);
@@ -2244,6 +2258,9 @@ fn fresh_object(file: &FileFacts, span: Span) -> bool {
 /// `self` and `globalThis`, unlike `window` and `document`. `Symbol` is the one
 /// [`symbol_key`] stands on.
 const HOST_KEYS: [&str; 3] = ["self", "globalThis", "Symbol"];
+/// ADR 1036: the census key of a member write whose key is a number or a boolean by its syntax
+/// ([`fresh_written::index_key`]): no member any census or formula reads.
+const INDEX_KEY: &str = "@@index";
 /// The census key of a site keyed by a symbol ([`symbol_key`]): no member, while
 /// the program leaves `Symbol` alone.
 const SYMBOL_SITE: &str = "@@symbol";
@@ -2930,7 +2947,7 @@ pub(crate) fn impostor_veto(
 /// [`BuildConstants`] (the parameter is unused); the kept index is also
 /// stamped with the constants it was folded under and refolds when they
 /// differ, and shadow and verify-reused modes compare it with a refold.
-pub(crate) fn hazards(view: &FileView<'_>, constants: &BuildConstants<'_>) -> Vec<(Hazard, u32)> {
+pub(crate) fn hazards(view: &FileView<'_>, _constants: &BuildConstants<'_>) -> Vec<(Hazard, u32)> {
     let file = view.file;
     let mut entries = Vec::new();
     for (index, hazard) in file.ast.module_hazards.iter().enumerate() {
@@ -2984,12 +3001,11 @@ pub(crate) fn hazards(view: &FileView<'_>, constants: &BuildConstants<'_>) -> Ve
     }
     if reflective_definition_spelled(file) {
         entries.push((Hazard::ReflectiveDefinitionSpelling, 0));
-        // ADR 0951: what the spellings may define, by key: any, or the literal keys their calls pass.
-        for (key, ()) in definers(view, constants) {
-            entries.push(match key {
-                DefinerKey::Any => (Hazard::ReflectiveDefinitionAny, 0),
-                DefinerKey::Sole(key) => (reflective_definition_sole(&key), 0),
-            });
+        // ADR 0951: what the spellings may define, by key: any, or the literal keys their calls pass. ADR 1036: a call
+        // of `Object`'s or `Reflect`'s definer on an object the program made defines nothing on a root (none), or only
+        // while the factories the factory form trusts are standard (`FreshFactoryDefinition*`).
+        for hazard in root_definitions(file) {
+            entries.push((hazard, 0));
         }
     }
     let writes = assignment_writes(file);
@@ -3123,6 +3139,95 @@ pub(crate) fn hazards(view: &FileView<'_>, constants: &BuildConstants<'_>) -> Ve
 }
 
 const DEFINERS: [&str; 3] = ["defineProperty", "defineProperties", "__defineGetter__"];
+
+/// ADR 1036: the definition hazards [`handed_root_patch`] reads, as [`definers`] keys them (ADR 0951), with each call of
+/// `Object.defineProperty`, `Object.defineProperties` or `Reflect.defineProperty` (the global `Object` or `Reflect`, which
+/// no declaration of the file shadows) whose first argument is an object the program made left out ([`Fresh::Made`]) or
+/// kept as its factory variant ([`Fresh::Factory`]): it defines keys of that object and of no root. Every other definer
+/// spelling (a held or destructured definer, a bare callee, `__defineGetter__`, a receiver that is no such global, a call
+/// with a spread target) stays as [`definers`] reads it.
+fn root_definitions(file: &FileFacts) -> Vec<Hazard> {
+    let ast = &file.ast;
+    let unquoted = |text: &str| text.trim_matches(['\'', '"', '`']).to_owned();
+    let mut hazards = Vec::new();
+    if ast.bindings.iter().any(|binding| {
+        binding
+            .object_slots
+            .iter()
+            .any(|slot| DEFINERS.contains(&slot.property.as_str()))
+    }) {
+        hazards.push(Hazard::ReflectiveDefinitionAny);
+    }
+    let member_spans = ast
+        .members
+        .iter()
+        .map(|member| member.span)
+        .collect::<HashSet<_>>();
+    for call in &ast.calls {
+        if !member_spans.contains(&ast.peel_ts_sugar_span(call.callee))
+            && file
+                .source_text(call.callee)
+                .is_some_and(|callee| DEFINERS.iter().any(|definer| callee.ends_with(definer)))
+        {
+            hazards.push(Hazard::ReflectiveDefinitionAny);
+        }
+    }
+    for member in &ast.members {
+        let Some(name) = file.source_text(member.property).map(unquoted) else {
+            continue;
+        };
+        if !DEFINERS.contains(&name.as_str()) {
+            continue;
+        }
+        let call = ast
+            .calls
+            .iter()
+            .find(|call| ast.peel_ts_sugar_span(call.callee) == member.span);
+        // The key the definition is put to, as `definers` reads it.
+        let key = call.and_then(|call| {
+            (name != "defineProperties"
+                && !call.arguments.first().is_some_and(|target| target.spread))
+            .then_some(())?;
+            match call
+                .arguments
+                .get(1)
+                .map(|key| (&key.literal_value, key.spread))
+            {
+                Some((ArgumentLiteralFact::String(key), false)) => Some(key.to_string()),
+                _ => None,
+            }
+        });
+        let (factory_hazard, open_hazard) = match &key {
+            Some(key) => (
+                Hazard::FreshFactoryDefinitionSole(member_hash("", key)),
+                reflective_definition_sole(key),
+            ),
+            None => (
+                Hazard::FreshFactoryDefinitionAny,
+                Hazard::ReflectiveDefinitionAny,
+            ),
+        };
+        let receiver = ast.peel_ts_sugar_span(member.object);
+        let global_definer = name != "__defineGetter__"
+            && matches!(
+                file.source_text(receiver).map(str::trim),
+                Some("Object" | "Reflect")
+            )
+            && ast.reference_declaration(receiver).is_none();
+        let target = call
+            .filter(|_| global_definer)
+            .and_then(|call| call.arguments.first())
+            .filter(|target| !target.spread);
+        match target.and_then(|target| fresh_written_object(file, target.span)) {
+            Some(Fresh::Made) => {}
+            Some(Fresh::Factory) => hazards.push(factory_hazard),
+            None => hazards.push(open_hazard),
+        }
+    }
+    hazards.sort_unstable();
+    hazards.dedup();
+    hazards
+}
 
 /// Review round 1 of ADR 0293: any member access, destructured property or
 /// callee spelled `defineProperty`, `defineProperties` or `__defineGetter__`,

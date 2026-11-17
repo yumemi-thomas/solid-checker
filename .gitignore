@@ -1367,6 +1367,14 @@ packages/wasm/owned/
 !fixtures/reactive-ir/fresh-written-object-escaped/node_modules/**
 !fixtures/reactive-ir/fresh-written-object-shadowed/node_modules/
 !fixtures/reactive-ir/fresh-written-object-shadowed/node_modules/**
+!fixtures/reactive-ir/fresh-target-definer/node_modules/
+!fixtures/reactive-ir/fresh-target-definer/node_modules/**
+!fixtures/reactive-ir/fresh-target-definer-open/node_modules/
+!fixtures/reactive-ir/fresh-target-definer-open/node_modules/**
+!fixtures/reactive-ir/fresh-target-definer-shadowed/node_modules/
+!fixtures/reactive-ir/fresh-target-definer-shadowed/node_modules/**
+!fixtures/reactive-ir/index-key-open/node_modules/
+!fixtures/reactive-ir/index-key-open/node_modules/**
 !fixtures/reactive-ir/rc21-listener-bare-global/node_modules/
 !fixtures/reactive-ir/rc21-listener-bare-global/node_modules/**
 !fixtures/reactive-ir/rc21-listener-bare-shadowed/node_modules/

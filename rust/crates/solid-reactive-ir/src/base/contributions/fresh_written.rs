@@ -164,11 +164,16 @@ impl Walk<'_> {
             if answer.is_none() {
                 break;
             }
-            if *reference == declaration
-                || !ast.any_write_target_containing(*reference)
-                || ast.any_member_with_object(*reference)
-            {
+            if *reference == declaration {
                 continue;
+            }
+            match binding_write(file, *reference) {
+                Write::None => continue,
+                Write::Other => {
+                    answer = None;
+                    continue;
+                }
+                Write::Exact => {}
             }
             // Only a plain or logical `=` whose target is the name itself: a pattern, a `for … of` head, an update or a
             // compound operator writes what no assignment value shows.
@@ -381,6 +386,188 @@ impl Walk<'_> {
         }
         self.value(property, depth)
     }
+}
+
+/// ADR 1036: whether the computed key at `span` is a number, a bigint or a boolean by its syntax, so that the property it
+/// names is an index or `true`/`false`, never a member a standard call is: a numeric literal; an operator whose result is
+/// such a primitive whatever its operands ([`numeric_operator`]: an arithmetic operator but `+`, a shift, bitwise or
+/// relational one, prefix `- ~ !`, `++`/`--`; equality, `in` and `instanceof` are not read); a `const` bound to such
+/// a key; and a `let` (no direct `eval`) whose initial value and every write is one: a plain or logical assignment of
+/// such a key, a compound assignment of one (number with number stays a number), or `++`/`--`, each assuming the previous
+/// value one (the induction of [`fresh_written_object`]'s `let`).
+pub(crate) fn index_key(file: &FileFacts, span: Span) -> bool {
+    Index {
+        file,
+        assumed: Vec::new(),
+    }
+    .key(span, 0)
+}
+
+struct Index<'f> {
+    file: &'f FileFacts,
+    assumed: Vec<Span>,
+}
+
+impl Index<'_> {
+    fn key(&mut self, span: Span, depth: u8) -> bool {
+        if depth > DEPTH {
+            return false;
+        }
+        let file = self.file;
+        let ast = &file.ast;
+        let value = ast.peel_ts_sugar_span(span);
+        let Some(text) = file.source_text(value).map(str::trim) else {
+            return false;
+        };
+        if text
+            .chars()
+            .next()
+            .is_some_and(|first| first.is_ascii_digit())
+            && text
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_')
+        {
+            return true;
+        }
+        if ast.primitive_results.binary_search(&value).is_ok() {
+            return numeric_operator(file, value, text);
+        }
+        let Some(declaration) = ast.reference_declaration(value) else {
+            return false;
+        };
+        if self.assumed.contains(&declaration) {
+            return true;
+        }
+        let Some(binding) = ast
+            .identifier_binding(declaration)
+            .filter(|binding| binding.immutable || binding.runtime_let)
+        else {
+            return false;
+        };
+        if binding.immutable {
+            return binding
+                .initializer
+                .is_some_and(|initializer| self.key(initializer, depth + 1));
+        }
+        if no_eval(file).is_none() {
+            return false;
+        }
+        let Some(initializer) = binding.initializer else {
+            return false;
+        };
+        self.assumed.push(declaration);
+        let mut numeric = self.key(initializer, depth + 1);
+        for reference in ast.references_to(declaration) {
+            if !numeric {
+                break;
+            }
+            if *reference == declaration {
+                continue;
+            }
+            match binding_write(file, *reference) {
+                Write::None => continue,
+                Write::Other => {
+                    numeric = false;
+                    continue;
+                }
+                Write::Exact => {}
+            }
+            let assigned = ast
+                .assignments
+                .iter()
+                .find(|assignment| ast.peel_ts_sugar_span(assignment.target) == *reference);
+            numeric = match assigned {
+                Some(assignment) => {
+                    let value = assignment.value_span;
+                    self.key(value, depth + 1)
+                }
+                // `i++`, `--i`: the update expression is the reference and its two-character operator.
+                None => ast.primitive_results.iter().any(|update| {
+                    (update.start == reference.start && update.end == reference.end + 2)
+                        || (update.end == reference.end && update.start + 2 == reference.start)
+                }),
+            };
+        }
+        self.assumed.pop();
+        numeric
+    }
+}
+
+/// Whether the operator expression at `value` (one of `primitive_results`) yields a number, a bigint or a boolean whatever
+/// its operands: a binary whose operator, read between its two operands (the `coercing_operands` that start and end with
+/// it), is no `+` and is one of the arithmetic, shift, bitwise or relational operators; else (no two such operands: a
+/// unary or an update) `++`/`--` at either end, or a prefix `-`, `~` or `!`. `typeof`, a unary `+` of a string-valued
+/// operand aside, and every binary the operands do not show, are not read.
+fn numeric_operator(file: &FileFacts, value: Span, text: &str) -> bool {
+    let ast = &file.ast;
+    let left = ast
+        .coercing_operands
+        .iter()
+        .filter(|operand| operand.start == value.start && operand.end < value.end)
+        .max_by_key(|operand| operand.end);
+    let right = ast
+        .coercing_operands
+        .iter()
+        .filter(|operand| operand.end == value.end && operand.start > value.start)
+        .min_by_key(|operand| operand.start);
+    if let (Some(left), Some(right)) = (left, right) {
+        if left.end > right.start {
+            return false;
+        }
+        let between = Span::new(left.end, right.start);
+        return file
+            .source_text(between)
+            .map(str::trim)
+            .is_some_and(|operator| {
+                matches!(
+                    operator,
+                    "-" | "*"
+                        | "/"
+                        | "%"
+                        | "**"
+                        | "|"
+                        | "&"
+                        | "^"
+                        | "<<"
+                        | ">>"
+                        | ">>>"
+                        | "<"
+                        | ">"
+                        | "<="
+                        | ">="
+                )
+            });
+    }
+    text.starts_with("++")
+        || text.starts_with("--")
+        || text.ends_with("++")
+        || text.ends_with("--")
+        || (text.starts_with(['-', '~', '!']) && !text.starts_with("!="))
+}
+
+/// How a reference to a binding is written.
+enum Write {
+    /// Not at all: a read, or a part of a member write target's object or key (`t[i] = v` reads `i`).
+    None,
+    /// It is a write target itself (an assignment's, an update's).
+    Exact,
+    /// Inside some other write target (a pattern, a `for … of` head): what is written there no assignment shows.
+    Other,
+}
+
+fn binding_write(file: &FileFacts, reference: Span) -> Write {
+    let ast = &file.ast;
+    let mut write = Write::None;
+    for target in &ast.write_targets {
+        let target = ast.peel_ts_sugar_span(*target);
+        if target == reference {
+            return Write::Exact;
+        }
+        if target.contains(reference) && ast.member_at(target).is_none() {
+            write = Write::Other;
+        }
+    }
+    write
 }
 
 /// Exactly an array or object literal, as [`super::fresh_object`] reads one.
@@ -713,6 +900,151 @@ mod tests {
             ),
         ] {
             assert_eq!(verdict(source), expected, "{source}");
+        }
+    }
+
+    /// ADR 1036: the definition hazards of a program's definer calls, by the target each defines on.
+    #[test]
+    fn a_definer_on_a_made_object_defines_on_no_root() {
+        use super::super::Hazard;
+        let hazards = |source: &str| super::super::root_definitions(&file(source));
+        let any = Hazard::ReflectiveDefinitionAny;
+        let factory = Hazard::FreshFactoryDefinitionAny;
+        for (source, expected) in [
+            // solid-query's `createInfiniteQuery` and probus-hk's getters: a fresh literal target.
+            (
+                "export const m = (d: any) => Object.defineProperties({}, d);",
+                vec![],
+            ),
+            (
+                "export const m = (d: any) => { const o = {}; Object.defineProperties(o, d); return o; };",
+                vec![],
+            ),
+            // A factory-made target.
+            (
+                "export const m = (d: any) => Object.defineProperties(Object.create(null), d);",
+                vec![factory],
+            ),
+            // A target no fact makes.
+            (
+                "export const m = (t: any, d: any) => Object.defineProperties(t, d);",
+                vec![any],
+            ),
+            // A definer held as a value, destructured, or on a receiver that is no global `Object`.
+            (
+                "export const m = (d: any) => { const def = Object.defineProperties; return def({}, d); };",
+                vec![any],
+            ),
+            (
+                "const { defineProperties } = Object; export const m = (d: any) => defineProperties({}, d);",
+                vec![any],
+            ),
+            (
+                "const Object = { defineProperties: (o: any, d: any) => o }; export const m = (d: any) => Object.defineProperties({}, d);",
+                vec![any],
+            ),
+            // A spread target.
+            (
+                "export const m = (a: any[], d: any) => Object.defineProperties(...(a as [object]), d);",
+                vec![any],
+            ),
+        ] {
+            assert_eq!(hazards(source), expected, "{source}");
+        }
+        // A literal key keeps its own hazard, on a target no fact makes.
+        assert_eq!(
+            hazards(
+                "export const m = (t: any, v: any) => Reflect.defineProperty(t, \"isFinite\", { value: v });"
+            ),
+            vec![super::super::reflective_definition_sole("isFinite")]
+        );
+        assert_eq!(
+            hazards(
+                "export const m = (v: any) => Reflect.defineProperty({}, \"isFinite\", { value: v });"
+            ),
+            vec![]
+        );
+    }
+
+    /// ADR 1036: a key that is a number or a boolean by its syntax names no member, so the write is no open write.
+    #[test]
+    fn an_index_key_names_no_member() {
+        for (source, open) in [
+            (
+                "export function m(t: any, f: any) { for (let i = 0; i < 3; i++) t[i] = f; }",
+                false,
+            ),
+            (
+                "export function m(t: any, f: any) { let n = 0; t[n++] = f; t[--n] = f; }",
+                false,
+            ),
+            (
+                "export function m(t: any, f: any, a: number) { t[a - 1] = f; t[a * 2] = f; t[a | 0] = f; t[a >>> 1] = f; }",
+                false,
+            ),
+            (
+                "export function m(t: any, f: any) { const k = 2 ** 3; t[k] = f; }",
+                false,
+            ),
+            (
+                "export function m(t: any, f: any) { let i = 0; i += 2; t[i] = f; }",
+                false,
+            ),
+            // A `+` may concatenate: `\"is\" + \"Finite\"`.
+            (
+                "export function m(t: any, f: any, a: any) { t[a + 1] = f; }",
+                true,
+            ),
+            (
+                "export function m(t: any, f: any) { t[\"is\" + \"Finite\"] = f; }",
+                true,
+            ),
+            (
+                "export function m(t: any, f: any, a: any) { t[typeof a] = f; }",
+                true,
+            ),
+            // A logical or a conditional whose text starts like a prefix operator (the fuzzer's `indexlogical`, `indexternary`).
+            (
+                "export function m(t: any, f: any, k: string) { t[(!f || k) as string] = f; }",
+                true,
+            ),
+            (
+                "export function m(t: any, f: any, k: string) { t[-0 || k] = f; }",
+                true,
+            ),
+            (
+                "export function m(t: any, f: any, k: string) { t[(!f ? 0 : k) as string] = f; }",
+                true,
+            ),
+            // A counter seeded or written with something no syntax bounds.
+            (
+                "export function m(t: any, f: any, a: any) { let i = a; i++; t[i] = f; }",
+                true,
+            ),
+            (
+                "export function m(t: any, f: any, a: any) { let i = 0; i = a; t[i] = f; }",
+                true,
+            ),
+            (
+                "export function m(t: any, f: any, a: any) { let i = 0; for (i of a) t[i] = f; }",
+                true,
+            ),
+            (
+                "export function m(t: any, f: any, s: string) { let i = 0; eval(s); t[i] = f; }",
+                true,
+            ),
+            // A parameter typed `number` proves nothing (a lying cast).
+            (
+                "export function m(t: any, f: any, i: number) { t[i] = f; }",
+                true,
+            ),
+        ] {
+            let file = file(source);
+            let (_, _, writes, _) = super::super::impostor_sites(&file);
+            let any = writes.iter().any(|(key, _)| {
+                !matches!(key, super::super::CensusKey::Named(name) if name == super::super::INDEX_KEY)
+            });
+            assert_eq!(any, open, "{source}");
         }
     }
 
