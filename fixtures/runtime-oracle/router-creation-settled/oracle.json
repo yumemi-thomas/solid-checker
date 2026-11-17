@@ -1,0 +1,1 @@
+{"note": "ADR 1066: a router component that runs its children function in onSettled (a leaf callback): a computation created in the children function throws PRIMITIVE_IN_FORBIDDEN_SCOPE. The reactive-ir twin reads the router from a package as dependency source; here it is written in the case."}
