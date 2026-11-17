@@ -1,0 +1,37 @@
+{
+ "note": "ADR 1018: the legal programs whose checker violation sits at a site no run reaches (legal.mjs outcome `unexecuted`) that a person has seen. Such a row needs a look (codes.mjs `rowProblem`: `unexecuted-violation`) unless an entry below matches its grid and id: `explained` (the judge is right that the site never runs and the row is not a checker defect, a lane that never drives the site, say) or `pending-fix` (a real false positive whose fix is the ADR named, held so CI stays green until it lands; the fix's change removes the entry). A provably dead site gives U, never V (ADR 1018 retires the 2026-11-10 \"wrong if it runs\" ruling). Seeded from the full audit at 78ddeb849 (run 43739577046): 6,205 rows in lg-recall, four groups, each Chrome-confirmed on 993e83f74.",
+ "entries": [
+  {
+   "grid": "lg-recall",
+   "kind": "pending-fix",
+   "item": "gate-throw",
+   "idRegex": "^lg-[a-z-]+-gate-throw-",
+   "adr": "ADR 1010",
+   "why": "A write, action or onFlush behind a gate a default parameter throws before: the site never runs; the checker reports a violation there (5,852 rows: REACTIVE_WRITE_IN_OWNED_SCOPE, STORE_WRITE_OUTSIDE_SETTER, ACTION_CALLED_IN_OWNED_SCOPE, ON_FLUSH_IN_OWNED_SCOPE)."
+  },
+  {
+   "grid": "lg-recall",
+   "kind": "pending-fix",
+   "item": "tbl-zero",
+   "idRegex": "^lg-[a-z-]+-tbl-[a-z0-9-]+-zero-",
+   "adr": "ADR 1019",
+   "why": "A callback handed to a standard-library iteration of an empty literal collection (`new Map().forEach(cb)`, `[].map(cb)`, `Uint8Array.from([], cb)`): it never runs; the checker reports the write, action or onFlush in it (195 rows)."
+  },
+  {
+   "grid": "lg-recall",
+   "kind": "pending-fix",
+   "item": "apply-void-value",
+   "idRegex": "^lg-[a-z-]+-apply-void-value-(row|untrack)-",
+   "adr": "ADR 1020",
+   "why": "A closure an effect's compute returns and nothing calls (`createEffect(() => () => { use(); }, ..)`): it never runs; the checker reports SYNC_NODE_RECEIVED_ASYNC in it (120 rows)."
+  },
+  {
+   "grid": "lg-recall",
+   "kind": "pending-fix",
+   "item": "ob-async-never",
+   "idRegex": "^lg-[a-z-]+-ob-[a-z-]+-async-never-",
+   "adr": "ADR 1021",
+   "why": "A read after an await in a class constructor, getter, setter or field helper nothing constructs or accesses (`class K { constructor() { r(); } }; void K;`): it never runs; the checker reports UNTRACKED_READ_AFTER_AWAIT there (38 rows)."
+  }
+ ]
+}
