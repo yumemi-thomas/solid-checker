@@ -656,33 +656,24 @@
   "R-alias-call": "R1f",
   "R-call-arg": "R1f"
  },
- "owners": {
-  "mx-census/mx-no-owner-effect-apply-placed-twin-effect-direct-none": "Mac 20",
-  "mx-census/mx-no-owner-effect-apply-placed-twin-render-direct-none": "Mac 20",
-  "mx-census/mx-no-owner-effect-effect-apply-shared-effect-direct-none": "Mac 20",
-  "mx-census/mx-no-owner-effect-effect-apply-shared-render-direct-none": "Mac 20",
-  "mx-census/mx-primitive-in-forbidden-scope-apply-placed-twin-effect-direct-none": "Mac 20",
-  "mx-census/mx-primitive-in-forbidden-scope-effect-apply-shared-effect-direct-none": "Mac 20",
-  "mx-census/mx-sync-node-received-async-effect-apply-shared-effect-direct-none": "Mac 20"
- },
+ "owners": {},
  "corpusBlockers": [],
  "ratchet": {
   "certified": 0,
   "certifiedF2": 0,
-  "falsePositive": 7,
-  "stackedClaim": 68,
+  "falsePositive": 0,
+  "stackedClaim": 69,
   "stackedPairs": {
    "NO_OWNER_CONTEXT|missing-context-provider": 6,
    "PRIMITIVE_IN_FORBIDDEN_SCOPE|sync-computation-received-async": 45,
-   "PRIMITIVE_IN_EFFECT_CALLBACK|sync-computation-received-async": 17
+   "PRIMITIVE_IN_EFFECT_CALLBACK|sync-computation-received-async": 18
   },
   "unjudgedClaim": 0,
   "haltedClaim": 2,
   "causes": {
-   "R-stacked": 68,
+   "R-stacked": 69,
    "R-unplaced": 8,
-   "R-halted": 2,
-   "false-positive": 7
+   "R-halted": 2
   }
  }
 }

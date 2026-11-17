@@ -6,6 +6,8 @@
 - `TrackedAndHandler`, `TrackedAndHandlerCleanup`: a helper a tracked effect and a handler both call. SC3001's refusal throws at mount and halts the system, so the handler's unowned run (SC4001) never reports.
 - `MissingEffectFunctionInTracked`: SC7001's `MISSING_EFFECT_FN` throws before SC3001's refusal.
 
+- `ApplyAndHandler`, `ApplyAndRender` (part 3): a helper an apply and a handler or a render both call. SC6002's `effect-owner-unproven` obligation names the apply caller, whose run throws `PRIMITIVE_IN_EFFECT_CALLBACK` and halts.
+
 Violations kept: `HandlerOnly` (SC4001), `EffectFunctionPresentInTracked` (SC3001), and SC6002, SC3001 and SC7001 where they are the earlier check.
 
 Chrome: `fixtures/runtime-oracle/competing-check-*` (one case per family: a halt stops the page). Stubs: `rc21-create-in-effect-unplaced`'s layout (a package the calls resolve to), reduced from rc.21.

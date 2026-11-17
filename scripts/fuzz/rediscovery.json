@@ -25855,5 +25855,17 @@
    "mx-sync-node-received-async-tracked-memo-direct-none"
   ],
   "rediscovered": "the merge of ADR 1020's branch (14434c30f) and part 1: stacked-claim (30 programs, ledgered R-stacked); this build: not-fired, and the rows leave open-defects-rows.json, so the old build fails `make fuzz-focus` on them as unlisted stacked claims"
+ },
+ {
+  "finding": "a false positive: missing-owner at an effect a helper creates that an effect's apply and a handler or a render both call: the apply's run throws PRIMITIVE_IN_EFFECT_CALLBACK and halts, and NO_OWNER_EFFECT is never reported",
+  "found": "ADR 1052's census (the 7 rows part 2 ledgered as false positives when it retired PRIMITIVE_IN_EFFECT_CALLBACK|missing-owner)",
+  "fixed": "ADR 1052 part 3 (`competing_checks.rs` `mark`: SC6002's `effect-owner-unproven` obligation at an effect's creation makes the owner row uncertifiable `creation-throws-first`)",
+  "grid": "mx-census",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-effect-apply-shared-effect-direct-none",
+   "mx-no-owner-effect-apply-placed-twin-effect-direct-none"
+  ],
+  "rediscovered": "main fa8f33277: false-positive (ledgered, owner Mac 20); with the rows gone from open-defects-rows.json `make fuzz-focus` on the 153 ledger ids fails there (7 false positives) and passes on this build"
  }
 ]

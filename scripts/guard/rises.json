@@ -4034,6 +4034,46 @@
    "to": 1,
    "adr": "ADR 1052",
    "fact": "part 2: an SC6002 violation at a sync memo's creation (the effect-callback guard) throws before the result probe: SC7002 uncertifiable creation-throws-first"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-first",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 9,
+   "to": 14,
+   "adr": "ADR 1052",
+   "fact": "part 3: fixture extended with ApplyAndHandler and ApplyAndRender (a helper an effect apply and another caller both call); their rows, missing-owner uncertifiable creation-throws-first"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-first",
+   "key": "SC4001 creation-throws-first",
+   "from": 4,
+   "to": 6,
+   "adr": "ADR 1052",
+   "fact": "part 3: fixture extended with ApplyAndHandler and ApplyAndRender (a helper an effect apply and another caller both call); their rows, missing-owner uncertifiable creation-throws-first"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-first",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 7,
+   "to": 10,
+   "adr": "ADR 1052",
+   "fact": "part 3: fixture extended with ApplyAndHandler and ApplyAndRender (a helper an effect apply and another caller both call); their rows, missing-owner uncertifiable creation-throws-first"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-first",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 6,
+   "to": 9,
+   "adr": "ADR 1052",
+   "fact": "part 3: fixture extended with ApplyAndHandler and ApplyAndRender (a helper an effect apply and another caller both call); their rows, missing-owner uncertifiable creation-throws-first"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-first",
+   "key": "SC6002 effect-owner-unproven",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1052",
+   "fact": "part 3: fixture extended with ApplyAndHandler and ApplyAndRender (a helper an effect apply and another caller both call); their rows, missing-owner uncertifiable creation-throws-first"
   }
  ]
 }
