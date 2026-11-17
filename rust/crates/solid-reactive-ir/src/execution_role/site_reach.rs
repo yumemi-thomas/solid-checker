@@ -113,11 +113,6 @@ pub(crate) struct SiteReach<'l, 'a> {
     /// ADR 1034: a function written as an object literal's member value that a later spread, computed key or repeated key may
     /// replace runs only where the member is proven to hold it, which this query never proves.
     final_members: bool,
-    /// ADR 1020 (third cut): the query in which a function a primitive's callback returns as a value is never proven to run
-    /// (1020's first cut), so its `Runs` reaches a site without calling a returned compute closure.
-    withholds_returned_values: bool,
-    /// ADR 1020 (third cut): this query met a function a primitive's callback returns as a value.
-    crossed_returned_value: Cell<bool>,
 }
 
 impl Drop for SiteReach<'_, '_> {
@@ -335,18 +330,7 @@ impl<'l, 'a> SiteReach<'l, 'a> {
             limited: Cell::new(false),
             lazy_reads: false,
             final_members: false,
-            withholds_returned_values: false,
-            crossed_returned_value: Cell::new(false),
         }
-    }
-
-    /// ADR 1020 (third cut): the query that withholds every function a primitive's callback returns as a value, called or not.
-    /// A function the plain query runs and this one does not runs only through such a value being called, which may happen on
-    /// an effect apply's stack; for the report sites alone.
-    fn withholding_returned_values(lookup: &'l SemanticLookup<'a>) -> Self {
-        let mut query = Self::new(lookup);
-        query.withholds_returned_values = true;
-        query
     }
 
     /// ADR 1034: the query in which a function written as a member value an object literal may replace later
@@ -689,16 +673,10 @@ impl<'l, 'a> SiteReach<'l, 'a> {
         // throw there, before the body): whether the helper's body, and so this function, ever runs is not decided.
         // ADR 1020: a function literal an effect's or a memo's compute returns is a value the runtime hands on (the apply receives
         // it, the memo stores it); it runs only where program code calls that value, which is not read here: undecided.
-        // Third cut: a returned value proven never called stays withheld; one that may be called may run, and the query records
-        // that it met one ([`OwnerAnswers::returned`]).
-        let returned = returned_by_primitive_callback(file, function, self.lookup, false);
-        if returned {
-            self.crossed_returned_value.set(true);
-        }
+        // Third cut: a returned value proven never called stays withheld; one that may be called may run, and a site it reaches is
+        // marked by [`reachable_from_returned_value`] ([`OwnerAnswers::returned`]).
         if self.handed_past_live_default(file, function)
-            || (returned
-                && (self.withholds_returned_values
-                    || returned_by_primitive_callback(file, function, self.lookup, true)))
+            || returned_by_primitive_callback(file, function, self.lookup, true)
         {
             self.limited.set(true);
             return true;
@@ -1463,6 +1441,129 @@ pub(crate) fn returned_by_primitive_callback(
     })
 }
 
+/// ADR 1062: `function` is a value a primitive's compute returns (`Dialect::callback_return_is_value`), not called where written:
+/// returned directly ([`returned_by_primitive_callback`]); written inside an expression the compute returns, not as an argument of a
+/// call there (`return { run: () => … }`, `return [f]`); or named, with its name in such an expression, not as a callee
+/// (`const f = () => …; return f`). A reference from another file is not read (docs/open-work.md).
+pub(crate) fn returned_value_holder(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    if ast.calls_with_peeled_callee(function.span).next().is_some() {
+        return false;
+    }
+    if returned_by_primitive_callback(file, function, lookup, false) {
+        return true;
+    }
+    // Whether `span`, written in a function a primitive's compute is, sits in an expression that function returns and is not an
+    // argument of a call written there.
+    let in_returned_value = |span: Span| {
+        let Some(outer) = crate::owners::owning_function(ast, span) else {
+            return false;
+        };
+        let value_returning = ast.arguments_containing(outer.span).any(|(call, index)| {
+            ast.peel_ts_sugar_span(call.arguments[index].span) == outer.span
+                && lookup
+                    .primitive_at_call(file, call.span)
+                    .is_some_and(|primitive| {
+                        lookup.dialect.callback_return_is_value(primitive, index)
+                    })
+        });
+        if !value_returning {
+            return false;
+        }
+        let returned = ast
+            .returns
+            .iter()
+            .filter(|returned| {
+                crate::owners::containing_body_function(ast, returned.span)
+                    .is_some_and(|body| body.span == outer.span)
+            })
+            .filter_map(|returned| returned.argument)
+            .chain(
+                outer
+                    .expression_body
+                    .then(|| {
+                        outer
+                            .expression_return
+                            .as_ref()
+                            .and_then(|value| value.argument)
+                    })
+                    .flatten(),
+            );
+        returned.into_iter().any(|value| {
+            value.contains(span)
+                && !ast.calls.iter().any(|call| {
+                    value.contains(call.span)
+                        && call
+                            .arguments
+                            .iter()
+                            .any(|argument| argument.span.contains(span))
+                })
+        })
+    };
+    if in_returned_value(function.span) {
+        return true;
+    }
+    function_declaration_span(file, function).is_some_and(|declaration| {
+        ast.reference_identifiers_to(declaration).any(|reference| {
+            ast.calls_with_peeled_callee(reference.span)
+                .next()
+                .is_none()
+                && in_returned_value(reference.span)
+        })
+    })
+}
+
+/// ADR 1062: whether a value a primitive's compute returns ([`returned_value_holder`]) may run `function`: upward from it through
+/// the function written around it, the functions holding its call sites, and those holding a reference to its name in its file.
+/// Every path counts, not only the one the reach query took (a second path that runs the site does not hide this one). The walk is
+/// bounded; at the bound the answer is yes (fail closed).
+fn reachable_from_returned_value(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    const BUDGET: usize = 512;
+    let Some(own) = lookup.own_file(file) else {
+        return true;
+    };
+    let Some(start) = own.ast.function_at(function.span) else {
+        return true;
+    };
+    let mut stack = vec![(own, start)];
+    let mut seen = crate::HashSet::default();
+    while let Some((file, function)) = stack.pop() {
+        if !seen.insert((file.path.shared(), function.span)) {
+            continue;
+        }
+        if seen.len() > BUDGET {
+            return true;
+        }
+        if returned_value_holder(file, function, lookup) {
+            return true;
+        }
+        if let Some(outer) = crate::owners::owning_function(&file.ast, function.span) {
+            stack.push((file, outer));
+        }
+        for (caller, callee) in lookup.function_call_sites(file.path.as_str(), function.span) {
+            if let Some(holder) = crate::owners::owning_function(&caller.ast, callee) {
+                stack.push((caller, holder));
+            }
+        }
+        if let Some(declaration) = function_declaration_span(file, function) {
+            for reference in file.ast.reference_identifiers_to(declaration) {
+                if let Some(holder) = crate::owners::owning_function(&file.ast, reference.span) {
+                    stack.push((file, holder));
+                }
+            }
+        }
+    }
+    false
+}
+
 /// ADR 1020 (fourth cut, Fable's review of 14434c30f): from `function` (the one written around a report site) up through the functions
 /// written around it, to the first that a primitive's compute returns as a value: one of them is a callback of a dialect primitive
 /// (`createMemo(() => site)`, an effect's apply; `untrack`'s too, which creates nothing: fail closed, no primitive is told apart). Called on an effect apply's stack, the returned value creates
@@ -1476,7 +1577,7 @@ fn crosses_creation_below_returned_value(
     let ast = &file.ast;
     let mut current = function;
     loop {
-        if returned_by_primitive_callback(file, current, lookup, false) {
+        if returned_value_holder(file, current, lookup) {
             return false;
         }
         let handed_to_primitive = ast.calls.iter().any(|call| {
@@ -1920,8 +2021,8 @@ struct OwnerAnswers {
     lazy: Option<Entered>,
     /// ADR 1034: [`SiteReach::proving_final_members`]' answer, where `entered` is `Runs`.
     members: Option<Entered>,
-    /// ADR 1020 (third cut): [`SiteReach::withholding_returned_values`]' answer, where `entered` is `Runs` and its query met a
-    /// function a primitive's callback returns as a value.
+    /// ADR 1020 (third cut), ADR 1062: `Some(Never)` where `entered` is `Runs` and some function a primitive's compute returns
+    /// as a value (directly or by reference) may run the site ([`reachable_from_returned_value`]).
     returned: Option<Entered>,
 }
 
@@ -1946,23 +2047,18 @@ impl OwnerAnswers {
         function: &solid_facts::ast::FunctionFact,
         lookup: &SemanticLookup<'_>,
     ) -> Self {
-        let query = SiteReach::new(lookup);
-        let entered = Entered::of(&query, file, function);
-        let crossed = query.crossed_returned_value.get();
-        drop(query);
+        let entered = Entered::of(&SiteReach::new(lookup), file, function);
         let plain = (entered == Entered::Never)
             .then(|| Entered::of(&SiteReach::without_refusals(lookup), file, function));
         let lazy = (entered == Entered::Runs)
             .then(|| Entered::of(&SiteReach::proving_lazy_reads(lookup), file, function));
         let members = (entered == Entered::Runs)
             .then(|| Entered::of(&SiteReach::proving_final_members(lookup), file, function));
-        let returned = (entered == Entered::Runs && crossed).then(|| {
-            Entered::of(
-                &SiteReach::withholding_returned_values(lookup),
-                file,
-                function,
-            )
-        });
+        // ADR 1062: any path from a value a compute returns (directly, by reference, as a returned literal's member) marks the
+        // site, whatever other path also runs it (a second path no longer hides this one).
+        let returned = (entered == Entered::Runs
+            && reachable_from_returned_value(file, function, lookup))
+        .then_some(Entered::Never);
         Self {
             entered,
             plain,
@@ -1991,8 +2087,7 @@ impl OwnerAnswers {
             (Entered::Runs, _, Some(Entered::Never), _, _) => SiteAnswer::LazyUnread,
             // ADR 1034: a site only a member value the literal may replace runs.
             (Entered::Runs, _, _, Some(Entered::Never), _) => SiteAnswer::MemberMayBeReplaced,
-            // ADR 1020 (third cut): not proven to run without a returned value being called (the withholding query's
-            // `Undecided` included: it stops at the first such value).
+            // ADR 1020 (third cut), ADR 1062: a returned value may run it.
             (Entered::Runs, _, _, _, Some(Entered::Never | Entered::Undecided)) => {
                 SiteAnswer::ReturnedValueRun
             }

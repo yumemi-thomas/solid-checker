@@ -1084,8 +1084,8 @@ const EQUIVALENT_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code) 
  */
 export const KEPT_CONTEXTS = { "kept-set-body": "body", "kept-array-body": "body", "kept-map-body": "body", "kept-set-untrack": "untrack", "kept-set-handler": "handler" };
 export const FLOW_UNTRACK_CONTEXTS = Object.fromEntries(FLOW_FORMS.map((form) => [`flow-untrack-${form}`, `flow-${form}`]));
-export const APPLY_VOID_CONTEXTS = { "apply-void-call-untrack": "effect-apply", "apply-void-call-row": "effect-apply" };
-export const APPLY_VOID_UNRUN = ["apply-void-value-untrack", "apply-void-value-row"];
+export const APPLY_VOID_CONTEXTS = { "apply-void-call-untrack": "effect-apply", "apply-void-call-row": "effect-apply", "apply-ref-call-untrack": "effect-apply", "apply-member-call-untrack": "effect-apply" };
+export const APPLY_VOID_UNRUN = ["apply-void-value-untrack", "apply-void-value-row", "apply-ref-value-untrack", "apply-member-value-untrack"];
 const LATER_RUN_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code) => !SPEC[code].typedAway && !SPEC[code].recallOnly).map((code) => {
   const spec = SPEC[code];
   const at = (kind) => [
@@ -2113,6 +2113,16 @@ function recallContext(context, stmts, kit) {
     case "apply-void-call-untrack": case "apply-void-call-row": case "apply-void-value-untrack": case "apply-void-value-row": {
       const effect = expr(prim("effect", fn([ret(fn(stmts))], { concise: true }), { apply: fn([expr(domExpr(context.includes("-call-") ? "void v()" : "void v"))]) }));
       if (context.endsWith("-row")) return { body: [], view: [flowEl(kit.name("v"), "for", [effect])] };
+      return { body: [expr(prim("untrack", fn([effect])))], view: [] };
+    }
+    // ADR 1062 (APPLY_VOID_CONTEXTS, APPLY_VOID_UNRUN): the compute returns the site's function by reference (`const f = …; return f`)
+    // or as a returned literal's member (`({ run: … })`); the apply calls it in `void` (`-call-`), or only names it (`-value-`).
+    case "apply-ref-call-untrack": case "apply-ref-value-untrack": case "apply-member-call-untrack": case "apply-member-value-untrack": {
+      const call = context.includes("-call-");
+      const member = context.startsWith("apply-member-");
+      const f = kit.name("f");
+      const compute = member ? fn([ret(obj([["run", fn(stmts)]]))]) : fn([decl(f, fn(stmts)), ret(ref(f))]);
+      const effect = expr(prim("effect", compute, { apply: fn([expr(domExpr(call ? (member ? "void v.run()" : "void v()") : "void v"))]) }));
       return { body: [expr(prim("untrack", fn([effect])))], view: [] };
     }
     // ADR 0932 (OWNED_UPDATER_CONTEXTS): the site in the updater of an `ownedWrite: true` setter called in the body or a handler.

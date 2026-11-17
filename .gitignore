@@ -1778,3 +1778,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/solid-specifier-mapped-package/node_modules/**
 !fixtures/reactive-ir/solid-specifier-mapped-other/node_modules/
 !fixtures/reactive-ir/solid-specifier-mapped-other/node_modules/**
+!fixtures/reactive-ir/returned-by-reference/node_modules/
+!fixtures/reactive-ir/returned-by-reference/node_modules/**
