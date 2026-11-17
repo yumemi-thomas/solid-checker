@@ -427,6 +427,7 @@ impl DiagnosticSession {
         // ADR 0949: the one place a package's finding leaves the report: it stands again as an
         // uncertifiable one at the project sites that enter the package code, never silent
         // (`package_drop::hand_off`), including the obligations of a rule the project disabled.
+        let mut drop_census = Vec::new();
         if !facts.dependency_source_roots.is_empty() {
             // The proof log's stages (the style drop, the hand-off) are written inside `hand_off`.
             let report = crate::package_drop::hand_off(&mut findings, facts, &program, true);
@@ -439,6 +440,8 @@ impl DiagnosticSession {
                 report.attributed,
                 withheld.attributed
             );
+            drop_census.extend(report.census);
+            drop_census.extend(withheld.census);
         }
         crate::package_drop::supersede_claims(&mut findings, true);
         suppress_findings_owned_by_enabled_rules(&mut findings, self.dialect.catalog_capabilities);
@@ -717,6 +720,8 @@ impl DiagnosticSession {
         let metrics = analysis_metrics(facts, &program);
         let mut snapshot = snapshot_of(sources, metrics, findings);
         attach_blocked_by(&mut snapshot, &program);
+        // ADR 1065 (B6): the package hand-off's census rows (empty unless the census is on).
+        snapshot.blocker_census.extend(drop_census);
         // A disabled coverage rule hides its obligations, not the gap they
         // name: the analysis is still incomplete there, so it cannot certify.
         if snapshot.status == "certified" && !withheld_coverage.is_empty() {

@@ -116,6 +116,8 @@ static ON: AtomicBool = AtomicBool::new(false);
 static PROOF_TRACKS: AtomicBool = AtomicBool::new(false);
 /// An arm is being ablated ([`ABLATE`]): [`ON`] stays set so `arm` is asked.
 static ABLATING: AtomicBool = AtomicBool::new(false);
+/// ADR 1065: the blocker census is on: [`ON`] stays set whatever the logs are.
+static CENSUS_TRACKS: AtomicBool = AtomicBool::new(false);
 /// Audit M6 (`scripts/proof-ablation.mjs`): the tagged arm this names answers
 /// `Unknown` whatever its role, to see whether any fixture's findings depend on
 /// it. Read once from `SOLID_CHECKER_IR_ABLATE_ARM`; only a measurement sets it.
@@ -166,6 +168,11 @@ fn init_from_env() {
             ON.store(true, Ordering::Release);
         }
         let _ = ABLATE.set(ablate);
+        // ADR 1065: the blocker census records the arm chain of each undecided answer, so decisions are framed while it is on.
+        if crate::blocker_census::enabled() {
+            CENSUS_TRACKS.store(true, Ordering::Release);
+            ON.store(true, Ordering::Release);
+        }
         // The proof log frames its decisions through this flag; reading its
         // environment here turns the flag on before the first decision.
         crate::proof_log::init_from_env();
@@ -176,7 +183,10 @@ fn init_from_env() {
 /// either log is. Called from the proof log's configuration only.
 pub(crate) fn track_for_proof_log(on: bool) {
     PROOF_TRACKS.store(on, Ordering::Release);
-    let framed = on || lock_sink().is_some() || ABLATING.load(Ordering::Acquire);
+    let framed = on
+        || lock_sink().is_some()
+        || ABLATING.load(Ordering::Acquire)
+        || CENSUS_TRACKS.load(Ordering::Acquire);
     ON.store(framed, Ordering::Release);
 }
 
@@ -194,7 +204,10 @@ pub fn configure(target: Option<&RoleLogTarget>) {
     }
     *sink = target.and_then(open_sink);
     ON.store(
-        sink.is_some() || PROOF_TRACKS.load(Ordering::Acquire) || ABLATING.load(Ordering::Acquire),
+        sink.is_some()
+            || PROOF_TRACKS.load(Ordering::Acquire)
+            || ABLATING.load(Ordering::Acquire)
+            || CENSUS_TRACKS.load(Ordering::Acquire),
         Ordering::Release,
     );
 }
@@ -392,6 +405,24 @@ fn silent(kind: &str, role: ExecutionRole) -> Option<bool> {
 
 fn write_decision(decision: &Decision, role: ExecutionRole) {
     forward_decision(decision, role);
+    // ADR 1065 (B4): an undecided answer's arm chain, at its span, for the rows `function-run-unplaced` files there.
+    // A decision inside an installed package's source joins no project row: not recorded (the table stays a size a reader can load).
+    if role == ExecutionRole::Unknown
+        && CENSUS_TRACKS.load(Ordering::Acquire)
+        && !decision.path.contains("/node_modules/")
+    {
+        crate::blocker_census::record(|| crate::blocker_census::CensusRow {
+            path: decision.path.clone(),
+            start: u64::from(decision.span.start),
+            end: u64::from(decision.span.end),
+            kind: "role-unknown".to_owned(),
+            blockers: vec![format!(
+                "cause|role|{}|{}",
+                decision.kind,
+                arm_names(decision).join(">")
+            )],
+        });
+    }
     if let Some(path) = path_ref(&decision.path) {
         append(&decision_line(decision, path, role));
     }

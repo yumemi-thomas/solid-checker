@@ -50,6 +50,8 @@ pub(crate) struct DropReport {
     pub(crate) style_dropped: usize,
     /// Each dropped finding's replacements, by the package location it was at, for the log and the tests.
     pub(crate) attributed: Vec<(Location, Vec<Location>)>,
+    /// ADR 1065 (B6): under the blocker census, one row per replacement: the dropped finding's own blocker kind, the package and the entry kind.
+    pub(crate) census: Vec<solid_reactive_ir::blocker_census::CensusRow>,
 }
 
 impl DropReport {
@@ -141,6 +143,7 @@ pub(crate) fn hand_off(
             let key = finding_key(&finding, &location);
             if standing.insert(key) {
                 replacements.push(replacement(&finding, &location, None));
+                census_row(&mut report.census, &finding, &location, root, None);
             }
             at.push(location);
             report.at_import += 1;
@@ -149,6 +152,13 @@ pub(crate) fn hand_off(
                 let key = finding_key(&finding, &site.location);
                 if standing.insert(key) {
                     replacements.push(replacement(&finding, &site.location, Some(site.kind)));
+                    census_row(
+                        &mut report.census,
+                        &finding,
+                        &site.location,
+                        root,
+                        Some(site.kind),
+                    );
                 }
                 at.push(site.location.clone());
             }
@@ -312,6 +322,42 @@ fn finding_key(finding: &Finding, location: &Location) -> (String, String, u64) 
         location.path.to_string(),
         location.start_byte,
     )
+}
+
+/// ADR 1065 (B6): the census row of one replacement, under `SOLID_CHECKER_BLOCKER_CENSUS=1` only:
+/// `cause|package-finding|<the dropped finding's own blocker kind, or its kind>|<package>|<entry kind>|<package path>:<start>`.
+fn census_row(
+    census: &mut Vec<solid_reactive_ir::blocker_census::CensusRow>,
+    dropped: &Finding,
+    at: &Location,
+    root: &str,
+    kind: Option<DependencyEntry>,
+) {
+    if !solid_reactive_ir::blocker_census::enabled() {
+        return;
+    }
+    let entry = match kind {
+        Some(DependencyEntry::Call) => "call",
+        Some(DependencyEntry::Render) => "element",
+        Some(DependencyEntry::Reference) => "use",
+        None => "import",
+    };
+    let own = if dropped.analysis_context.is_empty() {
+        dropped.kind.as_str()
+    } else {
+        dropped.analysis_context.as_str()
+    };
+    let package = root.rsplit("node_modules/").next().unwrap_or(root);
+    census.push(solid_reactive_ir::blocker_census::CensusRow {
+        path: at.path.to_string(),
+        start: at.start_byte,
+        end: at.end_byte,
+        kind: PACKAGE_FINDING_AT_ENTRY.to_owned(),
+        blockers: vec![format!(
+            "cause|package-finding|{own}|{package}|{entry}|{}:{}",
+            dropped.primary_location.path, dropped.primary_location.start_byte
+        )],
+    });
 }
 
 /// `dropped` as an uncertifiable finding of its own rule at `at`, the project site that enters the package code.

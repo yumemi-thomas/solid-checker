@@ -210,8 +210,22 @@ pub(super) fn silences(
                 )
             });
             let effect = codes.contains(&SiteCode::EffectCreation);
-            // What a group of codes is declined for: written to the proof log only.
+            // What a group of codes is declined for: written to the proof log, and (ADR 1065, B1a) to the blocker census with the first hand-off leaf.
             let decline = |group: Group, reason: Decline| {
+                crate::blocker_census::record(|| {
+                    let location = site.location(file.path.shared());
+                    let group_name = match group {
+                        Group::Leaf => "leaf",
+                        Group::Effect => "effect",
+                    };
+                    let mut blockers = vec![format!("cause|creation|{group_name}|{}", reason.id())];
+                    if matches!(reason, Decline::UnreadPackageMayRun)
+                        && let Some(leaf) = unread.may_run_leaf(file, span)
+                    {
+                        blockers.push(format!("handoff|{leaf}"));
+                    }
+                    crate::blocker_census::CensusRow::at(&location, "owner-call", blockers)
+                });
                 if !logging {
                     return;
                 }
