@@ -1,0 +1,5 @@
+{
+  "note": "ADR 1052, part 3: a helper an effect apply and a render under <Loading> both call. The render run is owned and the apply run throws PRIMITIVE_IN_EFFECT_CALLBACK; NO_OWNER_EFFECT is never reported; SC4001 uncertifiable `creation-throws-first`. Generated program `mx-no-owner-effect-apply-placed-twin-effect-direct-none` (differential fuzzer, generator 2).",
+  "haltMarker": true,
+  "steps": []
+}

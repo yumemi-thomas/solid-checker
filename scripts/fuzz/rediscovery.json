@@ -25883,5 +25883,17 @@
   "found": "Mac 21's open item from ADR 1054 (probe: paths-mapped shim and local stub)",
   "fixed": "ADR 1060 (`symbols.rs` `specifier_may_be_package`; SC9012 `dialect-specifier-mapped` at each use)",
   "outside": "Not generated: every grid program gets the generator's own tsconfig (typecheck.mjs `tsconfigFor`), with no `paths`, and runs under Vite, which does not read `paths`. Pinned by fixtures reactive-ir/solid-specifier-mapped and solid-specifier-mapped-other (violations on fa8f33277, SC9012 here) and the positive twin solid-specifier-mapped-package."
+ },
+ {
+  "finding": "a false positive: missing-owner at an effect a helper creates that an effect's apply and a handler or a render both call: the apply's run throws PRIMITIVE_IN_EFFECT_CALLBACK and halts, and NO_OWNER_EFFECT is never reported",
+  "found": "ADR 1052's census (the 7 rows part 2 ledgered as false positives when it retired PRIMITIVE_IN_EFFECT_CALLBACK|missing-owner)",
+  "fixed": "ADR 1052 part 3 (`competing_checks.rs` `mark`: SC6002's `effect-owner-unproven` obligation at an effect's creation makes the owner row uncertifiable `creation-throws-first`)",
+  "grid": "mx-census",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-effect-apply-shared-effect-direct-none",
+   "mx-no-owner-effect-apply-placed-twin-effect-direct-none"
+  ],
+  "rediscovered": "main fa8f33277: false-positive (ledgered, owner Mac 20); with the rows gone from open-defects-rows.json `make fuzz-focus` on the 153 ledger ids fails there (7 false positives) and passes on this build"
  }
 ]

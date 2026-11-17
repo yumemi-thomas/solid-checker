@@ -59,6 +59,34 @@ export function MissingEffectFunctionInTracked() {
   return <i />;
 }
 
+// Part 3: a helper an effect's apply and a handler (or a render) both call. SC6002 is an obligation at the creation
+// (`effect-owner-unproven`: one caller is an apply), and the apply's run throws PRIMITIVE_IN_EFFECT_CALLBACK and halts;
+// missing-owner is uncertifiable `creation-throws-first`.
+export function ApplyAndHandler() {
+  const g = () => {
+    createEffect(() => 1, () => {});
+  };
+  createEffect(
+    () => 1,
+    () => {
+      g();
+    },
+  );
+  return <button onClick={() => g()} />;
+}
+export function ApplyAndRender() {
+  const g = () => {
+    createEffect(() => 1, () => {});
+  };
+  createEffect(
+    () => 1,
+    () => {
+      g();
+    },
+  );
+  return <i>{(g(), "x")}</i>;
+}
+
 // Violations kept: no earlier check throws at the call.
 export function HandlerOnly() {
   const g = () => {
