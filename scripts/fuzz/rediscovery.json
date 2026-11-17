@@ -25728,5 +25728,11 @@
    "mx-dynamic-static-promise-fire-return-body-x-direct-none"
   ],
   "rediscovered": "main 2e2b60bb6: recall-gap (uncertifiable, `function-run-unplaced`) on each; ADR 1049's build: agree (60 of 60 fire-return rows)"
+ },
+ {
+  "finding": "with solid-js unresolved (SC9012 import-unresolved), a copy of a Solid export (`const { createMemo: m } = S`, `const m = S.createMemo`, `const m = createMemo`, a closed holder's member) was still named after the module specifier: SC7002, SC7001, SC4001, SC3001 proved by name",
+  "found": "Mac 21's review of ADR 1020 (an unresolved probe program: SC7002 at a destructured createMemo)",
+  "fixed": "ADR 1054 (`symbols.rs` `import_binding_declared` in `add_solid_import_names`)",
+  "outside": "Not generated: every grid program sits under the pinned install, and TypeScript climbs past a program's own shadowing `node_modules/solid-js/package.json` to the install's package, so no program has solid-js unresolved (a generated `unres-` binding was tried: all 912 resolved). Pinned by fixture reactive-ir/unresolved-namespace-slots (violations on 5780918b8, SC9012 only here) and its resolved twin."
  }
 ]
