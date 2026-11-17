@@ -586,6 +586,7 @@ function afterLoop(c) {\n  while (true) { if (c) break; }\n  wrap(4);\n}\n";
     ] {
         assert!(!calls.contains(&call.to_owned()), "{call} in {calls:?}");
     }
+}
 
 /// ADR 1047: a `yield` the caller names as resuming at once is no suspension; every other `yield` still ends the first step.
 #[test]
