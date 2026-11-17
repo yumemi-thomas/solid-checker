@@ -47,8 +47,28 @@ pub(crate) fn record(row: impl FnOnce() -> CensusRow) {
     }
 }
 
+/// ADR 1065 part 2: one cause at `span` of `file`, census only (`kind` is the producer, `cause` a `cause|…` string). The closure runs only with the census on.
+pub(crate) fn cause_at(
+    path: &str,
+    span: solid_facts::core::Span,
+    kind: &str,
+    cause: impl FnOnce() -> String,
+) {
+    // A cause inside an installed package's source joins no project row (as ADR 1065's role rows).
+    if path.contains("/node_modules/") {
+        return;
+    }
+    record(|| CensusRow {
+        path: path.to_owned(),
+        start: u64::from(span.start),
+        end: u64::from(span.end),
+        kind: kind.to_owned(),
+        blockers: vec![cause()],
+    });
+}
+
 /// The rows [`record`] holds, taken out, in a fixed order (they may come from worker threads).
-pub(crate) fn drain() -> Vec<CensusRow> {
+pub fn drain() -> Vec<CensusRow> {
     let mut rows = std::mem::take(
         &mut *PENDING
             .lock()
