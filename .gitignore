@@ -1329,6 +1329,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/handed-root-patch-unhanded/node_modules/**
 !fixtures/reactive-ir/handed-root-patch-fresh/node_modules/
 !fixtures/reactive-ir/handed-root-patch-fresh/node_modules/**
+!fixtures/reactive-ir/unconditional-structural/node_modules/
+!fixtures/reactive-ir/unconditional-structural/node_modules/**
 !fixtures/reactive-ir/handed-root-patch-definer-key-same/node_modules/
 !fixtures/reactive-ir/handed-root-patch-definer-key-same/node_modules/**
 !fixtures/reactive-ir/handed-root-patch-definer-key-other/node_modules/

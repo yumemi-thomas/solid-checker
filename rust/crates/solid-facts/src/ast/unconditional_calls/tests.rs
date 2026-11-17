@@ -337,3 +337,109 @@ fn every_unconditional_call_answers_per_function() {
                   function* m() { f(); yield 1; g(); }\n";
     assert_eq!(every(source), ["a()", "c()", "d()", "e()", "f()"]);
 }
+
+/// ADR 1042: under a label, in a finalizer or a `try` block no `catch` guards, in a `do` body, and in the body of a loop
+/// whose first test is true, a call runs at least once on every completion; every counterexample of the brief stays out.
+#[test]
+fn at_least_once_admits_labels_finalizers_do_bodies_and_entered_loops() {
+    for (source, admitted) in [
+        (
+            "function f() {\n  outer: { a(); break outer; }\n}\n",
+            vec!["a()"],
+        ),
+        (
+            "function f() {\n  try {} finally { a(); }\n}\n",
+            vec!["a()"],
+        ),
+        (
+            "function f() {\n  try { a(); } finally {}\n}\n",
+            vec!["a()"],
+        ),
+        (
+            "function f() {\n  do { a(); } while (false);\n}\n",
+            vec!["a()"],
+        ),
+        (
+            "function f() {\n  while (true) { a(); break; }\n}\n",
+            vec!["a()"],
+        ),
+        (
+            "function f() {\n  for (;;) { a(); break; }\n}\n",
+            vec!["a()"],
+        ),
+        (
+            "function f() {\n  for (h(); i(); ) { a(); break; }\n}\n",
+            vec!["h()", "i()"],
+        ),
+        (
+            "function f() {\n  for (const x of k()) {}\n}\n",
+            vec!["k()"],
+        ),
+        ("function f() {\n  while (true) a();\n}\n", vec!["a()"]),
+        (
+            "function f() {\n  outer: while (true) { a(); break outer; }\n}\n",
+            vec!["a()"],
+        ),
+        (
+            "function f() {\n  try { n(); } catch {} finally { a(); }\n}\n",
+            vec!["a()"],
+        ),
+        (
+            "function f(c) {\n  try { return c; } finally { a(); }\n}\n",
+            vec!["a()"],
+        ),
+    ] {
+        assert_eq!(synchronous(source, "f"), admitted, "{source}");
+        // No exactly-once call: `unconditional_calls` and the producer's whitelist are unchanged.
+        assert!(unconditional(source, "f").is_empty(), "{source}");
+    }
+    for (source, kept) in [
+        (
+            "function f(c) {\n  outer: { if (c) break outer; a(); }\n}\n",
+            "a()",
+        ),
+        ("function f(c) {\n  try { x(); } catch { a(); }\n}\n", "a()"),
+        (
+            "function f(c) {\n  try {} finally { if (c) return; a(); }\n}\n",
+            "a()",
+        ),
+        ("function f(c) {\n  try { x(); a(); } catch {}\n}\n", "a()"),
+        (
+            "function f(c, x) {\n  do { if (c) break; a(); } while (x);\n}\n",
+            "a()",
+        ),
+        ("function f(c) {\n  do {} while (a());\n}\n", "a()"),
+        (
+            "function f(n) {\n  for (let i = 0; i < n; i++) a();\n}\n",
+            "a()",
+        ),
+        ("function f(xs) {\n  for (const x of xs) a();\n}\n", "a()"),
+        ("function f(c) {\n  while (c) a();\n}\n", "a()"),
+        (
+            "function f(c) {\n  while (true) { if (c) continue; a(); break; }\n}\n",
+            "a()",
+        ),
+        (
+            "function f() {\n  for (let i = 0; i < 0; i++) a();\n}\n",
+            "a()",
+        ),
+        ("function f() {\n  for (;; a()) { break; }\n}\n", "a()"),
+        (
+            "function f(c) {\n  while (true) { if (c) break; }\n  a();\n}\n",
+            "a()",
+        ),
+    ] {
+        assert!(
+            !synchronous(source, "f").contains(&kept.to_owned()),
+            "{source}"
+        );
+    }
+}
+
+/// ADR 1042: the owner pass's set (`every_unconditional_call`) reads the same mode, a nested function answering for itself.
+#[test]
+fn every_unconditional_call_reads_at_least_once() {
+    let source = "function k(c) {\n  outer: { a(); }\n  try {} finally { b(); }\n  while (c) e();\n}\n\
+                  function l() {\n  while (true) { const g = () => c1(); d(); break; }\n}\n";
+    assert_eq!(every(source), ["a()", "b()", "c1()", "d()"]);
+}
