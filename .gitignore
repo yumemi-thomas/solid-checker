@@ -707,6 +707,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/route-components/node_modules/**
 !fixtures/reactive-ir/route-config/node_modules/
 !fixtures/reactive-ir/route-config/node_modules/**
+!fixtures/reactive-ir/route-mount-throw/node_modules/
+!fixtures/reactive-ir/route-mount-throw/node_modules/**
 !fixtures/reactive-ir/route-entries/node_modules/
 !fixtures/reactive-ir/route-entries/node_modules/**
 !fixtures/reactive-ir/route-entries-shadowed/node_modules/
@@ -1199,6 +1201,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/component-mounted-in-disposal/node_modules/**
 !fixtures/reactive-ir/dead-site-empty-collection/node_modules/
 !fixtures/reactive-ir/dead-site-empty-collection/node_modules/**
+!fixtures/reactive-ir/dead-site-nodelist/node_modules/
+!fixtures/reactive-ir/dead-site-nodelist/node_modules/**
 !fixtures/reactive-ir/dead-site-empty-collection-shadowed/node_modules/
 !fixtures/reactive-ir/dead-site-empty-collection-shadowed/node_modules/**
 !fixtures/reactive-ir/dead-site-unused-class/node_modules/
@@ -1537,6 +1541,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/owner-call-jsx-prop-arrow/node_modules/**
 !fixtures/reactive-ir/owner-call-jsx-getter/node_modules/
 !fixtures/reactive-ir/owner-call-jsx-getter/node_modules/**
+!fixtures/reactive-ir/owner-call-getter-placed/node_modules/
+!fixtures/reactive-ir/owner-call-getter-placed/node_modules/**
 !fixtures/reactive-ir/portal-children-owner/node_modules/
 !fixtures/reactive-ir/portal-children-owner/node_modules/**
 !fixtures/reactive-ir/lazy-entry-owner/node_modules/
@@ -1688,3 +1694,7 @@ packages/wasm/owned/
 !fixtures/reactive-ir/tuple-hazard-sites/node_modules/**
 !fixtures/reactive-ir/tuple-hazard-sites-shadowed/node_modules/
 !fixtures/reactive-ir/tuple-hazard-sites-shadowed/node_modules/**
+!fixtures/reactive-ir/closed-literal-dispatch/node_modules/
+!fixtures/reactive-ir/closed-literal-dispatch/node_modules/**
+!fixtures/reactive-ir/sync-option-overridden-member/node_modules/
+!fixtures/reactive-ir/sync-option-overridden-member/node_modules/**

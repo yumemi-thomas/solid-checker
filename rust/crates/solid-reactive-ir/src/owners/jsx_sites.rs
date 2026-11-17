@@ -751,3 +751,237 @@ fn indirect_primitive_operand(
         span = binding.initializer?;
     }
 }
+
+/// ADR 1031: where a component element's getter runs, when that is known exactly: the reads of the prop that holds `span` in the project component the element
+/// renders. `Some(reads)` (each `(file, span)` the `props.<name>` member read) only when
+///
+/// - `span` is a getter of the element ([`written_in_getter`]), in one prop's value (no namespace) or in its children, and the element has no spread;
+/// - the tag resolves to one project function ([`SemanticLookup::function_called_at`]) whose binding holds it now, in no package, neither async
+///   nor a generator, with at most one parameter, a plain identifier with no default;
+/// - every reference to that parameter is the object of a non-computed member read (the props object never escapes: no spread, no hand-off, no destructuring,
+///   no `in`, no computed key);
+/// - every read of the prop is in a position that runs on the component's own stack under its render's owner: directly in the component's body, in the JSX
+///   of an intrinsic element written directly in that body (every element around the read intrinsic: a component element there hands the read on as a getter
+///   of its own), or directly in a function that is argument 0 of an exact `children` call written directly in the body (a memo the call creates);
+/// - and there is at least one read (a getter nothing reads never runs: no placement, ADR 1021's ruling).
+///
+/// Anything else is `None`, and the site keeps `getter-runs-where-read`. A read in an effect's apply, a handler, a timer or a nested function (`createEffect(open,
+/// o => { if (o) render(() => p.children) })`) is not placed: the getter would create where that function runs.
+pub(crate) fn getter_read_sites<'a>(
+    file: &solid_facts::FileFacts,
+    lookup: &SemanticLookup<'a>,
+    span: Span,
+) -> Option<Vec<(&'a solid_facts::FileFacts, Span)>> {
+    if !written_in_getter(file, lookup, span) {
+        return None;
+    }
+    let element = file
+        .ast
+        .jsx_containing(span)
+        .filter(|element| {
+            element.span.contains(span)
+                && element.span != span
+                && !intrinsic_element(file, element)
+                && !element.name.span.contains(span)
+        })
+        .min_by_key(|element| element.span.end - element.span.start)?;
+    if !element.spreads.is_empty() || element.member_object.is_some() {
+        return None;
+    }
+    let prop = match element
+        .attributes
+        .iter()
+        .find(|attribute| attribute.span.contains(span))
+    {
+        Some(attribute) if attribute.namespace.is_none() => file.source_text(attribute.name)?,
+        Some(_) => return None,
+        None if element.children.iter().any(|child| child.contains(span)) => "children",
+        None => return None,
+    };
+    let (component_file, component) =
+        lookup.function_called_at(file.path.as_str(), element.name.span)?;
+    // A project component only: a package's component (installed, bundled, or read as dependency source) is the package's to run.
+    let path = component_file.path.as_str();
+    if lookup.in_dependency_source(path)
+        || path.starts_with("bundled:")
+        || crate::effect_phase::package_root(path).is_some()
+        || component.r#async
+        || component.generator
+        || !lookup.function_value_is_current(component_file, component)
+        || component.parameters.len() > 1
+    {
+        return None;
+    }
+    let ast = &component_file.ast;
+    let Some(parameter) = component.parameters.first() else {
+        // A component that takes no props reads no getter.
+        return None;
+    };
+    if parameter.shape != solid_facts::ast::BindingShape::Identifier
+        || parameter.initializer.is_some()
+    {
+        return None;
+    }
+    let declaration = parameter.names.first()?.span;
+    let mut reads = Vec::new();
+    for reference in ast
+        .reference_identifiers_to(declaration)
+        .map(|reference| reference.span)
+    {
+        if reference == declaration {
+            continue;
+        }
+        let Some(member) = ast
+            .members
+            .iter()
+            .find(|member| ast.peel_ts_sugar_span(member.object) == reference)
+        else {
+            // `const others = omit(props, "a", …)` spread on intrinsic elements: each spread reads every prop the call does not omit, where it is written.
+            for spread in omit_spread_reads(component_file, lookup, reference, prop)? {
+                if !read_in_render(component_file, lookup, component, spread) {
+                    return None;
+                }
+                reads.push((component_file, spread));
+            }
+            continue;
+        };
+        if ast.computed_members.binary_search(&member.span).is_ok() {
+            return None;
+        }
+        // The member is read, not written, deleted or called as a method on the props object (`props.children()` calls a getter's value: the getter runs there,
+        // and the value it returns is called, which is a read too).
+        if ast
+            .assignments
+            .iter()
+            .any(|assignment| assignment.target == member.span)
+        {
+            return None;
+        }
+        if component_file.source_text(member.property)? != prop {
+            continue;
+        }
+        if !read_in_render(component_file, lookup, component, member.span) {
+            return None;
+        }
+        reads.push((component_file, member.span));
+    }
+    (!reads.is_empty()).then_some(reads)
+}
+
+/// ADR 1031: the reads a props object handed to `omit` makes of `prop`: `Some(spreads)` when `reference` is the whole argument 0 of an exact `omit` call whose
+/// other arguments are string literals (no predicate form), the call is the initializer of a `const` identifier, and every reference to that `const` is the
+/// argument of a JSX spread on an intrinsic element. The spreads read every prop the call does not omit (an intrinsic element's spread reads the view in its
+/// render), so they are the reads of `prop`, or there are none where `prop` is omitted. Anything else is `None` (the props object escapes).
+fn omit_spread_reads(
+    file: &solid_facts::FileFacts,
+    lookup: &SemanticLookup<'_>,
+    reference: Span,
+    prop: &str,
+) -> Option<Vec<Span>> {
+    let ast = &file.ast;
+    let (call, _) = ast.arguments_containing(reference).find(|(call, index)| {
+        *index == 0
+            && !call.arguments[0].spread
+            && ast.peel_ts_sugar_span(call.arguments[0].span) == reference
+    })?;
+    if lookup.primitive_at_call(file, call.span) != Some(solid_dialect::Primitive::Omit) {
+        return None;
+    }
+    let mut omitted = Vec::new();
+    for argument in &call.arguments[1..] {
+        let text = file.source_text(argument.span)?;
+        let key = text
+            .strip_prefix('"')
+            .and_then(|rest| rest.strip_suffix('"'))
+            .or_else(|| {
+                text.strip_prefix('\'')
+                    .and_then(|rest| rest.strip_suffix('\''))
+            })?;
+        if argument.spread || key.contains('\\') {
+            return None;
+        }
+        omitted.push(key);
+    }
+    let binding = ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding
+                .initializer
+                .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == call.span)
+    })?;
+    let declaration = binding.names.first()?.span;
+    let mut spreads = Vec::new();
+    for use_site in ast
+        .reference_identifiers_to(declaration)
+        .map(|reference| reference.span)
+    {
+        if use_site == declaration {
+            continue;
+        }
+        let spread = ast.jsx_elements.iter().find_map(|element| {
+            intrinsic_element(file, element)
+                .then(|| {
+                    element
+                        .spreads
+                        .iter()
+                        .find(|spread| ast.peel_ts_sugar_span(spread.argument) == use_site)
+                })
+                .flatten()
+        })?;
+        spreads.push(spread.span);
+    }
+    Some(if omitted.contains(&prop) {
+        Vec::new()
+    } else {
+        spreads
+    })
+}
+
+/// ADR 1031: whether the prop read at `read` runs on `component`'s own stack under its render's owner: directly in its body, outside every JSX element or inside
+/// intrinsic ones only; or directly in the function that is argument 0 of an exact `children` call written that way.
+fn read_in_render(
+    file: &solid_facts::FileFacts,
+    lookup: &SemanticLookup<'_>,
+    component: &solid_facts::ast::FunctionFact,
+    read: Span,
+) -> bool {
+    let ast = &file.ast;
+    // Every element around the read, inside the component, renders it under the render's owner: an intrinsic element, or one that renders what it is handed in
+    // place (a dialect control-flow element, a context provider: `renders_in_place`), with no function between (the owner checks below).
+    let only_intrinsic = |at: Span| {
+        ast.jsx_containing(at)
+            .filter(|element| component.span.contains(element.span))
+            .all(|element| {
+                (intrinsic_element(file, element) || renders_in_place(file, lookup, element))
+                    && !element.name.span.contains(at)
+            })
+    };
+    // A class written in the body runs its elements at a construction or a member call, not where it is written.
+    if ast
+        .classes
+        .iter()
+        .any(|class| component.span.contains(class.span) && class.span.contains(read))
+    {
+        return false;
+    }
+    let Some(owner) = crate::owners::owning_function(ast, read) else {
+        return false;
+    };
+    if owner.span == component.span {
+        return component.body.contains(read) && only_intrinsic(read);
+    }
+    // `children(() => props.children)`: the arrow is the whole argument 0 of an exact `children` call written directly in the body, outside component elements.
+    if owner.r#async || owner.generator || !owner.body.contains(read) || !only_intrinsic(read) {
+        return false;
+    }
+    ast.arguments_containing(owner.span).any(|(call, index)| {
+        index == 0
+            && !call.arguments[index].spread
+            && ast.peel_ts_sugar_span(call.arguments[index].span) == owner.span
+            && lookup.primitive_at_call(file, call.span) == Some(solid_dialect::Primitive::Children)
+            && crate::owners::owning_function(ast, call.span)
+                .is_some_and(|host| host.span == component.span)
+            && component.body.contains(call.span)
+            && only_intrinsic(call.span)
+    })
+}

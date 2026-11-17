@@ -895,16 +895,22 @@
         "why": "`bind` only follows a transport shape toward the object, whose primitive `referenced_primitive` resolves exactly first; the name describes the transport, never a primitive"
       },
       "primitive-name-match": {
-        "count": 2,
-        "why": "pending-review"
+        "count": 4,
+        "why": "pending-review for the first two; ADR 1031's two (`read_in_render`, `omit_spread_reads`) compare `primitive_at_call`'s answer, the call's exactly resolved dialect primitive (`Children`, `Omit`), with no name read: a call it does not resolve answers `None` and places nothing"
       },
       "silent-unmatched-slot": {
-        "count": 1,
-        "why": "pending-review"
+        "count": 2,
+        "why": "pending-review for the first; ADR 1031's (`getter_read_sites`): a site in no attribute and no child of the element (`None => return None`) gets no read set, so its getter keeps `getter-runs-where-read` and both rows: the answer that fails closed"
       },
       "text-premise": {
         "count": 1,
         "why": "JSX grammar: a child of an element whose source starts with `{` is exactly an expression container, since a text child cannot contain an unescaped brace; this is a syntactic test of the node's own source, not a spelling match on a symbol"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/owners/leaf_universe.rs": {
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "ADR 1031 (`silences`): `None => {}` is a group of codes the site does not have (no SC3001 code, or no SC6002 code): nothing to end or decline; every group the site has answers `Some` (an end or a decline)"
       }
     },
     "rust/crates/solid-reactive-ir/src/owners/missing_owners.rs": {
@@ -1265,8 +1271,8 @@
     },
     "rust/crates/solid-reactive-ir/src/stored_throw.rs": {
       "name-only-match": {
-        "count": 1,
-        "why": "`fallback` is read only off an element with `element_primitive == Errored` (`handled_above`)"
+        "count": 5,
+        "why": "`fallback` is read only off an element with `element_primitive == Errored` (`handled_above`). ADR 1026: `component`, `routes` and `children` are literal property keys of a route definition or config that `solid_router_component_value` (ADR 0335: an audited @solidjs/router, the exact `createRouter` import) already proved a route table, read as the router reads them (`createRoutes`, `createBranches`); `children` of the route props is the static member the router defines as the outlet getter, on the parameter of a parent component every reference of which is a static member read"
       },
       "primitive-name-match": {
         "count": 2,
@@ -1275,6 +1281,10 @@
       "silent-unmatched-slot": {
         "count": 1,
         "why": "pending-review"
+      },
+      "default-on-missing": {
+        "count": 2,
+        "why": "ADR 1026: both answer `handled` (the throw is unobserved: uncertifiable, never a report) when a fact is missing: a `<Router>` tag whose file the lookup does not hold, and a route value whose mounts the reading refuses"
       }
     },
     "rust/crates/solid-reactive-ir/src/symbols.rs": {

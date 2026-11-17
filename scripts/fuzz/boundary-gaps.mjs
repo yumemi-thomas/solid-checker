@@ -225,6 +225,8 @@ export const ARM_GAPS = [
       "write_roles.walk-unknown-9",
       "write_roles.walk-unknown-10",
       "write_roles.walk-unknown-11",
+      // ADR 1023: the invocation flow's role, which the fallback takes when the walk answers unknown.
+      "write_roles.write-flow-fallback",
     ],
   },
   {

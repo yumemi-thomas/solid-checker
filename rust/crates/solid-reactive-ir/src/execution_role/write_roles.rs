@@ -2006,7 +2006,11 @@ fn write_role_fallback_unvetoed(
     if may_follow_suspension(file, span) {
         return role;
     }
-    write_flow_role(file, span, root_body, lookup).unwrap_or(role)
+    // The invocation flow's answer is a role its fold proves (ADR 1023 tags it: a write the flow places, such as one in a callback a literal's
+    // method hands to `queueMicrotask`, ended untagged in the proof log).
+    write_flow_role(file, span, root_body, lookup)
+        .map(|flow| role_arm!("write_roles.write-flow-fallback", flow))
+        .unwrap_or(role)
 }
 
 /// The `visiting` entry that restricts [`semantic_write_role_walk`] to the
@@ -3473,6 +3477,11 @@ pub(crate) fn layer_run(
             file.ast.peel_ts_sugar_span(call.arguments[*index].span) == layer.span
         })
         .find_map(|(call, index)| {
+            // ADR 1023: a member call a closed object literal dispatches to its own method is no standard call, whatever its type names:
+            // the helper arm below reads the method.
+            if closed_literal_dispatch(file, call.callee, lookup) {
+                return None;
+            }
             let resolved = lookup.placing_callee_call(file, call.callee)?;
             resolved
                 .declaration
@@ -3569,9 +3578,12 @@ fn handed_to_withheld_call(
         ast.arguments_containing(span)
             .min_by_key(|(call, _)| call.span.end - call.span.start)
     };
-    if let Some((call, _)) =
-        nearest(function.span).filter(|(call, _)| lookup.standard_call_withheld(file, call.callee))
-    {
+    // ADR 1023: a call a closed literal dispatches to its own method withholds nothing.
+    let withheld = |call: &solid_facts::ast::CallFact| {
+        lookup.standard_call_withheld(file, call.callee)
+            && !closed_literal_dispatch(file, call.callee, lookup)
+    };
+    if let Some((call, _)) = nearest(function.span).filter(|(call, _)| withheld(call)) {
         return Some(call.span);
     }
     let name = crate::owners::function_binding_name(file, function)?;
@@ -3582,7 +3594,7 @@ fn handed_to_withheld_call(
             nearest(*reference)
                 .filter(|(call, index)| {
                     ast.peel_ts_sugar_span(call.arguments[*index].span) == *reference
-                        && lookup.standard_call_withheld(file, call.callee)
+                        && withheld(call)
                 })
                 .map(|(call, _)| call.span)
         })

@@ -2724,65 +2724,122 @@ pub(crate) fn package_action_calls(
     let lookup = ctx.semantic_lookup;
     // ADR 0981: a value such a package returned, read where nothing tracks it (SC1001).
     value_reads::rows(ctx, rows);
-    for (file, file_sites) in lookup.files().iter().zip(sites(ctx)) {
-        if file_sites.is_empty() {
-            continue;
-        }
-        let allowed = crate::execution_role::allowed_callback_spans(file, lookup);
-        for site in file_sites {
-            if matches!(site.entry, Entry::Call | Entry::Tag | Entry::Read) {
-                // A call edge reaches a call; a member read is no call, so it is placed wherever the function that holds it may run.
-                let reached = match site.entry {
-                    Entry::Read => {
-                        crate::local_access::unreached_write_may_run(file, site.at, lookup)
+    let files = lookup.files();
+    let file_sites = sites(ctx);
+    // ADR 1032: each call, tag and read site's role is computed on the analysis workers (the walks read the lookup only), then the rows and
+    // the site ends are written in the files' and the sites' order, as the serial loop wrote them: the same findings, byte for byte.
+    let allowed = files
+        .iter()
+        .zip(file_sites)
+        .map(|(file, sites)| {
+            if sites.is_empty() {
+                Vec::new()
+            } else {
+                crate::execution_role::allowed_callback_spans(file, lookup)
+            }
+        })
+        .collect::<Vec<_>>();
+    let work = file_sites
+        .iter()
+        .enumerate()
+        .flat_map(|(file, sites)| {
+            sites
+                .iter()
+                .enumerate()
+                .filter(|(_, site)| matches!(site.entry, Entry::Call | Entry::Tag | Entry::Read))
+                .map(move |(site, _)| (file, site))
+        })
+        .collect::<Vec<_>>();
+    let decided = crate::pipeline::parallel_balanced_results_from(64, &work, |&(file, site)| {
+        site_decision(ctx, &files[file], &file_sites[file][site], &allowed[file])
+    });
+    let mut decided = work
+        .iter()
+        .copied()
+        .zip(decided)
+        .collect::<std::collections::HashMap<_, _>>();
+    for (index, (file, sites)) in files.iter().zip(file_sites).enumerate() {
+        for (position, site) in sites.iter().enumerate() {
+            if let Some(decision) = decided.remove(&(index, position)) {
+                match decision {
+                    SiteDecision::CannotRun => {
+                        ends.end_with(file, site.at, SiteSilence::PackageCallCannotRun, || {
+                            vec![Premise::at(PremiseKind::SiteReach, Some(site.at))]
+                        });
+                        continue;
                     }
-                    _ => ctx
-                        .reachable_calls
-                        .contains_key(&crate::location(file.path.shared(), site.callee)),
-                };
-                if !reached && !crate::local_access::unreached_write_may_run(file, site.at, lookup)
-                {
-                    ends.end_with(file, site.at, SiteSilence::PackageCallCannotRun, || {
-                        vec![Premise::at(PremiseKind::SiteReach, Some(site.at))]
-                    });
-                    continue;
-                }
-                let role = if reached {
-                    let role = crate::execution_role::semantic_write_execution_role(
-                        file,
-                        site.callee,
-                        &allowed,
-                        ctx.entities,
-                        ctx.symbol_names,
-                        lookup,
-                        RootBodyGuard::Rejects,
-                    );
-                    crate::local_access::handed_write_execution(
-                        file,
-                        site.callee,
-                        &allowed,
-                        ctx.entities,
-                        ctx.symbol_names,
-                        lookup,
-                        RootBodyGuard::Rejects,
-                        role,
-                    )
-                } else {
-                    crate::ExecutionRole::Unknown
-                };
-                if !(role.reports_disallowed_write() || role.reports_unplaced()) {
-                    ends.end_at(
-                        file,
-                        site.at,
-                        SiteSilence::PackageCallRoleAllows,
-                        PremiseKind::RoleDoesNotReport,
-                        || Some(site.callee),
-                    );
-                    continue;
+                    SiteDecision::RoleAllows => {
+                        ends.end_at(
+                            file,
+                            site.at,
+                            SiteSilence::PackageCallRoleAllows,
+                            PremiseKind::RoleDoesNotReport,
+                            || Some(site.callee),
+                        );
+                        continue;
+                    }
+                    SiteDecision::Reports => {}
                 }
             }
             rows.push(row(file, site));
         }
+    }
+}
+
+/// What a call, tag or read site's walk decides (ADR 1032: computed on the workers, applied in order).
+enum SiteDecision {
+    /// No call edge reaches it and nothing may run it.
+    CannotRun,
+    /// The role it runs in allows the write.
+    RoleAllows,
+    /// It reports.
+    Reports,
+}
+
+fn site_decision(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    site: &PackageSite,
+    allowed: &[Span],
+) -> SiteDecision {
+    let lookup = ctx.semantic_lookup;
+    // A call edge reaches a call; a member read is no call, so it is placed wherever the function that holds it may run.
+    let reached = match site.entry {
+        Entry::Read => crate::local_access::unreached_write_may_run(file, site.at, lookup),
+        _ => ctx
+            .reachable_calls
+            .contains_key(&crate::location(file.path.shared(), site.callee)),
+    };
+    if !reached && !crate::local_access::unreached_write_may_run(file, site.at, lookup) {
+        return SiteDecision::CannotRun;
+    }
+    let role = if reached {
+        let role = crate::execution_role::semantic_write_execution_role(
+            file,
+            site.callee,
+            allowed,
+            ctx.entities,
+            ctx.symbol_names,
+            lookup,
+            RootBodyGuard::Rejects,
+        );
+        crate::local_access::handed_write_execution(
+            file,
+            site.callee,
+            allowed,
+            ctx.entities,
+            ctx.symbol_names,
+            lookup,
+            RootBodyGuard::Rejects,
+            role,
+        )
+    } else {
+        crate::ExecutionRole::Unknown
+    };
+    if role.reports_disallowed_write() || role.reports_unplaced() {
+        SiteDecision::Reports
+    } else {
+        SiteDecision::RoleAllows
     }
 }
 

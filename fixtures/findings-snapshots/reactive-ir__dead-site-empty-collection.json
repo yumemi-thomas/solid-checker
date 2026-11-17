@@ -185,11 +185,12 @@
     {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "function-unentered",
       "severity": "error",
       "path": "fixtures/reactive-ir/dead-site-empty-collection/App.tsx",
-      "start": 3665,
-      "end": 3673,
+      "start": 3708,
+      "end": 3716,
       "fixes": 0
     }
   ]

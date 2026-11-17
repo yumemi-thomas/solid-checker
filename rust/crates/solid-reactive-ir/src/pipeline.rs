@@ -625,6 +625,10 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
             .iter()
             .enumerate()
             .filter(|(_, call)| semantic_lookup.impostor_withheld(file, call.callee))
+            // ADR 1023: a call a closed literal dispatches to its own method withholds nothing.
+            .filter(|(_, call)| {
+                !crate::execution_role::closed_literal_dispatch(file, call.callee, semantic_lookup)
+            })
             .map(|(index, _)| index)
             .collect::<Vec<_>>()
     });

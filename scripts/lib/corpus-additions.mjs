@@ -69,6 +69,22 @@ export function recordedOutputs(manifest) {
 }
 
 /**
+ * ADR 1039: throws, naming each, unless every output the manifest records for the apps a sweep reads (`apps`, a set of app names, or all) is on disk under `appsRoot`.
+ * A sweep reads the corpus as the record says it is: without its generated outputs the checker meets an unresolved import where a user's checkout has a module, and its
+ * rows compare with nothing the record describes (the rc.21 corpus lost all ten of its additions unnoticed, 7,110 development `import-unresolved` rows). Presence only:
+ * the count and digest are `checkAdditions`' (`node scripts/corpus-additions.mjs check`), which reads every file.
+ */
+export function assertAdditionsPresent(manifest, appsRoot, { apps = null, manifestPath = "manifest" } = {}) {
+  const missing = recordedOutputs(manifest)
+    .filter(({ app }) => !apps || apps.has(app))
+    .filter(({ dir }) => !existsSync(join(appsRoot, dir)))
+    .map(({ app, id, dir }) => `${app} ${id}: ${dir}`);
+  if (missing.length > 0) {
+    throw new Error(`${manifestPath}: refusing a corpus without its recorded additions under ${appsRoot} (rebuild them as the record says): ${missing.join("; ")}`);
+  }
+}
+
+/**
  * The problems of a corpus against its manifest's additions: an output that is missing, whose file count or digest differs from the record, and (when `changed` lists the files of the corpus
  * newer than a marker, relative to the apps root) a changed file that lies under no recorded output.
  * @returns {string[]}

@@ -81,10 +81,8 @@ pub(super) fn cleanup_handle(
         return CleanupHandle::Unplaced;
     }
     let mut sites = Vec::new();
-    for reference in ast.identifiers.iter().filter(|identifier| {
-        identifier.role == solid_facts::ast::IdentifierRole::Reference
-            && ast.reference_declaration(identifier.span) == Some(declaration)
-    }) {
+    // ADR 1032: the references the binder resolved to the declaration, from the index (what the scan of every identifier gave).
+    for reference in ast.reference_identifiers_to(declaration) {
         match call_of(reference.span) {
             Some(site) => sites.push(site.span),
             None => return CleanupHandle::Unplaced,
@@ -153,10 +151,8 @@ fn named_disposal_registration<'f>(
     };
     let mut found = None;
     let mut unplaced = false;
-    for reference in ast.identifiers.iter().filter(|identifier| {
-        identifier.role == solid_facts::ast::IdentifierRole::Reference
-            && ast.reference_declaration(identifier.span) == Some(declaration)
-    }) {
+    // ADR 1032: as above, from the index.
+    for reference in ast.reference_identifiers_to(declaration) {
         for (call, index) in ast.arguments_containing(reference.span) {
             let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
                 continue;

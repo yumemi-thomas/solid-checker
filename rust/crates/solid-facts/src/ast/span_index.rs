@@ -203,7 +203,8 @@ pub struct AstSpanIndex {
     /// The first plain-identifier binding of each name span.
     identifier_bindings: OnceLock<HashMap<Span, u32>>,
     /// Answers to per-declaration questions, by (question, declaration).
-    flags: RwLock<HashMap<(u8, Span), bool>>,
+    // ADR 1032: sharded by key, so the analysis workers asking at once do not all take one lock.
+    flags: Vec<RwLock<HashMap<(u8, Span), bool>>>,
 }
 
 /// What the queries below assume of the fact tables. They hold by
@@ -250,13 +251,22 @@ fn verify_table_invariants(facts: &AstFacts) {
     );
 }
 
+/// ADR 1032: how many locks the remembered flags are spread over.
+const FLAG_SHARDS: usize = 64;
+
+/// The shard of a flag's key (a multiplicative hash of the span's start and the question).
+fn flag_shard(question: u8, declaration: Span) -> usize {
+    let mixed = (declaration.start ^ (u32::from(question) << 29)).wrapping_mul(0x9E37_79B1);
+    (mixed >> 26) as usize % FLAG_SHARDS
+}
+
 impl AstSpanIndex {
     /// `compute()` for `(question, declaration)`, remembered. Concurrent
     /// first askers may each compute; the answers are equal.
     pub fn flag(&self, question: u8, declaration: Span, compute: impl FnOnce() -> bool) -> bool {
         let key = (question, declaration);
-        let known = self
-            .flags
+        let shard = &self.flags[flag_shard(question, declaration)];
+        let known = shard
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .get(&key)
@@ -265,7 +275,7 @@ impl AstSpanIndex {
             return known;
         }
         let answer = compute();
-        self.flags
+        shard
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .insert(key, answer);
@@ -331,7 +341,9 @@ impl AstSpanIndex {
             returns_by_peeled_argument: OnceLock::new(),
             bindings_by_peeled_initializer: OnceLock::new(),
             identifier_bindings: OnceLock::new(),
-            flags: RwLock::new(HashMap::new()),
+            flags: (0..FLAG_SHARDS)
+                .map(|_| RwLock::new(HashMap::new()))
+                .collect(),
             arguments_by_span: SpanTable::build(argument_entries),
             argument_slots,
             bindings_by_initializer: SpanTable::build(

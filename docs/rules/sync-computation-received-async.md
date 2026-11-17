@@ -69,6 +69,11 @@ type parameter (Type Facts `returnOpen`), and a value no fact describes are unce
 blocker `compute-return-unproven` (ADR 0655). Options the syntax cannot read are
 uncertifiable beside any computation not proven synchronous.
 
+A call written in a function that is an object literal's member value a later spread, computed key or repeated key of
+the literal may replace (`{ run: () => { createEffect(async () => 1, apply, { sync: true }); }, ...extra }`) is
+uncertifiable, blocker `member-value-overridden` (ADR 1034): nothing proves the member holds that function, so nothing
+proves it runs. A spread or computed key before the member leaves it the final value: a violation where it runs.
+
 ## Every call ends, and `sync` is read last-wins (ADR 0989)
 
 Each call of a primitive that takes `sync` is a site (`sync-option`) and ends in a row or a typed silence: the options are proven not to assert `sync: true` (`not-asserted`), a duplicate `sync` key TypeScript reports (`tsc-reports`, TS1117), or a computation proven synchronous (`computation-not-async`, never for an open answer). The runtime reads the LAST `sync`, so the rule is a violation only where the exact options literal's last `sync` is `true`: `{ sync: true, ...over }` and `{ sync: true, sync: false }` are not (Chrome rc.21 is quiet); options the syntax cannot read stay an obligation. `createTrackedEffect` takes no `sync` here: its node's compute returns `undefined` (`@solidjs/signals@2.0.0-rc.21` `dist/dev.js:2878-2892`), so the diagnostic is never raised there.

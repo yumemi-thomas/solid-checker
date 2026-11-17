@@ -10,7 +10,7 @@
 // a report without it, so a default build handed in as the what-if binary is an error, not a baseline). It compares only runs it makes itself, with the two binaries it is given.
 //
 //   node scripts/what-if.mjs corpus --what-if-bin <solid-checker-what-if> --checker-bin <solid-checker-rust, a default build of the same source> --typefacts <solid-typefacts>
-//        --set name=Hazard,Hazard ... [--sets-file f.json] [--sets-from-baseline N] [--premise-sets N] [--manifest scripts/corpus/rc21-manifest.json] [--apps-root ../solid-checker-rc21-frozen/apps] [--apps a,b]
+//        --set name=Hazard,Hazard ... [--sets-file f.json] [--sets-from-baseline N] [--premise-sets N] [--manifest scripts/corpus/rc21-manifest.json] [--apps-root /Users/thomas/Documents/Github/solid-checker-rc21-frozen-v2/apps] [--apps a,b]
 //        [--order-from sweep.json] [--jobs 12] [--no-control] --out report.json
 //   node scripts/what-if.mjs grid --what-if-bin ... --checker-bin ... --typefacts ... --scan <blocker-scan rows.jsonl> --set name=ids ... [--sets-file f] [--jobs 12]
 //        [--programs-from all] [--control N] [--every K] [--limit N] --out report.json [--movers-out ids.json]
@@ -29,6 +29,8 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { appendFileSync, createReadStream, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
+import { assertAdditionsPresent } from "./lib/corpus-additions.mjs";
+import { DEFAULT_APPS_ROOT } from "./lib/corpus-manifest.mjs";
 import { createInterface } from "node:readline";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -427,10 +429,11 @@ async function corpus(argv) {
   const binaries = binariesOf(found);
   const manifestPath = resolve(found.manifest ?? join(repo, "scripts/corpus/rc21-manifest.json"));
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-  const appsRoot = resolve(found["apps-root"] ?? join(repo, "../solid-checker-rc21-frozen/apps"));
+  const appsRoot = resolve(found["apps-root"] ?? DEFAULT_APPS_ROOT);
   const selected = found.apps ? new Set(found.apps.split(",")) : null;
   const rows = manifest.projects.filter((row) => !selected || selected.has(row.app)).map((row) => ({ app: row.app, root: join(appsRoot, row.root), project: row.project }));
   for (const row of rows) if (!existsSync(join(row.root, row.project))) throw new Error(`missing project input: ${join(row.root, row.project)}`);
+  assertAdditionsPresent(manifest, appsRoot, { apps: selected, manifestPath });
   if (found["order-from"]) {
     const previous = new Map();
     readReportFile(resolve(found["order-from"]), { onResult: (row) => previous.set(`${row.app}\0${row.project}`, row.wallMs) });

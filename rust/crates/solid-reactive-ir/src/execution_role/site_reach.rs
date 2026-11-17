@@ -110,6 +110,9 @@ pub(crate) struct SiteReach<'l, 'a> {
     limited: Cell<bool>,
     /// ADR 0576: a lazy computation runs only where a read of it is proven.
     lazy_reads: bool,
+    /// ADR 1034: a function written as an object literal's member value that a later spread, computed key or repeated key may
+    /// replace runs only where the member is proven to hold it, which this query never proves.
+    final_members: bool,
 }
 
 impl Drop for SiteReach<'_, '_> {
@@ -135,6 +138,25 @@ struct Approximation<'a> {
 /// How deep a chain of functions the query follows before it answers
 /// `MayRun` (ADR 0560: and every later answer of the query is undecided).
 const DEPTH_LIMIT: usize = 64;
+
+/// ADR 1034: whether `function` is written directly as the value of an object literal's member (a data property's value, a method,
+/// a getter or a setter) that a later spread, a later key with no static name, or a later property of the same key in the same
+/// literal may replace ([`super::flow_helpers::property_is_final_value`]): the member may never hold it, so nothing that reads the
+/// member is proven to enter it, and the literal holds no other reference to it.
+fn member_value_may_be_replaced(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> bool {
+    let ast = &file.ast;
+    ast.object_properties.iter().any(|property| {
+        let written_there = ast.peel_ts_sugar_span(property.value) == function.span
+            || function
+                .method_name
+                .as_ref()
+                .is_some_and(|name| name.span == property.key);
+        written_there && !super::flow_helpers::property_is_final_value(file, property)
+    })
+}
 
 /// ADR 1015: whether `span` is written in a part of a flow component's children that a literal prop keeps from ever running
 /// ([`SemanticLookup::flow_dead_children`]: `<For each={[]}>`'s row function, `<Repeat count={0}>`'s and `<Show when={false}>`'s children). The element must
@@ -307,7 +329,17 @@ impl<'l, 'a> SiteReach<'l, 'a> {
             derivations: Cell::new(0),
             limited: Cell::new(false),
             lazy_reads: false,
+            final_members: false,
         }
+    }
+
+    /// ADR 1034: the query in which a function written as a member value an object literal may replace later
+    /// ([`super::flow_helpers::property_is_final_value`] says no) is never entered. Its `Unreached` is "not proven to run", for
+    /// the report sites alone, as [`Self::proving_lazy_reads`]' is.
+    fn proving_final_members(lookup: &'l SemanticLookup<'a>) -> Self {
+        let mut query = Self::new(lookup);
+        query.final_members = true;
+        query
     }
 
     /// ADR 0576: the query in which a lazy computation runs only where a
@@ -632,6 +664,9 @@ impl<'l, 'a> SiteReach<'l, 'a> {
             && let Some(call) = lazy_creation(file, function.span, self.lookup)
             && !self.lazy_read_proven(file, call)
         {
+            return false;
+        }
+        if self.final_members && member_value_may_be_replaced(file, function) {
             return false;
         }
         // ADR 1010: a function literal handed to an exact project helper whose parameter default may run code at that call (and may
@@ -1510,6 +1545,7 @@ pub(crate) fn unreached_report_sites(
                     absent_prop,
                     refused_creation,
                     lazy_unread,
+                    member_may_be_replaced: false,
                     undecided,
                 })
             };
@@ -1524,6 +1560,10 @@ pub(crate) fn unreached_report_sites(
                             answer(false, false, refused_creation, false, false)
                         }
                         SiteAnswer::LazyUnread => answer(false, false, false, true, false),
+                        SiteAnswer::MemberMayBeReplaced => Some(crate::UnreachedSite {
+                            member_may_be_replaced: true,
+                            ..answer(false, false, false, false, false)?
+                        }),
                         // ADR 0560: an undecided query proves nothing; the
                         // violation is not proven either.
                         SiteAnswer::Undecided => answer(false, false, false, false, true),
@@ -1742,13 +1782,19 @@ struct OwnerAnswers {
     plain: Option<Entered>,
     /// [`SiteReach::proving_lazy_reads`]' answer, where `entered` is `Runs`.
     lazy: Option<Entered>,
+    /// ADR 1034: [`SiteReach::proving_final_members`]' answer, where `entered` is `Runs`.
+    members: Option<Entered>,
 }
 
 /// What a report site written in a function proves.
 enum SiteAnswer {
     MayRun,
-    NeverEntered { refused_creation: bool },
+    NeverEntered {
+        refused_creation: bool,
+    },
     LazyUnread,
+    /// ADR 1034: the site runs only in a function written as a member value the object literal may replace.
+    MemberMayBeReplaced,
     Undecided,
 }
 
@@ -1763,24 +1809,30 @@ impl OwnerAnswers {
             .then(|| Entered::of(&SiteReach::without_refusals(lookup), file, function));
         let lazy = (entered == Entered::Runs)
             .then(|| Entered::of(&SiteReach::proving_lazy_reads(lookup), file, function));
+        let members = (entered == Entered::Runs)
+            .then(|| Entered::of(&SiteReach::proving_final_members(lookup), file, function));
         Self {
             entered,
             plain,
             lazy,
+            members,
         }
     }
 
     fn site(self) -> SiteAnswer {
-        match (self.entered, self.plain, self.lazy) {
-            (Entered::Never, Some(Entered::Undecided), _)
-            | (Entered::Undecided, _, _)
-            | (Entered::Runs, _, Some(Entered::Undecided)) => SiteAnswer::Undecided,
-            (Entered::Never, plain, _) => SiteAnswer::NeverEntered {
+        match (self.entered, self.plain, self.lazy, self.members) {
+            (Entered::Never, Some(Entered::Undecided), _, _)
+            | (Entered::Undecided, _, _, _)
+            | (Entered::Runs, _, Some(Entered::Undecided), _)
+            | (Entered::Runs, _, _, Some(Entered::Undecided)) => SiteAnswer::Undecided,
+            (Entered::Never, plain, _, _) => SiteAnswer::NeverEntered {
                 refused_creation: plain == Some(Entered::Runs),
             },
             // ADR 0576: a site only an unread lazy computation runs.
-            (Entered::Runs, _, Some(Entered::Never)) => SiteAnswer::LazyUnread,
-            (Entered::Runs, _, _) => SiteAnswer::MayRun,
+            (Entered::Runs, _, Some(Entered::Never), _) => SiteAnswer::LazyUnread,
+            // ADR 1034: a site only a member value the literal may replace runs.
+            (Entered::Runs, _, _, Some(Entered::Never)) => SiteAnswer::MemberMayBeReplaced,
+            (Entered::Runs, _, _, _) => SiteAnswer::MayRun,
         }
     }
 }

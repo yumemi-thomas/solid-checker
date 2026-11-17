@@ -326,7 +326,8 @@ only dead code calls: ADR 0578) is uncertifiable (ADR 0458,
 (ADR 0576, `fixtures/reactive-ir/lazy-memo-unread`).
 So is a write in a callback handed to a standard-library iteration of a literal
 nothing can fill (`[].forEach(f)`, `new Set().forEach(f)`, `Array.from([], f)`,
-`[1].reduce(f)` with no initial value: [ADR 1019](../decisions.md#adr-1019),
+`[1].reduce(f)` with no initial value, the `childNodes` of an element
+`document.createElement("i")` made there: [ADR 1019](../decisions.md#adr-1019), [ADR 1033](../decisions.md#adr-1033),
 `fixtures/reactive-ir/dead-site-empty-collection`); a named array keeps the
 violation.
 So is a write or `refresh` in a function no call edge reaches but that may

@@ -258,8 +258,15 @@ fn defined_literal_elements(file: &solid_facts::FileFacts, span: Span) -> usize 
 ///   non-empty string literal pattern (no escape) the receiver does not
 ///   contain.
 ///
+/// - (ADR 1033) `NodeList.forEach`/`NodeListOf.forEach` on the `childNodes`
+///   of, or a `querySelectorAll` called on, a node made there and never
+///   handed on: `document.createElement` of a quoted name with no `-` and no
+///   second argument (no custom element constructor or customized built-in
+///   runs), `document` the library's global ([`fresh_empty_node`]).
+///
 /// Anything else (a name, a property, a literal with an element, a
-/// `NodeList`) answers `false`: the callback may run.
+/// `NodeList` of a node that is not fresh, `document.querySelectorAll`)
+/// answers `false`: the callback may run.
 pub(crate) fn carrier_provably_never_runs(
     file: &solid_facts::FileFacts,
     carrier: Span,
@@ -335,6 +342,9 @@ pub(crate) fn carrier_provably_never_runs(
         "Map.forEach" => receiver().is_some_and(|receiver| {
             fresh_collection(file, receiver, lookup, "MapConstructor.construct")
         }),
+        "NodeList.forEach" | "NodeListOf.forEach" => {
+            receiver().is_some_and(|receiver| fresh_empty_node_list(file, receiver, lookup))
+        }
         "String.replace" | "String.replaceAll" => {
             let text = |span: Span| string_literal_text(file, span);
             receiver()
@@ -415,4 +425,80 @@ fn string_literal_text(file: &solid_facts::FileFacts, span: Span) -> Option<&str
     let quote = text.chars().next().filter(|c| *c == '"' || *c == '\'')?;
     let inner = text.strip_prefix(quote)?.strip_suffix(quote)?;
     (!inner.contains(quote) && !inner.contains('\\') && !inner.contains('\n')).then_some(inner)
+}
+
+/// ADR 1033: whether `span` (through parentheses and type assertions) is a
+/// `NodeList` that holds no node: the `childNodes` of a [`fresh_empty_node`],
+/// or the result of the standard `querySelectorAll` called on one (a node with
+/// no descendants matches nothing).
+fn fresh_empty_node_list(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    let span = ast.peel_ts_sugar_span(span);
+    if let Some(member) = ast.member_at(span) {
+        // The property is the DOM's own `childNodes` by its symbol's declarations, not by its spelling.
+        return lookup.lib_dom_member(file, member.property, "childNodes")
+            && fresh_empty_node(file, member.object, lookup);
+    }
+    let Some(call) = ast
+        .calls
+        .iter()
+        .find(|call| call.span == span && !call.construct)
+    else {
+        return false;
+    };
+    let Some(member) = ast.member_at(ast.peel_ts_sugar_span(call.callee)) else {
+        return false;
+    };
+    call.arguments.len() == 1
+        && !call.arguments[0].spread
+        && crate::indexes::standard_library_declaration_of(
+            lookup.resolved_callee_call(file, call.callee),
+            typefacts::CallKind::Call,
+        )
+        .is_some_and(|declaration| {
+            declaration.qualified_name.as_ref() == "ParentNode.querySelectorAll"
+        })
+        && fresh_empty_node(file, member.object, lookup)
+}
+
+/// ADR 1033: whether `span` (through parentheses and type assertions) makes an
+/// element with no children, written there: `document.createElement("i")`, a
+/// quoted name with no `-` (no custom element's constructor runs) and no
+/// options (no customized built-in's), the standard-library method of the
+/// library's global `document`.
+fn fresh_empty_node(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    let span = ast.peel_ts_sugar_span(span);
+    let Some(call) = ast
+        .calls
+        .iter()
+        .find(|call| call.span == span && !call.construct)
+    else {
+        return false;
+    };
+    let Some(member) = ast.member_at(ast.peel_ts_sugar_span(call.callee)) else {
+        return false;
+    };
+    if lookup.global_dom_variable(file, ast.peel_ts_sugar_span(member.object)) != Some("document") {
+        return false;
+    }
+    let Some(declaration) = crate::indexes::standard_library_declaration_of(
+        lookup.resolved_callee_call(file, call.callee),
+        typefacts::CallKind::Call,
+    ) else {
+        return false;
+    };
+    declaration.qualified_name.as_ref() == "Document.createElement"
+        && call.arguments.len() == 1
+        && !call.arguments[0].spread
+        && string_literal_text(file, call.arguments[0].span)
+            .is_some_and(|name| !name.is_empty() && !name.contains('-'))
 }

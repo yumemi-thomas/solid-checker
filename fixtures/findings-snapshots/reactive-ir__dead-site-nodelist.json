@@ -1,0 +1,108 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-unentered",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-site-nodelist/App.tsx",
+      "start": 334,
+      "end": 341,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "function-unentered",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-site-nodelist/App.tsx",
+      "start": 553,
+      "end": 558,
+      "fixes": 0
+    },
+    {
+      "rule": "on-flush-in-owned-scope",
+      "code": "SC3002",
+      "kind": "uncertifiable",
+      "blocker": "function-unentered",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dead-site-nodelist/App.tsx",
+      "start": 692,
+      "end": 699,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-site-nodelist/App.tsx",
+      "start": 1001,
+      "end": 1008,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-site-nodelist/App.tsx",
+      "start": 1152,
+      "end": 1159,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-site-nodelist/App.tsx",
+      "start": 1416,
+      "end": 1423,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-site-nodelist/App.tsx",
+      "start": 1696,
+      "end": 1703,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-site-nodelist/App.tsx",
+      "start": 1943,
+      "end": 1950,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-site-nodelist/App.tsx",
+      "start": 2264,
+      "end": 2271,
+      "fixes": 0
+    },
+    {
+      "rule": "on-flush-in-owned-scope",
+      "code": "SC3002",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dead-site-nodelist/App.tsx",
+      "start": 2419,
+      "end": 2426,
+      "fixes": 0
+    }
+  ]
+}
