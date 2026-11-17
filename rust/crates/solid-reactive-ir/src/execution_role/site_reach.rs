@@ -1103,6 +1103,55 @@ pub(crate) fn unplaced_run(
     unplaced_run_but(file, span, lookup, &|_| false)
 }
 
+/// ADR 1065 part 2 (census only): which disjunct of [`unplaced_run`] holds at `span`, asked after it answered true. Never read by an answer.
+pub(crate) fn unplaced_layer(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> &'static str {
+    let ast = &file.ast;
+    if ast
+        .classes
+        .iter()
+        .flat_map(|class| &class.elements)
+        .any(|element| element.value.is_some_and(|value| value.contains(span)))
+        && !construct_only_placed(file, span)
+    {
+        return "class-element";
+    }
+    for function in ast.functions_owning(span) {
+        let value = function.span;
+        if ast
+            .object_properties
+            .iter()
+            .any(|property| ast.peel_ts_sugar_span(property.value) == value)
+        {
+            return "object-member";
+        }
+        if ast.array_literals.iter().any(|literal| {
+            ast.array_literal_at(*literal).is_some_and(|array| {
+                array
+                    .elements
+                    .iter()
+                    .any(|element| ast.peel_ts_sugar_span(element.span) == value)
+            })
+        }) {
+            return "array-element";
+        }
+        if crate::owners::function_binding_name(file, function).is_some_and(|name| {
+            ast.tagged_template_tags
+                .iter()
+                .any(|tag| ast.reference_declaration(*tag) == Some(name.span))
+        }) {
+            return "tag-function";
+        }
+    }
+    if crate::local_access::function_escapes_unfollowed(file, span, lookup) {
+        return "escapes-unfollowed";
+    }
+    "unnamed"
+}
+
 /// [`unplaced_run`], a function written as an object member that `placed` answers for left out (ADR 1009: the caller proves
 /// where such a member runs). Every other layer is asked as before.
 pub(crate) fn unplaced_run_but(

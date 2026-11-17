@@ -723,6 +723,12 @@ impl DiagnosticSession {
         attach_blocked_by(&mut snapshot, &program);
         // ADR 1065 (B6): the package hand-off's census rows (empty unless the census is on).
         snapshot.blocker_census.extend(drop_census);
+        // ADR 1065 part 2: the causes the finding projection recorded after the program was built (empty unless the census is on).
+        if solid_reactive_ir::blocker_census::enabled() {
+            snapshot
+                .blocker_census
+                .extend(solid_reactive_ir::blocker_census::drain());
+        }
         // A disabled coverage rule hides its obligations, not the gap they
         // name: the analysis is still incomplete there, so it cannot certify.
         if snapshot.status == "certified" && !withheld_coverage.is_empty() {

@@ -77,6 +77,55 @@ pub(super) fn runs_nothing(
     }
 }
 
+/// ADR 1065 part 2 (census only): the first conjunct of [`runs_nothing`] that fails, in its order. Asked after it answered false; never read by an answer.
+pub(super) fn runs_nothing_failure(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    call: &CallFact,
+    via: &str,
+    object_prototype_touched: &dyn Fn() -> bool,
+) -> String {
+    if let Some(hazard) = TOUCHED_BUILTINS
+        .into_iter()
+        .find(|hazard| ctx.semantic_lookup.hazard_present(*hazard))
+    {
+        return format!("builtins-touched:{hazard:?}");
+    }
+    if via == "setter" {
+        return "setter-unproven".to_owned();
+    }
+    let callee = file.ast.peel_ts_sugar_span(call.callee);
+    let Some(resolved) = ctx.semantic_lookup.resolved_callee_call(file, callee) else {
+        return "callee-unresolved".to_owned();
+    };
+    let Some(name) = runtime_semantics::standard_call_name(resolved) else {
+        return "not-standard".to_owned();
+    };
+    if name == "eval"
+        || name.starts_with("FunctionConstructor")
+        || runtime_semantics::delivers_synchronously(name)
+    {
+        return format!("runs-code:{name}");
+    }
+    if package_writes_global(ctx, file, callee) {
+        return format!("package-writes-global:{name}");
+    }
+    if !receiver_is_the_librarys(ctx, file, call) {
+        return format!("receiver-not-the-librarys:{name}");
+    }
+    call.arguments
+        .iter()
+        .enumerate()
+        .find(|(index, argument)| {
+            let behavior = runtime_semantics::argument_behavior(resolved, None, *index);
+            !argument_is_inert(ctx, file, argument, behavior, object_prototype_touched)
+        })
+        .map_or_else(
+            || format!("unnamed:{name}"),
+            |(index, _)| format!("argument-not-inert:{name}:{index}"),
+        )
+}
+
 /// Whether no analyzed file touches a built-in or evaluates code from a string ([`TOUCHED_BUILTINS`]).
 fn builtins_untouched(ctx: &AnalysisContext<'_>) -> bool {
     TOUCHED_BUILTINS

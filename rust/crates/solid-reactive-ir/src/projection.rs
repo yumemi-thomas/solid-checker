@@ -1801,6 +1801,41 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             FindingSeed::StaticViolation(_) | FindingSeed::StaticDefect(_) => None,
         };
         if let Some(blocker) = blocker {
+            // ADR 1065 part 2 (B4): the seed that names `function-run-unplaced` here, and what it carries, census only.
+            if blocker == crate::blockers::FUNCTION_RUN_UNPLACED
+                && !finding.primary_location.path.contains("/node_modules/")
+            {
+                crate::blocker_census::record(|| {
+                    let at = |location: &crate::Location| {
+                        format!(
+                            "{}:{}-{}",
+                            location.path, location.start_byte, location.end_byte
+                        )
+                    };
+                    let cause = match seed {
+                        FindingSeed::StrictRead { read, .. } => format!(
+                            "cause|seed|read|via={}|context={}|origin={}",
+                            read.via,
+                            read.context,
+                            read.origin.as_ref().map_or_else(|| "-".to_owned(), at)
+                        ),
+                        FindingSeed::OwnedWrite(write) => {
+                            format!("cause|seed|write|context={}", write.context)
+                        }
+                        FindingSeed::Action(action) => format!(
+                            "cause|seed|action|{}|context={}",
+                            action.action, action.context
+                        ),
+                        FindingSeed::OwnerRequirement(_) => "cause|seed|owner".to_owned(),
+                        _ => "cause|seed|other".to_owned(),
+                    };
+                    crate::blocker_census::CensusRow::at(
+                        &finding.primary_location,
+                        "seed",
+                        vec![cause],
+                    )
+                });
+            }
             finding.analysis_context =
                 crate::blockers::with_detail(blocker, &finding.analysis_context);
         }
