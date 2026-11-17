@@ -189,24 +189,136 @@ pub(crate) fn iteration_intrinsic_target(file: &FileFacts, span: Span, depth: us
         .is_some_and(|initializer| iteration_intrinsic_target(file, initializer, depth - 1))
 }
 
+/// ADR 1040 (a): whether the value at `span` is an array the global `Array`
+/// made here: an array literal, `new Array(n)`, `Array(n)` or `Array.from(…)`,
+/// through `const` (or never-written `let`) aliases. A new array is no
+/// intrinsic, whatever its elements. The call must resolve to the standard
+/// declaration, and the census must hold `Array`, the called function and (for
+/// `Array.from`, which constructs with its receiver) the constructor intact
+/// ([`standard_member_intact`]): a global replaced by a constructor returning
+/// `Array.prototype` would hand the intrinsic back.
+fn fresh_global_array(
+    file: &FileFacts,
+    lookup: &SemanticLookup<'_>,
+    span: Span,
+    depth: usize,
+) -> bool {
+    if depth == 0 {
+        return false;
+    }
+    let span = file.ast.peel_ts_sugar_span(span);
+    if file.ast.array_literals.contains(&span) {
+        return true;
+    }
+    if let Some(call) = file.ast.call_at(span) {
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        let (qualified, kind, construct_too) = if global_name(file, callee) == Some("Array") {
+            if call.construct {
+                (
+                    "ArrayConstructor.construct",
+                    typefacts::CallKind::Construct,
+                    false,
+                )
+            } else {
+                ("ArrayConstructor.call", typefacts::CallKind::Call, false)
+            }
+        } else if !call.construct
+            && file.ast.member_at(callee).is_some_and(|member| {
+                !file.ast.computed_members.contains(&member.span)
+                    && member_key(file, member) == Some("from")
+                    && global_name(file, file.ast.peel_ts_sugar_span(member.object))
+                        == Some("Array")
+            })
+        {
+            ("ArrayConstructor.from", typefacts::CallKind::Call, true)
+        } else {
+            return false;
+        };
+        return lookup
+            .standard_library_declaration(file, call, kind)
+            .is_some_and(|declaration| declaration.qualified_name.as_ref() == qualified)
+            && standard_member_intact(lookup, "Array")
+            && standard_member_intact(lookup, qualified)
+            && (!construct_too || standard_member_intact(lookup, "ArrayConstructor.construct"));
+    }
+    let Some(declaration) = file.ast.reference_declaration(span) else {
+        return false;
+    };
+    file.ast
+        .bindings
+        .iter()
+        .find(|binding| {
+            binding.shape == ast::BindingShape::Identifier
+                && binding.names.len() == 1
+                && binding.names[0].span == declaration
+                // A direct `eval` can rebind a `let` by name; never a `const`.
+                && (binding.immutable
+                    || (binding.runtime_let
+                        && !crate::interproc::property_gets::direct_eval_in(
+                            file,
+                            Span::new(0, u32::MAX),
+                        )))
+                && !iteration_binding_written(file, declaration)
+        })
+        .and_then(|binding| binding.initializer)
+        .is_some_and(|initializer| fresh_global_array(file, lookup, initializer, depth - 1))
+}
+
 /// ADR 0803: whether some call hands an array intrinsic (`Array.prototype`,
 /// the iterator's prototype) or the global object on as a value. Where one does,
 /// a parameter of the code that receives it may be the intrinsic, so
 /// [`visible_iteration_write`] cannot tell a harmless target from the intrinsic
 /// by what is written at the mutation; the census ([`handed_to_unseen_code`])
 /// leaves a mutating builtin to that scan, and the two deferred to each other.
+///
+/// ADR 1040 (b): only a hand-off the seen-code check ([`received_by_seen_code`])
+/// rejects counts, the check asked with the deferral to this scan refused
+/// ([`refusing_scan_deferral`]). A seen receiver hands the value on to nothing
+/// (no return, store, spread or unseen call), and a write through it under a
+/// key that may reach iteration, or by any key on the global object that may
+/// be a handler, is itself a rejection ([`handed_on`]). The one place the check
+/// leaves the value to this scan, an intrinsic as the target of a reflective
+/// mutator (`Object.assign(p, s)`, `Reflect.set(p, k, f)`: [`reflective_target`]),
+/// counts as handed on to the standard mutator here, which is no seen code: so
+/// the cut uses only the strictly weaker census, the one that would hold with
+/// `handed` true at every write the check leaves to the scan, and no parameter
+/// of accepted code can be the intrinsic at a write the scan then skips. The
+/// check reads the hazard census, resolution and the files, never this answer
+/// nor the visible scan it feeds, so (b) cannot justify itself.
 pub(crate) fn iteration_intrinsic_handed(lookup: &SemanticLookup<'_>) -> bool {
-    lookup
-        .slot_entries(lookup.base_hazards())
-        .any(|(_, entries)| {
-            entries.iter().any(|(hazard, entry)| {
-                matches!(hazard, crate::base::Hazard::IntrinsicHandedAtCall)
-                    && matches!(
-                        handed_call_of(*entry).2,
-                        Obtained::Intrinsic | Obtained::Global
-                    )
+    refusing_scan_deferral(|| {
+        lookup
+            .slot_entries(lookup.base_hazards())
+            .any(|(file, entries)| {
+                entries.iter().any(|(hazard, entry)| {
+                    let (ordinal, slot, kind) = handed_call_of(*entry);
+                    matches!(hazard, crate::base::Hazard::IntrinsicHandedAtCall)
+                        && matches!(kind, Obtained::Intrinsic | Obtained::Global)
+                        // Only a call the file holds and seen code receives is cut: an entry whose call is gone counts.
+                        && !file.ast.calls.get(ordinal).is_some_and(|call| {
+                            received_by_seen_code(lookup, file, call, slot, kind, SEEN_DEPTH, None)
+                        })
+                })
             })
-        })
+    })
+}
+
+thread_local! {
+    /// ADR 1040 (b): set while [`iteration_intrinsic_handed`] asks the seen check, whose answer then never rests on the
+    /// visible scan ([`handed_on`] records a reflective mutator's intrinsic target as a call instead of leaving it there).
+    static SCAN_DEFERRAL_REFUSED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Runs `body` with [`SCAN_DEFERRAL_REFUSED`] set, restoring the previous value after (an unwind included).
+fn refusing_scan_deferral<T>(body: impl FnOnce() -> T) -> T {
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            SCAN_DEFERRAL_REFUSED.with(|refused| refused.set(self.0));
+        }
+    }
+    let _restore = Restore(SCAN_DEFERRAL_REFUSED.with(|refused| refused.replace(true)));
+    body()
 }
 
 /// ADR 0803: a visible write in `file` that can reach the array iteration
@@ -235,10 +347,23 @@ pub(crate) fn visible_iteration_write_sites<'f>(
     lookup: &'f SemanticLookup<'_>,
     handed: bool,
 ) -> impl Iterator<Item = Span> + 'f {
-    let may_be_intrinsic = move |span: Span| {
-        iteration_intrinsic_target(file, span, 24)
-            || (handed && !separate_iteration_target(file, span, 24))
+    // ADR 1040 (a): an array the intact global `Array` made here is separate too. (c): so is an object ADR 1024's
+    // open-write census proves made (`fresh_written_object`): by syntax alone, or through a standard factory while the
+    // census holds every factory it trusts standard. The factory question goes through `hazard_present`, the full
+    // census, which is never weaker than the raw one ADR 1024's induction asks.
+    let factories_intact =
+        crate::base::contributions::fresh_factories_intact(&|hazard| lookup.hazard_present(hazard));
+    let separate = move |span: Span| {
+        separate_iteration_target(file, span, 24)
+            || fresh_global_array(file, lookup, span, 24)
+            || match crate::base::contributions::fresh_written_object(file, span) {
+                Some(crate::base::contributions::Fresh::Made) => true,
+                Some(crate::base::contributions::Fresh::Factory) => factories_intact,
+                None => false,
+            }
     };
+    let may_be_intrinsic =
+        move |span: Span| iteration_intrinsic_target(file, span, 24) || (handed && !separate(span));
     let iterator_key = |text: &str| {
         matches!(
             text.trim().trim_matches(['"', '\'']),
@@ -257,7 +382,7 @@ pub(crate) fn visible_iteration_write_sites<'f>(
             };
             let property = file.source_text(member.property).unwrap_or_default();
             if iterator_key(property) {
-                return !separate_iteration_target(file, member.object, 24);
+                return !separate(member.object);
             }
             let unknown = file.ast.computed_members.contains(&member.span)
                 && member_key(file, member).is_none();
@@ -282,7 +407,7 @@ pub(crate) fn visible_iteration_write_sites<'f>(
             let Some(method) = mutation_builtin(file, call, lookup) else {
                 return false;
             };
-            if target.spread || separate_iteration_target(file, target.span, 24) {
+            if target.spread || separate(target.span) {
                 return false;
             }
             let intrinsic = may_be_intrinsic(target.span);
@@ -2668,7 +2793,12 @@ fn handed_on(
         let first = index == 0 && !call.arguments[0].spread;
         // The reflective mutators on the global object may install a handler
         // (`Object.assign(window, { onclick })`): handed on.
-        if !(first && kind != Obtained::Global && reflective_target(file, span)) {
+        // ADR 1040 (b): not while the cut asks ([`refusing_scan_deferral`]): there it is handed to the mutator.
+        if !(first
+            && kind != Obtained::Global
+            && !SCAN_DEFERRAL_REFUSED.with(std::cell::Cell::get)
+            && reflective_target(file, span))
+        {
             // Whether the callee is code the checker sees is decided over the
             // project ([`handed_to_unseen_code`]); recorded, not counted here.
             at_calls

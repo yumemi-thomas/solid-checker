@@ -1,0 +1,1 @@
+{"note": "ADR 1040 (b), the hand-back: seen code (`relay`) hands the window to a callback parameter, and the project callback patches the array iterator under a key no literal names. Chrome is quiet (the patch hands back a no-op setter); the checker keeps `set(2)` uncertifiable (`tuple-iteration-written`)"}
