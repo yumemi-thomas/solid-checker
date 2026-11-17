@@ -636,7 +636,11 @@ impl<'l, 'a> SiteReach<'l, 'a> {
         }
         // ADR 1010: a function literal handed to an exact project helper whose parameter default may run code at that call (and may
         // throw there, before the body): whether the helper's body, and so this function, ever runs is not decided.
-        if self.handed_past_live_default(file, function) {
+        // ADR 1020: a function literal an effect's or a memo's compute returns is a value the runtime hands on (the apply receives
+        // it, the memo stores it); it runs only where program code calls that value, which is not read here: undecided.
+        if self.handed_past_live_default(file, function)
+            || returned_by_primitive_callback(file, function, self.lookup)
+        {
             self.limited.set(true);
             return true;
         }
@@ -1357,6 +1361,43 @@ fn class_of_member<'f>(
 /// written (an IIFE) returns, and the call's result is discarded: the value
 /// goes nowhere. `return value` in the function's own body, or its expression
 /// body. A generator is not read: its value goes to its iterator.
+/// ADR 1020: `function` is what a callback of a dialect primitive returns (its arrow's expression body, or a `return`'s argument in its
+/// own body) at a position whose return the runtime hands on as a value and never calls (`Dialect::callback_return_is_value`: an
+/// effect's or a memo's compute), and it is not called where it is written: `createEffect(() => () => { … }, (v) => { … })`. A
+/// cleanup an apply returns is called by the runtime, and is not this.
+fn returned_by_primitive_callback(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    if ast.calls_with_peeled_callee(function.span).next().is_some() {
+        return false;
+    }
+    let returning = ast
+        .returns_with_peeled_argument(function.span)
+        .filter_map(|returned| crate::owners::containing_body_function(ast, returned.span))
+        .chain(ast.functions.iter().filter(|outer| {
+            outer.expression_body
+                && outer
+                    .expression_return
+                    .as_ref()
+                    .and_then(|value| value.argument)
+                    .is_some_and(|argument| ast.peel_ts_sugar_span(argument) == function.span)
+        }))
+        .collect::<Vec<_>>();
+    returning.into_iter().any(|outer| {
+        ast.arguments_containing(outer.span).any(|(call, index)| {
+            ast.peel_ts_sugar_span(call.arguments[index].span) == outer.span
+                && lookup
+                    .primitive_at_call(file, call.span)
+                    .is_some_and(|primitive| {
+                        lookup.dialect.callback_return_is_value(primitive, index)
+                    })
+        })
+    })
+}
+
 fn returned_by_discarded_iife(file: &solid_facts::FileFacts, value: Span) -> bool {
     let ast = &file.ast;
     let returned_by = |returned: &solid_facts::ast::ReturnFact| {
