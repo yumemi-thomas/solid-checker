@@ -534,6 +534,9 @@ async function collectProject(project, scenario, tooling, browser, responses = n
     responses: portable([...responses.values()].map(({ served: _served, ...row }) => row)), runtimeOptions: portable(runtimeOptions) });
   let body = key ? executionCache.cache.read(key, roots) : null;
   const cacheOutcome = !key ? "off" : body ? "hit" : "miss";
+  // A half recorded in another checkout carries that checkout's snapshot identity (its manifest holds the probes the key leaves out,
+  // `keyManifest`); the key matched on every file read and resolved, so the capture is this snapshot's: it is stamped with it.
+  if (body) body = { ...body, capture: { ...body.capture, project: snapshot.manifest.project, inputId: snapshot.inputId, manifest: snapshot.manifest } };
   if (!body) {
     body = await browserHalf({ projectRoot, snapshot, models: uninstrumented ? new Map() : models, conflictingLeafModels: uninstrumented ? new Set() : conflictingLeafModels, scenario, tooling, browser, responses, runtimeOptions });
     if (key && !body.failure) executionCache.cache.write(key, body, roots);
