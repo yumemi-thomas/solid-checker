@@ -147,6 +147,8 @@ A read in the children a literal keeps from running (`<For each={[]}>`'s row fun
 A throw that leaves an `async` function rejects the promise its call returned: it is a violation only where that promise is dropped (an expression statement, `void`, a `then` chain with no rejection arm), awaited, or returned to a call that drops it; a promise that is caught, assigned or handed on leaves the row `computation-error-unobserved` ([ADR 1008](../decisions.md#adr-1008)).
 A function the render runs in place reports where its element does ([ADR 1006](../decisions.md#adr-1006)): one an intrinsic `ref` applies (the literal, an array element, a conditional's branch, the literal an exact same-file factory call returns) and the function child of `For`, `Repeat`, `Show` or `Match`; a boundary above the element still takes the throw.
 
+A read proven to run with no owner throws `NO_OWNER_CONTEXT` before Solid looks for a provider: the row is uncertifiable `owner-check-throws-first` ([ADR 1052](../decisions.md#adr-1052)). A read whose owner only varies by caller keeps its violation; six generated shapes where Chrome reports `NO_OWNER_CONTEXT` instead are open (`docs/open-work.md`).
+
 ## Related
 
 - [missing-owner](missing-owner.md): the same read with no owner, which throws `NoOwnerError`

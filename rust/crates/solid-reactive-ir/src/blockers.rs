@@ -78,6 +78,8 @@ pub(crate) const FIELD_INITIALIZER_UNPLACED: &str = "field-initializer-unplaced"
 /// names no function body): whatever function the program stored there runs on the stack of the call, and may read a source there.
 pub(crate) const UNRESOLVED_INVOCATION: &str = "unresolved-invocation";
 pub(crate) const OWNER_VARIES_BY_CALLER: &str = "owner-varies-by-caller";
+/// ADR 1052: `useContext` may run with no owner, where `NO_OWNER_CONTEXT` throws before the provider lookup.
+pub(crate) const OWNER_CHECK_THROWS_FIRST: &str = "owner-check-throws-first";
 pub(crate) const STORE_OPERATION_MAY_NOT_WRITE: &str = "store-operation-may-not-write";
 
 // Track R.
@@ -88,6 +90,9 @@ pub(crate) const ACCESSOR_VALUE_COERCED: &str = "accessor-value-coerced";
 pub(crate) const HANDLER_ROOT_UNPROVEN: &str = "handler-root-unproven";
 pub(crate) const STATIC_SOURCE_UNPROVEN: &str = "static-source-unproven";
 pub(crate) const COMPUTE_RETURN_UNPROVEN: &str = "compute-return-unproven";
+/// ADR 1020: a returned compute closure may create the node in an ownerless effect apply, where
+/// PRIMITIVE_IN_EFFECT_CALLBACK precedes the result probe; SYNC_NODE_RECEIVED_ASYNC is unproven.
+pub(crate) const CREATION_THROWS_FIRST: &str = "creation-throws-first";
 pub(crate) const DESTRUCTURE_ROOT_UNPROVEN: &str = "destructure-root-unproven";
 pub(crate) const CAUGHT_READ_UNPROVEN: &str = "caught-read-unproven";
 pub(crate) const ASYNC_PROVENANCE_UNPROVEN: &str = "async-provenance-unproven";
@@ -337,7 +342,17 @@ pub(crate) fn for_write(write: &crate::ReactiveWrite) -> &'static str {
 }
 
 pub(crate) const fn for_owner(requirement: &crate::OwnerRequirement) -> &'static str {
-    if requirement.flight_error_unobserved {
+    if requirement.earlier_check_throws {
+        // ADR 1052.
+        if matches!(
+            requirement.operation,
+            crate::OwnerRequirementOperation::ContextProvider
+        ) {
+            OWNER_CHECK_THROWS_FIRST
+        } else {
+            CREATION_THROWS_FIRST
+        }
+    } else if requirement.flight_error_unobserved {
         ASYNC_FLIGHT_ERROR_UNOBSERVED
     } else if requirement.computation_error_unobserved {
         COMPUTATION_ERROR_UNOBSERVED

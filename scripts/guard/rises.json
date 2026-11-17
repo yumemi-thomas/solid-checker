@@ -3922,6 +3922,38 @@
    "to": 1,
    "adr": "ADR 1023",
    "fact": "a member call on a closed const literal under an assertion dispatches to the literal's own method (closed_literal_dispatch); the method hands the callback to queueMicrotask, so the read is no longer withheld and keeps its own callee-callback-timing obligation"
+  },
+  {
+   "fixture": "reactive-ir/deferred-effect-apply-callees",
+   "key": "SC4001 creation-throws-first",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1052",
+   "fact": "an earlier check Solid makes at the same call throws first (SC6002 at an effect created on an apply's stack, SC3001's refusal on a leaf caller's run): the owner row is uncertifiable creation-throws-first"
+  },
+  {
+   "fixture": "reactive-ir/flush-veto-kept",
+   "key": "SC4001 creation-throws-first",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1052",
+   "fact": "an earlier check Solid makes at the same call throws first (SC6002 at an effect created on an apply's stack, SC3001's refusal on a leaf caller's run): the owner row is uncertifiable creation-throws-first"
+  },
+  {
+   "fixture": "reactive-ir/leaf-owner",
+   "key": "SC4001 creation-throws-first",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1052",
+   "fact": "an earlier check Solid makes at the same call throws first (SC6002 at an effect created on an apply's stack, SC3001's refusal on a leaf caller's run): the owner row is uncertifiable creation-throws-first"
+  },
+  {
+   "fixture": "reactive-ir/primitive-in-effect-callback-tag",
+   "key": "SC4001 creation-throws-first",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1052",
+   "fact": "an earlier check Solid makes at the same call throws first (SC6002 at an effect created on an apply's stack, SC3001's refusal on a leaf caller's run): the owner row is uncertifiable creation-throws-first"
   }
  ]
 }

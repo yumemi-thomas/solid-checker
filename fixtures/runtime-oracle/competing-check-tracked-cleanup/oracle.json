@@ -1,0 +1,10 @@
+{
+  "note": "ADR 1052: the same with onCleanup: CLEANUP_IN_FORBIDDEN_SCOPE at mount, never NO_OWNER_CLEANUP; SC4001 uncertifiable `creation-throws-first`. Generated program `mx-no-owner-cleanup-tracked-shared-x-direct-none` (differential fuzzer, generator 2).",
+  "haltMarker": true,
+  "steps": [
+    {
+      "action": "click",
+      "selector": "[data-act=\"b1\"], body:not(:has([data-act=\"b1\"])) > #sc-halted"
+    }
+  ]
+}

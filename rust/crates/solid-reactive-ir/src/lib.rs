@@ -48,6 +48,7 @@ mod cache;
 mod callback_return;
 mod carrier_runs;
 mod cleanup;
+mod competing_checks;
 mod development_feedback;
 mod directives;
 mod execution_paths;
@@ -843,6 +844,10 @@ pub struct LeafOwnerOperation {
     /// stack. In no report and in no serialized form.
     #[serde(skip)]
     pub through_async: bool,
+    /// ADR 1052: `createEffect` with no callable effect function throws `MISSING_EFFECT_FN` before the leaf owner's
+    /// refusal at this operation's call, so the refusal is not proven to be reached.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub earlier_check_throws: bool,
 }
 
 /// Why the slot climb of the leaf-owner walk owes an obligation: the two stops of [`execution_role::ClimbStop`] that do
@@ -1571,6 +1576,10 @@ pub struct OwnerRequirement {
     /// run is not proven to be reached past that throw.
     #[serde(default, skip_serializing_if = "is_false")]
     pub owned_run_throws: bool,
+    /// ADR 1052: a check Solid makes earlier at this call throws first (the effect-callback guard or the leaf owner's
+    /// refusal at a creation, the owner check of a context read), so this row's code is not proven to be reached.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub earlier_check_throws: bool,
     /// ADR 0290: the operation is inside a package analyzed as source
     /// (ADR 0284), at this location, and this requirement stands at the
     /// project's call that runs it there, under the call's owner context.

@@ -370,6 +370,7 @@ pub(crate) fn package_operation_claims(
                 computation_error_unobserved: false,
                 stop: None,
                 through_async: false,
+                earlier_check_throws: false,
             });
         }
         if contexts.apply {
