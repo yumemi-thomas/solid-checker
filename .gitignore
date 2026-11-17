@@ -1766,3 +1766,7 @@ packages/wasm/owned/
 !fixtures/reactive-ir/projection-draft-assign-rebound/node_modules/**
 !fixtures/reactive-ir/unresolved-namespace-slots/node_modules/
 !fixtures/reactive-ir/unresolved-namespace-slots/node_modules/**
+!fixtures/reactive-ir/solid-specifier-mapped-package/node_modules/
+!fixtures/reactive-ir/solid-specifier-mapped-package/node_modules/**
+!fixtures/reactive-ir/solid-specifier-mapped-other/node_modules/
+!fixtures/reactive-ir/solid-specifier-mapped-other/node_modules/**
