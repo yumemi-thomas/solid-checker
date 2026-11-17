@@ -223,7 +223,19 @@ pub(crate) fn visible_iteration_write(
     lookup: &SemanticLookup<'_>,
     handed: bool,
 ) -> bool {
-    let may_be_intrinsic = |span: Span| {
+    visible_iteration_write_sites(file, lookup, handed)
+        .next()
+        .is_some()
+}
+
+/// ADR 1027: the sites of [`visible_iteration_write`] in `file`, in its order: a written or deleted member's span, or a call's.
+/// Lazy, so the census's answer (the first) asks exactly what it asked before; the hazard table collects them all.
+pub(crate) fn visible_iteration_write_sites<'f>(
+    file: &'f FileFacts,
+    lookup: &'f SemanticLookup<'_>,
+    handed: bool,
+) -> impl Iterator<Item = Span> + 'f {
+    let may_be_intrinsic = move |span: Span| {
         iteration_intrinsic_target(file, span, 24)
             || (handed && !separate_iteration_target(file, span, 24))
     };
@@ -238,7 +250,8 @@ pub(crate) fn visible_iteration_write(
         .write_targets
         .iter()
         .chain(&file.ast.deleted_targets)
-        .any(|target| {
+        .copied()
+        .filter(move |target| {
             let Some(member) = file.ast.member_at(file.ast.peel_ts_sugar_span(*target)) else {
                 return false;
             };
@@ -251,8 +264,11 @@ pub(crate) fn visible_iteration_write(
             (unknown || member_key(file, member) == Some("__proto__"))
                 && may_be_intrinsic(member.object)
         });
-    writes
-        || file.ast.calls.iter().any(|call| {
+    writes.chain(
+        file.ast
+            .calls
+            .iter()
+            .filter(move |call| {
             let name = file
                 .ast
                 .member_at(file.ast.peel_ts_sugar_span(call.callee))
@@ -291,6 +307,8 @@ pub(crate) fn visible_iteration_write(
                 }),
             }
         })
+            .map(|call| call.span),
+    )
 }
 
 pub(super) fn iteration_binding_written(file: &FileFacts, declaration: Span) -> bool {
@@ -490,6 +508,12 @@ pub(crate) fn intrinsic_census(file: &FileFacts) -> (bool, Vec<u32>) {
     (obtained, calls)
 }
 
+/// ADR 1027: every site of `file` at which [`intrinsic_census`] finds an intrinsic obtained (the hazard
+/// `ArrayIntrinsicObtained`), for the hazard table. Its calls go to a throwaway list: the census's entries are its own.
+pub(crate) fn intrinsic_obtained_all_sites(file: &FileFacts) -> Vec<Span> {
+    intrinsic_obtained_sites(file, &std::cell::RefCell::new(Vec::new()), true)
+}
+
 /// ADR 0939: where a file hands standard roots on ([`standard_root_uses`]).
 #[derive(Default)]
 pub(crate) struct RootUses {
@@ -621,6 +645,13 @@ enum Slot {
 }
 
 fn intrinsic_obtained_collecting(file: &FileFacts, at_calls: &AtCalls) -> bool {
+    !intrinsic_obtained_sites(file, at_calls, false).is_empty()
+}
+
+/// ADR 1027: the sites of [`intrinsic_obtained_collecting`], in its order: the first only unless `all`. The first is
+/// found by exactly the questions, and the pushes to `at_calls`, the census's answer made before; with `all` the rest
+/// of the file is asked too, so only a caller with a throwaway `at_calls` passes it.
+fn intrinsic_obtained_sites(file: &FileFacts, at_calls: &AtCalls, all: bool) -> Vec<Span> {
     let aliases = this_aliases(file);
     let callees = file
         .ast
@@ -648,186 +679,256 @@ fn intrinsic_obtained_collecting(file: &FileFacts, at_calls: &AtCalls) -> bool {
             .iter()
             .any(|query| query.contains(span))
     };
-    file.ast.members.iter().any(|member| {
-        // A member of the global object goes as the global object does
-        // ([`handed_on`]): an intrinsic by name, an event handler written, a
-        // method called with it as `this`.
-        let object = file.ast.peel_ts_sugar_span(member.object);
-        // `typeof globalThis.setTimeout` in a type is erased: no value.
-        if in_type_query(member.span) {
-            return false;
-        }
-        if global_name(file, object).is_some_and(|name| WINDOW_NAMES.contains(&name)) {
-            return handed(object, Obtained::Global);
-        }
-        // A write is the visible side's (`visible_iteration_write`).
-        if writes.contains(&member.span) {
-            return false;
-        }
-        let key = member_key(file, member);
-        // Review D4: `this` read through to a global's name, in any file
-        // (the window's names for itself are typed candidates, R12); under
-        // a key no literal names, in sloppy code, where `this` may be the
-        // global object.
-        // In sloppy code a never-reassigned alias (`var self = this`) is
-        // `this` too.
-        let alias = file
-            .ast
-            .reference_declaration(object)
-            .is_some_and(|declaration| aliases.contains(&declaration));
-        if alias || file.source_text(object) == Some("this") {
-            match key {
-                Some("Array") => return handed(member.span, Obtained::Intrinsic),
-                Some("Function" | "eval" | "Reflect" | "Object") => {
-                    return handed(member.span, Obtained::Function);
-                }
-                Some("global") => return handed(member.span, Obtained::Global),
-                None => return alias || sloppy_this(file, object),
-                Some(_) => {}
-            }
-        }
-        match key {
-            // What these reach is a prototype or a constructor: an intrinsic
-            // when the receiver is an array, `Function` through `.constructor`.
-            Some("__proto__") => return handed(member.span, Obtained::Intrinsic),
-            Some("getPrototypeOf") => {
-                // Called, its result; held as a value, the function itself.
-                return callees.get(&member.span).map_or_else(
-                    || handed(member.span, Obtained::Intrinsic),
-                    |call| handed(*call, Obtained::Intrinsic),
-                );
-            }
-            Some("constructor") => return handed(member.span, Obtained::Function),
-            _ => {}
-        }
-        match global_name(file, object) {
-            Some("Array") => match key {
-                // `Array[k]` may be `Array.constructor`, which is `Function`.
-                None => handed(member.span, Obtained::Function),
-                Some("prototype") => {
-                    !reflective_target(file, member.span)
-                        && handed(member.span, Obtained::Intrinsic)
-                }
-                Some(_) => false,
-            },
-            _ => false,
-        }
-    }) || file.ast.identifiers.iter().any(|identifier| {
-        // Review a9fc #1: the global object as a value (`const g = globalThis;
-        // g.Array`, `Reflect.get(globalThis, "Array")`) reaches every global.
-        global_name(file, identifier.span).is_some_and(|name| WINDOW_NAMES.contains(&name))
-            && identifier.role == ast::IdentifierRole::Reference
-            && !file.ast.type_names.contains(&identifier.span)
-            && !in_type_query(identifier.span)
-            && !objects.contains(&identifier.span)
-            && handed(identifier.span, Obtained::Global)
-    }) || file.ast.bindings.iter().any(|binding| {
-        // A pattern that takes an intrinsic or a prototype getter out by key
-        // (`const { getPrototypeOf } = Object`, `const { constructor: F } =
-        // f`, `const { Array: A } = globalThis`), or destructures the global
-        // object at all.
-        binding.shape == ast::BindingShape::Object
-            && (binding.object_slots.iter().any(|slot| {
-                matches!(
-                    slot.property.as_str(),
-                    "getPrototypeOf" | "constructor" | "__proto__" | "Array" | "Function" | "eval"
-                ) || GLOBAL_OBJECTS.contains(&slot.property.as_str())
-            }) || binding.initializer.is_some_and(|initializer| {
-                global_name(file, file.ast.peel_ts_sugar_span(initializer))
-                    .is_some_and(|name| WINDOW_NAMES.contains(&name))
-            }))
-    }) || file.ast.identifiers.iter().any(|identifier| {
-        let name = global_name(file, identifier.span);
-        matches!(name, Some("Array" | "Function" | "Object" | "Reflect"))
-            && !file.ast.type_names.contains(&identifier.span)
-            && !objects.contains(&identifier.span)
-            && !callees.contains_key(&identifier.span)
-            && handed(
-                identifier.span,
-                if name == Some("Array") {
-                    Obtained::Intrinsic
-                } else {
-                    Obtained::Function
-                },
-            )
-    }) || file.ast.identifiers.iter().any(|identifier| {
-        // Review R19d: a caller of platform callbacks as a value (`const st =
-        // setTimeout`, `[f].forEach(setTimeout)`, `setTimeout.bind(null)`).
-        global_name(file, identifier.span).is_some_and(|name| PLATFORM_CALLERS.contains(&name))
-            && !file.ast.type_names.contains(&identifier.span)
-            && !in_type_query(identifier.span)
-            && !callees.contains_key(&identifier.span)
-            && match logical_timer_call(file, identifier.span) {
-                Some(call) => {
-                    at_calls
-                        .borrow_mut()
-                        .push((call, Slot::TimerCallback, Obtained::Global));
-                    false
-                }
-                None => handed(identifier.span, Obtained::Function),
-            }
-    }) || file.ast.calls.iter().any(|call| {
-        // Review R19e: a bubbling event's path ends at the window.
-        file.ast
-            .member_at(file.ast.peel_ts_sugar_span(call.callee))
-            .is_some_and(|member| member_key(file, member) == Some("composedPath"))
-            && handed(call.span, Obtained::Path)
-    }) || file
+    let sites = file
         .ast
-        .identifiers
+        .members
         .iter()
-        .any(|identifier| global_name(file, identifier.span) == Some("eval"))
-        || file.ast.calls.iter().any(|call| {
-            match global_name(file, file.ast.peel_ts_sugar_span(call.callee)) {
-                Some("Function") => true,
-                // A timer runs a string as code, and calls a function with
-                // the window as `this` (review D3).
-                Some("setTimeout" | "setInterval") => match call.arguments.first() {
-                    None => false,
-                    Some(handler)
-                        if handler.spread
-                            || handler.runtime_value_kind == ast::RuntimeValueKind::Primitive =>
-                    {
-                        true
+        .filter(|member| {
+            // A member of the global object goes as the global object does
+            // ([`handed_on`]): an intrinsic by name, an event handler written, a
+            // method called with it as `this`.
+            let object = file.ast.peel_ts_sugar_span(member.object);
+            // `typeof globalThis.setTimeout` in a type is erased: no value.
+            if in_type_query(member.span) {
+                return false;
+            }
+            if global_name(file, object).is_some_and(|name| WINDOW_NAMES.contains(&name)) {
+                return handed(object, Obtained::Global);
+            }
+            // A write is the visible side's (`visible_iteration_write`).
+            if writes.contains(&member.span) {
+                return false;
+            }
+            let key = member_key(file, member);
+            // Review D4: `this` read through to a global's name, in any file
+            // (the window's names for itself are typed candidates, R12); under
+            // a key no literal names, in sloppy code, where `this` may be the
+            // global object.
+            // In sloppy code a never-reassigned alias (`var self = this`) is
+            // `this` too.
+            let alias = file
+                .ast
+                .reference_declaration(object)
+                .is_some_and(|declaration| aliases.contains(&declaration));
+            if alias || file.source_text(object) == Some("this") {
+                match key {
+                    Some("Array") => return handed(member.span, Obtained::Intrinsic),
+                    Some("Function" | "eval" | "Reflect" | "Object") => {
+                        return handed(member.span, Obtained::Function);
                     }
-                    Some(handler) => match function_literal(file, handler.span) {
-                        Some(function) => {
-                            function.kind != ast::FunctionKind::Arrow
-                                && file
-                                    .source_text(function.span)
-                                    .is_none_or(crate::execution_role::mentions_receiver)
-                        }
-                        None => {
-                            at_calls.borrow_mut().push((
-                                call.span,
-                                Slot::TimerCallback,
-                                Obtained::Global,
-                            ));
-                            false
-                        }
-                    },
-                },
-                // The window's own method, called bare: its listener runs
-                // with the window as `this` and an event that reaches it.
-                Some("addEventListener") => {
-                    at_calls
-                        .borrow_mut()
-                        .push((call.span, Slot::This, Obtained::Global));
-                    false
+                    Some("global") => return handed(member.span, Obtained::Global),
+                    None => return alias || sloppy_this(file, object),
+                    Some(_) => {}
                 }
+            }
+            match key {
+                // What these reach is a prototype or a constructor: an intrinsic
+                // when the receiver is an array, `Function` through `.constructor`.
+                Some("__proto__") => return handed(member.span, Obtained::Intrinsic),
+                Some("getPrototypeOf") => {
+                    // Called, its result; held as a value, the function itself.
+                    return callees.get(&member.span).map_or_else(
+                        || handed(member.span, Obtained::Intrinsic),
+                        |call| handed(*call, Obtained::Intrinsic),
+                    );
+                }
+                Some("constructor") => return handed(member.span, Obtained::Function),
+                _ => {}
+            }
+            match global_name(file, object) {
+                Some("Array") => match key {
+                    // `Array[k]` may be `Array.constructor`, which is `Function`.
+                    None => handed(member.span, Obtained::Function),
+                    Some("prototype") => {
+                        !reflective_target(file, member.span)
+                            && handed(member.span, Obtained::Intrinsic)
+                    }
+                    Some(_) => false,
+                },
                 _ => false,
             }
         })
-        || sloppy_this_handed_on(file, &aliases, at_calls)
-        || file.ast.assignments.iter().any(|assignment| {
-            // A bare event handler (`onmessage = f`) is the window's.
-            let target = file.ast.peel_ts_sugar_span(assignment.target);
-            file.ast.reference_declaration(target).is_none()
-                && file
-                    .source_text(target)
-                    .is_some_and(|name| name.starts_with("on") && !name.contains(['.', '[']))
-                && !inert_handler(file, target)
-        })
+        .map(|member| member.span)
+        .chain(
+            file.ast
+                .identifiers
+                .iter()
+                .filter(|identifier| {
+                    // Review a9fc #1: the global object as a value (`const g = globalThis;
+                    // g.Array`, `Reflect.get(globalThis, "Array")`) reaches every global.
+                    global_name(file, identifier.span)
+                        .is_some_and(|name| WINDOW_NAMES.contains(&name))
+                        && identifier.role == ast::IdentifierRole::Reference
+                        && !file.ast.type_names.contains(&identifier.span)
+                        && !in_type_query(identifier.span)
+                        && !objects.contains(&identifier.span)
+                        && handed(identifier.span, Obtained::Global)
+                })
+                .map(|identifier| identifier.span),
+        )
+        .chain(
+            file.ast
+                .bindings
+                .iter()
+                .filter(|binding| {
+                    // A pattern that takes an intrinsic or a prototype getter out by key
+                    // (`const { getPrototypeOf } = Object`, `const { constructor: F } =
+                    // f`, `const { Array: A } = globalThis`), or destructures the global
+                    // object at all.
+                    binding.shape == ast::BindingShape::Object
+                        && (binding.object_slots.iter().any(|slot| {
+                            matches!(
+                                slot.property.as_str(),
+                                "getPrototypeOf"
+                                    | "constructor"
+                                    | "__proto__"
+                                    | "Array"
+                                    | "Function"
+                                    | "eval"
+                            ) || GLOBAL_OBJECTS.contains(&slot.property.as_str())
+                        }) || binding.initializer.is_some_and(|initializer| {
+                            global_name(file, file.ast.peel_ts_sugar_span(initializer))
+                                .is_some_and(|name| WINDOW_NAMES.contains(&name))
+                        }))
+                })
+                .map(|binding| binding.pattern),
+        )
+        .chain(
+            file.ast
+                .identifiers
+                .iter()
+                .filter(|identifier| {
+                    let name = global_name(file, identifier.span);
+                    matches!(name, Some("Array" | "Function" | "Object" | "Reflect"))
+                        && !file.ast.type_names.contains(&identifier.span)
+                        && !objects.contains(&identifier.span)
+                        && !callees.contains_key(&identifier.span)
+                        && handed(
+                            identifier.span,
+                            if name == Some("Array") {
+                                Obtained::Intrinsic
+                            } else {
+                                Obtained::Function
+                            },
+                        )
+                })
+                .map(|identifier| identifier.span),
+        )
+        .chain(
+            file.ast
+                .identifiers
+                .iter()
+                .filter(|identifier| {
+                    // Review R19d: a caller of platform callbacks as a value (`const st =
+                    // setTimeout`, `[f].forEach(setTimeout)`, `setTimeout.bind(null)`).
+                    global_name(file, identifier.span)
+                        .is_some_and(|name| PLATFORM_CALLERS.contains(&name))
+                        && !file.ast.type_names.contains(&identifier.span)
+                        && !in_type_query(identifier.span)
+                        && !callees.contains_key(&identifier.span)
+                        && match logical_timer_call(file, identifier.span) {
+                            Some(call) => {
+                                at_calls.borrow_mut().push((
+                                    call,
+                                    Slot::TimerCallback,
+                                    Obtained::Global,
+                                ));
+                                false
+                            }
+                            None => handed(identifier.span, Obtained::Function),
+                        }
+                })
+                .map(|identifier| identifier.span),
+        )
+        .chain(
+            file.ast
+                .calls
+                .iter()
+                .filter(|call| {
+                    // Review R19e: a bubbling event's path ends at the window.
+                    file.ast
+                        .member_at(file.ast.peel_ts_sugar_span(call.callee))
+                        .is_some_and(|member| member_key(file, member) == Some("composedPath"))
+                        && handed(call.span, Obtained::Path)
+                })
+                .map(|call| call.span),
+        )
+        .chain(
+            file.ast
+                .identifiers
+                .iter()
+                .filter(|identifier| global_name(file, identifier.span) == Some("eval"))
+                .map(|identifier| identifier.span),
+        )
+        .chain(
+            file.ast
+                .calls
+                .iter()
+                .filter(|call| {
+                    match global_name(file, file.ast.peel_ts_sugar_span(call.callee)) {
+                        Some("Function") => true,
+                        // A timer runs a string as code, and calls a function with
+                        // the window as `this` (review D3).
+                        Some("setTimeout" | "setInterval") => match call.arguments.first() {
+                            None => false,
+                            Some(handler)
+                                if handler.spread
+                                    || handler.runtime_value_kind
+                                        == ast::RuntimeValueKind::Primitive =>
+                            {
+                                true
+                            }
+                            Some(handler) => match function_literal(file, handler.span) {
+                                Some(function) => {
+                                    function.kind != ast::FunctionKind::Arrow
+                                        && file
+                                            .source_text(function.span)
+                                            .is_none_or(crate::execution_role::mentions_receiver)
+                                }
+                                None => {
+                                    at_calls.borrow_mut().push((
+                                        call.span,
+                                        Slot::TimerCallback,
+                                        Obtained::Global,
+                                    ));
+                                    false
+                                }
+                            },
+                        },
+                        // The window's own method, called bare: its listener runs
+                        // with the window as `this` and an event that reaches it.
+                        Some("addEventListener") => {
+                            at_calls
+                                .borrow_mut()
+                                .push((call.span, Slot::This, Obtained::Global));
+                            false
+                        }
+                        _ => false,
+                    }
+                })
+                .map(|call| call.span),
+        )
+        .chain(sloppy_this_handed_on_sites(file, &aliases, at_calls))
+        .chain(
+            file.ast
+                .assignments
+                .iter()
+                .filter(|assignment| {
+                    // A bare event handler (`onmessage = f`) is the window's.
+                    let target = file.ast.peel_ts_sugar_span(assignment.target);
+                    file.ast.reference_declaration(target).is_none()
+                        && file.source_text(target).is_some_and(|name| {
+                            name.starts_with("on") && !name.contains(['.', '['])
+                        })
+                        && !inert_handler(file, target)
+                })
+                .map(|assignment| assignment.target),
+        );
+    if all {
+        sites.collect()
+    } else {
+        sites.take(1).collect()
+    }
 }
 
 /// Review D4: whether `this` at `span` is in sloppy code, where a plain call
@@ -891,34 +992,42 @@ fn this_aliases(file: &FileFacts) -> HashSet<Span> {
 /// Review D4: sloppy code that hands `this` on: as the receiver of
 /// `call`, `apply` or `bind` (the target runs with it), or as an argument,
 /// recorded for the project's callee check.
-fn sloppy_this_handed_on(file: &FileFacts, aliases: &HashSet<Span>, at_calls: &AtCalls) -> bool {
-    file.ast.calls.iter().any(|call| {
-        let Some(index) = call.arguments.iter().position(|argument| {
-            let span = file.ast.peel_ts_sugar_span(argument.span);
-            (file.source_text(span) == Some("this") && sloppy_this(file, span))
-                || file
-                    .ast
-                    .reference_declaration(span)
-                    .is_some_and(|declaration| aliases.contains(&declaration))
-        }) else {
-            return false;
-        };
-        let rebinds = file
-            .ast
-            .member_at(file.ast.peel_ts_sugar_span(call.callee))
-            .is_some_and(|member| {
-                matches!(member_key(file, member), Some("call" | "apply" | "bind"))
-            });
-        if rebinds {
-            return true;
-        }
-        at_calls.borrow_mut().push((
-            call.span,
-            argument_slot(file, call, index),
-            Obtained::Global,
-        ));
-        false
-    })
+fn sloppy_this_handed_on_sites<'f>(
+    file: &'f FileFacts,
+    aliases: &'f HashSet<Span>,
+    at_calls: &'f AtCalls,
+) -> impl Iterator<Item = Span> + 'f {
+    file.ast
+        .calls
+        .iter()
+        .filter(move |call| {
+            let Some(index) = call.arguments.iter().position(|argument| {
+                let span = file.ast.peel_ts_sugar_span(argument.span);
+                (file.source_text(span) == Some("this") && sloppy_this(file, span))
+                    || file
+                        .ast
+                        .reference_declaration(span)
+                        .is_some_and(|declaration| aliases.contains(&declaration))
+            }) else {
+                return false;
+            };
+            let rebinds = file
+                .ast
+                .member_at(file.ast.peel_ts_sugar_span(call.callee))
+                .is_some_and(|member| {
+                    matches!(member_key(file, member), Some("call" | "apply" | "bind"))
+                });
+            if rebinds {
+                return true;
+            }
+            at_calls.borrow_mut().push((
+                call.span,
+                argument_slot(file, call, index),
+                Obtained::Global,
+            ));
+            false
+        })
+        .map(|call| call.span)
 }
 
 /// The function literal at `span`, through TypeScript sugar.
@@ -1271,21 +1380,58 @@ fn handed_call_of(entry: u32) -> (usize, Slot, Obtained) {
 pub(crate) fn handed_to_unseen_code(lookup: &SemanticLookup<'_>) -> bool {
     lookup
         .slot_entries(lookup.base_hazards())
-        .any(|(file, entries)| {
-            let mut candidates = None;
-            entries.iter().any(|(hazard, entry)| match hazard {
-                crate::base::Hazard::IntrinsicHandedAtCall => {
-                    let (ordinal, slot, kind) = handed_call_of(*entry);
-                    file.ast.calls.get(ordinal).is_none_or(|call| {
-                        !received_by_seen_code(lookup, file, call, slot, kind, SEEN_DEPTH, None)
-                    })
+        .any(|(file, entries)| handed_to_unseen_in(lookup, file, entries).next().is_some())
+}
+
+/// ADR 1027: every site at which [`handed_to_unseen_code`] holds, with the path of its file and what was handed
+/// (`intrinsic-handed`: a call that hands an obtained value to unseen code; `window-handed`: a value that may be the
+/// window, handed on). A census entry whose call or candidate the file no longer holds counts, as it does there, and
+/// stands at the file's start.
+pub(crate) fn handed_to_unseen_sites<'a>(
+    lookup: &SemanticLookup<'a>,
+) -> Vec<(&'a FileFacts, Span, &'static str)> {
+    lookup
+        .slot_entries(lookup.base_hazards())
+        .flat_map(|(file, entries)| {
+            handed_to_unseen_in(lookup, file, entries)
+                .map(move |(span, cause)| (file, span, cause))
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+/// The entries of one file at which [`handed_to_unseen_code`] holds, in the file's order, lazily.
+fn handed_to_unseen_in<'f>(
+    lookup: &'f SemanticLookup<'_>,
+    file: &'f FileFacts,
+    entries: &'f [(crate::base::Hazard, u32)],
+) -> impl Iterator<Item = (Span, &'static str)> + 'f {
+    let mut candidates = None;
+    entries
+        .iter()
+        .filter_map(move |(hazard, entry)| match hazard {
+            crate::base::Hazard::IntrinsicHandedAtCall => {
+                let (ordinal, slot, kind) = handed_call_of(*entry);
+                match file.ast.calls.get(ordinal) {
+                    None => Some((Span::new(0, 0), "intrinsic-handed")),
+                    Some(call) => {
+                        (!received_by_seen_code(lookup, file, call, slot, kind, SEEN_DEPTH, None))
+                            .then_some((call.span, "intrinsic-handed"))
+                    }
                 }
-                crate::base::Hazard::WindowValuedCandidate => candidates
+            }
+            crate::base::Hazard::WindowValuedCandidate => {
+                match candidates
                     .get_or_insert_with(|| file.window_valued_candidates())
                     .get(*entry as usize)
-                    .is_none_or(|span| window_handed_to_unseen_code(lookup, file, *span)),
-                _ => false,
-            })
+                    .copied()
+                {
+                    None => Some((Span::new(0, 0), "window-handed")),
+                    Some(span) => window_handed_to_unseen_code(lookup, file, span)
+                        .then_some((span, "window-handed")),
+                }
+            }
+            _ => None,
         })
 }
 

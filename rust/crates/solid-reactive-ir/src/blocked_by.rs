@@ -100,6 +100,70 @@ pub struct HazardSite {
     pub path: String,
     pub start: u32,
     pub end: u32,
+    /// ADR 1027: the disjunct the site holds, where the hazard is a disjunction of censuses (`TupleSlotIterationMayBeMutated`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cause: Option<String>,
+}
+
+/// ADR 0947's ids of the two disjuncts of ADR 0803's slot withdrawal ([`SemanticLookup::array_slots_withdrawn_causes`]).
+const VISIBLE_ITERATION_WRITE: &str = "VisibleIterationWrite";
+const TUPLE_SLOT_ITERATION_MAY_BE_MUTATED: &str = "TupleSlotIterationMayBeMutated";
+
+/// ADR 1027: where each disjunct of ADR 0803's slot withdrawal holds, by the census that decides it, so a row the veto
+/// holds can be traced to the code that fires it. Diagnostics only: the verdict is still the lookup's whole-program answer,
+/// and a site here is a place that alone would fire the hazard (an empty list where the hazard fired is a census this
+/// function does not read, and a test holds that it never happens on the cases it knows).
+///
+/// `VisibleIterationWrite`: each write or call [`visible_iteration_write`](crate::interproc::accessor_provenance::visible_iteration_write)
+/// finds (`visible-write`). `TupleSlotIterationMayBeMutated`: a direct `eval` (`eval`), a place an intrinsic or code from a
+/// string is obtained (`intrinsic-obtained`), and a call or value that hands one to code the checker does not see
+/// (`intrinsic-handed`, `window-handed`).
+fn tuple_iteration_sites(
+    lookup: &SemanticLookup<'_>,
+    id: &str,
+) -> Vec<crate::base::contributions::HazardSiteAt> {
+    use crate::interproc::accessor_provenance as census;
+    let at = |file: &FileFacts, span: Span, cause: &'static str| {
+        crate::base::contributions::HazardSiteAt {
+            path: file.path.as_str().to_owned(),
+            start: span.start,
+            end: span.end,
+            cause: Some(cause),
+        }
+    };
+    let mut sites = Vec::new();
+    if id == VISIBLE_ITERATION_WRITE {
+        let handed = census::iteration_intrinsic_handed(lookup);
+        for file in lookup.files() {
+            sites.extend(
+                census::visible_iteration_write_sites(file, lookup, handed)
+                    .map(|span| at(file, span, "visible-write")),
+            );
+        }
+    } else {
+        for file in lookup.files() {
+            sites.extend(
+                file.ast
+                    .module_hazards
+                    .iter()
+                    .filter(|hazard| hazard.kind == solid_facts::ast::ModuleHazardKind::Eval)
+                    .map(|hazard| at(file, hazard.span, "eval")),
+            );
+            sites.extend(
+                census::intrinsic_obtained_all_sites(file)
+                    .into_iter()
+                    .map(|span| at(file, span, "intrinsic-obtained")),
+            );
+        }
+        sites.extend(
+            census::handed_to_unseen_sites(lookup)
+                .into_iter()
+                .map(|(file, span, cause)| at(file, span, cause)),
+        );
+    }
+    sites.sort();
+    sites.dedup();
+    sites
 }
 
 /// One hazard id and its sites, where the census records them.
@@ -208,11 +272,16 @@ pub(crate) fn typed_blockers(
             ))
     });
     rows.dedup();
-    let sites = if ids.is_empty() {
+    let mut sites = if ids.is_empty() {
         BTreeMap::new()
     } else {
         crate::base::contributions::hazard_sites(lookup.files(), &ids)
     };
+    for id in [VISIBLE_ITERATION_WRITE, TUPLE_SLOT_ITERATION_MAY_BE_MUTATED] {
+        if ids.contains(id) {
+            sites.insert(id.to_owned(), tuple_iteration_sites(lookup, id));
+        }
+    }
     let hazards = ids
         .into_iter()
         .map(|id| {
@@ -224,6 +293,7 @@ pub(crate) fn typed_blockers(
                     path: site.path.clone(),
                     start: site.start,
                     end: site.end,
+                    cause: site.cause.map(str::to_owned),
                 })
                 .collect();
             HazardSites { id, sites }

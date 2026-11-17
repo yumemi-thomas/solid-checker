@@ -29,7 +29,7 @@
     },
     "rust/crates/solid-reactive-ir/src/accessor_provenance/mutation_sites.rs": {
       "default-on-missing": {
-        "count": 22,
+        "count": 20,
         "why": "pending-review"
       },
       "name-only-match": {
@@ -193,8 +193,8 @@
     },
     "rust/crates/solid-reactive-ir/src/blocked_by.rs": {
       "finding-filter": {
-        "count": 1,
-        "why": "`rows.dedup()` of identical typed-blocker rows, sorted by location and kind: a duplicate blocker row; the finding it types is untouched"
+        "count": 2,
+        "why": "`rows.dedup()` of identical typed-blocker rows, sorted by location and kind: a duplicate blocker row; the finding it types is untouched. ADR 1027: `sites.dedup()` of identical hazard sites, sorted, in the diagnostic table only: no finding is read or removed"
       }
     },
     "rust/crates/solid-reactive-ir/src/callback_host.rs": {
