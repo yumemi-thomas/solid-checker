@@ -199,7 +199,7 @@
   "SC7002 member-value-overridden": 6,
   "SC7002 package-finding-at-entry": 6,
   "SC7002 primitive-alias-call": 3,
-  "SC7002 site-reach-undecided": 4,
+  "SC7002 site-reach-undecided": 3,
   "SC7005 boundary-settle-order-unproven": 6,
   "SC7005 response-head-position-unproven": 9,
   "SC7005 server-rendering-unresolved": 2,
