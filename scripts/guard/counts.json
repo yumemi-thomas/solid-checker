@@ -52,6 +52,7 @@
   "SC2001 package-finding-at-entry": 5,
   "SC2001 refused-creation-unrun": 13,
   "SC2001 setter-handed-to-package": 9,
+  "SC2001 site-reach-undecided": 3,
   "SC2001 unreached-dead-code": 5,
   "SC2001 write-unaccounted": 12,
   "SC2002 action-handed-to-package": 1,

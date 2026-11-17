@@ -981,11 +981,12 @@ pub(crate) fn defaults_run_no_code_at(
         .iter()
         .enumerate()
         .all(|(position, parameter)| {
-            let default_inert = parameter.initializer.is_none_or(|initializer| {
+            // A parameter with no default runs nothing before the body: `None` here is that fact, not a missing one.
+            let default_inert = parameter.initializer.map(|initializer| {
                 let initializer = ast.peel_ts_sugar_span(initializer);
                 ast.function_at(initializer).is_some()
                     || callee_file.source_text(initializer).is_some_and(inert)
-            });
+            }) != Some(false);
             let pattern_inert = parameter.shape == solid_facts::ast::BindingShape::Identifier
                 || !callee_file
                     .source_text(parameter.pattern)
