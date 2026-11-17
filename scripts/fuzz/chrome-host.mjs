@@ -159,16 +159,17 @@ export function createChromeHost({ install = DEFAULT_FAST_INSTALL, oracleInstall
 
 /**
  * What a Chrome host record depends on beyond the fast path's own sources (cache.mjs `runtimeEnvironmentKey`): the host and its
- * page, runner and clock files, the clock and page mode, and the browser build (every file of its directory, as the oracle's key).
+ * page, runner and clock files, the clock and page mode, and the browser build (its executable's bytes, as the oracle's key).
  */
-export function chromeHostKey({ clock = "virtual-time", pages = "fresh-context", browser, executor, oracleInstall = DEFAULT_ORACLE_INSTALL } = {}, { fileHash, treeStat }) {
+export function chromeHostKey({ clock = "virtual-time", pages = "fresh-context", browser, executor, oracleInstall = DEFAULT_ORACLE_INSTALL } = {}, { fileHash, binaryHash }) {
   const executable = browser ?? defaultChromium();
   // The oracle's tools the host compiles and maps with (`startViteHost`).
   const tools = ["vite", "@solidjs/vite-plugin", "@jridgewell/trace-mapping"].map((name) => fileHash(join(resolve(oracleInstall), "node_modules", name, "package.json")));
   return JSON.stringify({
     kind: "chrome", clock, pages, tools, ...(executor ? { executor } : {}),
     sources: ["chrome-host.mjs", "served.mjs", "chrome-host/runner.tsx", "chrome-host/error-listeners.mjs", "chrome-host/index.html", "fast/virtual-clock.mjs", ...(executor === "rust" ? EXECUTOR_SOURCES : [])].map((name) => fileHash(join(here, name))),
-    browser: { path: executable, build: treeStat(dirname(executable)) },
+    // ADR 1029: the browser by its executable's bytes, not its path or its directory's stat.
+    browser: { build: binaryHash(executable) },
   });
 }
 

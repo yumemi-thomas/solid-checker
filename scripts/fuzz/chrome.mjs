@@ -156,47 +156,32 @@ async function oracleRows(root, { out, install, browser, concurrency, env, bin, 
  * A case may carry `checker` (a record as `chromeChecker` returns): the oracle's own run is `feedback run`, which does not read dependency
  * packages from source, so a case that ships a package is judged by the checker run as a user's is (checker.mjs ORDINARY_ARGS) and Chrome
  * supplies the runtime only.
- * `cache` (an `EntryCache` of cache.mjs under `chromeEnvironmentKey`) answers a case whose files match a stored run from the store, with
- * `cached: true` on its record, and runs the others. It is for confirmation only: the record's `checker` half is the one of the run
- * that stored it, so a caller that judges the checker by Chrome's findings passes no cache. A run the machine spoiled (no row, a
- * browser that would not close, a page that never loaded) is not stored.
+ * `cache` (an `EntryCache` of cache.mjs under `chromeEnvironmentKey`): ADR 1029. Chrome's half of a case is never retaken for the same
+ * case files, browser, installs and drivers: the oracle's execution cache (`executionCache`, content-keyed and shared per machine,
+ * cache.mjs `browserExecutionCache`) answers it, and the oracle reruns only the checker. The checker half of every record is this run's
+ * own, never a stored one (before, a hit returned the stored record whole, the checker half of the run that stored it). The entry cache
+ * keeps each case's runtime record: `cached: true` names a case whose files it has seen, and a fresh runtime that differs from the stored
+ * one (Chrome flaked, or something the key does not cover moved) is listed in `spotMismatches` and replaces it.
  * @param {{ id: string, dir: string, sites: object[], findings?: object[], checker?: object }[]} cases
  */
 export async function runChrome(cases, options) {
   const { cache, control = false, withClean = false } = options;
-  if (!cache) return runChromeCases(cases, options);
+  const executionCache = options.executionCache ?? cache?.executionDir;
+  const ran = await runChromeCases(cases, { ...options, executionCache });
+  if (!cache) return ran;
   const mode = control ? "control" : withClean ? "twin+clean" : "twin";
   const records = new Map();
-  const missing = [];
-  const hits = [];
   for (const entry of cases) {
     const key = caseKey(caseFiles(entry.dir), `chrome-${mode}|${entry.id}`);
     const stored = cache.get(key);
-    if (stored !== undefined) {
-      records.set(entry.id, { ...stored, checker: entry.checker ?? stored.checker, cached: true });
-      hits.push({ entry, key, stored, spot: cache.takeSpot("chrome") });
-    } else missing.push({ entry, key });
-  }
-  // The first hit of a process runs fresh in the same oracle call as the misses. Chrome can flake under load, so a difference does not stop
-  // the run: it drops the cache for this call, and every hit runs fresh (named `cached: false`, the mismatch in the cache's stats).
-  const spots = hits.filter((hit) => hit.spot);
-  const ran = missing.length || spots.length ? await runChromeCases([...missing, ...spots].map(({ entry }) => entry), options) : new Map();
-  const mismatch = spots.find((hit) => cacheableChrome(ran.get(hit.entry.id)) && recordDigest(ran.get(hit.entry.id).runtime) !== recordDigest(hit.stored.runtime));
-  if (mismatch) {
-    cache.spotMismatches.push(mismatch.entry.id);
-    console.error(`chrome cache: a fresh run of ${mismatch.entry.id} differs from its stored record; this call runs every case fresh`);
-    const rest = hits.filter((hit) => !hit.spot);
-    const again = rest.length ? await runChromeCases(rest.map(({ entry }) => entry), options) : new Map();
-    for (const hit of hits) {
-      const record = hit.spot ? ran.get(hit.entry.id) : again.get(hit.entry.id);
-      records.set(hit.entry.id, { ...record, cached: false });
-      if (cacheableChrome(record)) cache.set(hit.key, record);
-    }
-  }
-  for (const { entry, key } of missing) {
     const record = ran.get(entry.id);
-    records.set(entry.id, { ...record, cached: false });
-    if (cacheableChrome(record)) cache.set(key, record);
+    if (stored !== undefined && cacheableChrome(record) && recordDigest(stored.runtime) !== recordDigest(record.runtime)) {
+      cache.spotMismatches.push(entry.id);
+      console.error(`chrome cache: ${entry.id}: this run's Chrome record differs from the stored one; the stored one is replaced`);
+    }
+    records.set(entry.id, { ...record, cached: stored !== undefined });
+    // The runtime half only: the checker half is never reused (ADR 1029).
+    if (cacheableChrome(record)) cache.set(key, { row: { id: record.row.id, verdict: record.row.verdict }, runtime: record.runtime });
   }
   return records;
 }

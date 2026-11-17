@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EntryCache } from "./cache.mjs";
@@ -251,20 +251,44 @@ writeFileSync(arg("--out"), JSON.stringify({ results: ids.map((id) => ({ id, ver
     return { dir, caseDir, options, calls, cache };
   };
 
-  it("answers a case Chrome already ran from the cache, says so, and runs a changed case", async () => {
-    const t = setup({ "fuzz-1": { diagnostics: [{ code: "NO_OWNER_CLEANUP", file: "App.tsx", line: 2 }] } });
+  // ADR 1029: the oracle runs every case (its execution cache, keyed by content, skips Chrome for a case it has seen) so the checker half
+  // is always this run's; the entry cache only says which cases it has seen and checks the runtime half against what it stored.
+  it("the checker half is always this run's: a case seen before is named cached, its runtime checked, its findings fresh", async () => {
+    const t = setup({ "fuzz-1": { diagnostics: [{ code: "NO_OWNER_CLEANUP", file: "App.tsx", line: 2 }], findings: [{ rule: "r", kind: "violation", line: 2 }] } });
     const first = await runChrome([{ id: "fuzz-1", dir: t.caseDir, sites: [] }], t.options);
     expect(first.get("fuzz-1").cached).toBe(false);
+    // The checker changed: the oracle's findings are new, the runtime is the same.
+    writeFileSync(join(t.dir, "plan.json"), JSON.stringify({ "fuzz-1": { diagnostics: [{ code: "NO_OWNER_CLEANUP", file: "App.tsx", line: 2 }], findings: [] } }));
     const second = await runChrome([{ id: "fuzz-1", dir: t.caseDir, sites: [] }], t.options);
-    expect(t.calls()).toEqual([["fuzz-1"]]);
     expect(second.get("fuzz-1")).toMatchObject({ cached: true, runtime: first.get("fuzz-1").runtime });
+    expect(second.get("fuzz-1").checker.findings).toEqual([]);                          // never the stored run's
+    expect(first.get("fuzz-1").checker.findings).toHaveLength(1);
+    expect(t.cache.stats().spotMismatches).toEqual([]);
     writeFileSync(join(t.caseDir, "App.tsx"), "clean, edited");
     const third = await runChrome([{ id: "fuzz-1", dir: t.caseDir, sites: [] }], t.options);
-    expect(third.get("fuzz-1").cached).toBe(false);
-    expect(t.calls()).toEqual([["fuzz-1"], ["fuzz-1"]]);
+    expect(third.get("fuzz-1").cached).toBe(false);                                     // an edited case is a new key
     // Another mode of the same files is another key.
-    await runChrome([{ id: "fuzz-1", dir: t.caseDir, sites: [] }], { ...t.options, control: false });
-    expect(t.calls()).toHaveLength(3);
+    const fourth = await runChrome([{ id: "fuzz-1", dir: t.caseDir, sites: [] }], { ...t.options, control: false });
+    expect(fourth.get("fuzz-1").cached).toBe(false);
+  });
+
+  it("stores the runtime half only, and passes the shared execution cache to the oracle", async () => {
+    const t = setup({ "fuzz-1": { findings: [{ rule: "r", kind: "violation", line: 2 }] } });
+    t.cache.executionDir = join(t.dir, "execution");
+    await runChrome([{ id: "fuzz-1", dir: t.caseDir, sites: [] }], t.options);
+    const stored = [...readdirSync(join(t.dir, "cache"), { recursive: true })].filter((name) => String(name).endsWith(".json"));
+    expect(stored.length).toBeGreaterThan(0);
+    const text = stored.map((name) => readFileSync(join(t.dir, "cache", String(name)), "utf8")).join("\n");
+    expect(text).not.toContain("\"checker\"");
+  });
+
+  it("a fresh runtime that differs from the stored one is listed and replaces it", async () => {
+    const t = setup({});
+    await runChrome([{ id: "fuzz-1", dir: t.caseDir, sites: [] }], t.options);
+    writeFileSync(join(t.dir, "plan.json"), JSON.stringify({ "fuzz-1": { diagnostics: [{ code: "NO_OWNER_CLEANUP", file: "App.tsx", line: 2 }] } }));
+    const records = await runChrome([{ id: "fuzz-1", dir: t.caseDir, sites: [] }], t.options);
+    expect(records.get("fuzz-1").runtime.diagnostics.map((d) => d.code)).toEqual(["NO_OWNER_CLEANUP"]);
+    expect(t.cache.stats().spotMismatches).toEqual(["fuzz-1"]);
   });
 
   it("does not store a harness error or a page that never loaded; without a cache every call runs", async () => {
@@ -306,53 +330,6 @@ describe("chromeRuntime: the halt marker", () => {
     expect(plain.witnesses.map((w) => w.reached)).toEqual([true, true]);
     // A failure the oracle recorded stays the failure.
     expect(chromeRuntime({ ...row, failure: { message: "locator.click: Timeout" } }, [{ selector: haltable("#w2"), text: HALT_TEXT }], sites).failure.phase).toBe("execution");
-  });
-});
-
-describe("runChrome: the Chrome cache's spot check", () => {
-  const fakeOracle = (dir) => {
-    const path = join(dir, "oracle.mjs");
-    writeFileSync(path, `import { appendFileSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-const arg = (name) => process.argv[process.argv.indexOf(name) + 1];
-const ids = readdirSync(arg("--cases")).sort();
-appendFileSync(process.env.FAKE_LOG, JSON.stringify(ids) + "\\n");
-const plan = JSON.parse(readFileSync(process.env.FAKE_PLAN, "utf8"));
-writeFileSync(arg("--out"), JSON.stringify({ results: ids.map((id) => ({ id, verdict: "static-only", findings: [], diagnostics: [], pageErrors: [], ...(plan[id] ?? {}) })) }));
-`);
-    return path;
-  };
-  const setup = () => {
-    const dir = mkdtempSync(join(tmpdir(), "fuzz-chrome-spot-"));
-    for (const id of ["a", "b"]) { mkdirSync(join(dir, id)); writeFileSync(join(dir, id, "App.tsx"), id); }
-    const log = join(dir, "log.jsonl"); writeFileSync(log, "");
-    const plan = (rows) => writeFileSync(join(dir, "plan.json"), JSON.stringify(rows));
-    plan({});
-    const options = (spots) => ({ out: dir, install: join(dir, "install"), bin: "b", typefacts: "t", control: true, oracle: fakeOracle(dir), env: { ...process.env, FAKE_PLAN: join(dir, "plan.json"), FAKE_LOG: log }, cache: new EntryCache(join(dir, "cache"), "chrome", "e".repeat(64), { spots }) });
-    const cases = ["a", "b"].map((id) => ({ id, dir: join(dir, id), sites: [] }));
-    const calls = () => readFileSync(log, "utf8").trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
-    return { plan, options, cases, calls };
-  };
-
-  it("runs the first hit fresh; an equal run keeps every hit cached", async () => {
-    const t = setup();
-    await runChrome(t.cases, t.options({}));
-    const options = t.options({ chrome: 1 });
-    const records = await runChrome(t.cases, options);
-    expect(t.calls()).toEqual([["a", "b"], ["a"]]);
-    expect([records.get("a").cached, records.get("b").cached]).toEqual([true, true]);
-    expect(options.cache.stats()).toMatchObject({ spotChecked: 1, spotMismatches: [] });
-  });
-
-  it("drops the cache for the call when the fresh run differs, and runs every hit fresh", async () => {
-    const t = setup();
-    await runChrome(t.cases, t.options({}));
-    t.plan({ a: { diagnostics: [{ code: "NO_OWNER_CLEANUP", file: "App.tsx", line: 2 }] } });
-    const options = t.options({ chrome: 1 });
-    const records = await runChrome(t.cases, options);
-    expect(t.calls()).toEqual([["a", "b"], ["a"], ["b"]]);
-    expect([records.get("a").cached, records.get("b").cached]).toEqual([false, false]);
-    expect(records.get("a").runtime.diagnostics.map((d) => d.code)).toEqual(["NO_OWNER_CLEANUP"]);
-    expect(options.cache.stats().spotMismatches).toEqual(["a"]);
   });
 });
 
