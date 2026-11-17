@@ -1,0 +1,4 @@
+{
+  "note": "ADR 1052, part 2, negative: a sync memo in a component body: no earlier check throws, Chrome reports SYNC_NODE_RECEIVED_ASYNC, and SC7002 stays a violation.",
+  "steps": []
+}

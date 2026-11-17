@@ -1,0 +1,5 @@
+{
+  "note": "ADR 1052, part 2: a sync memo created in onSettled: PRIMITIVE_IN_FORBIDDEN_SCOPE only; SC7002 uncertifiable `creation-throws-first`. Generated program `mx-sync-node-received-async-settled-memo-direct-none` (differential fuzzer, generator 2).",
+  "haltMarker": true,
+  "steps": []
+}

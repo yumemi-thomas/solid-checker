@@ -173,10 +173,10 @@ describe("halted claims (coordinator's ruling, Part 17; ADR 0900)", () => {
 
 describe("the misuse grid's judge, off the site", () => {
   it("a stacked violation is a stacked-claim for a proved pair and a false positive for any other (stacked-pairs.json)", () => {
-    const halted = run([event("PRIMITIVE_IN_EFFECT_CALLBACK", 20)], undefined, { errors: [{ kind: "page-error", message: "boom", positions: [] }] });
-    const proved = judge({ code: "STRICT_READ_UNTRACKED", site, typecheck: { ok: true }, checker: { ok: true, findings: [finding("missing-owner", 20)] }, runtime: halted, built });
+    const halted = run([event("NO_OWNER_CONTEXT", 20)], undefined, { errors: [{ kind: "page-error", message: "boom", positions: [] }] });
+    const proved = judge({ code: "STRICT_READ_UNTRACKED", site, typecheck: { ok: true }, checker: { ok: true, findings: [finding("missing-context-provider", 20)] }, runtime: halted, built });
     expect(proved.outcome).toBe("stacked-claim");
-    expect(proved.detail).toMatchObject({ primary: "not-fired", pairs: ["PRIMITIVE_IN_EFFECT_CALLBACK|missing-owner"], at: [20] });
+    expect(proved.detail).toMatchObject({ primary: "not-fired", pairs: ["NO_OWNER_CONTEXT|missing-context-provider"], at: [20] });
     const unproved = judge({ code: "STRICT_READ_UNTRACKED", site, typecheck: { ok: true }, checker: { ok: true, findings: [finding("flush-in-effect-callback", 20)] }, runtime: halted, built });
     expect(unproved.outcome).toBe("false-positive");
     expect(unproved.detail).toMatchObject({ primary: "not-fired", rules: ["flush-in-effect-callback"], at: [20] });

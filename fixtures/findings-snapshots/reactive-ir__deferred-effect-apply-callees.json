@@ -134,7 +134,8 @@
     {
       "rule": "sync-computation-received-async",
       "code": "SC7002",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "creation-throws-first",
       "severity": "error",
       "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
       "start": 891,
