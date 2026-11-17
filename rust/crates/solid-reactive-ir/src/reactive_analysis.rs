@@ -697,6 +697,8 @@ pub(crate) fn collect_project<'facts>(
     // well as a method: the call is the use, and its row names the census.
     // ADR 0875: the row names the site that holds it.
     let mut holders = None;
+    // ADR 0939: the program's first open write of each key, built once on the first call that needs it.
+    let mut root_writes = None;
     let files = ctx.semantic_lookup.file_slots();
     // The draft's withheld calls (asked once per call); a draft built without
     // them asks here.
@@ -740,7 +742,10 @@ pub(crate) fn collect_project<'facts>(
                 })
                 .and_then(|name| {
                     let member = name.rsplit_once('.').map_or(name, |(_, member)| member);
-                    crate::base::contributions::handed_root_detail(files, member)
+                    let writes = root_writes.get_or_insert_with(|| {
+                        crate::base::contributions::handed_root_writes(files)
+                    });
+                    crate::base::contributions::handed_root_detail_in(writes, member)
                 });
             if let Some(detail) = root_detail.or_else(|| {
                 file.ast
