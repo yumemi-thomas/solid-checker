@@ -1,0 +1,5 @@
+{
+ "note": "ADR 1030: the pattern lane's programs proved by a violation of every code Chrome reported, recorded from a run on main (`node scripts/fuzz/patterns.mjs --record-proved`). A run that no longer proves one fails the lane unless a row of `changes` ({ ids, adr, why }) names it. Never removed by a run.",
+ "ids": [],
+ "changes": []
+}
