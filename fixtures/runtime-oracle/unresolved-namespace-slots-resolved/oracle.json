@@ -1,0 +1,1 @@
+{"note": "ADR 1054: each copy of a Solid export (namespace slot, member const, import alias, closed holder) runs the export: SYNC_NODE_RECEIVED_ASYNC per memo, MISSING_EFFECT_FN at the slot effect, NO_OWNER_CLEANUP at the module-scope cleanup."}

@@ -25835,5 +25835,11 @@
   "found": "Fable's review of 14434c30f; Mac 21's probe (checker and Chrome rc.21: SC7001 static-only)",
   "fixed": "ADR 1020 fourth cut (site_reach.rs crosses_creation_below_returned_value, UnreachedSite::returned_value_creation; every rule)",
   "outside": "Not generated: no grid writes a creation inside a function a compute returns (the apply-void-call contexts write the site directly in the returned closure, where the claim stands). Pinned by fixture returned-closure-unrun (CreatedInReturnedMemo, CreatedInReturnedEffect: violations on 14434c30f, uncertifiable here; Chrome rc.21 covered-uncertifiable)."
+ },
+ {
+  "finding": "with solid-js unresolved (SC9012 import-unresolved), a copy of a Solid export (`const { createMemo: m } = S`, `const m = S.createMemo`, `const m = createMemo`, a closed holder's member) was still named after the module specifier: SC7002, SC7001, SC4001, SC3001 proved by name",
+  "found": "Mac 21's review of ADR 1020 (an unresolved probe program: SC7002 at a destructured createMemo)",
+  "fixed": "ADR 1054 (`symbols.rs` `import_binding_declared` in `add_solid_import_names`)",
+  "outside": "Not generated: every grid program sits under the pinned install, and TypeScript climbs past a program's own shadowing `node_modules/solid-js/package.json` to the install's package, so no program has solid-js unresolved (a generated `unres-` binding was tried: all 912 resolved). Pinned by fixture reactive-ir/unresolved-namespace-slots (violations on 5780918b8, SC9012 only here) and its resolved twin."
  }
 ]
