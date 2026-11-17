@@ -4,6 +4,6 @@
 
 Uncertifiable, each a violation on main: `FreshChildNodes`, `FreshQueryAction`, `FreshQueryFlush`.
 
-Violations kept: `DocumentQuery` (`document.querySelectorAll`: the document may hold any element; a known false positive, ledgered, ADR 1033), `BodyChildNodes`, `CustomElementChildNodes` (`x-card` may be a custom element whose constructor appends children), `NamedNode` (a held node given a child), `ShadowedDocument` (a local `document`), and the fragment cases (`document.createDocumentFragment()` has no resolved declaration here: a known false positive, docs/open-work.md).
+Violations kept: `DocumentQuery` (`document.querySelectorAll`: a real page may hold such elements, so the site may run; right, ledgered `explained`), `BodyChildNodes`, `CustomElementChildNodes` (`x-card` may be a custom element whose constructor appends children), `NamedNode` (a held node given a child), `ShadowedDocument` (a local `document`), and the fragment cases (`document.createDocumentFragment()` has no resolved declaration here: a known false positive, docs/open-work.md).
 
 Chrome: `fixtures/runtime-oracle/dead-site-nodelist` (quiet) and `-live` (2 of 2 covered). Stubs: `dead-site-empty-collection`'s. `tsc --noEmit` clean.
