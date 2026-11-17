@@ -24892,5 +24892,16 @@
    "mx-on-flush-in-owned-scope-pos-class-ctor-x-direct-none"
   ],
   "rediscovered": "main 993e83f74: recall-gap (uncertifiable, `function-run-unplaced`) on each; ADR 1022's build: agree"
+ },
+ {
+  "finding": "a recall gap: `onCleanup` (and `createEffect`, a boundary, a settled cleanup, `useContext`) in the body of a `for await` in an async compute runs past the loop's suspension with no owner, Chrome warns, and the checker answered uncertifiable: the dominance proofs did not read a `for await` as a suspension",
+  "found": "Mac 21's corpus and grid study (slice 3, after-await), ADR 1038",
+  "fixed": "ADR 1038 (`body_roles.rs` `for_await_body_suspension` in `dominating_await_before`)",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "mx-no-owner-cleanup-memo-async-for-await-x-alias-chain-13"
+  ],
+  "rediscovered": "main 0a03da1a2 recall-gap, this build agree (397 programs of each of `memo-async-for-await` and `effect-async-for-await`, 313 of `async-for-await`); the four contexts \u00d7 every code: 6,993 recall-gap to agree, lg-recall 6,366 uncertifiable to clean, nothing needs a look"
  }
 ]

@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1038: the body of a `for await` runs only after the loop's first `next()` was awaited, so it is past a suspension with no owner: a write there is no REACTIVE_WRITE_IN_OWNED_SCOPE (`WriteInBody`, quiet, clean) and `onCleanup` there warns NO_OWNER_CLEANUP (`CleanupInBody`). The iterable is evaluated before the suspension (`WriteInIterable`: a violation Chrome reports); a `finally` around the loop and code after it are not this ADR's region."
+}

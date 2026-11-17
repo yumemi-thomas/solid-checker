@@ -452,18 +452,34 @@ pub(crate) fn follows_dominating_await(file: &solid_facts::FileFacts, span: Span
     dominating_await_before(file, span).is_some()
 }
 
-/// [`follows_dominating_await`]'s proof: the `await` itself.
+/// [`follows_dominating_await`]'s proof: the `await` itself, or (ADR 1038) the suspension of the `for await` whose body holds `span`.
 pub(crate) fn dominating_await_before(file: &solid_facts::FileFacts, span: Span) -> Option<Span> {
     let function = continuation_function(file, span)?;
+    let own = |at: Span| {
+        containing_ast_function(&file.ast, at).is_some_and(|owner| owner.span == function.span)
+    };
     file.ast
         .dominating_awaits
         .iter()
-        .find(|(awaited, region)| {
-            region.contains(span)
-                && containing_ast_function(&file.ast, *awaited)
-                    .is_some_and(|owner| owner.span == function.span)
-        })
+        .find(|(awaited, region)| region.contains(span) && own(*awaited))
         .map(|(awaited, _)| *awaited)
+        .or_else(|| for_await_body_suspension(file, span).filter(|suspension| own(*suspension)))
+}
+
+/// ADR 1038: the suspension of the `for await` statement whose body holds `span`. The loop awaits the
+/// iterator's first `next()` before the body runs, so every body run follows that await. The facts record a `for await`'s suspension as an implicit one
+/// that starts where its loop statement starts and ends with the iterable (`AstFacts::implicit_suspensions`, `loop_statements`): the region is the rest
+/// of the loop. A `yield*` or an `await using` starts where no loop does. What follows the loop, a `catch` or `finally` around it, and the iterable
+/// itself are not in the region (a synchronous throw of the iterable reaches a `catch` unsuspended).
+fn for_await_body_suspension(file: &solid_facts::FileFacts, span: Span) -> Option<Span> {
+    let ast = &file.ast;
+    ast.implicit_suspensions.iter().copied().find(|suspension| {
+        ast.loop_statements.iter().any(|loop_statement| {
+            loop_statement.start == suspension.start
+                && loop_statement.end > suspension.end
+                && Span::new(suspension.end, loop_statement.end).contains(span)
+        })
+    })
 }
 
 /// The async, non-generator function whose continuation `span` would run in,

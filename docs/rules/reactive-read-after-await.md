@@ -183,10 +183,12 @@ Each of these keeps it from applying:
   assigned member, a forwarded callback, ADR 0850);
 - a `.then` whose result is dropped, or a `setTimeout`/`queueMicrotask`
   callback (a deferred callback is not on the continuation's stack).
-- a read inside or after `for await` (or after `await using`) is an
-  uncertifiable obligation, not a violation: the loop suspends before its body
-  and after it (its suspension ends with the iterable), but whether the body
-  runs, and its position against an `await` the facts model, is not proven.
+- a read after `for await` (or after `await using`) is an uncertifiable
+  obligation, not a violation: whether it runs past the loop's suspension is
+  not proven the way an `await`'s dominance is. The loop's body is: it runs
+  only after the first `next()` was awaited, so the proofs that ask whether
+  code follows an await read it as they read the rest of an await's block
+  ([ADR 1038](../decisions.md#adr-1038)).
   Member reads, callbacks and helpers reached there are obligations too.
 
 **The feasible-path premise.** A read is reported where the code is written to

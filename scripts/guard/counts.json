@@ -9,7 +9,7 @@
   "SC1001 client-root-unproven": 1,
   "SC1001 compiler-refused-file": 1,
   "SC1001 component-identity-unproven": 136,
-  "SC1001 function-run-unplaced": 1486,
+  "SC1001 function-run-unplaced": 1483,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
   "SC1001 mount-form-window": 2,
@@ -47,7 +47,7 @@
   "SC1007 unchecked-native-handler-value": 2,
   "SC2001 binding-before-initialization": 3,
   "SC2001 component-identity-unproven": 9,
-  "SC2001 function-run-unplaced": 474,
+  "SC2001 function-run-unplaced": 476,
   "SC2001 function-unentered": 10,
   "SC2001 lazy-compute-unread": 7,
   "SC2001 owned-write-option-unread": 4,
@@ -126,7 +126,7 @@
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 13,
-  "SC4001 owner-varies-by-caller": 84,
+  "SC4001 owner-varies-by-caller": 85,
   "SC4001 package-finding-at-entry": 68,
   "SC4001 unreached-dead-code": 2,
   "SC4002 component-identity-unproven": 2,
@@ -2702,6 +2702,19 @@
     "open": "reactive-ir/route-entries"
    },
    "note": "the route components of the audited router’s `createRouter({ routes })` (ADR 0335’s premises), every reference a route definition’s `component` or a tag, and the inline arrows written as one: the router renders each with `createComponent` in the route’s outlet, under an owner (Chrome rc.21, oracle case `route-entry-owner`). The rows left are the fixture’s escapes; `route-entries` keeps `Shared`, `Preloaded` and the exported `Home` open."
+  },
+  {
+   "fixture": "reactive-ir/after-await-exact-callbacks",
+   "key": "SC1001 function-run-unplaced",
+   "from": 5,
+   "to": 2,
+   "adr": "ADR 1038",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/body_roles.rs::for_await_body_suspension",
+   "fixtures": {
+    "proved": "reactive-ir/after-await-exact-callbacks",
+    "open": "reactive-ir/after-await-exact-callbacks"
+   },
+   "note": "the strict reads in the body of a `for await` (`ObjectSlotForAwait`, `ObjectSlotForAwaitLayers`) run past the loop's suspension with no observer: no strict read; SC1002's rows at them stay uncertifiable."
   }
  ],
  "renames": []
