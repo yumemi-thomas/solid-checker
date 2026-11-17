@@ -29,7 +29,7 @@ describe("stackedSplit with twins", () => {
   });
   it("a twin settles no claim of any other kind: a first-throw stack, an unproved pair, a disturbed run's repeat, a false positive", () => {
     const rows = [
-      { finding: "missing-owner@5", verdict: "stacked", first: "PRIMITIVE_IN_EFFECT_CALLBACK", why: "disturbed" },
+      { finding: "missing-context-provider@5", verdict: "stacked", first: "NO_OWNER_CONTEXT", why: "disturbed" },
       { finding: "strict-read-untracked@6", verdict: "stacked", first: "STRICT_READ_UNTRACKED", why: "repeat" },
       claim(`${RULE}@7`, { why: "disturbed-repeat" }),
       { finding: "flush-in-action@9", verdict: "false-positive" },
@@ -37,7 +37,7 @@ describe("stackedSplit with twins", () => {
     const twins = Object.fromEntries(rows.map((row) => [row.finding, { holds: true }]));
     const split = stackedSplit(rows, undefined, { twins });
     expect(split.twinned).toEqual([]);
-    expect(split.stacked.map((row) => row.finding)).toEqual(["missing-owner@5", `${RULE}@7`]);
+    expect(split.stacked.map((row) => row.finding)).toEqual(["missing-context-provider@5", `${RULE}@7`]);
     expect(split.wrong.map((row) => row.finding)).toEqual(["strict-read-untracked@6", "flush-in-action@9"]);
     expect(rows.map((row) => isRepeat(row))).toEqual([false, false, false, false]);
   });
@@ -73,7 +73,7 @@ describe("repeatTwins", () => {
     expect(request.built.neutral).toBe(true);
   });
   it("asks for no twin of a claim that is not a repeat of a repeat pair", () => {
-    expect(repeatTwins({ judged: [asked({ why: "disturbed-repeat" }), { finding: "missing-owner@5", verdict: "stacked", first: "PRIMITIVE_IN_EFFECT_CALLBACK", why: "disturbed" }], offSite: off, built, program })).toEqual([]);
+    expect(repeatTwins({ judged: [asked({ why: "disturbed-repeat" }), { finding: "missing-context-provider@5", verdict: "stacked", first: "NO_OWNER_CONTEXT", why: "disturbed" }], offSite: off, built, program })).toEqual([]);
   });
   it("refuses, and a refused claim never holds, where the first read cannot be told", () => {
     const refused = (judged, input = {}) => repeatTwins({ judged, offSite: off, built, program, ...input }).map((request) => request.refused);

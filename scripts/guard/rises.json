@@ -3994,6 +3994,14 @@
    "to": 1,
    "adr": "ADR 1052",
    "fact": "an earlier check Solid makes at the same call throws first (SC6002 at an effect created on an apply's stack, SC3001's refusal on a leaf caller's run): the owner row is uncertifiable creation-throws-first"
+  },
+  {
+   "fixture": "reactive-ir/deferred-effect-apply-callees",
+   "key": "SC7002 creation-throws-first",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1052",
+   "fact": "part 2: an SC6002 violation at a sync memo's creation (the effect-callback guard) throws before the result probe: SC7002 uncertifiable creation-throws-first"
   }
  ]
 }

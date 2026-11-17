@@ -99,6 +99,50 @@ pub(crate) fn mark(program: &mut Program) {
             requirement.earlier_check_throws = true;
         }
     }
+    // SC7002 claims the creation reaches its result probe (SYNC_NODE_RECEIVED_ASYNC), which comes after every creation guard.
+    // An earlier check proven to throw at the creation (`effect_guarded`, `leaf_refused`) ends the call first, and so may
+    // SC6002's `effect-owner-unproven` obligation: a caller of the creation runs it in an apply with no owner proven. The
+    // accounting obligations (`effect-creation-unaccounted`, `leaf-operation-unaccounted`) name no caller and prove nothing:
+    // taking them cost 964 smoke programs Chrome reports SYNC_NODE_RECEIVED_ASYNC at.
+    let creation_may_throw: Vec<Location> = program
+        .static_violations
+        .iter()
+        .filter(|violation| {
+            violation.id == "SC6002"
+                && violation.uncertain
+                && crate::blocked_by::blocked_kind(&violation.analysis_context)
+                    == Some(crate::blockers::EFFECT_OWNER_UNPROVEN)
+        })
+        .map(|violation| violation.location.clone())
+        .chain(effect_guarded.iter().cloned())
+        // A leaf refusal counts only at a call written in the leaf callback itself, whose every run it refuses: one reached
+        // through a helper refuses that caller's run alone, and another caller (a render) may reach the probe first.
+        .chain(
+            program
+                .leaf_operations
+                .iter()
+                .filter(|operation| {
+                    !operation.uncertain && !operation.possible && operation.sites.is_empty()
+                })
+                .map(|operation| operation.location.clone()),
+        )
+        .collect();
+    for violation in &mut program.static_violations {
+        if violation.id != "SC7002" || violation.uncertain {
+            continue;
+        }
+        if creation_may_throw
+            .iter()
+            .any(|refused| same_call(refused, &violation.location))
+        {
+            violation.uncertain = true;
+            violation.analysis_context = crate::blockers::with_detail(
+                crate::blockers::CREATION_THROWS_FIRST,
+                &violation.analysis_context,
+            );
+            violation.message.push_str("; but a check Solid makes earlier at this creation (the effect-callback guard or a leaf owner's refusal) may throw first, so the result probe is not proven to be reached");
+        }
+    }
     for operation in &mut program.leaf_operations {
         if operation.uncertain || operation.possible {
             continue;

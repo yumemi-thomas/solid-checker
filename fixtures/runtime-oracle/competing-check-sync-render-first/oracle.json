@@ -1,0 +1,5 @@
+{
+  "note": "ADR 1052, part 2, negative: a helper a render and onSettled both call. The render runs it first and Chrome reports SYNC_NODE_RECEIVED_ASYNC; the refusal on onSettled's later run does not count, and SC7002 stays a violation. Generated program `mx-sync-node-received-async-settled-chain-placed-effect-direct-none` (differential fuzzer, generator 2).",
+  "haltMarker": true,
+  "steps": []
+}

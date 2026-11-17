@@ -1,0 +1,306 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 465,
+      "end": 477,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 465,
+      "end": 477,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 465,
+      "end": 477,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 510,
+      "end": 520,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 510,
+      "end": 520,
+      "fixes": 0
+    },
+    {
+      "rule": "sync-computation-received-async",
+      "code": "SC7002",
+      "kind": "uncertifiable",
+      "blocker": "creation-throws-first",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 510,
+      "end": 520,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 649,
+      "end": 663,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 649,
+      "end": 663,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 649,
+      "end": 663,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 696,
+      "end": 708,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 696,
+      "end": 708,
+      "fixes": 0
+    },
+    {
+      "rule": "sync-computation-received-async",
+      "code": "SC7002",
+      "kind": "uncertifiable",
+      "blocker": "creation-throws-first",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 696,
+      "end": 708,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 922,
+      "end": 941,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 922,
+      "end": 941,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 954,
+      "end": 964,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 954,
+      "end": 964,
+      "fixes": 0
+    },
+    {
+      "rule": "sync-computation-received-async",
+      "code": "SC7002",
+      "kind": "uncertifiable",
+      "blocker": "creation-throws-first",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 954,
+      "end": 964,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 1079,
+      "end": 1089,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 1079,
+      "end": 1089,
+      "fixes": 0
+    },
+    {
+      "rule": "sync-computation-received-async",
+      "code": "SC7002",
+      "kind": "uncertifiable",
+      "blocker": "creation-throws-first",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 1079,
+      "end": 1089,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 1466,
+      "end": 1476,
+      "fixes": 0
+    },
+    {
+      "rule": "sync-computation-received-async",
+      "code": "SC7002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 1466,
+      "end": 1476,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 1516,
+      "end": 1535,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 1516,
+      "end": 1535,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 1548,
+      "end": 1552,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 1689,
+      "end": 1699,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 1689,
+      "end": 1699,
+      "fixes": 0
+    },
+    {
+      "rule": "sync-computation-received-async",
+      "code": "SC7002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
+      "start": 1689,
+      "end": 1699,
+      "fixes": 0
+    }
+  ]
+}

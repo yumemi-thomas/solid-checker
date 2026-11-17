@@ -25236,5 +25236,19 @@
    "mx-missing-effect-fn-action-from-settled-cast-fn-direct-none"
   ],
   "rediscovered": "main a3ba1dd92: stacked-claim, tolerated by its pair in stacked-pairs.json; with the pair retired the judge scores it false-positive and `make fuzz-focus` fails (15 programs); ADR 1052's build: not-fired or agree, focus passes"
+ },
+ {
+  "finding": "a false positive: sync-computation-received-async at `createMemo(async, { sync: true })` created in an effect's apply or a leaf owner's callback: Solid throws PRIMITIVE_IN_EFFECT_CALLBACK or PRIMITIVE_IN_FORBIDDEN_SCOPE at the creation and never reaches the result probe",
+  "found": "ADR 1052's census of the stacked claims (R-stacked, 153 mx-census ids, main a3ba1dd92)",
+  "fixed": "ADR 1052 part 2 (`competing_checks.rs` `mark`: an SC6002 violation or `effect-owner-unproven` obligation, or an SC3001 violation written at the call, makes the SC7002 row uncertifiable `creation-throws-first`)",
+  "grid": "mx-census",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "mx-sync-node-received-async-effect-apply-memo-direct-none",
+   "mx-sync-node-received-async-rnd-handler-memo-direct-none",
+   "mx-sync-node-received-async-settled-memo-direct-none",
+   "mx-sync-node-received-async-tracked-memo-direct-none"
+  ],
+  "rediscovered": "the merge of ADR 1020's branch (14434c30f) and part 1: stacked-claim (30 programs, ledgered R-stacked); this build: not-fired, and the rows leave open-defects-rows.json, so the old build fails `make fuzz-focus` on them as unlisted stacked claims"
  }
 ]

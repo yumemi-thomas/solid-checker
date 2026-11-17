@@ -110,7 +110,7 @@
   "SC3001 function-run-unplaced": 35,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 7,
-  "SC3001 leaf-operation-unaccounted": 6709,
+  "SC3001 leaf-operation-unaccounted": 6716,
   "SC3001 leaf-owner-unproven": 67,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
@@ -124,7 +124,7 @@
   "SC4001 handler-member-unresolved": 39,
   "SC4001 handler-spread-unresolved": 59,
   "SC4001 owner-allocation-unproven": 23,
-  "SC4001 owner-callers-unenumerated": 3367,
+  "SC4001 owner-callers-unenumerated": 3371,
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 13,
@@ -184,7 +184,7 @@
   "SC5008 pending-read-unresolved": 23,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5081,
+  "SC6002 effect-creation-unaccounted": 5087,
   "SC6002 effect-owner-unproven": 35,
   "SC6002 function-run-unplaced": 49,
   "SC6002 generator-step-unplaced": 1,
@@ -198,7 +198,7 @@
   "SC7001 effect-runtime-entry-uncertain": 1,
   "SC7002 callee-callback-timing": 1,
   "SC7002 compute-return-unproven": 17,
-  "SC7002 creation-throws-first": 4,
+  "SC7002 creation-throws-first": 9,
   "SC7002 member-value-overridden": 6,
   "SC7002 package-finding-at-entry": 6,
   "SC7002 primitive-alias-call": 3,
@@ -2927,6 +2927,15 @@
     "open": "reactive-ir/after-await-exact-callbacks"
    },
    "note": "the strict reads in the body of a `for await` (`ObjectSlotForAwait`, `ObjectSlotForAwaitLayers`) run past the loop's suspension with no observer: no strict read; SC1002's rows at them stay uncertifiable."
+  },
+  {
+   "fixture": "reactive-ir/returned-closure-unrun",
+   "key": "SC7002 site-reach-undecided",
+   "from": 4,
+   "to": 3,
+   "adr": "ADR 1020",
+   "kind": "relabel",
+   "relabeledTo": "SC7002 creation-throws-first"
   }
  ],
  "renames": []
