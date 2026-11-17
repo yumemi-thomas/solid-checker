@@ -29,6 +29,9 @@ pub struct Snapshot {
     /// ADR 0947: the hazards the findings' `blockedBy.fired` ids name, each with the sites the census records.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hazards: Vec<solid_reactive_ir::blocked_by::HazardSites>,
+    /// ADR 1061: every blocker the analyses found, where the blocker census is on (`SOLID_CHECKER_BLOCKER_CENSUS=1`); empty otherwise.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blocker_census: Vec<solid_reactive_ir::blocker_census::CensusRow>,
     pub metrics: Metrics,
 }
 
@@ -1253,6 +1256,7 @@ pub fn unsupported_runtime_snapshot(
             fixes: Vec::new(),
         }],
         hazards: Vec::new(),
+        blocker_census: Vec::new(),
         metrics: Metrics {
             files_analyzed: 0,
             functions_analyzed: 0,
@@ -1331,6 +1335,7 @@ fn snapshot_of(sources: &[SourceFile], metrics: Metrics, findings: Vec<Finding>)
         status: status.into(),
         findings,
         hazards: Vec::new(),
+        blocker_census: Vec::new(),
         metrics,
     }
 }
@@ -1387,6 +1392,7 @@ fn attach_blocked_by(snapshot: &mut Snapshot, program: &Program) {
         .filter(|hazard| named.contains(&hazard.id))
         .cloned()
         .collect();
+    snapshot.blocker_census.clone_from(&program.blocker_census);
 }
 
 pub fn analysis_metrics(facts: &ProjectFacts, program: &Program) -> Metrics {

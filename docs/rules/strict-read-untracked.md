@@ -38,7 +38,7 @@ one, read by a member get, a call, a destructuring pattern, an iteration or an o
 tracks or places the read, is **uncertifiable** (`package-value-read:untracked` or `:unplaced`), never a
 violation. A package whose manifest names no Solid package is read as source nonetheless when its entry
 closure imports one (a package that forgot its peer): the same read of its value is a violation or
-silent by its source. `docs/open-work.md` names what would win the rows back.
+silent by its source. `docs/open-work.md` names what would win the rows back. A call the reviewed reading of a package shows throws on every call returns no value, so no read of its result stands ([ADR 1063](../decisions.md#adr-1063): `@stylexjs/stylex` 0.19.0's `create`, `defineVars` and their kin).
 
 Such a value is followed forward through the program as well ([ADR 0998](../decisions.md#adr-0998)): a binding, a pattern,
 an assignment, a slot of a literal, a return, a parameter of a project function, a standard method's result, an export read in

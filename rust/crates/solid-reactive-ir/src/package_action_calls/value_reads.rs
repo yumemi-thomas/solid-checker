@@ -46,6 +46,10 @@ fn value_of(
     let ast = &file.ast;
     let span = ast.peel_ts_sugar_span(span);
     if let Some(call) = ast.call_at(span) {
+        // ADR 1063: a call the reviewed reading shows throws on every call returns no value: nothing read off it runs.
+        if crate::reviewed_api::call_always_throws(ctx, file, call) {
+            return None;
+        }
         return match origin_of(ctx, analyzed, file, bound, call.span, ORIGIN_DEPTH) {
             Origin::Package(declaration) => Some(declaration),
             _ => None,
@@ -208,6 +212,10 @@ fn flowed_rows(
         }
         let bound = import_bindings(ctx, file);
         for call in &file.ast.calls {
+            // ADR 1063: no value leaves a call that throws on every call.
+            if crate::reviewed_api::call_always_throws(ctx, file, call) {
+                continue;
+            }
             let Origin::Package(declaration) =
                 origin_of(ctx, analyzed, file, &bound, call.span, ORIGIN_DEPTH)
             else {

@@ -46,126 +46,161 @@ pub struct ReviewedPremise {
 /// ADR 1000: the file an import of the package loads is part of the reading. Each package's manifest is pinned (one digest per release: they differ in the version and
 /// dependency fields only; `type`, `main`, `module`, `exports`, `imports` and `browser` are the same in each), and so are both entries of `vitest` itself
 /// (`dist/index.js`, which names the chunk's `expect` and `vi`, and `index.cjs`, which only throws). A patched entry or `exports` map is no match.
-pub const PREMISES: &[ReviewedPremise] = &[ReviewedPremise {
-    id: "vitest-4.1",
-    entry: "vitest",
+pub const PREMISES: &[ReviewedPremise] = &[
+    STYLEX_0_19,
+    ReviewedPremise {
+        id: "vitest-4.1",
+        entry: "vitest",
+        files: &[
+            ReviewedFile {
+                package: "vitest",
+                path: "package.json",
+                sha256: &[
+                    "16e78981f0c4f0b28c7056c06c0d87ee7c65821c721915df941996437a4267a9",
+                    "7cd821c11d3dcf6b9f2a53bf06d8ba645d7dd0f6be846764917ee694cf3eafee",
+                    "a28126d97bcaf567da5bed69443b7f3bcd9a7a8c38c8b66e554686b6bb2c10e0",
+                ],
+            },
+            ReviewedFile {
+                package: "vitest",
+                path: "dist/index.js",
+                sha256: &["3986618dbcbbdc0a3e200e2a507a434ef6f13dd8cc20c234168edb7b16e98d29"],
+            },
+            ReviewedFile {
+                package: "vitest",
+                path: "index.cjs",
+                sha256: &["15a78ebcf7fc24ea0a829448d770ca486b7506fcf8fd696a2cbf8e17d25dc02b"],
+            },
+            ReviewedFile {
+                package: "vitest",
+                path: "dist/index.d.ts",
+                sha256: &["90ba95a763101bb61b8a799731a2ed60b5016b8135c1a2d5186862d4b534d4a1"],
+            },
+            ReviewedFile {
+                package: "vitest",
+                path: "dist/chunks/test.DNmyFkvJ.js",
+                sha256: &["f07fc8036b066834143b14748bd70c436a6a2f15f648455af8d3a003a4eafc94"],
+            },
+            ReviewedFile {
+                package: "vitest",
+                path: "dist/chunks/utils.BX5Fg8C4.js",
+                sha256: &["f7b093e5d0814fbf4a58675cd3448a7dea4359926cbc0d02f7621de3b5a1f498"],
+            },
+            ReviewedFile {
+                package: "@vitest/expect",
+                path: "package.json",
+                sha256: &[
+                    "40ce909a274d4945f5fe440d9a05fab5b3cef5d586cba04e8b00f6386b06e083",
+                    "583dee9a3567dbb562033ac3e08dbe64a97791f78e37a68f45137fe7a0594dfd",
+                    "bc566b4322c25920e82c2fcdea00c2154d8ef98dd30de6605c5f89ac0d607adc",
+                ],
+            },
+            ReviewedFile {
+                package: "@vitest/expect",
+                path: "dist/index.d.ts",
+                sha256: &["5c935b7fc4ddc1410ea1cd7cd4e35ed106a6e4920dd27a9480a40fd224359dc3"],
+            },
+            ReviewedFile {
+                package: "@vitest/expect",
+                path: "dist/index.js",
+                sha256: &["b177ca97952f1d65d3d2691edbc31ab1af56ac36b3cf08d7f56ad0ca69f07a45"],
+            },
+            ReviewedFile {
+                package: "@vitest/spy",
+                path: "package.json",
+                sha256: &[
+                    "8d00db5190169f01f7d83758802bbf0db2796a7e3b0700bb9808d2312b5820fa",
+                    "c45024b2d922d19dfc72f7f064c4184ad2e291bc37293e15a2cdc0fa88675ff5",
+                    "9ae07df2e84098cc2360a9e1563925e123c8740e4b7d158bab11fa20573d6516",
+                ],
+            },
+            ReviewedFile {
+                package: "@vitest/spy",
+                path: "dist/index.js",
+                sha256: &["125bd25008172821d8d88c96fa2ebd189d52bf1494302486669dde9a4bc5c62d"],
+            },
+            ReviewedFile {
+                package: "chai",
+                path: "package.json",
+                sha256: &["b1f1454787c0ebc1a4324822bd6080e12535b1ab379b2c49d4eb467623123476"],
+            },
+            ReviewedFile {
+                package: "chai",
+                path: "index.js",
+                sha256: &["5261e5ed7e75365c2a5d832c220ff409daf704a3088b5511de34694e881d5edb"],
+            },
+            ReviewedFile {
+                package: "@vitest/runner",
+                path: "package.json",
+                sha256: &[
+                    "349bce64ba4aaf8e0b0afcc21af521ed1ddec22ec06657c0eb838d1503d76ad8",
+                    "992f85c03e56ea4ce920b42a0ffe1bc140c0acd9df99562deb05f348d8408e23",
+                    "357e56773a82d3aa95bf920a54ea7f91575d02e6b156d9d7719ea485708e6837",
+                ],
+            },
+            ReviewedFile {
+                package: "@vitest/runner",
+                path: "dist/chunk-artifact.js",
+                sha256: &[
+                    "bf6af6d2f4469911879a67e83b8f9e7b20332cf42795032c53457b10ccc1c617",
+                    "c10a7a80fca65fb42e27eabf7655c5ce5ecf36e8aaeb1811499efd063df62556",
+                    "25a9a7575905cbd4811421f3211e498e55b6e7c303d0ed9722f21588b3a6fc2d",
+                ],
+            },
+            ReviewedFile {
+                package: "@vitest/runner",
+                path: "dist/index.js",
+                sha256: &["61a758d5e6d41e0928c92bfd5ab7152bde625d90b97a08b269dc5a0438485d35"],
+            },
+            ReviewedFile {
+                package: "@vitest/utils",
+                path: "package.json",
+                sha256: &[
+                    "c1e7a62430b76f5e65197ba2dbd2be65fed1f308f9b77288237167f1638f565f",
+                    "ee1321f307c5a293cea312b682e4c7b6afba2dc68e620e54ee30215e09165939",
+                    "60611b68702749e1da829d835b528bf5dfe6712e4d59be14d058fcb46cf7a6e8",
+                ],
+            },
+            ReviewedFile {
+                package: "@vitest/utils",
+                path: "dist/helpers.js",
+                sha256: &["1a5e6ae2acfeb0477419d8e5bee9f89b873b7ef8b20d13490ea95e20615cf1ec"],
+            },
+        ],
+    },
+];
+
+/// `stylex-0.19` (ADR 1063): in `@stylexjs/stylex` 0.19.0's runtime, both entries (`lib/es/stylex.mjs`, the `import` condition, and `lib/cjs/stylex.js`, `require`)
+/// define `create`, `createTheme`, `defineConsts`, `defineVars`, `defineMarker`, `defaultMarker`, `firstThatWorks`, `keyframes`, `positionTry`,
+/// `viewTransitionClass`, `unstable_conditional`, `unstable_defineVarsNested`, `unstable_defineConstsNested` and `unstable_createThemeNested` as functions whose
+/// whole body is `throw errorForFn(name)` (`new Error(…)`: the message names the Babel plugin that compiles the calls away), and export them under those names.
+/// A call of one returns no value. The declaration file is pinned too: the analysis names these by the declarations the compiler resolves in it.
+const STYLEX_0_19: ReviewedPremise = ReviewedPremise {
+    id: "stylex-0.19",
+    entry: "@stylexjs/stylex",
     files: &[
         ReviewedFile {
-            package: "vitest",
+            package: "@stylexjs/stylex",
             path: "package.json",
-            sha256: &[
-                "16e78981f0c4f0b28c7056c06c0d87ee7c65821c721915df941996437a4267a9",
-                "7cd821c11d3dcf6b9f2a53bf06d8ba645d7dd0f6be846764917ee694cf3eafee",
-                "a28126d97bcaf567da5bed69443b7f3bcd9a7a8c38c8b66e554686b6bb2c10e0",
-            ],
+            sha256: &["175af0021645f444babee4f1174c8d6beb2ea03a6e9b73875c24681782912dfb"],
         },
         ReviewedFile {
-            package: "vitest",
-            path: "dist/index.js",
-            sha256: &["3986618dbcbbdc0a3e200e2a507a434ef6f13dd8cc20c234168edb7b16e98d29"],
+            package: "@stylexjs/stylex",
+            path: "lib/es/stylex.mjs",
+            sha256: &["6b68bd82495f031829b35106798dd81bb307c5bf97180ee13b4ef56dddf05740"],
         },
         ReviewedFile {
-            package: "vitest",
-            path: "index.cjs",
-            sha256: &["15a78ebcf7fc24ea0a829448d770ca486b7506fcf8fd696a2cbf8e17d25dc02b"],
+            package: "@stylexjs/stylex",
+            path: "lib/cjs/stylex.js",
+            sha256: &["334ea707296b1c526dd611b4d5398f009649257f5d24978b27d93d050a479fd8"],
         },
         ReviewedFile {
-            package: "vitest",
-            path: "dist/index.d.ts",
-            sha256: &["90ba95a763101bb61b8a799731a2ed60b5016b8135c1a2d5186862d4b534d4a1"],
-        },
-        ReviewedFile {
-            package: "vitest",
-            path: "dist/chunks/test.DNmyFkvJ.js",
-            sha256: &["f07fc8036b066834143b14748bd70c436a6a2f15f648455af8d3a003a4eafc94"],
-        },
-        ReviewedFile {
-            package: "vitest",
-            path: "dist/chunks/utils.BX5Fg8C4.js",
-            sha256: &["f7b093e5d0814fbf4a58675cd3448a7dea4359926cbc0d02f7621de3b5a1f498"],
-        },
-        ReviewedFile {
-            package: "@vitest/expect",
-            path: "package.json",
-            sha256: &[
-                "40ce909a274d4945f5fe440d9a05fab5b3cef5d586cba04e8b00f6386b06e083",
-                "583dee9a3567dbb562033ac3e08dbe64a97791f78e37a68f45137fe7a0594dfd",
-                "bc566b4322c25920e82c2fcdea00c2154d8ef98dd30de6605c5f89ac0d607adc",
-            ],
-        },
-        ReviewedFile {
-            package: "@vitest/expect",
-            path: "dist/index.d.ts",
-            sha256: &["5c935b7fc4ddc1410ea1cd7cd4e35ed106a6e4920dd27a9480a40fd224359dc3"],
-        },
-        ReviewedFile {
-            package: "@vitest/expect",
-            path: "dist/index.js",
-            sha256: &["b177ca97952f1d65d3d2691edbc31ab1af56ac36b3cf08d7f56ad0ca69f07a45"],
-        },
-        ReviewedFile {
-            package: "@vitest/spy",
-            path: "package.json",
-            sha256: &[
-                "8d00db5190169f01f7d83758802bbf0db2796a7e3b0700bb9808d2312b5820fa",
-                "c45024b2d922d19dfc72f7f064c4184ad2e291bc37293e15a2cdc0fa88675ff5",
-                "9ae07df2e84098cc2360a9e1563925e123c8740e4b7d158bab11fa20573d6516",
-            ],
-        },
-        ReviewedFile {
-            package: "@vitest/spy",
-            path: "dist/index.js",
-            sha256: &["125bd25008172821d8d88c96fa2ebd189d52bf1494302486669dde9a4bc5c62d"],
-        },
-        ReviewedFile {
-            package: "chai",
-            path: "package.json",
-            sha256: &["b1f1454787c0ebc1a4324822bd6080e12535b1ab379b2c49d4eb467623123476"],
-        },
-        ReviewedFile {
-            package: "chai",
-            path: "index.js",
-            sha256: &["5261e5ed7e75365c2a5d832c220ff409daf704a3088b5511de34694e881d5edb"],
-        },
-        ReviewedFile {
-            package: "@vitest/runner",
-            path: "package.json",
-            sha256: &[
-                "349bce64ba4aaf8e0b0afcc21af521ed1ddec22ec06657c0eb838d1503d76ad8",
-                "992f85c03e56ea4ce920b42a0ffe1bc140c0acd9df99562deb05f348d8408e23",
-                "357e56773a82d3aa95bf920a54ea7f91575d02e6b156d9d7719ea485708e6837",
-            ],
-        },
-        ReviewedFile {
-            package: "@vitest/runner",
-            path: "dist/chunk-artifact.js",
-            sha256: &[
-                "bf6af6d2f4469911879a67e83b8f9e7b20332cf42795032c53457b10ccc1c617",
-                "c10a7a80fca65fb42e27eabf7655c5ce5ecf36e8aaeb1811499efd063df62556",
-                "25a9a7575905cbd4811421f3211e498e55b6e7c303d0ed9722f21588b3a6fc2d",
-            ],
-        },
-        ReviewedFile {
-            package: "@vitest/runner",
-            path: "dist/index.js",
-            sha256: &["61a758d5e6d41e0928c92bfd5ab7152bde625d90b97a08b269dc5a0438485d35"],
-        },
-        ReviewedFile {
-            package: "@vitest/utils",
-            path: "package.json",
-            sha256: &[
-                "c1e7a62430b76f5e65197ba2dbd2be65fed1f308f9b77288237167f1638f565f",
-                "ee1321f307c5a293cea312b682e4c7b6afba2dc68e620e54ee30215e09165939",
-                "60611b68702749e1da829d835b528bf5dfe6712e4d59be14d058fcb46cf7a6e8",
-            ],
-        },
-        ReviewedFile {
-            package: "@vitest/utils",
-            path: "dist/helpers.js",
-            sha256: &["1a5e6ae2acfeb0477419d8e5bee9f89b873b7ef8b20d13490ea95e20615cf1ec"],
+            package: "@stylexjs/stylex",
+            path: "lib/es/stylex.d.ts",
+            sha256: &["ea52ff717cdb84e014a3f26f94bf322c191b5f49207adf3724fda0ac527e8d22"],
         },
     ],
-}];
+};
 
 /// The directory of the package `name` that Node finds from the directory `from`, canonical.
 fn package_dir(from: &Path, name: &str) -> Option<PathBuf> {
@@ -440,7 +475,11 @@ mod tests {
     fn published_vitest(directory: &Path) -> BTreeMap<String, PathBuf> {
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../../fixtures/reactive-ir/reviewed-vitest-4-1/node_modules");
-        for file in PREMISES[0].files {
+        let vitest = PREMISES
+            .iter()
+            .find(|premise| premise.id == "vitest-4.1")
+            .expect("the vitest premise");
+        for file in vitest.files {
             let below = Path::new("node_modules").join(file.package).join(file.path);
             let bytes = fs::read(fixture.join(file.package).join(file.path))
                 .unwrap_or_else(|error| panic!("{} {}: {error}", file.package, file.path));

@@ -25923,5 +25923,29 @@
   "found": "ADR 1059's coverage (the owner edge first made `object-member-initialization`'s TDZ case a violation), then a scratch oracle case on main 5780918b8 and ADR 1058's build",
   "fixed": "ADR 1059's review (`indexes/closed_members.rs` `initialized_before_every_use`: ADR 0351's index names a member only when every use of the binding runs after its declarator)",
   "outside": "the program throws a ReferenceError at the holder's call during the component's render, before any site runs, so no grid cell places a site there (the generator writes the holder before its uses); fixtures `stored-throw-returned-literal` (`LiteralBeforeDeclarator`, `BoxBeforeDeclarator`) and `owner-boxed-callers` (`BodyBeforeDeclarator`) and their oracle cases pin it: ADR 1058's build SC2007 static-only at both, this build uncertifiable, Chrome silent"
+ },
+ {
+  "finding": "not a defect: uncertifiable SC1001 `package-value-read` rows at reads of values `@stylexjs/stylex` 0.19.0's `create`, `defineVars` and their kin return, though those exports throw on every call and return no value (1,808 rows of the rc.21 corpus, inferay)",
+  "found": "R3's lever 7 (the package-value-read census of the rc.21 corpus)",
+  "fixed": "ADR 1063 (premise `stylex-0.19` in `solid-facts-backend/src/reviewed_packages.rs`, `reviewed_api::call_always_throws`, `value_reads.rs`)",
+  "outside": "the grids install no stylex (the fuzz installs hold Solid and the generator's own synthetic packages), and a reading pinned to stylex's published bytes holds for no generated package; fixtures `package-value-stylex` and `package-value-stylex-patched` pin the reading and its digest, and the corpus delta measures it"
+ },
+ {
+  "finding": "a function an effect's or a memo's compute returns by reference (`const f = () => …; return f`) or as a returned literal's member (`({ run: () => … })`) was not a returned value (ADR 1020): a sync memo it creates was a proved SC7002 where the apply only names the value (never runs) or calls it on its stack (Chrome rc.21: PRIMITIVE_IN_EFFECT_CALLBACK); a second path to the site (another caller) hid the returned-value path",
+  "found": "Fable's review of the ADR 1020 code (items 3 and 4)",
+  "fixed": "ADR 1062 (`site_reach.rs` `returned_value_holder`, `reachable_from_returned_value`)",
+  "grid": "lg-recall",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "lg-sync-node-received-async-apply-ref-value-untrack-memo-direct-none",
+   "lg-sync-node-received-async-apply-ref-value-untrack-memo-destructured-none",
+   "lg-sync-node-received-async-apply-ref-value-untrack-effect-direct-none",
+   "lg-sync-node-received-async-apply-ref-value-untrack-effect-destructured-none",
+   "lg-sync-node-received-async-apply-member-value-untrack-memo-direct-none",
+   "lg-sync-node-received-async-apply-member-value-untrack-memo-destructured-none",
+   "lg-sync-node-received-async-apply-member-value-untrack-effect-direct-none",
+   "lg-sync-node-received-async-apply-member-value-untrack-effect-destructured-none"
+  ],
+  "rediscovered": "New contexts apply-ref-{call,value}-untrack and apply-member-{call,value}-untrack (misuse.mjs APPLY_VOID_CONTEXTS, APPLY_VOID_UNRUN). `node scripts/fuzz/focus.mjs --codes SYNC_NODE_RECEIVED_ASYNC --grids lg-recall`: main fa8f33277 fails (120 unexecuted-violation, the -value- programs of both forms); this build passes, 0 legal violations. The second-path shape is pinned by fixture reactive-ir/returned-by-reference (R4, R5)."
  }
 ]

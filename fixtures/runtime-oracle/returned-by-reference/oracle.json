@@ -1,0 +1,1 @@
+{"note": "ADR 1062: a closure the compute returns by reference or as a returned literal's member, called by the apply, raises PRIMITIVE_IN_EFFECT_CALLBACK at the sync memo, never SYNC_NODE_RECEIVED_ASYNC; called in the body (C1) it raises SYNC_NODE_RECEIVED_ASYNC."}

@@ -59,8 +59,10 @@
 // - `unproven-clean`: no native finding of a rule claiming that code there.
 //   This is the defect class. A case TypeScript rejects against the real
 //   typings is `type-error` and proves nothing: fix the case.
-// Native violations with no diagnostic on their line are listed as
-// `static-only`: either a false positive or a site the steps did not reach.
+// A native violation that no diagnostic of a code claiming its rule covers (at its lines or an application frame) is
+// `code-mismatch` when Chrome raised another code on its lines, `static-only` otherwise (`no-runtime-code` for a rule no
+// code claims); either fails the case unless oracle.json's `open` ledgers it by `finding` with a kind, an owner and a
+// cause (`known-static`), ADR 1057.
 import { homedir } from "node:os";
 import { pinnedBrowser } from "./playwright-browser.mjs";
 import assert from "node:assert/strict";
@@ -460,6 +462,8 @@ const writeReasons = (writes) => (Array.isArray(writes) ? writes : []).flatMap((
 const reflectedOutcome = (writes) => !Array.isArray(writes) || writes.length === 0 || writeReasons(writes).length
   ? "unexpected" : writes.some((write) => write.observed === "lost") ? "defect" : "correct";
 
+// ADR 1057: the rules some runtime code claims; a violation of any other rule has no code to compare.
+const ruleCodes = new Set(Object.values(codeRules).flat());
 // The rule ids a behaviour may name: each code's rules, and each rule page (a rule with neither is not one the checker reports).
 const knownRules = new Set([
   ...Object.values(codeRules).flat(),
@@ -822,9 +826,10 @@ async function runCase(id, slot) {
   const excess = placelessExcess(findings.filter((finding) => finding.kind === "violation").map((finding) => ({ rule: finding.rule, file: finding.file, line: finding.line, column: finding.column, finding })),
     raised.map((row) => ({ code: row.code, file: caseFile(row.site.location.path) })), { only: fileJudgedCodes });
   const outnumbered = (finding) => fileJudgedCodes.some((code) => excess.get(`${code}|${finding.file}`)?.keys.has(siteKey({ file: finding.file, line: finding.line, column: finding.column })));
+  // ADR 1057: a diagnostic covers a violation only when its code claims the violation's rule; another code on the
+  // violation's lines (Solid's first throw there) is a code mismatch, never cover.
   const uncovered = findings.filter((finding) => finding.kind === "violation"
     && !["prefer-show", "prefer-for"].includes(finding.rule)
-    && !diagnostics.some((row) => row.file === finding.file && finding.line <= row.line && row.line <= finding.endLine)
     && !framed.some(({ rules, positions, wholeFile }) => rules.includes(finding.rule)
       && ((wholeFile === finding.file && !outnumbered(finding))
         || positions.some((position) => position.file === finding.file && finding.line <= position.line && position.line <= finding.endLine))));
@@ -835,6 +840,15 @@ async function runCase(id, slot) {
   // fires is stale and fails too, so a fix updates the list. A behavioural
   // observation is listed by its `rule` and `site` instead of a `code`.
   const open = new Map((spec.open ?? []).filter((entry) => entry.code).map((entry) => [`${entry.code} ${entry.site}`, entry.reason]));
+  // ADR 1057: a violation no diagnostic of its code covers, ledgered by `finding` ("<rule> <file>:<line>") with a `kind`
+  // (`false-positive`: Chrome contradicts it; `no-diagnostic`: a real defect Solid does not report; `unreached`: the steps do not
+  // reach it; `attribution`: the diagnostic is on another frame the oracle does not see), an owner and a one-line cause. Not a
+  // pass: listed, and stale (failing) once the violation is gone.
+  const KINDS = ["false-positive", "no-diagnostic", "unreached", "attribution"];
+  for (const entry of (spec.open ?? []).filter((entry) => entry.finding)) {
+    assert(KINDS.includes(entry.kind) && typeof entry.reason === "string" && typeof entry.owner === "string", `${id}: open finding ${entry.finding} needs a kind (${KINDS.join(", ")}), a reason and an owner`);
+  }
+  const knownFalsePositives = new Map((spec.open ?? []).filter((entry) => entry.finding).map((entry) => [entry.finding, `${entry.kind}: ${entry.reason} (owner ${entry.owner})`]));
   const openBehaviour = new Map((spec.open ?? []).filter((entry) => entry.rule).map((entry) => [`behaviour ${entry.rule} ${entry.site}`, entry.reason]));
   for (const row of diagnostics) {
     if (row.verdict === "unproven-clean" && open.has(`${row.code} ${row.file}:${row.line}`)) {
@@ -879,26 +893,37 @@ async function runCase(id, slot) {
       && finding.line <= row.line && row.line <= finding.endLine);
     const defect = evidence.some((row) => row.outcome === "defect");
     const correct = evidence.some((row) => row.outcome === "correct");
-    const classification = defect && correct ? "behaviour-conflict" : defect ? "behaviour-confirmed" : correct ? "behaviour-refuted" : "static-only";
-    return { ...finding, classification };
+    // ADR 1057: Chrome raised another code on the violation's lines and none of its rule: our claim never happens there.
+    const mismatched = diagnostics.filter((row) => row.file === finding.file && finding.line <= row.line && row.line <= finding.endLine).map((row) => row.code);
+    const claimed = ruleCodes.has(finding.rule);
+    const known = knownFalsePositives.get(`${finding.rule} ${finding.file}:${finding.line}`);
+    const classification = defect && correct ? "behaviour-conflict" : defect ? "behaviour-confirmed" : correct ? "behaviour-refuted"
+      : known !== undefined ? "known-static"
+      : mismatched.length && claimed ? "code-mismatch"
+      : claimed ? "static-only" : "no-runtime-code";
+    return { ...finding, classification, ...(mismatched.length ? { raised: [...new Set(mismatched)] } : {}), ...(known !== undefined ? { reason: known } : {}) };
   });
+  const staleFalsePositives = [...knownFalsePositives.keys()].filter((key) => !staticOnly.some((finding) => finding.classification === "known-static" && `${finding.rule} ${finding.file}:${finding.line}` === key));
   const staleBehaviour = [...openBehaviour.keys()].filter((key) => !behaviour.some((row) => row.verdict === "known-open" && `behaviour ${row.rule} ${row.site}` === key));
   const rows = [...diagnostics, ...behaviour];
   const verdict = typingErrors ? "type-error"
     : rows.some((row) => row.verdict === "unproven-clean") ? "unproven-clean"
-    : stale.length || staleBehaviour.length ? "stale-open"
+    : staticOnly.some((finding) => finding.classification === "code-mismatch") ? "code-mismatch"
+    : staticOnly.some((finding) => finding.classification === "static-only") ? "static-only"
+    : stale.length || staleBehaviour.length || staleFalsePositives.length ? "stale-open"
     : behaviour.some((row) => row.verdict === "behaviour-unexpected") || staticOnly.some((finding) => finding.classification === "behaviour-conflict") ? "harness-error"
     : rows.some((row) => row.verdict === "known-open") ? "known-open"
     : failure ? "harness-error"
     : rows.some((row) => row.verdict === "covered-uncertifiable") ? "covered-uncertifiable"
     // A refuted finding is a false-positive candidate: it is reported ahead of a covered verdict, never hidden under one.
     : behaviour.some((row) => row.verdict === "behaviour-refuted") ? "behaviour-refuted"
+    // ADR 1057: a ledgered violation no diagnostic of its code covers is listed ahead of the covered ones beside it.
+    : staticOnly.some((finding) => finding.classification === "known-static") ? "known-static"
     : diagnostics.length ? "covered-violation"
-    : staticOnly.some((finding) => finding.classification === "static-only") ? "static-only"
     : behaviour.some((row) => row.verdict === "behaviour-confirmed") ? "behaviour-confirmed"
     : behaviour.length ? "behaviour-clean" : "quiet";
   return {
-    id, verdict, note: spec.note ?? null, wallMs, executionCache: report.execution?.executionCache?.outcome ?? null, typingErrors, failure, stale: [...stale, ...staleBehaviour], diagnostics, behaviour, staticOnly, findings,
+    id, verdict, note: spec.note ?? null, wallMs, executionCache: report.execution?.executionCache?.outcome ?? null, typingErrors, failure, stale: [...stale, ...staleBehaviour, ...staleFalsePositives], diagnostics, behaviour, staticOnly, findings,
     unattributed: (report.execution?.diagnostics ?? []).filter((row) => !caseFile(row.site?.location?.path)).map((row) => row.code),
     pageErrors: (report.execution?.pageErrors ?? []).map((error) => error.message.slice(0, 200)),
     // What the page logged as an error (R3e, Part 16): a user effect logs the throw of its compute or of a computation it read
@@ -945,7 +970,8 @@ const executionCache = results.reduce((counts, row) => (row.executionCache ? { .
 writeFileSync(output, `${JSON.stringify({ solid: solidVersion, compilers, install, browser, cases: results.length, tally, executionCache, results }, null, 2)}\n`);
 console.log(JSON.stringify(tally));
 console.error(`browser halves: ${JSON.stringify(executionCache)}`);
-const failing = results.filter((row) => ["unproven-clean", "stale-open", "type-error", "harness-error"].includes(row.verdict));
+// ADR 1057: a violation no diagnostic of its own code covers fails unless it is ledgered (`known-static`).
+const failing = results.filter((row) => ["unproven-clean", "code-mismatch", "static-only", "stale-open", "type-error", "harness-error"].includes(row.verdict));
 for (const row of failing) {
   console.error(`${row.id}: ${row.verdict}`);
   for (const diagnostic of row.diagnostics ?? []) {
@@ -954,7 +980,13 @@ for (const row of failing) {
   for (const observation of row.behaviour ?? []) {
     if (["unproven-clean", "behaviour-unexpected"].includes(observation.verdict)) console.error(`  ${observation.rule} ${observation.site} (${observation.observation}: observed ${JSON.stringify(observation.observed)}; ${observation.verdict}${observation.error ? ": " + observation.error : ""})`);
   }
+  for (const finding of row.staticOnly ?? []) {
+    if (["code-mismatch", "static-only"].includes(finding.classification)) console.error(`  ${finding.classification} ${finding.rule} ${finding.file}:${finding.line}${finding.raised ? ` (Chrome raised ${finding.raised.join(", ")})` : ""}`);
+  }
   for (const key of row.stale ?? []) console.error(`  stale open entry: ${key}`);
   if (row.error) console.error(`  ${row.error.split("\n").slice(-3).join("\n  ")}`);
+}
+for (const row of results) for (const finding of row.staticOnly ?? []) {
+  if (finding.classification === "known-static") console.error(`known ${row.id} ${finding.rule} ${finding.file}:${finding.line}: ${finding.reason}`);
 }
 if (failing.length) process.exit(1);
