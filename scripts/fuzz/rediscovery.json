@@ -25099,5 +25099,53 @@
    "lg-on-flush-in-owned-scope-tbl-nodelist-foreach-zero-x-direct-none"
   ],
   "rediscovered": "main unexecuted (5 programs of the context, Chrome 5 of 5 never ran the site), `make fuzz-focus` fails (ADR 1018); this build uncertifiable, focus passes with the `tbl-nodelistof` rows ledgered `explained` (a real page may hold such elements: V is right, ADR 1033)"
+ },
+ {
+  "finding": "no defect: a recall gap. An owner operation in an IIFE or a closure written after a plain `yield` (`yield 1`) of an action's generator, the action called from an effect's apply (`action-plain-yield-from-apply`), was SC4001 `function-run-unplaced`: the owner graph's every-run test ended at the generator's first `yield`, though rc.21's action steps on at once after a value that is no thenable (`dist/dev.js:2365`). Chrome rc.21 reports NO_OWNER_EFFECT at each",
+  "found": "the G1 (`function-run-unplaced`) brief L4, the 2026-11-16 audit (run 43739577046): the `action-plain-yield-from-apply` context, ranked on main 2e2b60bb6",
+  "fixed": "ADR 1047 (`owners::action_resuming_yields`, `solid_facts::ast::every_unconditional_call_resuming`, asked by `owner_discovery`; `Dialect::action_step_resumes_after_plain_yield`)",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-action-plain-yield-from-apply-effect-direct-iife",
+   "mx-no-owner-effect-action-plain-yield-from-apply-effect-direct-closure"
+  ],
+  "rediscovered": "main 2e2b60bb6 recall-gap, this build agree: 2 of 2 (292 of the context's NO_OWNER_EFFECT programs move recall-gap to agree, Chrome agreeing on each)"
+ },
+ {
+  "finding": "no defect: a recall gap. An owner operation in an IIFE or a closure written after a plain `yield` (`yield 1`) of an action's generator, the action called from an effect's apply (`action-plain-yield-from-apply`), was SC4001 `function-run-unplaced`: the owner graph's every-run test ended at the generator's first `yield`, though rc.21's action steps on at once after a value that is no thenable (`dist/dev.js:2365`). Chrome rc.21 reports NO_OWNER_BOUNDARY at each",
+  "found": "the G1 (`function-run-unplaced`) brief L4, the 2026-11-16 audit (run 43739577046): the `action-plain-yield-from-apply` context, ranked on main 2e2b60bb6",
+  "fixed": "ADR 1047 (`owners::action_resuming_yields`, `solid_facts::ast::every_unconditional_call_resuming`, asked by `owner_discovery`; `Dialect::action_step_resumes_after_plain_yield`)",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_BOUNDARY",
+  "ids": [
+   "mx-no-owner-boundary-action-plain-yield-from-apply-errored-direct-iife",
+   "mx-no-owner-boundary-action-plain-yield-from-apply-errored-direct-closure"
+  ],
+  "rediscovered": "main 2e2b60bb6 recall-gap, this build agree: 2 of 2 (292 of the context's NO_OWNER_BOUNDARY programs move recall-gap to agree, Chrome agreeing on each)"
+ },
+ {
+  "finding": "no defect: a recall gap. An owner operation in an IIFE or a closure written after a plain `yield` (`yield 1`) of an action's generator, the action called from an effect's apply (`action-plain-yield-from-apply`), was SC4001 `function-run-unplaced`: the owner graph's every-run test ended at the generator's first `yield`, though rc.21's action steps on at once after a value that is no thenable (`dist/dev.js:2365`). Chrome rc.21 reports NO_OWNER_CLEANUP at each",
+  "found": "the G1 (`function-run-unplaced`) brief L4, the 2026-11-16 audit (run 43739577046): the `action-plain-yield-from-apply` context, ranked on main 2e2b60bb6",
+  "fixed": "ADR 1047 (`owners::action_resuming_yields`, `solid_facts::ast::every_unconditional_call_resuming`, asked by `owner_discovery`; `Dialect::action_step_resumes_after_plain_yield`)",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "mx-no-owner-cleanup-action-plain-yield-from-apply-x-direct-iife",
+   "mx-no-owner-cleanup-action-plain-yield-from-apply-x-direct-closure"
+  ],
+  "rediscovered": "main 2e2b60bb6 recall-gap, this build agree: 2 of 2 (146 of the context's NO_OWNER_CLEANUP programs move recall-gap to agree, Chrome agreeing on each)"
+ },
+ {
+  "finding": "no defect: a recall gap. An owner operation in an IIFE or a closure written after a plain `yield` (`yield 1`) of an action's generator, the action called from an effect's apply (`action-plain-yield-from-apply`), was SC4001 `function-run-unplaced`: the owner graph's every-run test ended at the generator's first `yield`, though rc.21's action steps on at once after a value that is no thenable (`dist/dev.js:2365`). Chrome rc.21 reports NO_OWNER_CONTEXT at each",
+  "found": "the G1 (`function-run-unplaced`) brief L4, the 2026-11-16 audit (run 43739577046): the `action-plain-yield-from-apply` context, ranked on main 2e2b60bb6",
+  "fixed": "ADR 1047 (`owners::action_resuming_yields`, `solid_facts::ast::every_unconditional_call_resuming`, asked by `owner_discovery`; `Dialect::action_step_resumes_after_plain_yield`)",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CONTEXT",
+  "ids": [
+   "mx-no-owner-context-action-plain-yield-from-apply-x-direct-iife",
+   "mx-no-owner-context-action-plain-yield-from-apply-x-direct-closure"
+  ],
+  "rediscovered": "main 2e2b60bb6 recall-gap, this build agree: 2 of 2 (146 of the context's NO_OWNER_CONTEXT programs move recall-gap to agree, Chrome agreeing on each)"
  }
 ]

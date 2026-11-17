@@ -1698,3 +1698,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/closed-literal-dispatch/node_modules/**
 !fixtures/reactive-ir/sync-option-overridden-member/node_modules/
 !fixtures/reactive-ir/sync-option-overridden-member/node_modules/**
+!fixtures/reactive-ir/action-plain-yield-layers/node_modules/
+!fixtures/reactive-ir/action-plain-yield-layers/node_modules/**

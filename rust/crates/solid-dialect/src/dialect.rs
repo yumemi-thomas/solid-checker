@@ -1065,6 +1065,16 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// ADR 1047: whether the stepped callback of `primitive` ([`Self::callback_runs_as_action_steps`]) runs its next step on
+    /// the same stack after a `yield` of a value that is not a thenable: the step that reached the `yield` hands the value
+    /// back synchronously, so the code after it runs within the same call of the returned function, under the same owner. A
+    /// thenable is assimilated instead and the next step runs from its continuation. The default claims nothing: every
+    /// `yield` is a suspension.
+    fn action_step_resumes_after_plain_yield(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        false
+    }
+
     /// Whether the `error` member of an exact effect bundle at `argument` of
     /// `primitive` (`{ effect, error }`) runs from the flush's error branch
     /// before the strict-read window opens, with no owner and no

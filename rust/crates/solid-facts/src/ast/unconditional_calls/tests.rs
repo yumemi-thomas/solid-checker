@@ -337,3 +337,35 @@ fn every_unconditional_call_answers_per_function() {
                   function* m() { f(); yield 1; g(); }\n";
     assert_eq!(every(source), ["a()", "c()", "d()", "e()", "f()"]);
 }
+
+/// ADR 1047: a `yield` the caller names as resuming at once is no suspension; every other `yield` still ends the first step.
+#[test]
+fn every_unconditional_call_resuming_skips_only_the_named_yields() {
+    let source = "export function* g() {\n  a();\n  yield 1;\n  b();\n  if (q) c();\n  yield p;\n  d();\n}\n";
+    let named = |text: &str| {
+        let start = source.find(text).expect("the yield");
+        Span::new(
+            u32::try_from(start).unwrap(),
+            u32::try_from(start + text.len()).unwrap(),
+        )
+    };
+    let calls = |resuming: HashSet<Span>| {
+        let mut calls = every_unconditional_call_resuming(Path::new("test.tsx"), source, &resuming)
+            .expect("parses")
+            .into_iter()
+            .collect::<Vec<_>>();
+        calls.sort_by_key(|span| span.start);
+        calls
+            .into_iter()
+            .map(|span| source[span.start as usize..span.end as usize].to_owned())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(calls(HashSet::new()), ["a()"]);
+    assert_eq!(calls(HashSet::from([named("yield 1")])), ["a()", "b()"]);
+    assert_eq!(
+        calls(HashSet::from([named("yield 1"), named("yield p")])),
+        ["a()", "b()", "d()"]
+    );
+    // A span that is no `yield` of the source changes nothing.
+    assert_eq!(calls(HashSet::from([named("a()")])), ["a()"]);
+}
