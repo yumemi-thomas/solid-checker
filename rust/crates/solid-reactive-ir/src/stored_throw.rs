@@ -1347,6 +1347,20 @@ fn element_prop_handled(
     {
         return false;
     }
+    // ADR 1043: a Solid-owned component that reads this prop only in a computation of its own, under an owner it creates below the element
+    // (`Dialect::component_entry`, ADR 0992: `Portal`'s `children`), renders it in place: a throw there ends where the element's does, and a
+    // boundary above the element (the lexical question above) takes it. A spread may replace the prop, and a function written between the element
+    // and `at` runs where the component calls it: neither is read so. `mount` is no such slot.
+    if element.spreads.is_empty()
+        && !file
+            .ast
+            .functions_owning(at)
+            .any(|function| element.span.contains(function.span))
+        && lookup.component_entry_of_tag(file, element, solid_dialect::ComponentSlot::Prop(prop))
+            == Some(solid_dialect::ComponentEntry::ReadTrackedUnderOwner)
+    {
+        return false;
+    }
     match crate::owners::element_primitive(lookup, file, element) {
         // `Errored` is the lexical question above.
         Some(

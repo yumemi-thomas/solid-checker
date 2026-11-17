@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1043: a component in `<Portal>`'s children renders in the Portal's own memo, so `useContext` with no provider there throws where the Portal renders: the page reports it (SC4002 violations at `InPortal`, `InNamespacePortal`, `InCalledChild`). A boundary above the Portal takes it (`UnderBoundary`), and a spread and `mount` are not read so (uncertifiable)."
+}

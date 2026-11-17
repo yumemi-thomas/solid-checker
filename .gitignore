@@ -1539,6 +1539,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/owner-call-jsx-getter/node_modules/**
 !fixtures/reactive-ir/portal-children-owner/node_modules/
 !fixtures/reactive-ir/portal-children-owner/node_modules/**
+!fixtures/reactive-ir/stored-throw-portal/node_modules/
+!fixtures/reactive-ir/stored-throw-portal/node_modules/**
 !fixtures/reactive-ir/lazy-entry-owner/node_modules/
 !fixtures/reactive-ir/lazy-entry-owner/node_modules/**
 !fixtures/reactive-ir/dynamic-component-owner/node_modules/
