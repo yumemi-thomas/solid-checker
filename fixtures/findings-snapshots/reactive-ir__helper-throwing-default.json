@@ -1,0 +1,58 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/helper-throwing-default/App.tsx",
+      "start": 653,
+      "end": 660,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/helper-throwing-default/App.tsx",
+      "start": 936,
+      "end": 943,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "site-reach-undecided",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/helper-throwing-default/App.tsx",
+      "start": 1256,
+      "end": 1263,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "site-reach-undecided",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/helper-throwing-default/App.tsx",
+      "start": 1590,
+      "end": 1597,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "site-reach-undecided",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/helper-throwing-default/App.tsx",
+      "start": 2013,
+      "end": 2020,
+      "fixes": 0
+    }
+  ]
+}

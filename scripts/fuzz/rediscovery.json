@@ -24810,5 +24810,14 @@
    "lg-on-flush-in-owned-scope-tbl-string-replace-zero-x-direct-none"
   ],
   "rediscovered": "main 993e83f74 unexecuted (the 39 `tbl-*-zero` contexts, the three codes: 195 programs, Chrome's sample 117 of 117 never ran the site), this build uncertifiable (185; the 10 `tbl-nodelist*-zero` programs stay, a stated remaining false positive). `make fuzz-focus` exits 0 on both builds: an `unexecuted` row is not gated until ADR 1018's oracle guard"
+ },
+ {
+  "finding": "a false positive of main (993e83f74): REACTIVE_WRITE_IN_OWNED_SCOPE proved (SC2001) at a write in a callback handed to a helper whose parameter default throws before its body (`(g, _gate = stopGate()) => { g(); }` called with one argument): the callback never runs; Chrome rc.21 has no diagnostic and the site never executes (judged `unexecuted`, so the audit never listed it). Reach analysis took the literal to run whenever its caller does",
+  "found": "W4's targeted scan for ADR 1017 (2026-11-17): 252 legal `gate-throw` programs gained a violation through a `dynamic` mount, and their directly mounted twins were already violations on main; W3's scan of every `unexecuted` violation of audit 43739577046 then counted 5,852 rows in `lg-recall` `gate-throw`",
+  "fixed": "ADR 1010 (`execution_role/site_reach.rs` `handed_past_live_default`, `callback_standing.rs` `defaults_run_no_code_at`)",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": ["lg-reactive-write-in-owned-scope-gate-throw-signal-direct-none", "lg-reactive-write-in-owned-scope-gate-throw-signal-alias-closure"],
+  "rediscovered": "main 993e83f74 violation (Chrome: no diagnostic, the site never executes: `unexecuted`), this build uncertifiable `site-reach-undecided`; 3,018 `gate-throw` programs move so, no other program of the 69,313 scanned"
  }
 ]

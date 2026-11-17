@@ -958,6 +958,62 @@ pub(crate) fn helper_argument_run(
     })
 }
 
+/// ADR 1010: whether no default of `callee`'s parameter list can run code before its body at `call`. A default runs whenever its
+/// argument is missing or `undefined`, before the body, and one that throws (`(g, gate = stop()) => g()`) ends the call there: the
+/// body, and every call of a parameter in it, never runs. A default is inert when it is a function literal, a primitive literal, `{}`,
+/// `[]` or `undefined`; any other default (a destructured parameter's own defaults included) needs an argument at its position written
+/// as a value that is never `undefined`: a function literal or a primitive literal. Anything else (no argument, a spread at or before
+/// it, a name or a call that may yield `undefined`) may run the default, and the run is not proven.
+pub(crate) fn defaults_run_no_code_at(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    callee_file: &solid_facts::FileFacts,
+    callee: &solid_facts::ast::FunctionFact,
+) -> bool {
+    let inert = |text: &str| {
+        let text = text.trim();
+        matches!(text, "{}" | "[]" | "undefined")
+            || crate::execution_role::primitive_literal_body(text)
+    };
+    let ast = &callee_file.ast;
+    callee
+        .parameters
+        .iter()
+        .enumerate()
+        .all(|(position, parameter)| {
+            // A parameter with no default runs nothing before the body: `None` here is that fact, not a missing one.
+            let default_inert = parameter.initializer.map(|initializer| {
+                let initializer = ast.peel_ts_sugar_span(initializer);
+                ast.function_at(initializer).is_some()
+                    || callee_file.source_text(initializer).is_some_and(inert)
+            }) != Some(false);
+            let pattern_inert = parameter.shape == solid_facts::ast::BindingShape::Identifier
+                || !callee_file
+                    .source_text(parameter.pattern)
+                    .unwrap_or("=")
+                    .contains('=');
+            if default_inert && pattern_inert {
+                return true;
+            }
+            if call
+                .arguments
+                .iter()
+                .take(position + 1)
+                .any(|argument| argument.spread)
+            {
+                return false;
+            }
+            let Some(argument) = call.arguments.get(position) else {
+                return false;
+            };
+            let value = file.ast.peel_ts_sugar_span(argument.span);
+            file.ast.function_at(value).is_some()
+                || file
+                    .source_text(value)
+                    .is_some_and(crate::execution_role::primitive_literal_body)
+        })
+}
+
 /// ADR 0931: how deep [`forwarded_parameter_uses`] follows a parameter handed
 /// on, as ADR 0285's forwards compose to a fixpoint.
 const FORWARDED_USES_DEPTH: usize = 16;
