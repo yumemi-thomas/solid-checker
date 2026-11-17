@@ -3890,6 +3890,14 @@
    "to": 2,
    "adr": "ADR 1014",
    "fact": "the slots are no longer withdrawn (tuple-iteration-written), so the row keeps the blocker of its own cause"
+  },
+  {
+   "fixture": "reactive-ir/fp-owner-nested-async-read",
+   "key": "SC1002 site-reach-undecided",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1020",
+   "fact": "a closure a memo compute returns, never called (typeof run() only reads the value): line 23 of ReturnedAsyncClosure is a site no run reaches; Chrome rc.21 reports nothing there (static-only on c2779cb39), and the fixture README itself lists it as a negative. ADR 1020 makes the reach query undecided there"
   }
  ]
 }

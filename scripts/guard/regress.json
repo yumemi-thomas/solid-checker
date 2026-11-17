@@ -1,4 +1,13 @@
 {
  "about": "Removals of proved violations on existing fixtures (ADR 0995; scripts/guard/regress.mjs). A violation the base held that a snapshot no longer holds (turned uncertifiable, or gone) needs a row: fixture, path, code, how many left that path, the ADR and why. Append-only; unnamed removals fail.",
- "regress": []
+ "regress": [
+  {
+   "fixture": "reactive-ir/fp-owner-nested-async-read",
+   "path": "fixtures/reactive-ir/fp-owner-nested-async-read/App.tsx",
+   "code": "SC1002",
+   "removed": 1,
+   "adr": "ADR 1020",
+   "why": "a closure a memo compute returns, never called (typeof run() only reads the value): line 23 of ReturnedAsyncClosure is a site no run reaches; Chrome rc.21 reports nothing there (static-only on c2779cb39), and the fixture README itself lists it as a negative. ADR 1020 makes the reach query undecided there"
+  }
+ ]
 }

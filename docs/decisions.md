@@ -3582,5 +3582,5 @@ Then the primitive's callback position is the only thing that runs it, as for a 
 
 *Not covered* (docs/open-work.md): whether program code calls the value a compute returned (`v()` in the apply, `m()()` on a memo) is not read, so a closure that is called stays uncertifiable.
 
-*Measured* (release, main c2779cb39 against this change; per-fix probe, owner's rule 2026-11-17): W3's 120 programs: all move violation to `site-reach-undecided`; a 2,000-program probe (600 programs of the `apply-void-value` contexts and a fixed-seed sample of the rest, legal included): 0 moved. The full grid and the corpus run once on the batch.
+*Measured* (release, main c2779cb39 against this change; per-fix probe, owner's rule 2026-11-17): W3's 120 programs: all move violation to `site-reach-undecided`; a 2,000-program probe (600 programs of the `apply-void-value` contexts and a fixed-seed sample of the rest, legal included): 0 moved. One fixture moves with it: `fp-owner-nested-async-read` line 23 (`ReturnedAsyncClosure`, the async closure `createMemo(() => async () => …)` returns, never called) was an SC1002 violation on main, `static-only` in Chrome rc.21 (nothing reported there) and listed by the fixture's own README as a negative; it is `site-reach-undecided` here, named in `scripts/guard/regress.json`. The full grid and the corpus run once on the batch.
 
