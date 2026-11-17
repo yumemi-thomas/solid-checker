@@ -108,3 +108,14 @@ test("the tooling identity names each package's manifest relative to the tooling
   assert.deepEqual(one, two);
   assert.equal(one[0].path, join("node_modules", "vite", "package.json"));
 }));
+
+test("the key's manifest keeps what was read and resolved, not the probes that found nothing", async () => {
+  const { keyManifest } = await import("../scripts/feedback-execution-cache.mjs");
+  const read = { kind: "readFile", path: "<<sc:project-root>>/App.tsx", arguments: [], result: "sha256:a" };
+  const found = { kind: "fileExists", path: "<<sc:tooling-root>>/node_modules/solid-js/package.json", arguments: [], result: true };
+  const a = { project: "p", inputs: [read, found, { kind: "directoryExists", path: "/a/node_modules", arguments: [], result: false }, { kind: "fileExists", path: "/a/x.d.ts", arguments: [], result: false }] };
+  const b = { project: "p", inputs: [read, { kind: "directoryExists", path: "/b/c/node_modules", arguments: [], result: true }, found] };
+  assert.deepEqual(keyManifest(a), keyManifest(b));
+  // A resolution that now reaches another file is a read of it: the key moves.
+  assert.notDeepEqual(keyManifest({ ...b, inputs: [...b.inputs, { kind: "readFile", path: "/b/node_modules/x/index.d.ts", arguments: [], result: "sha256:x" }] }), keyManifest(a));
+});

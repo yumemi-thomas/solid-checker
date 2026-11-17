@@ -201,7 +201,7 @@ const binaryHashes = new Map();
 export function binaryHash(path) {
   if (!path || !existsSync(path)) return "missing";
   const info = statSync(path);
-  const memo = `${path}\0${info.size}\0${info.mtimeMs}`;
+  const memo = `${path}\0${info.size}\0${info.mtimeMs}\0${info.ctimeMs}\0${info.ino}`;
   if (!binaryHashes.has(memo)) binaryHashes.set(memo, fileHash(path));
   return binaryHashes.get(memo);
 }

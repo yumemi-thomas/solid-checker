@@ -62,6 +62,17 @@ export function executionCacheKey(parts) {
   return sha256(JSON.stringify({ format: EXECUTION_CACHE_FORMAT, node: process.version, ...parts }));
 }
 
+/**
+ * ADR 1029: what of the TypeScript snapshot's input manifest the browser half depends on: every file read and every path resolved
+ * (`readFile`, `realpath`, a `fileExists` that found a file). A probe that found nothing (`fileExists` false) and a directory probe read
+ * nothing: they record where a checkout sits (the empty or absent `node_modules` of every directory up to the filesystem root), not the
+ * program. A probe that would find something now shows as a read of that file, so the key still moves with any file resolution reaches.
+ */
+export function keyManifest(manifest) {
+  if (!manifest || !Array.isArray(manifest.inputs)) return manifest;
+  return { ...manifest, inputs: manifest.inputs.filter(input => input.kind !== "directoryExists" && !(input.kind === "fileExists" && input.result === false)) };
+}
+
 /** An entry's runtime-input pins that no longer match the files on disk. */
 export function stalePins(pins) {
   return pins.filter(pin => !existsSync(pin.path) || sha256(readFileSync(pin.path)) !== pin.sha256);
