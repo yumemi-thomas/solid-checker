@@ -383,8 +383,8 @@
     },
     "rust/crates/solid-reactive-ir/src/execution_role/flow_helpers.rs": {
       "default-on-missing": {
-        "count": 1,
-        "why": "pending-review"
+        "count": 2,
+        "why": "pending-review (one hit); ADR 1009 review F1 `property_is_final_value`: `None => true` is a later property whose key has no static name, counted as one that MAY replace the member, so the property is not the final value and the proof that needs it (a closed bundle's hand-off, a receiver-free member) is refused: a missing key only makes the check more conservative"
       }
     },
     "rust/crates/solid-reactive-ir/src/execution_role/flow_memos.rs": {
@@ -513,6 +513,12 @@
       "name-only-match": {
         "count": 1,
         "why": "`eval` is a spelling used only to REFUSE a proof (a direct eval can reach any local binding without an identifier use): the true branch returns false/None/the unchanged slot, so a miss or a shadowing declaration only makes the check more conservative"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/indexes/components.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "a JSX attribute name is syntax, not a symbol; it only narrows which children are dead and keeps fallback/other props live"
       }
     },
     "rust/crates/solid-reactive-ir/src/indexes/compound.rs": {
@@ -717,6 +723,12 @@
       "default-on-missing": {
         "count": 1,
         "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/loading_entries.rs": {
+      "name-only-match": {
+        "count": 2,
+        "why": "`arguments` is a spelling used only to refuse a walk (ADR 1011: a callee body that reads the arguments object may run its parameter as `arguments[0]()`, which `parameter_uses` cannot see, so the true branch returns None and the walk takes no evidence from the body): it can never prove a boundary, and it adds nothing a member callee did not already have, which stays Unresolved; for an identifier callee the closure is read as part of the caller's function, as it was before ADR 1011. The second hit, `length`, is the property of a non-computed member read of that `arguments` (its count), which runs nothing: it only lets the walk read a body whose one use of `arguments` is `arguments.length` (ADR 1011: `argLen`, a violation of main that Chrome does not report)."
       }
     },
     "rust/crates/solid-reactive-ir/src/loading_hold.rs": {

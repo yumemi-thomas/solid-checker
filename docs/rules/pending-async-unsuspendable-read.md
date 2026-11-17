@@ -46,6 +46,8 @@ stack; a module-scope source suspends, and one nothing places is uncertifiable. 
 labelled `untrack(fn, "name")` opens a window of its own, in a handler too, and
 throws on any pending source (ADR 0628).
 
+A read in a function that is an object member is uncertifiable (ADR 0667), unless a closed `const` bundle hands that member to a primitive (`const bundle = { run: () => … }; onSettled(bundle.run)`, the object never passed, written, aliased or exported): it then runs where that primitive runs its callback ([ADR 1009](../decisions.md#adr-1009)).
+
 A read written directly in a named local function (`const f1 = () => {
 user(); }`), whose binding is never written, is read where a call of that
 function runs, through up to four such functions. A call in the component

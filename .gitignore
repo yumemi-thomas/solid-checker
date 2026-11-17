@@ -1267,6 +1267,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/walk-depth-bound/node_modules/**
 !fixtures/reactive-ir/stored-throw-value-mount/node_modules/
 !fixtures/reactive-ir/stored-throw-value-mount/node_modules/**
+!fixtures/reactive-ir/stored-throw-dynamic-mount/node_modules/
+!fixtures/reactive-ir/stored-throw-dynamic-mount/node_modules/**
 
 !fixtures/reactive-ir/rc21-listener-cross-file/node_modules/
 !fixtures/reactive-ir/rc21-listener-cross-file/node_modules/**
@@ -1613,6 +1615,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/loading-entries/node_modules/**
 !fixtures/reactive-ir/loading-entry-cover/node_modules/
 !fixtures/reactive-ir/loading-entry-cover/node_modules/**
+!fixtures/reactive-ir/loading-member-callee/node_modules/
+!fixtures/reactive-ir/loading-member-callee/node_modules/**
 !fixtures/reactive-ir/after-await-net/node_modules/
 !fixtures/reactive-ir/after-await-net/node_modules/**
 !fixtures/reactive-ir/after-await-then-handler/node_modules/
@@ -1651,3 +1655,6 @@ packages/wasm/owned/
 !fixtures/reactive-ir/after-await-handler-forms/node_modules/**
 !fixtures/reactive-ir/after-await-runner-callback/node_modules/
 !fixtures/reactive-ir/after-await-runner-callback/node_modules/**
+
+!fixtures/reactive-ir/dead-literal-rows/node_modules/
+!fixtures/reactive-ir/dead-literal-rows/node_modules/**

@@ -143,6 +143,8 @@ A named function a carrier provably runs at a tracked position reads there, with
 
 A source no fact proves async, a `lazy` tag, and a read in a method nothing places are uncertifiable, blocker `async-provenance-unproven` for the first two (ADRs 0665-0667). So is a source whose compute reads what it was handed (`createMemo(() => props.get())`) or names an async source in a function form: it is pending while that is, and a settled caller is not followed yet (ADR 0802). A hook's tuple slot is the accessor it names, so its read is proved or certified by that source (ADR 0801). A `Loading` covers what it holds, not what sits beside it (ADR 0668).
 
+A read in a function that is an object member is uncertifiable (ADR 0667), unless a closed `const` bundle hands that member to a primitive (`const bundle = { run: () => … }; onSettled(bundle.run)`, the object never passed, written, aliased or exported): it then runs where that primitive runs its callback ([ADR 1009](../decisions.md#adr-1009)).
+
 A flow element that is no JSX child and no component's return may never render, and rc.21 is silent then: its read is uncertifiable, blocker `carrier-run-unproven` (ADR 0892).
 
 A boundary the program enters by a call covers what Solid renders inside it (ADR 0978): the
@@ -156,6 +158,16 @@ edge places is uncertifiable (blocker `mount-unresolved`), never uncovered: the 
 of the props (a function-valued `children`, a method, `on`), an array element, a class element,
 a tag function, a closure handed to a call whose target the analysis does not resolve
 (`Loading.call(null, props)`, `[Loading][0](props)`, a wrapper's `props`).
+A closure handed to a call to a project function the analysis resolves exactly (an identifier callee whose binding nothing replaces, or a
+member it resolves exactly: a namespace import's member, ADR 1011) is read as part of the function around the call, and the callee's body is
+walked for its own boundary. It is covered when a `Loading` or `createLoadingBoundary` the callee writes holds every use of the parameter, or a
+chain of project functions that hand it on does (sixteen hand-offs at most). The read stays proven when any use runs the closure with no
+boundary around it (a callee that holds one call and runs another bare, a returned `() => cb()`), or no use shows a boundary. A parameter the
+callee stores, aliases, never calls or reads through `arguments`, an `async` or generator callee, a binding something writes or an initializer
+that is not the function (`const f = wrap((cb) => ..)`) leave what the walk knew before: the closure is part of the caller's function. A boundary
+on some uses with the rest not known leaves it uncertifiable, as do a callee the analysis does not resolve exactly (a method an assignment
+replaced, a function the component is handed), a re-exported namespace's member, a default import's method and a literal's method, whose closure
+no call edge places in the callee (blocker `call-attributed-read`).
 
 ## A render effect's own compute (ADR 0989)
 

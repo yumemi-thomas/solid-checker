@@ -5833,6 +5833,94 @@ impl LocalAccessContext<'_, '_> {
                     .iter()
                     .any(|tag| ast.reference_declaration(*tag) == Some(name.span))
             })
+            || self.handed_from_closed_bundle(file, function)
+    }
+
+    /// ADR 1009: the function is the value of a plain data property of a `const` object literal that nothing else can reach
+    /// or change, and every use of the object hands that property to a primitive as a whole argument
+    /// (`const cb = { run: () => … }; onSettled(cb.run)`). Then the primitive's callback position is the only place that
+    /// runs it, as it is for a function named by a `const`. The object is closed when the binding is a `const` identifier
+    /// whose initializer is the literal, it is not exported, and each reference to it is the object of a non-computed member
+    /// read of that one key, never a write target. An object passed, spread, returned, aliased or written anywhere, a
+    /// method, an accessor, a computed key and a `let` are not this.
+    fn handed_from_closed_bundle(
+        &self,
+        file: &solid_facts::FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+    ) -> bool {
+        use solid_facts::ast::BindingShape;
+        let ast = &file.ast;
+        let Some(property) = ast.object_properties.iter().find(|property| {
+            property.data
+                && !property.method
+                && !property.computed
+                && property.shorthand_binding.is_none()
+                && ast.peel_ts_sugar_span(property.value) == function.span
+        }) else {
+            return false;
+        };
+        // The member's final value (ADR 1009 review F1): a later spread, a later key with no static name or a later property of
+        // the same key may replace it, and then the primitive runs another function.
+        if !crate::execution_role::property_is_final_value(file, property) {
+            return false;
+        }
+        let Some(key) = file.source_text(property.key) else {
+            return false;
+        };
+        // The literal is the initializer itself: no other property's value lies between the binding and this property.
+        let Some(binding) = ast.bindings.iter().find(|binding| {
+            binding.immutable
+                && binding.shape == BindingShape::Identifier
+                && binding.names.len() == 1
+                && binding.initializer.is_some_and(|initializer| {
+                    let literal = ast.peel_ts_sugar_span(initializer);
+                    literal.contains(property.span)
+                        && file
+                            .source_text(literal)
+                            .is_some_and(|text| text.starts_with('{'))
+                        && !ast.object_properties.iter().any(|outer| {
+                            outer.span != property.span
+                                && literal.contains(outer.span)
+                                && outer.value.contains(property.span)
+                        })
+                        && !ast
+                            .array_literals
+                            .iter()
+                            .any(|array| literal.contains(*array) && array.contains(property.span))
+                })
+        }) else {
+            return false;
+        };
+        let name = binding.names[0].span;
+        // Both export questions: `binding_exported` reads `export { x as y }` and `export default x`, `flow_binding_exported` an
+        // exported declaration and a top-level binding of a script (global to every other script).
+        if crate::indexes::binding_exported(file, name)
+            || crate::execution_role::flow_binding_exported(file, name)
+        {
+            return false;
+        }
+        let mut handed = false;
+        for reference in ast.reference_identifiers_to(name) {
+            let Some(member) = ast.member_with_peeled_object(reference.span) else {
+                return false;
+            };
+            if ast.computed_members.binary_search(&member.span).is_ok()
+                || file.source_text(member.property) != Some(key)
+                || ast.any_write_target_containing(member.span)
+            {
+                return false;
+            }
+            let whole_argument = ast.arguments_containing(member.span).any(|(call, index)| {
+                !call.arguments[index].spread
+                    && ast.peel_ts_sugar_span(call.arguments[index].span) == member.span
+                    && self.lookup.primitive_at_call(file, call.span).is_some()
+            });
+            if !whole_argument {
+                return false;
+            }
+            handed = true;
+        }
+        handed
     }
 
     /// ADR 0667: a read of a possibly async source in a function nothing places:
@@ -5960,8 +6048,11 @@ impl LocalAccessContext<'_, '_> {
             // ADR 0667: an object method, a class member or a tag function has
             // no binding to follow to its calls: what runs it, and where, is
             // not known here.
+            // ADR 1009: an object member that a closed `const` bundle hands to a primitive is placed there.
             if depth == 0
-                && crate::execution_role::unplaced_run(file, site, self.lookup)
+                && crate::execution_role::unplaced_run_but(file, site, self.lookup, &|member| {
+                    self.handed_from_closed_bundle(file, member)
+                })
                 && !self.placed_elsewhere(file, function)
             {
                 self.push_unplaced_async_reads(file, read, name, declaration, &options, result);

@@ -690,6 +690,18 @@ impl<'a> SemanticLookup<'a> {
         element: &solid_facts::ast::JsxElementFact,
         slot: solid_dialect::ComponentSlot<'_>,
     ) -> Option<solid_dialect::ComponentEntry> {
+        let export = self.solid_export_of_tag(file, element)?;
+        self.dialect.component_entry(export, slot)
+    }
+
+    /// The export a tag names EXACTLY: its symbol has declarations, every one of them in one of the dialect's primitive-defining packages under one export name (a
+    /// project component of the same name, a shadowing local and an unresolved tag answer `None`; the spelling of the tag decides nothing). For a dotted tag
+    /// (`<S.Repeat>`) the property's symbol is the one asked.
+    fn solid_export_of_tag(
+        &self,
+        file: &FileFacts,
+        element: &solid_facts::ast::JsxElementFact,
+    ) -> Option<&str> {
         let component = element
             .member_property
             .and_then(|property| self.entities.at(file.path.as_str(), property))
@@ -697,13 +709,97 @@ impl<'a> SemanticLookup<'a> {
         let declarations = self.tag_declarations(component)?;
         let packages = self.dialect.primitive_defining_packages();
         let export = declarations.first()?.name.as_ref();
-        if !declarations.iter().all(|declaration| {
-            declared_in_package(declaration.location.path.as_ref(), packages)
-                && declaration.name.as_ref() == export
-        }) {
-            return None;
+        declarations
+            .iter()
+            .all(|declaration| {
+                declared_in_package(declaration.location.path.as_ref(), packages)
+                    && declaration.name.as_ref() == export
+            })
+            .then_some(export)
+    }
+
+    /// ADR 1015: the parts of `element`'s children that never run, because the element is a Solid-owned flow component
+    /// ([`Self::solid_export_of_tag`]) whose prop holds the literal the dialect says excludes them
+    /// ([`solid_dialect::Dialect::flow_children_exclusion`]): `For`'s `each={[]}`, `Repeat`'s `count={0}`, `Show`'s and `Match`'s `when={false}`. The prop must be
+    /// written once, with no namespace, as an expression holding exactly the literal (under parentheses and TypeScript assertions), and the element must carry no
+    /// spread (a spread may replace the prop). The answer is the function written as the children where only the function's body is excluded
+    /// ([`solid_dialect::ChildrenNever::RowFunction`]: `For` reads `props.children` once), and every child, and a `children` prop's expression, where the children are
+    /// never read. `fallback` is never one of them: the fallback runs exactly when the children do not.
+    pub(crate) fn flow_dead_children(
+        &self,
+        file: &FileFacts,
+        element: &solid_facts::ast::JsxElementFact,
+    ) -> Vec<Span> {
+        use solid_dialect::{ChildrenNever, ExcludingLiteral};
+        if !element.spreads.is_empty() {
+            return Vec::new();
         }
-        self.dialect.component_entry(export, slot)
+        let Some(export) = self.solid_export_of_tag(file, element) else {
+            return Vec::new();
+        };
+        let named = |attribute: &solid_facts::ast::JsxAttributeFact| {
+            if attribute.namespace.is_none() {
+                file.source_text(attribute.name)
+            } else {
+                None
+            }
+        };
+        let Some((exclusion, held)) = element.attributes.iter().find_map(|attribute| {
+            let prop = named(attribute)?;
+            let exclusion = self.dialect.flow_children_exclusion(export, prop)?;
+            // Written once: a second attribute of the same name would win or lose by order, which this does not decide.
+            let again = element
+                .attributes
+                .iter()
+                .filter(|other| named(other) == Some(prop))
+                .count();
+            (again == 1).then_some((exclusion, attribute))
+        }) else {
+            return Vec::new();
+        };
+        if held.value_kind != solid_facts::ast::JsxAttributeValueKind::Expression {
+            return Vec::new();
+        }
+        let Some(value) = held.expression else {
+            return Vec::new();
+        };
+        let Some(text) = file.source_text(file.ast.peel_ts_sugar_span(value)) else {
+            return Vec::new();
+        };
+        let excluded = match exclusion.literal {
+            ExcludingLiteral::EmptyArray => text == "[]",
+            ExcludingLiteral::Zero => text == "0",
+            ExcludingLiteral::False => text == "false",
+        };
+        if !excluded {
+            return Vec::new();
+        }
+        let children = element
+            .children
+            .iter()
+            .filter_map(|child| crate::execution_role::jsx_child_expression(file, *child))
+            .chain(
+                element
+                    .attributes
+                    .iter()
+                    .filter(|attribute| {
+                        attribute.namespace.is_none()
+                            && file.source_text(attribute.name) == Some("children")
+                    })
+                    .filter_map(|attribute| attribute.expression),
+            );
+        match exclusion.never {
+            ChildrenNever::Read => element
+                .children
+                .iter()
+                .copied()
+                .chain(children.map(|expression| file.ast.peel_ts_sugar_span(expression)))
+                .collect(),
+            ChildrenNever::RowFunction => children
+                .map(|expression| file.ast.peel_ts_sugar_span(expression))
+                .filter(|span| file.ast.function_at(*span).is_some())
+                .collect(),
+        }
     }
 
     pub(super) fn symbols_by_id(&self) -> &HashMap<&'a str, solid_facts::TypeScriptSymbol<'a>> {

@@ -24624,5 +24624,137 @@
   "found": "the coordinator's fifth probe, reading `receiver_is_a_nested_class_instance` (2026-11-16); run on the release build of 932a43c90, then the fixtures here (violation on that build, uncertifiable on the fix)",
   "fixed": "ADR 1014's second amendment, narrowed (`execution_role/callback_standing.rs` `receiver_is_a_nested_class_instance`: a constructor's body or a field's initializer only, no other non-arrow function between)",
   "outside": "the grid generators write a class in a literal's member only with a constructor that stores an arrow (the `handoff-assign-this-cb-bundle` cells, still proved) and never take a method off a prototype, so no cell holds the shape; the fixtures `iteration-written-slots/variants/handed-timer-callback-member-class-method` and `-class-field` hold it"
+ },
+ {
+  "finding": "no defect: a recall gap. A plain throw (`flush()` in `createTrackedEffect`) in a component mounted through `const D1 = dynamic(() => C1); <D1 />` was `computation-error-unobserved` since 666724c4a (ADR 0893 finished, in #173): only `Dynamic`'s `component` prop was read as a value mount, any other value use counted as handled. Chrome rc.21 reports the throw; the 11-05 audit had these programs agree. FLUSH_IN_TRACKED_QUEUE_CALLBACK is no coded diagnostic in rc.21, so no rule was broken",
+  "found": "W4's bisect of the lost violations between aa4702650 and 6e33e0b08 (2026-11-16), family C: 22 groups, 39 ids, all `-m-dynamic`",
+  "fixed": "ADR 1016 (`stored_throw.rs` `dynamic_mount_tags`, `dynamic_mount_end`, `dynamic_only_mounts`)",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
+  "ids": ["mx-flush-in-tracked-queue-callback-tracked-x-wrapper-none-m-dynamic", "mx-flush-in-tracked-queue-callback-tracked-rerun-x-wrapper-none-m-dynamic"],
+  "rediscovered": "the bundle measurement of claude/batch-2026-11-17 (d51fafacd against main 993e83f74, mx-recall, every program of FLUSH_IN_TRACKED_QUEUE_CALLBACK, checker against the kept runtime): both ids are recall-gap on main and agree on the bundle; 90 `-m-dynamic` programs of the code move recall-gap to agree, Chrome agreeing on each mover"
+ },
+ {
+  "finding": "a false positive of ADR 1016's first build b0bfc89fd (never on main): a plain throw (`flush()` in `createTrackedEffect`) in a component mounted through `const D = dynamic(() => C)` was proved (SC3001) where `<D />` is written but never renders: `<Show when={false}><D /></Show>`, `{false && <D />}`, `if (false) return <D />`, `<For each={[]}>{() => <D />}</For>`. Every tag counted as a mount; reach was not asked. Chrome rc.21 is silent (C never mounts)",
+  "found": "the bundle review of claude/batch-2026-11-17 (2026-11-17); then the fixture and the oracle case here (violation, Chrome `static-only`, on b0bfc89fd; uncertifiable and silent on the fix)",
+  "fixed": "ADR 1016 amended (`stored_throw.rs` `dynamic_mount_tags`: only tags `SiteReach` says may run count, ADRs 0458 and 1015)",
+  "outside": "the grid's `-m-dynamic` mount writes `<D1 />` in returned JSX only, never under a dead branch or a literal-dead flow child, so no cell holds the shape; the fixture `stored-throw-dynamic-mount` (`MountsNeverShown`, `MountsFalseAnd`, `MountsDeadReturn`, `MountsEmptyRows`) and the oracle case of the same name hold it"
+ },
+ {
+  "finding": "ASYNC_OUTSIDE_LOADING_BOUNDARY: 24 mx-recall programs, `module-ns` layer, contexts show / jsx / flush-iife / named-flush-call (6 each), lost their proved SC5003 violation to ADR 0978 (#234): a closure handed to `H.h1(cb)`, a member of a namespace import whose function calls it in the render, was read by `layer_cover` as handed to a call the analysis does not resolve (`function_called_at` names only an identifier callee), so the cover answered Unresolved and the finding became uncertifiable, blocker `mount-unresolved`. `agree` became `recall-gap`; the siblings reached through a named import, a default import, a barrel or `export *` kept their violation.",
+  "found": "the audit of main 78ddeb849 (CI run 43739577046) against the last green audit (aa4702650): the id-level comparison with the W audit of dfa6c5dec found 24 mx-recall ids agree there and recall-gap in the CI audit; bisected over the 29 first-parent merges dfa6c5dec..78ddeb849 to #234 (dbb5e7612); read with the proof log: the only difference at the site is SC5003 violation -> uncertifiable `mount-unresolved`.",
+  "fixed": "ADR 1011 (`loading_entries.rs` `layer_cover`: a closure handed to a member callee `project_callee_at_parameter` resolves exactly is read as part of the function around the call, the callee's body walked for its own boundary, `async_context.rs` `callee_boundary`); fixture `loading-member-callee` (`Namespace`), pattern programs `membercallee/*`; the 24 ids are `agree` again, Chrome compares the same.",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-flush-iife-x-alias-module-ns",
+   "mx-async-outside-loading-boundary-flush-iife-x-destructured-module-ns",
+   "mx-async-outside-loading-boundary-flush-iife-x-direct-module-ns",
+   "mx-async-outside-loading-boundary-flush-iife-x-hook-member-module-ns",
+   "mx-async-outside-loading-boundary-flush-iife-x-hook-module-ns",
+   "mx-async-outside-loading-boundary-flush-iife-x-tuple-module-ns",
+   "mx-async-outside-loading-boundary-jsx-x-alias-module-ns",
+   "mx-async-outside-loading-boundary-jsx-x-destructured-module-ns",
+   "mx-async-outside-loading-boundary-jsx-x-direct-module-ns",
+   "mx-async-outside-loading-boundary-jsx-x-hook-member-module-ns",
+   "mx-async-outside-loading-boundary-jsx-x-hook-module-ns",
+   "mx-async-outside-loading-boundary-jsx-x-tuple-module-ns",
+   "mx-async-outside-loading-boundary-named-flush-call-x-alias-module-ns",
+   "mx-async-outside-loading-boundary-named-flush-call-x-destructured-module-ns",
+   "mx-async-outside-loading-boundary-named-flush-call-x-direct-module-ns",
+   "mx-async-outside-loading-boundary-named-flush-call-x-hook-member-module-ns",
+   "mx-async-outside-loading-boundary-named-flush-call-x-hook-module-ns",
+   "mx-async-outside-loading-boundary-named-flush-call-x-tuple-module-ns",
+   "mx-async-outside-loading-boundary-show-x-alias-module-ns",
+   "mx-async-outside-loading-boundary-show-x-destructured-module-ns",
+   "mx-async-outside-loading-boundary-show-x-direct-module-ns",
+   "mx-async-outside-loading-boundary-show-x-hook-member-module-ns",
+   "mx-async-outside-loading-boundary-show-x-hook-module-ns",
+   "mx-async-outside-loading-boundary-show-x-tuple-module-ns"
+  ],
+  "rediscovered": "the build that had it (#234 to main 78ddeb849) answers `recall-gap` on these ids and the fix `agree`, but `make fuzz-focus` cannot fail on it: `recall-gap` is not a problem outcome (codes.mjs PROBLEMS) and no smoke manifest holds a recall grid, so only the audit's `agree -> recall-gap` moves (and an id-level comparison of two audits) see it; the fixture `loading-member-callee` is the gate: its `Namespace` component's SC5003 is a violation in the snapshot and `make coverage` fails on the old build."
+ },
+ {
+  "finding": "SC5003 false positive on main since ADR 0978 (#234): a closure handed to a project function whose body wraps its calls of the parameter in a boundary of its own (`export function exprArrow(cb) { createLoadingBoundary(() => cb(), () => 0); return 1 }`, or the block-bodied `inBoundary`) was read by `layer_cover` as part of the function around the call, and its callee was never walked, so a read in it (`exprArrow(() => { slow(); })` with no `Loading` in the caller) was a VIOLATION of async-outside-loading-boundary where the callee's boundary catches it and Chrome (rc.21) reports no ASYNC_OUTSIDE_LOADING_BOUNDARY. The identifier callee form (`function_called_at`) had it since #234; the namespace-member form had it in ADR 1011's first cut (db2ae965a), caught by its review before merge.",
+  "found": "the independent review of ADR 1011 (db2ae965a): helpers.tsx with `exprArrow` and `inBoundary`, App `<p>{(() => { H.exprArrow(() => { slow(); }); return 1; })()}</p>`; confirmed in real Chrome rc.21 by the pattern lane programs `membercallee/id-in-boundary`, `id-in-boundary-block` (main 78ddeb849: `false-positive`, Chrome codes []).",
+  "fixed": "ADR 1011 (`owners/async_context.rs` `callee_held`, `loading_entries.rs` `LayerCover::Callee`, `parameter_uses`, `passed_cover`): the walk goes through every use of the callee's parameter, bounded to its body and memoized per callee parameter, before the closure is read as part of the caller; a boundary on every use covers, a use run bare keeps the violation, a parameter passed on is followed into the project function it goes to, and a parameter the callee stores, aliases, never calls or reads through `arguments` (or an `async` or generator callee) leaves main's answer. Pattern programs `membercallee/{id,ns}-in-boundary{,-block}` and fixture `loading-member-callee` (`NsInBoundary*`, `IdInBoundary*`).",
+  "outside": "no generator writes it: the layer axis of the grids hands the closure to a helper (`helper`, `module-helper`, `module-ns`, ...) that only calls it, and a boundary is written in the program's own components (`lf-*` cells), never inside the helper that receives the closure; the shape lives in the pattern lane (`membercallee/`), where the pattern lane's judge fails it on the build that had it."
+ },
+ {
+  "finding": "SC5003 proved violations lost by ADR 1011's second cut (17afe6c88), before merge: the callee's boundary was trusted on the first use that has one, though another use runs the closure bare (`both(cb) { cb(); createLoadingBoundary(() => cb(), ..) }`; the review also named `branch(cb, false)` with a bare `cb()` on the other branch and a callee that also returns `() => cb()`, which are uncertifiable on main too, so they lose nothing); an identifier callee's Covered was trusted without the exactness a member callee gets (a `let` reassigned to a function that runs the closure bare, `const wrapped = ignore((cb) => ..)`, whose value is what `ignore` returns); and a body that runs the parameter as `arguments[0]()` was invisible to `parameter_uses`. Each moved a violation Chrome (rc.21) reports to uncertifiable or to silence.",
+  "found": "the independent review of ADR 1011 at 17afe6c88 (probes rev-1011c); the pattern lane programs `membercallee/{both-ns,both-id,branch-id,returned-id,via-arguments-id,wrap-let,via-wrap}` carry the shapes against real Chrome rc.21.",
+  "fixed": "ADR 1011 (`owners/async_context.rs` `callee_held` and `Held`: the uses are combined, one that runs the closure with no boundary decides; `loading_entries.rs` `project_callee`: an identifier callee is trusted only where `function_value_is_current_in` holds, else main's answer; `parameter_uses` refuses a body that reads `arguments`). Fixture `loading-member-callee` (`BothNs`, `BothId`, `ViaArgumentsId`, `WrapLet`, `ViaWrap`: violations; `BranchId` and `ReturnedId`, uncertifiable on main too, are pinned).",
+  "outside": "no generator writes it: a boundary inside the helper that receives the closure is outside the grids' layer axis. The pattern lane (`membercallee/{both-ns,both-id,via-arguments-id,wrap-let,via-wrap}`, Chrome rc.21 warns at each) carries the shapes but cannot fail the build that had them: a proved violation lost to uncertifiable is a recall-gap, not a problem outcome, and the lane reads it as fine (the second cut, 17afe6c88, passes it 22/22). The gate is the fixture `loading-member-callee` snapshot (`BothNs`, `BothId`, `ViaArgumentsId`, `WrapLet`, `ViaWrap` are violations; the second cut made each `call-attributed-read`), and main's ADR 1012 `regress` guard for any such shape that exists on main."
+ },
+ {
+  "finding": "no defect: a recall gap. A pending read in a function a `const` object literal holds and hands to a leaf owner (`const cb = { cb: () => { a(); } }; onSettled(cb.cb)`) was `invocation-context-unproven` since ADR 0667: a read in an object member was open whatever held the object. Chrome rc.21 reports PENDING_ASYNC_FORBIDDEN_SCOPE at each; the 11-05 full audit had them as violations",
+  "found": "the recall-gap ranking of the full audit of main 78ddeb849 (run 43739577046, 2026-11-16) and W4's bisect of #173 (commit 3ffbc91b5, ADRs 0665-0668): the `bundle` callback form of PENDING_ASYNC_FORBIDDEN_SCOPE, 84 programs in mx-recall and 12 in mx-pairs",
+  "fixed": "ADR 1009 (`local_access.rs` `handed_from_closed_bundle`: a plain data property of a `const` object literal that only ever hands that key to a primitive has the primitive's callback position for its place)",
+  "grid": "mx-recall",
+  "code": "PENDING_ASYNC_FORBIDDEN_SCOPE",
+  "ids": ["mx-pending-async-forbidden-scope-settled-x-direct-none-cb-bundle", "mx-pending-async-forbidden-scope-settled-x-alias-closure-cb-bundle", "mx-pending-async-forbidden-scope-tracked-x-alias-iife-cb-bundle", "mx-pending-async-forbidden-scope-tracked-rerun-x-alias-helper-cb-bundle"],
+  "rediscovered": "main 0799a4629 recall-gap, this build agree: 4 of 4 (84 of the code's 84 `bundle` gaps in mx-recall, 82 in mx-pairs)"
+ },
+ {
+  "finding": "no defect reproduced: review F1 of ADR 1009. `handed_from_closed_bundle` never checked that the property is the key's final value, so a bundle `{ run: () => { user(); }, ...extra }` or `{ run: () => { user(); }, [k]: () => {} }` handed to `onSettled` was taken for the function the primitive runs (Chrome runs the replacement and is silent). The reviewer's snippets stay uncertifiable on 4dd928e93 because a later stage keeps such a literal open (the function answered true, instrumented); no program of the grids differs between the builds",
+  "found": "the medium review of proof E (4dd928e93, 2026-11-16), F1",
+  "fixed": "ADR 1009 review fix (`flow_helpers.rs` `property_is_final_value`, used by `handed_from_closed_bundle` and `origin_member_ignores_receiver`)",
+  "grid": "lg-recall",
+  "code": "PENDING_ASYNC_FORBIDDEN_SCOPE",
+  "ids": [
+   "lg-pending-async-forbidden-scope-dead-bundle-spread-x-direct-none",
+   "lg-pending-async-forbidden-scope-dead-bundle-spread-x-alias-none",
+   "lg-pending-async-forbidden-scope-dead-bundle-computed-x-direct-none",
+   "lg-pending-async-forbidden-scope-dead-bundle-computed-x-alias-none"
+  ],
+  "rediscovered": "main 5b950fce6, 4dd928e93 and this build: uncertifiable on all four (the 2,400 programs of the two `dead-bundle-*` contexts, all codes: {clean 144, uncertifiable 2,136, unexecuted 120}, identical outcomes on the three builds); the cells hold the shape against a later change. The 120 unexecuted are SYNC_NODE_RECEIVED_ASYNC, a violation in a bundle function the spread or computed key replaces, also on main (a separate defect, reported)"
+ },
+ {
+  "finding": "a false positive: the read of an async memo in the children of `<For each={[]}>`, `<Repeat count={0}>`, `<Show when={false}>` or `<Match when={false}>` (the literal keeps the children from ever running) was a violation although the children never run and Chrome is silent",
+  "found": "ADR 1015 (owner-approved 2026-11-16): a probe of `useContext` read in the row of `<Repeat count={0}>` and `<For each={[]}>`, both reported by the checker and silent in Chrome",
+  "fixed": "ADR 1015 (`Dialect::flow_children_exclusion`; `site_reach.rs` `in_dead_flow_children`: children a literal prop keeps from running are unreached, so a violation there is uncertifiable `unreached-dead-code`)",
+  "grid": "lg-recall",
+  "code": "PENDING_ASYNC_UNTRACKED_READ",
+  "ids": [
+   "lg-pending-async-untracked-read-dead-flow-for-x-direct-none",
+   "lg-pending-async-untracked-read-dead-flow-for-unkeyed-x-direct-none",
+   "lg-pending-async-untracked-read-dead-flow-show-x-direct-none",
+   "lg-pending-async-untracked-read-dead-flow-show-keyed-x-direct-none",
+   "lg-pending-async-untracked-read-dead-flow-match-x-direct-none",
+   "lg-pending-async-untracked-read-dead-flow-repeat-x-direct-none"
+  ],
+  "rediscovered": "main 5b950fce6 false-positive (252 programs of the code's six `dead-flow` contexts across the shapes), this build uncertifiable; slice measurement (`--contexts dead-flow-*`, all codes, lg-recall, 7,200 programs: main {unexecuted 3,024, uncertifiable 3,096, clean 576, false-positive 504}, `make fuzz-focus` exit 1; this build {uncertifiable 3,636, clean 3,564}, exit 0); the full grid differential runs on the final commit"
+ },
+ {
+  "finding": "a false positive of the same shape: a pending read in a forbidden scope written in the children a literal keeps from running was a violation",
+  "found": "ADR 1015 (owner-approved 2026-11-16): a probe of `useContext` read in the row of `<Repeat count={0}>` and `<For each={[]}>`, both reported by the checker and silent in Chrome",
+  "fixed": "ADR 1015 (`Dialect::flow_children_exclusion`; `site_reach.rs` `in_dead_flow_children`: children a literal prop keeps from running are unreached, so a violation there is uncertifiable `unreached-dead-code`)",
+  "grid": "lg-recall",
+  "code": "PENDING_ASYNC_FORBIDDEN_SCOPE",
+  "ids": [
+   "lg-pending-async-forbidden-scope-dead-flow-for-x-direct-none",
+   "lg-pending-async-forbidden-scope-dead-flow-for-unkeyed-x-direct-none",
+   "lg-pending-async-forbidden-scope-dead-flow-show-x-direct-none",
+   "lg-pending-async-forbidden-scope-dead-flow-show-keyed-x-direct-none",
+   "lg-pending-async-forbidden-scope-dead-flow-match-x-direct-none",
+   "lg-pending-async-forbidden-scope-dead-flow-repeat-x-direct-none"
+  ],
+  "rediscovered": "main 5b950fce6 false-positive (252 programs), this build uncertifiable; same slice measurement as PENDING_ASYNC_UNTRACKED_READ's entry"
+ },
+ {
+  "finding": "SC4002 proven in the children a literal keeps from running (`useContext` with no provider in the row of `<Repeat count={0}>`, `<For each={[]}>`, `<Show when={false}>`, `<Match when={false}>`): the program never runs the read, so Chrome raises nothing; an `unexecuted` outcome",
+  "found": "ADR 1015 (owner-approved 2026-11-16): a probe of `useContext` read in the row of `<Repeat count={0}>` and `<For each={[]}>`, both reported by the checker and silent in Chrome",
+  "fixed": "ADR 1015 (`Dialect::flow_children_exclusion`; `site_reach.rs` `in_dead_flow_children`: children a literal prop keeps from running are unreached, so a violation there is uncertifiable `unreached-dead-code`)",
+  "grid": "lg-recall",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "lg-context-not-found-dead-flow-for-x-direct-none",
+   "lg-context-not-found-dead-flow-for-unkeyed-x-direct-none",
+   "lg-context-not-found-dead-flow-show-x-direct-none",
+   "lg-context-not-found-dead-flow-show-keyed-x-direct-none",
+   "lg-context-not-found-dead-flow-match-x-direct-none",
+   "lg-context-not-found-dead-flow-repeat-x-direct-none"
+  ],
+  "rediscovered": "main 5b950fce6 unexecuted (180 programs), this build uncertifiable; same slice measurement"
  }
 ]
