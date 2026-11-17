@@ -71,16 +71,6 @@
       "why": "a read ended before only by the async-read table's row, which answers SC5003's code, not STRICT_READ_UNTRACKED: SC1001 `strict-read-unaccounted` now stands beside SC5003/SC5008 (no false clean); the proof is the read classifier's own",
       "at": "fixtures/reactive-ir/handed-net/p1-timer.tsx:4:22"
     },
-    "reactive-ir/impostor-prototype-own|fixtures/reactive-ir/impostor-prototype-own/App.tsx|416-422|C3/untagged": {
-      "owner": "proof-log phase B (tag the producing return)",
-      "why": "a silent write row whose role no tagged arm answered (untagged)",
-      "at": "fixtures/reactive-ir/impostor-prototype-own/App.tsx:15:36"
-    },
-    "reactive-ir/impostor-symbol-key|fixtures/reactive-ir/impostor-symbol-key/App.tsx|433-439|C3/untagged": {
-      "owner": "proof-log phase B (tag the producing return)",
-      "why": "a silent write row whose role no tagged arm answered (untagged)",
-      "at": "fixtures/reactive-ir/impostor-symbol-key/App.tsx:16:28"
-    },
     "reactive-ir/jsx-creation-sites|fixtures/reactive-ir/jsx-creation-sites/App.tsx|2173-2194|C3/no-decision": {
       "owner": "proof-log phase B (tag the producing return)",
       "why": "a silent read row whose role no tagged arm answered (no-decision)",
@@ -136,16 +126,6 @@
       "why": "a silent write row whose role no tagged arm answered (no-decision)",
       "at": "fixtures/reactive-ir/own-setter-wrapper-identity/App.tsx:21:33"
     },
-    "reactive-ir/owner-region-no-edge|fixtures/reactive-ir/owner-region-no-edge/App.tsx|5502-5510|C3/untagged": {
-      "owner": "proof-log phase B (tag the producing return)",
-      "why": "a silent write row whose role no tagged arm answered (untagged)",
-      "at": "fixtures/reactive-ir/owner-region-no-edge/App.tsx:237:5"
-    },
-    "reactive-ir/prop-callback-roles|fixtures/reactive-ir/prop-callback-roles/App.tsx|1221-1235|C3/untagged": {
-      "owner": "proof-log phase B (tag the producing return)",
-      "why": "a silent write row whose role no tagged arm answered (untagged)",
-      "at": "fixtures/reactive-ir/prop-callback-roles/App.tsx:32:23"
-    },
     "reactive-ir/rc21-optimistic-before-load|fixtures/reactive-ir/rc21-optimistic-before-load/App.tsx|1026-1037|C2/reporting-decision-no-row": {
       "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
       "why": "an optimistic setter call whose REACTIVE_WRITE_IN_OWNED_SCOPE code was ended before only by SC2009's row: SC2001 `write-unaccounted` now stands beside the violation (no false clean); the proof is the optimistic setter's own write guard",
@@ -197,11 +177,6 @@
       "owner": "proof-log phase B (tag the producing return)",
       "why": "a silent read row whose role no tagged arm answered (override)",
       "at": "fixtures/reactive-ir/store-mutators/App.tsx:54:26"
-    },
-    "reactive-ir/write-named-closure-in-root|fixtures/reactive-ir/write-named-closure-in-root/App.tsx|5900-5904|C3/untagged": {
-      "owner": "proof-log phase B (tag the producing return)",
-      "why": "a silent action row whose role no tagged arm answered (untagged)",
-      "at": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx:118:154"
     },
     "uncertifiable-repro/sc1001|fixtures/uncertifiable-repro/sc1001/src/local-object-context-value.tsx|629-641|C2/reporting-decision-no-row": {
       "owner": "fix 6 follow-up (open)",

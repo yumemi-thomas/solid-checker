@@ -24756,5 +24756,43 @@
    "lg-context-not-found-dead-flow-repeat-x-direct-none"
   ],
   "rediscovered": "main 5b950fce6 unexecuted (180 programs), this build uncertifiable; same slice measurement"
+ },
+ {
+  "finding": "no defect: a recall gap. A member call on a closed `const` object literal under a type assertion (`const t1 = { then(f) { f(); } }; (t1 as unknown as Promise<void>).then(f1)`) was withheld as the standard `then` the type names (ADR 0840's impostor census, ADR 0874: `function-run-unplaced`), though the literal's method runs the callback in place and Chrome rc.21 reports the defect; the same call without the assertion is a proved violation: REACTIVE_WRITE_IN_OWNED_SCOPE at a setter call in the callback",
+  "found": "the G1 (`function-run-unplaced`) research of the 5% audit sample (coordinator brief, 2026-11-17): the `cast-then` and `cast-any-then` contexts",
+  "fixed": "ADR 1023 (`execution_role/callback_standing.rs` `closed_literal_dispatch`, asked by `write_roles.rs` `layer_run` and `handed_to_withheld_call` and by the pipeline's withheld calls)",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-cast-then-signal-alias-iife",
+   "mx-reactive-write-in-owned-scope-cast-then-signal-alias-module-helper",
+   "mx-reactive-write-in-owned-scope-cast-then-signal-destructured-closure",
+   "mx-reactive-write-in-owned-scope-cast-then-refresh-direct-iife"
+  ],
+  "rediscovered": "main c2779cb39 recall-gap, this build agree: 4 of 4 (70 of 104 REACTIVE_WRITE_IN_OWNED_SCOPE programs of a 1,844-program `cast-*` sample move recall-gap to agree, Chrome agreeing on each)"
+ },
+ {
+  "finding": "no defect: a recall gap. A member call on a closed `const` object literal under a type assertion (`const t1 = { then(f) { f(); } }; (t1 as unknown as Promise<void>).then(f1)`) was withheld as the standard `then` the type names (ADR 0840's impostor census, ADR 0874: `function-run-unplaced`), though the literal's method runs the callback in place and Chrome rc.21 reports the defect; the same call without the assertion is a proved violation: ACTION_CALLED_IN_OWNED_SCOPE",
+  "found": "the G1 (`function-run-unplaced`) research of the 5% audit sample (coordinator brief, 2026-11-17): the `cast-then` and `cast-any-then` contexts",
+  "fixed": "ADR 1023 (`execution_role/callback_standing.rs` `closed_literal_dispatch`, asked by `write_roles.rs` `layer_run` and `handed_to_withheld_call` and by the pipeline's withheld calls)",
+  "grid": "mx-census",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-cast-then-x-direct-none",
+   "mx-action-called-in-owned-scope-cast-any-then-x-direct-none"
+  ],
+  "rediscovered": "main c2779cb39 recall-gap, this build agree: 2 of 2"
+ },
+ {
+  "finding": "no defect: a recall gap. A member call on a closed `const` object literal under a type assertion (`const t1 = { then(f) { f(); } }; (t1 as unknown as Promise<void>).then(f1)`) was withheld as the standard `then` the type names (ADR 0840's impostor census, ADR 0874: `function-run-unplaced`), though the literal's method runs the callback in place and Chrome rc.21 reports the defect; the same call without the assertion is a proved violation: ON_FLUSH_IN_OWNED_SCOPE",
+  "found": "the G1 (`function-run-unplaced`) research of the 5% audit sample (coordinator brief, 2026-11-17): the `cast-then` and `cast-any-then` contexts",
+  "fixed": "ADR 1023 (`execution_role/callback_standing.rs` `closed_literal_dispatch`, asked by `write_roles.rs` `layer_run` and `handed_to_withheld_call` and by the pipeline's withheld calls)",
+  "grid": "mx-census",
+  "code": "ON_FLUSH_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-on-flush-in-owned-scope-cast-then-x-direct-none",
+   "mx-on-flush-in-owned-scope-cast-any-then-x-direct-none"
+  ],
+  "rediscovered": "main c2779cb39 recall-gap, this build agree: 2 of 2"
  }
 ]

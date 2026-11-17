@@ -595,6 +595,77 @@ fn receiver_is_a_nested_class_instance(
         })
 }
 
+/// ADR 1023: whether the member call at `callee` runs the method a closed object literal holds, whatever type the receiver is asserted to have
+/// (`const t = { then(f) { f(); } }; (t as unknown as Promise<void>).then(cb)`): the object-member index (ADR 0299) resolves the member to the
+/// literal's function (the receiver is a `const` identifier, under TypeScript wrappers only, bound to the literal; every use of it is a member it
+/// calls; the literal is closed, holds no accessor and no receiver-spelling method; no assignment writes the member's name), and ADR 1014's and ADR
+/// 1009's literal checks hold too: the property is the key's final value (no later spread, unnamed or same key), no member of the holder is
+/// assigned or written by an unnamed key, and no function of the literal hands its receiver on. Then the call is the literal's method, not the
+/// standard one its type names, and the census that withholds the standard call has nothing to withhold here.
+pub(crate) fn closed_literal_dispatch(
+    file: &solid_facts::FileFacts,
+    callee: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    use crate::indexes::CalleeWorld;
+    let Some((method_file, method)) = CalleeWorld::object_member_function(lookup, file, callee)
+    else {
+        return false;
+    };
+    let Some(member) = file.ast.member_at(file.ast.peel_ts_sugar_span(callee)) else {
+        return false;
+    };
+    if file
+        .ast
+        .computed_members
+        .binary_search(&member.span)
+        .is_ok()
+    {
+        return false;
+    }
+    let receiver = file.ast.peel_ts_sugar_span(member.object);
+    let Some((binding_file, binding)) = CalleeWorld::binding_at_reference(lookup, file, receiver)
+    else {
+        return false;
+    };
+    if !binding.immutable
+        || binding.shape != solid_facts::ast::BindingShape::Identifier
+        || binding_file.path != method_file.path
+    {
+        return false;
+    }
+    let (Some(initializer), Some(declaration)) = (
+        binding.initializer,
+        binding.names.first().map(|name| name.span),
+    ) else {
+        return false;
+    };
+    let literal = binding_file.ast.peel_ts_sugar_span(initializer);
+    let Some(shape) = binding_file
+        .ast
+        .object_get_shapes
+        .iter()
+        .find(|shape| shape.span == literal)
+    else {
+        return false;
+    };
+    // The property of the literal itself (not of a nested one) whose value is the method.
+    let Some(property) = binding_file.ast.object_properties.iter().find(|property| {
+        shape.span.contains(property.span)
+            && !property.computed
+            && (binding_file.ast.peel_ts_sugar_span(property.value) == method.span
+                || property.span == method.span)
+            && super::flow_helpers::innermost_object_literal(binding_file, property.key)
+                .is_some_and(|inner| inner.span == literal)
+    }) else {
+        return false;
+    };
+    super::flow_helpers::property_is_final_value(binding_file, property)
+        && !holder_written_by_unnamed_key(binding_file, declaration)
+        && !holder_member_assigned(binding_file, declaration)
+        && !literal_hands_its_receiver_on(binding_file, literal)
+}
+
 /// [`member_runs_declared_method`] over a callee world.
 pub(super) fn member_runs_declared_method_in<'a, W: crate::indexes::CalleeWorld<'a> + ?Sized>(
     world: &W,

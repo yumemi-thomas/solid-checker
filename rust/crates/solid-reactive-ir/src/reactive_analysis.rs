@@ -710,6 +710,13 @@ pub(crate) fn collect_project<'facts>(
                     .iter()
                     .enumerate()
                     .filter(|(_, call)| ctx.semantic_lookup.impostor_withheld(file, call.callee))
+                    .filter(|(_, call)| {
+                        !crate::execution_role::closed_literal_dispatch(
+                            file,
+                            call.callee,
+                            ctx.semantic_lookup,
+                        )
+                    })
                     .map(|(index, _)| index)
                     .collect()
             })

@@ -1658,3 +1658,5 @@ packages/wasm/owned/
 
 !fixtures/reactive-ir/dead-literal-rows/node_modules/
 !fixtures/reactive-ir/dead-literal-rows/node_modules/**
+!fixtures/reactive-ir/closed-literal-dispatch/node_modules/
+!fixtures/reactive-ir/closed-literal-dispatch/node_modules/**
