@@ -361,7 +361,7 @@ describe("what is really installed", () => {
     }
     expect(browserKey(undefined, two)).toBe(browserKey(undefined, one));
     const exe = buildExecutable(join(browserCache({ home: two }), pinnedHeadlessShell().directory));
-    writeFileSync(exe, "build 2");
+    writeFileSync(exe, "another build");
     expect(browserKey(undefined, two)).not.toBe(browserKey(undefined, one));
     expect(browserKey(exe)).not.toBe(browserKey(buildExecutable(join(browserCache({ home: one }), pinnedHeadlessShell().directory))));
     } finally { if (saved === undefined) delete process.env.PLAYWRIGHT_BROWSERS_PATH; else process.env.PLAYWRIGHT_BROWSERS_PATH = saved; }
