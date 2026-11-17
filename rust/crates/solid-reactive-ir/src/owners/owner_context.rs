@@ -805,6 +805,7 @@ pub(crate) fn push_owner_requirement(
             through_dependency: None,
             through_dependency_entry: crate::DependencyEntry::Call,
             report: status.report,
+            earlier_check_throws: false,
         });
     }
 }

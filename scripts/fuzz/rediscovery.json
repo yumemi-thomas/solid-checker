@@ -25753,5 +25753,63 @@
    "mx-flush-in-effect-callback-action-plain-yield-from-apply-x-direct-none"
   ],
   "rediscovered": "main 5780918b8 uncertifiable at the site, this build SC2008 violation at the action call, Chrome reporting FLUSH_IN_EFFECT_CALLBACK at that line"
+ },
+ {
+  "finding": "a false positive: missing-owner at an effect created in an effect's apply (or a render effect's), where Solid throws PRIMITIVE_IN_EFFECT_CALLBACK at the creation and never reports NO_OWNER_EFFECT; and at an effect a helper creates that a tracked effect and a handler both call, where the tracked call throws PRIMITIVE_IN_FORBIDDEN_SCOPE at mount and the handler never runs",
+  "found": "ADR 1052's census of the stacked claims (R-stacked, 153 mx-census ids, main a3ba1dd92)",
+  "fixed": "ADR 1052 (`competing_checks.rs` `mark`: an SC6002 violation at an effect's call, or an SC3001 violation at the operation's call, makes the owner row uncertifiable `creation-throws-first`)",
+  "grid": "mx-census",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-effect-apply-effect-direct-none",
+   "mx-no-owner-effect-rnd-handler-effect-direct-none",
+   "mx-no-owner-effect-tracked-shared-effect-direct-none"
+  ],
+  "rediscovered": "main a3ba1dd92: stacked-claim, tolerated by its pair in stacked-pairs.json; with the pair retired the judge scores it false-positive and `make fuzz-focus` fails (15 programs); ADR 1052's build: not-fired or agree, focus passes"
+ },
+ {
+  "finding": "a false positive: missing-owner at an `onCleanup` a helper runs that a tracked effect and a handler both call: the tracked call throws CLEANUP_IN_FORBIDDEN_SCOPE at mount and halts the system, so NO_OWNER_CLEANUP is never reported",
+  "found": "ADR 1052's census of the stacked claims (R-stacked, 153 mx-census ids, main a3ba1dd92)",
+  "fixed": "ADR 1052 (`competing_checks.rs` `mark`: an SC3001 violation at the operation's call)",
+  "grid": "mx-census",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "mx-no-owner-cleanup-tracked-shared-x-direct-none"
+  ],
+  "rediscovered": "main a3ba1dd92: stacked-claim, tolerated by its pair in stacked-pairs.json; with the pair retired the judge scores it false-positive and `make fuzz-focus` fails (15 programs); ADR 1052's build: not-fired or agree, focus passes"
+ },
+ {
+  "finding": "a false positive: missing-owner at a boundary a helper calls that a tracked effect and a handler both call: the tracked call throws PRIMITIVE_IN_FORBIDDEN_SCOPE at mount, so NO_OWNER_BOUNDARY is never reported",
+  "found": "ADR 1052's census of the stacked claims (R-stacked, 153 mx-census ids, main a3ba1dd92)",
+  "fixed": "ADR 1052 (`competing_checks.rs` `mark`: an SC3001 violation at the operation's call)",
+  "grid": "mx-census",
+  "code": "NO_OWNER_BOUNDARY",
+  "ids": [
+   "mx-no-owner-boundary-tracked-shared-loading-direct-none"
+  ],
+  "rediscovered": "main a3ba1dd92: stacked-claim, tolerated by its pair in stacked-pairs.json; with the pair retired the judge scores it false-positive and `make fuzz-focus` fails (15 programs); ADR 1052's build: not-fired or agree, focus passes"
+ },
+ {
+  "finding": "a false positive: missing-owner beside SC6002 at an effect created in an effect's apply, where PRIMITIVE_IN_EFFECT_CALLBACK throws first",
+  "found": "ADR 1052's census of the stacked claims (R-stacked, 153 mx-census ids, main a3ba1dd92)",
+  "fixed": "ADR 1052 (`competing_checks.rs` `mark`: an SC6002 violation at an effect's call)",
+  "grid": "mx-census",
+  "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-primitive-in-forbidden-scope-effect-apply-effect-direct-none"
+  ],
+  "rediscovered": "main a3ba1dd92: stacked-claim, tolerated by its pair in stacked-pairs.json; with the pair retired the judge scores it false-positive and `make fuzz-focus` fails (15 programs); ADR 1052's build: not-fired or agree, focus passes"
+ },
+ {
+  "finding": "a false positive: leaf-owner-forbidden-call at a `createEffect` with no callable effect function in a tracked effect or an action's `onSettled`: Solid throws MISSING_EFFECT_FN before the leaf owner refuses it",
+  "found": "ADR 1052's census of the stacked claims (R-stacked, 153 mx-census ids, main a3ba1dd92)",
+  "fixed": "ADR 1052 (`competing_checks.rs` `mark`: an SC7001 violation at the operation's call makes the SC3001 row uncertifiable `creation-throws-first`)",
+  "grid": "mx-census",
+  "code": "MISSING_EFFECT_FN",
+  "ids": [
+   "mx-missing-effect-fn-tracked-shared-cast-fn-direct-none",
+   "mx-missing-effect-fn-action-from-settled-cast-fn-direct-none"
+  ],
+  "rediscovered": "main a3ba1dd92: stacked-claim, tolerated by its pair in stacked-pairs.json; with the pair retired the judge scores it false-positive and `make fuzz-focus` fails (15 programs); ADR 1052's build: not-fired or agree, focus passes"
  }
 ]

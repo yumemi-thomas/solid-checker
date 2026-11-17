@@ -3962,6 +3962,38 @@
    "to": 4,
    "adr": "ADR 1020",
    "fact": "fixture extended (third cut): returned compute values called in an apply, as a memo's value, through a helper, and in the body; creation-throws-first is the site's reach (UnreachedSite::returned_value_run)"
+  },
+  {
+   "fixture": "reactive-ir/deferred-effect-apply-callees",
+   "key": "SC4001 creation-throws-first",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1052",
+   "fact": "an earlier check Solid makes at the same call throws first (SC6002 at an effect created on an apply's stack, SC3001's refusal on a leaf caller's run): the owner row is uncertifiable creation-throws-first"
+  },
+  {
+   "fixture": "reactive-ir/flush-veto-kept",
+   "key": "SC4001 creation-throws-first",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1052",
+   "fact": "an earlier check Solid makes at the same call throws first (SC6002 at an effect created on an apply's stack, SC3001's refusal on a leaf caller's run): the owner row is uncertifiable creation-throws-first"
+  },
+  {
+   "fixture": "reactive-ir/leaf-owner",
+   "key": "SC4001 creation-throws-first",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1052",
+   "fact": "an earlier check Solid makes at the same call throws first (SC6002 at an effect created on an apply's stack, SC3001's refusal on a leaf caller's run): the owner row is uncertifiable creation-throws-first"
+  },
+  {
+   "fixture": "reactive-ir/primitive-in-effect-callback-tag",
+   "key": "SC4001 creation-throws-first",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1052",
+   "fact": "an earlier check Solid makes at the same call throws first (SC6002 at an effect created on an apply's stack, SC3001's refusal on a leaf caller's run): the owner row is uncertifiable creation-throws-first"
   }
  ]
 }

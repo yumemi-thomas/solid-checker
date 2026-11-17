@@ -1,0 +1,10 @@
+{
+  "note": "ADR 1052: createEffect with no effect function in a tracked effect: Chrome reports MISSING_EFFECT_FN and never PRIMITIVE_IN_FORBIDDEN_SCOPE; SC7001 is the violation, SC3001 uncertifiable `creation-throws-first`. Generated program `mx-missing-effect-fn-tracked-shared-cast-fn-direct-none` (differential fuzzer, generator 2).",
+  "haltMarker": true,
+  "steps": [
+    {
+      "action": "click",
+      "selector": "[data-act=\"b1\"], body:not(:has([data-act=\"b1\"])) > #sc-halted"
+    }
+  ]
+}

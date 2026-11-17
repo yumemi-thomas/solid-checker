@@ -986,6 +986,7 @@ fn distinct_leaf_operations(
             && a.possible == b.possible
             && a.identity_unproven == b.identity_unproven
             && a.computation_error_unobserved == b.computation_error_unobserved
+            && a.earlier_check_throws == b.earlier_check_throws
     };
     let mut kept: Vec<&crate::LeafOwnerOperation> = Vec::with_capacity(operations.len());
     let mut at: crate::HashMap<&Location, Vec<usize>> = crate::HashMap::default();
@@ -1565,6 +1566,10 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             // proof obligation, not a proven runtime violation.
             if operation.uncertain || operation.possible {
                 finding.kind = "uncertifiable".into();
+            }
+            if operation.earlier_check_throws {
+                // ADR 1052.
+                crate::blockers::CREATION_THROWS_FIRST.clone_into(&mut finding.analysis_context);
             }
             if operation.computation_error_unobserved {
                 crate::blockers::COMPUTATION_ERROR_UNOBSERVED
