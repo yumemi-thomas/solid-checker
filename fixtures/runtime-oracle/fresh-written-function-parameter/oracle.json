@@ -1,0 +1,1 @@
+{"note": "ADR 1041 negative: a helper writes a member of its parameter and is handed Number: the replaced Number.isFinite writes a signal in the component body; Chrome reports REACTIVE_WRITE_IN_OWNED_SCOPE and the checker keeps the call uncertifiable"}

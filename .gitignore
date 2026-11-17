@@ -1700,3 +1700,11 @@ packages/wasm/owned/
 !fixtures/reactive-ir/closed-literal-dispatch/node_modules/**
 !fixtures/reactive-ir/sync-option-overridden-member/node_modules/
 !fixtures/reactive-ir/sync-option-overridden-member/node_modules/**
+!fixtures/reactive-ir/fresh-written-function/node_modules/
+!fixtures/reactive-ir/fresh-written-function/node_modules/**
+!fixtures/reactive-ir/fresh-written-function-parameter/node_modules/
+!fixtures/reactive-ir/fresh-written-function-parameter/node_modules/**
+!fixtures/reactive-ir/fresh-written-function-reassigned/node_modules/
+!fixtures/reactive-ir/fresh-written-function-reassigned/node_modules/**
+!fixtures/reactive-ir/fresh-written-function-shadowed/node_modules/
+!fixtures/reactive-ir/fresh-written-function-shadowed/node_modules/**
