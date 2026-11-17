@@ -925,6 +925,18 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// ADR 1053: whether the callback at `argument` of `primitive` receives, as its first parameter, a value whose writes
+    /// (a set, a delete, a definition) land only on objects the runtime made for the primitive: a projection's draft. A
+    /// write to that parameter then puts no member on a standard root. Default `false`: the parameter may be any object.
+    fn callback_first_parameter_writes_only_runtime_objects(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+    ) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
     /// Whether this component renders its children through a callback the
     /// component itself invokes.
     ///

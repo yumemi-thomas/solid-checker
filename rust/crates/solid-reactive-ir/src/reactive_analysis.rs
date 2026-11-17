@@ -753,6 +753,7 @@ pub(crate) fn collect_project<'facts>(
                         crate::base::contributions::handed_root_writes(
                             files,
                             ctx.semantic_lookup.fresh_factory_writes_open(),
+                            &|key| ctx.semantic_lookup.projection_draft_key_open(key),
                         )
                     });
                     crate::base::contributions::handed_root_detail_in(writes, member)

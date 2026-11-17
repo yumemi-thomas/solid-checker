@@ -1754,3 +1754,11 @@ packages/wasm/owned/
 !fixtures/reactive-ir/handed-root-patch-symbol-var-written/node_modules/**
 !fixtures/reactive-ir/action-resume-flush/node_modules/
 !fixtures/reactive-ir/action-resume-flush/node_modules/**
+!fixtures/reactive-ir/projection-draft-assign/node_modules/
+!fixtures/reactive-ir/projection-draft-assign/node_modules/**
+!fixtures/reactive-ir/projection-draft-assign-shadowed/node_modules/
+!fixtures/reactive-ir/projection-draft-assign-shadowed/node_modules/**
+!fixtures/reactive-ir/projection-draft-assign-other/node_modules/
+!fixtures/reactive-ir/projection-draft-assign-other/node_modules/**
+!fixtures/reactive-ir/projection-draft-assign-rebound/node_modules/
+!fixtures/reactive-ir/projection-draft-assign-rebound/node_modules/**

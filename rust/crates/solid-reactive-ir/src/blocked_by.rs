@@ -279,6 +279,7 @@ pub(crate) fn typed_blockers(
             lookup.files(),
             &ids,
             lookup.fresh_factory_writes_open(),
+            &|key| lookup.projection_draft_key_open(key),
         )
     };
     for id in [VISIBLE_ITERATION_WRITE, TUPLE_SLOT_ITERATION_MAY_BE_MUTATED] {

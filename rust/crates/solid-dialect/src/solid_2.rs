@@ -2608,6 +2608,20 @@ impl Dialect for Solid2 {
             )
     }
 
+    /// Source: rc.21 `@solidjs/signals` `dist/dev.js`. `createProjection` (`createProjectionInternal`, 7866-7918) runs
+    /// `runProjectionComputed` (7742), which calls the callback with `shadow ?? s`: `shadow` a clone of the store's value
+    /// (`cloneState`), `s` the `wrapDraft` (7585) wrapper, a new `Proxy` over a new `{}`/`[]` whose `set`, `deleteProperty` and
+    /// `defineProperty` traps write the projection's store proxy, whose traps write a backing the store made (`ensurePB`,
+    /// ADR 1041). A `markRaw` seed throws at `wrappedStore[$TARGET]._fam` before the callback runs. The store setter and the
+    /// function form of `createStore` hand a draft too, but are not read here (ADR 1053 takes the projection only).
+    fn callback_first_parameter_writes_only_runtime_objects(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+    ) -> bool {
+        argument == 0 && primitive == Primitive::CreateProjection
+    }
+
     fn accepts_cleanup_return(&self, primitive: Primitive) -> bool {
         matches!(
             primitive,
