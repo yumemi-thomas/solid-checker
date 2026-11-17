@@ -211,7 +211,11 @@ pub(crate) fn typed_blockers(
     let sites = if ids.is_empty() {
         BTreeMap::new()
     } else {
-        crate::base::contributions::hazard_sites(lookup.files(), &ids)
+        crate::base::contributions::hazard_sites(
+            lookup.files(),
+            &ids,
+            lookup.fresh_factory_writes_open(),
+        )
     };
     let hazards = ids
         .into_iter()

@@ -1,0 +1,258 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "exported-parameter-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-written-object-escaped/App.tsx",
+      "start": 212,
+      "end": 405,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-written-object-escaped/App.tsx",
+      "start": 290,
+      "end": 303,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-written-object-escaped/App.tsx",
+      "start": 313,
+      "end": 328,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "blocker": "unproven-container-root",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-written-object-escaped/App.tsx",
+      "start": 353,
+      "end": 364,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-written-object-escaped/App.tsx",
+      "start": 881,
+      "end": 891,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "blocker": "unproven-container-root",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-written-object-escaped/App.tsx",
+      "start": 909,
+      "end": 925,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "blocker": "store-operation-may-not-write",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-written-object-escaped/App.tsx",
+      "start": 1140,
+      "end": 1184,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-written-object-escaped/App.tsx",
+      "start": 1140,
+      "end": 1153,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "blocker": "store-operation-may-not-write",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-written-object-escaped/App.tsx",
+      "start": 1284,
+      "end": 1314,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-written-object-escaped/App.tsx",
+      "start": 1284,
+      "end": 1295,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-written-object-escaped/App.tsx",
+      "start": 1284,
+      "end": 1312,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-written-object-escaped/App.tsx",
+      "start": 1284,
+      "end": 1326,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "blocker": "unproven-container-root",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-written-object-escaped/App.tsx",
+      "start": 1377,
+      "end": 1388,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-written-object-escaped/App.tsx",
+      "start": 1431,
+      "end": 1444,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-written-object-escaped/App.tsx",
+      "start": 1735,
+      "end": 1739,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-written-object-escaped/App.tsx",
+      "start": 1743,
+      "end": 1758,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fresh-written-object-escaped/App.tsx",
+      "start": 1799,
+      "end": 1824,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fresh-written-object-escaped/App.tsx",
+      "start": 1799,
+      "end": 1824,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fresh-written-object-escaped/App.tsx",
+      "start": 1799,
+      "end": 1824,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/fresh-written-object-escaped/App.tsx",
+      "start": 1799,
+      "end": 1810,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fresh-written-object-escaped/App.tsx",
+      "start": 1826,
+      "end": 1831,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fresh-written-object-escaped/App.tsx",
+      "start": 1826,
+      "end": 1831,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/fresh-written-object-escaped/App.tsx",
+      "start": 1826,
+      "end": 1831,
+      "fixes": 0
+    }
+  ]
+}

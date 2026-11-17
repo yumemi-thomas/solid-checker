@@ -13,8 +13,11 @@ use solid_facts::{FileFacts, StandardRoot};
 use super::file_table::{FileView, ItemKind};
 
 mod blocked_by;
+mod fresh_written;
 use crate::{HashMap, HashSet};
 pub(crate) use blocked_by::*;
+pub(crate) use fresh_written::fresh_factories_intact;
+use fresh_written::{Fresh, fresh_written_object};
 
 /// The build-wide inputs a contribution may read besides its file. A change
 /// of any of them is a different cache domain, so a fresh build.
@@ -753,6 +756,10 @@ pub(crate) enum Hazard {
     /// (the hash of the key, [`member_hash`] with no container) and defines no
     /// other ([`DefinerKey::Sole`]; value 0).
     ReflectiveDefinitionSole(u32),
+    /// ADR 1024: code writes this member (the hash of [`Self::OpenMemberWrite`]'s key) of an object only the factory
+    /// form proves made ([`fresh_written::fresh_written_object`]; value 0): an open write while a factory it trusts may
+    /// not be standard ([`open_member_write_through_factory`]).
+    FreshFactoryWrite(u32),
     /// ADR 0965 (batch 11; the what-if build only): a typed cause of uncertifiable rows, the `blockedBy.kind` of the rows it blocks (`function-run-unplaced`,
     /// `unresolved-invocation`, ...), as a premise a proof would discharge for all of them. No census holds it and no file has it: the seam answers it present
     /// wherever it is asked, so only an assumption makes it absent, and what that removes is every uncertifiable finding of that kind from the report.
@@ -799,6 +806,23 @@ fn standard_impostor_write(member: &str) -> Hazard {
 
 fn open_member_write(member: &str) -> Hazard {
     Hazard::OpenMemberWrite(member_hash("", member))
+}
+
+fn fresh_factory_write(member: &str) -> Hazard {
+    Hazard::FreshFactoryWrite(member_hash("", member))
+}
+
+/// ADR 1024: whether `hazard`, an [`Hazard::OpenMemberWrite`], is present through the factory form's sites: some site
+/// writes that key of an object only a standard factory proves made, and the program may have replaced a factory
+/// ([`fresh_factories_intact`] asked of `raw`, the census as the files fold it, where no factory site is an open write).
+pub(crate) fn open_member_write_through_factory(
+    hazard: Hazard,
+    raw: &impl Fn(Hazard) -> bool,
+) -> bool {
+    let Hazard::OpenMemberWrite(key) = hazard else {
+        return false;
+    };
+    raw(Hazard::FreshFactoryWrite(key)) && !fresh_factories_intact(raw)
 }
 
 fn reflective_definition_sole(key: &str) -> Hazard {
@@ -1762,7 +1786,13 @@ fn spelled_callee(text: &str, name: &str) -> bool {
 /// gains one. `Object.assign` copies, so it is the impostor census's no site,
 /// but it writes its target.
 fn impostor_census(file: &FileFacts) -> Vec<Hazard> {
-    let (members, writers, open) = impostor_sites(file);
+    let (members, writers, open, factory) = impostor_sites(file);
+    let mut factory = factory
+        .into_iter()
+        .map(|(key, _)| open_write_key(key))
+        .collect::<Vec<_>>();
+    factory.sort_unstable();
+    factory.dedup();
     let mut members = members
         .into_iter()
         .map(|(member, _)| member)
@@ -1783,7 +1813,32 @@ fn impostor_census(file: &FileFacts) -> Vec<Hazard> {
         .map(standard_impostor)
         .chain(writers.into_iter().map(standard_impostor_write))
         .chain(open.iter().map(|key| open_member_write(key)))
+        .chain(factory.iter().map(|key| fresh_factory_write(key)))
         .collect()
+}
+
+/// [`Hazard::OpenMemberWrite`]'s key of a census key.
+fn open_write_key(key: CensusKey) -> String {
+    match key {
+        CensusKey::Named(name) if name != "__proto__" => name,
+        CensusKey::Symbol => SYMBOL_SITE.to_owned(),
+        _ => ANY_MEMBER.to_owned(),
+    }
+}
+
+/// The open writes of `file` ([`open_writes`]), and, where `factory_open` (ADR 1024: a factory the factory form trusts
+/// may not be standard), its factory-form sites too.
+fn open_writes_with_factory(file: &FileFacts, factory_open: bool) -> Vec<(String, Span)> {
+    let (_, _, open, factory) = impostor_sites(file);
+    let mut writes = open_writes(file, open);
+    if factory_open {
+        writes.extend(
+            factory
+                .into_iter()
+                .map(|(key, at)| (open_write_key(key), at)),
+        );
+    }
+    writes
 }
 
 /// ADR 0939: the keys written on objects not made where they are written
@@ -1793,14 +1848,7 @@ fn impostor_census(file: &FileFacts) -> Vec<Hazard> {
 fn open_writes(file: &FileFacts, open: Vec<(CensusKey, Span)>) -> Vec<(String, Span)> {
     let mut keys = open
         .into_iter()
-        .map(|(key, at)| {
-            let key = match key {
-                CensusKey::Named(name) if name != "__proto__" => name,
-                CensusKey::Symbol => SYMBOL_SITE.to_owned(),
-                _ => ANY_MEMBER.to_owned(),
-            };
-            (key, at)
-        })
+        .map(|(key, at)| (open_write_key(key), at))
         .collect::<Vec<_>>();
     let definer_held = file.ast.identifiers.iter().find(|identifier| {
         matches!(
@@ -1833,11 +1881,15 @@ fn open_writes(file: &FileFacts, open: Vec<(CensusKey, Span)>) -> Vec<(String, S
 
 /// ADR 0939: the detail of a call [`handed_root_patch`] withholds: the
 /// program's first write (by path and offset) that may put `member` there.
-pub(crate) fn handed_root_detail(files: &[FileFacts], member: &str) -> Option<String> {
+pub(crate) fn handed_root_detail(
+    files: &[FileFacts],
+    member: &str,
+    factory_open: bool,
+) -> Option<String> {
     let (file, at) = files
         .iter()
         .flat_map(|file| {
-            open_writes(file, impostor_sites(file).2)
+            open_writes_with_factory(file, factory_open)
                 .into_iter()
                 .filter(|(key, _)| key == ANY_MEMBER || key == member)
                 .map(move |(_, at)| (file, at))
@@ -1912,6 +1964,7 @@ fn impostor_sites(
     Vec<(&'static str, Span)>,
     Vec<&'static str>,
     Vec<(CensusKey, Span)>,
+    Vec<(CensusKey, Span)>,
 ) {
     use solid_facts::ast::ClassElementKind;
     let ast = &file.ast;
@@ -1919,6 +1972,8 @@ fn impostor_sites(
     let mut writers: Vec<&'static str> = Vec::new();
     // ADR 0939: every key written on an object not made here.
     let mut open: Vec<(CensusKey, Span)> = Vec::new();
+    // ADR 1024: the keys written on objects only the factory form proves made.
+    let mut factory: Vec<(CensusKey, Span)> = Vec::new();
     let census_member = |key: CensusKey| match key {
         CensusKey::Named(name) => IMPOSTOR_MEMBERS
             .iter()
@@ -1940,8 +1995,14 @@ fn impostor_sites(
         members.extend(census_member(key).map(|member| (member, at)));
     };
     let mut noted = Vec::new();
-    let mut write = |key: CensusKey, object: Span| {
-        if !fresh_object(file, object) {
+    let mut write = |key: CensusKey, object: Span| match fresh_written_object(file, object) {
+        Some(Fresh::Made) => {}
+        // The writers stay: a host receiver is no factory's, but the form claims no more than it needs.
+        Some(Fresh::Factory) => {
+            writers.extend(writer_member(key.clone()));
+            factory.push((key, object));
+        }
+        None => {
             writers.extend(writer_member(key.clone()));
             open.push((key, object));
         }
@@ -2085,7 +2146,8 @@ fn impostor_sites(
         {
             write_target(CensusKey::Unknown);
         } else if spelled_callee(callee, "Object.assign") {
-            if target.is_some_and(|target| fresh_object(file, target)) {
+            if target.is_some_and(|target| fresh_written_object(file, target) == Some(Fresh::Made))
+            {
                 continue;
             }
             for source in call.arguments.iter().skip(1) {
@@ -2132,7 +2194,7 @@ fn impostor_sites(
     }) {
         members.push((SYMBOL_REPLACE, read.span));
     }
-    (members, writers, open)
+    (members, writers, open, factory)
 }
 
 /// Whether the object at `span` is one this file makes on the spot: exactly

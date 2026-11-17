@@ -740,7 +740,11 @@ pub(crate) fn collect_project<'facts>(
                 })
                 .and_then(|name| {
                     let member = name.rsplit_once('.').map_or(name, |(_, member)| member);
-                    crate::base::contributions::handed_root_detail(files, member)
+                    crate::base::contributions::handed_root_detail(
+                        files,
+                        member,
+                        ctx.semantic_lookup.fresh_factory_writes_open(),
+                    )
                 });
             if let Some(detail) = root_detail.or_else(|| {
                 file.ast

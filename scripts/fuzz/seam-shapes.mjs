@@ -13,7 +13,8 @@
 //   bseam-isfinite-<form>          misuse  the member is replaced; the function runs at once, in the window of the call
 //   bseam-isfinite-<form>-other    legal   the replacement goes to another member; the declared one is called
 //
-// forms: assign, reflect, index, define (the ways a helper writes its parameter), and definelit, reflectlit (a definer put to a literal key, ADR 0951). Only a member the runtime does not itself call can be replaced in a program
+// forms: assign, reflect, index, define (the ways a helper writes its parameter), definelit, reflectlit (a definer put to a literal key, ADR 0951), and
+// pathescaped, pathrebound, letrebound, reviver, reduceforeign (an object that looks made but is the parameter, ADR 1024). Only a member the runtime does not itself call can be replaced in a program
 // the Chrome host runs: the replacement does not read the original (a program that does is already uncertifiable, SC9012 `standard-member-impostor`), so it would
 // break Solid and the host if it were `Set.add`, `setTimeout`, `Promise.prototype.then` or `addEventListener`. Those were scanned by the checker alone and are
 // reported, not shaped. Recall contexts, base shapes (misuse.mjs BASE_ONLY_CONTEXTS), on the three codes the hand-off roles decide.
@@ -29,6 +30,14 @@ const FORMS = {
   define: "Object.defineProperty(target, key, { value: impl, configurable: true, writable: true });",
   definelit: (key) => `Object.defineProperty(target, "${key}", { value: impl, configurable: true, writable: true });`,
   reflectlit: (key) => `Reflect.defineProperty(target, "${key}", { value: impl, configurable: true, writable: true });`,
+  // ADR 1024: writes through an object that looks made but reaches the parameter, each beside the fresh-object proof's form it is not: a static member
+  // path of a `const` literal handed to a call that rebinds it, the same path rebound in place, a `let` assigned the parameter, `JSON.parse` with a
+  // reviver, and a `reduce` callback whose return hands the next call the parameter.
+  pathescaped: "const holder = { slot: {} as any }; const swap = (o: any) => { o.slot = target; }; swap(holder); holder.slot[key] = impl;",
+  pathrebound: "const holder = { slot: {} as any }; holder.slot = target; holder.slot[key] = impl;",
+  letrebound: "let o: any = {}; o = target; o[key] = impl;",
+  reviver: "const o = JSON.parse(\"0\", () => target); o[key] = impl;",
+  reduceforeign: "[0, 1].reduce((acc: any, _x: number, i: number) => { if (i) acc[key] = impl; return target; }, {} as any);",
 };
 
 /**
