@@ -2869,6 +2869,15 @@ impl Dialect for Solid2 {
         self.triple_exports == releases::TripleExports::Rc21 && primitive == Primitive::Action
     }
 
+    /// ADR 1051, read on `@solidjs/signals@2.0.0-rc.21` and probed in Chrome (oracle case `action-resume-flush`):
+    /// `runEffect` runs a user effect's apply inside the draining flush with `inEffectCallback` set; the action's `step`
+    /// lowers it while the generator runs and restores it after, so `inTransaction`'s `flush()` (`dist/dev.js:2198-2208`)
+    /// finds the queue running and the marker up (`dist/dev-shared.js:3032-3077`) and warns. Only `createEffect`'s apply
+    /// was read and probed; a render effect and a reaction are not claimed.
+    fn resumed_action_flush_warns_in_apply(&self, effect: Primitive) -> bool {
+        self.triple_exports == releases::TripleExports::Rc21 && effect == Primitive::CreateEffect
+    }
+
     /// ADR 0548: `runEffect` calls a user effect's `_errorFn` when the
     /// compute errored, before `setStrictRead`, `setEffectCallback` and
     /// `enterCallback`, from the draining flush whose owner is `null`

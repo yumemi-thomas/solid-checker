@@ -1750,3 +1750,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/handed-root-patch-symbol-var/node_modules/**
 !fixtures/reactive-ir/handed-root-patch-symbol-var-written/node_modules/
 !fixtures/reactive-ir/handed-root-patch-symbol-var-written/node_modules/**
+!fixtures/reactive-ir/action-resume-flush/node_modules/
+!fixtures/reactive-ir/action-resume-flush/node_modules/**

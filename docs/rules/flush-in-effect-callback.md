@@ -209,6 +209,18 @@ unexported twin stays a violation.
 A call the call graph withheld (ADR 0339: a `const` arrow is not hoisted, and a call through an import cycle, a self-import
 included, may run before the binding's declarator) is followed the same way, as a run the walk does not prove.
 
+## An action's resumed step (ADR 1051)
+
+An action whose generator's first statement is a `yield` of a value that is no thenable (`yield;`, `yield 1`, `yield "s"`,
+`true`, `false`, `null`, the global `undefined`) steps again at once: `@solidjs/signals@2.0.0-rc.21`'s `run` calls
+`inTransaction(t, q, () => step(r.value))` (`dist/dev.js:2365`), and `inTransaction` flushes when no action step is on the
+stack (`:2198-2208`). A call of such an action (a `const` holding `action(function* …)`) on a `createEffect` apply's stack
+with no owner runs that flush inside the flush draining effects, so the rule reports the call as it reports a `flush()`
+written there; Chrome rc.21 warns FLUSH_IN_EFFECT_CALLBACK at it. Not reported: a first `yield` of a promise or any other
+value that may be a thenable (the step resumes from a continuation), code before the `yield`, an async generator, an
+`onSettled` or tracked-effect caller (the flush throws its own error there), a `createRenderEffect` or `createReaction`
+apply.
+
 ## Premises
 
 - **Universal claim.** Dead code is reported on purpose; there is no
