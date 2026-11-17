@@ -12,6 +12,7 @@
 //! instance on first use, so warm builds that never ask never pay.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{OnceLock, RwLock};
 
 use crate::core::Span;
@@ -205,6 +206,10 @@ pub struct AstSpanIndex {
     /// Answers to per-declaration questions, by (question, declaration).
     // ADR 1032: sharded by key, so the analysis workers asking at once do not all take one lock.
     flags: Vec<RwLock<HashMap<(u8, Span), bool>>>,
+    /// ADR 1032: the declarations the binder resolved a reference to (sorted, distinct), and per declaration one remembered answer for
+    /// each question below [`ATOMIC_QUESTIONS`] (0 unknown, 1 false, 2 true): read with a load, no lock.
+    declared: Vec<Span>,
+    declared_flags: Vec<[AtomicU8; ATOMIC_QUESTIONS]>,
 }
 
 /// What the queries below assume of the fact tables. They hold by
@@ -251,6 +256,9 @@ fn verify_table_invariants(facts: &AstFacts) {
     );
 }
 
+/// ADR 1032: the questions below this number whose answers about a declared span sit in a slot read without a lock.
+const ATOMIC_QUESTIONS: usize = 4;
+
 /// ADR 1032: how many locks the remembered flags are spread over.
 const FLAG_SHARDS: usize = 64;
 
@@ -264,6 +272,17 @@ impl AstSpanIndex {
     /// `compute()` for `(question, declaration)`, remembered. Concurrent
     /// first askers may each compute; the answers are equal.
     pub fn flag(&self, question: u8, declaration: Span, compute: impl FnOnce() -> bool) -> bool {
+        if let Some(slot) = self.atomic_flag(question, declaration) {
+            match slot.load(Ordering::Acquire) {
+                1 => return false,
+                2 => return true,
+                _ => {
+                    let answer = compute();
+                    slot.store(if answer { 2 } else { 1 }, Ordering::Release);
+                    return answer;
+                }
+            }
+        }
         let key = (question, declaration);
         let shard = &self.flags[flag_shard(question, declaration)];
         let known = shard
@@ -280,6 +299,17 @@ impl AstSpanIndex {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .insert(key, answer);
         answer
+    }
+
+    /// ADR 1032: the lock-free slot of `(question, declaration)`, when the question is one of the first [`ATOMIC_QUESTIONS`] and a reference
+    /// of the file resolves to the declaration.
+    fn atomic_flag(&self, question: u8, declaration: Span) -> Option<&AtomicU8> {
+        let question = usize::from(question);
+        if question >= ATOMIC_QUESTIONS {
+            return None;
+        }
+        let index = self.declared.binary_search(&declaration).ok()?;
+        Some(&self.declared_flags[index][question])
     }
 
     /// The spans of the file's `eval(...)` calls, computed by `compute` once.
@@ -303,6 +333,14 @@ impl AstSpanIndex {
                 argument_slots.push((call_index as u32, argument_index as u32));
             }
         }
+        // ADR 1032: every declaration a reference resolves to, the keys of the lock-free flags.
+        let mut declared = facts
+            .reference_declarations
+            .iter()
+            .map(|(_, declared)| *declared)
+            .collect::<Vec<_>>();
+        declared.sort_unstable();
+        declared.dedup();
         Self {
             functions_by_body: SpanTable::build(spans(
                 &mut facts.functions.iter().map(|function| function.body),
@@ -344,6 +382,11 @@ impl AstSpanIndex {
             flags: (0..FLAG_SHARDS)
                 .map(|_| RwLock::new(HashMap::new()))
                 .collect(),
+            declared_flags: declared
+                .iter()
+                .map(|_| std::array::from_fn(|_| AtomicU8::new(0)))
+                .collect(),
+            declared,
             arguments_by_span: SpanTable::build(argument_entries),
             argument_slots,
             bindings_by_initializer: SpanTable::build(
