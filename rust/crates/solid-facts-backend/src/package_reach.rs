@@ -283,6 +283,27 @@ pub fn package_reach_index(
                 None => {}
             }
         }
+        // ADR 1061: the blocker census keeps every problem of the closure, not only the verdict.
+        if solid_facts::package_reach::blocker_census() {
+            let census = match &named.runtime {
+                Ok(runtime) => verdicts.get(runtime).map_or_else(
+                    || solid_facts::package_reach::RootCensus {
+                        problems: vec![reach.clone()],
+                        ..Default::default()
+                    },
+                    |closure| solid_facts::package_reach::RootCensus {
+                        problems: closure.problems.clone(),
+                        write_any_files: closure.write_any_files.clone(),
+                        write_any_unread: closure.unread,
+                    },
+                ),
+                Err(reach) => solid_facts::package_reach::RootCensus {
+                    problems: vec![reach.clone()],
+                    ..Default::default()
+                },
+            };
+            index.census.insert(root.clone(), census);
+        }
         index.by_root.insert(root, reach);
     }
     index.linked = linked_roots(facts);
@@ -772,13 +793,16 @@ impl Demand {
 struct Closure {
     /// The verdict: the first thing that makes the closure reach Solid or not decided, in walk order, else clear.
     reach: PackageReach,
-    /// Everything that makes it so, each once, in walk order (the verdict first).
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// Everything that makes it so, each once, in walk order (the verdict first). Read by the blocker census (ADR 1061).
     problems: Vec<PackageReach>,
     /// Where the closure may define an accessor.
     accessors: AccessorFacts,
     /// The globals the closure writes (ADR 0974).
     global_writes: solid_facts::module_reach::GlobalWrites,
+    /// ADR 1061 (the blocker census): the files of the closure that write a global under a key nothing in the file decides.
+    write_any_files: Vec<String>,
+    /// ADR 1061: whether the closure holds code nobody read, which may write any global.
+    unread: bool,
     /// What the closure runs that the build does not see (the second re-check of #232): the answer of the walk that reads every file once, beside the action verdict.
     unseen: prototype::Closure,
 }
@@ -803,6 +827,8 @@ fn package_reach(
             problems: vec![PackageReach::ReachesSolid { via: name }],
             accessors: AccessorFacts::open(),
             global_writes: solid_facts::module_reach::GlobalWrites::default(),
+            write_any_files: Vec::new(),
+            unread: false,
             // Solid's own packages are the dialect's and are not asked.
             unseen: prototype::Closure::default(),
         };
@@ -819,6 +845,7 @@ fn package_reach(
         accessors_any_name: false,
         written: BTreeSet::new(),
         written_any: false,
+        written_any_files: Vec::new(),
         accessors_written: BTreeSet::new(),
         accessors_written_any: false,
         unread: false,
@@ -855,6 +882,12 @@ fn package_reach(
             accessor_names: walk.accessors_written.into_iter().collect(),
             accessors_any_name: walk.accessors_written_any || unread,
         },
+        write_any_files: walk
+            .written_any_files
+            .iter()
+            .map(|&file| short(walk.memo.path(file)))
+            .collect(),
+        unread,
         // A receiver matters only where the closure was read to its end and runs nothing unseen (the consumer asks for it only then).
         unseen: prototype::Closure {
             why: walk.unseen.map(|why| walk.memo.unseen_text(why).to_owned()),
@@ -1335,6 +1368,8 @@ struct Walk<'s, 'd, 'm> {
     /// The globals the files read write (ADR 0974), and whether any is written under a name the syntax does not fix.
     written: BTreeSet<String>,
     written_any: bool,
+    /// ADR 1061: the files read that write a global under a name the syntax does not fix, in walk order.
+    written_any_files: Vec<FileId>,
     /// The globals the files read may define an accessor for on the global object, and whether one may be defined under a name the syntax does not fix.
     accessors_written: BTreeSet<String>,
     accessors_written_any: bool,
@@ -1477,6 +1512,9 @@ impl Walk<'_, '_, '_> {
             self.accessors_any_name |= scan.accessors.any_name;
             extend(&mut self.written, &scan.global_writes.names);
             self.written_any |= scan.global_writes.any_name;
+            if scan.global_writes.any_name {
+                self.written_any_files.push(file);
+            }
             extend(
                 &mut self.accessors_written,
                 &scan.global_writes.accessor_names,

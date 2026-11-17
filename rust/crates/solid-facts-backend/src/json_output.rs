@@ -248,9 +248,10 @@ impl Serialize for Report<'_> {
             status,
             findings,
             hazards,
+            blocker_census,
             metrics,
         } = self.snapshot;
-        let mut report = serializer.serialize_struct("Snapshot", 6)?;
+        let mut report = serializer.serialize_struct("Snapshot", 7)?;
         if !premises.is_empty() {
             report.serialize_field("premises", premises)?;
         }
@@ -269,6 +270,10 @@ impl Serialize for Report<'_> {
         )?;
         if !hazards.is_empty() {
             report.serialize_field("hazards", hazards)?;
+        }
+        // ADR 1061: after the findings, so the findings' byte spans (the index) are those of a run without the census.
+        if !blocker_census.is_empty() {
+            report.serialize_field("blockerCensus", blocker_census)?;
         }
         report.serialize_field("metrics", metrics)?;
         report.end()

@@ -196,6 +196,29 @@ pub struct PackageReachIndex {
     /// a member through the object it runs against, and no file of the program shows the read. Asked of a program that can name a shared prototype (`unseen_code` is
     /// the answer for a package that does itself).
     pub reads_receiver: std::collections::BTreeSet<String>,
+    /// ADR 1061 (the blocker census, internal only): everything each root's closure holds, not only its verdict. Filled only where [`blocker_census`] is on;
+    /// no analysis reads it for a verdict.
+    pub census: BTreeMap<String, RootCensus>,
+}
+
+/// ADR 1061: what the blocker census records of one root's closure.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct RootCensus {
+    /// Every problem the walk met, each once, in walk order (the verdict first).
+    pub problems: Vec<PackageReach>,
+    /// The files of the closure that write a global under a key nothing in the file decides, and whether code nobody read may.
+    pub write_any_files: Vec<String>,
+    pub write_any_unread: bool,
+}
+
+/// ADR 1061: whether the blocker census is on (`SOLID_CHECKER_BLOCKER_CENSUS=1`). Internal only: it adds the `blockerCensus` table to the internal JSON and
+/// changes no finding, verdict, text or exit code.
+#[must_use]
+pub fn blocker_census() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| {
+        std::env::var_os("SOLID_CHECKER_BLOCKER_CENSUS").is_some_and(|value| value == "1")
+    })
 }
 
 impl PackageReachIndex {

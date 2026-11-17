@@ -15,6 +15,7 @@ fn snapshot(status: &str) -> Snapshot {
         status: status.into(),
         findings: Vec::new(),
         hazards: Vec::new(),
+        blocker_census: Vec::new(),
         metrics: Metrics {
             files_analyzed: 1,
             functions_analyzed: 2,

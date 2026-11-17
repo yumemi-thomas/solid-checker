@@ -85,6 +85,8 @@ pub(crate) struct PackageSite {
     pub(crate) package: String,
     /// Whose code the site enters.
     pub(crate) provider: Provider,
+    /// ADR 1061: every blocker of the site, where the blocker census is on (empty otherwise).
+    pub(crate) census: Vec<String>,
 }
 
 /// Whose code a site enters.
@@ -254,7 +256,19 @@ fn file_sites(
                 |root| installed_name(ctx, root),
             ),
         };
+        let census = if crate::blocker_census::enabled() {
+            reach_census(
+                &declaration.path,
+                entry,
+                &reach,
+                ctx.package_reach
+                    .is_some_and(|index| index.is_project_js(&declaration.path)),
+            )
+        } else {
+            Vec::new()
+        };
         sites.push(PackageSite {
+            census,
             at,
             callee,
             entry,
@@ -2720,6 +2734,7 @@ pub(crate) fn package_action_calls(
     ctx: &AnalysisContext<'_>,
     rows: &mut Vec<crate::StaticViolation>,
     ends: &mut SiteEnds,
+    census: &mut Vec<crate::blocker_census::CensusRow>,
 ) {
     let lookup = ctx.semantic_lookup;
     // ADR 0981: a value such a package returned, read where nothing tracks it (SC1001).
@@ -2753,6 +2768,8 @@ pub(crate) fn package_action_calls(
     let decided = crate::pipeline::parallel_balanced_results_from(64, &work, |&(file, site)| {
         site_decision(ctx, &files[file], &file_sites[file][site], &allowed[file])
     });
+    let mut roots = std::collections::BTreeSet::<String>::new();
+    let mut globals = std::collections::BTreeSet::<String>::new();
     let mut decided = work
         .iter()
         .copied()
@@ -2781,9 +2798,122 @@ pub(crate) fn package_action_calls(
                     SiteDecision::Reports => {}
                 }
             }
-            rows.push(row(file, site));
+            let filed = row(file, site);
+            if !site.census.is_empty() {
+                // A `reach|…` entry names no package or global: it is the whole census of its site.
+                for text in &site.census {
+                    if let Some(root) = text.strip_prefix("package|") {
+                        roots.insert(root.to_owned());
+                    } else if let Some(key) = text.strip_prefix("global|") {
+                        globals.insert(key.to_owned());
+                    }
+                }
+                census.push(crate::blocker_census::CensusRow::at(
+                    &filed.location,
+                    crate::blockers::PACKAGE_MAY_CALL_ACTION,
+                    site.census.clone(),
+                ));
+            }
+            rows.push(filed);
         }
     }
+    // ADR 1061: each package the census names, once, with every problem of its closure and the files that write any global.
+    if let Some(index) = ctx.package_reach {
+        for key in globals {
+            let writers = global_writers(index, &key);
+            roots.extend(writers.iter().map(|(root, _)| root.clone()));
+            census.push(crate::blocker_census::CensusRow {
+                path: key,
+                start: 0,
+                end: 0,
+                kind: "global".to_owned(),
+                blockers: writers
+                    .into_iter()
+                    .map(|(root, how)| format!("writer|{how}|{root}"))
+                    .collect(),
+            });
+        }
+        for root in roots {
+            let mut blockers = Vec::new();
+            crate::blocker_census::write_any_blockers(index, &root, &mut blockers);
+            crate::blocker_census::root_blockers(index, &root, &mut blockers);
+            census.push(crate::blocker_census::CensusRow {
+                path: root,
+                start: 0,
+                end: 0,
+                kind: "package".to_owned(),
+                blockers,
+            });
+        }
+    }
+}
+
+/// ADR 1061: every blocker of a site whose declaration is `path`. A global's writers (every one, not the first) are named once per global, in a row of kind
+/// `global` ([`global_writers`]); each package's problems once, in a row of kind `package` ([`package_action_calls`]).
+fn reach_census(path: &str, entry: Entry, reach: &PackageReach, project_js: bool) -> Vec<String> {
+    let how = if entry == Entry::Read {
+        "accessor"
+    } else {
+        "write"
+    };
+    if let Some(written) = path
+        .strip_prefix(WRITE_PREFIX)
+        .or_else(|| path.strip_prefix(WRITE_ANY_PREFIX))
+    {
+        let name = written.split_once(':').map_or(written, |(name, _)| name);
+        return vec![format!("global|{how}:{name}")];
+    }
+    if path.starts_with(READ_ANY_PREFIX) {
+        return vec![format!("global|{how}:*")];
+    }
+    if let Some(root) = package_root_of(path).filter(|_| {
+        !path.starts_with(solid_facts::package_reach::AMBIENT_PREFIX)
+            && !path.starts_with(solid_facts::package_reach::LIMIT_PREFIX)
+            && !path.starts_with(solid_facts::package_reach::COMPUTED_LOAD_PREFIX)
+            && !project_js
+    }) {
+        return vec![format!("package|{root}")];
+    }
+    let head = path.split_once(':').map_or("declaration", |(head, _)| head);
+    vec![format!(
+        "reach|{head}|{}|{}",
+        reach.word(),
+        match reach {
+            PackageReach::Undecided { detail, .. } => detail.as_str(),
+            PackageReach::ReachesSolid { via } => via.as_str(),
+            PackageReach::Clear => "",
+        }
+    )]
+}
+
+/// ADR 1061: the packages a global's key (`write:<name>`, `accessor:<name>`, `*` for a key the program does not spell) may run the code of, each with whether
+/// it writes the name (`named`) or may under any key (`any`, `unspelled`).
+fn global_writers(
+    index: &solid_facts::package_reach::PackageReachIndex,
+    key: &str,
+) -> Vec<(String, &'static str)> {
+    let (how, name) = key.split_once(':').unwrap_or(("write", key));
+    let mut writers: Vec<(String, &'static str)> = match (how, name) {
+        ("accessor", "*") => index
+            .global_accessor_writers_of_unspelled()
+            .map(|root| (root.to_owned(), "unspelled"))
+            .collect(),
+        (_, "*") => index
+            .global_writers_of_unspelled()
+            .map(|root| (root.to_owned(), "unspelled"))
+            .collect(),
+        ("accessor", name) => index
+            .global_accessor_writers_of(name)
+            .map(|(root, named)| (root.to_owned(), if named { "named" } else { "any" }))
+            .collect(),
+        (_, name) => index
+            .global_writers_of(name)
+            .map(|(root, named)| (root.to_owned(), if named { "named" } else { "any" }))
+            .collect(),
+    };
+    writers.sort();
+    writers.dedup();
+    writers
 }
 
 /// What a call, tag or read site's walk decides (ADR 1032: computed on the workers, applied in order).

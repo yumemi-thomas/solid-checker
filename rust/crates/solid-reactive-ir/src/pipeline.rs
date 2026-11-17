@@ -85,6 +85,8 @@ pub(crate) struct ProgramDraft {
     /// ADR 0840: per file (in `facts.files` order), the positions of the
     /// calls the impostor census withholds, asked once per call.
     pub(crate) withheld_calls: Vec<Vec<usize>>,
+    /// ADR 1061: the blocker census's rows (empty unless it is on).
+    pub(crate) blocker_census: Vec<crate::blocker_census::CensusRow>,
 }
 
 impl ProgramDraft {
@@ -191,6 +193,20 @@ impl ProgramDraft {
         }
         if first_at_start || (at_withheld && first_at_span) {
             self.static_defects.push(defect);
+        } else if defect.uncertain && crate::blocker_census::enabled() {
+            // ADR 1061: the row filed first at this start speaks for it; the census keeps what this one would have named.
+            let kind = crate::blocked_by::blocked_kind(&defect.analysis_context)
+                .unwrap_or("unnamed")
+                .to_owned();
+            self.blocker_census
+                .push(crate::blocker_census::CensusRow::at(
+                    &defect.location,
+                    "dropped",
+                    vec![format!(
+                        "dropped|{identity}|{kind}|{}",
+                        defect.analysis_context
+                    )],
+                ));
         }
     }
 
@@ -279,6 +295,7 @@ impl ProgramDraft {
             early_mention_sites: Vec::new(),
             blocked_by: Vec::new(),
             hazards: Vec::new(),
+            blocker_census: self.blocker_census,
             #[cfg(feature = "what-if")]
             assumed_premises: Vec::new(),
             package_entries: Vec::new(),
@@ -899,6 +916,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         &analysis,
         &mut draft.static_violations,
         &mut draft.site_ends,
+        &mut draft.blocker_census,
     );
     draft.discard_deleted_static_diagnostics(facts);
     crate::effect_execution::gate_diagnostics(semantic_lookup, &mut draft);
@@ -996,6 +1014,13 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     // ADR 0947: the typed blocker of each row a veto formula holds, over the final rows.
     (program.blocked_by, program.hazards) =
         crate::blocked_by::typed_blockers(&program, semantic_lookup);
+    // ADR 1061: the census of every veto formula a row's call meets, beside the one `blockedBy` names.
+    if crate::blocker_census::enabled() {
+        let rows = crate::blocked_by::formula_census(&program, semantic_lookup);
+        program.blocker_census.extend(rows);
+        program.blocker_census.sort();
+        program.blocker_census.dedup();
+    }
     // ADR 0965: the causes a what-if run assumed away, asked of the seam once the rows are final.
     #[cfg(feature = "what-if")]
     {
