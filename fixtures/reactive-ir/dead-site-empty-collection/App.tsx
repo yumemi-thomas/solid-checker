@@ -160,7 +160,7 @@ export function Wrapped() {
   });
   return <p />;
 }
-// A NodeList the DOM fills: not a literal.
+// A fresh element's `childNodes`: no child, so U since ADR 1033 (dead-site-nodelist).
 export function ChildNodes() {
   const [, setW] = createSignal(0);
   const tf = () => {

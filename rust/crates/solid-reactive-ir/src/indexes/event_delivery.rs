@@ -797,7 +797,7 @@ impl SemanticLookup<'_> {
 
     /// The name of the `lib.dom.d.ts` global `var` the identifier at `value`
     /// is, when it is one (see [`Self::dispatch_receiver`]).
-    fn global_dom_variable(
+    pub(crate) fn global_dom_variable(
         &self,
         file: &solid_facts::FileFacts,
         value: Span,
@@ -817,11 +817,7 @@ impl SemanticLookup<'_> {
         }
         let mut name = None;
         for declaration in symbol.declarations() {
-            let path = declaration.location.path.as_ref();
-            let file_name = std::path::Path::new(path).file_name()?.to_str()?;
-            if self.file_by_path(path).is_some() || !file_name.ends_with(".d.ts") {
-                return None;
-            }
+            let file_name = self.installed_declaration_file(declaration)?;
             if declaration.kind.as_ref() == "variable" && file_name == "lib.dom.d.ts" {
                 name = Some(declaration.name.as_ref());
             }
@@ -832,6 +828,35 @@ impl SemanticLookup<'_> {
             "document" => Some("document"),
             _ => None,
         }
+    }
+
+    /// ADR 1033: whether the name at `property` (a member's property) resolves to a member of the pinned `lib.dom.d.ts` called `name`, and nothing else:
+    /// every declaration of its symbol is there (none in a program file or another declaration file), so the read is the DOM's own property.
+    pub(crate) fn lib_dom_member(
+        &self,
+        file: &solid_facts::FileFacts,
+        property: Span,
+        name: &str,
+    ) -> bool {
+        let Some(symbol) = self.symbol_at(file.path.as_str(), property) else {
+            return false;
+        };
+        symbol.alias_target().is_empty()
+            && !symbol.declarations().is_empty()
+            && symbol.declarations().iter().all(|declaration| {
+                self.installed_declaration_file(declaration) == Some("lib.dom.d.ts")
+                    && declaration.name.as_ref() == name
+            })
+    }
+
+    /// The file name of a declaration in a declaration file that no program file is (a library's, not the project's), or `None`.
+    fn installed_declaration_file<'d>(
+        &self,
+        declaration: &'d typefacts::Declaration,
+    ) -> Option<&'d str> {
+        let path = declaration.location.path.as_ref();
+        let file_name = std::path::Path::new(path).file_name()?.to_str()?;
+        (self.file_by_path(path).is_none() && file_name.ends_with(".d.ts")).then_some(file_name)
     }
 
     /// The owner-free caller of a dispatch call, from where the call is

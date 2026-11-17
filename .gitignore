@@ -1189,6 +1189,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/component-mounted-in-disposal/node_modules/**
 !fixtures/reactive-ir/dead-site-empty-collection/node_modules/
 !fixtures/reactive-ir/dead-site-empty-collection/node_modules/**
+!fixtures/reactive-ir/dead-site-nodelist/node_modules/
+!fixtures/reactive-ir/dead-site-nodelist/node_modules/**
 !fixtures/reactive-ir/dead-site-empty-collection-shadowed/node_modules/
 !fixtures/reactive-ir/dead-site-empty-collection-shadowed/node_modules/**
 !fixtures/reactive-ir/dead-site-unused-class/node_modules/

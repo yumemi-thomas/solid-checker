@@ -1,5 +1,5 @@
 {
- "note": "ADR 1018: the legal programs whose checker violation sits at a site no run reaches (legal.mjs outcome `unexecuted`) that a person has seen. Such a row needs a look (codes.mjs `rowProblem`: `unexecuted-violation`) unless an entry below matches its grid and id: `explained` (the judge is right that the site never runs and the row is not a checker defect, a lane that never drives the site, say) or `pending-fix` (a real false positive whose fix is the ADR named, held so CI stays green until it lands; the fix's change removes the entry). A provably dead site gives U, never V (ADR 1018 retires the 2026-11-10 \"wrong if it runs\" ruling). Seeded from the full audit at 78ddeb849 (run 43739577046): 6,205 rows in lg-recall, four groups, each Chrome-confirmed on 993e83f74.",
+ "note": "ADR 1018: the legal programs whose checker violation sits at a site no run reaches (legal.mjs outcome `unexecuted`) that a person has seen. Such a row needs a look (codes.mjs `rowProblem`: `unexecuted-violation`) unless an entry below matches its grid and id: `explained` (the judge is right that the site never runs and the row is not a checker defect, a lane that never drives the site, say) or `pending-fix` (a real false positive whose fix is the ADR named, held so CI stays green until it lands; the fix's change removes the entry), or `known-false-positive` (ADR 1033: a real false positive no exact fact can rule out, its ADR saying why). A provably dead site gives U, never V (ADR 1018 retires the 2026-11-10 \"wrong if it runs\" ruling). Seeded from the full audit at 78ddeb849 (run 43739577046): 6,205 rows in lg-recall, four groups, each Chrome-confirmed on 993e83f74.",
  "entries": [
   {
    "grid": "lg-recall",
@@ -8,6 +8,14 @@
    "idRegex": "^lg-[a-z-]+-apply-void-value-(row|untrack)-",
    "adr": "ADR 1020",
    "why": "A closure an effect's compute returns and nothing calls (`createEffect(() => () => { use(); }, ..)`): it never runs; the checker reports SYNC_NODE_RECEIVED_ASYNC in it (120 rows)."
+  },
+  {
+   "grid": "lg-recall",
+   "kind": "known-false-positive",
+   "item": "tbl-nodelistof-foreach-zero",
+   "idRegex": "^lg-[a-z-]+-tbl-nodelistof-foreach-zero-",
+   "adr": "ADR 1033",
+   "why": "`document.querySelectorAll(\"sc-no-such-tag\").forEach(f)`: the generated page holds no such element, so Chrome never runs `f`, but no exact fact says the document holds none (its HTML, the project, a package or an extension may add one): the checker keeps the violation (5 rows: SC2001 x3, SC2002, SC3002). Not fixable without a census of the document's elements."
   }
  ]
 }

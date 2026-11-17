@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1033's live pair: `document.body.childNodes` and a node given a child before its `childNodes` are iterated; Chrome raises REACTIVE_WRITE_IN_OWNED_SCOPE at each, and the checker keeps the violation."
+}
