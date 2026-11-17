@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1036: the program's only definer is `Object.defineProperties({}, d)` and its only computed-key writes use keys numeric by their syntax, so `Number` handed on is never replaced and `Number.isFinite(sf1)` ignores its function argument: no dev diagnostic, and the checker certifies the call (fixture reactive-ir/fresh-target-definer)."
+}
