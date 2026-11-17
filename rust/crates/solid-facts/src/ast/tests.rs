@@ -3747,6 +3747,35 @@ fn local_alias_members_need_no_direct_eval_and_a_module() {
 
 /// ADR 0458 (facts schema 77): the regions no execution reaches, from the
 /// syntax alone, and the live code around them.
+/// ADR 1068: a `try` that never completes normally ends its list like a `return`.
+#[test]
+fn a_try_that_never_completes_normally_kills_what_follows() {
+    let source = "function f(c: boolean) {\n\
+  try { return; } finally { void 0; }\n\
+  a();\n\
+}\n\
+function g() {\n\
+  try { throw 1; } catch { return; }\n\
+  b();\n\
+}\n\
+function h(c: boolean) {\n\
+  try { if (c) return; } finally { void 0; }\n\
+  d();\n\
+  try { throw 1; } catch { void 0; }\n\
+  e();\n\
+  try { void 0; } finally { return; }\n\
+  k();\n\
+}\n";
+    let facts = extract("/project/App.tsx", source).unwrap();
+    let text = |span: &Span| &source[span.start as usize..span.end as usize];
+    let regions = facts
+        .unreachable_regions
+        .iter()
+        .map(text)
+        .collect::<Vec<_>>();
+    assert_eq!(regions, ["a();", "b();", "k();"]);
+}
+
 #[test]
 fn extracts_unreachable_regions() {
     let source = "function f(c: boolean) {\n\

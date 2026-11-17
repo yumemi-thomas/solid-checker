@@ -545,7 +545,8 @@ impl DiagnosticSession {
         let stage = solid_reactive_ir::ProofStage::begin(&findings);
         // ADR 0458: a violation at a site no execution reaches claims what
         // happens where nothing happens. Style rules claim nothing about
-        // execution, and SC2008 claims a no-op wherever it runs.
+        // execution. ADR 1068: SC2008 too (it was exempt as "a no-op wherever it runs", the reading ADR 1018 retired: a site
+        // that provably never runs gives no violation).
         for finding in &mut findings {
             if finding.kind == "violation"
                 && !finding.id.starts_with("SC80")
@@ -561,8 +562,6 @@ impl DiagnosticSession {
                 && (!site.returned_value_run
                     || site.returned_value_creation
                     || finding.id == "SC7002")
-                // SC2008 claims a no-op wherever it runs: only a site whose callback never runs (ADR 1020, fourth cut) is not one.
-                && (finding.id != "SC2008" || site.returned_value_creation)
             {
                 finding.kind = "uncertifiable".into();
                 let blocker = if site.returned_value_run {
