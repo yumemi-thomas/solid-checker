@@ -3926,34 +3926,42 @@
   {
    "fixture": "reactive-ir/returned-closure-unrun",
    "key": "SC3001 leaf-operation-unaccounted",
-   "from": 11,
-   "to": 13,
+   "from": 9,
+   "to": 20,
    "adr": "ADR 1020",
-   "fact": "Exact fixture package declarations place returned-value calls in a possible effect apply; creation-throws-first"
+   "fact": "fixture extended (third cut): returned compute values called in an apply, as a memo's value, through a helper, and in the body; creation-throws-first is the site's reach (UnreachedSite::returned_value_run)"
   },
   {
    "fixture": "reactive-ir/returned-closure-unrun",
    "key": "SC4001 owner-callers-unenumerated",
-   "from": 4,
-   "to": 5,
+   "from": 3,
+   "to": 7,
    "adr": "ADR 1020",
-   "fact": "Exact fixture package declarations place returned-value calls in a possible effect apply; creation-throws-first"
+   "fact": "fixture extended (third cut): returned compute values called in an apply, as a memo's value, through a helper, and in the body; creation-throws-first is the site's reach (UnreachedSite::returned_value_run)"
+  },
+  {
+   "fixture": "reactive-ir/returned-closure-unrun",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 9,
+   "to": 16,
+   "adr": "ADR 1020",
+   "fact": "fixture extended (third cut): returned compute values called in an apply, as a memo's value, through a helper, and in the body; creation-throws-first is the site's reach (UnreachedSite::returned_value_run)"
   },
   {
    "fixture": "reactive-ir/returned-closure-unrun",
    "key": "SC6002 effect-owner-unproven",
    "from": 0,
-   "to": 3,
+   "to": 4,
    "adr": "ADR 1020",
-   "fact": "Exact fixture package declarations place returned-value calls in a possible effect apply; creation-throws-first"
+   "fact": "fixture extended (third cut): returned compute values called in an apply, as a memo's value, through a helper, and in the body; creation-throws-first is the site's reach (UnreachedSite::returned_value_run)"
   },
   {
    "fixture": "reactive-ir/returned-closure-unrun",
    "key": "SC7002 creation-throws-first",
    "from": 0,
-   "to": 1,
+   "to": 4,
    "adr": "ADR 1020",
-   "fact": "Exact fixture package declarations place returned-value calls in a possible effect apply; creation-throws-first"
+   "fact": "fixture extended (third cut): returned compute values called in an apply, as a memo's value, through a helper, and in the body; creation-throws-first is the site's reach (UnreachedSite::returned_value_run)"
   }
  ]
 }

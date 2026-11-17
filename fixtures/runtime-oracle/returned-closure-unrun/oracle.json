@@ -1,1 +1,1 @@
-{"note": "ADR 1020: an unused returned closure is silent; called by the apply, a sync memo raises PRIMITIVE_IN_EFFECT_CALLBACK before its result probe. DirectSync raises SYNC_NODE_RECEIVED_ASYNC; AppliedVoidCall raises MISSING_EFFECT_FN."}
+{"note": "ADR 1020: an unused returned closure is silent; called in an apply (directly, as a memo's value, or through a helper), a sync memo raises PRIMITIVE_IN_EFFECT_CALLBACK before its result probe; called in the body, SYNC_NODE_RECEIVED_ASYNC. DirectSync raises SYNC_NODE_RECEIVED_ASYNC; AppliedVoidCall raises MISSING_EFFECT_FN."}

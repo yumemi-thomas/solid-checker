@@ -25166,9 +25166,9 @@
   "rediscovered": "main 2e2b60bb6 recall-gap, this build agree: 2 of 2 (146 of the context's NO_OWNER_CONTEXT programs move recall-gap to agree, Chrome agreeing on each)"
  },
  {
-  "finding": "SC7002 falsely proved inside a returned compute closure called by its apply: primitive creation throws PRIMITIVE_IN_EFFECT_CALLBACK before the async-result probe",
-  "found": "Mac 24 rejected bc96fab61; W4 Chrome rc.21 confirms the restored ReturnedAndCalled fixture and all four generated apply-void-call programs; zero typing errors",
-  "fixed": "ADR 1020 (static_api.rs returned compute closure competing-diagnostic gate; creation-throws-first)",
+  "finding": "SC7002 falsely proved where a sync memo is created only through a call of a value a compute returned (the apply calls it, a memo's value is called in an apply, a helper the closure calls): Chrome rc.21 throws PRIMITIVE_IN_EFFECT_CALLBACK at the creation first",
+  "found": "Mac 24 rejected bc96fab61; W4's Chrome run on the four generated apply-void-call programs; Mac 21's review of cd3a554fa: its origin-walk guard left 5 probe shapes proved (memo value, untrack(m)(), helper, nested function, helper via memo), Chrome PRIMITIVE_IN_EFFECT_CALLBACK at each",
+  "fixed": "ADR 1020 third cut (site_reach.rs SiteReach::withholding_returned_values, UnreachedSite::returned_value_run; SC7002 only: creation-throws-first)",
   "grid": "mx-census",
   "code": "SYNC_NODE_RECEIVED_ASYNC",
   "ids": [
@@ -25177,6 +25177,6 @@
    "mx-sync-node-received-async-apply-void-call-untrack-memo-direct-none",
    "mx-sync-node-received-async-apply-void-call-untrack-effect-direct-none"
   ],
-  "rediscovered": "Focused fuzzer: four stacked-claim outcomes on f1 become four not-fired outcomes without violations here. The old command exits zero because its existing R-stacked ledger masks those defects; no judge or allowlist changed. Chrome reports only PRIMITIVE_IN_EFFECT_CALLBACK. These mx-census programs remain in smoke."
+  "rediscovered": "make fuzz-focus CODES=SYNC_NODE_RECEIVED_ASYNC: the build before the guard (0f866a89a, bc96fab61 on main) fails with these 4 as unlisted stacked-claim once their rows leave open-defects-rows.json (R-stacked 153 -> 149); this build: not-fired, the 4 gone. The other probe shapes (memo value, helper, nested) are not generated: fixture returned-closure-unrun pins them. Unchanged on main and here: mx-sync-node-received-async-tracked-sibling-async-effect-direct-none (unlisted stacked-claim, PRIMITIVE_IN_FORBIDDEN_SCOPE)"
  }
 ]

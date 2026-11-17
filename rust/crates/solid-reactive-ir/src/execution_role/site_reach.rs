@@ -113,6 +113,11 @@ pub(crate) struct SiteReach<'l, 'a> {
     /// ADR 1034: a function written as an object literal's member value that a later spread, computed key or repeated key may
     /// replace runs only where the member is proven to hold it, which this query never proves.
     final_members: bool,
+    /// ADR 1020 (third cut): the query in which a function a primitive's callback returns as a value is never proven to run
+    /// (1020's first cut), so its `Runs` reaches a site without calling a returned compute closure.
+    withholds_returned_values: bool,
+    /// ADR 1020 (third cut): this query met a function a primitive's callback returns as a value.
+    crossed_returned_value: Cell<bool>,
 }
 
 impl Drop for SiteReach<'_, '_> {
@@ -330,7 +335,18 @@ impl<'l, 'a> SiteReach<'l, 'a> {
             limited: Cell::new(false),
             lazy_reads: false,
             final_members: false,
+            withholds_returned_values: false,
+            crossed_returned_value: Cell::new(false),
         }
+    }
+
+    /// ADR 1020 (third cut): the query that withholds every function a primitive's callback returns as a value, called or not.
+    /// A function the plain query runs and this one does not runs only through such a value being called, which may happen on
+    /// an effect apply's stack; for the report sites alone.
+    fn withholding_returned_values(lookup: &'l SemanticLookup<'a>) -> Self {
+        let mut query = Self::new(lookup);
+        query.withholds_returned_values = true;
+        query
     }
 
     /// ADR 1034: the query in which a function written as a member value an object literal may replace later
@@ -673,8 +689,16 @@ impl<'l, 'a> SiteReach<'l, 'a> {
         // throw there, before the body): whether the helper's body, and so this function, ever runs is not decided.
         // ADR 1020: a function literal an effect's or a memo's compute returns is a value the runtime hands on (the apply receives
         // it, the memo stores it); it runs only where program code calls that value, which is not read here: undecided.
+        // Third cut: a returned value proven never called stays withheld; one that may be called may run, and the query records
+        // that it met one ([`OwnerAnswers::returned`]).
+        let returned = returned_by_primitive_callback(file, function, self.lookup, false);
+        if returned {
+            self.crossed_returned_value.set(true);
+        }
         if self.handed_past_live_default(file, function)
-            || returned_by_primitive_callback(file, function, self.lookup, true)
+            || (returned
+                && (self.withholds_returned_values
+                    || returned_by_primitive_callback(file, function, self.lookup, true)))
         {
             self.limited.set(true);
             return true;
@@ -1617,6 +1641,7 @@ pub(crate) fn unreached_report_sites(
                     refused_creation,
                     lazy_unread,
                     member_may_be_replaced: false,
+                    returned_value_run: false,
                     undecided,
                 })
             };
@@ -1633,6 +1658,10 @@ pub(crate) fn unreached_report_sites(
                         SiteAnswer::LazyUnread => answer(false, false, false, true, false),
                         SiteAnswer::MemberMayBeReplaced => Some(crate::UnreachedSite {
                             member_may_be_replaced: true,
+                            ..answer(false, false, false, false, false)?
+                        }),
+                        SiteAnswer::ReturnedValueRun => Some(crate::UnreachedSite {
+                            returned_value_run: true,
                             ..answer(false, false, false, false, false)?
                         }),
                         // ADR 0560: an undecided query proves nothing; the
@@ -1855,6 +1884,9 @@ struct OwnerAnswers {
     lazy: Option<Entered>,
     /// ADR 1034: [`SiteReach::proving_final_members`]' answer, where `entered` is `Runs`.
     members: Option<Entered>,
+    /// ADR 1020 (third cut): [`SiteReach::withholding_returned_values`]' answer, where `entered` is `Runs` and its query met a
+    /// function a primitive's callback returns as a value.
+    returned: Option<Entered>,
 }
 
 /// What a report site written in a function proves.
@@ -1866,6 +1898,9 @@ enum SiteAnswer {
     LazyUnread,
     /// ADR 1034: the site runs only in a function written as a member value the object literal may replace.
     MemberMayBeReplaced,
+    /// ADR 1020 (third cut): the site may run, but it is proven to run only through a call of a value a primitive's compute
+    /// returned, which may be on an effect apply's stack.
+    ReturnedValueRun,
     Undecided,
 }
 
@@ -1875,35 +1910,57 @@ impl OwnerAnswers {
         function: &solid_facts::ast::FunctionFact,
         lookup: &SemanticLookup<'_>,
     ) -> Self {
-        let entered = Entered::of(&SiteReach::new(lookup), file, function);
+        let query = SiteReach::new(lookup);
+        let entered = Entered::of(&query, file, function);
+        let crossed = query.crossed_returned_value.get();
+        drop(query);
         let plain = (entered == Entered::Never)
             .then(|| Entered::of(&SiteReach::without_refusals(lookup), file, function));
         let lazy = (entered == Entered::Runs)
             .then(|| Entered::of(&SiteReach::proving_lazy_reads(lookup), file, function));
         let members = (entered == Entered::Runs)
             .then(|| Entered::of(&SiteReach::proving_final_members(lookup), file, function));
+        let returned = (entered == Entered::Runs && crossed).then(|| {
+            Entered::of(
+                &SiteReach::withholding_returned_values(lookup),
+                file,
+                function,
+            )
+        });
         Self {
             entered,
             plain,
             lazy,
             members,
+            returned,
         }
     }
 
     fn site(self) -> SiteAnswer {
-        match (self.entered, self.plain, self.lazy, self.members) {
-            (Entered::Never, Some(Entered::Undecided), _, _)
-            | (Entered::Undecided, _, _, _)
-            | (Entered::Runs, _, Some(Entered::Undecided), _)
-            | (Entered::Runs, _, _, Some(Entered::Undecided)) => SiteAnswer::Undecided,
-            (Entered::Never, plain, _, _) => SiteAnswer::NeverEntered {
+        match (
+            self.entered,
+            self.plain,
+            self.lazy,
+            self.members,
+            self.returned,
+        ) {
+            (Entered::Never, Some(Entered::Undecided), _, _, _)
+            | (Entered::Undecided, _, _, _, _)
+            | (Entered::Runs, _, Some(Entered::Undecided), _, _)
+            | (Entered::Runs, _, _, Some(Entered::Undecided), _) => SiteAnswer::Undecided,
+            (Entered::Never, plain, _, _, _) => SiteAnswer::NeverEntered {
                 refused_creation: plain == Some(Entered::Runs),
             },
             // ADR 0576: a site only an unread lazy computation runs.
-            (Entered::Runs, _, Some(Entered::Never), _) => SiteAnswer::LazyUnread,
+            (Entered::Runs, _, Some(Entered::Never), _, _) => SiteAnswer::LazyUnread,
             // ADR 1034: a site only a member value the literal may replace runs.
-            (Entered::Runs, _, _, Some(Entered::Never)) => SiteAnswer::MemberMayBeReplaced,
-            (Entered::Runs, _, _, _) => SiteAnswer::MayRun,
+            (Entered::Runs, _, _, Some(Entered::Never), _) => SiteAnswer::MemberMayBeReplaced,
+            // ADR 1020 (third cut): not proven to run without a returned value being called (the withholding query's
+            // `Undecided` included: it stops at the first such value).
+            (Entered::Runs, _, _, _, Some(Entered::Never | Entered::Undecided)) => {
+                SiteAnswer::ReturnedValueRun
+            }
+            (Entered::Runs, _, _, _, _) => SiteAnswer::MayRun,
         }
     }
 }
