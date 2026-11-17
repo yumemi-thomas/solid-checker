@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { test } from "vitest";
 
 import { assertManifestProvenance } from "./lib/corpus-manifest.mjs";
-import { assertManifestAdditions, changedSince, checkAdditions, filesUnder, hashTree, recordedOutputs } from "./lib/corpus-additions.mjs";
+import { assertAdditionsPresent, assertManifestAdditions, changedSince, checkAdditions, filesUnder, hashTree, recordedOutputs } from "./lib/corpus-additions.mjs";
 
 const commit = "35c4cc6b7c932f5dee5815b37d3601e7dff90b58";
 const write = (root, path, text) => { mkdirSync(join(root, path, ".."), { recursive: true }); writeFileSync(join(root, path), text); };
@@ -131,4 +131,21 @@ test("the committed rc.21 manifest records every addition in full: Paraglide for
   const failed = all.filter(({ addition }) => addition.result.exit !== 0);
   assert.deepEqual(failed.map(({ id }) => id).sort(), ["workspace-dist-solidaria", "workspace-dist-solidaria-components"]);
   for (const { addition } of failed) assert.ok(addition.result.tscErrors > 0 && /emitted/.test(addition.result.note));
+});
+
+test("ADR 1039: a sweep refuses a corpus whose recorded outputs are not on disk, for the apps it reads", () => {
+  const { root, manifest } = corpus();
+  try {
+    assert.doesNotThrow(() => assertAdditionsPresent(manifest, root));
+    assert.doesNotThrow(() => assertAdditionsPresent(manifest, root, { apps: new Set(["one"]) }));
+    rmSync(join(root, "one/packages/lib/dist"), { recursive: true });
+    assert.throws(() => assertAdditionsPresent(manifest, root, { manifestPath: "m.json" }), /m\.json: refusing a corpus without its recorded additions.*one workspace-dist-lib: one\/packages\/lib\/dist/);
+    assert.throws(() => assertAdditionsPresent(manifest, root, { apps: new Set(["one"]) }), /recorded additions/);
+    // an app the sweep does not read is not asked
+    assert.doesNotThrow(() => assertAdditionsPresent(manifest, root, { apps: new Set(["two"]) }));
+    // the check reports it too
+    assert.deepEqual(checkAdditions({ manifest, appsRoot: root }), ["one workspace-dist-lib: one/packages/lib/dist is missing"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

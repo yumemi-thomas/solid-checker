@@ -3,7 +3,7 @@
 // write one JSON report (findings per project, binary digests, configuration).
 //
 //   node scripts/corpus-sweep.mjs [--manifest scripts/corpus/rc21-manifest.json]
-//     [--apps-root ../solid-checker-rc21-frozen/apps]
+//     [--apps-root /Users/thomas/Documents/Github/solid-checker-rc21-frozen-v2/apps]
 //     [--checker rust/target/release/solid-checker-rust]
 //     [--typefacts bin/solid-typefacts] [--jobs 4] [--order-from <report.json>]
 //     [--apps <app,app>] [--program-boundary <open|closed>]
@@ -38,13 +38,14 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { AssumedReportError, refuseAssumed } from "./lib/assumed.mjs";
-import { assertManifestProvenance } from "./lib/corpus-manifest.mjs";
+import { assertAdditionsPresent } from "./lib/corpus-additions.mjs";
+import { DEFAULT_APPS_ROOT, assertManifestProvenance } from "./lib/corpus-manifest.mjs";
 import { readReportFile, writeReportFile } from "./lib/corpus-report.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const options = {
   manifest: join(repo, "scripts/corpus/rc21-manifest.json"),
-  "apps-root": resolve(repo, "../solid-checker-rc21-frozen/apps"),
+  "apps-root": DEFAULT_APPS_ROOT,
   checker: join(repo, "rust/target/release/solid-checker-rust"),
   typefacts: join(repo, "bin/solid-typefacts"),
   jobs: "4",
@@ -83,6 +84,7 @@ for (const row of rows) {
   const project = join(row.root, row.project);
   if (!existsSync(project)) throw new Error(`missing project input: ${project}`);
 }
+assertAdditionsPresent(manifest, appsRoot, { apps: selectedApps, manifestPath });
 if (options["order-from"]) {
   const key = (row) => `${row.app}\0${row.project}`;
   // The earlier report is read a project at a time: only the wall time of each is kept (a whole corpus report does not fit one string).

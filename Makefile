@@ -306,7 +306,7 @@ ir-edit-fuzz-corpus: build-checker-release
 
 # ADR 1012: the corpus findings of this tree held to main's (scripts/guard/corpus.mjs): a lost violation, or a (project, file, rule) that was clean and holds an
 # uncertifiable row, fails unless a new row of scripts/guard/corpus-changes.json names it. Release checker, the frozen corpus (CORPUS_APPS=<apps root>, the
-# default is ../solid-checker-rc21-frozen/apps) and a baseline of THIS machine (`node scripts/guard/corpus.mjs record` from a main checkout).
+# default is /Users/thomas/Documents/Github/solid-checker-rc21-frozen-v2/apps, ADR 1039) and a baseline of THIS machine (`node scripts/guard/corpus.mjs record` from a main checkout).
 CORPUS_APPS ?=
 corpus-guard: build-checker-release
 	node scripts/guard/corpus.mjs check $(if $(CORPUS_APPS),--apps-root "$(CORPUS_APPS)")

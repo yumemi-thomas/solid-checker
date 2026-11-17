@@ -4,7 +4,7 @@
 //   node scripts/corpus-delta.mjs --old <checker> --new <checker> [--typefacts <bin>] [--old-typefacts <bin>] [--new-typefacts <bin>]
 //     (--hazard <id[,id...]> | --blocker <kind[,kind...]> | --all)
 //     [--baseline <old build's corpus-sweep report>] [--controls 3]
-//     [--manifest scripts/corpus/rc21-manifest.json] [--apps-root ../solid-checker-rc21-frozen/apps] [--apps a,b]
+//     [--manifest scripts/corpus/rc21-manifest.json] [--apps-root /Users/thomas/Documents/Github/solid-checker-rc21-frozen-v2/apps] [--apps a,b]
 //     [--jobs 4] [--timeout 900] [--program-boundary open|closed] [--out <report.json>] [--json]
 //
 // A veto reads whole-program hazards (ADR 0947), so a change to one moves rows only in the projects where those hazards are present. The
@@ -29,7 +29,8 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { AssumedReportError, refuseAssumed } from "./lib/assumed.mjs";
-import { assertManifestProvenance } from "./lib/corpus-manifest.mjs";
+import { assertAdditionsPresent } from "./lib/corpus-additions.mjs";
+import { DEFAULT_APPS_ROOT, assertManifestProvenance } from "./lib/corpus-manifest.mjs";
 import { readReportFile } from "./lib/corpus-report.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -205,7 +206,7 @@ export function parseOptions(argv) {
   const options = {
     old: null, new: null, typefacts: join(repo, "bin/solid-typefacts"), "old-typefacts": null, "new-typefacts": null,
     hazard: null, blocker: null, baseline: null, controls: "3",
-    manifest: join(repo, "scripts/corpus/rc21-manifest.json"), "apps-root": resolve(repo, "../solid-checker-rc21-frozen/apps"),
+    manifest: join(repo, "scripts/corpus/rc21-manifest.json"), "apps-root": DEFAULT_APPS_ROOT,
     apps: null, jobs: "4", timeout: "900", "program-boundary": null, out: null,
   };
   const flags = new Set(["all", "json"]);
@@ -288,6 +289,7 @@ async function main(argv) {
   const selected = options.apps ? new Set(options.apps.split(",")) : null;
   const rows = manifest.projects.filter((row) => !selected || selected.has(row.app)).map((row) => ({ app: row.app, root: join(appsRoot, row.root), project: row.project }));
   for (const row of rows) if (!existsSync(join(row.root, row.project))) throw new Error(`missing project input: ${join(row.root, row.project)}`);
+  assertAdditionsPresent(manifest, appsRoot, { apps: selected, manifestPath });
   const [oldBin, newBin] = [resolve(options.old), resolve(options.new)];
   const oldFacts = resolve(options["old-typefacts"] ?? options.typefacts);
   const newFacts = resolve(options["new-typefacts"] ?? options.typefacts);
