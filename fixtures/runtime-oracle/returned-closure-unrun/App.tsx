@@ -1,4 +1,4 @@
-import { createEffect, createMemo, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, flush, untrack } from "solid-js";
 
 // ADR 1020: a function a primitive's callback returns is a value the runtime hands on (an effect's apply receives it, a memo stores
 // it). It runs only where something calls that value; reach analysis does not read that, so a site in it is undecided: uncertifiable.
@@ -129,5 +129,43 @@ export function MemoValueCalledInBody() {
     createMemo(async () => 8, { sync: true });
   });
   untrack(m)();
+  return <div />;
+}
+
+// Obligations (fourth cut, Fable's review): a site in a callback of a computation created inside the returned value. Called on the
+// apply's stack, that creation throws PRIMITIVE_IN_EFFECT_CALLBACK first and the callback never runs (Chrome: only that code), so no
+// rule's claim there is proven: the memo's compute creating an effect with no effect function (SC7001), a flush in a created
+// effect's apply (SC2008).
+export function CreatedInReturnedMemo() {
+  createEffect(
+    () => () => {
+      createMemo(() => {
+        createEffect(() => 1, undefined as unknown as () => void);
+        return 1;
+      });
+    },
+    (v) => {
+      v();
+    },
+  );
+  return <div />;
+}
+
+export function CreatedInReturnedEffect() {
+  const [s, setS] = createSignal(0);
+  createEffect(
+    () => () => {
+      createEffect(
+        () => s(),
+        () => {
+          setS(2);
+          flush();
+        },
+      );
+    },
+    (v) => {
+      v();
+    },
+  );
   return <div />;
 }

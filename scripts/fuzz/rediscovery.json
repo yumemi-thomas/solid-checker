@@ -25829,5 +25829,11 @@
   "found": "the Fable review of ADR 1047/1051",
   "fixed": "ADR 1051's review fix (one literal node as the operand; a parameter list that is not inert identifiers leaves the call unreported)",
   "outside": "the throw ends the action before any site of its body runs, so no grid program places a site there (the generator puts the site in the body, which never runs); fixture `action-resume-flush` (`YieldConcatThrows`, `ParameterDestructured`, `ParameterDefaultThrows`) and its oracle case pin them: a9a00a06b SC2008 static-only at each, this build no row, Chrome silent"
+ },
+ {
+  "finding": "ADR 1020 third cut (14434c30f): a site in a callback of a computation created inside a returned compute closure the apply calls was a proved violation of any rule but SC7002 (SC7001 in a created memo's compute, SC2008 at a flush in a created effect's apply); Chrome rc.21 throws PRIMITIVE_IN_EFFECT_CALLBACK at the creation first and the callback never runs",
+  "found": "Fable's review of 14434c30f; Mac 21's probe (checker and Chrome rc.21: SC7001 static-only)",
+  "fixed": "ADR 1020 fourth cut (site_reach.rs crosses_creation_below_returned_value, UnreachedSite::returned_value_creation; every rule)",
+  "outside": "Not generated: no grid writes a creation inside a function a compute returns (the apply-void-call contexts write the site directly in the returned closure, where the claim stands). Pinned by fixture returned-closure-unrun (CreatedInReturnedMemo, CreatedInReturnedEffect: violations on 14434c30f, uncertifiable here; Chrome rc.21 covered-uncertifiable)."
  }
 ]

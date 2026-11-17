@@ -1463,6 +1463,38 @@ pub(crate) fn returned_by_primitive_callback(
     })
 }
 
+/// ADR 1020 (fourth cut, Fable's review of 14434c30f): from `function` (the one written around a report site) up through the functions
+/// written around it, to the first that a primitive's compute returns as a value: one of them is a callback of a dialect primitive
+/// (`createMemo(() => site)`, an effect's apply; `untrack`'s too, which creates nothing: fail closed, no primitive is told apart). Called on an effect apply's stack, the returned value creates
+/// that computation first, which throws PRIMITIVE_IN_EFFECT_CALLBACK there, so the callback never runs: no claim at the site is
+/// proven. Any primitive counts, whether the release says its creation throws or not.
+fn crosses_creation_below_returned_value(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    let mut current = function;
+    loop {
+        if returned_by_primitive_callback(file, current, lookup, false) {
+            return false;
+        }
+        let handed_to_primitive = ast.calls.iter().any(|call| {
+            call.arguments
+                .iter()
+                .any(|argument| ast.peel_ts_sugar_span(argument.span) == current.span)
+                && lookup.primitive_at_call(file, call.span).is_some()
+        });
+        if handed_to_primitive {
+            return true;
+        }
+        match crate::owners::owning_function(ast, current.span) {
+            Some(outer) => current = outer,
+            None => return false,
+        }
+    }
+}
+
 /// ADR 1020 (narrowed after #271's smoke census): the value the callback at `index` of `call` returns is provably never called. It
 /// goes to the next argument when that is a function literal (an effect's apply): its first parameter is absent, or every reference of
 /// it is the operand of `void` and not called (`(v) => { void v; }`). Otherwise it is the call's own result (a memo's value): the call's
@@ -1642,6 +1674,7 @@ pub(crate) fn unreached_report_sites(
                     lazy_unread,
                     member_may_be_replaced: false,
                     returned_value_run: false,
+                    returned_value_creation: false,
                     undecided,
                 })
             };
@@ -1662,6 +1695,9 @@ pub(crate) fn unreached_report_sites(
                         }),
                         SiteAnswer::ReturnedValueRun => Some(crate::UnreachedSite {
                             returned_value_run: true,
+                            returned_value_creation: crosses_creation_below_returned_value(
+                                file, function, lookup,
+                            ),
                             ..answer(false, false, false, false, false)?
                         }),
                         // ADR 0560: an undecided query proves nothing; the

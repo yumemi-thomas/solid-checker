@@ -10,4 +10,6 @@ Violations too, since the narrowing after #271's smoke census: `AppliedVoidCall`
 
 Obligations too (SC7002 `creation-throws-first`, the site's reach: it runs only through a call of a returned value): `ReturnedAndCalled` (the apply calls the closure), `MemoValueCalledInApply` (a memo's value read by the compute and called in the apply), `HelperCalledInApply` (a helper the returned closure calls): rc.21 throws PRIMITIVE_IN_EFFECT_CALLBACK at the creation and never probes the computation; Chrome reports that code, not SYNC_NODE_RECEIVED_ASYNC. `MemoValueCalledInBody` (called in the component body: Chrome reports SYNC_NODE_RECEIVED_ASYNC) stays uncertifiable too, a known miss.
 
+Obligations (fourth cut): `CreatedInReturnedMemo` (SC7001 in a memo's compute created inside the returned value), `CreatedInReturnedEffect` (SC2008 at a `flush()` in a created effect's apply): the creation throws PRIMITIVE_IN_EFFECT_CALLBACK first on the apply's stack, so neither callback runs (Chrome reports only that code).
+
 Runtime: rc.21 Chrome, oracle case `fixtures/runtime-oracle/returned-closure-unrun`.
