@@ -1095,6 +1095,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-leaf-identity-unproven/node_modules/**
 !fixtures/reactive-ir/rc21-action-unplaced/node_modules/
 !fixtures/reactive-ir/rc21-action-unplaced/node_modules/**
+!fixtures/reactive-ir/construct-only-class/node_modules/
+!fixtures/reactive-ir/construct-only-class/node_modules/**
 !fixtures/reactive-ir/rc21-setter-unplaced/node_modules/
 !fixtures/reactive-ir/rc21-setter-unplaced/node_modules/**
 !fixtures/reactive-ir/store-for-head-write/node_modules/

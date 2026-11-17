@@ -24845,5 +24845,52 @@
   "code": "SYNC_NODE_RECEIVED_ASYNC",
   "ids": ["lg-sync-node-received-async-apply-void-value-untrack-memo-direct-none", "lg-sync-node-received-async-apply-void-value-row-memo-direct-none"],
   "rediscovered": "main c2779cb39 violation (Chrome: no diagnostic, the site never executes), this build uncertifiable `site-reach-undecided`: 120 of 120"
+ },
+ {
+  "finding": "G1 recall gap (Mac 21's brief): a member of a construct-only local class (its constructor, an instance field initializer, the method called directly on its one `new`) was `function-run-unplaced` while Chrome reports the code at the site, as it does written in the body",
+  "found": "the full CI audit 43739577046 (78ddeb849), the blocker scan of its `pos-class-*` cells",
+  "fixed": "ADR 1022 (`execution_role/construct_only.rs`)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-pos-class-method-memo-direct-none",
+   "mx-strict-read-untracked-pos-class-ctor-memo-direct-none",
+   "mx-strict-read-untracked-pos-class-field-memo-direct-none"
+  ],
+  "rediscovered": "main 993e83f74: recall-gap (uncertifiable, `function-run-unplaced`) on each; ADR 1022's build: agree"
+ },
+ {
+  "finding": "G1 recall gap (Mac 21's brief): a member of a construct-only local class (its constructor, an instance field initializer, the method called directly on its one `new`) was `function-run-unplaced` while Chrome reports the code at the site, as it does written in the body",
+  "found": "the full CI audit 43739577046 (78ddeb849), the blocker scan of its `pos-class-*` cells",
+  "fixed": "ADR 1022 (`execution_role/construct_only.rs`)",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-pos-class-ctor-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-pos-class-method-signal-direct-none"
+  ],
+  "rediscovered": "main 993e83f74: recall-gap (uncertifiable, `function-run-unplaced`) on each; ADR 1022's build: agree"
+ },
+ {
+  "finding": "G1 recall gap (Mac 21's brief): a member of a construct-only local class (its constructor, an instance field initializer, the method called directly on its one `new`) was `function-run-unplaced` while Chrome reports the code at the site, as it does written in the body",
+  "found": "the full CI audit 43739577046 (78ddeb849), the blocker scan of its `pos-class-*` cells",
+  "fixed": "ADR 1022 (`execution_role/construct_only.rs`)",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pos-class-method-x-direct-none"
+  ],
+  "rediscovered": "main 993e83f74: recall-gap (uncertifiable, `function-run-unplaced`) on each; ADR 1022's build: agree"
+ },
+ {
+  "finding": "G1 recall gap (Mac 21's brief): a member of a construct-only local class (its constructor, an instance field initializer, the method called directly on its one `new`) was `function-run-unplaced` while Chrome reports the code at the site, as it does written in the body",
+  "found": "the full CI audit 43739577046 (78ddeb849), the blocker scan of its `pos-class-*` cells",
+  "fixed": "ADR 1022 (`execution_role/construct_only.rs`)",
+  "grid": "mx-recall",
+  "code": "ON_FLUSH_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-on-flush-in-owned-scope-pos-class-ctor-x-direct-none"
+  ],
+  "rediscovered": "main 993e83f74: recall-gap (uncertifiable, `function-run-unplaced`) on each; ADR 1022's build: agree"
  }
 ]

@@ -353,6 +353,16 @@
         "why": "pending-review"
       }
     },
+    "rust/crates/solid-reactive-ir/src/execution_role/construct_only.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "ADR 1022 `run_in_class_body`: `host.is_none_or(..)` answers that a JSX element contains the run when the class is at module scope (no host function bounds the element): the answer refuses the placement, so the member stays `function-run-unplaced`; a missing fact never places a member"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "ADR 1022 `construct_only_member_run`: `_ => return None` over the element kinds (a static field, a static block, a getter, a setter, an index signature) places nothing: the member keeps the answer every net gave it before (unplaced, an obligation), never silence"
+      }
+    },
     "rust/crates/solid-reactive-ir/src/execution_role/control_flow.rs": {
       "default-on-missing": {
         "count": 1,
