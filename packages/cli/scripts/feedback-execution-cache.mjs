@@ -17,7 +17,7 @@
 // and the cached capture. A run whose scenario failed is not stored, so a
 // timeout under load is never replayed.
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -48,8 +48,9 @@ export function toolingIdentity(root, names = ["vite", "@solidjs/vite-plugin", "
       const metadata = join(directory, "package.json");
       if (existsSync(metadata) && JSON.parse(readFileSync(metadata, "utf8")).name === name) {
         // ADR 1029: where the tooling sits is not what it is: the manifest's path relative to the tooling root, so every checkout of the
-        // same tooling keys the same.
-        return { name, path: relative(root, metadata), sha256: sha256(readFileSync(metadata)) };
+        // same tooling keys the same. Relative to the root's real path: `require.resolve` answers real paths, so a root under a symlink (macOS
+        // `/var` is `/private/var`) would otherwise name a path out of the root.
+        return { name, path: relative(realpathSync(root), metadata), sha256: sha256(readFileSync(metadata)) };
       }
     }
     return { name, unresolved: resolved };
