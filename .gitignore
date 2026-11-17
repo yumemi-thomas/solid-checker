@@ -1768,3 +1768,13 @@ packages/wasm/owned/
 !fixtures/reactive-ir/projection-draft-assign-rebound/node_modules/**
 !fixtures/reactive-ir/unresolved-namespace-slots/node_modules/
 !fixtures/reactive-ir/unresolved-namespace-slots/node_modules/**
+!fixtures/reactive-ir/iteration-timer-parameter-composite/node_modules/
+!fixtures/reactive-ir/iteration-timer-parameter-composite/node_modules/**
+!fixtures/reactive-ir/iteration-timer-parameter-composite-stored/node_modules/
+!fixtures/reactive-ir/iteration-timer-parameter-composite-stored/node_modules/**
+!fixtures/reactive-ir/iteration-timer-handed-literal/node_modules/
+!fixtures/reactive-ir/iteration-timer-handed-literal/node_modules/**
+!fixtures/reactive-ir/iteration-timer-handed-literal-receiver/node_modules/
+!fixtures/reactive-ir/iteration-timer-handed-literal-receiver/node_modules/**
+!fixtures/reactive-ir/iteration-timer-handed-literal-escape/node_modules/
+!fixtures/reactive-ir/iteration-timer-handed-literal-escape/node_modules/**

@@ -1,0 +1,3 @@
+# iteration-timer-parameter-composite
+
+**Claim (ADR 1056).** A timer callback that is a parameter is seen where its function is entered only through calls: `afterNextPaint(resume)` (a local function, not exported) is referenced only as an operand of the composite callee `(options.scheduleAfterPaint ?? afterNextPaint)(() => …)`, so `resume` is the arrow that call passes, which ignores the window the timer gives it as `this`. The census hands no window to unseen code, the signal's slots stay exact, and `set(2)` in `BodyWrite` is REACTIVE_WRITE_IN_OWNED_SCOPE (SC2001), which Chrome reports (oracle case of the same name). kui's `feature-messages/src/session.ts:184,187`. Twin: `-stored`.

@@ -2068,6 +2068,13 @@ fn closed_parameter_seen(
             .iter()
             .any(|parameter| parameter.names.iter().any(|name| name.span == declaration))
     })?;
+    // ADR 1056: an anonymous function written as a member of an object literal handed whole to an exact project function.
+    if function.kind != ast::FunctionKind::Declaration
+        && function.name.is_none()
+        && let Some(seen) = handed_literal_member_seen(lookup, file, function, declaration, depth, test)
+    {
+        return Some(seen);
+    }
     let name = match function.kind {
         ast::FunctionKind::Declaration => function.name.as_ref()?.span,
         // A function expression's own name is an entry no binding shows
@@ -2126,12 +2133,26 @@ fn closed_parameter_seen(
         {
             continue;
         }
-        let Some(call) = file
+        // ADR 1056: a reference that is an assignment's value stores the function (`(slot = f)(cb)`, which ADR 0515's peel otherwise
+        // reads as the callee `f`): `slot` is an entry no call of `f` shows, so the parameter may be any function.
+        if file
             .ast
-            .calls
+            .assignments
             .iter()
-            .find(|call| file.ast.peel_ts_sugar_span(call.callee) == identifier.span)
-        else {
+            .any(|assignment| file.ast.peel_ts_sugar_span(assignment.value_span) == identifier.span)
+        {
+            return Some(false);
+        }
+        // ADR 1056: the reference is the callee, or one of the operands a composite callee may evaluate to (`(options.run ?? f)(cb)`,
+        // `(c ? f : g)(cb)`): either way the call enters the function with its own arguments.
+        let Some(call) = file.ast.calls.iter().find(|call| {
+            file.ast.peel_ts_sugar_span(call.callee) == identifier.span
+                || file
+                    .ast
+                    .composite_callee_operands(call.callee)
+                    .iter()
+                    .any(|operand| file.ast.peel_ts_sugar_span(*operand) == identifier.span)
+        }) else {
             return Some(false);
         };
         calls.push(call);
@@ -2148,6 +2169,148 @@ fn closed_parameter_seen(
         };
         parameter_argument(file, &frame, declaration)
             .is_some_and(|argument| callback_seen(lookup, file, argument, None, depth - 1, test))
+    }))
+}
+
+/// ADR 1056: `function` (anonymous, not a declaration) is the value of a plain data property `key` of an object literal written as the
+/// argument of a direct call of an exact project function `callee`, and the parameter at `declaration` is one of its own. The literal
+/// is closed (no spread, no computed or nameless key: [`ast::ObjectGetShapeFact::closed`]), has no accessor, and `function` is its
+/// one property of that key; the literal is nowhere else (it is the argument as written). `callee`'s parameter at that position is a
+/// plain name with no default, `callee` mentions no `arguments`, and every reference to the parameter reads a member by a static
+/// key, never written: a read of `key` is the callee of a direct call, and so the only way `function` runs; a call of another
+/// member runs that member with the literal as `this`, so its value must be a function that cannot read `this` (an arrow, or one
+/// that never mentions a receiver), else that member could reach `key` itself. What enters `function` is then exactly those calls,
+/// and the question is asked of their arguments. `None` where `function` is no such member.
+fn handed_literal_member_seen(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    function: &ast::FunctionFact,
+    declaration: Span,
+    depth: usize,
+    test: CallbackTest<'_>,
+) -> Option<bool> {
+    let ast = &file.ast;
+    let property = ast
+        .object_properties
+        .iter()
+        .find(|property| property.data && !property.computed && ast.peel_ts_sugar_span(property.value) == function.span)?;
+    let key = crate::execution_role::property_static_key(file, property)?;
+    // The literal is the innermost one holding the property, closed, and its own properties are data or methods, one of them `key`.
+    let literal = ast
+        .object_get_shapes
+        .iter()
+        .filter(|shape| shape.span.contains(property.span) && shape.span != property.span)
+        .min_by_key(|shape| shape.span.end - shape.span.start)?;
+    if !literal.closed {
+        return Some(false);
+    }
+    let own = ast
+        .object_properties
+        .iter()
+        .filter(|other| {
+            literal.span.contains(other.span)
+                && ast
+                    .object_get_shapes
+                    .iter()
+                    .filter(|shape| shape.span.contains(other.span) && shape.span != other.span)
+                    .min_by_key(|shape| shape.span.end - shape.span.start)
+                    .is_some_and(|shape| shape.span == literal.span)
+        })
+        .collect::<Vec<_>>();
+    if own.iter().any(|other| !(other.data || other.method) || other.computed)
+        || own
+            .iter()
+            .filter(|other| crate::execution_role::property_static_key(file, other).as_deref() == Some(key.as_str()))
+            .count()
+            != 1
+    {
+        return Some(false);
+    }
+    // The literal is, as written, an argument of a direct call (no spread before it).
+    let (call, index) = ast.calls.iter().filter(|call| !call.construct).find_map(|call| {
+        call.arguments
+            .iter()
+            .position(|argument| ast.peel_ts_sugar_span(argument.span) == literal.span)
+            .map(|index| (call, index))
+    })?;
+    if call.arguments.iter().take(index + 1).any(|argument| argument.spread) {
+        return Some(false);
+    }
+    let Some((callee_file, callee, true)) =
+        crate::execution_role::declared_callee_at_parameter(file, call, index, lookup)
+    else {
+        return Some(false);
+    };
+    let (Some(parameter), false) = (callee.parameters.get(index), callee.rest_parameter && index + 1 >= callee.parameters.len()) else {
+        return Some(false);
+    };
+    let [name] = parameter.names.as_slice() else {
+        return Some(false);
+    };
+    if parameter.shape != ast::BindingShape::Identifier
+        || parameter.initializer.is_some()
+        || callee_file
+            .source_text(callee.span)
+            .is_none_or(|text| crate::indexes::mentions_word(text, "arguments"))
+    {
+        return Some(false);
+    }
+    let position = function
+        .parameters
+        .iter()
+        .position(|parameter| parameter.names.iter().any(|name| name.span == declaration))?;
+    if function.rest_parameter && position + 1 == function.parameters.len() {
+        return Some(false);
+    }
+    let callee_ast = &callee_file.ast;
+    let mut entries = Vec::new();
+    for reference in callee_ast.reference_identifiers_to(name.span) {
+        let Some(member) = callee_ast.member_with_peeled_object(reference.span) else {
+            return Some(false);
+        };
+        if callee_ast.computed_members.binary_search(&member.span).is_ok() {
+            return Some(false);
+        }
+        let read = member_key(callee_file, member);
+        let written = callee_ast
+            .write_targets
+            .iter()
+            .chain(&callee_ast.deleted_targets)
+            .any(|target| callee_ast.peel_ts_sugar_span(*target) == member.span || callee_ast.peel_ts_sugar_span(*target) == reference.span);
+        if written || read.is_none() {
+            return Some(false);
+        }
+        let called = callee_ast
+            .calls
+            .iter()
+            .find(|entry| !entry.construct && callee_ast.peel_ts_sugar_span(entry.callee) == member.span);
+        if read == Some(key.as_str()) {
+            let Some(entry) = called else {
+                return Some(false);
+            };
+            entries.push(entry);
+        } else if called.is_some() {
+            // `options.other(...)` runs the literal's `other` with the literal as `this`: it must not read a receiver.
+            let other = own
+                .iter()
+                .find(|other| crate::execution_role::property_static_key(file, other).as_deref() == read);
+            if let Some(other) = other {
+                let Some(value) = function_literal(file, other.value) else {
+                    return Some(false);
+                };
+                if value.kind != ast::FunctionKind::Arrow
+                    && file.source_text(value.span).is_none_or(crate::execution_role::mentions_receiver)
+                {
+                    return Some(false);
+                }
+            }
+        }
+    }
+    Some(entries.into_iter().all(|entry| {
+        !entry.arguments.iter().take(position + 1).any(|argument| argument.spread)
+            && entry.arguments.get(position).is_some_and(|argument| {
+                callback_seen(lookup, callee_file, argument.span, None, depth.saturating_sub(1), test)
+            })
     }))
 }
 
