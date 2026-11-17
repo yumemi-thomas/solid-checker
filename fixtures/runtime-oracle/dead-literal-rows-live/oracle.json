@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1015, the live controls of dead-literal-rows (its own case: the first uncaught error halts the reactive system for the page): `count={1}`, `each={[1]}`, `when={true}`, the fallback of an empty `For`, a zero `Repeat` and a false `Show` (they run exactly when the children do not), and the row `For each={[]}` is handed by a call (`props.children` is read once when `For` maps). Each raises CONTEXT_NOT_FOUND, and each stays a violation."
+}

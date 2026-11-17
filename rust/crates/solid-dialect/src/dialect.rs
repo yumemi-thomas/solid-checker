@@ -1370,6 +1370,14 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// ADR 1016: whether a call of `primitive` with its source as the only
+    /// argument returns a component that, written as a tag, renders the
+    /// component its source returns where the tag is (the non-static
+    /// `dynamic`). Default `false`: no such mount is read.
+    fn dynamic_source_mounts_at_tag(&self, _primitive: Primitive) -> bool {
+        false
+    }
+
     /// Whether this primitive mounts a component tree at a DOM root, taking
     /// the root component (or a function returning it) as its first argument.
     ///
@@ -2143,6 +2151,19 @@ pub trait Dialect: Sync {
         slot: crate::ComponentSlot<'_>,
     ) -> Option<crate::ComponentEntry> {
         let _ = (export, slot);
+        None
+    }
+
+    /// ADR 1015: whether the Solid-owned component exported as `export` never runs what it is handed as its children when its prop `prop` holds a LITERAL
+    /// (`For`'s `each={[]}`, `Repeat`'s `count={0}`, `Show`'s and `Match`'s `when={false}`), read from the dialect's pinned source (never from a package's name: the engine
+    /// asks only of a component whose every declaration is in one of this dialect's packages under that export name). `None` states nothing: any other prop,
+    /// any other value and any other component keep the reading that the children may run.
+    fn flow_children_exclusion(
+        &self,
+        export: &str,
+        prop: &str,
+    ) -> Option<crate::FlowChildrenExclusion> {
+        let _ = (export, prop);
         None
     }
 

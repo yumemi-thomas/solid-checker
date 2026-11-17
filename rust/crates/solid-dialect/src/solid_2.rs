@@ -11,9 +11,10 @@
 //! and a fixture or focused regression test.
 
 use crate::{
-    AsyncBoundaryShape, Boundary, CallbackOwner, CleanupRule, CodePolicy, ComponentEntry,
-    ComponentSlot, ContextRole, Dialect, Execution, OwnerRequirementRole, Primitive, ReactiveRole,
-    ResultSlot, RuntimeCode, TrackedCallbackTiming, Version, lookup, reverse,
+    AsyncBoundaryShape, Boundary, CallbackOwner, ChildrenNever, CleanupRule, CodePolicy,
+    ComponentEntry, ComponentSlot, ContextRole, Dialect, ExcludingLiteral, Execution,
+    FlowChildrenExclusion, OwnerRequirementRole, Primitive, ReactiveRole, ResultSlot, RuntimeCode,
+    TrackedCallbackTiming, Version, lookup, reverse,
 };
 
 mod code_policy;
@@ -2695,6 +2696,43 @@ impl Dialect for Solid2 {
         }
     }
 
+    /// ADR 1015, read on rc.21 (`solid-js` `dist/solid.dev.js`, `@solidjs/signals` `dist/dev.js`): `For` maps `props.each` with `mapArray` and calls the mapper once per
+    /// item (`updateKeyedMap`), so an empty array calls it never; `props.children` is read once, when `For` maps, so the expression that makes the mapper runs and the
+    /// mapper's body does not. `Repeat` runs `updateRepeat`, which returns before any `_map` call when `count` is `0` (`newLen === 0`), and its mapper reads `props.children`
+    /// as its default parameter, so nothing of the children is read. `Show` reads `props.children` only when `props.when` is truthy (`if (c) { const child = props.children`),
+    /// and `Switch` reads a `Match`'s `children` only when it selects that `Match`, which a `when` that is `false` never is. Another value of the prop (`[1]`, `1`, `true`, a
+    /// name, a call) may run them: no other value is excluded.
+    fn flow_children_exclusion(&self, export: &str, prop: &str) -> Option<FlowChildrenExclusion> {
+        if self.triple_exports != releases::TripleExports::Rc21 {
+            return None;
+        }
+        // The four (export, prop) rows read above; any other pair excludes nothing (no row, no claim).
+        const ROWS: [(&str, &str, ExcludingLiteral, ChildrenNever); 4] = [
+            (
+                "For",
+                "each",
+                ExcludingLiteral::EmptyArray,
+                ChildrenNever::RowFunction,
+            ),
+            (
+                "Repeat",
+                "count",
+                ExcludingLiteral::Zero,
+                ChildrenNever::Read,
+            ),
+            ("Show", "when", ExcludingLiteral::False, ChildrenNever::Read),
+            (
+                "Match",
+                "when",
+                ExcludingLiteral::False,
+                ChildrenNever::Read,
+            ),
+        ];
+        ROWS.iter()
+            .find(|(row_export, row_prop, _, _)| *row_export == export && *row_prop == prop)
+            .map(|&(_, _, literal, never)| FlowChildrenExclusion { literal, never })
+    }
+
     fn computation_read_is_render(&self, primitive: Primitive) -> bool {
         primitive == Primitive::CreateRenderEffect
     }
@@ -2704,6 +2742,16 @@ impl Dialect for Solid2 {
     /// `createRenderEffect`'s apply has an owner on its first run.
     fn apply_never_owned(&self, primitive: Primitive) -> bool {
         primitive == Primitive::CreateEffect
+    }
+
+    /// Source: `@solidjs/web@2.0.0-rc.21` `types/index.d.ts:85-157`: `dynamic(source)`
+    /// "returns a stable `Component` whose identity is driven by a reactive
+    /// source ... usable anywhere a normal component is used"; with no options
+    /// (the call form `Dynamic`) the source is read in the instance's own
+    /// computation and the component it returns is rendered there. The static
+    /// form (`DynamicStatic`) calls the source once at the call and is not this.
+    fn dynamic_source_mounts_at_tag(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::Dynamic
     }
 
     /// Source: `@solidjs/web@2.0.0-rc.9` exports `render(code, element)` and

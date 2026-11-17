@@ -48,6 +48,8 @@ mod incremental_staleness_process;
 mod interproc_fixed_points_process;
 #[path = "invocation_flow_process.rs"]
 mod invocation_flow_process;
+#[path = "loading_callee_cost_process.rs"]
+mod loading_callee_cost_process;
 #[path = "owner_flow_process.rs"]
 mod owner_flow_process;
 #[path = "owner_parity_process.rs"]

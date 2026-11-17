@@ -300,6 +300,40 @@ pub(super) fn jsx_value_expression(file: &solid_facts::FileFacts, value: Span) -
         .map_or(value, |candidate| file.ast.peel_ts_sugar_span(candidate))
 }
 
+/// Whether `property` is the final value of its member in the object literal that holds it: no spread after it, no later own
+/// property with a key that has no static name (`[k]: v` may be any key), and no later own property with the same static key may
+/// replace it. A later `{ ...extra }`, `[k]` or a repeated key makes the value the property writes one the member may not hold.
+pub(crate) fn property_is_final_value(
+    file: &solid_facts::FileFacts,
+    property: &solid_facts::ast::ObjectPropertyFact,
+) -> bool {
+    let Some(object) = innermost_object_literal(file, property.key).map(|inner| inner.span) else {
+        return false;
+    };
+    let own =
+        |span: Span| innermost_object_literal(file, span).is_some_and(|inner| inner.span == object);
+    let key = property_static_key(file, property);
+    !(file.ast.spreads.iter().any(|spread| {
+        object.contains(spread.span)
+            && spread.span.start > property.span.start
+            && file
+                .ast
+                .object_get_shapes
+                .iter()
+                .filter(|shape| shape.span.contains(spread.span) && shape.span != spread.span)
+                .min_by_key(|shape| shape.span.end - shape.span.start)
+                .is_some_and(|shape| shape.span == object)
+    }) || file.ast.object_properties.iter().any(|other| {
+        object.contains(other.span)
+            && other.span.start > property.span.start
+            && own(other.key)
+            && match property_static_key(file, other) {
+                None => true,
+                Some(other_key) => key.as_deref() == Some(other_key.as_str()),
+            }
+    }))
+}
+
 /// Whether member `key` of the object `origin` describes is a value that
 /// cannot use that object as `this` when called: an arrow (or a `const`
 /// bound to one), a non-arrow function that never mentions `this`, a
@@ -332,33 +366,8 @@ pub(super) fn origin_member_ignores_receiver<'a, W: FlowWorld<'a>>(
             else {
                 return false;
             };
-            // The property must be the member's final value: no spread and no
-            // key without a static name after it may replace it, and a getter
-            // or setter is no plain value.
-            let own = |span: Span| {
-                innermost_object_literal(file, span).is_some_and(|inner| inner.span == *object)
-            };
-            if (!property.data && !property.method)
-                || file.ast.spreads.iter().any(|spread| {
-                    object.contains(spread.span)
-                        && spread.span.start > property.span.start
-                        && file
-                            .ast
-                            .object_get_shapes
-                            .iter()
-                            .filter(|shape| {
-                                shape.span.contains(spread.span) && shape.span != spread.span
-                            })
-                            .min_by_key(|shape| shape.span.end - shape.span.start)
-                            .is_some_and(|shape| shape.span == *object)
-                })
-                || file.ast.object_properties.iter().any(|other| {
-                    object.contains(other.span)
-                        && other.span.start > property.span.start
-                        && own(other.key)
-                        && property_static_key(file, other).is_none()
-                })
-            {
+            // The property must be the member's final value (a getter or setter is no plain value).
+            if (!property.data && !property.method) || !property_is_final_value(file, property) {
                 return false;
             }
             if property.method {
