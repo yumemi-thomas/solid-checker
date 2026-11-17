@@ -1666,3 +1666,5 @@ packages/wasm/owned/
 
 !fixtures/reactive-ir/dead-literal-rows/node_modules/
 !fixtures/reactive-ir/dead-literal-rows/node_modules/**
+!fixtures/reactive-ir/sync-option-overridden-member/node_modules/
+!fixtures/reactive-ir/sync-option-overridden-member/node_modules/**

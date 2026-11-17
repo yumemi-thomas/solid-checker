@@ -1928,6 +1928,10 @@ pub struct UnreachedSite {
     /// (`createMemo(fn, { lazy: true })`) that no proven read computes.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub lazy_unread: bool,
+    /// ADR 1034: not proven to run: the site runs only in a function written as an object literal's member value that a later
+    /// spread, computed key or repeated key of the literal may replace.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub member_may_be_replaced: bool,
     /// ADR 0560: the query stopped at its depth limit or work bound before
     /// it decided whether any execution reaches the site.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]

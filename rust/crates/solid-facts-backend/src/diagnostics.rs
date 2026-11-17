@@ -562,6 +562,8 @@ impl DiagnosticSession {
                     "site-reach-undecided"
                 } else if site.lazy_unread {
                     "lazy-compute-unread"
+                } else if site.member_may_be_replaced {
+                    "member-value-overridden"
                 } else if site.refused_creation {
                     "refused-creation-unrun"
                 } else if site.dead_code {
@@ -575,6 +577,8 @@ impl DiagnosticSession {
                     "; whether any execution reaches this code was not decided within the site-reach query's depth and work bounds, so this is not proven"
                 } else if site.lazy_unread {
                     "; this code runs only when a lazy computation (`lazy: true`) is first read, and no read of it is proven, so this is not proven"
+                } else if site.member_may_be_replaced {
+                    "; this code runs only in a function written as an object member that a later spread, computed key or repeated key of the same object literal may replace, so whether anything ever calls it is not proven"
                 } else if site.refused_creation {
                     "; this code runs only in a root, primitive or component created in an effect apply or a leaf callback (`createTrackedEffect`, `onSettled`), where the runtime refuses the creation before it runs, so this is not proven"
                 } else if site.dead_code {
