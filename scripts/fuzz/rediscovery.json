@@ -25811,6 +25811,8 @@
    "mx-missing-effect-fn-action-from-settled-cast-fn-direct-none"
   ],
   "rediscovered": "main a3ba1dd92: stacked-claim, tolerated by its pair in stacked-pairs.json; with the pair retired the judge scores it false-positive and `make fuzz-focus` fails (15 programs); ADR 1052's build: not-fired or agree, focus passes"
+ },
+ {
   "finding": "a false positive: SC2008 at the call of an action whose first `yield`'s operand is an operator expression whose text starts and ends with a quote (`yield \"z\" < \"a\" || Promise.resolve() || \"\"`): `yield_operand_plain` read the text as a string literal, but `yield` binds looser than `||`, `?:` and `+`, so the step yields a promise, the next step runs from its continuation, and Chrome rc.21 warns nothing at the call",
   "found": "the Fable review of ADR 1047/1051 (owner_context.rs `yield_operand_plain`)",
   "fixed": "ADR 1051's review fix (facts schema 96 `YieldFact::operand_literal`: one literal node, no text test)",
