@@ -1778,3 +1778,17 @@ packages/wasm/owned/
 !fixtures/reactive-ir/iteration-timer-handed-literal-receiver/node_modules/**
 !fixtures/reactive-ir/iteration-timer-handed-literal-escape/node_modules/
 !fixtures/reactive-ir/iteration-timer-handed-literal-escape/node_modules/**
+!fixtures/reactive-ir/iteration-timer-handed-literal-parameter-written/node_modules/
+!fixtures/reactive-ir/iteration-timer-handed-literal-parameter-written/node_modules/**
+!fixtures/reactive-ir/iteration-timer-handed-literal-parameter-default/node_modules/
+!fixtures/reactive-ir/iteration-timer-handed-literal-parameter-default/node_modules/**
+!fixtures/reactive-ir/iteration-timer-handed-literal-member-stored/node_modules/
+!fixtures/reactive-ir/iteration-timer-handed-literal-member-stored/node_modules/**
+!fixtures/reactive-ir/iteration-timer-handed-literal-member-receiver/node_modules/
+!fixtures/reactive-ir/iteration-timer-handed-literal-member-receiver/node_modules/**
+!fixtures/reactive-ir/iteration-timer-handed-literal-literal-stored/node_modules/
+!fixtures/reactive-ir/iteration-timer-handed-literal-literal-stored/node_modules/**
+!fixtures/reactive-ir/iteration-timer-handed-literal-script/node_modules/
+!fixtures/reactive-ir/iteration-timer-handed-literal-script/node_modules/**
+!fixtures/reactive-ir/iteration-timer-handed-literal-function-stored/node_modules/
+!fixtures/reactive-ir/iteration-timer-handed-literal-function-stored/node_modules/**
