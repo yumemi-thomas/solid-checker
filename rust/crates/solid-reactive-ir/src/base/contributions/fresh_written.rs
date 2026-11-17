@@ -472,7 +472,7 @@ fn written(file: &FileFacts, span: Span) -> bool {
 }
 
 /// `callee` spells `name` (`Object.create`) on the global, which no declaration of this file shadows.
-fn global_member_call(file: &FileFacts, callee: Span, name: &str) -> bool {
+pub(super) fn global_member_call(file: &FileFacts, callee: Span, name: &str) -> bool {
     let ast = &file.ast;
     let Some(member) = static_member(file, callee) else {
         return false;

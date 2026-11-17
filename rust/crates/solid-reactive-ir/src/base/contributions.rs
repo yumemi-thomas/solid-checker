@@ -756,6 +756,9 @@ pub(crate) enum Hazard {
     /// (the hash of the key, [`member_hash`] with no container) and defines no
     /// other ([`DefinerKey::Sole`]; value 0).
     ReflectiveDefinitionSole(u32),
+    /// ADR 1045: some standard definer is called on an object made there, so that [`Self::ReflectiveDefinitionAny`] leaves it
+    /// out (value 0): it may define any key while a patch may reach a definer ([`reflective_definition_through_made`]).
+    ReflectiveDefinitionMade,
     /// ADR 1024: code writes this member (the hash of [`Self::OpenMemberWrite`]'s key) of an object only the factory
     /// form proves made ([`fresh_written::fresh_written_object`]; value 0): an open write while a factory it trusts may
     /// not be standard ([`open_member_write_through_factory`]).
@@ -802,6 +805,12 @@ fn standard_impostor(member: &str) -> Hazard {
 
 fn standard_impostor_write(member: &str) -> Hazard {
     Hazard::StandardImpostorWrite(member_hash("", member))
+}
+
+/// [`open_member_write`], for the base tests.
+#[cfg(test)]
+pub(crate) fn open_member_write_for_test(member: &str) -> Hazard {
+    open_member_write(member)
 }
 
 fn open_member_write(member: &str) -> Hazard {
@@ -1239,13 +1248,60 @@ fn symbol_key(file: &FileFacts, key: Span) -> bool {
 /// ADR 0877: the key at `key` names a `const` of this file holding what
 /// [`symbol_made_at`] accepts at its initializer. `Symbol` replaced is
 /// `symbol_open`'s, as for the same call written in place.
+///
+/// ADR 1045: or a `let` or `var` of a module nothing writes, declared once by its name in the file, with no direct `eval`
+/// (`var _m$ = Symbol()`, a compiler's private key). A read before its declarator ran gives `undefined`, and a write under
+/// the key `"undefined"` puts nothing on a standard root (the global's `undefined` is neither writable nor configurable).
+/// A classic script's top-level `var` is the global object's property, which any code may write: a file with no import
+/// or export keeps it open.
 fn const_symbol_key(file: &FileFacts, key: Span) -> bool {
     let ast = &file.ast;
-    ast.reference_declaration(ast.peel_ts_sugar_span(key))
-        .and_then(|declaration| ast.identifier_binding(declaration))
-        .filter(|binding| binding.immutable)
-        .and_then(|binding| binding.initializer)
-        .is_some_and(|initializer| symbol_made_at(file, ast.peel_ts_sugar_span(initializer)))
+    let Some(declaration) = ast.reference_declaration(ast.peel_ts_sugar_span(key)) else {
+        return false;
+    };
+    let Some(binding) = ast.identifier_binding(declaration) else {
+        return false;
+    };
+    let never_written = || {
+        let name = file.source_text(declaration);
+        crate::execution_role::file_is_module(file)
+            && !symbol_binding_written(file, declaration)
+            && !crate::interproc::property_gets::direct_eval_in(file, Span::new(0, u32::MAX))
+            && name.is_some()
+            && ast
+                .identifiers
+                .iter()
+                .filter(|identifier| {
+                    identifier.role == solid_facts::ast::IdentifierRole::Binding
+                        && file.source_text(identifier.span) == name
+                })
+                .count()
+                == 1
+    };
+    (binding.immutable || never_written())
+        && binding
+            .initializer
+            .is_some_and(|initializer| symbol_made_at(file, ast.peel_ts_sugar_span(initializer)))
+}
+
+/// ADR 1045: whether some reference to the binding declared at `declaration` is written: a write or delete target that
+/// contains it, unless only as (part of) the computed key of that member target (`this[m] = v` reads `m`).
+/// [`crate::indexes::binding_written`] counts every reference inside a written target, the key included.
+fn symbol_binding_written(file: &FileFacts, declaration: Span) -> bool {
+    let ast = &file.ast;
+    ast.references_to(declaration).iter().any(|reference| {
+        ast.write_targets
+            .iter()
+            .chain(&ast.deleted_targets)
+            .map(|target| ast.peel_ts_sugar_span(*target))
+            .any(|target| {
+                target.contains(*reference)
+                    && !ast.member_at(target).is_some_and(|member| {
+                        ast.computed_members.binary_search(&member.span).is_ok()
+                            && member.property.contains(*reference)
+                    })
+            })
+    })
 }
 
 /// The well-known symbols no census member reads. Not `replace`, through which
@@ -2930,7 +2986,7 @@ pub(crate) fn impostor_veto(
 /// [`BuildConstants`] (the parameter is unused); the kept index is also
 /// stamped with the constants it was folded under and refolds when they
 /// differ, and shadow and verify-reused modes compare it with a refold.
-pub(crate) fn hazards(view: &FileView<'_>, constants: &BuildConstants<'_>) -> Vec<(Hazard, u32)> {
+pub(crate) fn hazards(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Hazard, u32)> {
     let file = view.file;
     let mut entries = Vec::new();
     for (index, hazard) in file.ast.module_hazards.iter().enumerate() {
@@ -2985,11 +3041,16 @@ pub(crate) fn hazards(view: &FileView<'_>, constants: &BuildConstants<'_>) -> Ve
     if reflective_definition_spelled(file) {
         entries.push((Hazard::ReflectiveDefinitionSpelling, 0));
         // ADR 0951: what the spellings may define, by key: any, or the literal keys their calls pass.
-        for (key, ()) in definers(view, constants) {
+        // ADR 1045: a standard definer called on an object made there defines nothing on a standard root.
+        let (keys, made) = definer_keys(file, true);
+        for (key, ()) in keys {
             entries.push(match key {
                 DefinerKey::Any => (Hazard::ReflectiveDefinitionAny, 0),
                 DefinerKey::Sole(key) => (reflective_definition_sole(&key), 0),
             });
+        }
+        if made {
+            entries.push((Hazard::ReflectiveDefinitionMade, 0));
         }
     }
     let writes = assignment_writes(file);
@@ -3159,7 +3220,58 @@ pub(crate) enum DefinerKey {
 /// rest block every name. Every other spelling blocks every name. Sole keys
 /// come sorted, `Any` at most once and first.
 pub(crate) fn definers(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(DefinerKey, ())> {
-    let file = view.file;
+    definer_keys(view.file, false).0
+}
+
+/// The standard definers ADR 1045 reads at their call: `Object.defineProperty(o, …)`, `Object.defineProperties(o, …)`
+/// and `Reflect.defineProperty(o, …)`, each of the global no declaration of the file shadows.
+const MADE_TARGET_DEFINERS: [&str; 3] = [
+    "Object.defineProperty",
+    "Object.defineProperties",
+    "Reflect.defineProperty",
+];
+
+/// The qualified names a patch of [`MADE_TARGET_DEFINERS`] is keyed by ([`patch_vetoed`]).
+const MADE_TARGET_DEFINER_NAMES: [&str; 3] = [
+    "ObjectConstructor.defineProperty",
+    "ObjectConstructor.defineProperties",
+    "Reflect.defineProperty",
+];
+
+/// ADR 1045: whether `call` is a call of a standard definer of [`MADE_TARGET_DEFINERS`], spelled at its callee on the
+/// unshadowed global, whose target (its first argument) [`fresh_written_object`] proves made by syntax alone
+/// ([`Fresh::Made`]): it defines its keys on that object and on no standard root.
+fn made_target_definer_call(file: &FileFacts, call: &solid_facts::ast::CallFact) -> bool {
+    let callee = file.ast.peel_ts_sugar_span(call.callee);
+    !call.construct
+        && MADE_TARGET_DEFINERS
+            .iter()
+            .any(|name| fresh_written::global_member_call(file, callee, name))
+        && call.arguments.first().is_some_and(|target| {
+            !target.spread && fresh_written_object(file, target.span) == Some(Fresh::Made)
+        })
+}
+
+/// ADR 1045: whether the definers ADR 1045 left out of [`Hazard::ReflectiveDefinitionAny`] (a call on a made target,
+/// [`Hazard::ReflectiveDefinitionMade`]) may not be the standard ones, so that they may define any key: some patch may
+/// reach a definer of [`MADE_TARGET_DEFINER_NAMES`], asked of `raw`, the census as the files fold it (the first-patch
+/// induction of ADR 1024: before the first moment such a call puts a member on a standard root, only a site the rest of
+/// the census sees could have replaced a definer).
+pub(crate) fn reflective_definition_through_made(
+    hazard: Hazard,
+    raw: &impl Fn(Hazard) -> bool,
+) -> bool {
+    hazard == Hazard::ReflectiveDefinitionAny
+        && raw(Hazard::ReflectiveDefinitionMade)
+        && MADE_TARGET_DEFINER_NAMES
+            .iter()
+            .any(|name| patch_vetoed(name, raw))
+}
+
+/// [`definers`], and where `made_target` (ADR 1045, the handed-root census only), a definer spelled as a member of
+/// which the one call is a standard definer on a made target ([`made_target_definer_call`]) is left out; the second
+/// answer says whether one was.
+fn definer_keys(file: &FileFacts, made_target: bool) -> (Vec<(DefinerKey, ())>, bool) {
     let spelled = |text: &str| DEFINERS.contains(&text.trim_matches(['\'', '"', '`']));
     let mut any = file.ast.bindings.iter().any(|binding| {
         binding
@@ -3189,8 +3301,12 @@ pub(crate) fn definers(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Defi
         .iter()
         .map(|member| member.span)
         .collect::<HashSet<_>>();
+    let mut made = HashSet::<Span>::default();
     for call in &file.ast.calls {
         let callee = file.ast.peel_ts_sugar_span(call.callee);
+        if made_target && definers.contains_key(&callee) && made_target_definer_call(file, call) {
+            made.insert(callee);
+        }
         if let Some((names_one_key, keys)) = definers.get_mut(&callee)
             && *names_one_key
             && let Some((ArgumentLiteralFact::String(key), false)) = call
@@ -3210,7 +3326,10 @@ pub(crate) fn definers(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Defi
         }
     }
     let mut sole = Vec::new();
-    for (_, keys) in definers.into_values() {
+    for (span, (_, keys)) in definers {
+        if made.contains(&span) {
+            continue;
+        }
         match keys.len() {
             0 => any = true,
             1 => sole.extend(keys.into_iter().map(Arc::<str>::from)),
@@ -3218,10 +3337,12 @@ pub(crate) fn definers(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Defi
         }
     }
     sole.sort();
-    any.then_some((DefinerKey::Any, ()))
+    let keys = any
+        .then_some((DefinerKey::Any, ()))
         .into_iter()
         .chain(sole.into_iter().map(|key| (DefinerKey::Sole(key), ())))
-        .collect()
+        .collect();
+    (keys, !made.is_empty())
 }
 
 /// Item key spaces: every function, call, JSX element and binding of the

@@ -2750,13 +2750,18 @@ impl<'a> SemanticLookup<'a> {
                 crate::base::memo::probes::PolledKey::Unit
             });
         }
-        let present = premise || {
-            let index = self.hazards_index();
-            index.contains_key(&hazard)
-                || crate::base::contributions::open_member_write_through_factory(hazard, &|raw| {
-                    index.contains_key(&raw)
+        let present = premise
+            || {
+                let index = self.hazards_index();
+                let raw = |raw| index.contains_key(&raw);
+                index.contains_key(&hazard)
+                || crate::base::contributions::open_member_write_through_factory(hazard, &raw)
+                // ADR 1045: a definer on a made target may define any key once a definer may not be standard; asked of the
+                // census with the factory form's answer (ADR 1024), never of this answer.
+                || crate::base::contributions::reflective_definition_through_made(hazard, &|atom| {
+                    raw(atom) || crate::base::contributions::open_member_write_through_factory(atom, &raw)
                 })
-        };
+            };
         // ADR 0950, the one seam: a what-if build answers `false` for a hazard it was told to assume absent. This block does not exist in a default
         // build (`what-if` is in no default, workspace or CI), so nothing there can reach it.
         #[cfg(feature = "what-if")]
