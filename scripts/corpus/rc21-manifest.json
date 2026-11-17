@@ -1,5 +1,5 @@
 {
-  "corpus": "solid-checker-rc21-frozen/apps",
+  "corpus": "solid-checker-rc21-frozen-v2/apps",
   "rebuilt": {
     "date": "2026-11-04",
     "method": "A source copy of the frozen rc.17 corpus (solid-checker-rc17-frozen/apps, its node_modules left out) at the same commits and edits. solid-js, @solidjs/web, @solidjs/signals, @solidjs/diagnostics, @solidjs/compiler, @solidjs/h and @solidjs/universal move to 2.0.0-rc.21 in every package.json, pnpm-workspace.yaml and override; every other package of the rc.17 version table keeps its pin. Installs run in `installDir` with lifecycle scripts disabled, as rc17-manifest.json states.",
@@ -45,7 +45,8 @@
           },
           "output": "src/paraglide",
           "files": 1517,
-          "sha256": "4e0cb02e55602baa155f4cbef64d1c23863b918044c35547e3aabf085a40215f",
+          "sha256": "f48df418bfd0459c7152ed698e841a68b0bc697a8ed85e7ae2b2a305ac16247a",
+          "sha256Note": "ADR 1039: the digest of the v2 corpus (solid-checker-rc21-frozen-v2, remade 2026-11-17 by the same procedure, CORPUS-V2.md): the same file count, another digest only because Paraglide writes the absolute path of the settings copy it compiled from into the generated README.md, and that path is not recorded; two compiles of the copy are byte-identical",
           "result": {
             "exit": 0
           }
@@ -204,7 +205,8 @@
           },
           "output": "src/paraglide",
           "files": 442,
-          "sha256": "27b17f902354913161f72a93129c1144d648f5958fd363b01bb5fad3f3554926",
+          "sha256": "68314b450ef2f8623aebcfef2f27f4be52adfc221294a46dd05d0583fed4fdd6",
+          "sha256Note": "ADR 1039: the digest of the v2 corpus (solid-checker-rc21-frozen-v2, remade 2026-11-17 by the same procedure, CORPUS-V2.md): the same file count, another digest only because Paraglide writes the absolute path of the settings copy it compiled from into the generated README.md, and that path is not recorded; two compiles of the copy are byte-identical",
           "result": {
             "exit": 0
           }

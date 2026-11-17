@@ -28,6 +28,8 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { assertAdditionsPresent } from "../lib/corpus-additions.mjs";
+import { DEFAULT_APPS_ROOT } from "../lib/corpus-manifest.mjs";
 import { fileURLToPath } from "node:url";
 import { gunzipSync, gzipSync } from "node:zlib";
 
@@ -225,8 +227,9 @@ function main(argv) {
   const base = revisions[0];
   const manifestPath = join(repo, "scripts/corpus/rc21-manifest.json");
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-  const appsRoot = resolve(options["apps-root"] ?? join(repo, "../solid-checker-rc21-frozen/apps"));
+  const appsRoot = resolve(options["apps-root"] ?? DEFAULT_APPS_ROOT);
   if (!existsSync(appsRoot)) return refuse(`no corpus at ${appsRoot}: the corpus guard needs the frozen corpus installed (--apps-root)`);
+  try { assertAdditionsPresent(manifest, appsRoot, { manifestPath }); } catch (error) { return refuse(error.message); }
   const checker = resolve(options.checker ?? join(repo, "rust/target/release/solid-checker-rust"));
   const typefacts = resolve(options.typefacts ?? join(repo, "bin/solid-typefacts"));
   if (!existsSync(checker)) return refuse(`no release checker at ${checker}: make build-checker-release`);

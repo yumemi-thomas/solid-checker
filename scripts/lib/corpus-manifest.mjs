@@ -7,6 +7,9 @@ import { assertManifestAdditions } from "./corpus-additions.mjs";
 
 const FIELDS = ["repository", "commit"];
 
+/** ADR 1039: the corpus the scripts sweep by default, the v2 copy of the frozen rc.21 corpus with its recorded additions present (its CORPUS-V2.md says how it was made). */
+export const DEFAULT_APPS_ROOT = "/Users/thomas/Documents/Github/solid-checker-rc21-frozen-v2/apps";
+
 /** Throws, naming the app, unless every app a project row uses has both. */
 export function assertManifestProvenance(manifest, manifestPath = "manifest") {
   const problems = [];
