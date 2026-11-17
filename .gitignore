@@ -1043,6 +1043,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/reactive-handler-frozen-roots/node_modules/**
 !fixtures/reactive-ir/rc21-sync-compute-open/node_modules/
 !fixtures/reactive-ir/rc21-sync-compute-open/node_modules/**
+!fixtures/reactive-ir/returned-closure-unrun/node_modules/
+!fixtures/reactive-ir/returned-closure-unrun/node_modules/**
 !fixtures/reactive-ir/rc21-anonymous-component/node_modules/
 !fixtures/reactive-ir/rc21-anonymous-component/node_modules/**
 !fixtures/reactive-ir/rc21-open-destructure/node_modules/

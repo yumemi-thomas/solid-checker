@@ -1,0 +1,1 @@
+{"note": "ADR 1020: a closure a primitive callback returns runs only where something calls it: a sync memo with an async compute inside a closure an effect apply only reads, or a memo value nothing calls, is silent in Chrome; called by the apply, or written directly, Chrome reports SYNC_NODE_RECEIVED_ASYNC."}

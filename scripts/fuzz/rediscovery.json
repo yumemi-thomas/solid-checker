@@ -24756,5 +24756,14 @@
    "lg-context-not-found-dead-flow-repeat-x-direct-none"
   ],
   "rediscovered": "main 5b950fce6 unexecuted (180 programs), this build uncertifiable; same slice measurement"
+ },
+ {
+  "finding": "a false positive of main (c2779cb39): SYNC_NODE_RECEIVED_ASYNC proved (SC7002) at a `sync: true` memo inside a closure an effect's compute returns, which the apply only reads (`createEffect(() => () => { createMemo(async () => 1, { sync: true }); }, (v) => { void v; })`): the closure never runs; Chrome rc.21 has no diagnostic and the site never executes (judged `unexecuted`)",
+  "found": "W3's scan of every `unexecuted` violation of audit 43739577046 (2026-11-17): 120 rows in `lg-recall` `apply-void-value-row` and `-untrack`; W3 confirmed two in Chrome on 993e83f74",
+  "fixed": "ADR 1020 (`execution_role/site_reach.rs` `returned_by_primitive_callback`, `Dialect::callback_return_is_value`)",
+  "grid": "lg-recall",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": ["lg-sync-node-received-async-apply-void-value-untrack-memo-direct-none", "lg-sync-node-received-async-apply-void-value-row-memo-direct-none"],
+  "rediscovered": "main c2779cb39 violation (Chrome: no diagnostic, the site never executes), this build uncertifiable `site-reach-undecided`: 120 of 120"
  }
 ]

@@ -2596,6 +2596,18 @@ impl Dialect for Solid2 {
 
     /// Source: the `accepts_cleanup_return` list in
     /// `solid-reactive-ir/src/cleanup.rs`, extracted unchanged.
+    /// Source: `@solidjs/signals@2.0.0-rc.21` `dist/types/signals.d.ts`: `createEffect(compute, effect)` and
+    /// `createRenderEffect(compute, effect)` pass the compute's value to `effect` as its first parameter, and `createMemo(compute)`
+    /// stores it as the memo's value; the runtime calls neither. What the apply returns is a cleanup (`accepts_cleanup_return`), and is
+    /// not this; `createTrackedEffect`'s single callback returns a cleanup too.
+    fn callback_return_is_value(&self, primitive: Primitive, argument: usize) -> bool {
+        argument == 0
+            && matches!(
+                primitive,
+                Primitive::CreateEffect | Primitive::CreateRenderEffect | Primitive::CreateMemo
+            )
+    }
+
     fn accepts_cleanup_return(&self, primitive: Primitive) -> bool {
         matches!(
             primitive,
