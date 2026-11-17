@@ -549,7 +549,6 @@ impl DiagnosticSession {
         for finding in &mut findings {
             if finding.kind == "violation"
                 && !finding.id.starts_with("SC80")
-                && finding.id != "SC2008"
                 && let Some(site) = solid_reactive_ir::site_unreached(
                     &program,
                     finding.primary_location.path.as_ref(),
@@ -559,10 +558,15 @@ impl DiagnosticSession {
                 // ADR 1020 (third cut): reached only through a call of a value a compute returned, which may be on an effect
                 // apply's stack, where a creation throws PRIMITIVE_IN_EFFECT_CALLBACK before a sync node's result probe (rc.21):
                 // SC7002's claim alone is not proven there.
-                && (!site.returned_value_run || finding.id == "SC7002")
+                && (!site.returned_value_run
+                    || site.returned_value_creation
+                    || finding.id == "SC7002")
+                // SC2008 claims a no-op wherever it runs: only a site whose callback never runs (ADR 1020, fourth cut) is not one.
+                && (finding.id != "SC2008" || site.returned_value_creation)
             {
                 finding.kind = "uncertifiable".into();
                 let blocker = if site.returned_value_run {
+                    // Fourth cut: every rule's site in a callback a creation there never runs; SC7002 at the creation itself.
                     "creation-throws-first"
                 } else if site.undecided {
                     "site-reach-undecided"
@@ -579,7 +583,9 @@ impl DiagnosticSession {
                 };
                 finding.analysis_context =
                     solid_reactive_ir::blocked_context(blocker, &finding.analysis_context);
-                finding.message.push_str(if site.returned_value_run {
+                finding.message.push_str(if site.returned_value_creation {
+                    "; this code runs only in a callback of a computation created inside a function an effect's or a memo's compute returned, and where that function is called on an effect apply's stack the creation throws PRIMITIVE_IN_EFFECT_CALLBACK first, so the callback never runs: this is not proven"
+                } else if site.returned_value_run {
                     "; this code runs only where a function an effect's or a memo's compute returned is called, which may be on an effect apply's stack with no owner set, where creating a computation throws PRIMITIVE_IN_EFFECT_CALLBACK before its result is probed, so this is not proven"
                 } else if site.undecided {
                     "; whether any execution reaches this code was not decided within the site-reach query's depth and work bounds, so this is not proven"

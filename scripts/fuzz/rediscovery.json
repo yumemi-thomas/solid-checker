@@ -25178,5 +25178,11 @@
    "mx-sync-node-received-async-apply-void-call-untrack-effect-direct-none"
   ],
   "rediscovered": "make fuzz-focus CODES=SYNC_NODE_RECEIVED_ASYNC: the build before the guard (0f866a89a, bc96fab61 on main) fails with these 4 as unlisted stacked-claim once their rows leave open-defects-rows.json (R-stacked 153 -> 149); this build: not-fired, the 4 gone. The other probe shapes (memo value, helper, nested) are not generated: fixture returned-closure-unrun pins them. Unchanged on main and here: mx-sync-node-received-async-tracked-sibling-async-effect-direct-none (unlisted stacked-claim, PRIMITIVE_IN_FORBIDDEN_SCOPE)"
+ },
+ {
+  "finding": "ADR 1020 third cut (14434c30f): a site in a callback of a computation created inside a returned compute closure the apply calls was a proved violation of any rule but SC7002 (SC7001 in a created memo's compute, SC2008 at a flush in a created effect's apply); Chrome rc.21 throws PRIMITIVE_IN_EFFECT_CALLBACK at the creation first and the callback never runs",
+  "found": "Fable's review of 14434c30f; Mac 21's probe (checker and Chrome rc.21: SC7001 static-only)",
+  "fixed": "ADR 1020 fourth cut (site_reach.rs crosses_creation_below_returned_value, UnreachedSite::returned_value_creation; every rule)",
+  "outside": "Not generated: no grid writes a creation inside a function a compute returns (the apply-void-call contexts write the site directly in the returned closure, where the claim stands). Pinned by fixture returned-closure-unrun (CreatedInReturnedMemo, CreatedInReturnedEffect: violations on 14434c30f, uncertifiable here; Chrome rc.21 covered-uncertifiable)."
  }
 ]

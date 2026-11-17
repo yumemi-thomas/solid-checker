@@ -3925,35 +3925,67 @@
   },
   {
    "fixture": "reactive-ir/returned-closure-unrun",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1020",
+   "fact": "fixture extended (third and fourth cuts): returned compute values called in an apply, as a memo's value, through a helper, in the body, and computations created inside them; creation-throws-first is the site's reach (UnreachedSite::returned_value_run, returned_value_creation)"
+  },
+  {
+   "fixture": "reactive-ir/returned-closure-unrun",
+   "key": "SC2006 flush-in-action-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1020",
+   "fact": "fixture extended (third and fourth cuts): returned compute values called in an apply, as a memo's value, through a helper, in the body, and computations created inside them; creation-throws-first is the site's reach (UnreachedSite::returned_value_run, returned_value_creation)"
+  },
+  {
+   "fixture": "reactive-ir/returned-closure-unrun",
+   "key": "SC2008 creation-throws-first",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1020",
+   "fact": "fixture extended (third and fourth cuts): returned compute values called in an apply, as a memo's value, through a helper, in the body, and computations created inside them; creation-throws-first is the site's reach (UnreachedSite::returned_value_run, returned_value_creation)"
+  },
+  {
+   "fixture": "reactive-ir/returned-closure-unrun",
    "key": "SC3001 leaf-operation-unaccounted",
    "from": 9,
-   "to": 20,
+   "to": 26,
    "adr": "ADR 1020",
-   "fact": "fixture extended (third cut): returned compute values called in an apply, as a memo's value, through a helper, and in the body; creation-throws-first is the site's reach (UnreachedSite::returned_value_run)"
+   "fact": "fixture extended (third and fourth cuts): returned compute values called in an apply, as a memo's value, through a helper, in the body, and computations created inside them; creation-throws-first is the site's reach (UnreachedSite::returned_value_run, returned_value_creation)"
   },
   {
    "fixture": "reactive-ir/returned-closure-unrun",
    "key": "SC4001 owner-callers-unenumerated",
    "from": 3,
-   "to": 7,
+   "to": 10,
    "adr": "ADR 1020",
-   "fact": "fixture extended (third cut): returned compute values called in an apply, as a memo's value, through a helper, and in the body; creation-throws-first is the site's reach (UnreachedSite::returned_value_run)"
+   "fact": "fixture extended (third and fourth cuts): returned compute values called in an apply, as a memo's value, through a helper, in the body, and computations created inside them; creation-throws-first is the site's reach (UnreachedSite::returned_value_run, returned_value_creation)"
   },
   {
    "fixture": "reactive-ir/returned-closure-unrun",
    "key": "SC6002 effect-creation-unaccounted",
    "from": 9,
-   "to": 16,
+   "to": 19,
    "adr": "ADR 1020",
-   "fact": "fixture extended (third cut): returned compute values called in an apply, as a memo's value, through a helper, and in the body; creation-throws-first is the site's reach (UnreachedSite::returned_value_run)"
+   "fact": "fixture extended (third and fourth cuts): returned compute values called in an apply, as a memo's value, through a helper, in the body, and computations created inside them; creation-throws-first is the site's reach (UnreachedSite::returned_value_run, returned_value_creation)"
   },
   {
    "fixture": "reactive-ir/returned-closure-unrun",
    "key": "SC6002 effect-owner-unproven",
    "from": 0,
-   "to": 4,
+   "to": 6,
    "adr": "ADR 1020",
-   "fact": "fixture extended (third cut): returned compute values called in an apply, as a memo's value, through a helper, and in the body; creation-throws-first is the site's reach (UnreachedSite::returned_value_run)"
+   "fact": "fixture extended (third and fourth cuts): returned compute values called in an apply, as a memo's value, through a helper, in the body, and computations created inside them; creation-throws-first is the site's reach (UnreachedSite::returned_value_run, returned_value_creation)"
+  },
+  {
+   "fixture": "reactive-ir/returned-closure-unrun",
+   "key": "SC7001 creation-throws-first",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1020",
+   "fact": "fixture extended (third and fourth cuts): returned compute values called in an apply, as a memo's value, through a helper, in the body, and computations created inside them; creation-throws-first is the site's reach (UnreachedSite::returned_value_run, returned_value_creation)"
   },
   {
    "fixture": "reactive-ir/returned-closure-unrun",
@@ -3961,7 +3993,7 @@
    "from": 0,
    "to": 4,
    "adr": "ADR 1020",
-   "fact": "fixture extended (third cut): returned compute values called in an apply, as a memo's value, through a helper, and in the body; creation-throws-first is the site's reach (UnreachedSite::returned_value_run)"
+   "fact": "fixture extended (third and fourth cuts): returned compute values called in an apply, as a memo's value, through a helper, in the body, and computations created inside them; creation-throws-first is the site's reach (UnreachedSite::returned_value_run, returned_value_creation)"
   }
  ]
 }

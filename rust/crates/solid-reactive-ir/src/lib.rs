@@ -1937,6 +1937,10 @@ pub struct UnreachedSite {
     /// (PRIMITIVE_IN_EFFECT_CALLBACK) is not proven. Every other claim reads the site as reached.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub returned_value_run: bool,
+    /// ADR 1020 (fourth cut): with `returned_value_run`, the site sits in a callback of a primitive (any, `untrack` included) written below the
+    /// returned value: called on an apply's stack, that creation throws first and the callback never runs. Every claim reads it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub returned_value_creation: bool,
     /// ADR 0560: the query stopped at its depth limit or work bound before
     /// it decided whether any execution reaches the site.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
