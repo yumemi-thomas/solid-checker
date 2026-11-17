@@ -24930,5 +24930,11 @@
    "mx-on-flush-in-owned-scope-cast-any-then-x-direct-none"
   ],
   "rediscovered": "main c2779cb39 recall-gap, this build agree: 2 of 2"
+ },
+ {
+  "finding": "A route component with no binding (an inline arrow written as a @solidjs/router route definition’s `component`) had no mount the stored-throw walk found, and an empty mount list reported: a plain throw in it (flush() in a tracked effect) was an SC3001 violation under an `<Errored>` with a handling fallback above the only `<Router>` tag, where Chrome is silent",
+  "found": "ADR 1026 (Mac 22), the guarded case of its Chrome lane",
+  "fixed": "ADR 1026",
+  "outside": "the grids install no router and have no route-table shape; fixtures/runtime-oracle/route-mount-guarded holds it (main c2779cb39: static-only at routes.tsx:21; ADR 1026: quiet, uncertifiable) and fixtures/reactive-ir/route-mount-throw `/guarded-inline`"
  }
 ]

@@ -917,6 +917,20 @@ impl Walk<'_, '_> {
         }
     }
 
+    /// ADR 1026: a route component an audited `@solidjs/router` renders, mounted at `tags` (each `<Router>` tag of the
+    /// table's instance, by file), throws where each renders, as a component under a `Show` there does: reported unless a
+    /// boundary above every tag takes it. A throw only under an observer is not read here.
+    fn route_mount_end(&self, tags: &[(String, Span)]) -> ThrowEnd {
+        if self.thrower == Thrower::UnderObserver {
+            return self.open();
+        }
+        if route_tags_handled(tags, self.context.lookup, MOUNT_DEPTH) {
+            ThrowEnd::Unobserved
+        } else {
+            ThrowEnd::Reported
+        }
+    }
+
     fn entries(&self, file: &FileFacts, function: &FunctionFact, depth: usize) -> ThrowEnd {
         // ADR 1008: the calls of an `async` function read below return the
         // promise its throw rejects.
@@ -963,6 +977,15 @@ impl Walk<'_, '_> {
             // as a component at each `<D />`.
             if let Some(tags) = dynamic_mount_tags(file, reference, lookup) {
                 match self.dynamic_mount_end(file, &tags) {
+                    ThrowEnd::Reported => return ThrowEnd::Reported,
+                    ThrowEnd::Unobserved => end = ThrowEnd::Unobserved,
+                    ThrowEnd::Open => {}
+                }
+                continue;
+            }
+            // ADR 1026: a top-level route definition's `component` mounts at each `<Router>` tag.
+            if let Some(tags) = route_mount_tags(file, reference, lookup) {
+                match self.route_mount_end(&tags) {
                     ThrowEnd::Reported => return ThrowEnd::Reported,
                     ThrowEnd::Unobserved => end = ThrowEnd::Unobserved,
                     ThrowEnd::Open => {}
@@ -1542,6 +1565,15 @@ fn mounts_handled(
             .iter()
             .all(|tag| handled_above(file, *tag, lookup, depth));
     }
+    // ADR 1026: an inline arrow written as a route definition's `component` has no binding and no tag; the router's
+    // render of its route ([`route_mount_tags`]) is its mount. A route value that reading does not follow (a table held in
+    // a binding, a parent that hands its props on) is undecided: handled, never a report from the empty mount list below.
+    if crate::owners::function_binding_name(file, component).is_none()
+        && lookup.solid_router_component_value(file.path.as_str(), component.span)
+    {
+        return route_mount_tags(file, component.span, lookup)
+            .is_none_or(|tags| route_tags_handled(&tags, lookup, depth));
+    }
     match lookup.function_component_status(file, component) {
         ComponentStatus::Proven => {}
         ComponentStatus::Uncertain => return true,
@@ -1573,10 +1605,14 @@ fn mounts_handled(
             Some(tags) => tags
                 .iter()
                 .all(|tag| handled_above(holder, *tag, lookup, depth)),
-            None => {
-                !dynamic_component(holder, reference, lookup)
-                    || handled_above(holder, reference, lookup, depth)
-            }
+            // ADR 1026: a top-level route definition's `component` mounts at each `<Router>` tag.
+            None => match route_mount_tags(holder, reference, lookup) {
+                Some(tags) => route_tags_handled(&tags, lookup, depth),
+                None => {
+                    !dynamic_component(holder, reference, lookup)
+                        || handled_above(holder, reference, lookup, depth)
+                }
+            },
         };
     if !values
         .iter()
@@ -1797,4 +1833,222 @@ fn in_component_getter(
             .any(|attribute| attribute.span.contains(read));
         element.span.contains(read) && !intrinsic && !boundary
     })
+}
+
+/// ADR 1026: whether a boundary above every `<Router>` tag of `tags` takes a route component's throw. A tag whose file the
+/// lookup does not hold is undecided: handled, as `handled_above` answers an undecided case.
+fn route_tags_handled(
+    tags: &[(String, Span)],
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    depth: usize,
+) -> bool {
+    tags.iter().all(|(path, tag)| {
+        lookup
+            .file_by_path(path)
+            .is_none_or(|holder| handled_above(holder, *tag, lookup, depth))
+    })
+}
+
+/// ADR 1026: where the component `reference` names mounts, by file: `reference` is a route definition's `component` an
+/// audited `@solidjs/router` renders (ADR 1025, ADR 0335's premises), in a definition literal of a route table written
+/// in place ([`definition_mounts`]). `None` for anything else, which keeps the reading's obligation.
+fn route_mount_tags(
+    file: &FileFacts,
+    reference: Span,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+) -> Option<Vec<(String, Span)>> {
+    if !lookup.solid_router_component_value(file.path.as_str(), reference) {
+        return None;
+    }
+    let ast = &file.ast;
+    let property = ast.object_properties.iter().find(|property| {
+        !property.computed
+            && file.source_text(property.key) == Some("component")
+            && ast.peel_ts_sugar_span(property.value) == reference
+    })?;
+    definition_mounts(
+        file,
+        smallest_literal_around(file, property.span)?,
+        lookup,
+        0,
+    )
+}
+
+/// The object literal directly around `span` (a property of it).
+fn smallest_literal_around(file: &FileFacts, span: Span) -> Option<Span> {
+    file.ast
+        .object_get_shapes
+        .iter()
+        .filter(|shape| shape.span.contains(span) && shape.span != span)
+        .min_by_key(|shape| shape.span.end - shape.span.start)
+        .map(|shape| shape.span)
+}
+
+/// Where the route of the definition literal `definition` renders its component (`createRouteContext`'s outlet):
+/// - an element of the `routes` array literal of `createRouter({ routes: [...] })` (a top-level route) renders at each
+///   `<Router>` tag of the instance, a `const` every reference of which, in any analyzed file, is a JSX tag name, an
+///   import or an export of the binding, or its declaration;
+/// - an element of a parent definition's `children` array literal renders in the parent's outlet: where the parent's
+///   component reads `props.children` (the `children` getter of its route props calls `outlet()`), or, for a parent with
+///   no `component`, where the parent's own route renders (`if (!component) return outlet()`).
+///
+/// A parent component counts only when it is an inline arrow or a function of this file nothing rebinds, whose first
+/// parameter is a plain name every reference of which is a static member read, every `children` read written in a JSX
+/// element's child (not an attribute). Only sites reach analysis says may run count (ADRs 0458, 1015, 1018). `None` for
+/// anything else: a table held in a binding or built by `defineRoute(s)`, a parent that hands its props on or reads
+/// `children` elsewhere.
+fn definition_mounts(
+    file: &FileFacts,
+    definition: Span,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    depth: usize,
+) -> Option<Vec<(String, Span)>> {
+    use solid_facts::ast::BindingShape;
+    if depth > 16 {
+        return None;
+    }
+    let ast = &file.ast;
+    let peel = |span: Span| ast.peel_ts_sugar_span(span);
+    // The array property holding the definition as an element of its own: `routes` of the config or `children` of a parent.
+    let holder = ast.object_properties.iter().find(|property| {
+        !property.computed
+            && matches!(file.source_text(property.key), Some("routes" | "children"))
+            && ast
+                .array_literal_at(peel(property.value))
+                .is_some_and(|array| {
+                    array
+                        .elements
+                        .iter()
+                        .any(|element| peel(element.span) == definition)
+                })
+    })?;
+    let owner = smallest_literal_around(file, holder.span)?;
+    let reach = SiteReach::new(lookup);
+    if file.source_text(holder.key) == Some("children") {
+        let component = ast.object_properties.iter().find(|property| {
+            !property.computed
+                && file.source_text(property.key) == Some("component")
+                && smallest_literal_around(file, property.span) == Some(owner)
+        });
+        let Some(component) = component else {
+            return definition_mounts(file, owner, lookup, depth + 1);
+        };
+        let value = peel(component.value);
+        let function = ast
+            .functions
+            .iter()
+            .find(|function| function.span == value)
+            .or_else(|| {
+                let declaration = ast.reference_declaration(value)?;
+                ast.functions.iter().find(|function| {
+                    function
+                        .name
+                        .as_ref()
+                        .is_some_and(|name| name.span == declaration)
+                        || ast.identifier_binding(declaration).is_some_and(|binding| {
+                            binding.immutable
+                                && binding
+                                    .initializer
+                                    .is_some_and(|initializer| peel(initializer) == function.span)
+                        })
+                })
+            })?;
+        if crate::owners::function_binding_name(file, function).is_some()
+            && !lookup.function_value_is_current(file, function)
+        {
+            return None;
+        }
+        let props = function
+            .parameters
+            .first()
+            .filter(|parameter| parameter.shape == BindingShape::Identifier)?;
+        let name = props.names.first()?.span;
+        let mut reads = Vec::new();
+        for reference in ast.references_to(name) {
+            if *reference == name {
+                continue;
+            }
+            let member = ast
+                .member_with_peeled_object(*reference)
+                .filter(|member| ast.computed_members.binary_search(&member.span).is_err())?;
+            if ast.any_write_target_containing(member.span) {
+                return None;
+            }
+            if file.source_text(member.property) != Some("children") {
+                continue;
+            }
+            let in_child = ast.jsx_elements.iter().any(|element| {
+                element.span.contains(member.span)
+                    && !element
+                        .attributes
+                        .iter()
+                        .any(|attribute| attribute.span.contains(member.span))
+            });
+            if !in_child {
+                return None;
+            }
+            if reach.site(file, member.span) == Reach::MayRun {
+                reads.push((file.path.to_string(), member.span));
+            }
+        }
+        return Some(reads);
+    }
+    let call = ast.calls.iter().find(|call| {
+        !call.construct
+            && call.arguments.len() == 1
+            && !call.arguments[0].spread
+            && peel(call.arguments[0].span) == owner
+    })?;
+    let binding = ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && !binding.in_switch_case
+            && binding.shape == BindingShape::Identifier
+            && binding.names.len() == 1
+            && binding
+                .initializer
+                .is_some_and(|initializer| peel(initializer) == call.span)
+    })?;
+    let name = binding.names[0].span;
+    let symbol = lookup.entities().at(file.path.as_str(), name)?;
+    let mut tags = Vec::new();
+    for location in lookup.symbol_references_if_present(symbol.as_str())? {
+        let holder = lookup.file_by_path(location.path.as_ref())?;
+        let at = Span::new(
+            u32::try_from(location.start_byte).ok()?,
+            u32::try_from(location.end_byte).ok()?,
+        );
+        if holder.path == file.path && at == name {
+            continue;
+        }
+        let opening = holder
+            .ast
+            .jsx_elements
+            .iter()
+            .find(|element| element.member_object.is_none() && element.name.span == at);
+        let closing = holder
+            .ast
+            .jsx_elements
+            .iter()
+            .any(|element| element.closing_name == Some(at));
+        let surface = holder
+            .ast
+            .imports
+            .iter()
+            .any(|import| import.span.contains(at))
+            || holder
+                .ast
+                .exports
+                .iter()
+                .any(|export| export.span.contains(at) && !export.span.contains(call.span));
+        match (opening, closing, surface) {
+            (Some(element), _, _) => {
+                if reach.site(holder, element.name.span) == Reach::MayRun {
+                    tags.push((holder.path.to_string(), element.name.span));
+                }
+            }
+            (None, true, _) | (None, false, true) => {}
+            (None, false, false) => return None,
+        }
+    }
+    Some(tags)
 }
