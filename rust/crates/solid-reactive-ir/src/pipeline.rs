@@ -1037,6 +1037,12 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         report_memos(&report, &mut build_timings, emit_timings);
     }
     program.runtime_configuration = runtime_configuration;
+    // ADR 1065 part 2: the causes the stages after the draft recorded (the after-await accounting, the late reach queries).
+    if crate::blocker_census::enabled() {
+        program
+            .blocker_census
+            .extend(crate::blocker_census::drain());
+    }
     crate::role_log::flush();
     crate::proof_log::flush();
     clock.finish(&mut build_timings, ReactiveIrStage::FinalOrdering);

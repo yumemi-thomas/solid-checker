@@ -3061,8 +3061,13 @@ fn unplaced_blocker(
     let mut memo = rustc_hash::FxHashMap::default();
     runs_unplaced_through_callers(file, site, lookup, 4, ownerless, Routes::Every, &mut memo)
         .or_else(|| {
-            runs_unplaced_exhaustive(file, site, lookup, ownerless)
-                .then_some(crate::blockers::FUNCTION_RUN_UNPLACED)
+            let exhaustive = runs_unplaced_exhaustive(file, site, lookup, ownerless);
+            if exhaustive {
+                crate::blocker_census::cause_at(file.path.as_str(), site, "unplaced", || {
+                    "cause|unplaced|exhaustive".to_owned()
+                });
+            }
+            exhaustive.then_some(crate::blockers::FUNCTION_RUN_UNPLACED)
         })
 }
 
@@ -3281,6 +3286,16 @@ fn runs_unplaced_once(
             member_route_runs(routes, file, site, lookup)
         }
     } {
+        // ADR 1065 part 2 (B4, producer 2): the layer that leaves the run unplaced, census only.
+        crate::blocker_census::cause_at(file.path.as_str(), site, "unplaced", || {
+            format!(
+                "cause|unplaced|{}",
+                match routes {
+                    Routes::Every => crate::execution_role::unplaced_layer(file, site, lookup),
+                    Routes::Members | Routes::MembersAndGenerators => "member-route",
+                }
+            )
+        });
         return Some(crate::blockers::FUNCTION_RUN_UNPLACED);
     }
     let at = match climb_in_place_layers(file, site, lookup) {
@@ -3318,10 +3333,15 @@ fn runs_unplaced_once(
     // stepped (handed on, or a call of it creates an iterator the program uses) the run is unplaced, an obligation,
     // not "placed". A generator nothing steps runs none of its body.
     if function.generator {
-        return (routes == Routes::Every
+        let stepped = routes == Routes::Every
             && !is_action_step_argument(file, function, lookup)
-            && generator_may_be_stepped(file, function, lookup))
-        .then_some(crate::blockers::FUNCTION_RUN_UNPLACED);
+            && generator_may_be_stepped(file, function, lookup);
+        if stepped {
+            crate::blocker_census::cause_at(file.path.as_str(), site, "unplaced", || {
+                "cause|unplaced|generator-stepped".to_owned()
+            });
+        }
+        return stepped.then_some(crate::blockers::FUNCTION_RUN_UNPLACED);
     }
     crate::owners::function_binding_name(file, function)?;
     let calls = lookup
@@ -3350,6 +3370,13 @@ fn runs_unplaced_once(
             caller, call.span, lookup, depth, ownerless, routes, memo,
         ) {
             Some(crate::blockers::FUNCTION_RUN_UNPLACED) => {
+                // ADR 1065 part 2: the run is unplaced through this caller; its own row (`unplaced` at the call) says why.
+                crate::blocker_census::cause_at(file.path.as_str(), site, "unplaced", || {
+                    format!(
+                        "cause|unplaced|via-caller|{}:{}-{}",
+                        caller.path, call.span.start, call.span.end
+                    )
+                });
                 return Some(crate::blockers::FUNCTION_RUN_UNPLACED);
             }
             Some(blocker) => answer = Some(blocker),

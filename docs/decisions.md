@@ -3980,3 +3980,10 @@ The handed-member proof reuses `parameter_argument`: a callback parameter must b
 **The gap.** The lean audit 44148527547 (main f544561a8) failed on bookkeeping alone: `known item mx-recall unplaced pk-lazy: 163 id(s) it does not store` and the same for `pk-call-shapes` (144). The lean ids of both entries (ADR 1012) were recorded at 356c97405, before ADR 0981 (#244) added the phantom-manifest twins (`-phantom`) to every package shape; the full ids, recorded at 78ddeb849, hold them. The lean grid now generates both, so each lean audit reports the twins as ids the entry does not store.
 **Checked.** The 307 reported twins are the same class. Each one, regenerated at seed 1 and judged with the release build of f544561a8's tree, is `unplaced`, and every finding is uncertifiable: no violation, no false clean. On the audit's rows, the lean set of each entry equals its full set, id for id (pk-lazy 326, pk-call-shapes 288).
 **Decision.** Each entry's `ids.lean` is the set the audit reports, which equals `ids.full`. The idRegex and the class are unchanged.
+**Part 2.** More `cause|…` families, census only:
+- B4: `unplaced|<layer>` (`runs_unplaced_once`, chained `via-caller`), `placed-nowhere|<disjunct>`, `dispatch|<trigger>|<role>|<context>|frame:<span>`, the projection's `seed|read/write/action/owner|…` where it names `function-run-unplaced`, and `after-await-member|handed-compute|via=<call>`, which explains part 1's 2,898 SC9012 rows with no role decision.
+- B3: `after-await|<via>|<first failed sub-fact of library_call::runs_nothing, or the member read's root kind>|test|host`.
+- B5: `handed|<first leaf of handed_value that answered>|<member declaration>`, through a census-only thread-local.
+- Rows recorded after the draft are drained at the end of the build and at the snapshot.
+
+*Evidence.* rc.21 frozen corpus v2, dev mode: 34 of 34 projects identical off and on (U 251,897, V 244); 719,778 census rows. Pools with a cause: B4 12,531 of 12,557, B3 14,151 of 14,151, B5 12,311 of 12,315. `make coverage` with the gate cache off, census off and on: both pass. Ranked causes and levers: sc-scratch `mac23/cause-1065b/REPORT.md`.

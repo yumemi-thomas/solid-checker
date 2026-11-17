@@ -277,7 +277,7 @@ pub(crate) fn handed_value(
 ) -> bool {
     // Past the bound the value is unknown, and this only opens obligations.
     if depth == 0 {
-        return true;
+        return handed_leaf("depth-exhausted");
     }
     let span = file.ast.peel_ts_sugar_span(span);
     if let Some(member) = file.ast.member_at(span) {
@@ -335,7 +335,7 @@ pub(crate) fn handed_value(
         .find(|shape| shape.span == span)
     {
         if !shape.closed {
-            return true;
+            return handed_leaf("open-literal");
         }
         let own = |property: &&solid_facts::ast::ObjectPropertyFact| {
             span.contains(property.span)
@@ -376,7 +376,7 @@ pub(crate) fn handed_value(
                 && t.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
         })
     {
-        return true;
+        return handed_leaf("props-source");
     }
     // An alias whose own binding has no row of a value that has one (`const
     // { f } = { f: imported }`): the alias was not followed, so the call may
@@ -398,7 +398,7 @@ pub(crate) fn handed_value(
                 .and_then(|declaration| t.lookup.callee_symbol(file, declaration))
                 .is_some_and(is_source))
     {
-        return true;
+        return handed_leaf("reactive-source-alias");
     }
     let Some(declaration) = file.ast.reference_declaration(span) else {
         return false;
@@ -415,7 +415,7 @@ pub(crate) fn handed_value(
                     .declared(&location(file.path.shared(), parameter.pattern))
         })
     }) {
-        return true;
+        return handed_leaf("props-slot");
     }
     // F0: a callback's parameter holds an element of the standard iteration's
     // receiver (`useT(n).forEach((f) => f())`).
@@ -509,6 +509,23 @@ fn iteration_receiver_of_parameter(
         .map(|member| member.object)
 }
 
+thread_local! {
+    /// ADR 1065 part 2 (census only): the first leaf of [`handed_value`] that answered true in the walk being asked. Never read by an answer.
+    static HANDED_LEAF: std::cell::Cell<Option<&'static str>> = const { std::cell::Cell::new(None) };
+}
+
+/// A leaf of [`handed_value`] answering true: the census keeps the first one (a true always rises to the top). Returns true.
+fn handed_leaf(kind: &'static str) -> bool {
+    if crate::blocker_census::enabled() {
+        HANDED_LEAF.with(|leaf| {
+            if leaf.get().is_none() {
+                leaf.set(Some(kind));
+            }
+        });
+    }
+    true
+}
+
 /// Whether the value `call` answers is one a caller supplied: `useContext`'s, or
 /// a project function's. A call of a call is the inner call's answer.
 fn handed_call(
@@ -535,13 +552,14 @@ fn handed_call(
             .dialect
             .name_of(primitive)
             .and_then(|name| t.lookup.dialect.context_role(name))
-            == Some(solid_dialect::ContextRole::Read);
+            == Some(solid_dialect::ContextRole::Read)
+            && handed_leaf("context-read");
     }
     if t.lookup
         .function_called_at(file.path.as_str(), callee)
         .is_some()
     {
-        return true;
+        return handed_leaf("project-call-result");
     }
     if let Some(inner) = file.ast.call_at(callee) {
         return handed_call(t, file, inner, depth);
@@ -575,7 +593,7 @@ fn handed_call(
             .binary_search(&member.span)
             .is_ok()
     }) {
-        return true;
+        return handed_leaf("computed-member-callee");
     }
     // ADR 0772: `useA.call(null)` and `useA.bind(null)` answer as `useA`, a
     // standard method's (`Array.prototype.slice.call(p.xs)`) below.
@@ -583,7 +601,7 @@ fn handed_call(
         function_prototype_dispatch_placing(t.lookup, file, call)
             && !rooted_at_global(file, member.object)
     }) {
-        return true;
+        return handed_leaf("function-prototype-dispatch");
     }
     let callee_binding = file
         .ast
@@ -596,14 +614,14 @@ fn handed_call(
         });
     // ADR 0772: what a rebound binding holds at the call is unknown.
     if callee_binding.is_some_and(|binding| !binding.immutable) {
-        return true;
+        return handed_leaf("rebound-callee");
     }
     // F-B: a function chosen at run time (`const hook = c ? useA : useB`).
     let chosen = callee_binding
         .and_then(|binding| binding.initializer)
         .unwrap_or(callee);
     if !file.ast.composite_callee_operands(chosen).is_empty() {
-        return true;
+        return handed_leaf("chosen-at-run-time");
     }
     // ADR 0772: a method of a handed value (`props.api.use()`), which a
     // standard method's own arm below also asks.
@@ -4213,6 +4231,25 @@ impl LocalAccessContext<'_, '_> {
             || self.may_run_in_leaf_owner(file, call.callee)
             || self.tracked_read_may_suspend(file, call, execution)
         {
+            // ADR 1065 part 2 (B4, producer 3): which test opened the obligation, the call's role, and the frame it runs in.
+            crate::blocker_census::cause_at(file.path.as_str(), call.callee, "dispatch", || {
+                let trigger = if may_write {
+                    "may-write"
+                } else if execution.reports_untracked_read() {
+                    "untracked-read"
+                } else if execution.reports_unplaced() {
+                    "unplaced"
+                } else if self.may_run_in_leaf_owner(file, call.callee) {
+                    "leaf-owner"
+                } else {
+                    "may-suspend"
+                };
+                let frame = containing_ast_function(&file.ast, call.span).map_or_else(
+                    || "module".to_owned(),
+                    |function| format!("{}-{}", function.span.start, function.span.end),
+                );
+                format!("cause|dispatch|{trigger}|{execution:?}|{context}|frame:{frame}")
+            });
             result.dispatch_obligations.push(crate::StaticDefect {
                 kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
                     callee: file
@@ -4369,7 +4406,46 @@ impl LocalAccessContext<'_, '_> {
         file: &solid_facts::FileFacts,
         callee: solid_facts::core::Span,
     ) -> bool {
-        handed_value(&self.handed_tables(None), file, callee, HANDED_DEPTH)
+        let census = crate::blocker_census::enabled();
+        if census {
+            HANDED_LEAF.with(|leaf| leaf.set(None));
+        }
+        let handed = handed_value(&self.handed_tables(None), file, callee, HANDED_DEPTH);
+        if census && handed {
+            // ADR 1065 part 2 (B5): the leaf that answered and what the callee's member is declared as.
+            let leaf = HANDED_LEAF.with(std::cell::Cell::take).unwrap_or("unnamed");
+            let declared = self
+                .lookup
+                .resolved_callee_call(file, file.ast.peel_ts_sugar_span(callee))
+                .and_then(|resolved| resolved.declaration.as_ref())
+                .map_or_else(
+                    || "none".to_owned(),
+                    |declaration| {
+                        if declaration.standard_library {
+                            format!("standard:{}", declaration.qualified_name)
+                        } else if declaration.location.path.contains("/node_modules/") {
+                            format!(
+                                "package:{}",
+                                declaration
+                                    .location
+                                    .path
+                                    .rsplit_once("/node_modules/")
+                                    .map_or("", |(_, rest)| rest)
+                                    .split('/')
+                                    .take(2)
+                                    .collect::<Vec<_>>()
+                                    .join("/")
+                            )
+                        } else {
+                            format!("project:{}", declaration.name)
+                        }
+                    },
+                );
+            crate::blocker_census::cause_at(file.path.as_str(), callee, "handed", || {
+                format!("cause|handed|{leaf}|{declared}")
+            });
+        }
+        handed
     }
 
     /// The write a call of the setter whose row is `symbol`'s makes: the
@@ -9708,11 +9784,24 @@ fn placed_nowhere(
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     // ADR 0874: a withheld call proves no run, and an impostor may make one.
-    crate::execution_role::runs_in_withheld_layer(file, span, lookup)
-        || function_escapes_unfollowed(file, span, lookup)
-        || runs_in_function_entered_unseen(file, span, lookup)
-        || crate::execution_role::inside_class_member(file, span, lookup)
-        || crate::static_api::runs_unplaced_exhaustive(file, span, lookup, false)
+    let layer = if crate::execution_role::runs_in_withheld_layer(file, span, lookup) {
+        "withheld-layer"
+    } else if function_escapes_unfollowed(file, span, lookup) {
+        "escapes-unfollowed"
+    } else if runs_in_function_entered_unseen(file, span, lookup) {
+        "entered-unseen"
+    } else if crate::execution_role::inside_class_member(file, span, lookup) {
+        "class-member"
+    } else if crate::static_api::runs_unplaced_exhaustive(file, span, lookup, false) {
+        "exhaustive"
+    } else {
+        return false;
+    };
+    // ADR 1065 part 2 (B4): the disjunct that placed the read nowhere, census only.
+    crate::blocker_census::cause_at(file.path.as_str(), span, "placed-nowhere", || {
+        format!("cause|placed-nowhere|{layer}")
+    });
+    true
 }
 
 /// ADR 0934: whether `span` sits in a function that is no component, or in one
