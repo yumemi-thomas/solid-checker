@@ -100,6 +100,20 @@ pub fn first_step_unconditional_calls(
 /// `None` when the source does not parse.
 #[must_use]
 pub fn every_unconditional_call(path: &Path, source: &str) -> Option<HashSet<Span>> {
+    every_unconditional_call_resuming(path, source, &HashSet::new())
+}
+
+/// ADR 1047: [`every_unconditional_call`], except that a `yield` whose span is in `resuming` is no suspension: the caller
+/// proved that whatever steps its generator resumes it on the same stack, at once (an action's step after a `yield` of a
+/// value that is not a thenable). A call after such a `yield` is then judged as one before it would be; any other `yield`
+/// of the generator still ends its first step. `resuming` holds only `yield` expressions of generators; a span of
+/// anything else matches nothing.
+#[must_use]
+pub fn every_unconditional_call_resuming(
+    path: &Path,
+    source: &str,
+    resuming: &HashSet<Span>,
+) -> Option<HashSet<Span>> {
     if source.len() > 4 * 1024 * 1024 {
         return None;
     }
@@ -117,8 +131,12 @@ pub fn every_unconditional_call(path: &Path, source: &str) -> Option<HashSet<Spa
     let mut suspension = HashMap::<Option<NodeId>, u32>::new();
     for node in nodes.iter() {
         if matches!(node.kind(), AstKind::YieldExpression(_)) {
+            let span = node.kind().span();
+            if resuming.contains(&Span::new(span.start, span.end)) {
+                continue;
+            }
             let owner = innermost_function(nodes, node.id());
-            let start = node.kind().span().start;
+            let start = span.start;
             suspension
                 .entry(owner)
                 .and_modify(|first| *first = (*first).min(start))
