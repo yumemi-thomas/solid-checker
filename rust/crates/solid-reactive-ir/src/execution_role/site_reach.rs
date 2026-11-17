@@ -1283,7 +1283,8 @@ fn returned_value_never_called(
                 && before[..before.len() - word.len()]
                     .chars()
                     .next_back()
-                    .is_none_or(|c| !(c.is_ascii_alphanumeric() || c == '_' || c == '$'))
+                    .map(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
+                    != Some(true)
         });
         let after = source[span.end as usize..]
             .iter()
