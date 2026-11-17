@@ -1337,6 +1337,14 @@ packages/wasm/owned/
 !fixtures/reactive-ir/handed-root-patch-definer-key-any/node_modules/**
 !fixtures/reactive-ir/handed-root-patch-shadowed/node_modules/
 !fixtures/reactive-ir/handed-root-patch-shadowed/node_modules/**
+!fixtures/reactive-ir/fresh-written-object/node_modules/
+!fixtures/reactive-ir/fresh-written-object/node_modules/**
+!fixtures/reactive-ir/fresh-written-object-factory-patched/node_modules/
+!fixtures/reactive-ir/fresh-written-object-factory-patched/node_modules/**
+!fixtures/reactive-ir/fresh-written-object-escaped/node_modules/
+!fixtures/reactive-ir/fresh-written-object-escaped/node_modules/**
+!fixtures/reactive-ir/fresh-written-object-shadowed/node_modules/
+!fixtures/reactive-ir/fresh-written-object-shadowed/node_modules/**
 !fixtures/reactive-ir/rc21-listener-bare-global/node_modules/
 !fixtures/reactive-ir/rc21-listener-bare-global/node_modules/**
 !fixtures/reactive-ir/rc21-listener-bare-shadowed/node_modules/

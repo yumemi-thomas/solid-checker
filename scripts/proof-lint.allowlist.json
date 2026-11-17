@@ -159,6 +159,16 @@
         "why": "ADR 0950, feature `what-if` only: `hazard_of_id` answers none for an id that names no hazard of the table, and its one caller (what_if.rs) refuses the `--assume` argument with an error, so an unknown name is never an assumption; a default build does not compile it"
       }
     },
+    "rust/crates/solid-reactive-ir/src/base/contributions/fresh_written.rs": {
+      "default-on-missing": {
+        "count": 2,
+        "why": "ADR 1024: both answer 'not proven made' (the write stays open) when the fact is missing: a callback body whose text cannot be read may name `arguments`, and a declaring function whose text cannot be read may hold a `finally`"
+      },
+      "name-only-match": {
+        "count": 2,
+        "why": "ADR 1024: `reduce` and `sort` are read as static members of an array the standard library made (a literal, `Object.keys`/`values`/`entries`, or such an array's `sort`), so the member is Array.prototype's own; `fresh_factories_intact` asks that `Array.reduce` and `Array.sort` are unpatched (ADR 0781's patch census), else every factory-form site is an open write"
+      }
+    },
     "rust/crates/solid-reactive-ir/src/base/fixpoint/fold.rs": {
       "default-on-missing": {
         "count": 1,

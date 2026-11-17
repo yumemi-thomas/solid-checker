@@ -2747,7 +2747,13 @@ impl<'a> SemanticLookup<'a> {
                 crate::base::memo::probes::PolledKey::Unit
             });
         }
-        let present = premise || self.hazards_index().contains_key(&hazard);
+        let present = premise || {
+            let index = self.hazards_index();
+            index.contains_key(&hazard)
+                || crate::base::contributions::open_member_write_through_factory(hazard, &|raw| {
+                    index.contains_key(&raw)
+                })
+        };
         // ADR 0950, the one seam: a what-if build answers `false` for a hazard it was told to assume absent. This block does not exist in a default
         // build (`what-if` is in no default, workspace or CI), so nothing there can reach it.
         #[cfg(feature = "what-if")]
@@ -2755,6 +2761,13 @@ impl<'a> SemanticLookup<'a> {
             return false;
         }
         present
+    }
+
+    /// ADR 1024: whether a factory the factory form of the open-write census trusts may not be standard, so that its
+    /// sites are open writes ([`crate::base::contributions::open_member_write_through_factory`]).
+    pub(crate) fn fresh_factory_writes_open(&self) -> bool {
+        let index = self.hazards_index();
+        !crate::base::contributions::fresh_factories_intact(&|raw| index.contains_key(&raw))
     }
 
     /// ADR 0965: the blocker kinds this run assumed away (`--assume Premise(kind)`), each asked of the seam, which is how the run records that it flipped.
