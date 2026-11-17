@@ -5,6 +5,8 @@
 // that table are mirrored in Rust, behind `Dialect::code_policy`: rust/crates/solid-dialect/src/solid_2/code_policy.rs, one line
 // per code; a change to `rules`, `declining` or `placelessCodes` here is a change to that table too.
 
+import { readFileSync } from "node:fs";
+
 // --- The policy table (phase D) -------------------------------------------------------------------------------
 // Every rc.21 dev diagnostic code, classified once: which checker rules claim it, what a diagnostic of it means for
 // the comparison (`disposition`), and how loud Solid is about it (`severity`: "error" throws or is an engine failure,
@@ -310,4 +312,26 @@ export const PROBLEMS = ["false-clean", "misplaced", "unplaced", "wrong-rule", "
  * What a grid row needs a look for, or null: its outcome, or a second code on the site's lines missed in a file with no uncertifiable
  * finding (matrix.mjs `judge`, `secondary`), a false clean of that code whatever the row's own outcome. The one test of focus, the audit and smoke.
  */
-export const rowProblem = (row) => (PROBLEMS.includes(row.outcome) ? row.outcome : Object.values(row.detail?.secondary ?? {}).includes("false-clean-certified") ? "secondary-false-clean" : null);
+export const rowProblem = (row, { unexecutedKnown = UNEXECUTED_KNOWN } = {}) => (PROBLEMS.includes(row.outcome) ? row.outcome
+  : unexecutedViolation(row, unexecutedKnown) ? "unexecuted-violation"
+  : Object.values(row.detail?.secondary ?? {}).includes("false-clean-certified") ? "secondary-false-clean" : null);
+
+/**
+ * ADR 1018: the ledger of legal rows whose violation is at a site no run reaches and a person has seen (scripts/fuzz/unexecuted-known.json:
+ * `explained` or `pending-fix`, each naming a grid, an id pattern, an ADR and a reason).
+ */
+export const UNEXECUTED_KNOWN = JSON.parse(readFileSync(new URL("./unexecuted-known.json", import.meta.url), "utf8"));
+
+/** The ledger entry that holds an unexecuted legal row, or null: the entry's grid is the row's (a legal id names it: `lg-`), its pattern matches the id. */
+export function unexecutedEntry(row, ledger = UNEXECUTED_KNOWN) {
+  return (ledger.entries ?? []).find((entry) => (!row.grid || entry.grid === row.grid) && entry.grid.startsWith("lg-") && new RegExp(entry.idRegex).test(row.id)) ?? null;
+}
+
+/**
+ * ADR 1018: a legal grid's `unexecuted` row (legal.mjs: a checker violation at a site that never ran, in a legal program) needs a look unless the ledger
+ * holds it. A provably dead site gives U, never V, so the violation is a false positive or a lane that never drives the site; either is named.
+ * A misuse grid's `unexecuted` (matrix.mjs: the page halted before the site) is another outcome and is not this.
+ */
+export function unexecutedViolation(row, ledger = UNEXECUTED_KNOWN) {
+  return row.outcome === "unexecuted" && typeof row.id === "string" && row.id.startsWith("lg-") && !unexecutedEntry(row, ledger);
+}

@@ -1966,8 +1966,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 7910,
-      "end": 7913,
+      "start": 7989,
+      "end": 7992,
       "fixes": 0
     },
     {
@@ -1977,8 +1977,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 7910,
-      "end": 7913,
+      "start": 7989,
+      "end": 7992,
       "fixes": 0
     },
     {
@@ -1988,8 +1988,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 7910,
-      "end": 7913,
+      "start": 7989,
+      "end": 7992,
       "fixes": 0
     },
     {
@@ -1999,8 +1999,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 8151,
-      "end": 8160,
+      "start": 8230,
+      "end": 8239,
       "fixes": 0
     },
     {
@@ -2010,8 +2010,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 8151,
-      "end": 8160,
+      "start": 8230,
+      "end": 8239,
       "fixes": 0
     },
     {
@@ -2020,8 +2020,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 8173,
-      "end": 8181,
+      "start": 8252,
+      "end": 8260,
       "fixes": 0
     },
     {
@@ -2031,8 +2031,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 8271,
-      "end": 8280,
+      "start": 8350,
+      "end": 8359,
       "fixes": 0
     },
     {
@@ -2042,8 +2042,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 8271,
-      "end": 8280,
+      "start": 8350,
+      "end": 8359,
       "fixes": 0
     },
     {
@@ -2053,8 +2053,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 8288,
-      "end": 8291,
+      "start": 8367,
+      "end": 8370,
       "fixes": 0
     },
     {
@@ -2064,8 +2064,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 8288,
-      "end": 8291,
+      "start": 8367,
+      "end": 8370,
       "fixes": 0
     },
     {
@@ -2075,8 +2075,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 8288,
-      "end": 8291,
+      "start": 8367,
+      "end": 8370,
       "fixes": 0
     },
     {
@@ -2086,8 +2086,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 8621,
-      "end": 8631,
+      "start": 8700,
+      "end": 8710,
       "fixes": 0
     },
     {
@@ -2097,8 +2097,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 8621,
-      "end": 8631,
+      "start": 8700,
+      "end": 8710,
       "fixes": 0
     },
     {
@@ -2108,8 +2108,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 8654,
-      "end": 8663,
+      "start": 8733,
+      "end": 8742,
       "fixes": 0
     },
     {
@@ -2119,8 +2119,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 8825,
-      "end": 8834,
+      "start": 8904,
+      "end": 8913,
       "fixes": 0
     },
     {
@@ -2130,8 +2130,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 8825,
-      "end": 8834,
+      "start": 8904,
+      "end": 8913,
       "fixes": 0
     },
     {
@@ -2141,8 +2141,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 8825,
-      "end": 8834,
+      "start": 8904,
+      "end": 8913,
       "fixes": 0
     },
     {
@@ -2152,8 +2152,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 9185,
-      "end": 9514,
+      "start": 9264,
+      "end": 9593,
       "fixes": 0
     },
     {
@@ -2163,8 +2163,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 9185,
-      "end": 9514,
+      "start": 9264,
+      "end": 9593,
       "fixes": 0
     },
     {
@@ -2174,8 +2174,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 9226,
-      "end": 9486,
+      "start": 9305,
+      "end": 9565,
       "fixes": 0
     },
     {
@@ -2185,8 +2185,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 9258,
-      "end": 9267,
+      "start": 9337,
+      "end": 9346,
       "fixes": 0
     },
     {
@@ -2196,8 +2196,8 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 9372,
-      "end": 9375,
+      "start": 9451,
+      "end": 9454,
       "fixes": 0
     },
     {
@@ -2207,8 +2207,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 9372,
-      "end": 9377,
+      "start": 9451,
+      "end": 9456,
       "fixes": 0
     },
     {
@@ -2218,8 +2218,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 9688,
-      "end": 9691,
+      "start": 9767,
+      "end": 9770,
       "fixes": 0
     },
     {
@@ -2229,8 +2229,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 9688,
-      "end": 9691,
+      "start": 9767,
+      "end": 9770,
       "fixes": 0
     },
     {
@@ -2240,8 +2240,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 9688,
-      "end": 9691,
+      "start": 9767,
+      "end": 9770,
       "fixes": 0
     },
     {
@@ -2251,8 +2251,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 9708,
-      "end": 10167,
+      "start": 9787,
+      "end": 10246,
       "fixes": 0
     },
     {
@@ -2262,8 +2262,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 9708,
-      "end": 10167,
+      "start": 9787,
+      "end": 10246,
       "fixes": 0
     },
     {
@@ -2273,8 +2273,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 9749,
-      "end": 10139,
+      "start": 9828,
+      "end": 10218,
       "fixes": 0
     },
     {
@@ -2284,8 +2284,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 9781,
-      "end": 9790,
+      "start": 9860,
+      "end": 9869,
       "fixes": 0
     },
     {
@@ -2295,8 +2295,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 9981,
-      "end": 9989,
+      "start": 10060,
+      "end": 10068,
       "fixes": 0
     },
     {
@@ -2306,8 +2306,8 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 10026,
-      "end": 10028,
+      "start": 10105,
+      "end": 10107,
       "fixes": 0
     },
     {
@@ -2317,8 +2317,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 10635,
-      "end": 10638,
+      "start": 10714,
+      "end": 10717,
       "fixes": 0
     },
     {
@@ -2328,8 +2328,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 10635,
-      "end": 10638,
+      "start": 10714,
+      "end": 10717,
       "fixes": 0
     },
     {
@@ -2339,8 +2339,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 10635,
-      "end": 10638,
+      "start": 10714,
+      "end": 10717,
       "fixes": 0
     },
     {
@@ -2350,8 +2350,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 10655,
-      "end": 10938,
+      "start": 10734,
+      "end": 11017,
       "fixes": 0
     },
     {
@@ -2361,8 +2361,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 10655,
-      "end": 10938,
+      "start": 10734,
+      "end": 11017,
       "fixes": 0
     },
     {
@@ -2372,8 +2372,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 10696,
-      "end": 10910,
+      "start": 10775,
+      "end": 10989,
       "fixes": 0
     },
     {
@@ -2383,8 +2383,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 10751,
-      "end": 10759,
+      "start": 10830,
+      "end": 10838,
       "fixes": 0
     },
     {
@@ -2394,8 +2394,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 10799,
-      "end": 10808,
+      "start": 10878,
+      "end": 10887,
       "fixes": 0
     },
     {
@@ -2405,8 +2405,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11041,
-      "end": 11051,
+      "start": 11120,
+      "end": 11130,
       "fixes": 0
     },
     {
@@ -2416,8 +2416,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11041,
-      "end": 11051,
+      "start": 11120,
+      "end": 11130,
       "fixes": 0
     },
     {
@@ -2427,8 +2427,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11074,
-      "end": 11083,
+      "start": 11153,
+      "end": 11162,
       "fixes": 0
     },
     {
@@ -2438,8 +2438,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11098,
-      "end": 11106,
+      "start": 11177,
+      "end": 11185,
       "fixes": 0
     },
     {
@@ -2449,8 +2449,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11185,
-      "end": 11194,
+      "start": 11264,
+      "end": 11273,
       "fixes": 0
     },
     {
@@ -2460,8 +2460,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11185,
-      "end": 11194,
+      "start": 11264,
+      "end": 11273,
       "fixes": 0
     },
     {
@@ -2471,8 +2471,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11185,
-      "end": 11194,
+      "start": 11264,
+      "end": 11273,
       "fixes": 0
     },
     {
@@ -2482,8 +2482,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11292,
-      "end": 11302,
+      "start": 11371,
+      "end": 11381,
       "fixes": 0
     },
     {
@@ -2493,8 +2493,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11292,
-      "end": 11302,
+      "start": 11371,
+      "end": 11381,
       "fixes": 0
     },
     {
@@ -2504,8 +2504,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11325,
-      "end": 11334,
+      "start": 11404,
+      "end": 11413,
       "fixes": 0
     },
     {
@@ -2515,8 +2515,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11349,
-      "end": 11357,
+      "start": 11428,
+      "end": 11436,
       "fixes": 0
     },
     {
@@ -2526,8 +2526,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11411,
-      "end": 11420,
+      "start": 11490,
+      "end": 11499,
       "fixes": 0
     },
     {
@@ -2537,8 +2537,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11411,
-      "end": 11420,
+      "start": 11490,
+      "end": 11499,
       "fixes": 0
     },
     {
@@ -2548,8 +2548,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11411,
-      "end": 11420,
+      "start": 11490,
+      "end": 11499,
       "fixes": 0
     },
     {
@@ -2559,8 +2559,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11515,
-      "end": 11525,
+      "start": 11594,
+      "end": 11604,
       "fixes": 0
     },
     {
@@ -2570,8 +2570,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11515,
-      "end": 11525,
+      "start": 11594,
+      "end": 11604,
       "fixes": 0
     },
     {
@@ -2581,8 +2581,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11548,
-      "end": 11557,
+      "start": 11627,
+      "end": 11636,
       "fixes": 0
     },
     {
@@ -2592,8 +2592,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11572,
-      "end": 11580,
+      "start": 11651,
+      "end": 11659,
       "fixes": 0
     },
     {
@@ -2603,8 +2603,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11643,
-      "end": 11652,
+      "start": 11722,
+      "end": 11731,
       "fixes": 0
     },
     {
@@ -2614,8 +2614,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11643,
-      "end": 11652,
+      "start": 11722,
+      "end": 11731,
       "fixes": 0
     },
     {
@@ -2625,8 +2625,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11643,
-      "end": 11652,
+      "start": 11722,
+      "end": 11731,
       "fixes": 0
     },
     {
@@ -2636,8 +2636,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11794,
-      "end": 11804,
+      "start": 11873,
+      "end": 11883,
       "fixes": 0
     },
     {
@@ -2647,8 +2647,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11794,
-      "end": 11804,
+      "start": 11873,
+      "end": 11883,
       "fixes": 0
     },
     {
@@ -2658,8 +2658,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11827,
-      "end": 11836,
+      "start": 11906,
+      "end": 11915,
       "fixes": 0
     },
     {
@@ -2669,8 +2669,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11851,
-      "end": 11859,
+      "start": 11930,
+      "end": 11938,
       "fixes": 0
     },
     {
@@ -2680,8 +2680,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11949,
-      "end": 11958,
+      "start": 12028,
+      "end": 12037,
       "fixes": 0
     },
     {
@@ -2691,8 +2691,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11949,
-      "end": 11958,
+      "start": 12028,
+      "end": 12037,
       "fixes": 0
     },
     {
@@ -2702,8 +2702,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 11949,
-      "end": 11958,
+      "start": 12028,
+      "end": 12037,
       "fixes": 0
     },
     {
@@ -2713,8 +2713,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 12148,
-      "end": 12158,
+      "start": 12227,
+      "end": 12237,
       "fixes": 0
     },
     {
@@ -2724,8 +2724,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 12148,
-      "end": 12158,
+      "start": 12227,
+      "end": 12237,
       "fixes": 0
     },
     {
@@ -2735,8 +2735,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 12182,
-      "end": 12191,
+      "start": 12261,
+      "end": 12270,
       "fixes": 0
     },
     {
@@ -2746,8 +2746,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 12234,
-      "end": 12242,
+      "start": 12313,
+      "end": 12321,
       "fixes": 0
     },
     {
@@ -2757,8 +2757,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 12459,
-      "end": 12468,
+      "start": 12538,
+      "end": 12547,
       "fixes": 0
     },
     {
@@ -2768,8 +2768,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 12459,
-      "end": 12468,
+      "start": 12538,
+      "end": 12547,
       "fixes": 0
     },
     {
@@ -2779,8 +2779,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 12459,
-      "end": 12468,
+      "start": 12538,
+      "end": 12547,
       "fixes": 0
     },
     {
@@ -2790,8 +2790,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 12574,
-      "end": 12584,
+      "start": 12653,
+      "end": 12663,
       "fixes": 0
     },
     {
@@ -2801,8 +2801,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 12574,
-      "end": 12584,
+      "start": 12653,
+      "end": 12663,
       "fixes": 0
     },
     {
@@ -2812,8 +2812,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 12607,
-      "end": 12616,
+      "start": 12686,
+      "end": 12695,
       "fixes": 0
     },
     {
@@ -2823,8 +2823,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 12631,
-      "end": 12639,
+      "start": 12710,
+      "end": 12718,
       "fixes": 0
     },
     {
@@ -2834,8 +2834,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 12809,
-      "end": 12818,
+      "start": 12888,
+      "end": 12897,
       "fixes": 0
     },
     {
@@ -2845,8 +2845,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 12809,
-      "end": 12818,
+      "start": 12888,
+      "end": 12897,
       "fixes": 0
     },
     {
@@ -2856,8 +2856,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 12809,
-      "end": 12818,
+      "start": 12888,
+      "end": 12897,
       "fixes": 0
     },
     {
@@ -2867,8 +2867,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 12976,
-      "end": 12986,
+      "start": 13055,
+      "end": 13065,
       "fixes": 0
     },
     {
@@ -2878,8 +2878,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 12976,
-      "end": 12986,
+      "start": 13055,
+      "end": 13065,
       "fixes": 0
     },
     {
@@ -2889,8 +2889,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 13018,
-      "end": 13027,
+      "start": 13097,
+      "end": 13106,
       "fixes": 0
     },
     {
@@ -2900,8 +2900,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 13042,
-      "end": 13047,
+      "start": 13121,
+      "end": 13126,
       "fixes": 0
     },
     {
@@ -2911,8 +2911,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 13110,
-      "end": 13113,
+      "start": 13189,
+      "end": 13192,
       "fixes": 0
     },
     {
@@ -2922,8 +2922,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 13110,
-      "end": 13113,
+      "start": 13189,
+      "end": 13192,
       "fixes": 0
     },
     {
@@ -2933,8 +2933,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 13110,
-      "end": 13113,
+      "start": 13189,
+      "end": 13192,
       "fixes": 0
     },
     {
@@ -2944,8 +2944,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 13331,
-      "end": 13343,
+      "start": 13410,
+      "end": 13422,
       "fixes": 0
     },
     {
@@ -2955,8 +2955,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 13331,
-      "end": 13343,
+      "start": 13410,
+      "end": 13422,
       "fixes": 0
     },
     {
@@ -2966,8 +2966,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 13331,
-      "end": 13343,
+      "start": 13410,
+      "end": 13422,
       "fixes": 0
     },
     {
@@ -2977,8 +2977,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 13401,
-      "end": 13409,
+      "start": 13480,
+      "end": 13488,
       "fixes": 0
     },
     {
@@ -2988,8 +2988,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 13436,
-      "end": 13445,
+      "start": 13515,
+      "end": 13524,
       "fixes": 0
     },
     {
@@ -2999,8 +2999,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 13547,
-      "end": 13550,
+      "start": 13626,
+      "end": 13629,
       "fixes": 0
     },
     {
@@ -3010,8 +3010,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 13547,
-      "end": 13550,
+      "start": 13626,
+      "end": 13629,
       "fixes": 0
     },
     {
@@ -3021,8 +3021,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 13547,
-      "end": 13550,
+      "start": 13626,
+      "end": 13629,
       "fixes": 0
     },
     {
@@ -3032,8 +3032,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 13760,
-      "end": 13770,
+      "start": 13839,
+      "end": 13849,
       "fixes": 0
     },
     {
@@ -3043,8 +3043,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 13760,
-      "end": 13770,
+      "start": 13839,
+      "end": 13849,
       "fixes": 0
     },
     {
@@ -3054,8 +3054,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 13793,
-      "end": 13802,
+      "start": 13872,
+      "end": 13881,
       "fixes": 0
     },
     {
@@ -3064,8 +3064,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 13817,
-      "end": 13825,
+      "start": 13896,
+      "end": 13904,
       "fixes": 0
     },
     {
@@ -3075,8 +3075,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 13903,
-      "end": 13912,
+      "start": 13982,
+      "end": 13991,
       "fixes": 0
     },
     {
@@ -3086,8 +3086,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 13903,
-      "end": 13912,
+      "start": 13982,
+      "end": 13991,
       "fixes": 0
     },
     {
@@ -3097,8 +3097,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 13903,
-      "end": 13912,
+      "start": 13982,
+      "end": 13991,
       "fixes": 0
     },
     {
@@ -3108,8 +3108,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 14044,
-      "end": 14054,
+      "start": 14123,
+      "end": 14133,
       "fixes": 0
     },
     {
@@ -3119,8 +3119,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 14044,
-      "end": 14054,
+      "start": 14123,
+      "end": 14133,
       "fixes": 0
     },
     {
@@ -3130,8 +3130,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 14077,
-      "end": 14086,
+      "start": 14156,
+      "end": 14165,
       "fixes": 0
     },
     {
@@ -3140,8 +3140,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 14101,
-      "end": 14109,
+      "start": 14180,
+      "end": 14188,
       "fixes": 0
     },
     {
@@ -3151,8 +3151,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 14186,
-      "end": 14195,
+      "start": 14265,
+      "end": 14274,
       "fixes": 0
     },
     {
@@ -3162,8 +3162,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 14186,
-      "end": 14195,
+      "start": 14265,
+      "end": 14274,
       "fixes": 0
     },
     {
@@ -3173,8 +3173,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 14186,
-      "end": 14195,
+      "start": 14265,
+      "end": 14274,
       "fixes": 0
     },
     {
@@ -3184,8 +3184,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 14359,
-      "end": 14369,
+      "start": 14438,
+      "end": 14448,
       "fixes": 0
     },
     {
@@ -3195,8 +3195,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 14359,
-      "end": 14369,
+      "start": 14438,
+      "end": 14448,
       "fixes": 0
     },
     {
@@ -3206,8 +3206,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 14392,
-      "end": 14401,
+      "start": 14471,
+      "end": 14480,
       "fixes": 0
     },
     {
@@ -3216,8 +3216,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 14416,
-      "end": 14424,
+      "start": 14495,
+      "end": 14503,
       "fixes": 0
     },
     {
@@ -3227,8 +3227,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 14522,
-      "end": 14531,
+      "start": 14601,
+      "end": 14610,
       "fixes": 0
     },
     {
@@ -3238,8 +3238,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 14522,
-      "end": 14531,
+      "start": 14601,
+      "end": 14610,
       "fixes": 0
     },
     {
@@ -3249,8 +3249,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-cleanup-handle-call/App.tsx",
-      "start": 14522,
-      "end": 14531,
+      "start": 14601,
+      "end": 14610,
       "fixes": 0
     }
   ]

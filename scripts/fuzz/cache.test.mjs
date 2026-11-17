@@ -1,9 +1,9 @@
-import { browserCache, pinnedHeadlessShell } from "../playwright-browser.mjs";
+import { browserCache, buildExecutable, pinnedHeadlessShell } from "../playwright-browser.mjs";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { BaselineCache, EntryCache, RECORD_SOURCES, executionFiles, browserKey, installedKey, recordDigest, treeStat, typecheckDigest, MismatchHistory, ORACLE_SOURCES, cacheableRecord, cacheableTypecheck, caseFiles, caseKey, chromeEnvironmentKey, codeHash, environmentKey, fileHash, oracleRecordHash, programKey, runtimeEnvironmentKey, treeHash, TYPECHECK_SOURCES, cacheStats, typecheckEnvironmentKey, typecheckKey, withRuntimeCache } from "./cache.mjs";
+import { BaselineCache, CHROME_RECORD_SOURCES, EntryCache, RECORD_SOURCES, installedContent, sharedCacheRoot, cacheDirectory, executionFiles, browserKey, installedKey, recordDigest, treeStat, typecheckDigest, MismatchHistory, ORACLE_SOURCES, cacheableRecord, cacheableTypecheck, caseFiles, caseKey, chromeEnvironmentKey, codeHash, environmentKey, fileHash, oracleRecordHash, programKey, runtimeEnvironmentKey, treeHash, TYPECHECK_SOURCES, cacheStats, typecheckEnvironmentKey, typecheckKey, withRuntimeCache } from "./cache.mjs";
 
 const scratch = () => mkdtempSync(join(tmpdir(), "fuzz-cache-"));
 const config = (dir, text = "checker") => {
@@ -280,19 +280,45 @@ describe("what is really installed", () => {
     expect(treeStat(dir)).not.toBe(stable);
   });
 
-  it("installedKey moves with Node's version, the runner's environment and either install's files", () => {
+  // ADR 1029: an install keys by what it holds, never where or when it was written.
+  const pkg = (root, name, version) => { mkdirSync(join(root, "node_modules", name), { recursive: true }); writeFileSync(join(root, "node_modules", name, "package.json"), JSON.stringify({ name, version })); };
+  it("installedContent: the same packages in another clone (a fresh install, other mtimes, another path) key the same; a version moves it", async () => {
+    const one = scratch(), two = scratch();
+    for (const root of [one, two]) { pkg(root, "solid-js", "2.0.0-rc.21"); pkg(root, "@solidjs/web", "2.0.0-rc.21"); }
+    const { utimesSync } = await import("node:fs");
+    utimesSync(join(two, "node_modules/solid-js/package.json"), new Date(1000), new Date(1000));
+    writeFileSync(join(two, "node_modules/solid-js/extra.js"), "a build file npm wrote later");
+    expect(installedContent(join(two, "node_modules"))).toBe(installedContent(join(one, "node_modules")));
+    pkg(two, "solid-js", "2.0.0-rc.22");
+    expect(installedContent(join(two, "node_modules"))).not.toBe(installedContent(join(one, "node_modules")));
+    expect(installedContent(join(one, "none"))).toBe("missing");
+  });
+
+  it("installedContent reads npm's record of the install when there is one: its bytes, not the tree", () => {
+    const one = scratch(), two = scratch();
+    for (const root of [one, two]) { pkg(root, "solid-js", "2.0.0-rc.21"); writeFileSync(join(root, "node_modules/.package-lock.json"), JSON.stringify({ packages: { "node_modules/solid-js": { version: "2.0.0-rc.21", integrity: "sha512-a" } } })); }
+    pkg(two, "stray", "1.0.0");                                                         // npm's record says what it installed
+    expect(installedContent(join(two, "node_modules"))).toBe(installedContent(join(one, "node_modules")));
+    writeFileSync(join(two, "node_modules/.package-lock.json"), JSON.stringify({ packages: { "node_modules/solid-js": { version: "2.0.0-rc.21", integrity: "sha512-b" } } }));
+    expect(installedContent(join(two, "node_modules"))).not.toBe(installedContent(join(one, "node_modules")));
+  });
+
+  it("installedKey moves with Node's version, the runner's environment and either install's packages, not with their files' times", async () => {
     const dir = scratch();
-    for (const name of ["fast", "oracle"]) { mkdirSync(join(dir, name, "node_modules/p"), { recursive: true }); writeFileSync(join(dir, name, "node_modules/p/x.js"), "1"); }
+    for (const name of ["fast", "oracle"]) pkg(join(dir, name), "p", "1.0.0");
     const config = { fastInstall: join(dir, "fast"), install: join(dir, "oracle") };
     const base = installedKey(config, { env: {}, node: "v24" });
     expect(installedKey(config, { env: {}, node: "v24" })).toBe(base);
     expect(installedKey(config, { env: {}, node: "v25" })).not.toBe(base);
     expect(installedKey(config, { env: { FUZZ_PAUSE_MS: "10" }, node: "v24" })).not.toBe(base);
     expect(installedKey(config, { env: { UNRELATED: "1" }, node: "v24" })).toBe(base);
-    writeFileSync(join(dir, "fast/node_modules/p/x.js"), "22");
+    const { utimesSync } = await import("node:fs");
+    utimesSync(join(dir, "fast/node_modules/p/package.json"), new Date(1000), new Date(1000));
+    expect(installedKey(config, { env: {}, node: "v24" })).toBe(base);
+    pkg(join(dir, "fast"), "p", "1.0.1");
     const fast = installedKey(config, { env: {}, node: "v24" });
     expect(fast).not.toBe(base);
-    writeFileSync(join(dir, "oracle/node_modules/p/x.js"), "333");
+    pkg(join(dir, "oracle"), "p", "1.0.2");
     expect(installedKey(config, { env: {}, node: "v24" })).not.toBe(fast);
   });
 
@@ -302,11 +328,10 @@ describe("what is really installed", () => {
     mkdirSync(join(cfg.fastInstall, "node_modules"), { recursive: true });
     const keys = () => [environmentKey(cfg, { code: "c" }), runtimeEnvironmentKey(cfg, { code: "c", oracle: "o" }), chromeEnvironmentKey(cfg, { code: "c", oracle: "o", browser: "b" })];
     const before = keys();
-    writeFileSync(join(cfg.fastInstall, "node_modules/x.js"), "1");
+    pkg(cfg.fastInstall, "x", "1.0.0");
     const fast = keys();
     expect(fast[0]).not.toBe(before[0]); expect(fast[1]).not.toBe(before[1]);
-    mkdirSync(join(cfg.install, "node_modules"), { recursive: true });
-    writeFileSync(join(cfg.install, "node_modules/y.js"), "1");
+    pkg(cfg.install, "y", "1.0.0");
     keys().forEach((key, index) => expect(key).not.toBe(fast[index]));
   });
 
@@ -323,16 +348,25 @@ describe("what is really installed", () => {
     expect(programKey({ ...program, files: { "App.tsx": "a" } })).toMatch(/^disposal\|1\|1\|[0-9a-f]{32}$/);
   });
 
-  it("the browser key moves with its build's files", () => {
-    const home = scratch();
-    const build = join(browserCache({ home }), pinnedHeadlessShell().directory);
-    mkdirSync(build, { recursive: true });
-    writeFileSync(join(build, "chrome"), "1");
-    const one = browserKey(undefined, home);
-    writeFileSync(join(build, "chrome"), "12");
-    expect(browserKey(undefined, home)).not.toBe(one);
-    expect(browserKey(join(build, "chrome"), home)).not.toBe(browserKey(undefined, home));
+  it("the browser key is its executable's bytes: the same build in another place keys the same, another build does not", () => {
+    const saved = process.env.PLAYWRIGHT_BROWSERS_PATH;
+    delete process.env.PLAYWRIGHT_BROWSERS_PATH;                                         // the builds below are found by home
+    try {
+    const one = scratch(), two = scratch();
+    for (const home of [one, two]) {
+      const exe = buildExecutable(join(browserCache({ home }), pinnedHeadlessShell().directory)) ?? join(browserCache({ home }), pinnedHeadlessShell().directory, process.platform === "darwin" ? "chrome-headless-shell-mac-arm64/chrome-headless-shell" : "chrome-headless-shell-linux64/chrome-headless-shell");
+      mkdirSync(dirname(exe), { recursive: true });
+      writeFileSync(exe, "build 1");
+      writeFileSync(join(dirname(exe), "other-file"), String(Math.random()));
+    }
+    expect(browserKey(undefined, two)).toBe(browserKey(undefined, one));
+    const exe = buildExecutable(join(browserCache({ home: two }), pinnedHeadlessShell().directory));
+    writeFileSync(exe, "another build");
+    expect(browserKey(undefined, two)).not.toBe(browserKey(undefined, one));
+    expect(browserKey(exe)).not.toBe(browserKey(buildExecutable(join(browserCache({ home: one }), pinnedHeadlessShell().directory))));
+    } finally { if (saved === undefined) delete process.env.PLAYWRIGHT_BROWSERS_PATH; else process.env.PLAYWRIGHT_BROWSERS_PATH = saved; }
   });
+
 });
 
 describe("the digests a spot check compares", () => {
@@ -356,5 +390,35 @@ describe("oracleRecordHash", () => {
     expect(oracleRecordHash(claimed)).toBe(oracleRecordHash(text));
     expect(oracleRecordHash(entry)).not.toBe(oracleRecordHash(text));
     expect(oracleRecordHash("no table")).toBe(oracleRecordHash("no table"));
+  });
+});
+
+// ADR 1029: a Chrome record is keyed by what makes it, and one cache serves every checkout of a machine.
+describe("the Chrome record's key (ADR 1029)", () => {
+  it("names only the driver of the browser record: not the fast path, the type check or the checker's adapter", () => {
+    const one = CHROME_RECORD_SOURCES();
+    expect(one).toMatch(/^[0-9a-f]{64}$/);
+    expect(CHROME_RECORD_SOURCES()).toBe(one);
+    expect(RECORD_SOURCES()).not.toBe(one);
+  });
+
+  it("the same case in another checkout hits: the key holds no path, no stat and nothing of the checker", () => {
+    const a = scratch(), b = scratch();
+    for (const dir of [a, b]) for (const name of ["fast", "oracle"]) { mkdirSync(join(dir, name, "node_modules/solid-js"), { recursive: true }); writeFileSync(join(dir, name, "node_modules/solid-js/package.json"), JSON.stringify({ name: "solid-js", version: "2.0.0-rc.21" })); writeFileSync(join(dir, name, "package-lock.json"), "{\"lock\":1}"); }
+    const key = (dir, over = {}) => chromeEnvironmentKey({ install: join(dir, "oracle"), bin: join(dir, "checker-" + Math.random()), ...over }, { oracle: "o", browser: "b" });
+    expect(key(b)).toBe(key(a));                                                        // another checkout, another checker binary
+    writeFileSync(join(b, "oracle/package-lock.json"), "{\"lock\":2}");
+    expect(key(b)).not.toBe(key(a));                                                    // a changed lockfile misses
+    writeFileSync(join(b, "oracle/package-lock.json"), "{\"lock\":1}");
+    expect(key(b)).toBe(key(a));
+    expect(chromeEnvironmentKey({ install: join(a, "oracle") }, { oracle: "o", browser: "b2" })).not.toBe(key(a));   // another browser build misses
+    expect(chromeEnvironmentKey({ install: join(a, "oracle") }, { oracle: "o2", browser: "b" })).not.toBe(key(a));   // another recorder (oracle, driver) misses
+    expect(chromeEnvironmentKey({ install: join(a, "oracle") }, { code: "other driver", oracle: "o", browser: "b" })).not.toBe(key(a));
+  });
+
+  it("one cache per machine: --cache-dir, else SOLID_CHECKER_FUZZ_CACHE, else ~/.cache/solid-checker/fuzz.noindex, whatever TMPDIR is", () => {
+    expect(sharedCacheRoot({}, "/home/u")).toBe("/home/u/.cache/solid-checker/fuzz.noindex");
+    expect(sharedCacheRoot({ SOLID_CHECKER_FUZZ_CACHE: "/x/cache", TMPDIR: "/t" }, "/home/u")).toBe("/x/cache");
+    expect(cacheDirectory({ cacheDir: "/y" })).toBe("/y");
   });
 });

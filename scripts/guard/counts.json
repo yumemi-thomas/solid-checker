@@ -9,7 +9,7 @@
   "SC1001 client-root-unproven": 1,
   "SC1001 compiler-refused-file": 1,
   "SC1001 component-identity-unproven": 136,
-  "SC1001 function-run-unplaced": 1475,
+  "SC1001 function-run-unplaced": 1486,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
   "SC1001 mount-form-window": 2,
@@ -23,15 +23,16 @@
   "SC1001 write-path-read-unproven": 13,
   "SC1002 field-initializer-unplaced": 2,
   "SC1002 function-run-unplaced": 78,
+  "SC1002 function-unentered": 4,
   "SC1002 generator-stepped": 11,
-  "SC1002 handed-read-after-await": 188,
+  "SC1002 handed-read-after-await": 189,
   "SC1002 package-finding-at-entry": 17,
   "SC1002 package-operation-after-await": 3,
   "SC1002 parameter-initializer-unplaced": 8,
-  "SC1002 read-after-await-unaccounted": 691,
+  "SC1002 read-after-await-unaccounted": 698,
   "SC1002 search-depth-limit": 1,
   "SC1002 tuple-iteration-written": 82,
-  "SC1002 unresolved-invocation": 96,
+  "SC1002 unresolved-invocation": 97,
   "SC1003 destructure-root-unproven": 29,
   "SC1003 package-finding-at-entry": 14,
   "SC1003 props-callers-unenumerated": 17,
@@ -45,17 +46,19 @@
   "SC1007 unchecked-native-handler-value": 2,
   "SC2001 binding-before-initialization": 3,
   "SC2001 component-identity-unproven": 9,
-  "SC2001 function-run-unplaced": 466,
-  "SC2001 function-unentered": 2,
+  "SC2001 function-run-unplaced": 468,
+  "SC2001 function-unentered": 10,
   "SC2001 lazy-compute-unread": 7,
   "SC2001 owned-write-option-unread": 4,
   "SC2001 package-finding-at-entry": 5,
   "SC2001 refused-creation-unrun": 13,
   "SC2001 setter-handed-to-package": 9,
+  "SC2001 site-reach-undecided": 3,
   "SC2001 unreached-dead-code": 5,
   "SC2001 write-unaccounted": 12,
   "SC2002 action-handed-to-package": 1,
   "SC2002 function-run-unplaced": 22,
+  "SC2002 function-unentered": 1,
   "SC2002 lazy-compute-unread": 1,
   "SC2002 package-finding-at-entry": 71,
   "SC2002 package-may-call-action": 1221,
@@ -80,7 +83,7 @@
   "SC2005 async-slot-unmodelled": 2,
   "SC2005 computation-error-unobserved": 6,
   "SC2005 function-run-unplaced": 6,
-  "SC2006 flush-in-action-unaccounted": 464,
+  "SC2006 flush-in-action-unaccounted": 463,
   "SC2006 function-run-unplaced": 78,
   "SC2006 package-finding-at-entry": 1,
   "SC2006 parameter-initializer-unplaced": 14,
@@ -89,7 +92,7 @@
   "SC2007 computation-error-unobserved": 3,
   "SC2007 static-source-unproven": 7,
   "SC2008 callee-callback-timing": 1,
-  "SC2008 flush-in-effect-unaccounted": 498,
+  "SC2008 flush-in-effect-unaccounted": 497,
   "SC2008 function-run-unplaced": 38,
   "SC2008 generator-step-unplaced": 6,
   "SC2008 handler-dispatch-unproven": 23,
@@ -102,22 +105,23 @@
   "SC2009 optimistic-write-unaccounted": 2,
   "SC3001 computation-error-unobserved": 10,
   "SC3001 field-initializer-unplaced": 5,
-  "SC3001 function-run-unplaced": 36,
+  "SC3001 function-run-unplaced": 34,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 7,
-  "SC3001 leaf-operation-unaccounted": 6579,
+  "SC3001 leaf-operation-unaccounted": 6561,
   "SC3001 leaf-owner-unproven": 67,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
+  "SC3002 function-unentered": 1,
   "SC4001 async-flight-error-unobserved": 4,
   "SC4001 component-identity-unproven": 14,
   "SC4001 computation-error-unobserved": 30,
-  "SC4001 function-run-unplaced": 264,
+  "SC4001 function-run-unplaced": 251,
   "SC4001 function-unentered": 3,
   "SC4001 handler-member-unresolved": 39,
   "SC4001 handler-spread-unresolved": 59,
   "SC4001 owner-allocation-unproven": 23,
-  "SC4001 owner-callers-unenumerated": 3317,
+  "SC4001 owner-callers-unenumerated": 3326,
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 13,
@@ -177,7 +181,7 @@
   "SC5008 pending-read-unresolved": 23,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5012,
+  "SC6002 effect-creation-unaccounted": 5009,
   "SC6002 effect-owner-unproven": 31,
   "SC6002 function-run-unplaced": 48,
   "SC6002 generator-step-unplaced": 1,
@@ -2365,6 +2369,276 @@
     "open": "reactive-ir/iteration-written-slots-handed-timer-callback-member-written"
    },
    "note": "the reads of the accessors whose slots the withdrawal held: with the slots exact, each is a plain signal read and the pending-read obligation has nothing to stand on."
+  },
+  {
+   "fixture": "reactive-ir/leaf-carrier-provably-runs",
+   "key": "SC4001 function-run-unplaced",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 1019",
+   "kind": "relabel",
+   "relabeledTo": "SC4001 owner-callers-unenumerated"
+  },
+  {
+   "fixture": "reactive-ir/owner-carrier-provably-runs",
+   "key": "SC4001 function-run-unplaced",
+   "from": 12,
+   "to": 7,
+   "adr": "ADR 1019",
+   "kind": "relabel",
+   "relabeledTo": "SC4001 owner-callers-unenumerated"
+  },
+  {
+   "fixture": "reactive-ir/resolve-inline-entries",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 29,
+   "to": 27,
+   "adr": "ADR 1019",
+   "proof": "rust/crates/solid-reactive-ir/src/carrier_runs.rs::carrier_provably_never_runs",
+   "fixtures": {
+    "proved": "reactive-ir/resolve-inline-entries",
+    "open": "reactive-ir/resolve-inline-entries"
+   },
+   "note": "the `Empty` case: `([] as number[]).map(Row)` never calls `Row`, so the `flush(() => resolve(...))` in it never runs and its obligation ends at `OwnerCallNeverRuns`/`FlushSafe::NeverRuns` (SiteReach), as for syntactically dead code (ADR 0458); the open twin is the fixture's own `PropsReceiver`-style cases, which keep the key."
+  },
+  {
+   "fixture": "reactive-ir/resolve-inline-entries",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 23,
+   "to": 22,
+   "adr": "ADR 1019",
+   "proof": "rust/crates/solid-reactive-ir/src/carrier_runs.rs::carrier_provably_never_runs",
+   "fixtures": {
+    "proved": "reactive-ir/resolve-inline-entries",
+    "open": "reactive-ir/resolve-inline-entries"
+   },
+   "note": "the `Empty` case: `([] as number[]).map(Row)` never calls `Row`, so the `flush(() => resolve(...))` in it never runs and its obligation ends at `OwnerCallNeverRuns`/`FlushSafe::NeverRuns` (SiteReach), as for syntactically dead code (ADR 0458); the open twin is the fixture's own `PropsReceiver`-style cases, which keep the key."
+  },
+  {
+   "fixture": "reactive-ir/resolve-inline-entries",
+   "key": "SC2006 flush-in-action-unaccounted",
+   "from": 6,
+   "to": 5,
+   "adr": "ADR 1019",
+   "proof": "rust/crates/solid-reactive-ir/src/carrier_runs.rs::carrier_provably_never_runs",
+   "fixtures": {
+    "proved": "reactive-ir/resolve-inline-entries",
+    "open": "reactive-ir/resolve-inline-entries"
+   },
+   "note": "the `Empty` case: `([] as number[]).map(Row)` never calls `Row`, so the `flush(() => resolve(...))` in it never runs and its obligation ends at `OwnerCallNeverRuns`/`FlushSafe::NeverRuns` (SiteReach), as for syntactically dead code (ADR 0458); the open twin is the fixture's own `PropsReceiver`-style cases, which keep the key."
+  },
+  {
+   "fixture": "reactive-ir/resolve-inline-entries",
+   "key": "SC2008 flush-in-effect-unaccounted",
+   "from": 6,
+   "to": 5,
+   "adr": "ADR 1019",
+   "proof": "rust/crates/solid-reactive-ir/src/carrier_runs.rs::carrier_provably_never_runs",
+   "fixtures": {
+    "proved": "reactive-ir/resolve-inline-entries",
+    "open": "reactive-ir/resolve-inline-entries"
+   },
+   "note": "the `Empty` case: `([] as number[]).map(Row)` never calls `Row`, so the `flush(() => resolve(...))` in it never runs and its obligation ends at `OwnerCallNeverRuns`/`FlushSafe::NeverRuns` (SiteReach), as for syntactically dead code (ADR 0458); the open twin is the fixture's own `PropsReceiver`-style cases, which keep the key."
+  },
+  {
+   "fixture": "reactive-ir/unplaced-site-obligations",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 51,
+   "to": 50,
+   "adr": "ADR 1019",
+   "proof": "rust/crates/solid-reactive-ir/src/carrier_runs.rs::carrier_provably_never_runs",
+   "fixtures": {
+    "proved": "reactive-ir/unplaced-site-obligations",
+    "open": "reactive-ir/unplaced-site-obligations"
+   },
+   "note": "`ReduceCallback`: `[1].reduce(cb)` with no initial value returns the element without calling `cb`, so the `resolve` in it never runs and its obligation ends at `OwnerCallNeverRuns` (SiteReach), as for syntactically dead code (ADR 0458); the other sites of the fixture keep the key."
+  },
+  {
+   "fixture": "reactive-ir/unplaced-site-obligations",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 51,
+   "to": 50,
+   "adr": "ADR 1019",
+   "proof": "rust/crates/solid-reactive-ir/src/carrier_runs.rs::carrier_provably_never_runs",
+   "fixtures": {
+    "proved": "reactive-ir/unplaced-site-obligations",
+    "open": "reactive-ir/unplaced-site-obligations"
+   },
+   "note": "`ReduceCallback`: `[1].reduce(cb)` with no initial value returns the element without calling `cb`, so the `resolve` in it never runs and its obligation ends at `OwnerCallNeverRuns` (SiteReach), as for syntactically dead code (ADR 0458); the other sites of the fixture keep the key."
+  },
+  {
+   "fixture": "reactive-ir/generator-step-owner",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 24,
+   "to": 23,
+   "adr": "ADR 1021",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/site_reach.rs::inert_reference",
+   "fixtures": {
+    "proved": "reactive-ir/generator-step-owner",
+    "open": "reactive-ir/generator-step-owner"
+   },
+   "note": "`localShadow`: the local generator's only reference is `void listedGenerator`, so it is never stepped and the `onCleanup` in it never runs (every reference inert, ADR 1021)."
+  },
+  {
+   "fixture": "reactive-ir/generator-step-owner",
+   "key": "SC4001 function-run-unplaced",
+   "from": 4,
+   "to": 3,
+   "adr": "ADR 1021",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/site_reach.rs::inert_reference",
+   "fixtures": {
+    "proved": "reactive-ir/generator-step-owner",
+    "open": "reactive-ir/generator-step-owner"
+   },
+   "note": "`localShadow`: the local generator's only reference is `void listedGenerator`, so it is never stepped and the `onCleanup` in it never runs (every reference inert, ADR 1021)."
+  },
+  {
+   "fixture": "reactive-ir/leaf-scope-by-value-callback",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 7,
+   "to": 6,
+   "adr": "ADR 1021",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/site_reach.rs::inert_reference",
+   "fixtures": {
+    "proved": "reactive-ir/leaf-scope-by-value-callback",
+    "open": "reactive-ir/leaf-scope-by-value-callback"
+   },
+   "note": "`BundleUnrun`: `hf`'s only reference is `void hf`, so the `createMemo` in it never runs (every reference inert, ADR 1021)."
+  },
+  {
+   "fixture": "reactive-ir/owner-namespace-reachable",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 5,
+   "to": 4,
+   "adr": "ADR 1021",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/site_reach.rs::inert_reference",
+   "fixtures": {
+    "proved": "reactive-ir/owner-namespace-reachable",
+    "open": "reactive-ir/owner-namespace-reachable"
+   },
+   "note": "`unused`: its only reference is `void unused`, so the `createEffect` in it never runs (every reference inert, ADR 1021)."
+  },
+  {
+   "fixture": "reactive-ir/owner-namespace-reachable",
+   "key": "SC4001 function-run-unplaced",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 1021",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/site_reach.rs::inert_reference",
+   "fixtures": {
+    "proved": "reactive-ir/owner-namespace-reachable",
+    "open": "reactive-ir/owner-namespace-reachable"
+   },
+   "note": "`unused`: its only reference is `void unused`, so the `createEffect` in it never runs (every reference inert, ADR 1021)."
+  },
+  {
+   "fixture": "reactive-ir/owner-region-no-edge",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 21,
+   "to": 20,
+   "adr": "ADR 1021",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/site_reach.rs::inert_reference",
+   "fixtures": {
+    "proved": "reactive-ir/owner-region-no-edge",
+    "open": "reactive-ir/owner-region-no-edge"
+   },
+   "note": "`StoredNeverCalled` (e13): the literal's only reference is `void o`, so its member `f` and the `onCleanup` in it never run (every reference inert, ADR 1021)."
+  },
+  {
+   "fixture": "reactive-ir/owner-region-no-edge",
+   "key": "SC4001 function-run-unplaced",
+   "from": 13,
+   "to": 12,
+   "adr": "ADR 1021",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/site_reach.rs::inert_reference",
+   "fixtures": {
+    "proved": "reactive-ir/owner-region-no-edge",
+    "open": "reactive-ir/owner-region-no-edge"
+   },
+   "note": "`StoredNeverCalled` (e13): the literal's only reference is `void o`, so its member `f` and the `onCleanup` in it never run (every reference inert, ADR 1021)."
+  },
+  {
+   "fixture": "reactive-ir/parameter-list-owner",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 70,
+   "to": 64,
+   "adr": "ADR 1021",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/site_reach.rs::inert_reference",
+   "fixtures": {
+    "proved": "reactive-ir/parameter-list-owner",
+    "open": "reactive-ir/parameter-list-owner"
+   },
+   "note": "the `*Default` cases: the closure whose default calls the forbidden primitive is referenced only by `void g`, so the default never runs (SC4001's row stays at each) (every reference inert, ADR 1021)."
+  },
+  {
+   "fixture": "reactive-ir/parameter-list-owner",
+   "key": "SC3001 function-run-unplaced",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 1021",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/site_reach.rs::inert_reference",
+   "fixtures": {
+    "proved": "reactive-ir/parameter-list-owner",
+    "open": "reactive-ir/handed-residuals"
+   },
+   "note": "the `*Default` cases: the closure whose default calls the forbidden primitive is referenced only by `void g`, so the default never runs (SC4001's row stays at each) (every reference inert, ADR 1021)."
+  },
+  {
+   "fixture": "reactive-ir/rc13-flush-in-effect-callback",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 49,
+   "to": 44,
+   "adr": "ADR 1021",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/site_reach.rs::inert_reference",
+   "fixtures": {
+    "proved": "reactive-ir/rc13-flush-in-effect-callback",
+    "open": "reactive-ir/rc13-flush-in-effect-callback"
+   },
+   "note": "`void onClick` and the other `void`-only helpers: never called, so the leaf operations in them never run (every reference inert, ADR 1021)."
+  },
+  {
+   "fixture": "reactive-ir/solid2-precision",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 41,
+   "to": 40,
+   "adr": "ADR 1021",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/site_reach.rs::inert_reference",
+   "fixtures": {
+    "proved": "reactive-ir/solid2-precision",
+    "open": "reactive-ir/solid2-precision"
+   },
+   "note": "`NestedSettledCleanup`: `later`'s only reference is `void later`, so the `onCleanup` in it never runs (every reference inert, ADR 1021)."
+  },
+  {
+   "fixture": "reactive-ir/solid2-precision",
+   "key": "SC4001 function-run-unplaced",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 1021",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/site_reach.rs::inert_reference",
+   "fixtures": {
+    "proved": "reactive-ir/solid2-precision",
+    "open": "reactive-ir/solid2-precision"
+   },
+   "note": "`NestedSettledCleanup`: `later`'s only reference is `void later`, so the `onCleanup` in it never runs (every reference inert, ADR 1021)."
+  },
+  {
+   "fixture": "reactive-ir/parameter-list-owner",
+   "key": "SC4001 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1021",
+   "kind": "relabel",
+   "relabeledTo": "SC4001 owner-callers-unenumerated"
+  },
+  {
+   "fixture": "reactive-ir/rc13-flush-in-effect-callback",
+   "key": "SC4001 function-run-unplaced",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 1021",
+   "kind": "relabel",
+   "relabeledTo": "SC4001 owner-callers-unenumerated"
   }
  ],
  "renames": []

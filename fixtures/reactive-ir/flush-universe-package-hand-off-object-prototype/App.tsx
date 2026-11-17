@@ -48,7 +48,7 @@ const plainHolder = {
     flush();
   },
 };
-void plainHolder;
+void [plainHolder]; // kept, never used (an array element is no inert use, ADR 1021)
 
 export function App() {
   return <p>x</p>;

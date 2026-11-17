@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1021's live pair: the reads of dead-site-unused-class where the construct runs (`new K()`, `new K2()` of a subclass, an instance made with a field helper, a getter read, a class handed to a wrapper that constructs it, `Reflect.get` of a getter): Chrome raises UNTRACKED_READ_AFTER_AWAIT at each, and the checker keeps the violation."
+}

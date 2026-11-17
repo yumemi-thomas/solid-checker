@@ -20,7 +20,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PROBLEMS, rowProblem } from "./codes.mjs";
+import { rowProblem } from "./codes.mjs";
 import { GENERATOR_VERSION } from "./generate.mjs";
 import { fnv } from "./rng.mjs";
 
@@ -228,7 +228,7 @@ export function compare(referenceRows, againstRows, ids) {
   const moved = [];
   for (const row of againstRows) {
     const old = before.get(row.id);
-    if (old && behaviourOf(old) !== behaviourOf(row)) moved.push({ id: row.id, move: `${behaviourOf(old)} -> ${row.outcome}|${behaviourOf(row).split("|").slice(3).join("|")}`, problem: PROBLEMS.includes(row.outcome) });
+    if (old && behaviourOf(old) !== behaviourOf(row)) moved.push({ id: row.id, move: `${behaviourOf(old)} -> ${row.outcome}|${behaviourOf(row).split("|").slice(3).join("|")}`, problem: Boolean(rowProblem(row)) });
   }
   const caughtMoves = new Set(moved.filter((m) => smoke.has(m.id)).map((m) => m.move));
   const moves = new Set(moved.map((m) => m.move));

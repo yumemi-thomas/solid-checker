@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { AssumedReportError } from "../lib/assumed.mjs";
 import { TAINTED, cleanReport, fakeChecker, finding } from "../lib/assumed-fixtures.mjs";
-import { atRecordedSite, mapStacks, runChecker } from "./patterns.mjs";
+import { codeRules } from "./codes.mjs";
+import { atRecordedSite, judgePattern, lostProofs, mapStacks, newProofs, runChecker } from "./patterns.mjs";
 
 // ADR 0950: the pattern lane judges each program's checker report against what Chrome reported. A what-if report is a prediction, so the lane
 // stops on it; it is never a "no checker report" row (`no-run`), which a person reads past.
@@ -95,5 +96,30 @@ describe("the pattern lane's recorded site (atRecordedSite)", () => {
   it("does not cover from another file at the same line and column", () => {
     expect(atRecordedSite(row("/w/cases/a/helpers.ts", 14), [[frame]], "NO_OWNER_EFFECT")).toBe(false);
     expect(atRecordedSite(row("/w/cases/a/helpers.ts", 20), [[frame]], "NO_OWNER_EFFECT")).toBe(false);
+  });
+});
+
+// ADR 1030: the lane read a proved violation lost to uncertifiable as `fine`, so no build that lost one failed it.
+describe("a lost proved violation fails the lane", () => {
+  // A record without positions (the witness rows' form): a claiming finding covers its code anywhere in the file.
+  const run = { codes: ["NO_OWNER_CLEANUP"], counts: { NO_OWNER_CLEANUP: 1 }, stacks: {}, positions: false };
+  const at = (kind) => ({ rule: codeRules.NO_OWNER_CLEANUP[0], kind, line: 3 });
+
+  it("says how a passing program passes: a violation, an uncertifiable row, or nothing Chrome claimed", () => {
+    const proved = judgePattern(run, [at("violation")]);
+    const open = judgePattern(run, [at("uncertifiable")]);
+    expect(proved).toMatchObject({ outcome: "fine", proof: "violation" });
+    expect(open).toMatchObject({ outcome: "fine", proof: "uncertifiable" });
+    expect(judgePattern({ codes: [], counts: {}, stacks: {} }, []).proof).toBe("silent");
+  });
+
+  it("a ledgered program no longer proved by a violation is lost, unless a change names it; a new proof is offered to the ledger", () => {
+    const ledger = { ids: ["a/one", "a/two", "a/gone"], changes: [] };
+    const rows = [{ id: "a/one", outcome: "fine", proof: "violation" }, { id: "a/two", outcome: "fine", proof: "uncertifiable" }, { id: "a/three", outcome: "fine", proof: "violation" }];
+    expect(lostProofs(rows, ledger)).toEqual([{ id: "a/two", now: "fine/uncertifiable" }, { id: "a/gone", now: "absent" }]);
+    expect(lostProofs(rows, ledger, { whole: false }).map((row) => row.id)).toEqual(["a/two"]);           // an --only run judges only what it ran
+    expect(lostProofs(rows, { ...ledger, changes: [{ ids: ["a/two", "a/gone"], adr: "ADR 1030", why: "moved on purpose" }] })).toEqual([]);
+    expect(lostProofs([{ id: "a/two", outcome: "false-clean" }], { ids: ["a/two"] })).toEqual([{ id: "a/two", now: "false-clean" }]);
+    expect(newProofs(rows, ledger)).toEqual(["a/three"]);
   });
 });

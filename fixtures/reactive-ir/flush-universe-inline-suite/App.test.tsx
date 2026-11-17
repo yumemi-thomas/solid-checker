@@ -16,10 +16,10 @@ describe("suite", () => {
   class Field {
     x = flush();
   }
-  void Field;
+  void [Field]; // kept, never used (an array element is no inert use, ADR 1021)
 
   const withDefault = (x = flush()) => x;
-  void withDefault;
+  void [withDefault];
 
   function Child(props: { v: void }) {
     return <p>{String(props.v)}</p>;

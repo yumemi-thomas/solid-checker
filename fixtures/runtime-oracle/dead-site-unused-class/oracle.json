@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1021: a read after `await` in a constructor, an instance field's helper, a getter or a method of a class or object literal nothing constructs or accesses (every reference `void K`, `typeof K`, `K;`, or the `extends` of such a class) never runs: no dev diagnostic, so the checker's SC1002 there is uncertifiable (function-unentered), never a violation. Its pair, dead-site-unused-class-live, triggers each construct."
+}

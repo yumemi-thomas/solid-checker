@@ -15,7 +15,7 @@ const plainHolder = {
     flush();
   },
 };
-void plainHolder;
+void [plainHolder]; // kept, never used (an array element is no inert use, ADR 1021)
 
 // the program loads `steplib` (its source is not read as Solid's: its manifest names no Solid package, and its closure is walked for the question above)
 void runStep(() => {});

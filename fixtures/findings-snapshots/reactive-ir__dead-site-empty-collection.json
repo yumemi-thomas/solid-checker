@@ -1,0 +1,196 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-unentered",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-site-empty-collection/App.tsx",
+      "start": 405,
+      "end": 412,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-unentered",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-site-empty-collection/App.tsx",
+      "start": 579,
+      "end": 586,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-unentered",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-site-empty-collection/App.tsx",
+      "start": 713,
+      "end": 720,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-unentered",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-site-empty-collection/App.tsx",
+      "start": 893,
+      "end": 900,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-unentered",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-site-empty-collection/App.tsx",
+      "start": 1153,
+      "end": 1160,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-unentered",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-site-empty-collection/App.tsx",
+      "start": 1308,
+      "end": 1315,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-unentered",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-site-empty-collection/App.tsx",
+      "start": 1493,
+      "end": 1500,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "function-unentered",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-site-empty-collection/App.tsx",
+      "start": 1682,
+      "end": 1687,
+      "fixes": 0
+    },
+    {
+      "rule": "on-flush-in-owned-scope",
+      "code": "SC3002",
+      "kind": "uncertifiable",
+      "blocker": "function-unentered",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dead-site-empty-collection/App.tsx",
+      "start": 1821,
+      "end": 1828,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-unentered",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-site-empty-collection/App.tsx",
+      "start": 1960,
+      "end": 1967,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-site-empty-collection/App.tsx",
+      "start": 2242,
+      "end": 2250,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-site-empty-collection/App.tsx",
+      "start": 2479,
+      "end": 2487,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-site-empty-collection/App.tsx",
+      "start": 2638,
+      "end": 2646,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-site-empty-collection/App.tsx",
+      "start": 2802,
+      "end": 2810,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-site-empty-collection/App.tsx",
+      "start": 2957,
+      "end": 2965,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-site-empty-collection/App.tsx",
+      "start": 3199,
+      "end": 3207,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-site-empty-collection/App.tsx",
+      "start": 3495,
+      "end": 3503,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dead-site-empty-collection/App.tsx",
+      "start": 3665,
+      "end": 3673,
+      "fixes": 0
+    }
+  ]
+}

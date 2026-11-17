@@ -140,8 +140,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-test-runner/App.test.tsx",
-      "start": 1997,
-      "end": 2002,
+      "start": 2064,
+      "end": 2069,
       "fixes": 0
     },
     {
@@ -151,8 +151,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-test-runner/App.test.tsx",
-      "start": 1997,
-      "end": 2004,
+      "start": 2064,
+      "end": 2071,
       "fixes": 0
     },
     {
@@ -162,8 +162,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-test-runner/App.test.tsx",
-      "start": 1997,
-      "end": 2004,
+      "start": 2064,
+      "end": 2071,
       "fixes": 0
     }
   ]

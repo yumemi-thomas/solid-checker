@@ -24756,5 +24756,85 @@
    "lg-context-not-found-dead-flow-repeat-x-direct-none"
   ],
   "rediscovered": "main 5b950fce6 unexecuted (180 programs), this build uncertifiable; same slice measurement"
+ },
+ {
+  "finding": "a false positive: a write in a callback handed to a standard-library iteration of a literal nothing can fill (`[].forEach(f)`, `[1].reduce(f)`, `Array.from([], f)`, `new Set().forEach(f)`, `\"x\".replace(\"z\", f)`) was a violation although the callback never runs and Chrome is silent",
+  "found": "full CI audit run 43739577046 (lg-recall, legal programs: the checker's violation at a site Chrome never runs), re-confirmed on main 993e83f74 with the release checker and Chrome",
+  "fixed": "ADR 1019 (`carrier_runs.rs` `carrier_provably_never_runs`, `handed_to_idle_carrier`; `site_reach.rs` reads the hand-off as reaching nothing, so a violation in the callback is uncertifiable `function-unentered`)",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-tbl-array-foreach-zero-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-tbl-readonlyarray-map-zero-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-tbl-array-reduce-zero-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-tbl-arrayconstructor-from-zero-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-tbl-uint8arrayconstructor-from-zero-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-tbl-set-foreach-zero-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-tbl-map-foreach-zero-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-tbl-string-replace-zero-signal-direct-none"
+  ],
+  "rediscovered": "main 993e83f74 unexecuted (the 39 `tbl-*-zero` contexts, the three codes: 195 programs, Chrome's sample 117 of 117 never ran the site), this build uncertifiable (185; the 10 `tbl-nodelist*-zero` programs stay, a stated remaining false positive). `make fuzz-focus` exits 0 on both builds: an `unexecuted` row is not gated until ADR 1018's oracle guard"
+ },
+ {
+  "finding": "a false positive: an action call in a callback handed to a standard-library iteration of a literal nothing can fill (`[].forEach(f)`, `[1].reduce(f)`, `Array.from([], f)`, `new Set().forEach(f)`, `\"x\".replace(\"z\", f)`) was a violation although the callback never runs and Chrome is silent",
+  "found": "full CI audit run 43739577046 (lg-recall, legal programs: the checker's violation at a site Chrome never runs), re-confirmed on main 993e83f74 with the release checker and Chrome",
+  "fixed": "ADR 1019 (`carrier_runs.rs` `carrier_provably_never_runs`, `handed_to_idle_carrier`; `site_reach.rs` reads the hand-off as reaching nothing, so a violation in the callback is uncertifiable `function-unentered`)",
+  "grid": "lg-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-action-called-in-owned-scope-tbl-array-foreach-zero-x-direct-none",
+   "lg-action-called-in-owned-scope-tbl-readonlyarray-map-zero-x-direct-none",
+   "lg-action-called-in-owned-scope-tbl-array-reduce-zero-x-direct-none",
+   "lg-action-called-in-owned-scope-tbl-arrayconstructor-from-zero-x-direct-none",
+   "lg-action-called-in-owned-scope-tbl-uint8arrayconstructor-from-zero-x-direct-none",
+   "lg-action-called-in-owned-scope-tbl-set-foreach-zero-x-direct-none",
+   "lg-action-called-in-owned-scope-tbl-map-foreach-zero-x-direct-none",
+   "lg-action-called-in-owned-scope-tbl-string-replace-zero-x-direct-none"
+  ],
+  "rediscovered": "main 993e83f74 unexecuted (the 39 `tbl-*-zero` contexts, the three codes: 195 programs, Chrome's sample 117 of 117 never ran the site), this build uncertifiable (185; the 10 `tbl-nodelist*-zero` programs stay, a stated remaining false positive). `make fuzz-focus` exits 0 on both builds: an `unexecuted` row is not gated until ADR 1018's oracle guard"
+ },
+ {
+  "finding": "a false positive: `onFlush` in a callback handed to a standard-library iteration of a literal nothing can fill (`[].forEach(f)`, `[1].reduce(f)`, `Array.from([], f)`, `new Set().forEach(f)`, `\"x\".replace(\"z\", f)`) was a violation although the callback never runs and Chrome is silent",
+  "found": "full CI audit run 43739577046 (lg-recall, legal programs: the checker's violation at a site Chrome never runs), re-confirmed on main 993e83f74 with the release checker and Chrome",
+  "fixed": "ADR 1019 (`carrier_runs.rs` `carrier_provably_never_runs`, `handed_to_idle_carrier`; `site_reach.rs` reads the hand-off as reaching nothing, so a violation in the callback is uncertifiable `function-unentered`)",
+  "grid": "lg-recall",
+  "code": "ON_FLUSH_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-on-flush-in-owned-scope-tbl-array-foreach-zero-x-direct-none",
+   "lg-on-flush-in-owned-scope-tbl-readonlyarray-map-zero-x-direct-none",
+   "lg-on-flush-in-owned-scope-tbl-array-reduce-zero-x-direct-none",
+   "lg-on-flush-in-owned-scope-tbl-arrayconstructor-from-zero-x-direct-none",
+   "lg-on-flush-in-owned-scope-tbl-uint8arrayconstructor-from-zero-x-direct-none",
+   "lg-on-flush-in-owned-scope-tbl-set-foreach-zero-x-direct-none",
+   "lg-on-flush-in-owned-scope-tbl-map-foreach-zero-x-direct-none",
+   "lg-on-flush-in-owned-scope-tbl-string-replace-zero-x-direct-none"
+  ],
+  "rediscovered": "main 993e83f74 unexecuted (the 39 `tbl-*-zero` contexts, the three codes: 195 programs, Chrome's sample 117 of 117 never ran the site), this build uncertifiable (185; the 10 `tbl-nodelist*-zero` programs stay, a stated remaining false positive). `make fuzz-focus` exits 0 on both builds: an `unexecuted` row is not gated until ADR 1018's oracle guard"
+ },
+ {
+  "finding": "a false positive of main (993e83f74): REACTIVE_WRITE_IN_OWNED_SCOPE proved (SC2001) at a write in a callback handed to a helper whose parameter default throws before its body (`(g, _gate = stopGate()) => { g(); }` called with one argument): the callback never runs; Chrome rc.21 has no diagnostic and the site never executes (judged `unexecuted`, so the audit never listed it). Reach analysis took the literal to run whenever its caller does",
+  "found": "W4's targeted scan for ADR 1017 (2026-11-17): 252 legal `gate-throw` programs gained a violation through a `dynamic` mount, and their directly mounted twins were already violations on main; W3's scan of every `unexecuted` violation of audit 43739577046 then counted 5,852 rows in `lg-recall` `gate-throw`",
+  "fixed": "ADR 1010 (`execution_role/site_reach.rs` `handed_past_live_default`, `callback_standing.rs` `defaults_run_no_code_at`)",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": ["lg-reactive-write-in-owned-scope-gate-throw-signal-direct-none", "lg-reactive-write-in-owned-scope-gate-throw-signal-alias-closure"],
+  "rediscovered": "main 993e83f74 violation (Chrome: no diagnostic, the site never executes: `unexecuted`), this build uncertifiable `site-reach-undecided`; 3,018 `gate-throw` programs move so, no other program of the 69,313 scanned"
+ },
+ {
+  "finding": "a false positive: a read after `await` in a constructor, an instance field's helper, a getter or a setter of a class or object literal nothing constructs or accesses (`class K1 { constructor() { r1(); } }; void K1;`, `class K2 extends K1 {}; void K2;`, `const o1 = { get v() { r1(); } }; void o1;`) was a violation although the member never runs and Chrome is silent",
+  "found": "full CI audit run 43739577046 (lg-recall, legal programs: the checker's violation at a site Chrome never runs), re-confirmed on main 993e83f74 with the release checker and Chrome",
+  "fixed": "ADR 1021 (`site_reach.rs` `inert_reference`, `heritage_of_unreached_class`, `in_field_of_unreached_class`, `literal_member_unreached`: the member is never entered, so a violation there is uncertifiable `function-unentered`)",
+  "grid": "lg-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "lg-untracked-read-after-await-ob-ctor-new-memo-async-never-x-direct-none",
+   "lg-untracked-read-after-await-ob-ctor-super-memo-async-never-x-direct-none",
+   "lg-untracked-read-after-await-ob-ctor-implicit-memo-async-never-x-direct-none",
+   "lg-untracked-read-after-await-ob-field-helper-memo-async-never-x-direct-none",
+   "lg-untracked-read-after-await-ob-getter-memo-async-never-x-direct-none",
+   "lg-untracked-read-after-await-ob-setter-memo-async-never-x-direct-none",
+   "lg-untracked-read-after-await-ob-field-helper-effect-async-never-x-direct-none"
+  ],
+  "rediscovered": "main 993e83f74 unexecuted (the 38 programs of the six constructs' `-never` contexts; Chrome 29 of 29 sampled never ran the site), this build uncertifiable (38 of 38). `make fuzz-focus` exits 0 on both builds: an `unexecuted` row is not gated until ADR 1018's oracle guard"
  }
 ]

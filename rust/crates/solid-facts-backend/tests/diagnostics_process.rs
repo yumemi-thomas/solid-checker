@@ -2029,15 +2029,17 @@ fn solid2_precision_corrections_are_end_to_end() {
         // may run an export under a leaf owner: B3, policy A) and the four `onCleanup(dispose)` calls in the wrapped, referenced,
         // nested and handed-on callbacks (lines 249, 259, 271, 281) that no proven leaf scope places. None is a violation.
         // ADR 0971 (batch 11, B2): eight more, the uncertifiable `leaf-operation-unaccounted` rows at the JSX creations in the exported components, all before
-        // the landmark below, so forty-two in all and one violation.
-        ("leaf-owner-forbidden-call", 42),
+        // the landmark below, so forty-two in all and one violation. ADR 1021: one fewer, the nested callback's `onCleanup(dispose)`
+        // (`NestedSettledCleanup`: `later`'s only reference is `void later`, so it never runs and its row closes).
+        ("leaf-owner-forbidden-call", 41),
         // One fewer than before ADR 0345 review D: the wrapper-built callback is
         // no longer named, so its cleanup is not reported. Two more since ADR
         // 0534: the wrapped and handed-on cleanups (lines 248 and 270) run in
         // no proven region, so they are obligations, never silent. ADR 0970: and
         // thirty-four uncertifiable `owner-callers-unenumerated` rows, the render
-        // effects and owner operations of the exported components no tag renders.
-        ("missing-owner", 43),
+        // effects and owner operations of the exported components no tag renders. ADR 1021: one fewer, the same never-run
+        // `onCleanup` in `NestedSettledCleanup`.
+        ("missing-owner", 42),
     ] {
         assert_rule_findings(&findings, rule, expected);
     }
@@ -2057,7 +2059,7 @@ fn solid2_precision_corrections_are_end_to_end() {
             .all(|start| start < non_literal_leaf),
         "a leaf callback that is not the literal argument proves no leaf scope"
     );
-    // ADR 0969: what SC3001 keeps past the landmark is the four `onCleanup(dispose)` rows of the leaf universe, uncertifiable and no
+    // ADR 0969: what SC3001 keeps past the landmark is the `onCleanup(dispose)` rows (four; three since ADR 1021, the nested one never runs) of the leaf universe, uncertifiable and no
     // violation: no leaf scope is proven at them, and nothing proves none can reach them either.
     let past_landmark = findings_for_rule(&findings, "leaf-owner-forbidden-call")
         .into_iter()
@@ -2075,7 +2077,7 @@ fn solid2_precision_corrections_are_end_to_end() {
         .collect::<Vec<_>>();
     assert_eq!(
         past_landmark,
-        [(Some("uncertifiable"), Some("leaf-operation-unaccounted")); 4],
+        [(Some("uncertifiable"), Some("leaf-operation-unaccounted")); 3],
         "{findings:#?}"
     );
     assert_eq!(
@@ -2083,8 +2085,8 @@ fn solid2_precision_corrections_are_end_to_end() {
             .iter()
             .filter(|start| **start > non_literal_leaf)
             .count(),
-        4,
-        "the referenced and out-of-band cleanups stay unowned; the wrapped and handed-on ones are obligations (ADR 0534)"
+        3,
+        "the referenced and out-of-band cleanups stay unowned; the wrapped and handed-on ones are obligations (ADR 0534); the nested one never runs (ADR 1021)"
     );
 
     assert!(

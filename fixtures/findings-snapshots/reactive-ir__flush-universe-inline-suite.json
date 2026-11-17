@@ -41,8 +41,8 @@
       "blocker": "parameter-initializer-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-inline-suite/App.test.tsx",
-      "start": 990,
-      "end": 995,
+      "start": 1057,
+      "end": 1062,
       "fixes": 0
     },
     {
@@ -52,8 +52,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-inline-suite/App.test.tsx",
-      "start": 990,
-      "end": 997,
+      "start": 1057,
+      "end": 1064,
       "fixes": 0
     },
     {
@@ -63,8 +63,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-inline-suite/App.test.tsx",
-      "start": 990,
-      "end": 997,
+      "start": 1057,
+      "end": 1064,
       "fixes": 0
     },
     {
@@ -74,8 +74,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-inline-suite/App.test.tsx",
-      "start": 1114,
-      "end": 1135,
+      "start": 1183,
+      "end": 1204,
       "fixes": 0
     },
     {
@@ -85,8 +85,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-inline-suite/App.test.tsx",
-      "start": 1124,
-      "end": 1131,
+      "start": 1193,
+      "end": 1200,
       "fixes": 0
     },
     {
@@ -96,8 +96,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-inline-suite/App.test.tsx",
-      "start": 1124,
-      "end": 1131,
+      "start": 1193,
+      "end": 1200,
       "fixes": 0
     },
     {
@@ -107,8 +107,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-inline-suite/App.test.tsx",
-      "start": 1124,
-      "end": 1131,
+      "start": 1193,
+      "end": 1200,
       "fixes": 0
     },
     {
@@ -118,8 +118,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-inline-suite/App.test.tsx",
-      "start": 1289,
-      "end": 1294,
+      "start": 1358,
+      "end": 1363,
       "fixes": 0
     },
     {
@@ -129,8 +129,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-inline-suite/App.test.tsx",
-      "start": 1289,
-      "end": 1296,
+      "start": 1358,
+      "end": 1365,
       "fixes": 0
     },
     {
@@ -140,8 +140,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-inline-suite/App.test.tsx",
-      "start": 1289,
-      "end": 1296,
+      "start": 1358,
+      "end": 1365,
       "fixes": 0
     },
     {
@@ -151,8 +151,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-inline-suite/App.test.tsx",
-      "start": 1520,
-      "end": 1527,
+      "start": 1589,
+      "end": 1596,
       "fixes": 0
     },
     {
@@ -162,8 +162,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-inline-suite/App.test.tsx",
-      "start": 1520,
-      "end": 1527,
+      "start": 1589,
+      "end": 1596,
       "fixes": 0
     },
     {
@@ -173,8 +173,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-universe-inline-suite/App.test.tsx",
-      "start": 1520,
-      "end": 1527,
+      "start": 1589,
+      "end": 1596,
       "fixes": 0
     }
   ]

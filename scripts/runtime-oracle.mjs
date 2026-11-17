@@ -61,6 +61,7 @@
 //   typings is `type-error` and proves nothing: fix the case.
 // Native violations with no diagnostic on their line are listed as
 // `static-only`: either a false positive or a site the steps did not reach.
+import { homedir } from "node:os";
 import { pinnedBrowser } from "./playwright-browser.mjs";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -86,7 +87,9 @@ const options = {
   // The browser half of each case, content-addressed (`feedback run
   // --execution-cache`): a checker change that leaves a case's development
   // models alone reruns only its analysis. `off` runs every browser half.
-  cache: join(repo, "rust/target/runtime-oracle-cache"),
+  // ADR 1029: one per machine, shared by every checkout (the key is content and the stored halves are path-free), so a case another
+  // worktree ran is never run in Chrome again; `SOLID_CHECKER_RUNTIME_ORACLE_CACHE` moves it.
+  cache: process.env.SOLID_CHECKER_RUNTIME_ORACLE_CACHE || join(homedir(), ".cache/solid-checker/runtime-oracle.noindex"),
   // `batch`: each worker is one `feedback batch` process that runs its cases in turn, sharing the tooling, the
   // Chromium process (a fresh context per case) and the browser's pin; a process that retires (a failed case,
   // ...: feedback-browser.mjs `openBrowserFeedbackBatch`) is replaced. `per-case`: one `feedback run` per case.

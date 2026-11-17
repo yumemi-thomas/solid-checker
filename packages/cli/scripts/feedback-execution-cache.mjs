@@ -17,13 +17,13 @@
 // and the cached capture. A run whose scenario failed is not stored, so a
 // timeout under load is never replayed.
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /** Bumped when what an entry means changes; older entries become misses. */
-export const EXECUTION_CACHE_FORMAT = 1;
+export const EXECUTION_CACHE_FORMAT = 2;
 
 const sha256 = bytes => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 
@@ -47,7 +47,10 @@ export function toolingIdentity(root, names = ["vite", "@solidjs/vite-plugin", "
     for (let directory = dirname(resolved); dirname(directory) !== directory; directory = dirname(directory)) {
       const metadata = join(directory, "package.json");
       if (existsSync(metadata) && JSON.parse(readFileSync(metadata, "utf8")).name === name) {
-        return { name, path: metadata, sha256: sha256(readFileSync(metadata)) };
+        // ADR 1029: where the tooling sits is not what it is: the manifest's path relative to the tooling root, so every checkout of the
+        // same tooling keys the same. Both sides as real paths: Node's `require.resolve` answers a real path and Bun's may not, so a root under a
+        // symlink (macOS `/var` is `/private/var`) would otherwise name a path out of the root under one runtime or the other.
+        return { name, path: relative(realpathSync(root), realpathSync(metadata)), sha256: sha256(readFileSync(metadata)) };
       }
     }
     return { name, unresolved: resolved };
@@ -59,9 +62,36 @@ export function executionCacheKey(parts) {
   return sha256(JSON.stringify({ format: EXECUTION_CACHE_FORMAT, node: process.version, ...parts }));
 }
 
+/**
+ * ADR 1029: what of the TypeScript snapshot's input manifest the browser half depends on: every file read and every path resolved
+ * (`readFile`, `realpath`, a `fileExists` that found a file). A probe that found nothing (`fileExists` false) and a directory probe read
+ * nothing: they record where a checkout sits (the empty or absent `node_modules` of every directory up to the filesystem root), not the
+ * program. A probe that would find something now shows as a read of that file, so the key still moves with any file resolution reaches.
+ */
+export function keyManifest(manifest) {
+  if (!manifest || !Array.isArray(manifest.inputs)) return manifest;
+  return { ...manifest, inputs: manifest.inputs.filter(input => input.kind !== "directoryExists" && !(input.kind === "fileExists" && input.result === false)) };
+}
+
 /** An entry's runtime-input pins that no longer match the files on disk. */
 export function stalePins(pins) {
   return pins.filter(pin => !existsSync(pin.path) || sha256(readFileSync(pin.path)) !== pin.sha256);
+}
+
+/**
+ * ADR 1029: a body's absolute paths made portable. `roots` maps a placeholder to this run's absolute directory (the project root, the
+ * tooling root); every occurrence of a root in the body is stored as its placeholder and put back on read, so a browser half recorded in
+ * one checkout answers the same case in another, and its runtime-input pins are re-hashed at this checkout's paths.
+ */
+export function portableBody(body, roots = {}) {
+  let text = JSON.stringify(body);
+  for (const [token, root] of Object.entries(roots).sort(([, a], [, b]) => b.length - a.length)) if (root) text = text.split(root).join(token);
+  return JSON.parse(text);
+}
+export function localBody(body, roots = {}) {
+  let text = JSON.stringify(body);
+  for (const [token, root] of Object.entries(roots)) if (root) text = text.split(token).join(root);
+  return JSON.parse(text);
 }
 
 export function createExecutionCache(directory) {
@@ -69,20 +99,21 @@ export function createExecutionCache(directory) {
   const file = key => join(directory, `${key.replace(/^sha256:/, "")}.json`);
   return {
     directory,
-    /** The stored body, or null on a miss (absent, other format, a stale pin). */
-    read(key) {
+    /** The stored body at this run's paths (`roots`), or null on a miss (absent, other format, a stale pin). */
+    read(key, roots = {}) {
       const path = file(key);
       if (!existsSync(path)) return null;
       let entry;
       try { entry = JSON.parse(readFileSync(path, "utf8")); } catch { return null; }
       if (entry.format !== EXECUTION_CACHE_FORMAT || entry.key !== key) return null;
-      if (!Array.isArray(entry.body?.runtimeInputs) || stalePins(entry.body.runtimeInputs).length) return null;
-      return entry.body;
+      const body = localBody(entry.body, roots);
+      if (!Array.isArray(body?.runtimeInputs) || stalePins(body.runtimeInputs).length) return null;
+      return body;
     },
-    /** Stores a body whole or not at all. */
-    write(key, body) {
+    /** Stores a body whole or not at all, its paths under `roots` made portable. */
+    write(key, body, roots = {}) {
       const path = file(key), temporary = `${path}.${process.pid}.tmp`;
-      writeFileSync(temporary, JSON.stringify({ format: EXECUTION_CACHE_FORMAT, key, body }));
+      writeFileSync(temporary, JSON.stringify({ format: EXECUTION_CACHE_FORMAT, key, body: portableBody(body, roots) }));
       renameSync(temporary, path);
     },
   };

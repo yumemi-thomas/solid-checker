@@ -23,6 +23,9 @@ const LAYOUTS = {
   linux: ["chrome-headless-shell-linux64/chrome-headless-shell", "chrome-headless-shell-linux-arm64/chrome-headless-shell", "chrome-linux/headless_shell"],
 };
 
+/** The executable inside a build directory by the platform's layouts, or null (cache.mjs `browserKey` hashes it). */
+export const buildExecutable = (build, platform = process.platform) => (LAYOUTS[platform] ?? []).map((layout) => join(build, layout)).find((path) => existsSync(path)) ?? null;
+
 /** What the pinned Playwright names: its version and the headless shell's revision and Chrome version. */
 export function pinnedHeadlessShell(install = ORACLE_INSTALL) {
   const core = join(install, "node_modules/playwright-core");
