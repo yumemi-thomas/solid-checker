@@ -4,6 +4,6 @@
 
 Violations: `BoxedCalled`, `KeyedCalled` (SC2007).
 
-Uncertifiable: `HelperAlsoStores`, `TwoReturns`, `HelperSpreads` (no boxing helper), `BoxHandedOn`, `BoxWritten` (the box is not closed), `BoxCaught` (the call is caught), `ImportedHelper` (the helper is in another module: open).
+Uncertifiable: `HelperAlsoStores`, `TwoReturns`, `HelperSpreads` (no boxing helper), `BoxHandedOn`, `BoxWritten` (the box is not closed), `BoxCaught` (the call is caught), `ImportedHelper` (the helper is in another module: open). `LiteralBeforeDeclarator`, `BoxBeforeDeclarator` (ADR 1059's review: a hoisted declaration calls the holder before its declarator, a `ReferenceError`; a closed literal or box names its member only where every use runs after the declarator).
 
 Chrome: `fixtures/runtime-oracle/stored-throw-returned-literal`. Stubs: `stored-throw-returned-param`'s. `tsc --noEmit` clean.

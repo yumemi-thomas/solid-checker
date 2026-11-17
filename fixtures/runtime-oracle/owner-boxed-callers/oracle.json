@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1059: a function a helper boxes (`function boxed(cb) { return { cb } }`, ADR 1058) runs where `box.cb()` is called, and the owner graph gives it that call as its caller: `useContext` of a context never provided throws in the component body (CONTEXT_NOT_FOUND, SC4002), and from a timer there is no owner (NO_OWNER_CONTEXT, SC4001). A context with a default in the body is legal; a box handed on and an imported helper stay uncertifiable."
+}
