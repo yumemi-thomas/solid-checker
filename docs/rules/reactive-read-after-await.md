@@ -195,7 +195,12 @@ rejecting would reach (`try { await rejecting(); return value() } catch {}`), a
 branch on a condition the analysis cannot decide (`if (tick() > 100)`). A
 callback a carrier may run zero times is not on such a path: it is an
 obligation (ADR 0566). The runtime stays silent on a run that does not take the
-path; the rule does not.
+path; the rule does not. A read in a constructor, an instance field's
+initializer (or a helper only it calls), a getter, a setter or a method of a
+class or object literal nothing constructs or accesses (every reference `void K`,
+`typeof K`, `K;`, a side of `===`, or the `extends` of such a class) never runs:
+uncertifiable `function-unentered`, never a violation ([ADR 1021](../decisions.md#adr-1021),
+`fixtures/reactive-ir/dead-site-unused-class`).
 
 **A source already tracked is exempt** (ADR 0195). A read after the await of
 an accessor that the same function already called *on every run, before its

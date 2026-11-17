@@ -24819,5 +24819,22 @@
   "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
   "ids": ["lg-reactive-write-in-owned-scope-gate-throw-signal-direct-none", "lg-reactive-write-in-owned-scope-gate-throw-signal-alias-closure"],
   "rediscovered": "main 993e83f74 violation (Chrome: no diagnostic, the site never executes: `unexecuted`), this build uncertifiable `site-reach-undecided`; 3,018 `gate-throw` programs move so, no other program of the 69,313 scanned"
+ },
+ {
+  "finding": "a false positive: a read after `await` in a constructor, an instance field's helper, a getter or a setter of a class or object literal nothing constructs or accesses (`class K1 { constructor() { r1(); } }; void K1;`, `class K2 extends K1 {}; void K2;`, `const o1 = { get v() { r1(); } }; void o1;`) was a violation although the member never runs and Chrome is silent",
+  "found": "full CI audit run 43739577046 (lg-recall, legal programs: the checker's violation at a site Chrome never runs), re-confirmed on main 993e83f74 with the release checker and Chrome",
+  "fixed": "ADR 1021 (`site_reach.rs` `inert_reference`, `heritage_of_unreached_class`, `in_field_of_unreached_class`, `literal_member_unreached`: the member is never entered, so a violation there is uncertifiable `function-unentered`)",
+  "grid": "lg-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "lg-untracked-read-after-await-ob-ctor-new-memo-async-never-x-direct-none",
+   "lg-untracked-read-after-await-ob-ctor-super-memo-async-never-x-direct-none",
+   "lg-untracked-read-after-await-ob-ctor-implicit-memo-async-never-x-direct-none",
+   "lg-untracked-read-after-await-ob-field-helper-memo-async-never-x-direct-none",
+   "lg-untracked-read-after-await-ob-getter-memo-async-never-x-direct-none",
+   "lg-untracked-read-after-await-ob-setter-memo-async-never-x-direct-none",
+   "lg-untracked-read-after-await-ob-field-helper-effect-async-never-x-direct-none"
+  ],
+  "rediscovered": "main 993e83f74 unexecuted (the 38 programs of the six constructs' `-never` contexts; Chrome 29 of 29 sampled never ran the site), this build uncertifiable (38 of 38). `make fuzz-focus` exits 0 on both builds: an `unexecuted` row is not gated until ADR 1018's oracle guard"
  }
 ]

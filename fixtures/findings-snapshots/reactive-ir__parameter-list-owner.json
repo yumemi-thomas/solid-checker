@@ -1213,17 +1213,6 @@
     {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/parameter-list-owner/App.tsx",
-      "start": 4125,
-      "end": 4134,
-      "fixes": 0
-    },
-    {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/parameter-list-owner/App.tsx",
@@ -2009,17 +1998,6 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
-      "start": 569,
-      "end": 578,
-      "fixes": 0
-    },
-    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -2028,17 +2006,6 @@
       "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
       "start": 569,
       "end": 578,
-      "fixes": 0
-    },
-    {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
-      "start": 775,
-      "end": 787,
       "fixes": 0
     },
     {
@@ -2064,10 +2031,10 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
+      "rule": "missing-owner",
+      "code": "SC4001",
       "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
+      "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
       "start": 961,
@@ -2081,41 +2048,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
-      "start": 961,
-      "end": 970,
-      "fixes": 0
-    },
-    {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
       "start": 1165,
       "end": 1174,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "blocker": "owner-callers-unenumerated",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
-      "start": 1165,
-      "end": 1174,
-      "fixes": 0
-    },
-    {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
-      "start": 1408,
-      "end": 1417,
       "fixes": 0
     },
     {
@@ -2163,17 +2097,6 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
-      "start": 1949,
-      "end": 1958,
-      "fixes": 0
-    },
-    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -2207,21 +2130,10 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
-      "start": 2275,
-      "end": 2284,
-      "fixes": 0
-    },
-    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/parameter-list-owner/Owner.tsx",
       "start": 2275,

@@ -171,9 +171,9 @@ export function ObjectGetterTimer() {
   return <p />;
 }
 
-// e13: a closure stored in an object literal and never called. SiteReach
-// cannot prove an object member unreached, so this is an obligation too: the
-// recorded precision trade.
+// e13: a closure stored in an object literal and never called. Every reference
+// to the literal is inert (`void o`), so SiteReach proves the member unreached
+// (ADR 1021): silent.
 export function StoredNeverCalled() {
   const o = {
     f: () => {

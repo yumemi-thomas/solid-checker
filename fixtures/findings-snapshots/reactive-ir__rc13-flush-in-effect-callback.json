@@ -764,32 +764,10 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 5689,
-      "end": 5696,
-      "fixes": 0
-    },
-    {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 6195,
-      "end": 6207,
-      "fixes": 0
-    },
-    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
       "start": 6195,
@@ -860,17 +838,6 @@
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
       "start": 6817,
       "end": 6822,
-      "fixes": 0
-    },
-    {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 6817,
-      "end": 6824,
       "fixes": 0
     },
     {
@@ -1494,21 +1461,10 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 11312,
-      "end": 11324,
-      "fixes": 0
-    },
-    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
       "start": 11312,
@@ -1534,17 +1490,6 @@
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
       "start": 11346,
       "end": 11351,
-      "fixes": 0
-    },
-    {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 11346,
-      "end": 11353,
       "fixes": 0
     },
     {

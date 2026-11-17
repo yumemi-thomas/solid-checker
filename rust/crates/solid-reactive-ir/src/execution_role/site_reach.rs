@@ -344,6 +344,10 @@ impl<'l, 'a> SiteReach<'l, 'a> {
         if statically_dead(file, site, self.lookup) {
             return Reach::Unreached(UnreachedReason::DeadCode);
         }
+        // ADR 1021: an instance field's initializer runs only when an instance is made.
+        if self.in_field_of_unreached_class(file, site) {
+            return Reach::Unreached(UnreachedReason::NeverEntered);
+        }
         // ADR 0696: a fact of the whole program.
         if behind_absent_prop(file, site, self.lookup)
             || crate::owners::owning_function(&file.ast, site).is_some_and(|function| {
@@ -601,6 +605,13 @@ impl<'l, 'a> SiteReach<'l, 'a> {
         {
             return false;
         }
+        // ADR 1021: written in an instance field's initializer of a class nothing
+        // reaches, or a member of an object literal whose binding nothing uses.
+        if self.in_field_of_unreached_class(file, function.span)
+            || self.literal_member_unreached(file, function)
+        {
+            return false;
+        }
         let Some(outer) = crate::owners::owning_function(&file.ast, function.span) else {
             // Module scope: entered by modules and hosts this does not follow,
             // unless it is entered only through refused creations (ADR 0475).
@@ -708,8 +719,11 @@ impl<'l, 'a> SiteReach<'l, 'a> {
 
     /// Whether every reference to the name declared at `declaration` is
     /// unreached, erased (a type query), a value an IIFE returns into a
-    /// discarded result, or (ADR 1019) handed to a standard-library carrier
-    /// that provably never runs it ([`crate::carrier_runs::handed_to_idle_carrier`]).
+    /// discarded result, (ADR 1019) handed to a standard-library carrier
+    /// that provably never runs it ([`crate::carrier_runs::handed_to_idle_carrier`]),
+    /// or (ADR 1021) a value nothing takes (the operand of `void` or `typeof`,
+    /// an expression statement, a side of `===`/`!==`: [`inert_reference`]) or
+    /// the `extends` clause of a class nothing reaches.
     fn references_unreached(&self, file: &solid_facts::FileFacts, declaration: Span) -> bool {
         file.ast
             .reference_identifiers_to(declaration)
@@ -724,12 +738,80 @@ impl<'l, 'a> SiteReach<'l, 'a> {
                         reference.span,
                         self.lookup,
                     )
+                    || inert_reference(file, reference.span)
+                    || self.heritage_of_unreached_class(file, reference.span)
                     || (self.lazy_reads
                         && lazy_creation(file, reference.span, self.lookup)
                             .is_some_and(|call| !self.lazy_read_proven(file, call)))
                     || !self.reached(file, reference.span)
                     || self.refused(file, reference.span)
             })
+    }
+
+    /// ADR 1021: whether `span` is written in the initializer of a non-static
+    /// field of a class nothing reaches ([`Self::class_unreached`]): the
+    /// initializer runs only when an instance (of it or of a subclass) is made.
+    fn in_field_of_unreached_class(&self, file: &solid_facts::FileFacts, span: Span) -> bool {
+        file.ast.classes.iter().any(|class| {
+            class.elements.iter().any(|element| {
+                element.kind == solid_facts::ast::ClassElementKind::Field
+                    && !element.r#static
+                    && element.value.is_some_and(|value| value.contains(span))
+            }) && self.class_unreached(file, class)
+        })
+    }
+
+    /// ADR 1021: whether `reference` is, as it stands, the `extends` clause of a
+    /// class nothing reaches. Defining the subclass reads the superclass and its
+    /// `prototype` (a class's own, never an accessor), and runs none of its code;
+    /// only constructing the subclass or reaching its members can.
+    fn heritage_of_unreached_class(&self, file: &solid_facts::FileFacts, reference: Span) -> bool {
+        file.ast.classes.iter().any(|class| {
+            class
+                .heritage
+                .is_some_and(|heritage| file.ast.peel_ts_sugar_span(heritage) == reference)
+                && self.class_unreached(file, class)
+        })
+    }
+
+    /// ADR 1021: whether `function` is the value of a property (a getter, a
+    /// setter, a method, a function-valued property) written directly in an
+    /// object literal that is the whole initializer of a name nothing reaches:
+    /// the name is not exported, no module calls direct `eval`, and every
+    /// reference to it is unreached ([`Self::references_unreached`]). Making the
+    /// literal runs none of its members; only an access of the object can.
+    fn literal_member_unreached(
+        &self,
+        file: &solid_facts::FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+    ) -> bool {
+        let ast = &file.ast;
+        let Some(property) = ast.object_property_with_value(function.span) else {
+            return false;
+        };
+        // The literal the property is written in: the smallest one around it.
+        let Some(literal) = ast
+            .object_get_shapes
+            .iter()
+            .filter(|shape| shape.span.contains(property.span) && shape.span != property.span)
+            .min_by_key(|shape| shape.span.end - shape.span.start)
+        else {
+            return false;
+        };
+        let Some(binding) = ast.bindings.iter().find(|binding| {
+            binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding
+                    .initializer
+                    .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == literal.span)
+        }) else {
+            return false;
+        };
+        let Some(name) = binding.names.first() else {
+            return false;
+        };
+        !self.lookup.program_has_eval()
+            && !flow_binding_exported(file, name.span)
+            && self.references_unreached(file, name.span)
     }
 
     /// Whether nothing reaches the class's instances or its constructor: its
@@ -762,6 +844,18 @@ impl<'l, 'a> SiteReach<'l, 'a> {
         };
         !flow_binding_exported(file, declaration) && self.references_unreached(file, declaration)
     }
+}
+
+/// ADR 1021: whether the reference at `reference` is a value nothing takes
+/// ([`solid_facts::ast::AstFacts::inert_operands`]: the operand of `void` or
+/// `typeof`, an expression statement's value, a side of `===` or `!==`),
+/// through parentheses and TypeScript assertions. No call, construction,
+/// coercion or property access of the value happens there.
+fn inert_reference(file: &solid_facts::FileFacts, reference: Span) -> bool {
+    file.ast
+        .inert_operands
+        .iter()
+        .any(|operand| file.ast.peel_ts_sugar_span(*operand) == reference)
 }
 
 /// The declaration of the name a class is bound to: its own name, or the

@@ -335,6 +335,7 @@ export function HandleInInstanceField() {
     class K {
       f = h();
     }
+    void [K]; // kept, never used (an array element is no inert use, ADR 1021)
     return 1;
   });
   return <div>{v()}</div>;

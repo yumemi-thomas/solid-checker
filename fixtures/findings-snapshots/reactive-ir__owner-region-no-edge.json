@@ -304,30 +304,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-region-no-edge/App.tsx",
-      "start": 4208,
-      "end": 4217,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/owner-region-no-edge/App.tsx",
-      "start": 4208,
-      "end": 4217,
-      "fixes": 0
-    },
-    {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/owner-region-no-edge/App.tsx",
-      "start": 4569,
-      "end": 4578,
+      "start": 4571,
+      "end": 4580,
       "fixes": 0
     },
     {
@@ -336,8 +314,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/owner-region-no-edge/App.tsx",
-      "start": 4569,
-      "end": 4578,
+      "start": 4571,
+      "end": 4580,
       "fixes": 0
     },
     {
@@ -347,8 +325,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-region-no-edge/App.tsx",
-      "start": 4797,
-      "end": 4806,
+      "start": 4799,
+      "end": 4808,
       "fixes": 0
     },
     {
@@ -357,8 +335,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/owner-region-no-edge/App.tsx",
-      "start": 4797,
-      "end": 4806,
+      "start": 4799,
+      "end": 4808,
       "fixes": 0
     },
     {
@@ -368,8 +346,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-region-no-edge/App.tsx",
-      "start": 5144,
-      "end": 5153,
+      "start": 5146,
+      "end": 5155,
       "fixes": 0
     },
     {
@@ -379,8 +357,8 @@
       "blocker": "owner-varies-by-caller",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-region-no-edge/App.tsx",
-      "start": 5144,
-      "end": 5153,
+      "start": 5146,
+      "end": 5155,
       "fixes": 0
     },
     {
@@ -390,8 +368,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-region-no-edge/App.tsx",
-      "start": 5780,
-      "end": 5789,
+      "start": 5782,
+      "end": 5791,
       "fixes": 0
     },
     {
@@ -401,8 +379,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-region-no-edge/App.tsx",
-      "start": 5780,
-      "end": 5789,
+      "start": 5782,
+      "end": 5791,
       "fixes": 0
     },
     {
@@ -412,8 +390,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-region-no-edge/App.tsx",
-      "start": 6097,
-      "end": 6107,
+      "start": 6099,
+      "end": 6109,
       "fixes": 0
     },
     {
@@ -423,8 +401,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-region-no-edge/App.tsx",
-      "start": 6122,
-      "end": 6131,
+      "start": 6124,
+      "end": 6133,
       "fixes": 0
     },
     {
