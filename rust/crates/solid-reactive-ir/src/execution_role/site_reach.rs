@@ -674,7 +674,7 @@ impl<'l, 'a> SiteReach<'l, 'a> {
         // ADR 1020: a function literal an effect's or a memo's compute returns is a value the runtime hands on (the apply receives
         // it, the memo stores it); it runs only where program code calls that value, which is not read here: undecided.
         if self.handed_past_live_default(file, function)
-            || returned_by_primitive_callback(file, function, self.lookup)
+            || returned_by_primitive_callback(file, function, self.lookup, true)
         {
             self.limited.set(true);
             return true;
@@ -1406,10 +1406,11 @@ fn class_of_member<'f>(
 /// own body) at a position whose return the runtime hands on as a value and never calls (`Dialect::callback_return_is_value`: an
 /// effect's or a memo's compute), and it is not called where it is written: `createEffect(() => () => { … }, (v) => { … })`. A
 /// cleanup an apply returns is called by the runtime, and is not this.
-fn returned_by_primitive_callback(
+pub(crate) fn returned_by_primitive_callback(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
+    require_never_called: bool,
 ) -> bool {
     let ast = &file.ast;
     if ast.calls_with_peeled_callee(function.span).next().is_some() {
@@ -1435,7 +1436,7 @@ fn returned_by_primitive_callback(
                     .is_some_and(|primitive| {
                         lookup.dialect.callback_return_is_value(primitive, index)
                     })
-                && returned_value_never_called(file, call, index)
+                && (!require_never_called || returned_value_never_called(file, call, index))
         })
     })
 }

@@ -530,13 +530,49 @@ impl StaticApiContext<'_> {
             if let Some(SyncOptionState::Asserted) = sync_options
                 && let Some(state @ (StaticSource::Promise(_) | StaticSource::Open)) = compute()
             {
-                let uncertain = matches!(state, StaticSource::Open);
+                // ADR 1020 (second narrowing): created where an effect's apply may run it with no owner set (SC6002's own walk), the
+                // dev build throws PRIMITIVE_IN_EFFECT_CALLBACK at the creation and never probes the computation: Chrome rc.21 reports
+                // that code there, not SYNC_NODE_RECEIVED_ASYNC.
+                // Scope this correction to the returned-value witness. Other competing
+                // creation diagnostics are the separate ADR 1052 census.
+                let returned_value = crate::owners::owning_function(&file.ast, call.span)
+                    .is_some_and(|function| {
+                        crate::execution_role::returned_by_primitive_callback(
+                            file,
+                            function,
+                            self.lookup,
+                            false,
+                        )
+                    });
+                let throws_first = returned_value
+                    && kind.is_some_and(|created| {
+                        self.client_build()
+                            && dialect.throws_creating_in_effect_callback(
+                                created,
+                                first_argument_is_function(call),
+                            )
+                            && self
+                                .lookup
+                                .callee_package_root(file, call.callee)
+                                .is_some_and(|root| {
+                                    crate::effect_phase::ownerless_effect_phase_origin(
+                                        file,
+                                        call.span,
+                                        &root,
+                                        self.package_instances,
+                                        self.lookup,
+                                    )
+                                    .is_some_and(|origin| origin.undecided.is_none())
+                                })
+                    });
+                let open = matches!(state, StaticSource::Open);
+                let uncertain = open || throws_first;
                 result.violations.push(StaticViolation {
                     id: "SC7002".into(),
                     rule: "sync-computation-received-async".into(),
                     message: format!(
                         "{primitive} is marked sync: true but its computation {}; sync: true asserts a synchronous result so the runtime can skip the async-shape probe — dev still probes and throws SYNC_NODE_RECEIVED_ASYNC, and production stores the unawaited value as-is",
-                        if uncertain {
+                        if open {
                             "may return a Promise or AsyncIterable, and nothing proves it does not"
                         } else {
                             "returns a Promise or AsyncIterable"
@@ -547,7 +583,9 @@ impl StaticApiContext<'_> {
                         dialect.boundary_name(solid_dialect::Boundary::Async)
                     ),
                     location: location(file.path.shared(), call.callee),
-                    analysis_context: if uncertain {
+                    analysis_context: if throws_first {
+                        crate::blockers::CREATION_THROWS_FIRST.to_owned()
+                    } else if open {
                         crate::blockers::COMPUTE_RETURN_UNPROVEN.to_owned()
                     } else {
                         String::new()

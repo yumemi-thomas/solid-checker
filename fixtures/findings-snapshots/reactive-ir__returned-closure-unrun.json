@@ -268,7 +268,7 @@
       "rule": "primitive-in-effect-callback",
       "code": "SC6002",
       "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
+      "blocker": "effect-owner-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/returned-closure-unrun/App.tsx",
       "start": 1680,
@@ -333,7 +333,7 @@
       "rule": "primitive-in-effect-callback",
       "code": "SC6002",
       "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
+      "blocker": "effect-owner-unproven",
       "severity": "error",
       "path": "fixtures/reactive-ir/returned-closure-unrun/App.tsx",
       "start": 1915,
@@ -348,6 +348,72 @@
       "path": "fixtures/reactive-ir/returned-closure-unrun/App.tsx",
       "start": 1915,
       "end": 1927,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-closure-unrun/App.tsx",
+      "start": 2425,
+      "end": 2437,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-closure-unrun/App.tsx",
+      "start": 2425,
+      "end": 2437,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-closure-unrun/App.tsx",
+      "start": 2425,
+      "end": 2437,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-closure-unrun/App.tsx",
+      "start": 2463,
+      "end": 2473,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-owner-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-closure-unrun/App.tsx",
+      "start": 2463,
+      "end": 2473,
+      "fixes": 0
+    },
+    {
+      "rule": "sync-computation-received-async",
+      "code": "SC7002",
+      "kind": "uncertifiable",
+      "blocker": "creation-throws-first",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/returned-closure-unrun/App.tsx",
+      "start": 2463,
+      "end": 2473,
       "fixes": 0
     }
   ]

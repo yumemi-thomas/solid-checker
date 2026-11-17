@@ -2924,6 +2924,15 @@
     "open": "reactive-ir/after-await-exact-callbacks"
    },
    "note": "the strict reads in the body of a `for await` (`ObjectSlotForAwait`, `ObjectSlotForAwaitLayers`) run past the loop's suspension with no observer: no strict read; SC1002's rows at them stay uncertifiable."
+  },
+  {
+   "fixture": "reactive-ir/returned-closure-unrun",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 11,
+   "to": 10,
+   "adr": "ADR 1020",
+   "kind": "relabel",
+   "relabeledTo": "SC6002 effect-owner-unproven"
   }
  ],
  "renames": []
