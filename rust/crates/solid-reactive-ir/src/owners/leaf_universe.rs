@@ -41,7 +41,7 @@
 //! each code, and the gate accepts such a site only if that row stands and a decline at its span lists the code (coordinator-approved, owner delegated).
 
 use super::*;
-use crate::proof_log::PremiseKind;
+use crate::proof_log::{Premise, PremiseKind};
 use crate::site_accounting::{SiteEnds, SiteSilence};
 
 /// Why an owner-call site has no silence from this pass for a group of its codes: one typed fact, the first the producer's order of questions meets. A decline is
@@ -156,10 +156,26 @@ pub(super) fn silences(
         .collect();
     let unread = crate::package_hand_off::UnreadPackageHandOff::new(lookup, &by_path);
     let no_leaf_opener = !lookup.project_opens_leaf_scope();
-    let caller_unplaced = |caller_file: &solid_facts::FileFacts, at: Span| {
-        super::owner_emission::caller_holds_no_context(graph, &reach, lookup, caller_file, at)
-    };
     let logging = crate::proof_log::enabled();
+    // ADR 1031: the path id of each listed file, for a getter answered at reads written in another file.
+    let pids: std::collections::HashMap<&str, PathId> = files
+        .iter()
+        .zip(order)
+        .map(|(listed, pid)| (listed.path.as_str(), *pid))
+        .collect();
+    let question = Question {
+        graph,
+        reach: &reach,
+        unread: &unread,
+        no_leaf_opener,
+        lookup,
+        entities,
+        symbol_names,
+        pids: &pids,
+    };
+    // The callback positions the role engine takes as placed, per file, for the role question (computed at the first creation that asks it).
+    let mut allowed_by_path: std::collections::HashMap<String, Option<Vec<Span>>> =
+        std::collections::HashMap::new();
     for (listed, pid) in files.iter().zip(order) {
         if lookup.in_dependency_source(listed.path.as_str()) {
             continue;
@@ -168,8 +184,6 @@ pub(super) fn silences(
             continue;
         };
         let ast = &file.ast;
-        // The callback positions the role engine takes as placed, for the role question (computed at the first creation that asks it).
-        let mut allowed: Option<Vec<Span>> = None;
         // The sites of the file this pass answers for, as (the span the role, the entry and the graph are asked about, the span the site is reported at, its codes): the
         // calls of the owner-call universe, and (B2, the re-review of #220) its JSX creation sites.
         let mut candidates: Vec<(Span, Span, &'static [SiteCode], bool)> = Vec::new();
@@ -230,197 +244,307 @@ pub(super) fn silences(
                 );
                 continue;
             }
-            // A getter's JSX or creating call runs where the component reads the prop (the review of #225, F2): the function that holds it, module evaluation and every entry of that
-            // function say nothing of that stack, so only "never evaluated" (above) ends it.
-            if getter {
-                for (open, group) in [(leaf, Group::Leaf), (effect, Group::Effect)] {
-                    if open {
-                        decline(group, Decline::GetterRunsWhereRead);
+            let answers = if getter {
+                // A getter's JSX or creating call runs where the component reads the prop (the review of #225, F2): the function that holds it, module evaluation and
+                // every entry of that function say nothing of that stack. ADR 1031: where every read of the prop in the project component the element renders is on the
+                // component's own stack under its render's owner, the getter runs at those reads, so each group is answered at each read as for a site written there,
+                // and ends only where every read that may run ends it.
+                match crate::owners::getter_read_sites(file, lookup, span) {
+                    Some(reads) => {
+                        answer_at_reads(&question, &reads, leaf, effect, &mut allowed_by_path)
                     }
-                }
-                continue;
-            }
-            // Module evaluation: one run, on a stack of its own (an instance field's initializer runs at each construction, which may be anywhere: written directly in one it is
-            // no part of the function the class is written in, which says nothing of the stack of a construction, the review of #225, B3).
-            let in_field = crate::local_access::in_instance_field_initializer_directly(file, span);
-            let Some(function) = ast.innermost_function_owning(span).filter(|_| !in_field) else {
-                if in_field {
-                    for (open, group) in [(leaf, Group::Leaf), (effect, Group::Effect)] {
-                        if open {
-                            decline(group, Decline::InstanceFieldInitializer);
-                        }
-                    }
-                } else {
-                    ends.end_at(
-                        file,
-                        site,
-                        SiteSilence::OwnerCallModuleScope,
-                        PremiseKind::ModuleScope,
-                        || Some(site),
-                    );
-                }
-                continue;
-            };
-            // A package the build does not read may run the function (B3): no census and no entry the graph holds answers for it.
-            if unread.may_run(file, span) {
-                for (open, group) in [(leaf, Group::Leaf), (effect, Group::Effect)] {
-                    if open {
-                        decline(group, Decline::UnreadPackageMayRun);
-                    }
-                }
-                continue;
-            }
-            // The groups of codes still open: the census answers SC3001's pair for a program with no leaf opener.
-            let mut open_leaf = leaf;
-            if leaf && no_leaf_opener {
-                ends.end_at(
-                    file,
-                    site,
-                    SiteSilence::LeafNoOpenerInProgram,
-                    PremiseKind::ProgramCensus,
-                    || Some(site),
-                );
-                open_leaf = false;
-            }
-            let mut open_effect = effect;
-            if !open_leaf && !open_effect {
-                continue;
-            }
-            // Every answer below speaks for the site only where it is plain: the graph's context and the role engine's placement say where code written
-            // directly in a function runs, not a parameter list, a generator's body or a later task.
-            let plain = if crate::owners::in_parameter_list(ast, span) {
-                Err(Decline::ParameterList)
-            } else if generator_layer_around(file, span, lookup) {
-                Err(Decline::GeneratorBody)
-            } else if crate::execution_role::may_follow_suspension(file, span) {
-                Err(Decline::AfterSuspension)
-            } else {
-                Ok(())
-            };
-            if let Err(reason) = plain {
-                for (open, group) in [(open_leaf, Group::Leaf), (open_effect, Group::Effect)] {
-                    if open {
-                        decline(group, reason);
-                    }
-                }
-                continue;
-            }
-            // Whether a layer around the site is entered by a route the graph has no edge for, asked once and without the component-render premise
-            // (ADR 0868, and the ruling: a package that renders a component is no more trusted than one that calls it).
-            let mut entry_open_known: Option<bool> = None;
-            let mut entry_open = || {
-                *entry_open_known.get_or_insert_with(|| {
-                    super::owner_emission::layer_entry_open_by_reference(
-                        file,
-                        span,
-                        lookup,
-                        caller_unplaced,
-                    )
-                })
-            };
-            // SC6002's two silences that rest on no graph context (they were `static_api`'s until the review of #220, which found each asking less than the
-            // others: F2, F3). The role engine places the site off every effect's apply (a handler, a deferred callback, a directive apply, rendering, module
-            // code, discarded code), and every layer around the site is entered only the way that role says; or an exact primitive's callback that creates
-            // an owner wraps it.
-            if open_effect {
-                let allowed = allowed.get_or_insert_with(|| {
-                    crate::execution_role::allowed_callback_spans(file, lookup)
-                });
-                if crate::static_api::runs_off_every_apply(
-                    file,
-                    span,
-                    allowed,
-                    entities,
-                    symbol_names,
-                    lookup,
-                ) && !entry_open()
-                {
-                    ends.end_at(
-                        file,
-                        site,
-                        SiteSilence::EffectCreationRunsOffApply,
-                        PremiseKind::RoleDoesNotReport,
-                        || Some(site),
-                    );
-                    open_effect = false;
-                } else if let Some(wrapper) =
-                    crate::static_api::owner_created_around_call(file, span, lookup)
-                {
-                    ends.end_at(
-                        file,
-                        site,
-                        SiteSilence::EffectCreationOwnerSetAround,
-                        PremiseKind::OwnerSetAround,
-                        || Some(wrapper),
-                    );
-                    open_effect = false;
-                }
-            }
-            if !open_leaf && !open_effect {
-                continue;
-            }
-            let Some((node, context)) = graph.node_context(*pid, function.span) else {
-                for (open, group) in [(open_leaf, Group::Leaf), (open_effect, Group::Effect)] {
-                    if open {
-                        decline(group, Decline::NoOwnerNode);
-                    }
-                }
-                continue;
-            };
-            // Each group asks the context its own question.
-            let leaf_answer = if !open_leaf {
-                None
-            } else if context == 0 {
-                Some(Err(Decline::NoEdgeIntoFunction))
-            } else if context & (OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED) != 0 {
-                Some(Err(Decline::LeafBitPresent))
-            } else if open_world_unowned_only(context, node) {
-                Some(Err(Decline::OpenWorldExport))
-            } else {
-                Some(Ok(()))
-            };
-            let effect_answer = if !open_effect {
-                None
-            } else if context == 0 {
-                Some(Err(Decline::NoEdgeIntoFunction))
-            } else if context
-                & !(OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED)
-                != 0
-            {
-                Some(Err(Decline::UnownedEntry))
-            } else {
-                Some(Ok(()))
-            };
-            // The context says no entry is the forbidden one; it is every entry only where no layer around the site is entered by a route the graph has no
-            // edge for.
-            let entry_is_open = (matches!(leaf_answer, Some(Ok(())))
-                || matches!(effect_answer, Some(Ok(()))))
-                && entry_open();
-            for (answer, group) in [(leaf_answer, Group::Leaf), (effect_answer, Group::Effect)] {
-                let Some(answer) = answer else {
-                    continue;
-                };
-                match answer {
-                    Err(reason) => decline(group, reason),
-                    Ok(()) if entry_is_open => decline(group, Decline::EntryByReference),
-                    Ok(()) => match group {
-                        Group::Leaf => ends.end_at(
-                            file,
-                            site,
-                            SiteSilence::LeafOwnerAbsent,
-                            PremiseKind::OwnerContextNoLeaf,
-                            || Some(function.span),
-                        ),
-                        Group::Effect => ends.end_at(
-                            file,
-                            site,
-                            SiteSilence::OwnerCurrent,
-                            PremiseKind::OwnerContextCurrent,
-                            || Some(function.span),
-                        ),
+                    None => Answers {
+                        leaf: leaf.then_some(Err(Decline::GetterRunsWhereRead)),
+                        effect: effect.then_some(Err(Decline::GetterRunsWhereRead)),
                     },
+                }
+            } else {
+                let allowed = allowed_by_path.entry(file.path.to_string()).or_default();
+                let (leaf_answer, effect_answer) =
+                    question.answer(file, *pid, span, site, leaf, effect, allowed);
+                let own = |answer: Option<Outcome>| {
+                    answer.map(|outcome| {
+                        outcome
+                            .map(|(silence, kind, at)| (silence, vec![Premise::at(kind, Some(at))]))
+                    })
+                };
+                Answers {
+                    leaf: own(leaf_answer),
+                    effect: own(effect_answer),
+                }
+            };
+            for (answer, group) in [(answers.leaf, Group::Leaf), (answers.effect, Group::Effect)] {
+                match answer {
+                    None => {}
+                    Some(Err(reason)) => decline(group, reason),
+                    Some(Ok((silence, premises))) => {
+                        ends.end_with(file, site, silence, || premises);
+                    }
                 }
             }
         }
+    }
+}
+
+/// What one question of a group of codes comes to: a silence with the premise it rests on (its kind and the span of the code it is about), or a decline.
+type Outcome = Result<(SiteSilence, PremiseKind, Span), Decline>;
+
+/// The answer of each group of codes of a site, with the premises an end rests on.
+#[derive(Default)]
+struct Answers {
+    leaf: Option<Result<(SiteSilence, Vec<Premise>), Decline>>,
+    effect: Option<Result<(SiteSilence, Vec<Premise>), Decline>>,
+}
+
+/// What every question of the pass is asked against, fixed for the program.
+struct Question<'q, 'l, 'a> {
+    graph: &'q OwnerGraph,
+    reach: &'q crate::execution_role::SiteReach<'l, 'a>,
+    unread: &'q crate::package_hand_off::UnreadPackageHandOff<'q, 'a>,
+    no_leaf_opener: bool,
+    lookup: &'l SemanticLookup<'a>,
+    entities: &'q crate::EntitySymbols,
+    symbol_names: &'q crate::HashMap<crate::SymbolId, crate::SymbolId>,
+    pids: &'q std::collections::HashMap<&'q str, PathId>,
+}
+
+impl<'a> Question<'_, '_, 'a> {
+    /// The answer of each open group (`leaf`, `effect`) for code written at `span` of `file` (reported at `site`), the site ADR 0458's query does not prove
+    /// unreached: the questions the pass asks of every site, in its order (module scope, an unread package, the census, a plain site, the role, the graph).
+    #[allow(clippy::too_many_arguments)]
+    fn answer(
+        &self,
+        file: &'a solid_facts::FileFacts,
+        pid: PathId,
+        span: Span,
+        site: Span,
+        leaf: bool,
+        effect: bool,
+        allowed: &mut Option<Vec<Span>>,
+    ) -> (Option<Outcome>, Option<Outcome>) {
+        let both = |reason: Decline| (leaf.then_some(Err(reason)), effect.then_some(Err(reason)));
+        let ast = &file.ast;
+        // Module evaluation: one run, on a stack of its own (an instance field's initializer runs at each construction, which may be anywhere: written directly in one it is
+        // no part of the function the class is written in, which says nothing of the stack of a construction, the review of #225, B3).
+        let in_field = crate::local_access::in_instance_field_initializer_directly(file, span);
+        let Some(function) = ast.innermost_function_owning(span).filter(|_| !in_field) else {
+            if in_field {
+                return both(Decline::InstanceFieldInitializer);
+            }
+            let end = Ok((
+                SiteSilence::OwnerCallModuleScope,
+                PremiseKind::ModuleScope,
+                site,
+            ));
+            return (leaf.then_some(end), effect.then_some(end));
+        };
+        // A package the build does not read may run the function (B3): no census and no entry the graph holds answers for it.
+        if self.unread.may_run(file, span) {
+            return both(Decline::UnreadPackageMayRun);
+        }
+        // The groups of codes still open: the census answers SC3001's pair for a program with no leaf opener.
+        let mut leaf_answer = None;
+        let mut open_leaf = leaf;
+        if leaf && self.no_leaf_opener {
+            leaf_answer = Some(Ok((
+                SiteSilence::LeafNoOpenerInProgram,
+                PremiseKind::ProgramCensus,
+                site,
+            )));
+            open_leaf = false;
+        }
+        let mut effect_answer = None;
+        let mut open_effect = effect;
+        if !open_leaf && !open_effect {
+            return (leaf_answer, effect_answer);
+        }
+        // Every answer below speaks for the site only where it is plain: the graph's context and the role engine's placement say where code written
+        // directly in a function runs, not a parameter list, a generator's body or a later task.
+        let plain = if crate::owners::in_parameter_list(ast, span) {
+            Err(Decline::ParameterList)
+        } else if generator_layer_around(file, span, self.lookup) {
+            Err(Decline::GeneratorBody)
+        } else if crate::execution_role::may_follow_suspension(file, span) {
+            Err(Decline::AfterSuspension)
+        } else {
+            Ok(())
+        };
+        if let Err(reason) = plain {
+            return (
+                leaf_answer.or(open_leaf.then_some(Err(reason))),
+                open_effect.then_some(Err(reason)),
+            );
+        }
+        // Whether a layer around the site is entered by a route the graph has no edge for, asked once and without the component-render premise
+        // (ADR 0868, and the ruling: a package that renders a component is no more trusted than one that calls it).
+        let caller_unplaced = |caller_file: &solid_facts::FileFacts, at: Span| {
+            super::owner_emission::caller_holds_no_context(
+                self.graph,
+                self.reach,
+                self.lookup,
+                caller_file,
+                at,
+            )
+        };
+        let mut entry_open_known: Option<bool> = None;
+        let mut entry_open = || {
+            *entry_open_known.get_or_insert_with(|| {
+                super::owner_emission::layer_entry_open_by_reference(
+                    file,
+                    span,
+                    self.lookup,
+                    caller_unplaced,
+                )
+            })
+        };
+        // SC6002's two silences that rest on no graph context (they were `static_api`'s until the review of #220, which found each asking less than the
+        // others: F2, F3). The role engine places the site off every effect's apply (a handler, a deferred callback, a directive apply, rendering, module
+        // code, discarded code), and every layer around the site is entered only the way that role says; or an exact primitive's callback that creates
+        // an owner wraps it.
+        if open_effect {
+            let allowed = allowed.get_or_insert_with(|| {
+                crate::execution_role::allowed_callback_spans(file, self.lookup)
+            });
+            if crate::static_api::runs_off_every_apply(
+                file,
+                span,
+                allowed,
+                self.entities,
+                self.symbol_names,
+                self.lookup,
+            ) && !entry_open()
+            {
+                effect_answer = Some(Ok((
+                    SiteSilence::EffectCreationRunsOffApply,
+                    PremiseKind::RoleDoesNotReport,
+                    site,
+                )));
+                open_effect = false;
+            } else if let Some(wrapper) =
+                crate::static_api::owner_created_around_call(file, span, self.lookup)
+            {
+                effect_answer = Some(Ok((
+                    SiteSilence::EffectCreationOwnerSetAround,
+                    PremiseKind::OwnerSetAround,
+                    wrapper,
+                )));
+                open_effect = false;
+            }
+        }
+        if !open_leaf && !open_effect {
+            return (leaf_answer, effect_answer);
+        }
+        let Some((node, context)) = self.graph.node_context(pid, function.span) else {
+            return (
+                leaf_answer.or(open_leaf.then_some(Err(Decline::NoOwnerNode))),
+                effect_answer.or(open_effect.then_some(Err(Decline::NoOwnerNode))),
+            );
+        };
+        // Each group asks the context its own question.
+        let leaf_context = if !open_leaf {
+            None
+        } else if context == 0 {
+            Some(Err(Decline::NoEdgeIntoFunction))
+        } else if context & (OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED) != 0 {
+            Some(Err(Decline::LeafBitPresent))
+        } else if open_world_unowned_only(context, node) {
+            Some(Err(Decline::OpenWorldExport))
+        } else {
+            Some(Ok(()))
+        };
+        let effect_context = if !open_effect {
+            None
+        } else if context == 0 {
+            Some(Err(Decline::NoEdgeIntoFunction))
+        } else if context & !(OWNER_CONTEXT_OWNED | OWNER_CONTEXT_LEAF | OWNER_CONTEXT_LEAF_OWNED)
+            != 0
+        {
+            Some(Err(Decline::UnownedEntry))
+        } else {
+            Some(Ok(()))
+        };
+        // The context says no entry is the forbidden one; it is every entry only where no layer around the site is entered by a route the graph has no
+        // edge for.
+        let entry_is_open = (matches!(leaf_context, Some(Ok(())))
+            || matches!(effect_context, Some(Ok(()))))
+            && entry_open();
+        let close =
+            |answer: Option<Result<(), Decline>>, silence: SiteSilence, kind: PremiseKind| {
+                answer.map(|answer| match answer {
+                    Err(reason) => Err(reason),
+                    Ok(()) if entry_is_open => Err(Decline::EntryByReference),
+                    Ok(()) => Ok((silence, kind, function.span)),
+                })
+            };
+        (
+            leaf_answer.or(close(
+                leaf_context,
+                SiteSilence::LeafOwnerAbsent,
+                PremiseKind::OwnerContextNoLeaf,
+            )),
+            effect_answer.or(close(
+                effect_context,
+                SiteSilence::OwnerCurrent,
+                PremiseKind::OwnerContextCurrent,
+            )),
+        )
+    }
+}
+
+/// ADR 1031: the answer of each open group for a getter that runs at `reads` (the prop's reads in the component the element renders, each on the component's own
+/// stack under its render's owner): each group is asked at each read as for code written there, and ends only where every read that may run ends it, on the premises
+/// of all of them (each in the file it is about). A read ADR 0458's query proves unreached runs nothing; a getter no read runs keeps `getter-runs-where-read` (no
+/// placement for code that never runs, ADR 1021's ruling).
+fn answer_at_reads<'a>(
+    question: &Question<'_, '_, 'a>,
+    reads: &[(&'a solid_facts::FileFacts, Span)],
+    leaf: bool,
+    effect: bool,
+    allowed_by_path: &mut std::collections::HashMap<String, Option<Vec<Span>>>,
+) -> Answers {
+    let unplaced = || Answers {
+        leaf: leaf.then_some(Err(Decline::GetterRunsWhereRead)),
+        effect: effect.then_some(Err(Decline::GetterRunsWhereRead)),
+    };
+    let mut leaf_outcomes = Vec::new();
+    let mut effect_outcomes = Vec::new();
+    for (read_file, read) in reads {
+        if matches!(
+            question.reach.site(read_file, *read),
+            crate::execution_role::Reach::Unreached(_)
+        ) {
+            continue;
+        }
+        let Some(pid) = question.pids.get(read_file.path.as_str()).copied() else {
+            return unplaced();
+        };
+        let allowed = allowed_by_path
+            .entry(read_file.path.to_string())
+            .or_default();
+        let (leaf_answer, effect_answer) =
+            question.answer(read_file, pid, *read, *read, leaf, effect, allowed);
+        let path = read_file.path.shared();
+        leaf_outcomes.extend(leaf_answer.map(|outcome| (outcome, path.clone())));
+        effect_outcomes.extend(effect_answer.map(|outcome| (outcome, path.clone())));
+    }
+    if leaf && leaf_outcomes.is_empty() || effect && effect_outcomes.is_empty() {
+        return unplaced();
+    }
+    // A decline at one read declines the group (the first reason met); every read's silence ends it, on the premises of all of them.
+    let fold = |outcomes: Vec<(Outcome, std::sync::Arc<str>)>| {
+        let mut premises = Vec::new();
+        let mut silence = None;
+        for (outcome, path) in outcomes {
+            let (each, kind, at) = outcome?;
+            silence.get_or_insert(each);
+            premises.push(Premise::in_file(kind, at, path));
+        }
+        silence
+            .map(|silence| (silence, premises))
+            .ok_or(Decline::GetterRunsWhereRead)
+    };
+    Answers {
+        leaf: leaf.then(|| fold(leaf_outcomes)),
+        effect: effect.then(|| fold(effect_outcomes)),
     }
 }

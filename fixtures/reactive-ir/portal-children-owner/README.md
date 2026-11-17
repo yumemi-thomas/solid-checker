@@ -7,6 +7,6 @@
 | `<Portal><div>{text()}</div></Portal>` (`Tip`) | silent | the tracked `{text()}` render effect is created in the portal's memo |
 | the same through an alias (`import { Portal as Overlay }`) and a namespace (`<Web.Portal>`) | silent | the tag resolves to the declaration (every declaration in `@solidjs/web`, named `Portal`), not to the spelling |
 | `<Portal mount={createMemo(() => document.body)()}>` (`Mounted`) | SC3001 and SC6002 uncertifiable (`getter-runs-where-read`) | `mount` is no such slot: the render effect's apply reads it again under `untrack(mount)` (`:2402`), on an apply's stack |
-| a project component named `Portal` (`Shadowed.tsx`) | the rows it had | its children are a getter its own render reads; a name proves nothing |
+| a project component named `Portal` (`Shadowed.tsx`) | silent (ADR 1031; the rows it had before) | a name proves nothing, but its children are a getter it reads in an intrinsic element's JSX, under its render's owner |
 
 `node_modules/@solidjs/web/index.d.ts` carries `Portal` byte-faithful from `@solidjs/web@2.0.0-rc.21` `types/index.d.ts:70-72`. The program is closed (`.solid-checker/runtime.json`).

@@ -79,7 +79,7 @@ function ByCall() {
   return <Slot slot={createMemo(() => 1)} />;
 }
 
-// A component that reads its children in its body: the getter runs under the owner its own render sets. Nothing the checker reads proves where the read is, so this is a row too.
+// A component that reads its children in its JSX: the getter runs under the owner its own render sets, and ADR 1031 answers it there (silent).
 function InBody(props: { children?: unknown }) {
   return <p>{props.children}</p>;
 }

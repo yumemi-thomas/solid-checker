@@ -2728,6 +2728,188 @@
     "open": "reactive-ir/impostor-receivers"
    },
    "note": "`Lies`' call `(t as unknown as number[]).forEach(cb)` dispatches to the closed literal's own `forEach`: no impostor may run the callback, so the census row at the call is gone. `Held` (an alias) and `Union` keep theirs."
+  },
+  {
+   "fixture": "reactive-ir/async-creation-pass",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 4,
+   "to": 2,
+   "adr": "ADR 1031",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/jsx_sites.rs::getter_read_sites",
+   "fixtures": {
+    "proved": "reactive-ir/async-creation-pass",
+    "open": "reactive-ir/owner-call-getter-placed"
+   },
+   "note": "A getter of a project component placed at its reads (ADR 1031): `LookalikeReader` and `PanelReader` are children of a project wrapper that reads them in intrinsic JSX; the owner-call questions answer it there as for code written at the read."
+  },
+  {
+   "fixture": "reactive-ir/async-creation-pass",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 4,
+   "to": 2,
+   "adr": "ADR 1031",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/jsx_sites.rs::getter_read_sites",
+   "fixtures": {
+    "proved": "reactive-ir/async-creation-pass",
+    "open": "reactive-ir/owner-call-getter-placed"
+   },
+   "note": "A getter of a project component placed at its reads (ADR 1031): `LookalikeReader` and `PanelReader` are children of a project wrapper that reads them in intrinsic JSX; the owner-call questions answer it there as for code written at the read."
+  },
+  {
+   "fixture": "reactive-ir/dead-literal-rows",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 1031",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/jsx_sites.rs::getter_read_sites",
+   "fixtures": {
+    "proved": "reactive-ir/dead-literal-rows",
+    "open": "reactive-ir/owner-call-getter-placed"
+   },
+   "note": "A getter of a project component placed at its reads (ADR 1031): a project component named `Show` reads its children in a `<div>`; the owner-call questions answer it there as for code written at the read."
+  },
+  {
+   "fixture": "reactive-ir/dead-literal-rows",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 1031",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/jsx_sites.rs::getter_read_sites",
+   "fixtures": {
+    "proved": "reactive-ir/dead-literal-rows",
+    "open": "reactive-ir/owner-call-getter-placed"
+   },
+   "note": "A getter of a project component placed at its reads (ADR 1031): a project component named `Show` reads its children in a `<div>`; the owner-call questions answer it there as for code written at the read."
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-causes",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 58,
+   "to": 57,
+   "adr": "ADR 1031",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/jsx_sites.rs::getter_read_sites",
+   "fixtures": {
+    "proved": "reactive-ir/flush-universe-package-hand-off-causes",
+    "open": "reactive-ir/owner-call-getter-placed"
+   },
+   "note": "A getter of a project component placed at its reads (ADR 1031): `Holder` reads its children in a `<div>`; it is rendered in a timer callback, where neither an effect apply nor a leaf owner is on the stack; the owner-call questions answer it there as for code written at the read."
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-causes",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 14,
+   "to": 13,
+   "adr": "ADR 1031",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/jsx_sites.rs::getter_read_sites",
+   "fixtures": {
+    "proved": "reactive-ir/flush-universe-package-hand-off-causes",
+    "open": "reactive-ir/owner-call-getter-placed"
+   },
+   "note": "A getter of a project component placed at its reads (ADR 1031): `Holder` reads its children in a `<div>`; it is rendered in a timer callback, where neither an effect apply nor a leaf owner is on the stack; the owner-call questions answer it there as for code written at the read."
+  },
+  {
+   "fixture": "reactive-ir/loading-cover-children",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 7,
+   "to": 3,
+   "adr": "ADR 1031",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/jsx_sites.rs::getter_read_sites",
+   "fixtures": {
+    "proved": "reactive-ir/loading-cover-children",
+    "open": "reactive-ir/owner-call-getter-placed"
+   },
+   "note": "A getter of a project component placed at its reads (ADR 1031): project wrappers read their children inside `<Loading>` or intrinsic JSX; the owner-call questions answer it there as for code written at the read."
+  },
+  {
+   "fixture": "reactive-ir/loading-cover-children",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 7,
+   "to": 3,
+   "adr": "ADR 1031",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/jsx_sites.rs::getter_read_sites",
+   "fixtures": {
+    "proved": "reactive-ir/loading-cover-children",
+    "open": "reactive-ir/owner-call-getter-placed"
+   },
+   "note": "A getter of a project component placed at its reads (ADR 1031): project wrappers read their children inside `<Loading>` or intrinsic JSX; the owner-call questions answer it there as for code written at the read."
+  },
+  {
+   "fixture": "reactive-ir/owner-call-jsx-getter",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 10,
+   "to": 9,
+   "adr": "ADR 1031",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/jsx_sites.rs::getter_read_sites",
+   "fixtures": {
+    "proved": "reactive-ir/owner-call-jsx-getter",
+    "open": "reactive-ir/owner-call-getter-placed"
+   },
+   "note": "A getter of a project component placed at its reads (ADR 1031): `InBody` reads its children in `<p>` (a named cost before); the owner-call questions answer it there as for code written at the read."
+  },
+  {
+   "fixture": "reactive-ir/owner-call-jsx-getter",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 10,
+   "to": 9,
+   "adr": "ADR 1031",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/jsx_sites.rs::getter_read_sites",
+   "fixtures": {
+    "proved": "reactive-ir/owner-call-jsx-getter",
+    "open": "reactive-ir/owner-call-getter-placed"
+   },
+   "note": "A getter of a project component placed at its reads (ADR 1031): `InBody` reads its children in `<p>` (a named cost before); the owner-call questions answer it there as for code written at the read."
+  },
+  {
+   "fixture": "reactive-ir/portal-children-owner",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 1031",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/jsx_sites.rs::getter_read_sites",
+   "fixtures": {
+    "proved": "reactive-ir/portal-children-owner",
+    "open": "reactive-ir/owner-call-getter-placed"
+   },
+   "note": "A getter of a project component placed at its reads (ADR 1031): a project `Portal` reads its children in `<section>` (a named cost before); the owner-call questions answer it there as for code written at the read."
+  },
+  {
+   "fixture": "reactive-ir/portal-children-owner",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 1031",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/jsx_sites.rs::getter_read_sites",
+   "fixtures": {
+    "proved": "reactive-ir/portal-children-owner",
+    "open": "reactive-ir/owner-call-getter-placed"
+   },
+   "note": "A getter of a project component placed at its reads (ADR 1031): a project `Portal` reads its children in `<section>` (a named cost before); the owner-call questions answer it there as for code written at the read."
+  },
+  {
+   "fixture": "reactive-ir/stored-throw-wrapper-boundary",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 12,
+   "to": 5,
+   "adr": "ADR 1031",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/jsx_sites.rs::getter_read_sites",
+   "fixtures": {
+    "proved": "reactive-ir/stored-throw-wrapper-boundary",
+    "open": "reactive-ir/owner-call-getter-placed"
+   },
+   "note": "A getter of a project component placed at its reads (ADR 1031): project wrappers read their children inside an in-place renderer or intrinsic JSX; the owner-call questions answer it there as for code written at the read."
+  },
+  {
+   "fixture": "reactive-ir/stored-throw-wrapper-boundary",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 12,
+   "to": 5,
+   "adr": "ADR 1031",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/jsx_sites.rs::getter_read_sites",
+   "fixtures": {
+    "proved": "reactive-ir/stored-throw-wrapper-boundary",
+    "open": "reactive-ir/owner-call-getter-placed"
+   },
+   "note": "A getter of a project component placed at its reads (ADR 1031): project wrappers read their children inside an in-place renderer or intrinsic JSX; the owner-call questions answer it there as for code written at the read."
   }
  ],
  "renames": []
