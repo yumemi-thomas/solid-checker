@@ -24846,7 +24846,7 @@
   "ids": [
    "lg-reactive-write-in-owned-scope-tbl-nodelist-foreach-zero-signal-direct-none"
   ],
-  "rediscovered": "main unexecuted (5 programs of the context, Chrome 5 of 5 never ran the site), `make fuzz-focus` fails (ADR 1018); this build uncertifiable, focus passes with the `tbl-nodelistof` rows ledgered (`known-false-positive`, ADR 1033)"
+  "rediscovered": "main unexecuted (5 programs of the context, Chrome 5 of 5 never ran the site), `make fuzz-focus` fails (ADR 1018); this build uncertifiable, focus passes with the `tbl-nodelistof` rows ledgered `explained` (a real page may hold such elements: V is right, ADR 1033)"
  },
  {
   "finding": "a false positive: an action call in a callback handed to `forEach` of the `childNodes` of an element `document.createElement(\"i\")` makes there (no child, so the callback never runs) was a violation, Chrome silent",
@@ -24857,7 +24857,7 @@
   "ids": [
    "lg-action-called-in-owned-scope-tbl-nodelist-foreach-zero-x-direct-none"
   ],
-  "rediscovered": "main unexecuted (5 programs of the context, Chrome 5 of 5 never ran the site), `make fuzz-focus` fails (ADR 1018); this build uncertifiable, focus passes with the `tbl-nodelistof` rows ledgered (`known-false-positive`, ADR 1033)"
+  "rediscovered": "main unexecuted (5 programs of the context, Chrome 5 of 5 never ran the site), `make fuzz-focus` fails (ADR 1018); this build uncertifiable, focus passes with the `tbl-nodelistof` rows ledgered `explained` (a real page may hold such elements: V is right, ADR 1033)"
  },
  {
   "finding": "a false positive: `onFlush` in a callback handed to `forEach` of the `childNodes` of an element `document.createElement(\"i\")` makes there (no child, so the callback never runs) was a violation, Chrome silent",
@@ -24868,6 +24868,6 @@
   "ids": [
    "lg-on-flush-in-owned-scope-tbl-nodelist-foreach-zero-x-direct-none"
   ],
-  "rediscovered": "main unexecuted (5 programs of the context, Chrome 5 of 5 never ran the site), `make fuzz-focus` fails (ADR 1018); this build uncertifiable, focus passes with the `tbl-nodelistof` rows ledgered (`known-false-positive`, ADR 1033)"
+  "rediscovered": "main unexecuted (5 programs of the context, Chrome 5 of 5 never ran the site), `make fuzz-focus` fails (ADR 1018); this build uncertifiable, focus passes with the `tbl-nodelistof` rows ledgered `explained` (a real page may hold such elements: V is right, ADR 1033)"
  }
 ]

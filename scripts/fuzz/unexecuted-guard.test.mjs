@@ -50,7 +50,7 @@ describe("the ledger", () => {
     expect(UNEXECUTED_KNOWN.entries.length).toBeGreaterThan(0);
     for (const entry of UNEXECUTED_KNOWN.entries) {
       expect(entry.grid).toMatch(/^lg-/);
-      expect(["explained", "pending-fix", "known-false-positive"]).toContain(entry.kind);
+      expect(["explained", "pending-fix"]).toContain(entry.kind);
       expect(() => new RegExp(entry.idRegex)).not.toThrow();
       expect(entry.adr).toMatch(/^ADR \d{4}$/);
       expect(entry.why.length).toBeGreaterThan(20);
@@ -62,13 +62,6 @@ describe("the ledger", () => {
     const entry1018 = decisions.slice(decisions.indexOf('<a id="adr-1018"></a>'));
     expect(decisions).toContain('<a id="adr-1018"></a>');
     for (const entry of UNEXECUTED_KNOWN.entries.filter((e) => e.kind === "pending-fix")) expect(entry1018.slice(0, 4000)).toContain(entry.adr.replace("ADR ", ""));
-  });
-
-  it("a known-false-positive entry names an ADR of docs/decisions.md that says why the site is not proved dead", () => {
-    for (const entry of UNEXECUTED_KNOWN.entries.filter((e) => e.kind === "known-false-positive")) {
-      const number = entry.adr.replace("ADR ", "");
-      expect(decisions).toContain(`<a id="adr-${number}"></a>`);
-    }
   });
 
   it("the seed holds the Chrome-confirmed groups of the full audit at 78ddeb849 whose fix has not landed", () => {

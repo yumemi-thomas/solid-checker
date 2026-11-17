@@ -29,7 +29,7 @@ export function FreshQueryFlush() {
 
 // ---- May run: today's reading stays (a violation) ----
 
-// The document may hold any element: what it holds is not read.
+// A real page may hold such elements: the site may run (V is right).
 export function DocumentQuery() {
   const [, setW] = createSignal(0);
   document.querySelectorAll("sc-no-such-tag").forEach(() => {

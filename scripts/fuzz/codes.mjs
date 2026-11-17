@@ -318,8 +318,7 @@ export const rowProblem = (row, { unexecutedKnown = UNEXECUTED_KNOWN } = {}) => 
 
 /**
  * ADR 1018: the ledger of legal rows whose violation is at a site no run reaches and a person has seen (scripts/fuzz/unexecuted-known.json:
- * `explained`, `pending-fix` or, ADR 1033, `known-false-positive` (a false positive no exact fact can rule out, its ADR saying why), each naming a grid, an id
- * pattern, an ADR and a reason).
+ * `explained` or `pending-fix`, each naming a grid, an id pattern, an ADR and a reason).
  */
 export const UNEXECUTED_KNOWN = JSON.parse(readFileSync(new URL("./unexecuted-known.json", import.meta.url), "utf8"));
 
