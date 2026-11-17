@@ -4,14 +4,6 @@
   {
    "grid": "lg-recall",
    "kind": "pending-fix",
-   "item": "gate-throw",
-   "idRegex": "^lg-[a-z-]+-gate-throw-",
-   "adr": "ADR 1010",
-   "why": "A write, action or onFlush behind a gate a default parameter throws before: the site never runs; the checker reports a violation there (5,852 rows: REACTIVE_WRITE_IN_OWNED_SCOPE, STORE_WRITE_OUTSIDE_SETTER, ACTION_CALLED_IN_OWNED_SCOPE, ON_FLUSH_IN_OWNED_SCOPE)."
-  },
-  {
-   "grid": "lg-recall",
-   "kind": "pending-fix",
    "item": "apply-void-value",
    "idRegex": "^lg-[a-z-]+-apply-void-value-(row|untrack)-",
    "adr": "ADR 1020",
