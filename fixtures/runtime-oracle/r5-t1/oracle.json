@@ -1,3 +1,11 @@
 {
-  "note": "r5 reviewer: t1. Runtime adaptation: mount the original component with populated signal-backed props so its reactive reads and control-flow branches execute. Static-only row investigation: data() throws PENDING_ASYNC_UNTRACKED_READ before execution reaches the following props destructure. The earlier read is covered; the no-destructure row is an unreachable-during-this-run site, not runtime evidence of a false positive."
+  "note": "r5 reviewer: t1. Runtime adaptation: mount the original component with populated signal-backed props so its reactive reads and control-flow branches execute. Static-only row investigation: data() throws PENDING_ASYNC_UNTRACKED_READ before execution reaches the following props destructure. The earlier read is covered; the no-destructure row is an unreachable-during-this-run site, not runtime evidence of a false positive.",
+  "open": [
+    {
+      "finding": "no-destructure App.tsx:9",
+      "kind": "unreached",
+      "reason": "data() throws PENDING_ASYNC_UNTRACKED_READ before the run reaches the destructure (documented in the note)",
+      "owner": "Mac 20"
+    }
+  ]
 }

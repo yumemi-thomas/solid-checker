@@ -7,5 +7,13 @@
       "text": "1",
       "id": "runtime-observation-0"
     }
+  ],
+  "open": [
+    {
+      "finding": "no-store-mutation-outside-setter App.tsx:16",
+      "kind": "no-diagnostic",
+      "reason": "rc.13+ drops the write silently, a real defect with no dev diagnostic (documented in the note)",
+      "owner": "Mac 20"
+    }
   ]
 }

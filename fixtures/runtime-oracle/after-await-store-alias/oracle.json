@@ -1,1 +1,11 @@
-{"note": "slice 9B follow-up (ADR 0976), S4 of the review of #233: a store value reached through a module-scope alias, a destructuring, an element of a store array, a function's return, a cell of a literal and an alias made before the await, and a props alias, read after an await; Chrome raises UNTRACKED_READ_AFTER_AWAIT at the member read and each keeps SC1002's uncertifiable row (covered-uncertifiable); the control reads a number after the await and gets no row"}
+{
+  "note": "slice 9B follow-up (ADR 0976), S4 of the review of #233: a store value reached through a module-scope alias, a destructuring, an element of a store array, a function's return, a cell of a literal and an alias made before the await, and a props alias, read after an await; Chrome raises UNTRACKED_READ_AFTER_AWAIT at the member read and each keeps SC1002's uncertifiable row (covered-uncertifiable); the control reads a number after the await and gets no row",
+  "open": [
+    {
+      "finding": "no-destructure App.tsx:13",
+      "kind": "no-diagnostic",
+      "reason": "a module-scope destructure of a store reads once and loses reactivity; rc.21 warns only under an owner",
+      "owner": "Mac 20"
+    }
+  ]
+}

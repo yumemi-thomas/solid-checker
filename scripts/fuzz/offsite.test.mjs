@@ -7,6 +7,7 @@ import { rowProblem } from "./codes.mjs";
 import { readGrid } from "./focus.mjs";
 import { judgeLegalProgram, legalCells } from "./legal.mjs";
 import { buildMatrix, cellList, censusCells, censusShapes, gate, generateShape, judge } from "./matrix.mjs";
+import { stackedSplit } from "./stacked.mjs";
 
 // A program with its site at line 10 and a decoy read at line 20, each with a counter (`hit`), and a glue call at line 30.
 const built = {
@@ -172,14 +173,15 @@ describe("halted claims (coordinator's ruling, Part 17; ADR 0900)", () => {
 });
 
 describe("the misuse grid's judge, off the site", () => {
-  it("a stacked violation is a stacked-claim for a proved pair and a false positive for any other (stacked-pairs.json)", () => {
+  it("a stacked violation is a false positive: no pair of a first throw is tolerated (ADR 1052, 1057); a proved pair's row is a stacked claim (stacked-pairs.json)", () => {
     const halted = run([event("ACTION_CALLED_IN_OWNED_SCOPE", 20)], undefined, { errors: [{ kind: "page-error", message: "boom", positions: [] }] });
-    const proved = judge({ code: "STRICT_READ_UNTRACKED", site, typecheck: { ok: true }, checker: { ok: true, findings: [finding("flush-in-action", 20)] }, runtime: halted, built });
-    expect(proved.outcome).toBe("stacked-claim");
-    expect(proved.detail).toMatchObject({ primary: "not-fired", pairs: ["ACTION_CALLED_IN_OWNED_SCOPE|flush-in-action"], at: [20] });
-    const unproved = judge({ code: "STRICT_READ_UNTRACKED", site, typecheck: { ok: true }, checker: { ok: true, findings: [finding("flush-in-effect-callback", 20)] }, runtime: halted, built });
-    expect(unproved.outcome).toBe("false-positive");
-    expect(unproved.detail).toMatchObject({ primary: "not-fired", rules: ["flush-in-effect-callback"], at: [20] });
+    const stacked = judge({ code: "STRICT_READ_UNTRACKED", site, typecheck: { ok: true }, checker: { ok: true, findings: [finding("flush-in-action", 20)] }, runtime: halted, built });
+    expect(stacked.outcome).toBe("false-positive");
+    expect(stacked.detail).toMatchObject({ primary: "not-fired", rules: ["flush-in-action"], at: [20] });
+    // The table's branch, on a synthetic pair: a proved pair keeps its row a stacked claim.
+    const row = { finding: "synthetic-rule@20", verdict: "stacked", first: "SYNTHETIC_FIRST", why: "disturbed" };
+    expect(stackedSplit([row], { "SYNTHETIC_FIRST|synthetic-rule": { patterns: [] } }).stacked).toEqual([row]);
+    expect(stackedSplit([row], {}).wrong).toEqual([row]);
   });
   const strictAtSite = { ok: true, findings: [finding("strict-read-untracked", 10), finding("strict-read-untracked", 20)] };
   it("an agree with a contradicted stray violation is a false positive, and keeps the site's own outcome", () => {
