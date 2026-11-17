@@ -6,9 +6,9 @@
    "kind": "unplaced",
    "item": "pk-lazy",
    "idRegex": "-pk-lazy",
-   "adr": "ADR 1073",
+   "adr": "ADR 1076",
    "work": "brief 09, the package half",
-   "why": "A throw in a lazily loaded package's module: Chrome reports the code and its stack holds no App frame, so the oracle cannot place it at a site (placed: unplaced, ADR 0815). The checker's rows are uncertifiable at the site (package-behavior-unavailable, leaf-owner-forbidden-call); nothing is a false clean. ADR 1073: the lean ids hold the phantom-manifest twins (`-phantom`, ADR 0981) too; the lean list was recorded at 356c97405, before that axis existed, and the lean grid now generates the same set as the full one.",
+   "why": "A throw in a lazily loaded package's module: Chrome reports the code and its stack holds no App frame, so the oracle cannot place it at a site (placed: unplaced, ADR 0815). The checker's rows are uncertifiable at the site (package-behavior-unavailable, leaf-owner-forbidden-call); nothing is a false clean. ADR 1076: the lean ids hold the phantom-manifest twins (`-phantom`, ADR 0981) too; the lean list was recorded at 356c97405, before that axis existed, and the lean grid now generates the same set as the full one.",
    "ids": {
     "lean": [
      "mx-action-called-in-owned-scope-body-x-direct-none-pk-lazy",
@@ -673,9 +673,9 @@
    "kind": "unplaced",
    "item": "pk-call-shapes",
    "idRegex": "-pk-(?!lazy)",
-   "adr": "ADR 1073",
+   "adr": "ADR 1076",
    "work": "docs/open-work.md: unplaced package-call shapes in deferred store-write contexts",
-   "why": "The package-call shapes of the recall grid (dotcall, tagged, reflect, getter, call, call-inner, new, callback, with their own and phantom twins) in the deferred contexts of STORE_WRITE_OUTSIDE_SETTER end `unplaced`: the oracle reports the code and cannot place it at a site (placed: unplaced, ADR 0815). The CAUSE IS NOT MEASURED: it is its own item, not the lazy-package ruling's (brief 09, the package half, covers pk-lazy only). Counted exactly so that a new shape stands out. ADR 1073: the lean ids hold the phantom-manifest twins (`-phantom`, ADR 0981) too; the lean list was recorded at 356c97405, before that axis existed, and the lean grid now generates the same set as the full one.",
+   "why": "The package-call shapes of the recall grid (dotcall, tagged, reflect, getter, call, call-inner, new, callback, with their own and phantom twins) in the deferred contexts of STORE_WRITE_OUTSIDE_SETTER end `unplaced`: the oracle reports the code and cannot place it at a site (placed: unplaced, ADR 0815). The CAUSE IS NOT MEASURED: it is its own item, not the lazy-package ruling's (brief 09, the package half, covers pk-lazy only). Counted exactly so that a new shape stands out. ADR 1076: the lean ids hold the phantom-manifest twins (`-phantom`, ADR 0981) too; the lean list was recorded at 356c97405, before that axis existed, and the lean grid now generates the same set as the full one.",
    "ids": {
     "lean": [
      "mx-store-write-outside-setter-handler-deferred-micro-direct-none-pk-call",
