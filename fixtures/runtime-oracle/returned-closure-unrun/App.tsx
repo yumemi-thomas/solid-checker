@@ -47,15 +47,30 @@ export function ReturnedFromMemo() {
   return <div />;
 }
 
-// Known miss (uncertifiable, Chrome reports): the apply calls the returned closure. Whether a hand-on value is called is not read.
-export function ReturnedAndCalled() {
+// Violations: the apply calls the value the compute returned (#271's smoke census: MISSING_EFFECT_FN, Chrome reports it), so the
+// closure runs and the effect created there without an effect function is reported.
+export function AppliedVoidCall() {
   createEffect(
     () => () => {
-      createMemo(async () => 5, { sync: true });
+      createEffect(() => 1, undefined as unknown as () => void);
     },
     (v) => {
-      v();
+      void v();
     },
   );
+  return <div />;
+}
+
+export function AppliedVoidCallUntrack() {
+  untrack(() => {
+    createEffect(
+      () => () => {
+        createEffect(() => 1, undefined as unknown as () => void);
+      },
+      (v) => {
+        void v();
+      },
+    );
+  });
   return <div />;
 }

@@ -1257,8 +1257,79 @@ fn returned_by_primitive_callback(
                     .is_some_and(|primitive| {
                         lookup.dialect.callback_return_is_value(primitive, index)
                     })
+                && returned_value_never_called(file, call, index)
         })
     })
+}
+
+/// ADR 1020 (narrowed after #271's smoke census): the value the callback at `index` of `call` returns is provably never called. It
+/// goes to the next argument when that is a function literal (an effect's apply): its first parameter is absent, or every reference of
+/// it is the operand of `void` and not called (`(v) => { void v; }`). Otherwise it is the call's own result (a memo's value): the call's
+/// result is discarded, or it is a `const` whose every reference is called once with no argument and that call's result goes only to
+/// `void` or `typeof` (`typeof run()`). Anything else (`v()`, `void v()`, `m()()`, a value handed on) may call it.
+fn returned_value_never_called(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+) -> bool {
+    let ast = &file.ast;
+    // The text of `file` just before `span` (whitespace dropped) ends with a `void` or `typeof` keyword, and just after it is no call,
+    // member, index or optional chain.
+    let only_read_by_operator = |span: Span| {
+        let source = file.source.as_bytes();
+        let before = file.source[..span.start as usize].trim_end();
+        let keyword = ["void", "typeof"].iter().any(|word| {
+            before.ends_with(word)
+                && before[..before.len() - word.len()]
+                    .chars()
+                    .next_back()
+                    .is_none_or(|c| !(c.is_ascii_alphanumeric() || c == '_' || c == '$'))
+        });
+        let after = source[span.end as usize..]
+            .iter()
+            .find(|byte| !byte.is_ascii_whitespace())
+            .copied();
+        keyword && !matches!(after, Some(b'(' | b'.' | b'[' | b'?' | b'`'))
+    };
+    if let Some(apply) = call.arguments.get(index + 1) {
+        let Some(apply) = ast.function_at(ast.peel_ts_sugar_span(apply.span)) else {
+            return false;
+        };
+        let Some(parameter) = apply.parameters.first() else {
+            return true;
+        };
+        if parameter.shape != solid_facts::ast::BindingShape::Identifier {
+            return false;
+        }
+        let Some(name) = parameter.names.first() else {
+            return false;
+        };
+        return ast
+            .reference_identifiers_to(name.span)
+            .all(|reference| only_read_by_operator(reference.span));
+    }
+    if call.result_discarded {
+        return true;
+    }
+    let Some(binding) = ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding.names.len() == 1
+            && binding
+                .initializer
+                .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == call.span)
+    }) else {
+        return false;
+    };
+    ast.reference_identifiers_to(binding.names[0].span)
+        .all(|reference| {
+            ast.calls.iter().any(|read| {
+                !read.construct
+                    && read.arguments.is_empty()
+                    && ast.peel_ts_sugar_span(read.callee) == reference.span
+                    && only_read_by_operator(read.span)
+            })
+        })
 }
 
 fn returned_by_discarded_iife(file: &solid_facts::FileFacts, value: Span) -> bool {
