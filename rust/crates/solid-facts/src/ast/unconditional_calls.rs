@@ -381,6 +381,12 @@ fn evaluates_child_once(
     {
         return admitted;
     }
+    // ADR 1046: a statement of an entered case's consequent, no earlier one of which leaves (a `break` included).
+    if mode == Mode::AtLeastOnce
+        && let AstKind::SwitchCase(case) = nodes.kind(parent)
+    {
+        return statements_before_exit_free(scope, &case.consequent, child_span, throws_exit);
+    }
     match nodes.kind(parent) {
         AstKind::FunctionBody(body) => {
             statements_before_exit_free(scope, &body.statements, child_span, throws_exit)
@@ -483,12 +489,119 @@ fn evaluates_child_at_least_once(
         AstKind::ForStatement(statement) => {
             statement.init.as_ref().is_some_and(|init| is(init.span()))
                 || statement.test.as_ref().is_some_and(|test| is(test.span()))
-                || (is(statement.body.span()) && entered(statement.test.as_ref()))
+                || (is(statement.body.span())
+                    && (entered(statement.test.as_ref()) || counter_entered(statement)))
+        }
+        // ADR 1046: the discriminant is evaluated once; a case is entered when literals decide it the first equal one.
+        AstKind::SwitchStatement(statement) => {
+            is(statement.discriminant.span())
+                || statement
+                    .cases
+                    .iter()
+                    .position(|case| is(case.span))
+                    .is_some_and(|index| literal_switch_enters(statement, index))
         }
         AstKind::ForInStatement(statement) => is(statement.right.span()),
         AstKind::ForOfStatement(statement) => is(statement.right.span()),
         _ => return None,
     })
+}
+
+/// ADR 1046: a literal a switch or a counter loop compares: a number, a string or a boolean, through parentheses and
+/// TypeScript's wrappers (`1 as number`), a negated number included.
+#[derive(Clone, Debug, PartialEq)]
+enum Literal {
+    Number(f64),
+    String(String),
+    Boolean(bool),
+}
+
+fn literal(expression: &Expression<'_>) -> Option<Literal> {
+    match expression.get_inner_expression() {
+        Expression::NumericLiteral(number) => Some(Literal::Number(number.value)),
+        Expression::StringLiteral(string) => Some(Literal::String(string.value.to_string())),
+        Expression::BooleanLiteral(boolean) => Some(Literal::Boolean(boolean.value)),
+        Expression::UnaryExpression(unary)
+            if unary.operator == oxc_syntax::operator::UnaryOperator::UnaryNegation =>
+        {
+            match literal(&unary.argument)? {
+                Literal::Number(value) => Some(Literal::Number(-value)),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+/// ADR 1046: whether the case at `index` is the one a `switch` enters: its discriminant and every case test up to it are
+/// literals of one primitive type, none before it strictly equal to the discriminant, and its own test strictly equal. A
+/// `default` and a case reached by fall-through are not read.
+fn literal_switch_enters(statement: &oxc_ast::ast::SwitchStatement<'_>, index: usize) -> bool {
+    let Some(discriminant) = literal(&statement.discriminant) else {
+        return false;
+    };
+    let same_kind =
+        |other: &Literal| std::mem::discriminant(other) == std::mem::discriminant(&discriminant);
+    for (at, case) in statement.cases.iter().enumerate().take(index + 1) {
+        let Some(test) = case.test.as_ref().and_then(literal) else {
+            return false;
+        };
+        if !same_kind(&test) {
+            return false;
+        }
+        let equal = test == discriminant;
+        if at == index {
+            return equal;
+        }
+        if equal {
+            return false;
+        }
+    }
+    false
+}
+
+/// ADR 1046: whether a counter loop's first test passes: the initializer declares one binding (`let`, `const` or `var`)
+/// bound to a numeric literal, and the test compares that name (the loop's own binding: nothing runs between the
+/// initializer and the first test) with a numeric literal by `<`, `<=`, `>`, `>=`, `!=` or `!==`, true for those values.
+fn counter_entered(statement: &oxc_ast::ast::ForStatement<'_>) -> bool {
+    use oxc_ast::ast::{BindingPattern, ForStatementInit};
+    use oxc_syntax::operator::BinaryOperator;
+    let Some(ForStatementInit::VariableDeclaration(declaration)) = &statement.init else {
+        return false;
+    };
+    let [declarator] = declaration.declarations.as_slice() else {
+        return false;
+    };
+    let BindingPattern::BindingIdentifier(name) = &declarator.id else {
+        return false;
+    };
+    let Some(Literal::Number(start)) = declarator.init.as_ref().and_then(literal) else {
+        return false;
+    };
+    let Some(Expression::BinaryExpression(test)) = statement
+        .test
+        .as_ref()
+        .map(Expression::get_inner_expression)
+    else {
+        return false;
+    };
+    let Expression::Identifier(left) = test.left.get_inner_expression() else {
+        return false;
+    };
+    let Some(Literal::Number(bound)) = literal(&test.right) else {
+        return false;
+    };
+    if left.name != name.name || start.is_nan() || bound.is_nan() {
+        return false;
+    }
+    match test.operator {
+        BinaryOperator::LessThan => start < bound,
+        BinaryOperator::LessEqualThan => start <= bound,
+        BinaryOperator::GreaterThan => start > bound,
+        BinaryOperator::GreaterEqualThan => start >= bound,
+        BinaryOperator::Inequality | BinaryOperator::StrictInequality => start != bound,
+        _ => false,
+    }
 }
 
 /// Whether the statement at `child` in `statements` exists and no earlier one
