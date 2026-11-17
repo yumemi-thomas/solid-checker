@@ -575,10 +575,45 @@ fn yield_operand_plain(
     };
     matches!(text, "true" | "false" | "null")
         || (text == "undefined" && file.ast.reference_declaration(operand).is_none())
-        || text.parse::<f64>().is_ok()
+        // ADR 1047: a numeric literal, not a name `f64` also parses (`NaN`, `Infinity`, `inf`), which a binding may shadow.
+        || (!text.starts_with(|first: char| first.is_ascii_alphabetic() || first == '_' || first == '$')
+            && text.parse::<f64>().is_ok())
         || (text.len() >= 2
             && (text.starts_with('"') && text.ends_with('"')
                 || text.starts_with('\'') && text.ends_with('\'')))
+}
+
+/// ADR 1047: the `yield`s after which the code of their generator runs on the same stack, at once: a non-delegating
+/// `yield` of a plain value ([`yield_operand_plain`]: absent, a numeric or string literal, `true`, `false`, `null`, the
+/// global `undefined`), written directly in a non-async generator that an action steps ([`stepped_action_generator`]),
+/// on a dialect whose action resumes a step after such a value synchronously
+/// ([`solid_dialect::Dialect::action_step_resumes_after_plain_yield`]). Any other `yield` may hand out a thenable, and a
+/// generator nothing steps as an action may never be resumed.
+pub(crate) fn action_resuming_yields(
+    file: &solid_facts::FileFacts,
+    lookup: &SemanticLookup<'_>,
+) -> std::collections::HashSet<Span> {
+    file.ast
+        .yields
+        .iter()
+        .filter(|yielded| !yielded.delegate && yield_operand_plain(file, yielded))
+        .filter(|yielded| {
+            containing_ast_function(&file.ast, yielded.span).is_some_and(|generator| {
+                generator.generator
+                    && !generator.r#async
+                    && stepped_action_generator(file, generator, lookup).is_some_and(|(call, _)| {
+                        lookup
+                            .primitive_at_call(file, call.span)
+                            .is_some_and(|primitive| {
+                                lookup
+                                    .dialect
+                                    .action_step_resumes_after_plain_yield(primitive)
+                            })
+                    })
+            })
+        })
+        .map(|yielded| yielded.span)
+        .collect()
 }
 
 pub(super) fn callback_call_owner_edge(

@@ -37,7 +37,15 @@ pub fn unconditional_calls(
     function: Span,
     folds: &[HostConstantFold],
 ) -> Option<Vec<Span>> {
-    calls_on_every_completion(path, source, function, folds, false, false)
+    calls_on_every_completion(
+        path,
+        source,
+        function,
+        folds,
+        false,
+        false,
+        Mode::ExactlyOnce,
+    )
 }
 
 /// The calls a call of the function at `function` runs before it returns, on
@@ -54,7 +62,15 @@ pub fn synchronously_unconditional_calls(
     function: Span,
     folds: &[HostConstantFold],
 ) -> Option<Vec<Span>> {
-    calls_on_every_completion(path, source, function, folds, true, false)
+    calls_on_every_completion(
+        path,
+        source,
+        function,
+        folds,
+        true,
+        false,
+        Mode::AtLeastOnce,
+    )
 }
 
 /// ADR 0550: the calls the first `next()` of the generator at `function`
@@ -70,7 +86,7 @@ pub fn first_step_unconditional_calls(
     function: Span,
     folds: &[HostConstantFold],
 ) -> Option<Vec<Span>> {
-    calls_on_every_completion(path, source, function, folds, true, true)
+    calls_on_every_completion(path, source, function, folds, true, true, Mode::AtLeastOnce)
 }
 
 /// ADR 0714: in one parse, every call and `new` expression that runs exactly
@@ -84,6 +100,20 @@ pub fn first_step_unconditional_calls(
 /// `None` when the source does not parse.
 #[must_use]
 pub fn every_unconditional_call(path: &Path, source: &str) -> Option<HashSet<Span>> {
+    every_unconditional_call_resuming(path, source, &HashSet::new())
+}
+
+/// ADR 1047: [`every_unconditional_call`], except that a `yield` whose span is in `resuming` is no suspension: the caller
+/// proved that whatever steps its generator resumes it on the same stack, at once (an action's step after a `yield` of a
+/// value that is not a thenable). A call after such a `yield` is then judged as one before it would be; any other `yield`
+/// of the generator still ends its first step. `resuming` holds only `yield` expressions of generators; a span of
+/// anything else matches nothing.
+#[must_use]
+pub fn every_unconditional_call_resuming(
+    path: &Path,
+    source: &str,
+    resuming: &HashSet<Span>,
+) -> Option<HashSet<Span>> {
     if source.len() > 4 * 1024 * 1024 {
         return None;
     }
@@ -101,8 +131,12 @@ pub fn every_unconditional_call(path: &Path, source: &str) -> Option<HashSet<Spa
     let mut suspension = HashMap::<Option<NodeId>, u32>::new();
     for node in nodes.iter() {
         if matches!(node.kind(), AstKind::YieldExpression(_)) {
+            let span = node.kind().span();
+            if resuming.contains(&Span::new(span.start, span.end)) {
+                continue;
+            }
             let owner = innermost_function(nodes, node.id());
-            let start = node.kind().span().start;
+            let start = span.start;
             suspension
                 .entry(owner)
                 .and_modify(|first| *first = (*first).min(start))
@@ -124,7 +158,14 @@ pub fn every_unconditional_call(path: &Path, source: &str) -> Option<HashSet<Spa
                 .get(&owner)
                 .is_none_or(|suspension| span.end <= *suspension)
                 && match owner {
-                    Some(owner) => runs_on_every_completion(nodes, scope, node.id(), owner, true),
+                    Some(owner) => runs_on_every_completion(
+                        nodes,
+                        scope,
+                        node.id(),
+                        owner,
+                        true,
+                        Mode::AtLeastOnce,
+                    ),
                     None => runs_on_every_module_evaluation(nodes, scope, node.id()),
                 }
         })
@@ -160,6 +201,7 @@ fn runs_on_every_module_evaluation(
                     &program.body,
                     nodes.kind(child).span(),
                     true,
+                    Mode::AtLeastOnce,
                 );
             }
             AstKind::ExportNamedDeclaration(_)
@@ -172,7 +214,18 @@ fn runs_on_every_module_evaluation(
                         .value
                         .as_ref()
                         .is_some_and(|value| value.span() == nodes.kind(child).span()) => {}
-            _ if !evaluates_child_once(nodes, scope, parent, child, true) => return false,
+            _ if !evaluates_child_once(
+                nodes,
+                scope,
+                parent,
+                child,
+                true,
+                Mode::AtLeastOnce,
+                call,
+            ) =>
+            {
+                return false;
+            }
             _ => {}
         }
         child = parent;
@@ -186,6 +239,7 @@ fn calls_on_every_completion(
     folds: &[HostConstantFold],
     synchronous_prefix: bool,
     generator_first_step: bool,
+    mode: Mode,
 ) -> Option<Vec<Span>> {
     if source.len() > 4 * 1024 * 1024 {
         return None;
@@ -255,7 +309,14 @@ fn calls_on_every_completion(
                 && first_suspension.is_none_or(|suspension| span.end <= suspension)
         })
         .filter(|node| {
-            runs_on_every_completion(nodes, scope, node.id(), owner.id(), synchronous_prefix)
+            runs_on_every_completion(
+                nodes,
+                scope,
+                node.id(),
+                owner.id(),
+                synchronous_prefix,
+                mode,
+            )
         })
         .map(|node| {
             let span = node.kind().span();
@@ -291,6 +352,7 @@ fn runs_on_every_completion(
     call: NodeId,
     owner: NodeId,
     throws_exit: bool,
+    mode: Mode,
 ) -> bool {
     if let AstKind::CallExpression(expression) = nodes.kind(call)
         && expression.optional
@@ -307,31 +369,68 @@ fn runs_on_every_completion(
             return matches!(nodes.kind(child), AstKind::FunctionBody(_))
                 || matches!(nodes.kind(owner), AstKind::ArrowFunctionExpression(arrow) if arrow.expression);
         }
-        if !evaluates_child_once(nodes, scope, parent, child, throws_exit) {
+        if !evaluates_child_once(nodes, scope, parent, child, throws_exit, mode, call) {
             return false;
         }
         child = parent;
     }
 }
 
-/// Whether evaluating `parent` evaluates `child` exactly once, whatever the
-/// values involved.
+/// What a walk proves of a call it admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Mode {
+    /// It runs exactly once on every completion: [`unconditional_calls`], the producer's whitelist (ADR 0161).
+    ExactlyOnce,
+    /// ADR 1042: it runs at least once on every completion. Admits, besides, a label's body, a `try`'s finalizer and the
+    /// block of a `try` with no `catch`, a `do` body, the body of a `while` or `for` whose first test is decided true (or
+    /// a `for` with no test), and the parts a loop evaluates once before its body (a `for`'s initializer and first test, a
+    /// `while`'s first test, a `for … in`/`of` object). Every reader of this mode asks whether the call runs, never how
+    /// often: the owner graph's edges (ADR 0714), a leaf scope's reach (`cleanup.rs`), a rerun's read
+    /// (`write_roles.rs`, `read_context.rs`).
+    AtLeastOnce,
+}
+
+/// Whether evaluating `parent` evaluates `child` exactly once (or, under [`Mode::AtLeastOnce`], at least once), whatever
+/// the values involved.
 fn evaluates_child_once(
     nodes: &AstNodes<'_>,
     scope: Option<&HostConstantScope<'_, '_>>,
     parent: NodeId,
     child: NodeId,
     throws_exit: bool,
+    mode: Mode,
+    call: NodeId,
 ) -> bool {
     let child_span = nodes.kind(child).span();
     let is = |span: oxc_span::Span| span == child_span;
     let decided = |test: &Expression<'_>| scope.and_then(|scope| scope.truthiness(test));
+    // ADR 1048: the block of a `try` a `catch` guards, when nothing before the call can throw (a throw there would be caught,
+    // and the `try` complete without the call).
+    if mode == Mode::AtLeastOnce
+        && let AstKind::TryStatement(statement) = nodes.kind(parent)
+        && statement.handler.is_some()
+        && is(statement.block.span())
+    {
+        return scope.is_some_and(|scope| guarded_first_call(nodes, scope, &statement.block, call));
+    }
+    if mode == Mode::AtLeastOnce
+        && let Some(admitted) =
+            evaluates_child_at_least_once(nodes.kind(parent), child_span, &decided)
+    {
+        return admitted;
+    }
+    // ADR 1046: a statement of an entered case's consequent, no earlier one of which leaves (a `break` included).
+    if mode == Mode::AtLeastOnce
+        && let AstKind::SwitchCase(case) = nodes.kind(parent)
+    {
+        return statements_before_exit_free(scope, &case.consequent, child_span, throws_exit, mode);
+    }
     match nodes.kind(parent) {
         AstKind::FunctionBody(body) => {
-            statements_before_exit_free(scope, &body.statements, child_span, throws_exit)
+            statements_before_exit_free(scope, &body.statements, child_span, throws_exit, mode)
         }
         AstKind::BlockStatement(block) => {
-            statements_before_exit_free(scope, &block.body, child_span, throws_exit)
+            statements_before_exit_free(scope, &block.body, child_span, throws_exit, mode)
         }
         AstKind::IfStatement(statement) => {
             is(statement.test.span())
@@ -393,6 +492,227 @@ fn evaluates_child_once(
     }
 }
 
+/// ADR 1042: the parents [`Mode::AtLeastOnce`] reads beyond the exactly-once whitelist: `Some` for a loop, label or
+/// `try`, `None` for every other kind (the whitelist answers). An earlier exit inside the admitted statement (a `break`,
+/// `continue` or `return` before the call in a loop body, a label's block, a finalizer) is the enclosing block's to
+/// refuse, as for any block.
+fn evaluates_child_at_least_once(
+    parent: AstKind<'_>,
+    child: oxc_span::Span,
+    decided: &dyn Fn(&Expression<'_>) -> Option<(bool, bool)>,
+) -> Option<bool> {
+    let is = |span: oxc_span::Span| span == child;
+    // A first test a literal or a fold decides true: the body is entered.
+    let entered = |test: Option<&Expression<'_>>| {
+        test.is_none_or(|test| matches!(decided(test), Some((true, _))))
+    };
+    Some(match parent {
+        // A labelled statement evaluates its body once.
+        AstKind::LabeledStatement(statement) => is(statement.body.span()),
+        // The finalizer runs whenever the `try` is entered; the block runs as a plain block when nothing catches. The
+        // handler runs only on a throw, and a block a `catch` guards may complete without its later statements.
+        AstKind::TryStatement(statement) => {
+            statement
+                .finalizer
+                .as_ref()
+                .is_some_and(|finalizer| is(finalizer.span()))
+                || (statement.handler.is_none() && is(statement.block.span()))
+        }
+        // The body's first pass runs before any test.
+        AstKind::DoWhileStatement(statement) => is(statement.body.span()),
+        AstKind::WhileStatement(statement) => {
+            is(statement.test.span())
+                || (is(statement.body.span()) && entered(Some(&statement.test)))
+        }
+        AstKind::ForStatement(statement) => {
+            statement.init.as_ref().is_some_and(|init| is(init.span()))
+                || statement.test.as_ref().is_some_and(|test| is(test.span()))
+                || (is(statement.body.span())
+                    && (entered(statement.test.as_ref()) || counter_entered(statement)))
+        }
+        // ADR 1046: the discriminant is evaluated once; a case is entered when literals decide it the first equal one.
+        AstKind::SwitchStatement(statement) => {
+            is(statement.discriminant.span())
+                || statement
+                    .cases
+                    .iter()
+                    .position(|case| is(case.span))
+                    .is_some_and(|index| literal_switch_enters(statement, index))
+        }
+        AstKind::ForInStatement(statement) => is(statement.right.span()),
+        AstKind::ForOfStatement(statement) => is(statement.right.span()),
+        _ => return None,
+    })
+}
+
+/// ADR 1048: whether the call at `call` is the first statement of the guarded `block`, and nothing evaluated before it runs
+/// can throw: no optional chain, a callee that is a hoisted function declaration of the module nothing writes, or an import
+/// from a package (bound before the module's code runs), and arguments that are literals, functions or arrows. A throw there
+/// would be caught and the `try` would complete without the call; the callee's own throw is the call having run.
+fn guarded_first_call(
+    nodes: &AstNodes<'_>,
+    scope: &HostConstantScope<'_, '_>,
+    block: &oxc_ast::ast::BlockStatement<'_>,
+    call: NodeId,
+) -> bool {
+    use oxc_ast::ast::Argument;
+    let AstKind::CallExpression(expression) = nodes.kind(call) else {
+        return false;
+    };
+    let Some(Statement::ExpressionStatement(first)) = block.body.first() else {
+        return false;
+    };
+    if first.expression.get_inner_expression().span() != expression.span || expression.optional {
+        return false;
+    }
+    let Expression::Identifier(callee) = expression.callee.get_inner_expression() else {
+        return false;
+    };
+    let scoping = scope.scoping();
+    let Some(symbol) = callee
+        .reference_id
+        .get()
+        .and_then(|id| scoping.get_reference(id).symbol_id())
+    else {
+        return false;
+    };
+    if scoping
+        .get_resolved_references(symbol)
+        .any(|reference| reference.is_write())
+    {
+        return false;
+    }
+    let declaration = scoping.symbol_declaration(symbol);
+    let bound = match nodes.kind(declaration) {
+        AstKind::Function(function) => function.is_declaration(),
+        AstKind::ImportSpecifier(_) | AstKind::ImportDefaultSpecifier(_) => {
+            let mut at = declaration;
+            loop {
+                let parent = nodes.parent_id(at);
+                if parent == at {
+                    break false;
+                }
+                if let AstKind::ImportDeclaration(import) = nodes.kind(parent) {
+                    let source = import.source.value.as_str();
+                    break !source.starts_with('.') && !source.starts_with('/');
+                }
+                at = parent;
+            }
+        }
+        _ => false,
+    };
+    bound
+        && expression.arguments.iter().all(|argument| match argument {
+            Argument::SpreadElement(_) => false,
+            argument => matches!(
+                argument.to_expression().get_inner_expression(),
+                Expression::NumericLiteral(_)
+                    | Expression::StringLiteral(_)
+                    | Expression::BooleanLiteral(_)
+                    | Expression::NullLiteral(_)
+                    | Expression::ArrowFunctionExpression(_)
+                    | Expression::FunctionExpression(_)
+            ),
+        })
+}
+
+/// ADR 1046: a literal a switch or a counter loop compares: a number, a string or a boolean, through parentheses and
+/// TypeScript's wrappers (`1 as number`), a negated number included.
+#[derive(Clone, Debug, PartialEq)]
+enum Literal {
+    Number(f64),
+    String(String),
+    Boolean(bool),
+}
+
+fn literal(expression: &Expression<'_>) -> Option<Literal> {
+    match expression.get_inner_expression() {
+        Expression::NumericLiteral(number) => Some(Literal::Number(number.value)),
+        Expression::StringLiteral(string) => Some(Literal::String(string.value.to_string())),
+        Expression::BooleanLiteral(boolean) => Some(Literal::Boolean(boolean.value)),
+        Expression::UnaryExpression(unary)
+            if unary.operator == oxc_syntax::operator::UnaryOperator::UnaryNegation =>
+        {
+            match literal(&unary.argument)? {
+                Literal::Number(value) => Some(Literal::Number(-value)),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+/// ADR 1046: whether the case at `index` is the one a `switch` enters: its discriminant and every case test up to it are
+/// literals of one primitive type, none before it strictly equal to the discriminant, and its own test strictly equal. A
+/// `default` and a case reached by fall-through are not read.
+fn literal_switch_enters(statement: &oxc_ast::ast::SwitchStatement<'_>, index: usize) -> bool {
+    let Some(discriminant) = literal(&statement.discriminant) else {
+        return false;
+    };
+    let same_kind =
+        |other: &Literal| std::mem::discriminant(other) == std::mem::discriminant(&discriminant);
+    for (at, case) in statement.cases.iter().enumerate().take(index + 1) {
+        let Some(test) = case.test.as_ref().and_then(literal) else {
+            return false;
+        };
+        if !same_kind(&test) {
+            return false;
+        }
+        let equal = test == discriminant;
+        if at == index {
+            return equal;
+        }
+        if equal {
+            return false;
+        }
+    }
+    false
+}
+
+/// ADR 1046: whether a counter loop's first test passes: the initializer declares one binding (`let`, `const` or `var`)
+/// bound to a numeric literal, and the test compares that name (the loop's own binding: nothing runs between the
+/// initializer and the first test) with a numeric literal by `<`, `<=`, `>`, `>=`, `!=` or `!==`, true for those values.
+fn counter_entered(statement: &oxc_ast::ast::ForStatement<'_>) -> bool {
+    use oxc_ast::ast::{BindingPattern, ForStatementInit};
+    use oxc_syntax::operator::BinaryOperator;
+    let Some(ForStatementInit::VariableDeclaration(declaration)) = &statement.init else {
+        return false;
+    };
+    let [declarator] = declaration.declarations.as_slice() else {
+        return false;
+    };
+    let BindingPattern::BindingIdentifier(name) = &declarator.id else {
+        return false;
+    };
+    let Some(Literal::Number(start)) = declarator.init.as_ref().and_then(literal) else {
+        return false;
+    };
+    let Some(Expression::BinaryExpression(test)) = statement
+        .test
+        .as_ref()
+        .map(Expression::get_inner_expression)
+    else {
+        return false;
+    };
+    let Expression::Identifier(left) = test.left.get_inner_expression() else {
+        return false;
+    };
+    let Some(Literal::Number(bound)) = literal(&test.right) else {
+        return false;
+    };
+    if left.name != name.name || start.is_nan() || bound.is_nan() {
+        return false;
+    }
+    match test.operator {
+        BinaryOperator::LessThan => start < bound,
+        BinaryOperator::LessEqualThan => start <= bound,
+        BinaryOperator::GreaterThan => start > bound,
+        BinaryOperator::GreaterEqualThan => start >= bound,
+        BinaryOperator::Inequality | BinaryOperator::StrictInequality => start != bound,
+        _ => false,
+    }
+}
+
 /// Whether the statement at `child` in `statements` exists and no earlier one
 /// can leave the enclosing function early.
 fn statements_before_exit_free(
@@ -400,6 +720,7 @@ fn statements_before_exit_free(
     statements: &[Statement<'_>],
     child: oxc_span::Span,
     throws_exit: bool,
+    mode: Mode,
 ) -> bool {
     for statement in statements {
         if statement.span() == child {
@@ -409,6 +730,7 @@ fn statements_before_exit_free(
             scope,
             throws_exit,
             found: false,
+            inner: (mode == Mode::AtLeastOnce).then(Inner::default),
         };
         exits.visit_statement(statement);
         if exits.found {
@@ -426,6 +748,46 @@ struct EarlyExit<'f, 's, 'a> {
     scope: Option<&'f HostConstantScope<'s, 'a>>,
     throws_exit: bool,
     found: bool,
+    /// ADR 1048 (`Mode::AtLeastOnce` only): the loops, `switch`es and labels open inside the visited statement, so that a
+    /// `break` or `continue` that leaves only one of them is no way out of the statement. `None`: every one counts.
+    inner: Option<Inner>,
+}
+
+#[derive(Default)]
+struct Inner {
+    loops: usize,
+    switches: usize,
+    labels: Vec<String>,
+}
+
+impl EarlyExit<'_, '_, '_> {
+    /// Whether a jump to `label` (or, with none, to the innermost loop, or for a `break` the innermost `switch` too) leaves the
+    /// visited statement.
+    fn leaves(&self, label: Option<&oxc_ast::ast::LabelIdentifier<'_>>, is_break: bool) -> bool {
+        let Some(inner) = &self.inner else {
+            return true;
+        };
+        match label {
+            Some(label) => !inner.labels.iter().any(|open| open == label.name.as_str()),
+            None => inner.loops == 0 && !(is_break && inner.switches > 0),
+        }
+    }
+
+    fn within(&mut self, kind: u8, walk: impl FnOnce(&mut Self)) {
+        if let Some(inner) = &mut self.inner {
+            match kind {
+                0 => inner.loops += 1,
+                _ => inner.switches += 1,
+            }
+        }
+        walk(self);
+        if let Some(inner) = &mut self.inner {
+            match kind {
+                0 => inner.loops -= 1,
+                _ => inner.switches -= 1,
+            }
+        }
+    }
 }
 
 impl<'v> Visit<'v> for EarlyExit<'_, '_, '_> {
@@ -450,11 +812,50 @@ impl<'v> Visit<'v> for EarlyExit<'_, '_, '_> {
     fn visit_return_statement(&mut self, _: &oxc_ast::ast::ReturnStatement<'v>) {
         self.found = true;
     }
-    fn visit_break_statement(&mut self, _: &oxc_ast::ast::BreakStatement<'v>) {
-        self.found = true;
+    fn visit_break_statement(&mut self, statement: &oxc_ast::ast::BreakStatement<'v>) {
+        self.found |= self.leaves(statement.label.as_ref(), true);
     }
-    fn visit_continue_statement(&mut self, _: &oxc_ast::ast::ContinueStatement<'v>) {
-        self.found = true;
+    fn visit_continue_statement(&mut self, statement: &oxc_ast::ast::ContinueStatement<'v>) {
+        self.found |= self.leaves(statement.label.as_ref(), false);
+    }
+    fn visit_for_statement(&mut self, statement: &oxc_ast::ast::ForStatement<'v>) {
+        self.within(0, |this| {
+            oxc_ast_visit::walk::walk_for_statement(this, statement)
+        });
+    }
+    fn visit_for_in_statement(&mut self, statement: &oxc_ast::ast::ForInStatement<'v>) {
+        self.within(0, |this| {
+            oxc_ast_visit::walk::walk_for_in_statement(this, statement)
+        });
+    }
+    fn visit_for_of_statement(&mut self, statement: &oxc_ast::ast::ForOfStatement<'v>) {
+        self.within(0, |this| {
+            oxc_ast_visit::walk::walk_for_of_statement(this, statement)
+        });
+    }
+    fn visit_while_statement(&mut self, statement: &oxc_ast::ast::WhileStatement<'v>) {
+        self.within(0, |this| {
+            oxc_ast_visit::walk::walk_while_statement(this, statement)
+        });
+    }
+    fn visit_do_while_statement(&mut self, statement: &oxc_ast::ast::DoWhileStatement<'v>) {
+        self.within(0, |this| {
+            oxc_ast_visit::walk::walk_do_while_statement(this, statement)
+        });
+    }
+    fn visit_switch_statement(&mut self, statement: &oxc_ast::ast::SwitchStatement<'v>) {
+        self.within(1, |this| {
+            oxc_ast_visit::walk::walk_switch_statement(this, statement)
+        });
+    }
+    fn visit_labeled_statement(&mut self, statement: &oxc_ast::ast::LabeledStatement<'v>) {
+        if let Some(inner) = &mut self.inner {
+            inner.labels.push(statement.label.name.to_string());
+        }
+        oxc_ast_visit::walk::walk_labeled_statement(self, statement);
+        if let Some(inner) = &mut self.inner {
+            inner.labels.pop();
+        }
     }
     fn visit_throw_statement(&mut self, statement: &oxc_ast::ast::ThrowStatement<'v>) {
         self.found |= self.throws_exit;

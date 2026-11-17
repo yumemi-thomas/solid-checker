@@ -17,7 +17,7 @@ mod fresh_written;
 use crate::{HashMap, HashSet};
 pub(crate) use blocked_by::*;
 pub(crate) use fresh_written::fresh_factories_intact;
-use fresh_written::{Fresh, fresh_written_object};
+pub(crate) use fresh_written::{Fresh, fresh_written_object};
 
 /// The build-wide inputs a contribution may read besides its file. A change
 /// of any of them is a different cache domain, so a fresh build.

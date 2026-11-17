@@ -1207,6 +1207,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/dead-site-empty-collection-shadowed/node_modules/**
 !fixtures/reactive-ir/dead-site-unused-class/node_modules/
 !fixtures/reactive-ir/dead-site-unused-class/node_modules/**
+!fixtures/reactive-ir/for-await-body/node_modules/
+!fixtures/reactive-ir/for-await-body/node_modules/**
 !fixtures/reactive-ir/value-use-census/node_modules/
 !fixtures/reactive-ir/value-use-census/node_modules/**
 !fixtures/reactive-ir/thrown-value-catch/node_modules/
@@ -1343,6 +1345,12 @@ packages/wasm/owned/
 !fixtures/reactive-ir/handed-root-patch-unhanded/node_modules/**
 !fixtures/reactive-ir/handed-root-patch-fresh/node_modules/
 !fixtures/reactive-ir/handed-root-patch-fresh/node_modules/**
+!fixtures/reactive-ir/unconditional-structural/node_modules/
+!fixtures/reactive-ir/unconditional-structural/node_modules/**
+!fixtures/reactive-ir/unconditional-literal/node_modules/
+!fixtures/reactive-ir/unconditional-literal/node_modules/**
+!fixtures/reactive-ir/unconditional-try-catch/node_modules/
+!fixtures/reactive-ir/unconditional-try-catch/node_modules/**
 !fixtures/reactive-ir/handed-root-patch-definer-key-same/node_modules/
 !fixtures/reactive-ir/handed-root-patch-definer-key-same/node_modules/**
 !fixtures/reactive-ir/handed-root-patch-definer-key-other/node_modules/
@@ -1545,6 +1553,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/owner-call-getter-placed/node_modules/**
 !fixtures/reactive-ir/portal-children-owner/node_modules/
 !fixtures/reactive-ir/portal-children-owner/node_modules/**
+!fixtures/reactive-ir/stored-throw-portal/node_modules/
+!fixtures/reactive-ir/stored-throw-portal/node_modules/**
 !fixtures/reactive-ir/lazy-entry-owner/node_modules/
 !fixtures/reactive-ir/lazy-entry-owner/node_modules/**
 !fixtures/reactive-ir/dynamic-component-owner/node_modules/
@@ -1698,3 +1708,13 @@ packages/wasm/owned/
 !fixtures/reactive-ir/closed-literal-dispatch/node_modules/**
 !fixtures/reactive-ir/sync-option-overridden-member/node_modules/
 !fixtures/reactive-ir/sync-option-overridden-member/node_modules/**
+!fixtures/reactive-ir/fresh-written-function/node_modules/
+!fixtures/reactive-ir/fresh-written-function/node_modules/**
+!fixtures/reactive-ir/fresh-written-function-parameter/node_modules/
+!fixtures/reactive-ir/fresh-written-function-parameter/node_modules/**
+!fixtures/reactive-ir/fresh-written-function-reassigned/node_modules/
+!fixtures/reactive-ir/fresh-written-function-reassigned/node_modules/**
+!fixtures/reactive-ir/fresh-written-function-shadowed/node_modules/
+!fixtures/reactive-ir/fresh-written-function-shadowed/node_modules/**
+!fixtures/reactive-ir/action-plain-yield-layers/node_modules/
+!fixtures/reactive-ir/action-plain-yield-layers/node_modules/**

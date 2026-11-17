@@ -49,9 +49,12 @@ pub(crate) fn discover_owner_file(
         in_dependency
             || every_run
                 .get_or_init(|| {
-                    solid_facts::ast::every_unconditional_call(
+                    // ADR 1047: a `yield` of a plain value in a generator an action steps is no suspension: the step goes on
+                    // at once, on the same stack, so the calls after it run as the calls before it do.
+                    solid_facts::ast::every_unconditional_call_resuming(
                         std::path::Path::new(file.path.as_str()),
                         &file.source,
+                        &super::owner_context::action_resuming_yields(file, lookup),
                     )
                 })
                 .as_ref()

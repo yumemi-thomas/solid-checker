@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1048: a guarded first call (a function declaration or a package import, literal or function arguments) and a call after a loop a `break` leaves run at least once: each handler runs `fN` with no owner and NO_OWNER_CLEANUP fires, a proven violation for the five admitted forms and an uncertifiable row for the counterexamples that run (the handler arm never runs)."
+}

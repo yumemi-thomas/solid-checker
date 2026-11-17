@@ -2859,6 +2859,16 @@ impl Dialect for Solid2 {
         primitive == Primitive::Action && argument == 0
     }
 
+    /// ADR 1047, read on `@solidjs/signals@2.0.0-rc.21`: the returned function's `step` calls `it.next(v)` and hands the
+    /// result to `run`, which assimilates a thenable (`r.value.then(v => inTransaction(t, q, () => step(v)))`) and steps
+    /// again at once for any other value, `inTransaction(t, q, () => step(r.value))` (`dist/dev.js:2348-2365`;
+    /// `dist/prod/core` the same). `isThenable` is `value != null && typeof value === "object" && typeof value.then ===
+    /// "function"` (`dist/dev-shared.js:3727`, `dist/prod/core/async.js:272`): no primitive, whatever its prototype holds,
+    /// and no function is one. Only rc.21's runner was read for this answer.
+    fn action_step_resumes_after_plain_yield(&self, primitive: Primitive) -> bool {
+        self.triple_exports == releases::TripleExports::Rc21 && primitive == Primitive::Action
+    }
+
     /// ADR 0548: `runEffect` calls a user effect's `_errorFn` when the
     /// compute errored, before `setStrictRead`, `setEffectCallback` and
     /// `enterCallback`, from the draining flush whose owner is `null`

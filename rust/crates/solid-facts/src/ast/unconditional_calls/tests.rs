@@ -337,3 +337,285 @@ fn every_unconditional_call_answers_per_function() {
                   function* m() { f(); yield 1; g(); }\n";
     assert_eq!(every(source), ["a()", "c()", "d()", "e()", "f()"]);
 }
+
+/// ADR 1042: under a label, in a finalizer or a `try` block no `catch` guards, in a `do` body, and in the body of a loop
+/// whose first test is true, a call runs at least once on every completion; every counterexample of the brief stays out.
+#[test]
+fn at_least_once_admits_labels_finalizers_do_bodies_and_entered_loops() {
+    for (source, admitted) in [
+        (
+            "function f() {\n  outer: { a(); break outer; }\n}\n",
+            vec!["a()"],
+        ),
+        (
+            "function f() {\n  try {} finally { a(); }\n}\n",
+            vec!["a()"],
+        ),
+        (
+            "function f() {\n  try { a(); } finally {}\n}\n",
+            vec!["a()"],
+        ),
+        (
+            "function f() {\n  do { a(); } while (false);\n}\n",
+            vec!["a()"],
+        ),
+        (
+            "function f() {\n  while (true) { a(); break; }\n}\n",
+            vec!["a()"],
+        ),
+        (
+            "function f() {\n  for (;;) { a(); break; }\n}\n",
+            vec!["a()"],
+        ),
+        (
+            "function f() {\n  for (h(); i(); ) { a(); break; }\n}\n",
+            vec!["h()", "i()"],
+        ),
+        (
+            "function f() {\n  for (const x of k()) {}\n}\n",
+            vec!["k()"],
+        ),
+        ("function f() {\n  while (true) a();\n}\n", vec!["a()"]),
+        (
+            "function f() {\n  outer: while (true) { a(); break outer; }\n}\n",
+            vec!["a()"],
+        ),
+        (
+            "function f() {\n  try { n(); } catch {} finally { a(); }\n}\n",
+            vec!["a()"],
+        ),
+        (
+            "function f(c) {\n  try { return c; } finally { a(); }\n}\n",
+            vec!["a()"],
+        ),
+    ] {
+        assert_eq!(synchronous(source, "f"), admitted, "{source}");
+        // No exactly-once call: `unconditional_calls` and the producer's whitelist are unchanged.
+        assert!(unconditional(source, "f").is_empty(), "{source}");
+    }
+    for (source, kept) in [
+        (
+            "function f(c) {\n  outer: { if (c) break outer; a(); }\n}\n",
+            "a()",
+        ),
+        ("function f(c) {\n  try { x(); } catch { a(); }\n}\n", "a()"),
+        (
+            "function f(c) {\n  try {} finally { if (c) return; a(); }\n}\n",
+            "a()",
+        ),
+        ("function f(c) {\n  try { x(); a(); } catch {}\n}\n", "a()"),
+        (
+            "function f(c, x) {\n  do { if (c) break; a(); } while (x);\n}\n",
+            "a()",
+        ),
+        ("function f(c) {\n  do {} while (a());\n}\n", "a()"),
+        (
+            "function f(n) {\n  for (let i = 0; i < n; i++) a();\n}\n",
+            "a()",
+        ),
+        ("function f(xs) {\n  for (const x of xs) a();\n}\n", "a()"),
+        ("function f(c) {\n  while (c) a();\n}\n", "a()"),
+        (
+            "function f(c) {\n  while (true) { if (c) continue; a(); break; }\n}\n",
+            "a()",
+        ),
+        (
+            "function f() {\n  for (let i = 0; i < 0; i++) a();\n}\n",
+            "a()",
+        ),
+        ("function f() {\n  for (;; a()) { break; }\n}\n", "a()"),
+    ] {
+        assert!(
+            !synchronous(source, "f").contains(&kept.to_owned()),
+            "{source}"
+        );
+    }
+}
+
+/// ADR 1042: the owner pass's set (`every_unconditional_call`) reads the same mode, a nested function answering for itself.
+#[test]
+fn every_unconditional_call_reads_at_least_once() {
+    let source = "function k(c) {\n  outer: { a(); }\n  try {} finally { b(); }\n  while (c) e();\n}\n\
+                  function l() {\n  while (true) { const g = () => c1(); d(); break; }\n}\n";
+    assert_eq!(every(source), ["a()", "b()", "c1()", "d()"]);
+}
+
+/// ADR 1046: a counter loop whose literal bounds pass the first test, and the case a literal `switch` enters, run at least
+/// once; zero-iteration bounds, an early exit, a non-literal test, fall-through and `default` stay out.
+#[test]
+fn at_least_once_admits_counter_loops_and_literal_switch_cases() {
+    for (source, admitted) in [
+        (
+            "function f() {\n  for (let i = 0; i < 1; i += 1) { a(); }\n}\n",
+            true,
+        ),
+        (
+            "function f() {\n  for (let i = 0; i < 3; i++) a();\n}\n",
+            true,
+        ),
+        (
+            "function f() {\n  for (var i = 5; i >= 0; i--) { a(); }\n}\n",
+            true,
+        ),
+        (
+            "function f() {\n  for (let i = 0; i !== 2; i++) { a(); }\n}\n",
+            true,
+        ),
+        (
+            "function f() {\n  switch ((1)) {\n    case 1: { a(); break; }\n  }\n}\n",
+            true,
+        ),
+        (
+            "function f() {\n  switch (\"b\") {\n    case \"a\": x(); break;\n    case \"b\": a(); break;\n  }\n}\n",
+            true,
+        ),
+        (
+            "function f() {\n  switch (true) {\n    case false: break;\n    case true: a();\n  }\n}\n",
+            true,
+        ),
+        // Zero iterations, an exit before the call, a test no literal decides.
+        (
+            "function f() {\n  for (let i = 0; i < 0; i++) a();\n}\n",
+            false,
+        ),
+        (
+            "function f() {\n  for (let i = 1; i <= 0; i++) a();\n}\n",
+            false,
+        ),
+        (
+            "function f(n) {\n  for (let i = 0; i < n; i++) a();\n}\n",
+            false,
+        ),
+        (
+            "function f(c) {\n  for (let i = 0; i < 1; i++) { if (c) break; a(); }\n}\n",
+            false,
+        ),
+        (
+            "function f(c) {\n  for (let i = 0; i < 1; i++) { if (c) continue; a(); }\n}\n",
+            false,
+        ),
+        (
+            "function f(j) {\n  for (let i = 0; j < 1; i++) a();\n}\n",
+            false,
+        ),
+        (
+            "function f() {\n  for (let i = 0, j = 1; i < 1; i++) a();\n}\n",
+            false,
+        ),
+        // A case no literal decides, a missed case, an earlier equal case, fall-through, `default`, an early `break`.
+        (
+            "function f(x) {\n  switch (x) {\n    case 1: a();\n  }\n}\n",
+            false,
+        ),
+        (
+            "function f() {\n  switch (1) {\n    case g(): break;\n    case 1: a();\n  }\n}\n",
+            false,
+        ),
+        (
+            "function f() {\n  switch (2) {\n    case 1: a();\n  }\n}\n",
+            false,
+        ),
+        (
+            "function f() {\n  switch (1) {\n    case 1: break;\n    case 1: a();\n  }\n}\n",
+            false,
+        ),
+        (
+            "function f() {\n  switch (1) {\n    case 1: x();\n    case 2: a();\n  }\n}\n",
+            false,
+        ),
+        (
+            "function f() {\n  switch (1) {\n    default: a();\n  }\n}\n",
+            false,
+        ),
+        (
+            "function f(c) {\n  switch (1) {\n    case 1: if (c) break; a();\n  }\n}\n",
+            false,
+        ),
+        (
+            "function f() {\n  switch (1) {\n    case \"1\": a();\n  }\n}\n",
+            false,
+        ),
+    ] {
+        assert_eq!(
+            synchronous(source, "f").contains(&"a()".to_owned()),
+            admitted,
+            "{source}"
+        );
+        assert!(
+            !unconditional(source, "f").contains(&"a()".to_owned()),
+            "{source}"
+        );
+    }
+}
+
+fn every_names(source: &str) -> Vec<String> {
+    every(source)
+}
+
+/// ADR 1048: the first statement of a `try` block a `catch` guards runs when nothing before the call can throw; a jump
+/// that leaves only a loop, `switch` or label inside an earlier statement is no way out.
+#[test]
+fn at_least_once_admits_a_guarded_first_call_and_inner_jumps() {
+    let module = "import { onCleanup } from \"solid-js\";\nimport { local } from \"./local\";\n\
+function wrap() {}\nlet moved = () => {};\n\
+function admitted() {\n  try { wrap(); } catch {}\n  try { onCleanup(() => {}); } catch { } finally {}\n}\n\
+function inner(c) {\n  for (const x of c) { if (x) break; }\n  while (c) { continue; }\n  switch (c) { case 1: break; }\n  label: { break label; }\n  wrap(1, \"s\", () => {});\n}\n\
+function refused(c, a) {\n  try { c(); wrap(); } catch {}\n  try { moved(); } catch {}\n  try { local(); } catch {}\n  try { wrap(a.b); } catch {}\n  try { wrap?.(); } catch {}\n  try { wrap(...a); } catch {}\n}\n\
+function leaving(c) {\n  for (const x of c) { if (x) break outer; }\n  wrap(2);\n}\n\
+function continued(c) {\n  switch (c) { case 1: continue; }\n  wrap(3);\n}\n\
+function afterLoop(c) {\n  while (true) { if (c) break; }\n  wrap(4);\n}\n";
+    let calls = every_names(module);
+    // A `break` that leaves only the loop before it: the call runs on every completion (the brief's slice 3 over-count).
+    for call in [
+        "wrap()",
+        "onCleanup(() => {})",
+        "wrap(1, \"s\", () => {})",
+        "wrap(4)",
+    ] {
+        assert!(calls.contains(&call.to_owned()), "{call} in {calls:?}");
+    }
+    for call in [
+        "c()",
+        "moved()",
+        "local()",
+        "wrap(a.b)",
+        "wrap?.()",
+        "wrap(...a)",
+        "wrap(2)",
+        "wrap(3)",
+    ] {
+        assert!(!calls.contains(&call.to_owned()), "{call} in {calls:?}");
+    }
+}
+
+/// ADR 1047: a `yield` the caller names as resuming at once is no suspension; every other `yield` still ends the first step.
+#[test]
+fn every_unconditional_call_resuming_skips_only_the_named_yields() {
+    let source = "export function* g() {\n  a();\n  yield 1;\n  b();\n  if (q) c();\n  yield p;\n  d();\n}\n";
+    let named = |text: &str| {
+        let start = source.find(text).expect("the yield");
+        Span::new(
+            u32::try_from(start).unwrap(),
+            u32::try_from(start + text.len()).unwrap(),
+        )
+    };
+    let calls = |resuming: HashSet<Span>| {
+        let mut calls = every_unconditional_call_resuming(Path::new("test.tsx"), source, &resuming)
+            .expect("parses")
+            .into_iter()
+            .collect::<Vec<_>>();
+        calls.sort_by_key(|span| span.start);
+        calls
+            .into_iter()
+            .map(|span| source[span.start as usize..span.end as usize].to_owned())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(calls(HashSet::new()), ["a()"]);
+    assert_eq!(calls(HashSet::from([named("yield 1")])), ["a()", "b()"]);
+    assert_eq!(
+        calls(HashSet::from([named("yield 1"), named("yield p")])),
+        ["a()", "b()", "d()"]
+    );
+    // A span that is no `yield` of the source changes nothing.
+    assert_eq!(calls(HashSet::from([named("a()")])), ["a()"]);
+}
