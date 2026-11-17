@@ -845,6 +845,9 @@ pub(super) struct SemanticLookup<'a> {
     /// reads no filesystem. Set by the pipeline from the package boundary.
     package_reach: Option<&'a solid_facts::package_reach::PackageReachIndex>,
     ast_indexes: &'a HashMap<solid_facts::core::SourcePath, CachedAstFileIndex>,
+    /// ADR 1032: `ast_indexes` by the facts' file slot, built once, so a file of this build's facts finds its index by address, not by hashing
+    /// and comparing its path on every call.
+    ast_index_slots: OnceLock<Vec<Option<&'a CachedAstFileIndex>>>,
     entities: &'a EntitySymbols,
     symbol_names: &'a HashMap<SymbolId, SymbolName>,
     functions_by_symbol: crate::base::reads::Recorded<HashMap<&'a str, SymbolFunction>>,
@@ -1289,6 +1292,7 @@ impl<'a> SemanticLookup<'a> {
             package_instances: crate::PackageInstanceEvidence::default(),
             package_reach: None,
             ast_indexes,
+            ast_index_slots: OnceLock::new(),
             entities,
             symbol_names,
             functions_by_symbol: crate::base::reads::Recorded::new(),
@@ -2307,9 +2311,26 @@ impl<'a> SemanticLookup<'a> {
     /// The position of a call in `file.ast.calls`, for the primitive tables
     /// that are index-aligned with it.
     pub(super) fn call_index(&self, file: &FileFacts, span: Span) -> Option<usize> {
-        self.ast_indexes
-            .get(file.path.as_str())
+        self.ast_index_of(file)
             .and_then(|index| index.call_index_by_span(span))
+    }
+
+    /// ADR 1032: the AST index of `file`: by its slot when it is one of this build's facts (its address), else by its path, as before.
+    fn ast_index_of(&self, file: &FileFacts) -> Option<&'a CachedAstFileIndex> {
+        let files = crate::base::reads::file_slots(self.facts);
+        let size = std::mem::size_of::<FileFacts>();
+        let offset = (std::ptr::from_ref(file) as usize).wrapping_sub(files.as_ptr() as usize);
+        if size != 0 && offset.is_multiple_of(size) && offset / size < files.len() {
+            let ast_indexes = self.ast_indexes;
+            let slots = self.ast_index_slots.get_or_init(|| {
+                files
+                    .iter()
+                    .map(|slot| ast_indexes.get(slot.path.as_str()))
+                    .collect()
+            });
+            return slots[offset / size];
+        }
+        self.ast_indexes.get(file.path.as_str())
     }
 
     /// The primitive resolved for the call occupying exactly `span`.
@@ -2330,8 +2351,7 @@ impl<'a> SemanticLookup<'a> {
 
     /// The property span of the member expression occupying exactly `span`.
     pub(super) fn member_property_at(&self, file: &FileFacts, span: Span) -> Option<Span> {
-        self.ast_indexes
-            .get(file.path.as_str())
+        self.ast_index_of(file)
             .and_then(|index| index.member_property(span))
     }
 
