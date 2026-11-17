@@ -12,14 +12,6 @@
   {
    "grid": "lg-recall",
    "kind": "pending-fix",
-   "item": "tbl-zero",
-   "idRegex": "^lg-[a-z-]+-tbl-[a-z0-9-]+-zero-",
-   "adr": "ADR 1019",
-   "why": "A callback handed to a standard-library iteration of an empty literal collection (`new Map().forEach(cb)`, `[].map(cb)`, `Uint8Array.from([], cb)`): it never runs; the checker reports the write, action or onFlush in it (195 rows)."
-  },
-  {
-   "grid": "lg-recall",
-   "kind": "pending-fix",
    "item": "apply-void-value",
    "idRegex": "^lg-[a-z-]+-apply-void-value-(row|untrack)-",
    "adr": "ADR 1020",

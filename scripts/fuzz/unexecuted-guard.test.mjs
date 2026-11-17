@@ -18,9 +18,9 @@ describe("an unexecuted violation", () => {
   });
 
   it("a ledgered one passes, and names its entry", () => {
-    const row = legal("lg-reactive-write-in-owned-scope-tbl-map-foreach-zero-store-direct-none");
+    const row = legal("lg-reactive-write-in-owned-scope-gate-throw-store-destructured-helper");
     expect(rowProblem(row)).toBeNull();
-    expect(unexecutedEntry(row)).toMatchObject({ kind: "pending-fix", adr: "ADR 1019" });
+    expect(unexecutedEntry(row)).toMatchObject({ kind: "pending-fix", adr: "ADR 1010" });
   });
 
   it("an entry removed from the ledger (its fix landed) makes the same row fail again", () => {
@@ -40,7 +40,7 @@ describe("an unexecuted violation", () => {
     const before = [{ id: "lg-x-new-dead", outcome: "uncertifiable", detail: {} }];
     const after = [legal("lg-x-new-dead")];
     expect(compare(before, after, ["lg-x-new-dead"]).problems).toBe(1);
-    const held = [{ ...legal("lg-reactive-write-in-owned-scope-tbl-map-foreach-zero-store-direct-none") }];
+    const held = [{ ...legal("lg-reactive-write-in-owned-scope-gate-throw-store-destructured-helper") }];
     expect(compare([{ ...held[0], outcome: "uncertifiable" }], held, [held[0].id]).problems).toBe(0);
   });
 });
@@ -64,13 +64,16 @@ describe("the ledger", () => {
     for (const entry of UNEXECUTED_KNOWN.entries.filter((e) => e.kind === "pending-fix")) expect(entry1018.slice(0, 4000)).toContain(entry.adr.replace("ADR ", ""));
   });
 
-  it("the seed holds the four Chrome-confirmed groups of the full audit at 78ddeb849", () => {
+  it("the seed holds the Chrome-confirmed groups of the full audit at 78ddeb849 whose fix has not landed", () => {
     const ids = {
       "gate-throw": "lg-reactive-write-in-owned-scope-gate-throw-store-destructured-helper",
-      "tbl-zero": "lg-action-called-in-owned-scope-tbl-map-foreach-zero-x-direct-none",
       "apply-void-value": "lg-sync-node-received-async-apply-void-value-untrack-memo-alias-iife",
       "ob-async-never": "lg-untracked-read-after-await-ob-getter-memo-async-never-x-direct-helper",
     };
     for (const [item, id] of Object.entries(ids)) expect(unexecutedEntry(legal(id))?.item).toBe(item);
+  });
+
+  it("a group whose fix landed is out of the ledger, so its shape fails again if it comes back (tbl-zero, ADR 1019)", () => {
+    expect(rowProblem(legal("lg-action-called-in-owned-scope-tbl-map-foreach-zero-x-direct-none"))).toBe("unexecuted-violation");
   });
 });
