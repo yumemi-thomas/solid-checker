@@ -349,6 +349,9 @@ describe("what is really installed", () => {
   });
 
   it("the browser key is its executable's bytes: the same build in another place keys the same, another build does not", () => {
+    const saved = process.env.PLAYWRIGHT_BROWSERS_PATH;
+    delete process.env.PLAYWRIGHT_BROWSERS_PATH;                                         // the builds below are found by home
+    try {
     const one = scratch(), two = scratch();
     for (const home of [one, two]) {
       const exe = buildExecutable(join(browserCache({ home }), pinnedHeadlessShell().directory)) ?? join(browserCache({ home }), pinnedHeadlessShell().directory, process.platform === "darwin" ? "chrome-headless-shell-mac-arm64/chrome-headless-shell" : "chrome-headless-shell-linux64/chrome-headless-shell");
@@ -361,6 +364,7 @@ describe("what is really installed", () => {
     writeFileSync(exe, "build 2");
     expect(browserKey(undefined, two)).not.toBe(browserKey(undefined, one));
     expect(browserKey(exe)).not.toBe(browserKey(buildExecutable(join(browserCache({ home: one }), pinnedHeadlessShell().directory))));
+    } finally { if (saved === undefined) delete process.env.PLAYWRIGHT_BROWSERS_PATH; else process.env.PLAYWRIGHT_BROWSERS_PATH = saved; }
   });
 
 });

@@ -14,7 +14,7 @@ import { classifyUnmappedFrames, createFrameAttributor, operationFrame, siteExpr
 import { completeFeedbackEntryOutput, feedbackEntryBootstrapPlugin, feedbackHtmlEntries, resolveFeedbackEntries, selectedFeedbackEntry, validateFeedbackDocument } from "./feedback-entry-bootstrap.mjs";
 import { observeFeedbackDocuments } from "./feedback-documents.mjs";
 import { configureFeedbackOptimizer, createFeedbackOptimizerObserver, feedbackRuntimePackages, resolveFeedbackRuntime } from "./feedback-optimizer.mjs";
-import { createExecutionCache, executionCacheKey, harnessDigest, toolingIdentity } from "./feedback-execution-cache.mjs";
+import { createExecutionCache, executionCacheKey, harnessDigest, portableBody, toolingIdentity } from "./feedback-execution-cache.mjs";
 
 const hash = bytes => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 const runtimePath = fileURLToPath(new URL("./feedback-read-runtime.mjs", import.meta.url));
@@ -522,8 +522,11 @@ async function collectProject(project, scenario, tooling, browser, responses = n
   // Paths are relative to the project root (the key) or stored as placeholders (the body), so another checkout of the same case hits.
   const uninstrumented = runtimeOptions.sourceInstrumentation === false;
   const realRoot = realpathSync(projectRoot);
-  const roots = executionCache ? { "<<sc:project-root>>": realRoot, "<<sc:tooling-root>>": (await tooling()).root } : {};
-  const portable = value => (value === undefined ? value : JSON.parse(JSON.stringify(value).split(realRoot).join("<<sc:project-root>>")));
+  // The roots a half's paths sit under: the project, the tooling, and the tree the application is part of (`--app-tree`: the runtime
+  // oracle's checkout, which holds its install); each is a placeholder in the key and in the stored half, longest first.
+  const roots = executionCache ? { "<<sc:project-root>>": realRoot, "<<sc:tooling-root>>": (await tooling()).root,
+    ...(runtimeOptions.appTree ? { "<<sc:app-tree>>": realpathSync(runtimeOptions.appTree) } : {}) } : {};
+  const portable = value => (value === undefined ? value : portableBody(value, roots));
   const key = executionCache && executionCacheKey({ ...executionCache.parts, project: relative(realRoot, realpathSync(project)),
     manifest: portable(snapshot.manifest), sources: snapshot.sources.filter(source => !source.isDeclarationFile)
       .map(source => [relative(realRoot, resolve(source.fileName)), hash(source.text)]),
