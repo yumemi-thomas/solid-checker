@@ -656,28 +656,33 @@
   "R-alias-call": "R1f",
   "R-call-arg": "R1f"
  },
- "owners": {},
+ "owners": {
+  "mx-census/mx-no-owner-effect-apply-placed-twin-effect-direct-none": "Mac 20",
+  "mx-census/mx-no-owner-effect-apply-placed-twin-render-direct-none": "Mac 20",
+  "mx-census/mx-no-owner-effect-effect-apply-shared-effect-direct-none": "Mac 20",
+  "mx-census/mx-no-owner-effect-effect-apply-shared-render-direct-none": "Mac 20",
+  "mx-census/mx-primitive-in-forbidden-scope-apply-placed-twin-effect-direct-none": "Mac 20",
+  "mx-census/mx-primitive-in-forbidden-scope-effect-apply-shared-effect-direct-none": "Mac 20",
+  "mx-census/mx-sync-node-received-async-effect-apply-shared-effect-direct-none": "Mac 20"
+ },
  "corpusBlockers": [],
  "ratchet": {
   "certified": 0,
   "certifiedF2": 0,
-  "falsePositive": 0,
-  "stackedClaim": 153,
+  "falsePositive": 7,
+  "stackedClaim": 68,
   "stackedPairs": {
    "NO_OWNER_CONTEXT|missing-context-provider": 6,
-   "MISSING_EFFECT_FN|leaf-owner-forbidden-call": 8,
-   "PRIMITIVE_IN_FORBIDDEN_SCOPE|missing-owner": 6,
-   "CLEANUP_IN_FORBIDDEN_SCOPE|missing-owner": 1,
-   "PRIMITIVE_IN_EFFECT_CALLBACK|missing-owner": 47,
-   "PRIMITIVE_IN_FORBIDDEN_SCOPE|sync-computation-received-async": 51,
-   "PRIMITIVE_IN_EFFECT_CALLBACK|sync-computation-received-async": 46
+   "PRIMITIVE_IN_FORBIDDEN_SCOPE|sync-computation-received-async": 45,
+   "PRIMITIVE_IN_EFFECT_CALLBACK|sync-computation-received-async": 17
   },
   "unjudgedClaim": 0,
   "haltedClaim": 2,
   "causes": {
-   "R-stacked": 153,
+   "R-stacked": 68,
    "R-unplaced": 8,
-   "R-halted": 2
+   "R-halted": 2,
+   "false-positive": 7
   }
  }
 }

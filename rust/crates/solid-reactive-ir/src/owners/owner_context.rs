@@ -555,32 +555,15 @@ fn yield_operand_promise(
         )
 }
 
-/// Whether the `yield`'s operand is a value that is not a thenable, which the
-/// action step passes back synchronously: absent (`undefined`), a numeric or
-/// string literal, `true`, `false`, `null`, or the global `undefined`
-/// resolved by the absence of a declaration (a binding of that name is a
-/// value). Anything else may be a thenable.
+/// Whether the `yield`'s operand is a value that is not a thenable, which the action step passes back synchronously: absent
+/// (`undefined`), or one literal node ([`solid_facts::ast::YieldFact::operand_literal`]: a string, numeric, bigint or boolean
+/// literal, `null`, the global `undefined`). Anything else may be a thenable or throw, an operator expression whose text looks
+/// like a literal included (`yield "" || load()`, `yield "a" + f() + "b"`: ADR 1051's review).
 fn yield_operand_plain(
-    file: &solid_facts::FileFacts,
+    _file: &solid_facts::FileFacts,
     yielded: &solid_facts::ast::YieldFact,
 ) -> bool {
-    let Some(operand) = yielded
-        .operand
-        .map(|operand| file.ast.peel_ts_sugar_span(operand))
-    else {
-        return true;
-    };
-    let Some(text) = file.source_text(operand).map(str::trim) else {
-        return false;
-    };
-    matches!(text, "true" | "false" | "null")
-        || (text == "undefined" && file.ast.reference_declaration(operand).is_none())
-        // ADR 1047: a numeric literal, not a name `f64` also parses (`NaN`, `Infinity`, `inf`), which a binding may shadow.
-        || (!text.starts_with(|first: char| first.is_ascii_alphabetic() || first == '_' || first == '$')
-            && text.parse::<f64>().is_ok())
-        || (text.len() >= 2
-            && (text.starts_with('"') && text.ends_with('"')
-                || text.starts_with('\'') && text.ends_with('\'')))
+    yielded.operand.is_none() || yielded.operand_literal
 }
 
 /// ADR 1047: the `yield`s after which the code of their generator runs on the same stack, at once: a non-delegating
@@ -805,6 +788,7 @@ pub(crate) fn push_owner_requirement(
             through_dependency: None,
             through_dependency_entry: crate::DependencyEntry::Call,
             report: status.report,
+            earlier_check_throws: false,
         });
     }
 }

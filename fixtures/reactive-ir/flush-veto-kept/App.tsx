@@ -6,7 +6,7 @@ import { createEffect, createSignal, flush, runWithOwner } from "solid-js";
 // Module evaluation: no owner is current.
 flush();
 
-// A computation created on the apply's stack: SC6002 and SC4001.
+// A computation created on the apply's stack: SC6002 (SC4001 uncertifiable, ADR 1052).
 export function CreatesInApply() {
   const [count] = createSignal(0);
   createEffect(

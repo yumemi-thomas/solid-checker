@@ -61,7 +61,7 @@ use thiserror::Error;
 /// computed key that nothing proves is a number, a symbol or a plain non-text
 /// value (`computed_keys`), and the places the file runs code it builds
 /// (`code_sinks`).
-pub const AST_FACTS_SCHEMA: u32 = 95;
+pub const AST_FACTS_SCHEMA: u32 = 96;
 
 mod argument_completion;
 mod code_sinks;

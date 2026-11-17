@@ -1270,6 +1270,20 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         }
     }
 
+    /// Facts schema 96: `expression` is one literal node under transparent TypeScript wrappers (a string, numeric, bigint or
+    /// boolean literal, `null`, the global `undefined`): evaluating it runs no code and its value is no thenable.
+    pub(super) fn literal_operand(&self, expression: &Expression<'_>) -> bool {
+        match peel_ts_sugar(expression) {
+            Expression::StringLiteral(_)
+            | Expression::NumericLiteral(_)
+            | Expression::BigIntLiteral(_)
+            | Expression::BooleanLiteral(_)
+            | Expression::NullLiteral(_) => true,
+            Expression::Identifier(identifier) => self.is_global_undefined(identifier),
+            _ => false,
+        }
+    }
+
     pub(super) fn is_global_undefined(&self, identifier: &IdentifierReference<'_>) -> bool {
         self.is_unresolved_named(identifier, "undefined")
     }

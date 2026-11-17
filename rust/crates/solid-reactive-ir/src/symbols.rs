@@ -62,14 +62,20 @@ pub(super) fn add_solid_import_names(
         // `const { onCleanup: cleanup } = Solid` (ADR 0459): the slot holds
         // the namespace's member, so it names what `Solid.onCleanup` does.
         for member in &file.ast.namespace_member_bindings {
-            let Some(import) = file.ast.imports.iter().find(|import| {
+            let Some((import, namespace)) = file.ast.imports.iter().find_map(|import| {
                 import
                     .bindings
                     .iter()
-                    .any(|binding| binding.local.span == member.namespace)
+                    .find(|binding| binding.local.span == member.namespace)
+                    .map(|binding| (import, binding))
             }) else {
                 continue;
             };
+            // ADR 1054: the slot copies the namespace's member, so it is the primitive only where the namespace import itself
+            // resolved: an import of a missing package is the checker's unknown symbol, which declares nothing.
+            if !import_binding_declared(facts, entities, file, namespace) {
+                continue;
+            }
             let primitives = dialect.namespace_import_primitives(import.module.as_str());
             let Some(primitive) = primitives
                 .iter()
@@ -106,6 +112,10 @@ pub(super) fn add_solid_import_names(
             }) else {
                 continue;
             };
+            // ADR 1054: as for the slot above, only where the copied import itself resolved.
+            if !import_binding_declared(facts, entities, file, imported) {
+                continue;
+            }
             let primitives = dialect.namespace_import_primitives(import.module.as_str());
             let Some(primitive) = imported
                 .imported
@@ -161,6 +171,19 @@ pub(super) fn add_solid_import_names(
             }
         }
     }
+}
+
+/// ADR 1054: the import binding's own symbol is a declaration's identity ([`undeclared`] says no for an import of a missing
+/// package). A binding the compiler gave no symbol is not proven either.
+fn import_binding_declared(
+    facts: &ProjectFacts,
+    entities: &EntitySymbols,
+    file: &solid_facts::FileFacts,
+    binding: &solid_facts::ast::ImportBindingFact,
+) -> bool {
+    entities
+        .get(&location(file.path.shared(), binding.local.span))
+        .is_some_and(|symbol| !undeclared(facts, symbol))
 }
 
 /// A non-exported `const` of one name declared at `declaration`.

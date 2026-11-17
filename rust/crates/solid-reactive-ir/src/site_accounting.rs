@@ -1016,6 +1016,7 @@ mod tests {
             computation_error_unobserved: false,
             stop: None,
             through_async: false,
+            earlier_check_throws: false,
         }
     }
 

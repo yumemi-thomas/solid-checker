@@ -48,6 +48,7 @@ mod cache;
 mod callback_return;
 mod carrier_runs;
 mod cleanup;
+mod competing_checks;
 mod development_feedback;
 mod directives;
 mod execution_paths;
@@ -843,6 +844,10 @@ pub struct LeafOwnerOperation {
     /// stack. In no report and in no serialized form.
     #[serde(skip)]
     pub through_async: bool,
+    /// ADR 1052: `createEffect` with no callable effect function throws `MISSING_EFFECT_FN` before the leaf owner's
+    /// refusal at this operation's call, so the refusal is not proven to be reached.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub earlier_check_throws: bool,
 }
 
 /// Why the slot climb of the leaf-owner walk owes an obligation: the two stops of [`execution_role::ClimbStop`] that do
@@ -1571,6 +1576,10 @@ pub struct OwnerRequirement {
     /// run is not proven to be reached past that throw.
     #[serde(default, skip_serializing_if = "is_false")]
     pub owned_run_throws: bool,
+    /// ADR 1052: a check Solid makes earlier at this call throws first (the effect-callback guard or the leaf owner's
+    /// refusal at a creation, the owner check of a context read), so this row's code is not proven to be reached.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub earlier_check_throws: bool,
     /// ADR 0290: the operation is inside a package analyzed as source
     /// (ADR 0284), at this location, and this requirement stands at the
     /// project's call that runs it there, under the call's owner context.
@@ -1932,6 +1941,15 @@ pub struct UnreachedSite {
     /// spread, computed key or repeated key of the literal may replace.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub member_may_be_replaced: bool,
+    /// ADR 1020 (third cut): the site may run, but only through a call of a function an effect's or a memo's compute returned
+    /// as a value, and such a call may be on an effect apply's stack: a claim a creation there would throw first
+    /// (PRIMITIVE_IN_EFFECT_CALLBACK) is not proven. Every other claim reads the site as reached.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub returned_value_run: bool,
+    /// ADR 1020 (fourth cut): with `returned_value_run`, the site sits in a callback of a primitive (any, `untrack` included) written below the
+    /// returned value: called on an apply's stack, that creation throws first and the callback never runs. Every claim reads it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub returned_value_creation: bool,
     /// ADR 0560: the query stopped at its depth limit or work bound before
     /// it decided whether any execution reaches the site.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]

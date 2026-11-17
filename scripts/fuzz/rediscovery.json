@@ -25728,5 +25728,132 @@
    "mx-dynamic-static-promise-fire-return-body-x-direct-none"
   ],
   "rediscovered": "main 2e2b60bb6: recall-gap (uncertifiable, `function-run-unplaced`) on each; ADR 1049's build: agree (60 of 60 fire-return rows)"
+ },
+ {
+  "finding": "SC7002 falsely proved where a sync memo is created only through a call of a value a compute returned (the apply calls it, a memo's value is called in an apply, a helper the closure calls): Chrome rc.21 throws PRIMITIVE_IN_EFFECT_CALLBACK at the creation first",
+  "found": "Mac 24 rejected bc96fab61; W4's Chrome run on the four generated apply-void-call programs; Mac 21's review of cd3a554fa: its origin-walk guard left 5 probe shapes proved (memo value, untrack(m)(), helper, nested function, helper via memo), Chrome PRIMITIVE_IN_EFFECT_CALLBACK at each",
+  "fixed": "ADR 1020 third cut (site_reach.rs SiteReach::withholding_returned_values, UnreachedSite::returned_value_run; SC7002 only: creation-throws-first)",
+  "grid": "mx-census",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "mx-sync-node-received-async-apply-void-call-row-memo-direct-none",
+   "mx-sync-node-received-async-apply-void-call-row-effect-direct-none",
+   "mx-sync-node-received-async-apply-void-call-untrack-memo-direct-none",
+   "mx-sync-node-received-async-apply-void-call-untrack-effect-direct-none"
+  ],
+  "rediscovered": "make fuzz-focus CODES=SYNC_NODE_RECEIVED_ASYNC: the build before the guard (0f866a89a, bc96fab61 on main) fails with these 4 as unlisted stacked-claim once their rows leave open-defects-rows.json (R-stacked 153 -> 149); this build: not-fired, the 4 gone. The other probe shapes (memo value, helper, nested) are not generated: fixture returned-closure-unrun pins them. Unchanged on main and here: mx-sync-node-received-async-tracked-sibling-async-effect-direct-none (unlisted stacked-claim, PRIMITIVE_IN_FORBIDDEN_SCOPE)"
+ },
+ {
+  "finding": "no defect: a recall gap. An action whose generator's first statement is `yield 1`, called from a `createEffect` apply (`action-plain-yield-from-apply`), steps again at once inside `inTransaction`, which flushes at action depth 0 (`@solidjs/signals@2.0.0-rc.21` `dist/dev.js:2198-2208`, `:2365`); the queue is already running, so the flush drains nothing and Chrome rc.21 warns FLUSH_IN_EFFECT_CALLBACK at the action's call. No build of the checker reported it",
+  "found": "ADR 1047's oracle case `action-plain-yield-layers` (Chrome reported FLUSH_IN_EFFECT_CALLBACK at each action call, the checker nothing)",
+  "fixed": "ADR 1051 (`static_api.rs` `check_action_resume_flush`, `effect_phase::ownerless_effect_phase_origin_through`)",
+  "grid": "mx-census",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-flush-in-effect-callback-action-plain-yield-from-apply-x-direct-none"
+  ],
+  "rediscovered": "main 5780918b8 uncertifiable at the site, this build SC2008 violation at the action call, Chrome reporting FLUSH_IN_EFFECT_CALLBACK at that line"
+ },
+ {
+  "finding": "a false positive: missing-owner at an effect created in an effect's apply (or a render effect's), where Solid throws PRIMITIVE_IN_EFFECT_CALLBACK at the creation and never reports NO_OWNER_EFFECT; and at an effect a helper creates that a tracked effect and a handler both call, where the tracked call throws PRIMITIVE_IN_FORBIDDEN_SCOPE at mount and the handler never runs",
+  "found": "ADR 1052's census of the stacked claims (R-stacked, 153 mx-census ids, main a3ba1dd92)",
+  "fixed": "ADR 1052 (`competing_checks.rs` `mark`: an SC6002 violation at an effect's call, or an SC3001 violation at the operation's call, makes the owner row uncertifiable `creation-throws-first`)",
+  "grid": "mx-census",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-effect-apply-effect-direct-none",
+   "mx-no-owner-effect-rnd-handler-effect-direct-none",
+   "mx-no-owner-effect-tracked-shared-effect-direct-none"
+  ],
+  "rediscovered": "main a3ba1dd92: stacked-claim, tolerated by its pair in stacked-pairs.json; with the pair retired the judge scores it false-positive and `make fuzz-focus` fails (15 programs); ADR 1052's build: not-fired or agree, focus passes"
+ },
+ {
+  "finding": "a false positive: missing-owner at an `onCleanup` a helper runs that a tracked effect and a handler both call: the tracked call throws CLEANUP_IN_FORBIDDEN_SCOPE at mount and halts the system, so NO_OWNER_CLEANUP is never reported",
+  "found": "ADR 1052's census of the stacked claims (R-stacked, 153 mx-census ids, main a3ba1dd92)",
+  "fixed": "ADR 1052 (`competing_checks.rs` `mark`: an SC3001 violation at the operation's call)",
+  "grid": "mx-census",
+  "code": "NO_OWNER_CLEANUP",
+  "ids": [
+   "mx-no-owner-cleanup-tracked-shared-x-direct-none"
+  ],
+  "rediscovered": "main a3ba1dd92: stacked-claim, tolerated by its pair in stacked-pairs.json; with the pair retired the judge scores it false-positive and `make fuzz-focus` fails (15 programs); ADR 1052's build: not-fired or agree, focus passes"
+ },
+ {
+  "finding": "a false positive: missing-owner at a boundary a helper calls that a tracked effect and a handler both call: the tracked call throws PRIMITIVE_IN_FORBIDDEN_SCOPE at mount, so NO_OWNER_BOUNDARY is never reported",
+  "found": "ADR 1052's census of the stacked claims (R-stacked, 153 mx-census ids, main a3ba1dd92)",
+  "fixed": "ADR 1052 (`competing_checks.rs` `mark`: an SC3001 violation at the operation's call)",
+  "grid": "mx-census",
+  "code": "NO_OWNER_BOUNDARY",
+  "ids": [
+   "mx-no-owner-boundary-tracked-shared-loading-direct-none"
+  ],
+  "rediscovered": "main a3ba1dd92: stacked-claim, tolerated by its pair in stacked-pairs.json; with the pair retired the judge scores it false-positive and `make fuzz-focus` fails (15 programs); ADR 1052's build: not-fired or agree, focus passes"
+ },
+ {
+  "finding": "a false positive: missing-owner beside SC6002 at an effect created in an effect's apply, where PRIMITIVE_IN_EFFECT_CALLBACK throws first",
+  "found": "ADR 1052's census of the stacked claims (R-stacked, 153 mx-census ids, main a3ba1dd92)",
+  "fixed": "ADR 1052 (`competing_checks.rs` `mark`: an SC6002 violation at an effect's call)",
+  "grid": "mx-census",
+  "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-primitive-in-forbidden-scope-effect-apply-effect-direct-none"
+  ],
+  "rediscovered": "main a3ba1dd92: stacked-claim, tolerated by its pair in stacked-pairs.json; with the pair retired the judge scores it false-positive and `make fuzz-focus` fails (15 programs); ADR 1052's build: not-fired or agree, focus passes"
+ },
+ {
+  "finding": "a false positive: leaf-owner-forbidden-call at a `createEffect` with no callable effect function in a tracked effect or an action's `onSettled`: Solid throws MISSING_EFFECT_FN before the leaf owner refuses it",
+  "found": "ADR 1052's census of the stacked claims (R-stacked, 153 mx-census ids, main a3ba1dd92)",
+  "fixed": "ADR 1052 (`competing_checks.rs` `mark`: an SC7001 violation at the operation's call makes the SC3001 row uncertifiable `creation-throws-first`)",
+  "grid": "mx-census",
+  "code": "MISSING_EFFECT_FN",
+  "ids": [
+   "mx-missing-effect-fn-tracked-shared-cast-fn-direct-none",
+   "mx-missing-effect-fn-action-from-settled-cast-fn-direct-none"
+  ],
+  "rediscovered": "main a3ba1dd92: stacked-claim, tolerated by its pair in stacked-pairs.json; with the pair retired the judge scores it false-positive and `make fuzz-focus` fails (15 programs); ADR 1052's build: not-fired or agree, focus passes"
+ },
+ {
+  "finding": "a false positive: SC2008 at the call of an action whose first `yield`'s operand is an operator expression whose text starts and ends with a quote (`yield \"z\" < \"a\" || Promise.resolve() || \"\"`): `yield_operand_plain` read the text as a string literal, but `yield` binds looser than `||`, `?:` and `+`, so the step yields a promise, the next step runs from its continuation, and Chrome rc.21 warns nothing at the call",
+  "found": "the Fable review of ADR 1047/1051 (owner_context.rs `yield_operand_plain`)",
+  "fixed": "ADR 1051's review fix (facts schema 96 `YieldFact::operand_literal`: one literal node, no text test)",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-action-compound-yield-from-apply-signal-direct-module-helper",
+   "lg-reactive-write-in-owned-scope-action-compound-yield-from-apply-signal-destructured-none"
+  ],
+  "rediscovered": "a9a00a06b false-positive (SC2008 at the action call, Chrome silent) on all 1,000 sampled programs of the context `action-compound-yield-from-apply` (lg-recall 960, mx-census 40); this build nothing needs a look"
+ },
+ {
+  "finding": "a false positive: SC2008 at the call of an action whose first step never stops at its plain-looking `yield`: the operand throws (`yield \"a\" + fail() + \"b\"`, the step settles the action), or the parameter list throws when the action calls the generator function (`function* ({ id } = undefined as any)`, a default that throws), so no step resumes and nothing flushes; Chrome rc.21 is silent",
+  "found": "the Fable review of ADR 1047/1051",
+  "fixed": "ADR 1051's review fix (one literal node as the operand; a parameter list that is not inert identifiers leaves the call unreported)",
+  "outside": "the throw ends the action before any site of its body runs, so no grid program places a site there (the generator puts the site in the body, which never runs); fixture `action-resume-flush` (`YieldConcatThrows`, `ParameterDestructured`, `ParameterDefaultThrows`) and its oracle case pin them: a9a00a06b SC2008 static-only at each, this build no row, Chrome silent"
+ },
+ {
+  "finding": "ADR 1020 third cut (14434c30f): a site in a callback of a computation created inside a returned compute closure the apply calls was a proved violation of any rule but SC7002 (SC7001 in a created memo's compute, SC2008 at a flush in a created effect's apply); Chrome rc.21 throws PRIMITIVE_IN_EFFECT_CALLBACK at the creation first and the callback never runs",
+  "found": "Fable's review of 14434c30f; Mac 21's probe (checker and Chrome rc.21: SC7001 static-only)",
+  "fixed": "ADR 1020 fourth cut (site_reach.rs crosses_creation_below_returned_value, UnreachedSite::returned_value_creation; every rule)",
+  "outside": "Not generated: no grid writes a creation inside a function a compute returns (the apply-void-call contexts write the site directly in the returned closure, where the claim stands). Pinned by fixture returned-closure-unrun (CreatedInReturnedMemo, CreatedInReturnedEffect: violations on 14434c30f, uncertifiable here; Chrome rc.21 covered-uncertifiable)."
+ },
+ {
+  "finding": "with solid-js unresolved (SC9012 import-unresolved), a copy of a Solid export (`const { createMemo: m } = S`, `const m = S.createMemo`, `const m = createMemo`, a closed holder's member) was still named after the module specifier: SC7002, SC7001, SC4001, SC3001 proved by name",
+  "found": "Mac 21's review of ADR 1020 (an unresolved probe program: SC7002 at a destructured createMemo)",
+  "fixed": "ADR 1054 (`symbols.rs` `import_binding_declared` in `add_solid_import_names`)",
+  "outside": "Not generated: every grid program sits under the pinned install, and TypeScript climbs past a program's own shadowing `node_modules/solid-js/package.json` to the install's package, so no program has solid-js unresolved (a generated `unres-` binding was tried: all 912 resolved). Pinned by fixture reactive-ir/unresolved-namespace-slots (violations on 5780918b8, SC9012 only here) and its resolved twin."
+ },
+ {
+  "finding": "a false positive: sync-computation-received-async at `createMemo(async, { sync: true })` created in an effect's apply or a leaf owner's callback: Solid throws PRIMITIVE_IN_EFFECT_CALLBACK or PRIMITIVE_IN_FORBIDDEN_SCOPE at the creation and never reaches the result probe",
+  "found": "ADR 1052's census of the stacked claims (R-stacked, 153 mx-census ids, main a3ba1dd92)",
+  "fixed": "ADR 1052 part 2 (`competing_checks.rs` `mark`: an SC6002 violation or `effect-owner-unproven` obligation, or an SC3001 violation written at the call, makes the SC7002 row uncertifiable `creation-throws-first`)",
+  "grid": "mx-census",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "mx-sync-node-received-async-effect-apply-memo-direct-none",
+   "mx-sync-node-received-async-rnd-handler-memo-direct-none",
+   "mx-sync-node-received-async-settled-memo-direct-none",
+   "mx-sync-node-received-async-tracked-memo-direct-none"
+  ],
+  "rediscovered": "the merge of ADR 1020's branch (14434c30f) and part 1: stacked-claim (30 programs, ledgered R-stacked); this build: not-fired, and the rows leave open-defects-rows.json, so the old build fails `make fuzz-focus` on them as unlisted stacked claims"
  }
 ]

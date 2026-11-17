@@ -3922,6 +3922,118 @@
    "to": 1,
    "adr": "ADR 1023",
    "fact": "a member call on a closed const literal under an assertion dispatches to the literal's own method (closed_literal_dispatch); the method hands the callback to queueMicrotask, so the read is no longer withheld and keeps its own callee-callback-timing obligation"
+  },
+  {
+   "fixture": "reactive-ir/returned-closure-unrun",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1020",
+   "fact": "fixture extended (third and fourth cuts): returned compute values called in an apply, as a memo's value, through a helper, in the body, and computations created inside them; creation-throws-first is the site's reach (UnreachedSite::returned_value_run, returned_value_creation)"
+  },
+  {
+   "fixture": "reactive-ir/returned-closure-unrun",
+   "key": "SC2006 flush-in-action-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1020",
+   "fact": "fixture extended (third and fourth cuts): returned compute values called in an apply, as a memo's value, through a helper, in the body, and computations created inside them; creation-throws-first is the site's reach (UnreachedSite::returned_value_run, returned_value_creation)"
+  },
+  {
+   "fixture": "reactive-ir/returned-closure-unrun",
+   "key": "SC2008 creation-throws-first",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1020",
+   "fact": "fixture extended (third and fourth cuts): returned compute values called in an apply, as a memo's value, through a helper, in the body, and computations created inside them; creation-throws-first is the site's reach (UnreachedSite::returned_value_run, returned_value_creation)"
+  },
+  {
+   "fixture": "reactive-ir/returned-closure-unrun",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 9,
+   "to": 26,
+   "adr": "ADR 1020",
+   "fact": "fixture extended (third and fourth cuts): returned compute values called in an apply, as a memo's value, through a helper, in the body, and computations created inside them; creation-throws-first is the site's reach (UnreachedSite::returned_value_run, returned_value_creation)"
+  },
+  {
+   "fixture": "reactive-ir/returned-closure-unrun",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 3,
+   "to": 10,
+   "adr": "ADR 1020",
+   "fact": "fixture extended (third and fourth cuts): returned compute values called in an apply, as a memo's value, through a helper, in the body, and computations created inside them; creation-throws-first is the site's reach (UnreachedSite::returned_value_run, returned_value_creation)"
+  },
+  {
+   "fixture": "reactive-ir/returned-closure-unrun",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 9,
+   "to": 19,
+   "adr": "ADR 1020",
+   "fact": "fixture extended (third and fourth cuts): returned compute values called in an apply, as a memo's value, through a helper, in the body, and computations created inside them; creation-throws-first is the site's reach (UnreachedSite::returned_value_run, returned_value_creation)"
+  },
+  {
+   "fixture": "reactive-ir/returned-closure-unrun",
+   "key": "SC6002 effect-owner-unproven",
+   "from": 0,
+   "to": 6,
+   "adr": "ADR 1020",
+   "fact": "fixture extended (third and fourth cuts): returned compute values called in an apply, as a memo's value, through a helper, in the body, and computations created inside them; creation-throws-first is the site's reach (UnreachedSite::returned_value_run, returned_value_creation)"
+  },
+  {
+   "fixture": "reactive-ir/returned-closure-unrun",
+   "key": "SC7001 creation-throws-first",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1020",
+   "fact": "fixture extended (third and fourth cuts): returned compute values called in an apply, as a memo's value, through a helper, in the body, and computations created inside them; creation-throws-first is the site's reach (UnreachedSite::returned_value_run, returned_value_creation)"
+  },
+  {
+   "fixture": "reactive-ir/returned-closure-unrun",
+   "key": "SC7002 creation-throws-first",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 1020",
+   "fact": "fixture extended (third and fourth cuts): returned compute values called in an apply, as a memo's value, through a helper, in the body, and computations created inside them; creation-throws-first is the site's reach (UnreachedSite::returned_value_run, returned_value_creation)"
+  },
+  {
+   "fixture": "reactive-ir/deferred-effect-apply-callees",
+   "key": "SC4001 creation-throws-first",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1052",
+   "fact": "an earlier check Solid makes at the same call throws first (SC6002 at an effect created on an apply's stack, SC3001's refusal on a leaf caller's run): the owner row is uncertifiable creation-throws-first"
+  },
+  {
+   "fixture": "reactive-ir/flush-veto-kept",
+   "key": "SC4001 creation-throws-first",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1052",
+   "fact": "an earlier check Solid makes at the same call throws first (SC6002 at an effect created on an apply's stack, SC3001's refusal on a leaf caller's run): the owner row is uncertifiable creation-throws-first"
+  },
+  {
+   "fixture": "reactive-ir/leaf-owner",
+   "key": "SC4001 creation-throws-first",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1052",
+   "fact": "an earlier check Solid makes at the same call throws first (SC6002 at an effect created on an apply's stack, SC3001's refusal on a leaf caller's run): the owner row is uncertifiable creation-throws-first"
+  },
+  {
+   "fixture": "reactive-ir/primitive-in-effect-callback-tag",
+   "key": "SC4001 creation-throws-first",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1052",
+   "fact": "an earlier check Solid makes at the same call throws first (SC6002 at an effect created on an apply's stack, SC3001's refusal on a leaf caller's run): the owner row is uncertifiable creation-throws-first"
+  },
+  {
+   "fixture": "reactive-ir/deferred-effect-apply-callees",
+   "key": "SC7002 creation-throws-first",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1052",
+   "fact": "part 2: an SC6002 violation at a sync memo's creation (the effect-callback guard) throws before the result probe: SC7002 uncertifiable creation-throws-first"
   }
  ]
 }

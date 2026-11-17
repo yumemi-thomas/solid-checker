@@ -2608,6 +2608,20 @@ impl Dialect for Solid2 {
             )
     }
 
+    /// Source: rc.21 `@solidjs/signals` `dist/dev.js`. `createProjection` (`createProjectionInternal`, 7866-7918) runs
+    /// `runProjectionComputed` (7742), which calls the callback with `shadow ?? s`: `shadow` a clone of the store's value
+    /// (`cloneState`), `s` the `wrapDraft` (7585) wrapper, a new `Proxy` over a new `{}`/`[]` whose `set`, `deleteProperty` and
+    /// `defineProperty` traps write the projection's store proxy, whose traps write a backing the store made (`ensurePB`,
+    /// ADR 1041). A `markRaw` seed throws at `wrappedStore[$TARGET]._fam` before the callback runs. The store setter and the
+    /// function form of `createStore` hand a draft too, but are not read here (ADR 1053 takes the projection only).
+    fn callback_first_parameter_writes_only_runtime_objects(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+    ) -> bool {
+        argument == 0 && primitive == Primitive::CreateProjection
+    }
+
     fn accepts_cleanup_return(&self, primitive: Primitive) -> bool {
         matches!(
             primitive,
@@ -2867,6 +2881,15 @@ impl Dialect for Solid2 {
     /// and no function is one. Only rc.21's runner was read for this answer.
     fn action_step_resumes_after_plain_yield(&self, primitive: Primitive) -> bool {
         self.triple_exports == releases::TripleExports::Rc21 && primitive == Primitive::Action
+    }
+
+    /// ADR 1051, read on `@solidjs/signals@2.0.0-rc.21` and probed in Chrome (oracle case `action-resume-flush`):
+    /// `runEffect` runs a user effect's apply inside the draining flush with `inEffectCallback` set; the action's `step`
+    /// lowers it while the generator runs and restores it after, so `inTransaction`'s `flush()` (`dist/dev.js:2198-2208`)
+    /// finds the queue running and the marker up (`dist/dev-shared.js:3032-3077`) and warns. Only `createEffect`'s apply
+    /// was read and probed; a render effect and a reaction are not claimed.
+    fn resumed_action_flush_warns_in_apply(&self, effect: Primitive) -> bool {
+        self.triple_exports == releases::TripleExports::Rc21 && effect == Primitive::CreateEffect
     }
 
     /// ADR 0548: `runEffect` calls a user effect's `_errorFn` when the

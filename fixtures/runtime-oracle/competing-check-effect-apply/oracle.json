@@ -1,0 +1,5 @@
+{
+  "note": "ADR 1052: an effect created in an effect apply. Chrome reports PRIMITIVE_IN_EFFECT_CALLBACK at the inner createEffect and never NO_OWNER_EFFECT; SC6002 is the violation, SC4001 uncertifiable `creation-throws-first`. Generated program `mx-no-owner-effect-effect-apply-effect-direct-none` (differential fuzzer, generator 2).",
+  "haltMarker": true,
+  "steps": []
+}

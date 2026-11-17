@@ -1,0 +1,7 @@
+{
+  "note": "ADR 1052, negative: a helper only a handler calls creates an effect with no owner: no earlier check throws, Chrome reports NO_OWNER_EFFECT, and SC4001 stays a violation.",
+  "haltMarker": true,
+  "steps": [
+    { "action": "click", "selector": "[data-act=\"b1\"], body:not(:has([data-act=\"b1\"])) > #sc-halted" }
+  ]
+}

@@ -8,8 +8,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 381,
-      "end": 393,
+      "start": 403,
+      "end": 415,
       "fixes": 0
     },
     {
@@ -19,8 +19,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 381,
-      "end": 393,
+      "start": 403,
+      "end": 415,
       "fixes": 0
     },
     {
@@ -30,8 +30,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 381,
-      "end": 393,
+      "start": 403,
+      "end": 415,
       "fixes": 0
     },
     {
@@ -41,28 +41,29 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 432,
-      "end": 444,
+      "start": 454,
+      "end": 466,
       "fixes": 0
     },
     {
       "rule": "missing-owner",
       "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "creation-throws-first",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
+      "start": 454,
+      "end": 466,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
       "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 432,
-      "end": 444,
-      "fixes": 0
-    },
-    {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 432,
-      "end": 444,
+      "start": 454,
+      "end": 466,
       "fixes": 0
     },
     {
@@ -72,8 +73,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 680,
-      "end": 692,
+      "start": 702,
+      "end": 714,
       "fixes": 0
     },
     {
@@ -83,8 +84,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 680,
-      "end": 692,
+      "start": 702,
+      "end": 714,
       "fixes": 0
     },
     {
@@ -94,8 +95,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 680,
-      "end": 692,
+      "start": 702,
+      "end": 714,
       "fixes": 0
     },
     {
@@ -105,8 +106,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 770,
-      "end": 776,
+      "start": 792,
+      "end": 798,
       "fixes": 0
     },
     {
@@ -116,8 +117,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 770,
-      "end": 776,
+      "start": 792,
+      "end": 798,
       "fixes": 0
     },
     {
@@ -127,8 +128,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 770,
-      "end": 776,
+      "start": 792,
+      "end": 798,
       "fixes": 0
     },
     {
@@ -138,8 +139,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 963,
-      "end": 975,
+      "start": 985,
+      "end": 997,
       "fixes": 0
     },
     {
@@ -149,8 +150,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 963,
-      "end": 975,
+      "start": 985,
+      "end": 997,
       "fixes": 0
     },
     {
@@ -160,8 +161,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 963,
-      "end": 975,
+      "start": 985,
+      "end": 997,
       "fixes": 0
     },
     {
@@ -171,8 +172,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 1014,
-      "end": 1021,
+      "start": 1036,
+      "end": 1043,
       "fixes": 0
     },
     {
@@ -181,8 +182,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 1014,
-      "end": 1019,
+      "start": 1036,
+      "end": 1041,
       "fixes": 0
     },
     {
@@ -192,8 +193,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 1014,
-      "end": 1021,
+      "start": 1036,
+      "end": 1043,
       "fixes": 0
     },
     {
@@ -203,41 +204,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 1226,
-      "end": 1233,
-      "fixes": 0
-    },
-    {
-      "rule": "flush-in-effect-callback",
-      "code": "SC2008",
-      "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 1226,
-      "end": 1233,
-      "fixes": 0
-    },
-    {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 1226,
-      "end": 1233,
-      "fixes": 0
-    },
-    {
-      "rule": "flush-in-action",
-      "code": "SC2006",
-      "kind": "uncertifiable",
-      "blocker": "flush-in-action-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 1372,
-      "end": 1379,
+      "start": 1248,
+      "end": 1255,
       "fixes": 0
     },
     {
@@ -247,8 +215,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 1372,
-      "end": 1379,
+      "start": 1248,
+      "end": 1255,
       "fixes": 0
     },
     {
@@ -258,8 +226,30 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 1372,
-      "end": 1379,
+      "start": 1248,
+      "end": 1255,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
+      "start": 1394,
+      "end": 1401,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
+      "start": 1394,
+      "end": 1401,
       "fixes": 0
     },
     {
@@ -269,8 +259,19 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 1403,
-      "end": 1410,
+      "start": 1394,
+      "end": 1401,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
+      "start": 1425,
+      "end": 1432,
       "fixes": 0
     },
     {
@@ -280,8 +281,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 1403,
-      "end": 1410,
+      "start": 1425,
+      "end": 1432,
       "fixes": 0
     },
     {
@@ -291,8 +292,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 1403,
-      "end": 1410,
+      "start": 1425,
+      "end": 1432,
       "fixes": 0
     },
     {
@@ -302,8 +303,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 1819,
-      "end": 1831,
+      "start": 1841,
+      "end": 1853,
       "fixes": 0
     },
     {
@@ -313,8 +314,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 1819,
-      "end": 1831,
+      "start": 1841,
+      "end": 1853,
       "fixes": 0
     },
     {
@@ -324,8 +325,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 1819,
-      "end": 1831,
+      "start": 1841,
+      "end": 1853,
       "fixes": 0
     },
     {
@@ -335,8 +336,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 1941,
-      "end": 1947,
+      "start": 1963,
+      "end": 1969,
       "fixes": 0
     },
     {
@@ -346,8 +347,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 1941,
-      "end": 1947,
+      "start": 1963,
+      "end": 1969,
       "fixes": 0
     },
     {
@@ -357,8 +358,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
-      "start": 1941,
-      "end": 1947,
+      "start": 1963,
+      "end": 1969,
       "fixes": 0
     }
   ]

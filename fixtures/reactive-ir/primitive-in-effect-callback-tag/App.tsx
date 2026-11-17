@@ -7,7 +7,7 @@ function h1(cb: () => unknown) {
   return 1;
 }
 
-// Violation (SC6002; the effect is SC4001 too): a template tag runs its tag
+// Violation (SC6002; SC4001 uncertifiable, ADR 1052): a template tag runs its tag
 // function on the apply's stack, so the effect it creates has no owner.
 export function EffectThroughTag() {
   const [count] = createSignal(0);

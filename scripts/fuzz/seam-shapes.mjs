@@ -14,7 +14,9 @@
 //   bseam-isfinite-<form>-other    legal   the replacement goes to another member; the declared one is called
 //
 // forms: assign, reflect, index, define (the ways a helper writes its parameter), definelit, reflectlit (a definer put to a literal key, ADR 0951), and
-// pathescaped, pathrebound, letrebound, reviver, reduceforeign (an object that looks made but is the parameter, ADR 1024). Only a member the runtime does not itself call can be replaced in a program
+// pathescaped, pathrebound, letrebound, reviver, reduceforeign (an object that looks made but is the parameter, ADR 1024), indexlet, indexlogical,
+// indexternary, definerebound, definepath (a key that looks numeric, or a definer target that looks made, but is the parameter, ADR 1036),
+// draftcallee (a callback parameter written as a projection draft, its callee a helper handing it the parameter, ADR 1053). Only a member the runtime does not itself call can be replaced in a program
 // the Chrome host runs: the replacement does not read the original (a program that does is already uncertifiable, SC9012 `standard-member-impostor`), so it would
 // break Solid and the host if it were `Set.add`, `setTimeout`, `Promise.prototype.then` or `addEventListener`. Those were scanned by the checker alone and are
 // reported, not shaped. Recall contexts, base shapes (misuse.mjs BASE_ONLY_CONTEXTS), on the three codes the hand-off roles decide.
@@ -38,6 +40,15 @@ const FORMS = {
   letrebound: "let o: any = {}; o = target; o[key] = impl;",
   reviver: "const o = JSON.parse(\"0\", () => target); o[key] = impl;",
   reduceforeign: "[0, 1].reduce((acc: any, _x: number, i: number) => { if (i) acc[key] = impl; return target; }, {} as any);",
+  // ADR 1036: a key that starts like a number or a boolean but is the parameter (a `let` rebound to it, a logical or a conditional whose operand starts
+  // with `!`), and a definer whose first argument looks made but reaches the parameter (a `let` rebound, a member path rebound in place).
+  indexlet: "let k: any = 0; k = key; target[k] = impl;",
+  indexlogical: "target[(!impl || key) as string] = impl;",
+  indexternary: "target[(!impl ? 0 : key) as string] = impl;",
+  definerebound: "let o: any = {}; o = target; Object.defineProperty(o, key, { value: impl, configurable: true, writable: true });",
+  definepath: "const holder = { slot: {} as any }; holder.slot = target; Object.defineProperties(holder.slot, { [key]: { value: impl, configurable: true, writable: true } });",
+  // ADR 1053: a callback's first parameter written as a projection draft is, but the callee is a local helper that hands it the parameter.
+  draftcallee: "const run = (f: (d: any) => void) => f(target); run((draft: any) => { Object.assign(draft, { [key]: impl }); });",
 };
 
 /**

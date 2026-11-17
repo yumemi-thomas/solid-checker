@@ -161,8 +161,8 @@
     },
     "rust/crates/solid-reactive-ir/src/base/contributions/fresh_written.rs": {
       "default-on-missing": {
-        "count": 2,
-        "why": "ADR 1024: both answer 'not proven made' (the write stays open) when the fact is missing: a callback body whose text cannot be read may name `arguments`, and a declaring function whose text cannot be read may hold a `finally`"
+        "count": 3,
+        "why": "ADR 1024, ADR 1053: each answers 'not proven made' (the write stays open) when the fact is missing: a reduce callback or a projection-draft callback whose body text cannot be read may name `arguments` (whose sloppy `arguments[0]` rebinds the parameter), and a declaring function whose text cannot be read may hold a `finally`"
       },
       "name-only-match": {
         "count": 2,

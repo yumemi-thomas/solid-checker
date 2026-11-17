@@ -3535,6 +3535,60 @@ function* body(flag: boolean) {
     );
 }
 
+/// Facts schema 96 (ADR 1051's review): a `yield`'s operand is a literal only when it is one literal node; an operator
+/// expression whose text starts and ends with a quote is not (`yield` binds looser than `||`, `?:` and `+`).
+#[test]
+fn records_whether_a_yield_operand_is_one_literal_node() {
+    let source = r#"
+declare const mode: string;
+declare function load(): Promise<void>;
+declare function fail(): string;
+let undefinedShadow = 1;
+function* body() {
+  yield "s";
+  yield 'q' as const;
+  yield 1;
+  yield 10n;
+  yield true;
+  yield null;
+  yield undefined;
+  yield;
+  yield "z" < mode || load() || "";
+  yield "p" === mode ? load() : "done";
+  yield "a" + fail() + "b";
+  yield `t`;
+  yield -1;
+  yield undefinedShadow;
+}
+"#;
+    let facts = extract("/project/body.ts", source).unwrap();
+    let text = |span: &Span| &source[span.start as usize..span.end as usize];
+    let rows = facts
+        .yields
+        .iter()
+        .map(|fact| (text(&fact.span), fact.operand_literal))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        rows,
+        [
+            ("yield \"s\"", true),
+            ("yield 'q' as const", true),
+            ("yield 1", true),
+            ("yield 10n", true),
+            ("yield true", true),
+            ("yield null", true),
+            ("yield undefined", true),
+            ("yield", false),
+            ("yield \"z\" < mode || load() || \"\"", false),
+            ("yield \"p\" === mode ? load() : \"done\"", false),
+            ("yield \"a\" + fail() + \"b\"", false),
+            ("yield `t`", false),
+            ("yield -1", false),
+            ("yield undefinedShadow", false),
+        ]
+    );
+}
+
 /// Facts schema 78: a `const` destructuring slot of a namespace import binding
 /// names one export; every other form names nothing.
 #[test]

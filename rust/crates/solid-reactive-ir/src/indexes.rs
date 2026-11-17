@@ -875,6 +875,8 @@ pub(super) struct SemanticLookup<'a> {
     /// ADR 0949: the runtime redirects as an undirected graph (a declaration symbol and the runtime
     /// symbol it implements), so a function's references through its `.d.ts` are asked once.
     redirect_neighbors: OnceLock<std::collections::BTreeMap<&'a str, Vec<&'a str>>>,
+    /// ADR 1053: the hashes of the symbols the dialect names `createProjection` ([`Self::projection_drafts_exact`]).
+    projection_symbols: OnceLock<HashSet<u32>>,
     /// The literals whose every invocation is a host event dispatch.
     event_invoked_literals: OnceLock<HashSet<(String, Span)>>,
     /// ADR 0435: every dispatch call with the receiver and caller its own
@@ -1305,6 +1307,7 @@ impl<'a> SemanticLookup<'a> {
             bounded_walk_peak: std::sync::atomic::AtomicU64::new(0),
             bounded_walks_exhausted: std::sync::atomic::AtomicU64::new(0),
             redirect_neighbors: OnceLock::new(),
+            projection_symbols: OnceLock::new(),
             event_invoked_literals: OnceLock::new(),
             placed_event_dispatch: OnceLock::new(),
             synchronous_event_dispatch: OnceLock::new(),
@@ -2750,13 +2753,24 @@ impl<'a> SemanticLookup<'a> {
                 crate::base::memo::probes::PolledKey::Unit
             });
         }
-        let present = premise || {
-            let index = self.hazards_index();
-            index.contains_key(&hazard)
-                || crate::base::contributions::open_member_write_through_factory(hazard, &|raw| {
-                    index.contains_key(&raw)
+        let present = premise
+            || {
+                let index = self.hazards_index();
+                let raw = |raw| index.contains_key(&raw);
+                index.contains_key(&hazard)
+                || crate::base::contributions::open_member_write_through_factory(hazard, &raw)
+                // ADR 1045: a definer on a made target may define any key once a definer may not be standard; asked of the
+                // census with the factory form's answer (ADR 1024), never of this answer.
+                || crate::base::contributions::reflective_definition_through_made(hazard, &|atom| {
+                    raw(atom) || crate::base::contributions::open_member_write_through_factory(atom, &raw)
                 })
-        };
+                || (index.contains_key(&crate::base::Hazard::ProjectionDraftAny)
+                    && crate::base::contributions::projection_draft_write_open(
+                        hazard,
+                        index.keys(),
+                        self.projection_symbols(),
+                    ))
+            };
         // ADR 0950, the one seam: a what-if build answers `false` for a hazard it was told to assume absent. This block does not exist in a default
         // build (`what-if` is in no default, workspace or CI), so nothing there can reach it.
         #[cfg(feature = "what-if")]
@@ -2771,6 +2785,39 @@ impl<'a> SemanticLookup<'a> {
     pub(crate) fn fresh_factory_writes_open(&self) -> bool {
         let index = self.hazards_index();
         !crate::base::contributions::fresh_factories_intact(&|raw| index.contains_key(&raw))
+    }
+
+    /// ADR 1053: whether some projection-draft write holds the census key `key` (by name) open, as
+    /// [`Self::hazard_present`] reads it.
+    pub(crate) fn projection_draft_key_open(&self, key: &str) -> bool {
+        let index = self.hazards_index();
+        index.contains_key(&crate::base::Hazard::ProjectionDraftAny)
+            && crate::base::contributions::projection_draft_write_open(
+                crate::base::contributions::open_member_write_hazard(key),
+                index.keys(),
+                self.projection_symbols(),
+            )
+    }
+
+    /// ADR 1053: the hashes of the symbols the dialect names `createProjection`, by the symbol the binder resolves at a
+    /// callee (as [`crate::primitive_name`] reads a call).
+    fn projection_symbols(&self) -> &HashSet<u32> {
+        self.projection_symbols.get_or_init(|| {
+            self.symbol_names()
+                .iter()
+                .filter(|(_, name)| {
+                    self.dialect
+                        .primitive(name.as_ref())
+                        .is_some_and(|primitive| {
+                            self.dialect
+                                .callback_first_parameter_writes_only_runtime_objects(primitive, 0)
+                        })
+                })
+                .map(|(symbol, _)| {
+                    crate::base::contributions::projection_callee_hash(symbol.as_ref())
+                })
+                .collect()
+        })
     }
 
     /// ADR 0965: the blocker kinds this run assumed away (`--assume Premise(kind)`), each asked of the seam, which is how the run records that it flipped.

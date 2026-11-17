@@ -1,0 +1,10 @@
+{
+  "note": "ADR 1052: a helper a tracked effect and a handler both call. The tracked call throws PRIMITIVE_IN_FORBIDDEN_SCOPE at mount and halts the system, the button never mounts, and NO_OWNER_EFFECT is never reported; SC3001 is the violation, SC4001 uncertifiable `creation-throws-first`. Generated program `mx-no-owner-effect-tracked-shared-effect-direct-none` (differential fuzzer, generator 2).",
+  "haltMarker": true,
+  "steps": [
+    {
+      "action": "click",
+      "selector": "[data-act=\"b1\"], body:not(:has([data-act=\"b1\"])) > #sc-halted"
+    }
+  ]
+}

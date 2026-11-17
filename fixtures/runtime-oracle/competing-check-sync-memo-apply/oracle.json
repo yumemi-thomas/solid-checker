@@ -1,0 +1,5 @@
+{
+  "note": "ADR 1052, part 2: a sync memo created in an effect apply. Chrome reports PRIMITIVE_IN_EFFECT_CALLBACK and never SYNC_NODE_RECEIVED_ASYNC; SC6002 is the violation, SC7002 uncertifiable `creation-throws-first`. Generated program `mx-sync-node-received-async-effect-apply-memo-direct-none` (differential fuzzer, generator 2).",
+  "haltMarker": true,
+  "steps": []
+}

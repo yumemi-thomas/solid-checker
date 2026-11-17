@@ -12,6 +12,11 @@
 //! - **Factory**: the value is also one a standard function made or handed back unchanged: `Object.create(null)`,
 //!   `JSON.parse(text)` (no reviver), the target `Object.assign` returns, and the accumulator of an inline `reduce`
 //!   callback over an array the standard library made, whose seed and every return are such values.
+//! - **Projection draft** (ADR 1053, a factory-form site): the first parameter of an inline callback passed as the first
+//!   argument of a call whose callee is an identifier ([`fresh_written_object_drafts`] hands back the callee). The
+//!   program side keeps it only while every such callee resolves to the dialect's `createProjection`, whose rc.21 source
+//!   calls the callback with a draft wrapper (a new `Proxy` whose traps write the projection's store proxy, whose own traps
+//!   write a backing the store made) or a clone of the store's value (`runProjectionComputed`, `wrapDraft`, `cloneState`).
 //!
 //! The factory form trusts the standard functions of [`FRESH_FACTORIES`]. The premise that makes that trust sound
 //! (the first-patch induction, ADR 1024): take the first moment any write of the factory form puts a member on a
@@ -55,8 +60,31 @@ pub(crate) fn fresh_written_object(file: &FileFacts, span: Span) -> Option<Fresh
         file,
         assumed: Vec::new(),
         site: span,
+        drafts: None,
     }
     .value(span, 0)
+}
+
+/// ADR 1053: [`fresh_written_object`] with the projection-draft form admitted, and the callee span of every call whose
+/// callback's draft the answer rests on. The answer holds only while each callee is the dialect's `createProjection`,
+/// which the program side asks ([`super::Hazard::ProjectionDraftCallee`]).
+pub(crate) fn fresh_written_object_drafts(
+    file: &FileFacts,
+    span: Span,
+) -> (Option<Fresh>, Vec<Span>) {
+    let mut walk = Walk {
+        file,
+        assumed: Vec::new(),
+        site: span,
+        drafts: Some(Vec::new()),
+    };
+    let answer = walk.value(span, 0);
+    let drafts = if answer.is_some() {
+        walk.drafts.unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    (answer, drafts)
 }
 
 /// Whether the program leaves every factory of [`FRESH_FACTORIES`] standard, `hazard` answering the census with every
@@ -75,6 +103,8 @@ struct Walk<'f> {
     assumed: Vec<Span>,
     /// The written object, where a member path's straight-code test is asked.
     site: Span,
+    /// ADR 1053: `Some` where the projection-draft form is admitted: the callee spans the answer rests on.
+    drafts: Option<Vec<Span>>,
 }
 
 fn both(left: Option<Fresh>, right: Option<Fresh>) -> Option<Fresh> {
@@ -149,7 +179,9 @@ impl Walk<'_> {
             .identifier_binding(declaration)
             .filter(|binding| binding.immutable || binding.runtime_let)
         else {
-            return self.accumulator(declaration, depth);
+            return self
+                .accumulator(declaration, depth)
+                .or_else(|| self.projection_draft(declaration));
         };
         if binding.immutable {
             return self.value(binding.initializer?, depth);
@@ -164,11 +196,16 @@ impl Walk<'_> {
             if answer.is_none() {
                 break;
             }
-            if *reference == declaration
-                || !ast.any_write_target_containing(*reference)
-                || ast.any_member_with_object(*reference)
-            {
+            if *reference == declaration {
                 continue;
+            }
+            match binding_write(file, *reference) {
+                Write::None => continue,
+                Write::Other => {
+                    answer = None;
+                    continue;
+                }
+                Write::Exact => {}
             }
             // Only a plain or logical `=` whose target is the name itself: a pattern, a `for … of` head, an update or a
             // compound operator writes what no assignment value shows.
@@ -261,6 +298,44 @@ impl Walk<'_> {
         }
         self.assumed.pop();
         answer.map(|_| Fresh::Factory)
+    }
+
+    /// ADR 1053: the first parameter of an inline callback (an identifier, no default, never written; an arrow or a function
+    /// that never names `arguments`, whose sloppy `arguments[0]` would rebind it), the first argument of a call whose callee
+    /// is an identifier (no member, no call). Factory-form: the callee is recorded and the program side keeps the answer only
+    /// while it is the dialect's `createProjection`.
+    fn projection_draft(&mut self, declaration: Span) -> Option<Fresh> {
+        self.drafts.as_ref()?;
+        let file = self.file;
+        let ast = &file.ast;
+        let function = ast.functions.iter().find(|function| {
+            function.parameters.first().is_some_and(|parameter| {
+                parameter.shape == BindingShape::Identifier
+                    && parameter.initializer.is_none()
+                    && parameter.names.first().map(|name| name.span) == Some(declaration)
+            })
+        })?;
+        if (function.kind != FunctionKind::Arrow
+            && file
+                .source_text(function.body)
+                .is_none_or(|body| body.contains("arguments")))
+            || crate::indexes::binding_written(file, declaration)
+        {
+            return None;
+        }
+        no_eval(file)?;
+        let call = ast.calls.iter().find(|call| {
+            !call.construct
+                && call.arguments.first().is_some_and(|argument| {
+                    !argument.spread && ast.peel_ts_sugar_span(argument.span) == function.span
+                })
+        })?;
+        let callee = ast.peel_ts_sugar_span(call.callee);
+        if ast.member_at(callee).is_some() || ast.call_at(callee).is_some() {
+            return None;
+        }
+        self.drafts.as_mut()?.push(callee);
+        Some(Fresh::Factory)
     }
 
     /// An array the standard library made: a literal, `Object.keys`, `values` or `entries` of anything, or such an
@@ -381,6 +456,188 @@ impl Walk<'_> {
         }
         self.value(property, depth)
     }
+}
+
+/// ADR 1036: whether the computed key at `span` is a number, a bigint or a boolean by its syntax, so that the property it
+/// names is an index or `true`/`false`, never a member a standard call is: a numeric literal; an operator whose result is
+/// such a primitive whatever its operands ([`numeric_operator`]: an arithmetic operator but `+`, a shift, bitwise or
+/// relational one, prefix `- ~ !`, `++`/`--`; equality, `in` and `instanceof` are not read); a `const` bound to such
+/// a key; and a `let` (no direct `eval`) whose initial value and every write is one: a plain or logical assignment of
+/// such a key, a compound assignment of one (number with number stays a number), or `++`/`--`, each assuming the previous
+/// value one (the induction of [`fresh_written_object`]'s `let`).
+pub(crate) fn index_key(file: &FileFacts, span: Span) -> bool {
+    Index {
+        file,
+        assumed: Vec::new(),
+    }
+    .key(span, 0)
+}
+
+struct Index<'f> {
+    file: &'f FileFacts,
+    assumed: Vec<Span>,
+}
+
+impl Index<'_> {
+    fn key(&mut self, span: Span, depth: u8) -> bool {
+        if depth > DEPTH {
+            return false;
+        }
+        let file = self.file;
+        let ast = &file.ast;
+        let value = ast.peel_ts_sugar_span(span);
+        let Some(text) = file.source_text(value).map(str::trim) else {
+            return false;
+        };
+        if text
+            .chars()
+            .next()
+            .is_some_and(|first| first.is_ascii_digit())
+            && text
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_')
+        {
+            return true;
+        }
+        if ast.primitive_results.binary_search(&value).is_ok() {
+            return numeric_operator(file, value, text);
+        }
+        let Some(declaration) = ast.reference_declaration(value) else {
+            return false;
+        };
+        if self.assumed.contains(&declaration) {
+            return true;
+        }
+        let Some(binding) = ast
+            .identifier_binding(declaration)
+            .filter(|binding| binding.immutable || binding.runtime_let)
+        else {
+            return false;
+        };
+        if binding.immutable {
+            return binding
+                .initializer
+                .is_some_and(|initializer| self.key(initializer, depth + 1));
+        }
+        if no_eval(file).is_none() {
+            return false;
+        }
+        let Some(initializer) = binding.initializer else {
+            return false;
+        };
+        self.assumed.push(declaration);
+        let mut numeric = self.key(initializer, depth + 1);
+        for reference in ast.references_to(declaration) {
+            if !numeric {
+                break;
+            }
+            if *reference == declaration {
+                continue;
+            }
+            match binding_write(file, *reference) {
+                Write::None => continue,
+                Write::Other => {
+                    numeric = false;
+                    continue;
+                }
+                Write::Exact => {}
+            }
+            let assigned = ast
+                .assignments
+                .iter()
+                .find(|assignment| ast.peel_ts_sugar_span(assignment.target) == *reference);
+            numeric = match assigned {
+                Some(assignment) => {
+                    let value = assignment.value_span;
+                    self.key(value, depth + 1)
+                }
+                // `i++`, `--i`: the update expression is the reference and its two-character operator.
+                None => ast.primitive_results.iter().any(|update| {
+                    (update.start == reference.start && update.end == reference.end + 2)
+                        || (update.end == reference.end && update.start + 2 == reference.start)
+                }),
+            };
+        }
+        self.assumed.pop();
+        numeric
+    }
+}
+
+/// Whether the operator expression at `value` (one of `primitive_results`) yields a number, a bigint or a boolean whatever
+/// its operands: a binary whose operator, read between its two operands (the `coercing_operands` that start and end with
+/// it), is no `+` and is one of the arithmetic, shift, bitwise or relational operators; else (no two such operands: a
+/// unary or an update) `++`/`--` at either end, or a prefix `-`, `~` or `!`. `typeof`, a unary `+` of a string-valued
+/// operand aside, and every binary the operands do not show, are not read.
+fn numeric_operator(file: &FileFacts, value: Span, text: &str) -> bool {
+    let ast = &file.ast;
+    let left = ast
+        .coercing_operands
+        .iter()
+        .filter(|operand| operand.start == value.start && operand.end < value.end)
+        .max_by_key(|operand| operand.end);
+    let right = ast
+        .coercing_operands
+        .iter()
+        .filter(|operand| operand.end == value.end && operand.start > value.start)
+        .min_by_key(|operand| operand.start);
+    if let (Some(left), Some(right)) = (left, right) {
+        if left.end > right.start {
+            return false;
+        }
+        let between = Span::new(left.end, right.start);
+        return file
+            .source_text(between)
+            .map(str::trim)
+            .is_some_and(|operator| {
+                matches!(
+                    operator,
+                    "-" | "*"
+                        | "/"
+                        | "%"
+                        | "**"
+                        | "|"
+                        | "&"
+                        | "^"
+                        | "<<"
+                        | ">>"
+                        | ">>>"
+                        | "<"
+                        | ">"
+                        | "<="
+                        | ">="
+                )
+            });
+    }
+    text.starts_with("++")
+        || text.starts_with("--")
+        || text.ends_with("++")
+        || text.ends_with("--")
+        || (text.starts_with(['-', '~', '!']) && !text.starts_with("!="))
+}
+
+/// How a reference to a binding is written.
+enum Write {
+    /// Not at all: a read, or a part of a member write target's object or key (`t[i] = v` reads `i`).
+    None,
+    /// It is a write target itself (an assignment's, an update's).
+    Exact,
+    /// Inside some other write target (a pattern, a `for … of` head): what is written there no assignment shows.
+    Other,
+}
+
+fn binding_write(file: &FileFacts, reference: Span) -> Write {
+    let ast = &file.ast;
+    let mut write = Write::None;
+    for target in &ast.write_targets {
+        let target = ast.peel_ts_sugar_span(*target);
+        if target == reference {
+            return Write::Exact;
+        }
+        if target.contains(reference) && ast.member_at(target).is_none() {
+            write = Write::Other;
+        }
+    }
+    write
 }
 
 /// Exactly an array or object literal, as [`super::fresh_object`] reads one.
@@ -559,6 +816,88 @@ mod tests {
         Some((!factory.is_empty()).then_some(Fresh::Factory))
     }
 
+    /// ADR 1053: the first parameter of an inline callback passed first to a call whose callee is an identifier is a
+    /// factory-form object, resting on that callee; the shapes beside it stay open.
+    #[test]
+    fn a_projection_draft_rests_on_its_callee() {
+        let drafts = |source: &str| {
+            let file = file(source);
+            let (_, _, open, factory) = super::super::impostor_sites(&file);
+            let callees = factory
+                .iter()
+                .flat_map(|(_, object)| super::fresh_written_object_drafts(&file, *object).1)
+                .map(|callee| file.source_text(callee).unwrap_or_default().to_owned())
+                .collect::<Vec<_>>();
+            (open.is_empty(), callees)
+        };
+        // solid-query's `metaProjection`, and a plain member write on the draft.
+        assert_eq!(
+            drafts(
+                "declare function createProjection(f: (d: any) => void, s: object): object; export const m = (x: object) => createProjection((draft: any) => { Object.assign(draft, x); }, {});"
+            ),
+            (true, vec!["createProjection".to_owned()])
+        );
+        assert_eq!(
+            drafts(
+                "declare function cp(f: (d: any) => void, s: object): object; export const m = (k: string, v: unknown) => cp(function (draft: any) { draft[k] = v; }, {});"
+            ),
+            (true, vec!["cp".to_owned()])
+        );
+        for source in [
+            // A member callee, a callee that is a call, the callback second, a spread.
+            "declare const S: any; export const m = (x: object) => S.createProjection((draft: any) => { Object.assign(draft, x); }, {});",
+            "declare const f: any; export const m = (x: object) => f()((draft: any) => { Object.assign(draft, x); }, {});",
+            "declare function cp(s: object, f: (d: any) => void): object; export const m = (x: object) => cp({}, (draft: any) => { Object.assign(draft, x); });",
+            // The parameter written, defaulted, destructured, or reachable through a sloppy function's `arguments`.
+            "declare function cp(f: (d: any) => void, s: object): object; export const m = (t: any, x: object) => cp((draft: any) => { draft = t; Object.assign(draft, x); }, {});",
+            "declare function cp(f: (d?: any) => void, s: object): object; export const m = (t: any, x: object) => cp((draft: any = t) => { Object.assign(draft, x); }, {});",
+            "declare function cp(f: (d: any) => void, s: object): object; export const m = (t: any, x: object) => cp(function (draft: any) { arguments[0] = t; Object.assign(draft, x); }, {});",
+            // A direct `eval` may rebind it.
+            "declare function cp(f: (d: any) => void, s: object): object; export const m = (s: string, x: object) => cp((draft: any) => { eval(s); Object.assign(draft, x); }, {});",
+        ] {
+            assert_eq!(drafts(source), (false, vec![]), "{source}");
+        }
+    }
+
+    /// ADR 1053: a draft write holds its own key open, and only while its callee is not `createProjection`.
+    #[test]
+    fn a_draft_write_opens_only_its_key_under_another_callee() {
+        use super::super::{
+            Hazard, open_member_write_hazard, projection_callee_hash, projection_draft_write_open,
+        };
+        let projection = projection_callee_hash("solid-js::createProjection");
+        let other = projection_callee_hash("solid-js::createMemo");
+        let projections = [projection].into_iter().collect::<crate::HashSet<u32>>();
+        let star = open_member_write_hazard("*");
+        let Hazard::OpenMemberWrite(key) = star else {
+            unreachable!()
+        };
+        let Hazard::OpenMemberWrite(name) = open_member_write_hazard("name") else {
+            unreachable!()
+        };
+        let open = |keys: &[Hazard], asked: Hazard| {
+            projection_draft_write_open(asked, keys.iter(), &projections)
+        };
+        assert!(!open(
+            &[Hazard::ProjectionDraftWrite(key, projection)],
+            star
+        ));
+        assert!(open(
+            &[
+                Hazard::ProjectionDraftWrite(key, projection),
+                Hazard::ProjectionDraftWrite(key, other)
+            ],
+            star
+        ));
+        assert!(open(&[Hazard::ProjectionDraftWriteUnresolved(key)], star));
+        // Another key's draft under another callee opens that key only.
+        assert!(!open(&[Hazard::ProjectionDraftWrite(name, other)], star));
+        assert!(open(
+            &[Hazard::ProjectionDraftWrite(name, other)],
+            open_member_write_hazard("name")
+        ));
+    }
+
     /// ADR 1024: each form, and the shape beside it that keeps the write open.
     #[test]
     fn a_write_is_open_unless_its_object_is_proven_made() {
@@ -713,6 +1052,158 @@ mod tests {
             ),
         ] {
             assert_eq!(verdict(source), expected, "{source}");
+        }
+    }
+
+    /// ADR 1036: the definition hazards of a program's definer calls, by the target each defines on.
+    #[test]
+    fn a_definer_on_a_made_object_defines_on_no_root() {
+        use super::super::Hazard;
+        let hazards = |source: &str| super::super::root_definitions(&file(source)).0;
+        let any = Hazard::ReflectiveDefinitionAny;
+        let factory = Hazard::FreshFactoryDefinitionAny;
+        for (source, expected) in [
+            // solid-query's `createInfiniteQuery` and probus-hk's getters: a fresh literal target.
+            (
+                "export const m = (d: any) => Object.defineProperties({}, d);",
+                vec![],
+            ),
+            (
+                "export const m = (d: any) => { const o = {}; Object.defineProperties(o, d); return o; };",
+                vec![],
+            ),
+            // A factory-made target.
+            (
+                "export const m = (d: any) => Object.defineProperties(Object.create(null), d);",
+                vec![factory],
+            ),
+            // A target no fact makes.
+            (
+                "export const m = (t: any, d: any) => Object.defineProperties(t, d);",
+                vec![any],
+            ),
+            // A definer held as a value, destructured, or on a receiver that is no global `Object`.
+            (
+                "export const m = (d: any) => { const def = Object.defineProperties; return def({}, d); };",
+                vec![any],
+            ),
+            (
+                "const { defineProperties } = Object; export const m = (d: any) => defineProperties({}, d);",
+                vec![any],
+            ),
+            (
+                "const Object = { defineProperties: (o: any, d: any) => o }; export const m = (d: any) => Object.defineProperties({}, d);",
+                vec![any],
+            ),
+            // A spread target.
+            (
+                "export const m = (a: any[], d: any) => Object.defineProperties(...(a as [object]), d);",
+                vec![any],
+            ),
+        ] {
+            assert_eq!(hazards(source), expected, "{source}");
+        }
+        // A literal key keeps its own hazard, on a target no fact makes.
+        assert_eq!(
+            hazards(
+                "export const m = (t: any, v: any) => Reflect.defineProperty(t, \"isFinite\", { value: v });"
+            ),
+            vec![super::super::reflective_definition_sole("isFinite")]
+        );
+        assert_eq!(
+            hazards(
+                "export const m = (v: any) => Reflect.defineProperty({}, \"isFinite\", { value: v });"
+            ),
+            vec![]
+        );
+        // ADR 1045: the made target is kept as `ReflectiveDefinitionMade` (any key while a patch may reach a definer).
+        assert!(
+            super::super::root_definitions(&file(
+                "export const m = (v: any) => Reflect.defineProperty({}, \"isFinite\", { value: v });"
+            ))
+            .1
+        );
+    }
+
+    /// ADR 1036: a key that is a number or a boolean by its syntax names no member, so the write is no open write.
+    #[test]
+    fn an_index_key_names_no_member() {
+        for (source, open) in [
+            (
+                "export function m(t: any, f: any) { for (let i = 0; i < 3; i++) t[i] = f; }",
+                false,
+            ),
+            (
+                "export function m(t: any, f: any) { let n = 0; t[n++] = f; t[--n] = f; }",
+                false,
+            ),
+            (
+                "export function m(t: any, f: any, a: number) { t[a - 1] = f; t[a * 2] = f; t[a | 0] = f; t[a >>> 1] = f; }",
+                false,
+            ),
+            (
+                "export function m(t: any, f: any) { const k = 2 ** 3; t[k] = f; }",
+                false,
+            ),
+            (
+                "export function m(t: any, f: any) { let i = 0; i += 2; t[i] = f; }",
+                false,
+            ),
+            // A `+` may concatenate: `\"is\" + \"Finite\"`.
+            (
+                "export function m(t: any, f: any, a: any) { t[a + 1] = f; }",
+                true,
+            ),
+            (
+                "export function m(t: any, f: any) { t[\"is\" + \"Finite\"] = f; }",
+                true,
+            ),
+            (
+                "export function m(t: any, f: any, a: any) { t[typeof a] = f; }",
+                true,
+            ),
+            // A logical or a conditional whose text starts like a prefix operator (the fuzzer's `indexlogical`, `indexternary`).
+            (
+                "export function m(t: any, f: any, k: string) { t[(!f || k) as string] = f; }",
+                true,
+            ),
+            (
+                "export function m(t: any, f: any, k: string) { t[-0 || k] = f; }",
+                true,
+            ),
+            (
+                "export function m(t: any, f: any, k: string) { t[(!f ? 0 : k) as string] = f; }",
+                true,
+            ),
+            // A counter seeded or written with something no syntax bounds.
+            (
+                "export function m(t: any, f: any, a: any) { let i = a; i++; t[i] = f; }",
+                true,
+            ),
+            (
+                "export function m(t: any, f: any, a: any) { let i = 0; i = a; t[i] = f; }",
+                true,
+            ),
+            (
+                "export function m(t: any, f: any, a: any) { let i = 0; for (i of a) t[i] = f; }",
+                true,
+            ),
+            (
+                "export function m(t: any, f: any, s: string) { let i = 0; eval(s); t[i] = f; }",
+                true,
+            ),
+            // A parameter typed `number` proves nothing (a lying cast).
+            (
+                "export function m(t: any, f: any, i: number) { t[i] = f; }",
+                true,
+            ),
+        ] {
+            let file = file(source);
+            let (_, _, writes, _) = super::super::impostor_sites(&file);
+            let any = writes.iter().any(|(key, _)| {
+                !matches!(key, super::super::CensusKey::Named(name) if name == super::super::INDEX_KEY)
+            });
+            assert_eq!(any, open, "{source}");
         }
     }
 

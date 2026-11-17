@@ -228,6 +228,7 @@ impl Finding {
                 && !provider_open
                 && !default_unproven
                 && !owned_run_throws
+                && !requirement.earlier_check_throws
                 && !requirement.flight_error_unobserved
                 && !requirement.computation_error_unobserved
                 && !requirement.context_unaccounted);
@@ -378,6 +379,15 @@ impl Finding {
         if owned_run_throws {
             message.push_str(
                 "; but this read also runs under an owner, where the context has no provider and Solid throws `ContextNotFoundError` first (missing-context-provider), and a run with no owner is not proven to be reached after that",
+            );
+        }
+        if requirement.earlier_check_throws {
+            message.push_str(
+                if requirement.operation == crate::OwnerRequirementOperation::ContextProvider {
+                    "; but this read may also run with no owner, where Solid throws `NO_OWNER_CONTEXT` before it looks for a provider, so `ContextNotFoundError` is not proven to be what this call reports"
+                } else {
+                    "; but Solid checks this call earlier for a scope that refuses it (an effect callback, a leaf owner), and that check throws first on a run this program proves or leaves open, so the owner check is not proven to be reached"
+                },
             );
         }
         if requirement.computation_error_unobserved {

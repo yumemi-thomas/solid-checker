@@ -17,7 +17,7 @@ mod fresh_written;
 use crate::{HashMap, HashSet};
 pub(crate) use blocked_by::*;
 pub(crate) use fresh_written::fresh_factories_intact;
-pub(crate) use fresh_written::{Fresh, fresh_written_object};
+pub(crate) use fresh_written::{Fresh, fresh_written_object, fresh_written_object_drafts};
 
 /// The build-wide inputs a contribution may read besides its file. A change
 /// of any of them is a different cache domain, so a fresh build.
@@ -756,10 +756,27 @@ pub(crate) enum Hazard {
     /// (the hash of the key, [`member_hash`] with no container) and defines no
     /// other ([`DefinerKey::Sole`]; value 0).
     ReflectiveDefinitionSole(u32),
+    /// ADR 1036: a reflective definer that may define any key on an object only the factory form proves made (value 0):
+    /// [`Self::ReflectiveDefinitionAny`] while a factory may not be standard ([`open_member_write_through_factory`]).
+    FreshFactoryDefinitionAny,
+    /// ADR 1036: the same for a definer called with this literal key ([`Self::ReflectiveDefinitionSole`]'s hash).
+    FreshFactoryDefinitionSole(u32),
+    /// ADR 1045: some standard definer is called on an object made there, so that [`Self::ReflectiveDefinitionAny`] leaves it
+    /// out (value 0): it may define any key while a patch may reach a definer ([`reflective_definition_through_made`]).
+    ReflectiveDefinitionMade,
     /// ADR 1024: code writes this member (the hash of [`Self::OpenMemberWrite`]'s key) of an object only the factory
     /// form proves made ([`fresh_written::fresh_written_object`]; value 0): an open write while a factory it trusts may
     /// not be standard ([`open_member_write_through_factory`]).
     FreshFactoryWrite(u32),
+    /// ADR 1053: code writes this key ([`Self::OpenMemberWrite`]'s hash) of the first parameter of a callback passed to a
+    /// call whose callee is this symbol (the hash of its id, [`projection_callee_hash`]; value 0): an open write of the key
+    /// unless the callee is the dialect's `createProjection` ([`projection_draft_write_open`]).
+    ProjectionDraftWrite(u32, u32),
+    /// ADR 1053: the same, for a callee no symbol resolves: an open write of the key.
+    ProjectionDraftWriteUnresolved(u32),
+    /// ADR 1053: the file has some [`Self::ProjectionDraftWrite`] or [`Self::ProjectionDraftWriteUnresolved`] (value 0), so
+    /// a program without it asks no more.
+    ProjectionDraftAny,
     /// ADR 0965 (batch 11; the what-if build only): a typed cause of uncertifiable rows, the `blockedBy.kind` of the rows it blocks (`function-run-unplaced`,
     /// `unresolved-invocation`, ...), as a premise a proof would discharge for all of them. No census holds it and no file has it: the seam answers it present
     /// wherever it is asked, so only an assumption makes it absent, and what that removes is every uncertifiable finding of that kind from the report.
@@ -804,6 +821,16 @@ fn standard_impostor_write(member: &str) -> Hazard {
     Hazard::StandardImpostorWrite(member_hash("", member))
 }
 
+/// [`open_member_write`], for the base tests.
+#[cfg(test)]
+pub(crate) fn open_member_write_for_test(member: &str) -> Hazard {
+    open_member_write(member)
+}
+
+pub(crate) fn open_member_write_hazard(member: &str) -> Hazard {
+    open_member_write(member)
+}
+
 fn open_member_write(member: &str) -> Hazard {
     Hazard::OpenMemberWrite(member_hash("", member))
 }
@@ -819,10 +846,40 @@ pub(crate) fn open_member_write_through_factory(
     hazard: Hazard,
     raw: &impl Fn(Hazard) -> bool,
 ) -> bool {
+    let factory = match hazard {
+        Hazard::OpenMemberWrite(key) => Hazard::FreshFactoryWrite(key),
+        // ADR 1036: a definer on a factory-made object.
+        Hazard::ReflectiveDefinitionAny => Hazard::FreshFactoryDefinitionAny,
+        Hazard::ReflectiveDefinitionSole(key) => Hazard::FreshFactoryDefinitionSole(key),
+        _ => return false,
+    };
+    raw(factory) && !fresh_factories_intact(raw)
+}
+
+/// ADR 1053: [`Hazard::ProjectionDraftWrite`]'s callee key for a symbol id (FNV-1a, as every census key is hashed).
+pub(crate) fn projection_callee_hash(symbol: &str) -> u32 {
+    member_hash("", symbol)
+}
+
+/// ADR 1053: whether `hazard`, an [`Hazard::OpenMemberWrite`], is present through a projection draft: among the census's
+/// `keys` (the hazard index's), a draft write of that key whose callee is not one of `projections` (the hashes of the
+/// symbols the dialect names `createProjection`), or no symbol resolves.
+pub(crate) fn projection_draft_write_open<'k>(
+    hazard: Hazard,
+    keys: impl Iterator<Item = &'k Hazard>,
+    projections: &HashSet<u32>,
+) -> bool {
     let Hazard::OpenMemberWrite(key) = hazard else {
         return false;
     };
-    raw(Hazard::FreshFactoryWrite(key)) && !fresh_factories_intact(raw)
+    let mut keys = keys;
+    keys.any(|held| match *held {
+        Hazard::ProjectionDraftWriteUnresolved(written) => written == key,
+        Hazard::ProjectionDraftWrite(written, callee) => {
+            written == key && !projections.contains(&callee)
+        }
+        _ => false,
+    })
 }
 
 fn reflective_definition_sole(key: &str) -> Hazard {
@@ -1239,13 +1296,60 @@ fn symbol_key(file: &FileFacts, key: Span) -> bool {
 /// ADR 0877: the key at `key` names a `const` of this file holding what
 /// [`symbol_made_at`] accepts at its initializer. `Symbol` replaced is
 /// `symbol_open`'s, as for the same call written in place.
+///
+/// ADR 1045: or a `let` or `var` of a module nothing writes, declared once by its name in the file, with no direct `eval`
+/// (`var _m$ = Symbol()`, a compiler's private key). A read before its declarator ran gives `undefined`, and a write under
+/// the key `"undefined"` puts nothing on a standard root (the global's `undefined` is neither writable nor configurable).
+/// A classic script's top-level `var` is the global object's property, which any code may write: a file with no import
+/// or export keeps it open.
 fn const_symbol_key(file: &FileFacts, key: Span) -> bool {
     let ast = &file.ast;
-    ast.reference_declaration(ast.peel_ts_sugar_span(key))
-        .and_then(|declaration| ast.identifier_binding(declaration))
-        .filter(|binding| binding.immutable)
-        .and_then(|binding| binding.initializer)
-        .is_some_and(|initializer| symbol_made_at(file, ast.peel_ts_sugar_span(initializer)))
+    let Some(declaration) = ast.reference_declaration(ast.peel_ts_sugar_span(key)) else {
+        return false;
+    };
+    let Some(binding) = ast.identifier_binding(declaration) else {
+        return false;
+    };
+    let never_written = || {
+        let name = file.source_text(declaration);
+        crate::execution_role::file_is_module(file)
+            && !symbol_binding_written(file, declaration)
+            && !crate::interproc::property_gets::direct_eval_in(file, Span::new(0, u32::MAX))
+            && name.is_some()
+            && ast
+                .identifiers
+                .iter()
+                .filter(|identifier| {
+                    identifier.role == solid_facts::ast::IdentifierRole::Binding
+                        && file.source_text(identifier.span) == name
+                })
+                .count()
+                == 1
+    };
+    (binding.immutable || never_written())
+        && binding
+            .initializer
+            .is_some_and(|initializer| symbol_made_at(file, ast.peel_ts_sugar_span(initializer)))
+}
+
+/// ADR 1045: whether some reference to the binding declared at `declaration` is written: a write or delete target that
+/// contains it, unless only as (part of) the computed key of that member target (`this[m] = v` reads `m`).
+/// [`crate::indexes::binding_written`] counts every reference inside a written target, the key included.
+fn symbol_binding_written(file: &FileFacts, declaration: Span) -> bool {
+    let ast = &file.ast;
+    ast.references_to(declaration).iter().any(|reference| {
+        ast.write_targets
+            .iter()
+            .chain(&ast.deleted_targets)
+            .map(|target| ast.peel_ts_sugar_span(*target))
+            .any(|target| {
+                target.contains(*reference)
+                    && !ast.member_at(target).is_some_and(|member| {
+                        ast.computed_members.binary_search(&member.span).is_ok()
+                            && member.property.contains(*reference)
+                    })
+            })
+    })
 }
 
 /// The well-known symbols no census member reads. Not `replace`, through which
@@ -1785,8 +1889,10 @@ fn spelled_callee(text: &str, name: &str) -> bool {
 /// it did not make ([`fresh_object`]), which is the only way a host global
 /// gains one. `Object.assign` copies, so it is the impostor census's no site,
 /// but it writes its target.
-fn impostor_census(file: &FileFacts) -> Vec<Hazard> {
-    let (members, writers, open, factory) = impostor_sites(file);
+fn impostor_census(
+    file: &FileFacts,
+    (members, writers, open, factory): ImpostorSites,
+) -> Vec<Hazard> {
     let mut factory = factory
         .into_iter()
         .map(|(key, _)| open_write_key(key))
@@ -1828,16 +1934,20 @@ fn open_write_key(key: CensusKey) -> String {
 
 /// The open writes of `file` ([`open_writes`]), and, where `factory_open` (ADR 1024: a factory the factory form trusts
 /// may not be standard), its factory-form sites too.
-fn open_writes_with_factory(file: &FileFacts, factory_open: bool) -> Vec<(String, Span)> {
+/// ADR 1053: where `factory_open` does not hold, a projection-draft site is listed when `drafts_open` holds of its key
+/// (some draft write holds it open, [`projection_draft_write_open`]).
+fn open_writes_with_factory(
+    file: &FileFacts,
+    factory_open: bool,
+    drafts_open: &dyn Fn(&str) -> bool,
+) -> Vec<(String, Span)> {
     let (_, _, open, factory) = impostor_sites(file);
     let mut writes = open_writes(file, open);
-    if factory_open {
-        writes.extend(
-            factory
-                .into_iter()
-                .map(|(key, at)| (open_write_key(key), at)),
-        );
-    }
+    writes.extend(factory.into_iter().filter_map(|(key, at)| {
+        let key = open_write_key(key);
+        (factory_open || (drafts_open(&key) && !fresh_written_object_drafts(file, at).1.is_empty()))
+            .then_some((key, at))
+    }));
     writes
 }
 
@@ -1883,13 +1993,14 @@ fn open_writes(file: &FileFacts, open: Vec<(CensusKey, Span)>) -> Vec<(String, S
 /// [`handed_root_detail_in`] answers each withheld call from. Asked once per build; before, every withheld call re-read every
 /// file's census (on app-game, 70 s of an 85 s analysis).
 /// `factory_open` (ADR 1024): the writes to an object the program made count too, as [`open_writes_with_factory`] says; one answer per build.
-pub(crate) fn handed_root_writes(
-    files: &[FileFacts],
+pub(crate) fn handed_root_writes<'f>(
+    files: &'f [FileFacts],
     factory_open: bool,
-) -> BTreeMap<String, (&FileFacts, Span)> {
+    drafts_open: &dyn Fn(&str) -> bool,
+) -> BTreeMap<String, (&'f FileFacts, Span)> {
     let mut first = BTreeMap::<String, (&FileFacts, Span)>::new();
     for file in files {
-        for (key, at) in open_writes_with_factory(file, factory_open) {
+        for (key, at) in open_writes_with_factory(file, factory_open, drafts_open) {
             let earlier = first.get(&key).is_some_and(|(held, span)| {
                 (held.path.as_str(), span.start) <= (file.path.as_str(), at.start)
             });
@@ -1974,14 +2085,15 @@ pub(crate) fn impostor_detail(
 /// Each census site of the file, by key, and the keys it writes on an object it
 /// did not make.
 #[allow(clippy::type_complexity)]
-fn impostor_sites(
-    file: &FileFacts,
-) -> (
+/// [`impostor_sites`]' answer: the members, the writers, the open writes and the factory-form writes (key, object).
+type ImpostorSites = (
     Vec<(&'static str, Span)>,
     Vec<&'static str>,
     Vec<(CensusKey, Span)>,
     Vec<(CensusKey, Span)>,
-) {
+);
+
+fn impostor_sites(file: &FileFacts) -> ImpostorSites {
     use solid_facts::ast::ClassElementKind;
     let ast = &file.ast;
     let mut members: Vec<(&'static str, Span)> = Vec::new();
@@ -2011,7 +2123,8 @@ fn impostor_sites(
         members.extend(census_member(key).map(|member| (member, at)));
     };
     let mut noted = Vec::new();
-    let mut write = |key: CensusKey, object: Span| match fresh_written_object(file, object) {
+    let mut write = |key: CensusKey, object: Span| match fresh_written_object_drafts(file, object).0
+    {
         Some(Fresh::Made) => {}
         // The writers stay: a host receiver is no factory's, but the form claims no more than it needs.
         Some(Fresh::Factory) => {
@@ -2093,7 +2206,12 @@ fn impostor_sites(
         {
             CensusKey::Named(literal.key.to_string())
         } else {
-            census_key(file, member.property, true)
+            // ADR 1036: a key that is a number or a boolean by its syntax names no member.
+            if fresh_written::index_key(file, member.property) {
+                CensusKey::Named(INDEX_KEY.to_owned())
+            } else {
+                census_key(file, member.property, true)
+            }
         };
         write(key.clone(), member.object);
         note(key, target);
@@ -2244,6 +2362,9 @@ fn fresh_object(file: &FileFacts, span: Span) -> bool {
 /// `self` and `globalThis`, unlike `window` and `document`. `Symbol` is the one
 /// [`symbol_key`] stands on.
 const HOST_KEYS: [&str; 3] = ["self", "globalThis", "Symbol"];
+/// ADR 1036: the census key of a member write whose key is a number or a boolean by its syntax
+/// ([`fresh_written::index_key`]): no member any census or formula reads.
+const INDEX_KEY: &str = "@@index";
 /// The census key of a site keyed by a symbol ([`symbol_key`]): no member, while
 /// the program leaves `Symbol` alone.
 const SYMBOL_SITE: &str = "@@symbol";
@@ -2930,7 +3051,7 @@ pub(crate) fn impostor_veto(
 /// [`BuildConstants`] (the parameter is unused); the kept index is also
 /// stamped with the constants it was folded under and refolds when they
 /// differ, and shadow and verify-reused modes compare it with a refold.
-pub(crate) fn hazards(view: &FileView<'_>, constants: &BuildConstants<'_>) -> Vec<(Hazard, u32)> {
+pub(crate) fn hazards(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Hazard, u32)> {
     let file = view.file;
     let mut entries = Vec::new();
     for (index, hazard) in file.ast.module_hazards.iter().enumerate() {
@@ -2984,12 +3105,16 @@ pub(crate) fn hazards(view: &FileView<'_>, constants: &BuildConstants<'_>) -> Ve
     }
     if reflective_definition_spelled(file) {
         entries.push((Hazard::ReflectiveDefinitionSpelling, 0));
-        // ADR 0951: what the spellings may define, by key: any, or the literal keys their calls pass.
-        for (key, ()) in definers(view, constants) {
-            entries.push(match key {
-                DefinerKey::Any => (Hazard::ReflectiveDefinitionAny, 0),
-                DefinerKey::Sole(key) => (reflective_definition_sole(&key), 0),
-            });
+        // ADR 0951: what the spellings may define, by key: any, or the literal keys their calls pass. ADR 1036: a call
+        // of `Object`'s or `Reflect`'s definer on an object the program made defines nothing on a root (none), or only
+        // while the factories the factory form trusts are standard (`FreshFactoryDefinition*`). ADR 1045: the made
+        // case is kept as `ReflectiveDefinitionMade`, any key while a patch may reach a definer.
+        let (definitions, made) = root_definitions(file);
+        for hazard in definitions {
+            entries.push((hazard, 0));
+        }
+        if made {
+            entries.push((Hazard::ReflectiveDefinitionMade, 0));
         }
     }
     let writes = assignment_writes(file);
@@ -3004,7 +3129,32 @@ pub(crate) fn hazards(view: &FileView<'_>, constants: &BuildConstants<'_>) -> Ve
     for (index, patch) in patches.into_iter().enumerate() {
         entries.push((patch, ordinal(index)));
     }
-    for (index, impostor) in impostor_census(file).into_iter().enumerate() {
+    let sites = impostor_sites(file);
+    // ADR 1053: the factory form's projection-draft writes, by key and by the callee each rests on (its symbol; none:
+    // unresolved).
+    let mut drafts = sites
+        .3
+        .iter()
+        .flat_map(|(key, object)| {
+            let key = member_hash("", &open_write_key(key.clone()));
+            fresh_written_object_drafts(file, *object)
+                .1
+                .into_iter()
+                .map(move |callee| match view.symbol_at(callee) {
+                    Some(symbol) => {
+                        Hazard::ProjectionDraftWrite(key, projection_callee_hash(symbol.as_ref()))
+                    }
+                    None => Hazard::ProjectionDraftWriteUnresolved(key),
+                })
+        })
+        .collect::<Vec<_>>();
+    drafts.sort_unstable();
+    drafts.dedup();
+    if !drafts.is_empty() {
+        entries.push((Hazard::ProjectionDraftAny, 0));
+    }
+    entries.extend(drafts.into_iter().map(|draft| (draft, 0)));
+    for (index, impostor) in impostor_census(file, sites).into_iter().enumerate() {
         entries.push((impostor, ordinal(index)));
     }
     for write in writes {
@@ -3124,6 +3274,96 @@ pub(crate) fn hazards(view: &FileView<'_>, constants: &BuildConstants<'_>) -> Ve
 
 const DEFINERS: [&str; 3] = ["defineProperty", "defineProperties", "__defineGetter__"];
 
+/// ADR 1036: the definition hazards [`handed_root_patch`] reads, as [`definers`] keys them (ADR 0951), with each call of
+/// `Object.defineProperty`, `Object.defineProperties` or `Reflect.defineProperty` (the global `Object` or `Reflect`, which
+/// no declaration of the file shadows) whose first argument is an object the program made left out ([`Fresh::Made`]) or
+/// kept as its factory variant ([`Fresh::Factory`]): it defines keys of that object and of no root. Every other definer
+/// spelling (a held or destructured definer, a bare callee, `__defineGetter__`, a receiver that is no such global, a call
+/// with a spread target) stays as [`definers`] reads it.
+fn root_definitions(file: &FileFacts) -> (Vec<Hazard>, bool) {
+    let ast = &file.ast;
+    let unquoted = |text: &str| text.trim_matches(['\'', '"', '`']).to_owned();
+    let mut hazards = Vec::new();
+    let mut made = false;
+    if ast.bindings.iter().any(|binding| {
+        binding
+            .object_slots
+            .iter()
+            .any(|slot| DEFINERS.contains(&slot.property.as_str()))
+    }) {
+        hazards.push(Hazard::ReflectiveDefinitionAny);
+    }
+    let member_spans = ast
+        .members
+        .iter()
+        .map(|member| member.span)
+        .collect::<HashSet<_>>();
+    for call in &ast.calls {
+        if !member_spans.contains(&ast.peel_ts_sugar_span(call.callee))
+            && file
+                .source_text(call.callee)
+                .is_some_and(|callee| DEFINERS.iter().any(|definer| callee.ends_with(definer)))
+        {
+            hazards.push(Hazard::ReflectiveDefinitionAny);
+        }
+    }
+    for member in &ast.members {
+        let Some(name) = file.source_text(member.property).map(unquoted) else {
+            continue;
+        };
+        if !DEFINERS.contains(&name.as_str()) {
+            continue;
+        }
+        let call = ast
+            .calls
+            .iter()
+            .find(|call| ast.peel_ts_sugar_span(call.callee) == member.span);
+        // The key the definition is put to, as `definers` reads it.
+        let key = call.and_then(|call| {
+            (name != "defineProperties"
+                && !call.arguments.first().is_some_and(|target| target.spread))
+            .then_some(())?;
+            match call
+                .arguments
+                .get(1)
+                .map(|key| (&key.literal_value, key.spread))
+            {
+                Some((ArgumentLiteralFact::String(key), false)) => Some(key.to_string()),
+                _ => None,
+            }
+        });
+        let (factory_hazard, open_hazard) = match &key {
+            Some(key) => (
+                Hazard::FreshFactoryDefinitionSole(member_hash("", key)),
+                reflective_definition_sole(key),
+            ),
+            None => (
+                Hazard::FreshFactoryDefinitionAny,
+                Hazard::ReflectiveDefinitionAny,
+            ),
+        };
+        let receiver = ast.peel_ts_sugar_span(member.object);
+        let global_definer = name != "__defineGetter__"
+            && matches!(
+                file.source_text(receiver).map(str::trim),
+                Some("Object" | "Reflect")
+            )
+            && ast.reference_declaration(receiver).is_none();
+        let target = call
+            .filter(|_| global_definer)
+            .and_then(|call| call.arguments.first())
+            .filter(|target| !target.spread);
+        match target.and_then(|target| fresh_written_object(file, target.span)) {
+            Some(Fresh::Made) => made = true,
+            Some(Fresh::Factory) => hazards.push(factory_hazard),
+            None => hazards.push(open_hazard),
+        }
+    }
+    hazards.sort_unstable();
+    hazards.dedup();
+    (hazards, made)
+}
+
 /// Review round 1 of ADR 0293: any member access, destructured property or
 /// callee spelled `defineProperty`, `defineProperties` or `__defineGetter__`,
 /// whatever its receiver.
@@ -3222,6 +3462,30 @@ pub(crate) fn definers(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Defi
         .into_iter()
         .chain(sole.into_iter().map(|key| (DefinerKey::Sole(key), ())))
         .collect()
+}
+
+/// ADR 1045: the qualified names a patch of `Object.defineProperty`, `Object.defineProperties` or
+/// `Reflect.defineProperty` is keyed by ([`patch_vetoed`]).
+const MADE_TARGET_DEFINER_NAMES: [&str; 3] = [
+    "ObjectConstructor.defineProperty",
+    "ObjectConstructor.defineProperties",
+    "Reflect.defineProperty",
+];
+
+/// ADR 1045: whether the definers ADR 1045 left out of [`Hazard::ReflectiveDefinitionAny`] (a call on a made target,
+/// [`Hazard::ReflectiveDefinitionMade`]) may not be the standard ones, so that they may define any key: some patch may
+/// reach a definer of [`MADE_TARGET_DEFINER_NAMES`], asked of `raw`, the census as the files fold it (the first-patch
+/// induction of ADR 1024: before the first moment such a call puts a member on a standard root, only a site the rest of
+/// the census sees could have replaced a definer).
+pub(crate) fn reflective_definition_through_made(
+    hazard: Hazard,
+    raw: &impl Fn(Hazard) -> bool,
+) -> bool {
+    hazard == Hazard::ReflectiveDefinitionAny
+        && raw(Hazard::ReflectiveDefinitionMade)
+        && MADE_TARGET_DEFINER_NAMES
+            .iter()
+            .any(|name| patch_vetoed(name, raw))
 }
 
 /// Item key spaces: every function, call, JSX element and binding of the

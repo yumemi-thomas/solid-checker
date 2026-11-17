@@ -1425,6 +1425,12 @@ pub struct YieldFact {
     /// region runs only after that `yield` handed its value out.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub region: Option<Span>,
+    /// The operand is one literal node under transparent TypeScript wrappers (facts schema 96, ADR 1051's review): a string,
+    /// numeric, bigint or boolean literal, `null`, or the global `undefined`. An operator expression is not, even when its
+    /// text starts and ends with a quote (`yield "" || load()`: `yield` binds looser than `||`, `?:` and `+`). A bare
+    /// `yield` has no operand and is not recorded here. Absent (an older fact) is false: the operand may be anything.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub operand_literal: bool,
 }
 
 /// A `try` with a `catch` clause.

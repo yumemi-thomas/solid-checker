@@ -925,6 +925,18 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// ADR 1053: whether the callback at `argument` of `primitive` receives, as its first parameter, a value whose writes
+    /// (a set, a delete, a definition) land only on objects the runtime made for the primitive: a projection's draft. A
+    /// write to that parameter then puts no member on a standard root. Default `false`: the parameter may be any object.
+    fn callback_first_parameter_writes_only_runtime_objects(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+    ) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
     /// Whether this component renders its children through a callback the
     /// component itself invokes.
     ///
@@ -1072,6 +1084,15 @@ pub trait Dialect: Sync {
     /// `yield` is a suspension.
     fn action_step_resumes_after_plain_yield(&self, primitive: Primitive) -> bool {
         let _ = primitive;
+        false
+    }
+
+    /// ADR 1051: whether a flush made on the stack of `effect`'s apply callback by an action's step resumed after a plain
+    /// `yield` ([`Self::action_step_resumes_after_plain_yield`]) runs inside the flush draining effects with the
+    /// effect-callback marker up, so that it drains nothing and the dev build warns FLUSH_IN_EFFECT_CALLBACK. The default
+    /// claims nothing.
+    fn resumed_action_flush_warns_in_apply(&self, effect: Primitive) -> bool {
+        let _ = effect;
         false
     }
 

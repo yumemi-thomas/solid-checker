@@ -341,6 +341,7 @@ fn push_reached(
                     computation_error_unobserved: false,
                     stop: None,
                     through_async: false,
+                    earlier_check_throws: false,
                 }
             };
         for stepper in steppers.into_iter().filter(|stepper| *stepper != at) {
@@ -373,6 +374,7 @@ fn push_reached(
             computation_error_unobserved: false,
             stop: None,
             through_async: false,
+            earlier_check_throws: false,
         });
     }
 }
@@ -580,6 +582,7 @@ pub(super) fn leaf_owner_operations_for_file(
                         computation_error_unobserved: false,
                         stop: None,
                         through_async: false,
+                        earlier_check_throws: false,
                     });
                 }
                 if complete {
@@ -599,6 +602,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     computation_error_unobserved: false,
                     stop: None,
                     through_async: false,
+                    earlier_check_throws: false,
                 });
                 continue;
             }
@@ -632,6 +636,7 @@ pub(super) fn leaf_owner_operations_for_file(
                 computation_error_unobserved: false,
                 stop: None,
                 through_async: false,
+                earlier_check_throws: false,
             });
             continue;
         };
@@ -844,6 +849,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     computation_error_unobserved: false,
                     stop: None,
                     through_async: false,
+                    earlier_check_throws: false,
                 },
                 crossed.as_ref(),
                 false,
@@ -973,6 +979,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     computation_error_unobserved: false,
                     stop: None,
                     through_async: false,
+                    earlier_check_throws: false,
                 });
                 continue;
             }
@@ -1046,6 +1053,7 @@ pub(super) fn leaf_owner_operations_for_file(
                                 | ClimbStop::RunsElsewhere
                                 | ClimbStop::Declined => None,
                             }),
+                            earlier_check_throws: false,
                         });
                     }
                 }
@@ -1182,6 +1190,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     computation_error_unobserved: false,
                     stop: None,
                     through_async: false,
+                    earlier_check_throws: false,
                 },
                 crossed.as_ref(),
                 false,
@@ -1233,6 +1242,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     computation_error_unobserved: false,
                     stop: None,
                     through_async: false,
+                    earlier_check_throws: false,
                 });
             }
             if !complete {
@@ -1250,6 +1260,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     computation_error_unobserved: false,
                     stop: None,
                     through_async: false,
+                    earlier_check_throws: false,
                 });
             }
         }

@@ -183,8 +183,11 @@
     "file_by_path": 3,
     "symbols_by_id": 7,
     "typescript-table": 3,
-    "symbol_names-scan": 1,
-    "hashmap-iteration": 1
+    "symbol_names-scan": 2,
+    "hashmap-iteration": 1,
+    "pending-review": [
+      "symbol_names-scan rose 1 -> 2 (--allow-rise): unreviewed"
+    ]
   },
   "rust/crates/solid-reactive-ir/src/interproc/graph.rs": {
     "placing-call": 1

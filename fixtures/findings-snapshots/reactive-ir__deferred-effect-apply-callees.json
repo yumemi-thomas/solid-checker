@@ -92,8 +92,9 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
+      "kind": "uncertifiable",
+      "blocker": "creation-throws-first",
+      "severity": "error",
       "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
       "start": 830,
       "end": 842,
@@ -133,7 +134,8 @@
     {
       "rule": "sync-computation-received-async",
       "code": "SC7002",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "creation-throws-first",
       "severity": "error",
       "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
       "start": 891,
@@ -186,8 +188,9 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
+      "kind": "uncertifiable",
+      "blocker": "creation-throws-first",
+      "severity": "error",
       "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
       "start": 1071,
       "end": 1083,
