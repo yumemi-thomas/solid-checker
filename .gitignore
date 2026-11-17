@@ -1688,3 +1688,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/tuple-hazard-sites/node_modules/**
 !fixtures/reactive-ir/tuple-hazard-sites-shadowed/node_modules/
 !fixtures/reactive-ir/tuple-hazard-sites-shadowed/node_modules/**
+!fixtures/reactive-ir/closed-literal-dispatch/node_modules/
+!fixtures/reactive-ir/closed-literal-dispatch/node_modules/**

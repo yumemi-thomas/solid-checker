@@ -2702,6 +2702,32 @@
     "open": "reactive-ir/route-entries"
    },
    "note": "the route components of the audited router’s `createRouter({ routes })` (ADR 0335’s premises), every reference a route definition’s `component` or a tag, and the inline arrows written as one: the router renders each with `createComponent` in the route’s outlet, under an owner (Chrome rc.21, oracle case `route-entry-owner`). The rows left are the fixture’s escapes; `route-entries` keeps `Shared`, `Preloaded` and the exported `Home` open."
+  },
+  {
+   "fixture": "reactive-ir/lying-assertion",
+   "key": "SC1001 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1023",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/callback_standing.rs::closed_literal_dispatch",
+   "fixtures": {
+    "proved": "reactive-ir/lying-assertion",
+    "open": "reactive-ir/impostor-receivers"
+   },
+   "note": "`Lies`: `(t as unknown as number[]).forEach(cb)` with `const t = { forEach(f) { queueMicrotask(f); } }` dispatches to the literal's own method, which hands `cb` to a microtask: the read is no longer withheld (`function-run-unplaced`) and keeps its own obligation, `callee-callback-timing` (named in rises.json). The fixture's claim, that the read is open, stands."
+  },
+  {
+   "fixture": "reactive-ir/lying-assertion",
+   "key": "SC9012 standard-member-impostor",
+   "from": 3,
+   "to": 2,
+   "adr": "ADR 1023",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/callback_standing.rs::closed_literal_dispatch",
+   "fixtures": {
+    "proved": "reactive-ir/lying-assertion",
+    "open": "reactive-ir/impostor-receivers"
+   },
+   "note": "`Lies`' call `(t as unknown as number[]).forEach(cb)` dispatches to the closed literal's own `forEach`: no impostor may run the callback, so the census row at the call is gone. `Held` (an alias) and `Union` keep theirs."
   }
  ],
  "renames": []

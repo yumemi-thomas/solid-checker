@@ -1,0 +1,16 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "callee-callback-timing",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/closed-literal-dispatch/variants/late-read/App.tsx",
+      "start": 346,
+      "end": 349,
+      "fixes": 0
+    }
+  ]
+}
