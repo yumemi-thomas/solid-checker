@@ -64,6 +64,16 @@ describe("the ledger", () => {
     for (const entry of UNEXECUTED_KNOWN.entries.filter((e) => e.kind === "pending-fix")) expect(entry1018.slice(0, 4000)).toContain(entry.adr.replace("ADR ", ""));
   });
 
+  it("holds the two groups the #270 smoke found that no fix covers yet (ADR 1033: an empty DOM NodeList; ADR 1034: dead-bundle SYNC_NODE)", () => {
+    expect(unexecutedEntry(legal("lg-action-called-in-owned-scope-tbl-nodelistof-foreach-zero-x-direct-none"))).toMatchObject({ item: "tbl-nodelist-zero", adr: "ADR 1033" });
+    expect(unexecutedEntry(legal("lg-reactive-write-in-owned-scope-tbl-nodelist-foreach-zero-store-direct-none"))).toMatchObject({ item: "tbl-nodelist-zero", adr: "ADR 1033" });
+    expect(unexecutedEntry(legal("lg-sync-node-received-async-dead-bundle-spread-effect-direct-closure"))).toMatchObject({ item: "dead-bundle-sync-node", adr: "ADR 1034" });
+    expect(unexecutedEntry(legal("lg-sync-node-received-async-dead-bundle-computed-effect-namespace-module-helper"))).toMatchObject({ item: "dead-bundle-sync-node", adr: "ADR 1034" });
+    // Narrow: another code at a dead bundle, and another empty carrier, are not held.
+    expect(rowProblem(legal("lg-pending-async-forbidden-scope-dead-bundle-spread-x-direct-none"))).toBe("unexecuted-violation");
+    expect(rowProblem(legal("lg-action-called-in-owned-scope-tbl-set-foreach-zero-x-direct-none"))).toBe("unexecuted-violation");
+  });
+
   it("a group whose fix landed is out of the ledger, so its shape fails again if it comes back (tbl-zero, ADR 1019; gate-throw, ADR 1010; ob-async-never, ADR 1021; apply-void-value, ADR 1020)", () => {
     expect(rowProblem(legal("lg-action-called-in-owned-scope-tbl-map-foreach-zero-x-direct-none"))).toBe("unexecuted-violation");
     expect(rowProblem(legal("lg-reactive-write-in-owned-scope-gate-throw-store-destructured-helper"))).toBe("unexecuted-violation");
