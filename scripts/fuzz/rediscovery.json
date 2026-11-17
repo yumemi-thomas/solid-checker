@@ -25877,5 +25877,23 @@
    "mx-no-owner-context-fire-store-handler-x-direct-none"
   ],
   "rediscovered": "main 5780918b8 recall-gap, this build agree (SC4001 violation at the site)"
+ },
+ {
+  "finding": "a function an effect's or a memo's compute returns by reference (`const f = () => …; return f`) or as a returned literal's member (`({ run: () => … })`) was not a returned value (ADR 1020): a sync memo it creates was a proved SC7002 where the apply only names the value (never runs) or calls it on its stack (Chrome rc.21: PRIMITIVE_IN_EFFECT_CALLBACK); a second path to the site (another caller) hid the returned-value path",
+  "found": "Fable's review of the ADR 1020 code (items 3 and 4)",
+  "fixed": "ADR 1062 (`site_reach.rs` `returned_value_holder`, `reachable_from_returned_value`)",
+  "grid": "lg-recall",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "lg-sync-node-received-async-apply-ref-value-untrack-memo-direct-none",
+   "lg-sync-node-received-async-apply-ref-value-untrack-memo-destructured-none",
+   "lg-sync-node-received-async-apply-ref-value-untrack-effect-direct-none",
+   "lg-sync-node-received-async-apply-ref-value-untrack-effect-destructured-none",
+   "lg-sync-node-received-async-apply-member-value-untrack-memo-direct-none",
+   "lg-sync-node-received-async-apply-member-value-untrack-memo-destructured-none",
+   "lg-sync-node-received-async-apply-member-value-untrack-effect-direct-none",
+   "lg-sync-node-received-async-apply-member-value-untrack-effect-destructured-none"
+  ],
+  "rediscovered": "New contexts apply-ref-{call,value}-untrack and apply-member-{call,value}-untrack (misuse.mjs APPLY_VOID_CONTEXTS, APPLY_VOID_UNRUN). `node scripts/fuzz/focus.mjs --codes SYNC_NODE_RECEIVED_ASYNC --grids lg-recall`: main fa8f33277 fails (120 unexecuted-violation, the -value- programs of both forms); this build passes, 0 legal violations. The second-path shape is pinned by fixture reactive-ir/returned-by-reference (R4, R5)."
  }
 ]
