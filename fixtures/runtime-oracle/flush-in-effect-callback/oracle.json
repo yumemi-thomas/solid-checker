@@ -1,1 +1,59 @@
-{"note": "FLUSH_IN_EFFECT_CALLBACK: flush that only ever runs on the stack of a createEffect apply (direct, non-exported helper, IIFE, untrack, forEach, async helper before its first await); documented static-only (checker claims the no-op: dev warning absent after a synchronous nested render effect or JSX, or the call is dead code that never runs): RenderThenFlush, JsxThenFlush, HelperThenFlush, FlushFnRender, Conditional, AfterReturn, EmptyLiteral, ThrowingCompute, TryReturn, NeverBeforeFlush; covered by an uncertifiable row (ADR 0963: a run the walk proves with others it does not, an exported helper's flush): OtherFile; controls: handler, timer, shadowed, compute function, createRenderEffect first run, deferred never-applied effect"}
+{
+  "note": "FLUSH_IN_EFFECT_CALLBACK: flush that only ever runs on the stack of a createEffect apply (direct, non-exported helper, IIFE, untrack, forEach, async helper before its first await); documented static-only (checker claims the no-op: dev warning absent after a synchronous nested render effect or JSX, or the call is dead code that never runs): RenderThenFlush, JsxThenFlush, HelperThenFlush, FlushFnRender, Conditional, AfterReturn, EmptyLiteral, ThrowingCompute, TryReturn, NeverBeforeFlush; covered by an uncertifiable row (ADR 0963: a run the walk proves with others it does not, an exported helper's flush): OtherFile; controls: handler, timer, shadowed, compute function, createRenderEffect first run, deferred never-applied effect",
+  "open": [
+    {
+      "finding": "flush-in-effect-callback App.tsx:88",
+      "kind": "no-diagnostic",
+      "reason": "a flush after a synchronous nested render effect drains nothing and rc.21 gives no dev warning (documented in the note)",
+      "owner": "Mac 20"
+    },
+    {
+      "finding": "flush-in-effect-callback App.tsx:98",
+      "kind": "no-diagnostic",
+      "reason": "a flush after JSX created in the apply drains nothing, no dev warning (documented in the note)",
+      "owner": "Mac 20"
+    },
+    {
+      "finding": "flush-in-effect-callback App.tsx:115",
+      "kind": "no-diagnostic",
+      "reason": "a flush after a helper that mounts drains nothing, no dev warning (documented in the note)",
+      "owner": "Mac 20"
+    },
+    {
+      "finding": "flush-in-effect-callback App.tsx:136",
+      "kind": "unreached",
+      "reason": "behind `next > 100`, which this run never meets; an unknown condition counts as reachable",
+      "owner": "Mac 20"
+    },
+    {
+      "finding": "flush-in-effect-callback App.tsx:149",
+      "kind": "false-positive",
+      "reason": "after a `return`: the flush never runs, so a violation is wrong (ADR 1018); should be uncertifiable",
+      "owner": "Mac 20"
+    },
+    {
+      "finding": "flush-in-effect-callback App.tsx:157",
+      "kind": "false-positive",
+      "reason": "in a callback of `[].forEach`: never runs (ADR 1019 covers other codes, not FLUSH_IN_EFFECT_CALLBACK)",
+      "owner": "Mac 20"
+    },
+    {
+      "finding": "flush-in-effect-callback App.tsx:168",
+      "kind": "false-positive",
+      "reason": "the compute throws, so the apply never runs (ADR 1018)",
+      "owner": "Mac 20"
+    },
+    {
+      "finding": "flush-in-effect-callback App.tsx:239",
+      "kind": "false-positive",
+      "reason": "after a `return` inside `try`: never runs (ADR 1018)",
+      "owner": "Mac 20"
+    },
+    {
+      "finding": "flush-in-effect-callback App.tsx:254",
+      "kind": "false-positive",
+      "reason": "after a `return` that follows a caught throw: never runs (ADR 1018)",
+      "owner": "Mac 20"
+    }
+  ]
+}
