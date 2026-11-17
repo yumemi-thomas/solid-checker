@@ -22,7 +22,16 @@
    "project": "helge-dev/tsconfig.json",
    "rule": "SC2001",
    "kind": "newly-uncertifiable",
-   "build": "both",
+   "build": "std",
+   "count": 3,
+   "adr": "ADR 1040",
+   "why": "ADR 1040 (b) lifts ADR 0803's slot withdrawal (SC9012 tuple-iteration-written) in this project: the router's window hand-offs reach only seen code, so its open writes are no longer visible iteration writes. The setter calls and reads it held are asked again and stay uncertifiable under this rule's own blocker (function-run-unplaced, read-after-await-unaccounted, async-read-unaccounted): every such file held a tuple-iteration-written row at the base, a relabel across rules, never clean. Measured in the sc VM on the frozen rc.21 corpus (fed4aa902 against the ADR 1040 build), both runtime builds alike."
+  },
+  {
+   "project": "helge-dev/tsconfig.json",
+   "rule": "SC2001",
+   "kind": "newly-uncertifiable",
+   "build": "dev",
    "count": 3,
    "adr": "ADR 1040",
    "why": "ADR 1040 (b) lifts ADR 0803's slot withdrawal (SC9012 tuple-iteration-written) in this project: the router's window hand-offs reach only seen code, so its open writes are no longer visible iteration writes. The setter calls and reads it held are asked again and stay uncertifiable under this rule's own blocker (function-run-unplaced, read-after-await-unaccounted, async-read-unaccounted): every such file held a tuple-iteration-written row at the base, a relabel across rules, never clean. Measured in the sc VM on the frozen rc.21 corpus (fed4aa902 against the ADR 1040 build), both runtime builds alike."
@@ -31,7 +40,16 @@
    "project": "jar-hell-web/web/tsconfig.json",
    "rule": "SC1002",
    "kind": "newly-uncertifiable",
-   "build": "both",
+   "build": "std",
+   "count": 1,
+   "adr": "ADR 1040",
+   "why": "ADR 1040 (b) lifts ADR 0803's slot withdrawal (SC9012 tuple-iteration-written) in this project: the router's window hand-offs reach only seen code, so its open writes are no longer visible iteration writes. The setter calls and reads it held are asked again and stay uncertifiable under this rule's own blocker (function-run-unplaced, read-after-await-unaccounted, async-read-unaccounted): every such file held a tuple-iteration-written row at the base, a relabel across rules, never clean. Measured in the sc VM on the frozen rc.21 corpus (fed4aa902 against the ADR 1040 build), both runtime builds alike."
+  },
+  {
+   "project": "jar-hell-web/web/tsconfig.json",
+   "rule": "SC1002",
+   "kind": "newly-uncertifiable",
+   "build": "dev",
    "count": 1,
    "adr": "ADR 1040",
    "why": "ADR 1040 (b) lifts ADR 0803's slot withdrawal (SC9012 tuple-iteration-written) in this project: the router's window hand-offs reach only seen code, so its open writes are no longer visible iteration writes. The setter calls and reads it held are asked again and stay uncertifiable under this rule's own blocker (function-run-unplaced, read-after-await-unaccounted, async-read-unaccounted): every such file held a tuple-iteration-written row at the base, a relabel across rules, never clean. Measured in the sc VM on the frozen rc.21 corpus (fed4aa902 against the ADR 1040 build), both runtime builds alike."
@@ -40,7 +58,16 @@
    "project": "jar-hell-web/web/tsconfig.json",
    "rule": "SC2001",
    "kind": "newly-uncertifiable",
-   "build": "both",
+   "build": "std",
+   "count": 9,
+   "adr": "ADR 1040",
+   "why": "ADR 1040 (b) lifts ADR 0803's slot withdrawal (SC9012 tuple-iteration-written) in this project: the router's window hand-offs reach only seen code, so its open writes are no longer visible iteration writes. The setter calls and reads it held are asked again and stay uncertifiable under this rule's own blocker (function-run-unplaced, read-after-await-unaccounted, async-read-unaccounted): every such file held a tuple-iteration-written row at the base, a relabel across rules, never clean. Measured in the sc VM on the frozen rc.21 corpus (fed4aa902 against the ADR 1040 build), both runtime builds alike."
+  },
+  {
+   "project": "jar-hell-web/web/tsconfig.json",
+   "rule": "SC2001",
+   "kind": "newly-uncertifiable",
+   "build": "dev",
    "count": 9,
    "adr": "ADR 1040",
    "why": "ADR 1040 (b) lifts ADR 0803's slot withdrawal (SC9012 tuple-iteration-written) in this project: the router's window hand-offs reach only seen code, so its open writes are no longer visible iteration writes. The setter calls and reads it held are asked again and stay uncertifiable under this rule's own blocker (function-run-unplaced, read-after-await-unaccounted, async-read-unaccounted): every such file held a tuple-iteration-written row at the base, a relabel across rules, never clean. Measured in the sc VM on the frozen rc.21 corpus (fed4aa902 against the ADR 1040 build), both runtime builds alike."
@@ -49,7 +76,16 @@
    "project": "jar-hell-web/web/tsconfig.json",
    "rule": "SC5001",
    "kind": "newly-uncertifiable",
-   "build": "both",
+   "build": "std",
+   "count": 1,
+   "adr": "ADR 1040",
+   "why": "ADR 1040 (b) lifts ADR 0803's slot withdrawal (SC9012 tuple-iteration-written) in this project: the router's window hand-offs reach only seen code, so its open writes are no longer visible iteration writes. The setter calls and reads it held are asked again and stay uncertifiable under this rule's own blocker (function-run-unplaced, read-after-await-unaccounted, async-read-unaccounted): every such file held a tuple-iteration-written row at the base, a relabel across rules, never clean. Measured in the sc VM on the frozen rc.21 corpus (fed4aa902 against the ADR 1040 build), both runtime builds alike."
+  },
+  {
+   "project": "jar-hell-web/web/tsconfig.json",
+   "rule": "SC5001",
+   "kind": "newly-uncertifiable",
+   "build": "dev",
    "count": 1,
    "adr": "ADR 1040",
    "why": "ADR 1040 (b) lifts ADR 0803's slot withdrawal (SC9012 tuple-iteration-written) in this project: the router's window hand-offs reach only seen code, so its open writes are no longer visible iteration writes. The setter calls and reads it held are asked again and stay uncertifiable under this rule's own blocker (function-run-unplaced, read-after-await-unaccounted, async-read-unaccounted): every such file held a tuple-iteration-written row at the base, a relabel across rules, never clean. Measured in the sc VM on the frozen rc.21 corpus (fed4aa902 against the ADR 1040 build), both runtime builds alike."
@@ -58,7 +94,16 @@
    "project": "kui/frontend/packages/feature-alerts/tsconfig.json",
    "rule": "SC2001",
    "kind": "newly-uncertifiable",
-   "build": "both",
+   "build": "std",
+   "count": 17,
+   "adr": "ADR 1040",
+   "why": "ADR 1040 (b) lifts ADR 0803's slot withdrawal (SC9012 tuple-iteration-written) in this project: the router's window hand-offs reach only seen code, so its open writes are no longer visible iteration writes. The setter calls and reads it held are asked again and stay uncertifiable under this rule's own blocker (function-run-unplaced, read-after-await-unaccounted, async-read-unaccounted): every such file held a tuple-iteration-written row at the base, a relabel across rules, never clean. Measured in the sc VM on the frozen rc.21 corpus (fed4aa902 against the ADR 1040 build), both runtime builds alike."
+  },
+  {
+   "project": "kui/frontend/packages/feature-alerts/tsconfig.json",
+   "rule": "SC2001",
+   "kind": "newly-uncertifiable",
+   "build": "dev",
    "count": 17,
    "adr": "ADR 1040",
    "why": "ADR 1040 (b) lifts ADR 0803's slot withdrawal (SC9012 tuple-iteration-written) in this project: the router's window hand-offs reach only seen code, so its open writes are no longer visible iteration writes. The setter calls and reads it held are asked again and stay uncertifiable under this rule's own blocker (function-run-unplaced, read-after-await-unaccounted, async-read-unaccounted): every such file held a tuple-iteration-written row at the base, a relabel across rules, never clean. Measured in the sc VM on the frozen rc.21 corpus (fed4aa902 against the ADR 1040 build), both runtime builds alike."
@@ -67,7 +112,16 @@
    "project": "kui/frontend/packages/feature-clusters/tsconfig.json",
    "rule": "SC2001",
    "kind": "newly-uncertifiable",
-   "build": "both",
+   "build": "std",
+   "count": 21,
+   "adr": "ADR 1040",
+   "why": "ADR 1040 (b) lifts ADR 0803's slot withdrawal (SC9012 tuple-iteration-written) in this project: the router's window hand-offs reach only seen code, so its open writes are no longer visible iteration writes. The setter calls and reads it held are asked again and stay uncertifiable under this rule's own blocker (function-run-unplaced, read-after-await-unaccounted, async-read-unaccounted): every such file held a tuple-iteration-written row at the base, a relabel across rules, never clean. Measured in the sc VM on the frozen rc.21 corpus (fed4aa902 against the ADR 1040 build), both runtime builds alike."
+  },
+  {
+   "project": "kui/frontend/packages/feature-clusters/tsconfig.json",
+   "rule": "SC2001",
+   "kind": "newly-uncertifiable",
+   "build": "dev",
    "count": 21,
    "adr": "ADR 1040",
    "why": "ADR 1040 (b) lifts ADR 0803's slot withdrawal (SC9012 tuple-iteration-written) in this project: the router's window hand-offs reach only seen code, so its open writes are no longer visible iteration writes. The setter calls and reads it held are asked again and stay uncertifiable under this rule's own blocker (function-run-unplaced, read-after-await-unaccounted, async-read-unaccounted): every such file held a tuple-iteration-written row at the base, a relabel across rules, never clean. Measured in the sc VM on the frozen rc.21 corpus (fed4aa902 against the ADR 1040 build), both runtime builds alike."
@@ -76,7 +130,16 @@
    "project": "kui/frontend/packages/feature-connect/tsconfig.json",
    "rule": "SC2001",
    "kind": "newly-uncertifiable",
-   "build": "both",
+   "build": "std",
+   "count": 16,
+   "adr": "ADR 1040",
+   "why": "ADR 1040 (b) lifts ADR 0803's slot withdrawal (SC9012 tuple-iteration-written) in this project: the router's window hand-offs reach only seen code, so its open writes are no longer visible iteration writes. The setter calls and reads it held are asked again and stay uncertifiable under this rule's own blocker (function-run-unplaced, read-after-await-unaccounted, async-read-unaccounted): every such file held a tuple-iteration-written row at the base, a relabel across rules, never clean. Measured in the sc VM on the frozen rc.21 corpus (fed4aa902 against the ADR 1040 build), both runtime builds alike."
+  },
+  {
+   "project": "kui/frontend/packages/feature-connect/tsconfig.json",
+   "rule": "SC2001",
+   "kind": "newly-uncertifiable",
+   "build": "dev",
    "count": 16,
    "adr": "ADR 1040",
    "why": "ADR 1040 (b) lifts ADR 0803's slot withdrawal (SC9012 tuple-iteration-written) in this project: the router's window hand-offs reach only seen code, so its open writes are no longer visible iteration writes. The setter calls and reads it held are asked again and stay uncertifiable under this rule's own blocker (function-run-unplaced, read-after-await-unaccounted, async-read-unaccounted): every such file held a tuple-iteration-written row at the base, a relabel across rules, never clean. Measured in the sc VM on the frozen rc.21 corpus (fed4aa902 against the ADR 1040 build), both runtime builds alike."
@@ -85,7 +148,16 @@
    "project": "kui/frontend/packages/feature-ksql/tsconfig.json",
    "rule": "SC2001",
    "kind": "newly-uncertifiable",
-   "build": "both",
+   "build": "std",
+   "count": 16,
+   "adr": "ADR 1040",
+   "why": "ADR 1040 (b) lifts ADR 0803's slot withdrawal (SC9012 tuple-iteration-written) in this project: the router's window hand-offs reach only seen code, so its open writes are no longer visible iteration writes. The setter calls and reads it held are asked again and stay uncertifiable under this rule's own blocker (function-run-unplaced, read-after-await-unaccounted, async-read-unaccounted): every such file held a tuple-iteration-written row at the base, a relabel across rules, never clean. Measured in the sc VM on the frozen rc.21 corpus (fed4aa902 against the ADR 1040 build), both runtime builds alike."
+  },
+  {
+   "project": "kui/frontend/packages/feature-ksql/tsconfig.json",
+   "rule": "SC2001",
+   "kind": "newly-uncertifiable",
+   "build": "dev",
    "count": 16,
    "adr": "ADR 1040",
    "why": "ADR 1040 (b) lifts ADR 0803's slot withdrawal (SC9012 tuple-iteration-written) in this project: the router's window hand-offs reach only seen code, so its open writes are no longer visible iteration writes. The setter calls and reads it held are asked again and stay uncertifiable under this rule's own blocker (function-run-unplaced, read-after-await-unaccounted, async-read-unaccounted): every such file held a tuple-iteration-written row at the base, a relabel across rules, never clean. Measured in the sc VM on the frozen rc.21 corpus (fed4aa902 against the ADR 1040 build), both runtime builds alike."
@@ -94,7 +166,16 @@
    "project": "kui/frontend/packages/feature-schemas/tsconfig.json",
    "rule": "SC2001",
    "kind": "newly-uncertifiable",
-   "build": "both",
+   "build": "std",
+   "count": 20,
+   "adr": "ADR 1040",
+   "why": "ADR 1040 (b) lifts ADR 0803's slot withdrawal (SC9012 tuple-iteration-written) in this project: the router's window hand-offs reach only seen code, so its open writes are no longer visible iteration writes. The setter calls and reads it held are asked again and stay uncertifiable under this rule's own blocker (function-run-unplaced, read-after-await-unaccounted, async-read-unaccounted): every such file held a tuple-iteration-written row at the base, a relabel across rules, never clean. Measured in the sc VM on the frozen rc.21 corpus (fed4aa902 against the ADR 1040 build), both runtime builds alike."
+  },
+  {
+   "project": "kui/frontend/packages/feature-schemas/tsconfig.json",
+   "rule": "SC2001",
+   "kind": "newly-uncertifiable",
+   "build": "dev",
    "count": 20,
    "adr": "ADR 1040",
    "why": "ADR 1040 (b) lifts ADR 0803's slot withdrawal (SC9012 tuple-iteration-written) in this project: the router's window hand-offs reach only seen code, so its open writes are no longer visible iteration writes. The setter calls and reads it held are asked again and stay uncertifiable under this rule's own blocker (function-run-unplaced, read-after-await-unaccounted, async-read-unaccounted): every such file held a tuple-iteration-written row at the base, a relabel across rules, never clean. Measured in the sc VM on the frozen rc.21 corpus (fed4aa902 against the ADR 1040 build), both runtime builds alike."
@@ -103,7 +184,16 @@
    "project": "kui/frontend/packages/feature-topics/tsconfig.json",
    "rule": "SC2001",
    "kind": "newly-uncertifiable",
-   "build": "both",
+   "build": "std",
+   "count": 22,
+   "adr": "ADR 1040",
+   "why": "ADR 1040 (b) lifts ADR 0803's slot withdrawal (SC9012 tuple-iteration-written) in this project: the router's window hand-offs reach only seen code, so its open writes are no longer visible iteration writes. The setter calls and reads it held are asked again and stay uncertifiable under this rule's own blocker (function-run-unplaced, read-after-await-unaccounted, async-read-unaccounted): every such file held a tuple-iteration-written row at the base, a relabel across rules, never clean. Measured in the sc VM on the frozen rc.21 corpus (fed4aa902 against the ADR 1040 build), both runtime builds alike."
+  },
+  {
+   "project": "kui/frontend/packages/feature-topics/tsconfig.json",
+   "rule": "SC2001",
+   "kind": "newly-uncertifiable",
+   "build": "dev",
    "count": 22,
    "adr": "ADR 1040",
    "why": "ADR 1040 (b) lifts ADR 0803's slot withdrawal (SC9012 tuple-iteration-written) in this project: the router's window hand-offs reach only seen code, so its open writes are no longer visible iteration writes. The setter calls and reads it held are asked again and stay uncertifiable under this rule's own blocker (function-run-unplaced, read-after-await-unaccounted, async-read-unaccounted): every such file held a tuple-iteration-written row at the base, a relabel across rules, never clean. Measured in the sc VM on the frozen rc.21 corpus (fed4aa902 against the ADR 1040 build), both runtime builds alike."
@@ -112,7 +202,16 @@
    "project": "sensor-sim/packages/frontend/tsconfig.json",
    "rule": "SC2001",
    "kind": "newly-uncertifiable",
-   "build": "both",
+   "build": "std",
+   "count": 4,
+   "adr": "ADR 1040",
+   "why": "ADR 1040 (b) lifts ADR 0803's slot withdrawal (SC9012 tuple-iteration-written) in this project: the router's window hand-offs reach only seen code, so its open writes are no longer visible iteration writes. The setter calls and reads it held are asked again and stay uncertifiable under this rule's own blocker (function-run-unplaced, read-after-await-unaccounted, async-read-unaccounted): every such file held a tuple-iteration-written row at the base, a relabel across rules, never clean. Measured in the sc VM on the frozen rc.21 corpus (fed4aa902 against the ADR 1040 build), both runtime builds alike."
+  },
+  {
+   "project": "sensor-sim/packages/frontend/tsconfig.json",
+   "rule": "SC2001",
+   "kind": "newly-uncertifiable",
+   "build": "dev",
    "count": 4,
    "adr": "ADR 1040",
    "why": "ADR 1040 (b) lifts ADR 0803's slot withdrawal (SC9012 tuple-iteration-written) in this project: the router's window hand-offs reach only seen code, so its open writes are no longer visible iteration writes. The setter calls and reads it held are asked again and stay uncertifiable under this rule's own blocker (function-run-unplaced, read-after-await-unaccounted, async-read-unaccounted): every such file held a tuple-iteration-written row at the base, a relabel across rules, never clean. Measured in the sc VM on the frozen rc.21 corpus (fed4aa902 against the ADR 1040 build), both runtime builds alike."
