@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1034: createEffect(async, apply, { sync: true }) throws SYNC_NODE_RECEIVED_ASYNC wherever it runs. Written in a function that is an object member a later spread or computed key replaces, it never runs and Chrome is silent; the checker keeps an uncertifiable member-value-overridden row there, never a violation. SpreadWithoutKey's spread holds no `run`, so Chrome runs the original and reports, and the checker's row is uncertifiable (not proven which value the member holds). A spread or computed key before the member, a plain member and a nested literal's later key leave it the final value: violations, which Chrome reports."
+}

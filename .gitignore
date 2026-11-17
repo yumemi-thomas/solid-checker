@@ -1694,3 +1694,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/tuple-hazard-sites-shadowed/node_modules/**
 !fixtures/reactive-ir/closed-literal-dispatch/node_modules/
 !fixtures/reactive-ir/closed-literal-dispatch/node_modules/**
+!fixtures/reactive-ir/sync-option-overridden-member/node_modules/
+!fixtures/reactive-ir/sync-option-overridden-member/node_modules/**
