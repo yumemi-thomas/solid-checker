@@ -90,7 +90,7 @@
   "SC2006 parameter-initializer-unplaced": 14,
   "SC2006 primitive-alias-call": 2,
   "SC2007 async-flight-error-unobserved": 2,
-  "SC2007 computation-error-unobserved": 3,
+  "SC2007 computation-error-unobserved": 7,
   "SC2007 static-source-unproven": 7,
   "SC2008 callee-callback-timing": 1,
   "SC2008 flush-in-effect-unaccounted": 507,
@@ -104,7 +104,7 @@
   "SC2008 search-depth-limit": 3,
   "SC2009 optimistic-reach-unresolved": 10,
   "SC2009 optimistic-write-unaccounted": 2,
-  "SC3001 computation-error-unobserved": 16,
+  "SC3001 computation-error-unobserved": 14,
   "SC3001 field-initializer-unplaced": 5,
   "SC3001 function-run-unplaced": 35,
   "SC3001 generator-stepped": 9,
@@ -126,11 +126,11 @@
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 13,
-  "SC4001 owner-varies-by-caller": 84,
+  "SC4001 owner-varies-by-caller": 85,
   "SC4001 package-finding-at-entry": 68,
   "SC4001 unreached-dead-code": 2,
   "SC4002 component-identity-unproven": 2,
-  "SC4002 computation-error-unobserved": 26,
+  "SC4002 computation-error-unobserved": 28,
   "SC4002 function-unentered": 4,
   "SC4002 lazy-compute-unread": 2,
   "SC4002 owner-unproven": 5,
@@ -227,7 +227,7 @@
   "SC9012 function-call-target-unresolved": 9,
   "SC9012 function-prototype-callee-unresolved": 2,
   "SC9012 function-run-unplaced": 2,
-  "SC9012 handed-member-dispatch": 451,
+  "SC9012 handed-member-dispatch": 457,
   "SC9012 handed-member-read": 71,
   "SC9012 handed-read-after-await": 10,
   "SC9012 import-unresolved": 38,
@@ -2911,6 +2911,19 @@
     "open": "reactive-ir/owner-call-getter-placed"
    },
    "note": "A getter of a project component placed at its reads (ADR 1031): project wrappers read their children inside an in-place renderer or intrinsic JSX; the owner-call questions answer it there as for code written at the read."
+  },
+  {
+   "fixture": "reactive-ir/leaf-generator-step",
+   "key": "SC3001 computation-error-unobserved",
+   "from": 3,
+   "to": 1,
+   "adr": "ADR 1049",
+   "proof": "rust/crates/solid-reactive-ir/src/stored_throw.rs::stepped_generator_step",
+   "fixtures": {
+    "proved": "reactive-ir/leaf-generator-step",
+    "open": "reactive-ir/leaf-generator-step"
+   },
+   "note": "A flush in the first step of a generator stepped in a tracked effect (`Reaches`, and `Wrapper` through its helper) throws on that `next()` call's stack, so the effect's compute takes it: violations, as for a flush written there (Chrome: FLUSH_IN_TRACKED_QUEUE_CALLBACK at Reaches' line). `MayStop` keeps its row."
   }
  ],
  "renames": []

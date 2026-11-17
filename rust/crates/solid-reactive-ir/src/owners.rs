@@ -642,8 +642,25 @@ pub(crate) fn iterator_next_stepped_at(file: &solid_facts::FileFacts, call: Span
 }
 
 fn iterator_stepped_at_by(file: &solid_facts::FileFacts, call: Span, methods: &[&str]) -> bool {
+    iterator_step_by(file, call, methods).is_some()
+}
+
+/// ADR 1049: the first `next` call of [`iterator_next_stepped_at`], whose stack runs a fresh generator's body
+/// up to its first `yield`.
+pub(crate) fn iterator_next_step(
+    file: &solid_facts::FileFacts,
+    call: Span,
+) -> Option<&solid_facts::ast::CallFact> {
+    iterator_step_by(file, call, &["next"])
+}
+
+fn iterator_step_by<'f>(
+    file: &'f solid_facts::FileFacts,
+    call: Span,
+    methods: &[&str],
+) -> Option<&'f solid_facts::ast::CallFact> {
     let ast = &file.ast;
-    ast.calls.iter().any(|step| {
+    ast.calls.iter().find(|step| {
         let callee = ast.peel_ts_sugar_span(step.callee);
         ast.member_at(callee).is_some_and(|member| {
             ast.peel_ts_sugar_span(member.object) == call

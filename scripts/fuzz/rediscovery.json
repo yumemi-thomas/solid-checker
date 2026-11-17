@@ -25099,5 +25099,29 @@
    "lg-on-flush-in-owned-scope-tbl-nodelist-foreach-zero-x-direct-none"
   ],
   "rediscovered": "main unexecuted (5 programs of the context, Chrome 5 of 5 never ran the site), `make fuzz-focus` fails (ADR 1018); this build uncertifiable, focus passes with the `tbl-nodelistof` rows ledgered `explained` (a real page may hold such elements: V is right, ADR 1033)"
+ },
+ {
+  "finding": "a recall gap: the plain throw of CONTEXT_NOT_FOUND, DYNAMIC_STATIC_PROMISE, NO_OWNER_CONTEXT, RESOLVE/UNTIL_IN_REACTIVE_SCOPE or FLUSH_IN_TRACKED_QUEUE_CALLBACK in the first step of a generator stepped where it is made (`(function* () { …; yield 1 })().next()`) was `function-run-unplaced` while Chrome reports it",
+  "found": "R2's L3 scan (BRIEF-L3, the `generator` group: 105 misuse rows of the six stored-throw codes)",
+  "fixed": "ADR 1049 (`stored_throw.rs` `stepped_generator_step`: the site runs on the stack of that `next()` call)",
+  "grid": "mx-recall",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-body-x-direct-generator",
+   "mx-context-not-found-memo-x-direct-generator",
+   "mx-context-not-found-jsx-x-direct-generator"
+  ],
+  "rediscovered": "main 2e2b60bb6: recall-gap (uncertifiable, `function-run-unplaced`) on each; ADR 1049's build: agree (105 of 105 generator rows of the group)"
+ },
+ {
+  "finding": "a recall gap: the plain throw of DYNAMIC_STATIC_PROMISE or NO_OWNER_CONTEXT in a literal handed to an identity wrapper (`function h(cb) { return cb }`) and run through the call's value (`const run = h(() => …); run()`) was `function-run-unplaced` while Chrome reports it",
+  "found": "R2's L3 scan (BRIEF-L3, the `fire-return` group: 60 misuse rows)",
+  "fixed": "ADR 1049 (`stored_throw.rs` `returned_parameter_end`, on ADR 0346's `identity_wrapped_literal_span`)",
+  "grid": "mx-recall",
+  "code": "DYNAMIC_STATIC_PROMISE",
+  "ids": [
+   "mx-dynamic-static-promise-fire-return-body-x-direct-none"
+  ],
+  "rediscovered": "main 2e2b60bb6: recall-gap (uncertifiable, `function-run-unplaced`) on each; ADR 1049's build: agree (60 of 60 fire-return rows)"
  }
 ]

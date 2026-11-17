@@ -376,6 +376,10 @@ impl Walk<'_, '_> {
                 (false, false) => ThrowEnd::Reported,
             };
         }
+        // ADR 1049: a generator stepped once where it is made runs `at` on that step's stack.
+        if let Some(step) = stepped_generator_step(file, at, self.allowed) {
+            return self.call_end(file, step, false, depth);
+        }
         self.entries(file, function, depth)
     }
 
@@ -813,6 +817,40 @@ impl Walk<'_, '_> {
         }
     }
 
+    /// ADR 1049: `reference` is the literal handed to an identity wrapper at the parameter it returns (`h(() => …)` with
+    /// `function h(cb) { return cb }`, ADR 0346's exact wrapper: it returns that parameter on every completion and reads it nowhere
+    /// else), so the call's value is the function itself: where that value is called, held in a `const` or handed on is where the
+    /// function runs. `None` for any other position.
+    fn returned_parameter_end(
+        &self,
+        file: &FileFacts,
+        reference: Span,
+        depth: usize,
+    ) -> Option<ThrowEnd> {
+        let lookup = self.context.lookup;
+        let (call, _) = file
+            .ast
+            .arguments_containing(reference)
+            .find(|(call, index)| {
+                file.ast.peel_ts_sugar_span(call.arguments[*index].span) == reference
+            })?;
+        if crate::indexes::identity_wrapped_literal_span(lookup, file, call.span)? != reference {
+            return None;
+        }
+        let value = call.span;
+        if let Some(direct) =
+            file.ast.calls.iter().find(|direct| {
+                !direct.construct && file.ast.peel_ts_sugar_span(direct.callee) == value
+            })
+        {
+            return Some(self.call_end(file, direct, self.rejects.get(), depth));
+        }
+        Some(
+            self.alias_end(file, value, depth)
+                .unwrap_or_else(|| self.reference(file, value, depth)),
+        )
+    }
+
     /// A `const` alias of the function: `const compute = inner`. A use that
     /// neither calls nor hands it runs nothing (`void c`).
     fn alias_end(&self, file: &FileFacts, reference: Span, depth: usize) -> Option<ThrowEnd> {
@@ -1018,7 +1056,8 @@ impl Walk<'_, '_> {
                     .filter(|(call, _)| lookup.primitive_at_call(file, call.span).is_some())
                     .map_or_else(
                         || {
-                            self.alias_end(file, reference, depth)
+                            self.returned_parameter_end(file, reference, depth)
+                                .or_else(|| self.alias_end(file, reference, depth))
                                 .unwrap_or_else(|| self.reference(file, reference, depth))
                         },
                         |(call, index)| self.argument(file, call, index, reference, rejects, depth),
@@ -2051,4 +2090,20 @@ fn definition_mounts(
         }
     }
     Some(tags)
+}
+
+/// ADR 1049: the `next()` call that runs `at` when `at` is written in a generator stepped once where it is made
+/// (`(function* () { … at …; yield 1 })().next()`, ADR 0521's `stepped_generator_in_place` with its first step reaching the site): the
+/// body runs on that call's stack up to its first `yield`, so a throw there leaves the `next()` call. `None` for a site after a `yield`,
+/// an async generator, a stored or unstepped iterator, or a step that is a `return` or `throw`.
+fn stepped_generator_step<'f>(
+    file: &'f FileFacts,
+    at: Span,
+    allowed: &[Span],
+) -> Option<&'f CallFact> {
+    let stepped = crate::execution_role::stepped_generator_in_place(file, at, allowed)?;
+    if stepped.first_step != crate::execution_role::StepReach::Reaches {
+        return None;
+    }
+    crate::owners::iterator_next_step(file, stepped.created).filter(|step| !step.construct)
 }
