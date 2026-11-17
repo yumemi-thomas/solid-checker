@@ -570,14 +570,20 @@ impl StaticApiContext<'_> {
                 result.violations.push(StaticViolation {
                     id: "SC7002".into(),
                     rule: "sync-computation-received-async".into(),
-                    message: format!(
-                        "{primitive} is marked sync: true but its computation {}; sync: true asserts a synchronous result so the runtime can skip the async-shape probe — dev still probes and throws SYNC_NODE_RECEIVED_ASYNC, and production stores the unawaited value as-is",
-                        if open {
-                            "may return a Promise or AsyncIterable, and nothing proves it does not"
-                        } else {
-                            "returns a Promise or AsyncIterable"
-                        }
-                    ),
+                    message: if throws_first {
+                        format!(
+                            "{primitive} is marked sync: true, but primitive creation may throw PRIMITIVE_IN_EFFECT_CALLBACK in an ownerless effect apply before its async-result probe; whether SYNC_NODE_RECEIVED_ASYNC is reached is not proven"
+                        )
+                    } else {
+                        format!(
+                            "{primitive} is marked sync: true but its computation {}; sync: true asserts a synchronous result so the runtime can skip the async-shape probe — dev still probes and throws SYNC_NODE_RECEIVED_ASYNC, and production stores the unawaited value as-is",
+                            if open {
+                                "may return a Promise or AsyncIterable, and nothing proves it does not"
+                            } else {
+                                "returns a Promise or AsyncIterable"
+                            }
+                        )
+                    },
                     hint: format!(
                         "Drop sync: true and let the read suspend to a <{}> boundary, or make the computation synchronous by moving the async work into its own computation and reading the settled accessor here.",
                         dialect.boundary_name(solid_dialect::Boundary::Async)

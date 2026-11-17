@@ -25177,6 +25177,6 @@
    "mx-sync-node-received-async-apply-void-call-untrack-memo-direct-none",
    "mx-sync-node-received-async-apply-void-call-untrack-effect-direct-none"
   ],
-  "rediscovered": "Prior f1 build reports SC7002 violation on all four; Chrome reports only PRIMITIVE_IN_EFFECT_CALLBACK. Narrow gate retains a named SC7002 obligation. These existing mx-census programs stay in the smoke census."
+  "rediscovered": "Focused fuzzer: four stacked-claim outcomes on f1 become four not-fired outcomes without violations here. The old command exits zero because its existing R-stacked ledger masks those defects; no judge or allowlist changed. Chrome reports only PRIMITIVE_IN_EFFECT_CALLBACK. These mx-census programs remain in smoke."
  }
 ]

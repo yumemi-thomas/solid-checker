@@ -1,6 +1,6 @@
 # returned-closure-unrun
 
-**Claim (ADR 1020).** A function literal that a callback of a dialect primitive returns (an arrow's expression body or a `return`'s argument) is a value the runtime hands on: an effect's apply receives it, a memo stores it. It runs only where something calls that value, and reach analysis does not read that, so a site in it is undecided: a violation there is `site-reach-undecided`, an obligation stays, nothing becomes clean.
+**Claim (ADR 1020).** A function a primitive compute returns is a value: an effect's apply receives it, a memo stores it. The reachability gate withholds sites in that function where its value is proven uncalled; they remain uncertifiable, never clean. A called returned closure also keeps SC7002 uncertifiable where primitive creation may throw a competing diagnostic before the async-result probe.
 
 Violations: `DirectSync` (SC7002: a `sync: true` memo whose compute returns a Promise; Chrome reports SYNC_NODE_RECEIVED_ASYNC).
 
