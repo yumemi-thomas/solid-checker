@@ -1,0 +1,1 @@
+{"note": "ADR 1010: a helper whose parameter default throws before its body never calls its callback: the write in the callback is silent in Chrome; with a literal default, or a literal argument at the default's position, the write runs and Chrome reports REACTIVE_WRITE_IN_OWNED_SCOPE."}

@@ -595,10 +595,39 @@ impl<'l, 'a> SiteReach<'l, 'a> {
         {
             return false;
         }
+        // ADR 1010: a function literal handed to an exact project helper whose parameter default may run code at that call (and may
+        // throw there, before the body): whether the helper's body, and so this function, ever runs is not decided.
+        if self.handed_past_live_default(file, function) {
+            self.limited.set(true);
+            return true;
+        }
         match function_declaration_span(file, function) {
             Some(declaration) => !self.binding_unreached(file, function, declaration),
             None => !returned_by_discarded_iife(file, function.span),
         }
+    }
+
+    /// ADR 1010: `function` is written as an argument of a call of an exact project function, and a default of that function's
+    /// parameter list may run code at the call ([`super::defaults_run_no_code_at`]).
+    fn handed_past_live_default(
+        &self,
+        file: &solid_facts::FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+    ) -> bool {
+        let lookup = self.lookup;
+        file.ast
+            .arguments_containing(function.span)
+            .filter(|(call, index)| {
+                file.ast.peel_ts_sugar_span(call.arguments[*index].span) == function.span
+                    && lookup.primitive_at_call(file, call.span).is_none()
+            })
+            .any(|(call, index)| {
+                super::project_callee_at_parameter(file, call, index, lookup).is_some_and(
+                    |(callee_file, callee, exact)| {
+                        exact && !super::defaults_run_no_code_at(file, call, callee_file, callee)
+                    },
+                )
+            })
     }
 
     /// ADR 0475: whether a function bound to a name has a call or render the

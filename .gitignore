@@ -436,6 +436,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/render-time-reads/node_modules/**
 !fixtures/reactive-ir/project-callback-uses/node_modules/
 !fixtures/reactive-ir/project-callback-uses/node_modules/**
+!fixtures/reactive-ir/helper-throwing-default/node_modules/
+!fixtures/reactive-ir/helper-throwing-default/node_modules/**
 !fixtures/reactive-ir/closed-export-declaration-sibling/node_modules/
 !fixtures/reactive-ir/closed-export-declaration-sibling/node_modules/**
 !fixtures/reactive-ir/prop-head-get/node_modules/
