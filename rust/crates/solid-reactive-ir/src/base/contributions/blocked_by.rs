@@ -223,6 +223,8 @@ pub(crate) struct HazardSiteAt {
     pub(crate) path: String,
     pub(crate) start: u32,
     pub(crate) end: u32,
+    /// ADR 1027: which disjunct of the hazard the site holds, where the hazard is a disjunction.
+    pub(crate) cause: Option<&'static str>,
 }
 
 /// The sites that contribute each hazard of `ids` (ids of [`handed_root_atoms`] or [`impostor_atoms`]), by path then span,
@@ -280,6 +282,7 @@ pub(crate) fn hazard_sites(
                     path: file.path.as_str().to_owned(),
                     start: span.start,
                     end: span.end,
+                    cause: None,
                 }));
             }
         }

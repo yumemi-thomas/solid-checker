@@ -3837,3 +3837,102 @@ fn accessor_walks_end_on_self_reference_and_keep_their_rows() {
         assert_eq!(rows, 0, "{twin}");
     }
 }
+
+/// ADR 1027: the hazard table names where each disjunct of ADR 0803's slot withdrawal holds. `tuple-hazard-sites` holds
+/// one file per census (a visible iterator-key write, an intrinsic obtained, a direct `eval`, the window handed to unseen
+/// code), and every site stands in the file that fires it, under its cause; the shadowed twin binds the same names
+/// locally and writes an iterator key on its own literal, so no slot is withdrawn and the table names neither hazard.
+#[test]
+fn the_tuple_iteration_hazards_name_their_sites() {
+    let Ok(producer) = std::env::var("SOLID_TYPEFACTS_BIN") else {
+        return;
+    };
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let report = |name: &str| -> serde_json::Value {
+        let output = std::process::Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+            .env("SOLID_TYPEFACTS_BIN", &producer)
+            .env("SOLID_CHECKER_DAEMON", "0")
+            .args(["--format", "json", "--project"])
+            .arg(root.join(format!("fixtures/reactive-ir/{name}/tsconfig.json")))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{name}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        serde_json::from_slice(&output.stdout).unwrap()
+    };
+    let sites = |report: &serde_json::Value, id: &str| -> Vec<(String, String)> {
+        report["hazards"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|hazard| hazard["id"] == id)
+            .flat_map(|hazard| hazard["sites"].as_array().cloned().unwrap_or_default())
+            .map(|site| {
+                let path = site["path"].as_str().unwrap_or_default();
+                let file = path.rsplit('/').next().unwrap_or_default().to_owned();
+                (file, site["cause"].as_str().unwrap_or_default().to_owned())
+            })
+            .collect()
+    };
+    let fired = report("tuple-hazard-sites");
+    let held = fired["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|finding| finding["blockedBy"]["kind"] == "tuple-iteration-written")
+        .collect::<Vec<_>>();
+    assert!(!held.is_empty(), "{fired:#}");
+    // Every id a row names has sites: a fired hazard this table could not place would be a census it does not read.
+    for row in &held {
+        for id in row["blockedBy"]["fired"].as_array().unwrap() {
+            assert!(
+                !sites(&fired, id.as_str().unwrap()).is_empty(),
+                "{id}: {fired:#}"
+            );
+        }
+    }
+    let visible = sites(&fired, "VisibleIterationWrite");
+    assert_eq!(
+        visible,
+        [("visible.ts".to_owned(), "visible-write".to_owned())],
+        "{fired:#}"
+    );
+    let mutated = sites(&fired, "TupleSlotIterationMayBeMutated");
+    for expected in [
+        ("evaluated.ts", "eval"),
+        ("obtained.ts", "intrinsic-obtained"),
+        ("handed.ts", "intrinsic-handed"),
+    ] {
+        assert!(
+            mutated
+                .iter()
+                .any(|(file, cause)| file == expected.0 && cause == expected.1),
+            "{expected:?}: {mutated:?}"
+        );
+    }
+    // No site stands in a file that fires nothing.
+    assert!(
+        mutated
+            .iter()
+            .chain(&visible)
+            .all(|(file, _)| file != "counter.tsx" && file != "main.tsx"),
+        "{mutated:?}"
+    );
+    let shadowed = report("tuple-hazard-sites-shadowed");
+    assert!(
+        sites(&shadowed, "VisibleIterationWrite").is_empty()
+            && sites(&shadowed, "TupleSlotIterationMayBeMutated").is_empty(),
+        "{shadowed:#}"
+    );
+    assert!(
+        shadowed["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|finding| finding["blockedBy"]["kind"] != "tuple-iteration-written"),
+        "{shadowed:#}"
+    );
+}
