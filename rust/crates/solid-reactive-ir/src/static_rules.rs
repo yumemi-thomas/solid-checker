@@ -182,7 +182,20 @@ fn unresolved_import_references(
                 .entities
                 .at(file.path.as_str(), declaration)
                 .is_none_or(|symbol| ctx.semantic_lookup.symbol_undeclared(symbol.as_str()));
-            if !unresolved {
+            // ADR 1060: an import of a dialect module that resolved to another file (`paths` to a project shim) names nothing
+            // (`symbols::specifier_may_be_package`), and what the file holds is not the package: every use is open, as above.
+            let mapped = !unresolved
+                && !ctx
+                    .dialect
+                    .namespace_import_primitives(import.module.as_str())
+                    .is_empty()
+                && !crate::symbols::specifier_may_be_package(
+                    ctx.semantic_lookup.resolved_imports(),
+                    file,
+                    import.span,
+                    import.module.as_str(),
+                );
+            if !unresolved && !mapped {
                 continue;
             }
             let name = file.source_text(declaration).unwrap_or("this import");
@@ -207,7 +220,12 @@ fn unresolved_import_references(
                         member: None,
                     },
                     location: location(file.path.shared(), reference),
-                    analysis_context: crate::blockers::IMPORT_UNRESOLVED.to_owned(),
+                    analysis_context: if mapped {
+                        crate::blockers::DIALECT_SPECIFIER_MAPPED
+                    } else {
+                        crate::blockers::IMPORT_UNRESOLVED
+                    }
+                    .to_owned(),
                     fixes: vec![],
                     uncertain: true,
                 });

@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "target": "ES2022",
+    "baseUrl": ".",
+    "paths": { "solid-js": ["./node_modules/other-signals"] }
+  },
+  "include": ["*.ts"]
+}

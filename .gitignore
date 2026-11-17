@@ -1297,6 +1297,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/stored-throw-returned-param/node_modules/**
 !fixtures/reactive-ir/stored-throw-returned-literal/node_modules/
 !fixtures/reactive-ir/stored-throw-returned-literal/node_modules/**
+!fixtures/reactive-ir/owner-boxed-callers/node_modules/
+!fixtures/reactive-ir/owner-boxed-callers/node_modules/**
 
 !fixtures/reactive-ir/rc21-listener-cross-file/node_modules/
 !fixtures/reactive-ir/rc21-listener-cross-file/node_modules/**
@@ -1768,3 +1770,7 @@ packages/wasm/owned/
 !fixtures/reactive-ir/projection-draft-assign-rebound/node_modules/**
 !fixtures/reactive-ir/unresolved-namespace-slots/node_modules/
 !fixtures/reactive-ir/unresolved-namespace-slots/node_modules/**
+!fixtures/reactive-ir/solid-specifier-mapped-package/node_modules/
+!fixtures/reactive-ir/solid-specifier-mapped-package/node_modules/**
+!fixtures/reactive-ir/solid-specifier-mapped-other/node_modules/
+!fixtures/reactive-ir/solid-specifier-mapped-other/node_modules/**

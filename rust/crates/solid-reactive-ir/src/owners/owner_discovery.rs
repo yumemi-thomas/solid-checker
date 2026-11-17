@@ -177,6 +177,9 @@ pub(crate) fn discover_owner_file(
         let owner = owner_at(call.span);
         let target = lookup
             .object_member_function(file, call.callee)
+            // ADR 1059: a closed literal's member the census does not hold, the literal a boxing helper returns (ADR 1058's
+            // `const box = h(f)`, `box.cb()`): the call runs `f`.
+            .or_else(|| lookup.callee_closed_member_function(file, call.callee))
             .map(|(file, function)| OwnerTarget::Function(file.path.to_string(), function.span))
             .or_else(|| {
                 named_action_generator(file, call.callee, lookup).map(OwnerTarget::LocalSpan)
@@ -259,6 +262,7 @@ pub(crate) fn discover_owner_file(
             && lookup
                 .function_called_at(file.path.as_str(), callee)
                 .or_else(|| lookup.object_member_function(file, call.callee))
+                .or_else(|| lookup.callee_closed_member_function(file, call.callee))
                 .is_some_and(|(_, function)| function.generator))
         .then(|| crate::owners::iterator_steps(file, call, lookup));
         if let Some(target) = target {

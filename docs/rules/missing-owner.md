@@ -261,7 +261,10 @@ A callback with no proven run under its lexical owner (a wrapper callback,
 stored member, class member or getter) is uncertifiable (ADR 0534). Dormant
 exports remain silent; unnamed namespace escapes remain uncertain. An operation in an exported helper's
 own body names its unseen callers instead: the open-world seed is its edge
-(fixture `owner-exported-seed-cause`).
+(fixture `owner-exported-seed-cause`). A function a same-file helper boxes in a fresh literal
+(`function boxed(cb) { return { cb } }`, a closed `const box = boxed(f)`, ADR 1058)
+has each `box.cb()` call as its caller (ADR 1059): it runs under that call's owner,
+or with none from a timer.
 
 An invoked function literal is an owner edge (ADR 0347): the call runs its body
 under the owner of the code around the call, so a plain IIFE at module scope or
@@ -395,3 +398,4 @@ Every owner-requiring call ends in a finding or a named proof that its owner con
 An indirect `onSettled` call (`f.bind(…)(…)`, `f.call`/`f.apply`, `(slot ||= f)(…)`) whose operand names the primitive is SC4001's uncertifiable where the direct call would be, after an `await` too (ADR 0926): an attribution, never a proof of invocation or owner; a local function of the same name is none. An operation that is already uncertain is still reported where its named layer has an open entry (ADR 0902).
 
 Where a check Solid makes earlier at the same call is proven to throw, the owner check is never reached: an effect created in an effect's apply (SC6002 throws `PRIMITIVE_IN_EFFECT_CALLBACK` before `createEffect` reports `NO_OWNER_EFFECT`), and an operation a leaf owner refuses on another caller's run (SC3001 throws at mount and halts the system, so a handler's later unowned run never reports). The row is uncertifiable `creation-throws-first`, not a violation ([ADR 1052](../decisions.md#adr-1052)). A boundary reports `NO_OWNER_BOUNDARY` before it creates anything, so it keeps its violation in an apply.
+The same holds where a helper an effect's apply and another caller both run creates the effect (SC6002's `effect-owner-unproven`: the apply's run throws the guard and halts).

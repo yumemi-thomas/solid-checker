@@ -20,6 +20,13 @@
 
 use crate::{Location, OwnerRequirementOperation, Program, StaticDefectKind};
 
+/// The blocker an uncertain static violation is reported under: the one its context names, else the rule's own
+/// (`blockers::for_rule`, what projection gives it, ADR 0680).
+fn violation_blocker(violation: &crate::StaticViolation) -> &str {
+    crate::blocked_by::blocked_kind(&violation.analysis_context)
+        .unwrap_or_else(|| crate::blockers::for_rule(&violation.id))
+}
+
 fn same_call(left: &Location, right: &Location) -> bool {
     left.path == right.path && left.start_byte == right.start_byte
 }
@@ -48,6 +55,21 @@ pub(crate) fn mark(program: &mut Program) {
         .iter()
         .filter(|violation| violation.id == "SC6002" && !violation.uncertain)
         .map(|violation| violation.location.clone())
+        .collect();
+    // ADR 1052, part 3: SC6002's `effect-owner-unproven` obligation names a caller that runs the creation in an effect's
+    // apply (a helper the apply and a handler or a render both call). On that run the guard throws first and halts; the
+    // run the owner row proves unowned may be that one, and no fact orders the others' runs against the halt: the owner
+    // row is an obligation. The accounting obligation (`effect-creation-unaccounted`) names no caller and is not this.
+    let effect_may_guard: Vec<Location> = program
+        .static_violations
+        .iter()
+        .filter(|violation| {
+            violation.id == "SC6002"
+                && violation.uncertain
+                && violation_blocker(violation) == crate::blockers::EFFECT_OWNER_UNPROVEN
+        })
+        .map(|violation| violation.location.clone())
+        .chain(effect_guarded.iter().cloned())
         .collect();
     let leaf_refused: Vec<Location> = program
         .leaf_operations
@@ -86,7 +108,7 @@ pub(crate) fn mark(program: &mut Program) {
             OwnerRequirementOperation::ContextRead => false,
             operation => {
                 (operation == OwnerRequirementOperation::Effect
-                    && effect_guarded
+                    && effect_may_guard
                         .iter()
                         .any(|guarded| same_call(guarded, &requirement.location)))
                     || leaf_refused
@@ -100,21 +122,14 @@ pub(crate) fn mark(program: &mut Program) {
         }
     }
     // SC7002 claims the creation reaches its result probe (SYNC_NODE_RECEIVED_ASYNC), which comes after every creation guard.
-    // An earlier check proven to throw at the creation (`effect_guarded`, `leaf_refused`) ends the call first, and so may
-    // SC6002's `effect-owner-unproven` obligation: a caller of the creation runs it in an apply with no owner proven. The
-    // accounting obligations (`effect-creation-unaccounted`, `leaf-operation-unaccounted`) name no caller and prove nothing:
-    // taking them cost 964 smoke programs Chrome reports SYNC_NODE_RECEIVED_ASYNC at.
-    let creation_may_throw: Vec<Location> = program
-        .static_violations
+    // An earlier check proven to throw at the creation (`effect_guarded`, `leaf_refused` at the call itself) ends the call
+    // first. No obligation counts here: the accounting ones (`effect-creation-unaccounted`, `leaf-operation-unaccounted`)
+    // name no caller (taking them cost 964 smoke programs Chrome reports SYNC_NODE_RECEIVED_ASYNC at), and
+    // `effect-owner-unproven` names an apply caller while another caller (a render, a rerun) may reach the probe first
+    // (14 such smoke programs, ADR 1052 part 3).
+    let creation_may_throw: Vec<Location> = effect_guarded
         .iter()
-        .filter(|violation| {
-            violation.id == "SC6002"
-                && violation.uncertain
-                && crate::blocked_by::blocked_kind(&violation.analysis_context)
-                    == Some(crate::blockers::EFFECT_OWNER_UNPROVEN)
-        })
-        .map(|violation| violation.location.clone())
-        .chain(effect_guarded.iter().cloned())
+        .cloned()
         // A leaf refusal counts only at a call written in the leaf callback itself, whose every run it refuses: one reached
         // through a helper refuses that caller's run alone, and another caller (a render) may reach the probe first.
         .chain(

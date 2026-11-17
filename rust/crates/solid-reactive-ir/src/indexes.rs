@@ -3028,7 +3028,7 @@ impl<'a> SemanticLookup<'a> {
 
     /// The compiler's attested resolution of the project's import specifiers,
     /// when the analysis carries it.
-    pub(super) fn resolved_imports(&self) -> Option<&'a solid_facts::AttestedImportIndex> {
+    pub(crate) fn resolved_imports(&self) -> Option<&'a solid_facts::AttestedImportIndex> {
         self.facts.resolved_imports.as_ref()
     }
 

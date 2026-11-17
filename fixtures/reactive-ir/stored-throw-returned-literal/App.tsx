@@ -99,3 +99,28 @@ export function ImportedHelper() {
   box.cb();
   return <p />;
 }
+
+// Uncertifiable (ADR 1059's review of ADRs 1044 and 1058): a hoisted declaration calls the holder before its declarator ran;
+// the call throws a ReferenceError (Chrome reports that, never the static promise), so the member names nothing there.
+export function LiteralBeforeDeclarator() {
+  function enter() {
+    held.cb();
+  }
+  enter();
+  const held = {
+    cb: () => {
+      dynamic(() => Promise.resolve("p" as const), { static: true });
+    },
+  };
+  return <p />;
+}
+export function BoxBeforeDeclarator() {
+  function enter() {
+    box.cb();
+  }
+  enter();
+  const box = boxed(() => {
+    dynamic(() => Promise.resolve("p" as const), { static: true });
+  });
+  return <p />;
+}

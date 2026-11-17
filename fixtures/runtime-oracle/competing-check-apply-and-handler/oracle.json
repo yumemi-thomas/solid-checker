@@ -1,0 +1,10 @@
+{
+  "note": "ADR 1052, part 3: a helper an effect apply and a handler both call. The apply run throws PRIMITIVE_IN_EFFECT_CALLBACK and halts, and NO_OWNER_EFFECT is never reported; SC4001 uncertifiable `creation-throws-first` (SC6002 `effect-owner-unproven`). Generated program `mx-no-owner-effect-effect-apply-shared-effect-direct-none` (differential fuzzer, generator 2).",
+  "haltMarker": true,
+  "steps": [
+    {
+      "action": "click",
+      "selector": "[data-act=\"b1\"], body:not(:has([data-act=\"b1\"])) > #sc-halted"
+    }
+  ]
+}

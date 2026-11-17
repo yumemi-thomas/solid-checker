@@ -104,6 +104,13 @@ fn is_component_renderer(lookup: &SemanticLookup<'_>, file: &FileFacts, callee: 
                 .dialect
                 .namespace_import_primitives(import.module.as_str())
                 .is_empty()
+            // ADR 1060: a specifier mapped to another file is not the package.
+            && crate::symbols::specifier_may_be_package(
+                lookup.resolved_imports(),
+                file,
+                import.span,
+                import.module.as_str(),
+            )
             && imported.is_some_and(renders);
     }
     let Some(member) = ast
@@ -122,6 +129,12 @@ fn is_component_renderer(lookup: &SemanticLookup<'_>, file: &FileFacts, callee: 
                 .dialect
                 .namespace_import_primitives(import.module.as_str())
                 .is_empty()
+            && crate::symbols::specifier_may_be_package(
+                lookup.resolved_imports(),
+                file,
+                import.span,
+                import.module.as_str(),
+            )
             && file.source_text(member.property).is_some_and(renders)
     })
 }

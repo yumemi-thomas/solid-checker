@@ -31,7 +31,14 @@ pub(super) fn add_solid_import_names(
     for file in crate::base::reads::file_slots(facts) {
         for import in &file.ast.imports {
             let primitives = dialect.namespace_import_primitives(import.module.as_str());
-            if primitives.is_empty() {
+            if primitives.is_empty()
+                || !specifier_may_be_package(
+                    facts.resolved_imports.as_ref(),
+                    file,
+                    import.span,
+                    import.module.as_str(),
+                )
+            {
                 continue;
             }
             for binding in &import.bindings {
@@ -73,7 +80,14 @@ pub(super) fn add_solid_import_names(
             };
             // ADR 1054: the slot copies the namespace's member, so it is the primitive only where the namespace import itself
             // resolved: an import of a missing package is the checker's unknown symbol, which declares nothing.
-            if !import_binding_declared(facts, entities, file, namespace) {
+            if !import_binding_declared(facts, entities, file, namespace)
+                || !specifier_may_be_package(
+                    facts.resolved_imports.as_ref(),
+                    file,
+                    import.span,
+                    import.module.as_str(),
+                )
+            {
                 continue;
             }
             let primitives = dialect.namespace_import_primitives(import.module.as_str());
@@ -113,7 +127,14 @@ pub(super) fn add_solid_import_names(
                 continue;
             };
             // ADR 1054: as for the slot above, only where the copied import itself resolved.
-            if !import_binding_declared(facts, entities, file, imported) {
+            if !import_binding_declared(facts, entities, file, imported)
+                || !specifier_may_be_package(
+                    facts.resolved_imports.as_ref(),
+                    file,
+                    import.span,
+                    import.module.as_str(),
+                )
+            {
                 continue;
             }
             let primitives = dialect.namespace_import_primitives(import.module.as_str());
@@ -137,7 +158,14 @@ pub(super) fn add_solid_import_names(
                 continue;
             };
             let primitives = dialect.namespace_import_primitives(module);
-            if primitives.is_empty() {
+            if primitives.is_empty()
+                || !specifier_may_be_package(
+                    facts.resolved_imports.as_ref(),
+                    file,
+                    export.span,
+                    module,
+                )
+            {
                 continue;
             }
             // `export * as Solid from "solid-js"` (ADR 0780): the binding is
@@ -170,6 +198,48 @@ pub(super) fn add_solid_import_names(
                 }
             }
         }
+    }
+}
+
+/// ADR 1060: whether the dialect specifier `module` of the declaration at `declaration` in `file` may load the package it names, by
+/// the compiler's attested resolution. A bare specifier the resolver landed outside every `node_modules` tree (a `paths` or `baseUrl`
+/// mapping: a project file of the same names), or a relative one, is not the package unless the resolver read the package's own
+/// manifest on the way; nor is a landing whose package (the resolver's own, else the nearest manifest's) is another. An unresolved row (an ambient `declare module`, a missing package) or no row keeps the earlier
+/// answer: [`undeclared`] decides those.
+pub(crate) fn specifier_may_be_package(
+    resolved_imports: Option<&solid_facts::AttestedImportIndex>,
+    file: &solid_facts::FileFacts,
+    declaration: solid_facts::core::Span,
+    module: &str,
+) -> bool {
+    use solid_facts::{ImportResolution, SpecifierAttestation};
+    let Some(index) = resolved_imports else {
+        return true;
+    };
+    let SpecifierAttestation::Attested(row) =
+        index.specifier(file.path.as_str(), declaration, module)
+    else {
+        return true;
+    };
+    if row.resolution == ImportResolution::Unresolved {
+        return true;
+    }
+    let package = if module.starts_with('@') {
+        module.splitn(3, '/').take(2).collect::<Vec<_>>().join("/")
+    } else {
+        module.split('/').next().unwrap_or(module).to_owned()
+    };
+    // The package whose manifest the resolver itself consulted decides (a manifest's `types` may point outside its directory,
+    // a `NonRelative` landing that is still the package's); without one, a `node_modules` landing is its nearest named manifest's
+    // (none named: not attested), and any other landing (a `paths` mapping straight to a file, a relative one) is not the package.
+    match (row.resolver_package_name.as_deref(), row.resolution) {
+        (Some(resolver), _) => resolver == package.as_str(),
+        (None, ImportResolution::NodeModules) => row
+            .package_name
+            .as_deref()
+            .is_some_and(|name| name == package.as_str()),
+        // No package names the landing: its identity is not attested.
+        (None, _) => false,
     }
 }
 

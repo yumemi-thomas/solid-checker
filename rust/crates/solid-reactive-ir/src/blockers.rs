@@ -264,6 +264,9 @@ pub(crate) const PRIMITIVE_IDENTITY_UNPROVEN: &str = "primitive-identity-unprove
 /// missing module, an export its target lacks): what the value is, and so
 /// what any call, read, tag or write through it does, is unknown.
 pub(crate) const IMPORT_UNRESOLVED: &str = "import-unresolved";
+/// ADR 1060: an import of a dialect module whose specifier the compiler resolved to a file that is not that package (a `paths` or
+/// `baseUrl` mapping to a project file, a relative landing, another package's file): what runs is not the package.
+pub(crate) const DIALECT_SPECIFIER_MAPPED: &str = "dialect-specifier-mapped";
 /// ADR 0829: a store `delete` whose operand is neither proven optional and
 /// writable nor proven rejected by TypeScript (a computed or index key, a
 /// required `T | undefined`, `unknown`): whether `tsc` accepts it, and so
