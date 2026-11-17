@@ -1,0 +1,159 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-setter-draft-assign-proxy/App.tsx",
+      "start": 469,
+      "end": 480,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-setter-draft-assign-proxy/App.tsx",
+      "start": 539,
+      "end": 550,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/store-setter-draft-assign-proxy/App.tsx",
+      "start": 647,
+      "end": 708,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-setter-draft-assign-proxy/App.tsx",
+      "start": 719,
+      "end": 733,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-setter-draft-assign-proxy/App.tsx",
+      "start": 720,
+      "end": 726,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-setter-draft-assign-proxy/App.tsx",
+      "start": 1026,
+      "end": 1030,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-setter-draft-assign-proxy/App.tsx",
+      "start": 1034,
+      "end": 1049,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/store-setter-draft-assign-proxy/App.tsx",
+      "start": 1090,
+      "end": 1115,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/store-setter-draft-assign-proxy/App.tsx",
+      "start": 1090,
+      "end": 1115,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/store-setter-draft-assign-proxy/App.tsx",
+      "start": 1090,
+      "end": 1115,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "standard-member-impostor",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-setter-draft-assign-proxy/App.tsx",
+      "start": 1090,
+      "end": 1101,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/store-setter-draft-assign-proxy/App.tsx",
+      "start": 1117,
+      "end": 1122,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/store-setter-draft-assign-proxy/App.tsx",
+      "start": 1117,
+      "end": 1122,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/store-setter-draft-assign-proxy/App.tsx",
+      "start": 1117,
+      "end": 1122,
+      "fixes": 0
+    }
+  ]
+}

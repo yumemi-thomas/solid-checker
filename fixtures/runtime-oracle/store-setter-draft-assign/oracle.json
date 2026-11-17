@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1067: createStore's updater receives its own store proxy. Assigning onto it cannot replace Number.isFinite. The unshadowed standard call ignores its function argument, so no dev diagnostic is expected."
+}
