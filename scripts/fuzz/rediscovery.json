@@ -25855,5 +25855,11 @@
    "mx-sync-node-received-async-tracked-memo-direct-none"
   ],
   "rediscovered": "the merge of ADR 1020's branch (14434c30f) and part 1: stacked-claim (30 programs, ledgered R-stacked); this build: not-fired, and the rows leave open-defects-rows.json, so the old build fails `make fuzz-focus` on them as unlisted stacked claims"
+ },
+ {
+  "finding": "ADR 1062: Function.toString.call/apply in dependency source was classified as code generation, making the package an arbitrary global writer and keeping inert package calls uncertifiable",
+  "found": "ADR 1061 blocker census: Babel _isNativeFunction helper in published package source",
+  "fixed": "ADR 1062 (module_reach.rs function_use_is_inert, to_string_applied)",
+  "outside": "The grids do not generate installed package source containing Function member reads. Scanner unit tests and fixture function-member-read (immediate call, held member, bind) retain the shape; the pre-fix release build gives package-may-call-action:code-generation at the immediate-call fixture, the fix certifies it. No runtime violation is claimed."
  }
 ]
