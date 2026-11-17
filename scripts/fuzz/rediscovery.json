@@ -25895,5 +25895,33 @@
    "mx-no-owner-effect-apply-placed-twin-effect-direct-none"
   ],
   "rediscovered": "main fa8f33277: false-positive (ledgered, owner Mac 20); with the rows gone from open-defects-rows.json `make fuzz-focus` on the 153 ledger ids fails there (7 false positives) and passes on this build"
+ },
+ {
+  "finding": "a recall gap: `useContext` of a context never provided, in a function a helper boxes (`function h(cb) { return { cb } }`) and run by `box.cb()` in the component body, was `function-run-unplaced` (the owner graph gave the boxed function no caller) while Chrome reports CONTEXT_NOT_FOUND there",
+  "found": "ADR 1058's probe (the `fire-store` group of R2's L3 scan: 40 misuse rows SC4001's own net decided), recorded open in docs/open-work.md",
+  "fixed": "ADR 1059 (`owners/owner_discovery.rs`: a call's target is also the function a closed literal's member read names, `SemanticLookup::callee_closed_member_function`)",
+  "grid": "mx-recall",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-fire-store-body-x-direct-none"
+  ],
+  "rediscovered": "ADR 1058's build recall-gap, this build agree (SC4002 violation at the site)"
+ },
+ {
+  "finding": "a recall gap: an owner read (`useContext`, `onCleanup`, an effect, a boundary, `onSettled`'s cleanup) in a function a helper boxes, run by `box.cb()` from a timer, was `function-run-unplaced` while Chrome reports the no-owner diagnostic there",
+  "found": "ADR 1058's probe (the `fire-store` group of R2's L3 scan: 40 misuse rows SC4001's own net decided), recorded open in docs/open-work.md",
+  "fixed": "ADR 1059 (`owners/owner_discovery.rs`: a call's target is also the function a closed literal's member read names, `SemanticLookup::callee_closed_member_function`)",
+  "grid": "mx-recall",
+  "code": "NO_OWNER_CONTEXT",
+  "ids": [
+   "mx-no-owner-context-fire-store-timer-x-direct-none"
+  ],
+  "rediscovered": "ADR 1058's build recall-gap, this build agree (SC4001 violation at the site; the 126 mx-recall movers: recall-gap 120 to agree)"
+ },
+ {
+  "finding": "a false positive: SC2007 at a plain throw in a closed literal's member (ADR 1044's `const held = { cb: () => … }`, or ADR 1058's box) called through a hoisted function declaration before the literal's declarator (`function enter() { held.cb(); } enter(); const held = …`): the call throws a ReferenceError and the member never runs; Chrome rc.21 reports the ReferenceError, never the promise",
+  "found": "ADR 1059's coverage (the owner edge first made `object-member-initialization`'s TDZ case a violation), then a scratch oracle case on main 5780918b8 and ADR 1058's build",
+  "fixed": "ADR 1059's review (`indexes/closed_members.rs` `initialized_before_every_use`: ADR 0351's index names a member only when every use of the binding runs after its declarator)",
+  "outside": "the program throws a ReferenceError at the holder's call during the component's render, before any site runs, so no grid cell places a site there (the generator writes the holder before its uses); fixtures `stored-throw-returned-literal` (`LiteralBeforeDeclarator`, `BoxBeforeDeclarator`) and `owner-boxed-callers` (`BodyBeforeDeclarator`) and their oracle cases pin it: ADR 1058's build SC2007 static-only at both, this build uncertifiable, Chrome silent"
  }
 ]

@@ -28,6 +28,29 @@ impl<'a> SemanticLookup<'a> {
         Some((file, function))
     }
 
+    /// ADR 1059: the function a call's callee names when it is a member read of a box ADR 1058 reads as a closed literal
+    /// (`const box = h(f)`, `box.cb()`): `f`. A box only: a `const` written as an object literal is the literal-receiver
+    /// census's (`object_member_function`). `None` for anything else.
+    pub(crate) fn callee_closed_member_function(
+        &self,
+        file: &FileFacts,
+        callee: Span,
+    ) -> Option<(&'a FileFacts, &'a FunctionFact)> {
+        let member = file.ast.member_at(file.ast.peel_ts_sugar_span(callee))?;
+        let declaration = file.ast.reference_declaration(member.object)?;
+        let boxed = file.ast.bindings.iter().any(|binding| {
+            binding
+                .names
+                .first()
+                .is_some_and(|name| name.span == declaration)
+                && binding.initializer_value_kind != RuntimeValueKind::Object
+        });
+        if !boxed {
+            return None;
+        }
+        self.closed_member_function(file, member)
+    }
+
     /// The value of a closed literal's member read: a function, or a name
     /// that may hold one.
     pub(crate) fn closed_member_value(
@@ -157,6 +180,9 @@ fn closed_binding_members(
                 && mentions_word(file.source_text(export.span).unwrap_or_default(), declared))
     });
     if exported {
+        return Vec::new();
+    }
+    if !initialized_before_every_use(lookup, file, binding, name, boxed.is_some()) {
         return Vec::new();
     }
     let mut reads = Vec::new();
@@ -316,4 +342,66 @@ fn boxing_helper(file: &FileFacts, helper: &FunctionFact) -> Option<(Span, usize
         return None;
     }
     Some((literal, index, value))
+}
+
+/// Whether every use of the closed binding declared at `declaration` runs after its declarator (ADR 1059's review of ADRs 1044
+/// and 1058; the literal-receiver census's `initialized_use`, ADR 0299): a use that may run first throws a `ReferenceError`
+/// in place of the call, so the member names nothing there.
+///
+/// - In a function: the binding is in no `switch` case (a shared case scope has no dominance), and every use is written after
+///   the initializer with no function declaration between it and the binding's scope: a hoisted declaration may run before
+///   the declarator; a function expression or an arrow written later is created later.
+/// - At module level (a written literal only; a box is refused there, its helper's call runs in the declarator): the module is
+///   on no import cycle and no load is unknown, every use is written after the initializer or inside a function, and the code
+///   before the initializer's end enters no project function: each call outside a function there is a construct-free call of
+///   a primitive with only literal arguments (`createContext(7)`, `createSignal(0)`).
+fn initialized_before_every_use(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    binding: &BindingFact,
+    declaration: Span,
+    boxed: bool,
+) -> bool {
+    let Some(initializer) = binding.initializer else {
+        return false;
+    };
+    let initialized = initializer.end;
+    if binding.in_switch_case {
+        return false;
+    }
+    let uses = || file.ast.reference_identifiers_to(declaration);
+    if crate::owners::containing_ast_function(&file.ast, declaration).is_some() {
+        return uses().all(|reference| {
+            reference.span.start >= initialized
+                && file.ast.functions_owning(reference.span).all(|function| {
+                    function.span.contains(declaration)
+                        || function.kind != solid_facts::ast::FunctionKind::Declaration
+                })
+        });
+    }
+    let census = lookup.module_census();
+    if boxed || census.is_cyclic(file.path.as_str()) || census.has_unknown_load() {
+        return false;
+    }
+    let prefix_inert = file.ast.calls.iter().all(|call| {
+        call.span.start >= initialized
+            || crate::owners::containing_ast_function(&file.ast, call.span).is_some()
+            || (!call.construct
+                && lookup.primitive_at_call(file, call.span).is_some()
+                && call.arguments.iter().all(|argument| {
+                    !argument.spread
+                        && matches!(
+                            argument.literal_value,
+                            solid_facts::ast::ArgumentLiteralFact::Null
+                                | solid_facts::ast::ArgumentLiteralFact::Boolean(_)
+                                | solid_facts::ast::ArgumentLiteralFact::Integer(_)
+                                | solid_facts::ast::ArgumentLiteralFact::String(_)
+                        )
+                }))
+    });
+    prefix_inert
+        && uses().all(|reference| {
+            reference.span.start >= initialized
+                || crate::owners::containing_ast_function(&file.ast, reference.span).is_some()
+        })
 }

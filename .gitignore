@@ -1297,6 +1297,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/stored-throw-returned-param/node_modules/**
 !fixtures/reactive-ir/stored-throw-returned-literal/node_modules/
 !fixtures/reactive-ir/stored-throw-returned-literal/node_modules/**
+!fixtures/reactive-ir/owner-boxed-callers/node_modules/
+!fixtures/reactive-ir/owner-boxed-callers/node_modules/**
 
 !fixtures/reactive-ir/rc21-listener-cross-file/node_modules/
 !fixtures/reactive-ir/rc21-listener-cross-file/node_modules/**
