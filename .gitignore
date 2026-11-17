@@ -1511,6 +1511,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/owner-call-jsx-prop-arrow/node_modules/**
 !fixtures/reactive-ir/owner-call-jsx-getter/node_modules/
 !fixtures/reactive-ir/owner-call-jsx-getter/node_modules/**
+!fixtures/reactive-ir/owner-call-getter-placed/node_modules/
+!fixtures/reactive-ir/owner-call-getter-placed/node_modules/**
 !fixtures/reactive-ir/portal-children-owner/node_modules/
 !fixtures/reactive-ir/portal-children-owner/node_modules/**
 !fixtures/reactive-ir/lazy-entry-owner/node_modules/

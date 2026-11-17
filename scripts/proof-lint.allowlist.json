@@ -875,16 +875,22 @@
         "why": "`bind` only follows a transport shape toward the object, whose primitive `referenced_primitive` resolves exactly first; the name describes the transport, never a primitive"
       },
       "primitive-name-match": {
-        "count": 2,
-        "why": "pending-review"
+        "count": 4,
+        "why": "pending-review for the first two; ADR 1031's two (`read_in_render`, `omit_spread_reads`) compare `primitive_at_call`'s answer, the call's exactly resolved dialect primitive (`Children`, `Omit`), with no name read: a call it does not resolve answers `None` and places nothing"
       },
       "silent-unmatched-slot": {
-        "count": 1,
-        "why": "pending-review"
+        "count": 2,
+        "why": "pending-review for the first; ADR 1031's (`getter_read_sites`): a site in no attribute and no child of the element (`None => return None`) gets no read set, so its getter keeps `getter-runs-where-read` and both rows: the answer that fails closed"
       },
       "text-premise": {
         "count": 1,
         "why": "JSX grammar: a child of an element whose source starts with `{` is exactly an expression container, since a text child cannot contain an unescaped brace; this is a syntactic test of the node's own source, not a spelling match on a symbol"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/owners/leaf_universe.rs": {
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "ADR 1031 (`silences`): `None => {}` is a group of codes the site does not have (no SC3001 code, or no SC6002 code): nothing to end or decline; every group the site has answers `Some` (an end or a decline)"
       }
     },
     "rust/crates/solid-reactive-ir/src/owners/missing_owners.rs": {
