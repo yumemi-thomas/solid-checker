@@ -106,7 +106,7 @@
   "SC3001 function-run-unplaced": 36,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 7,
-  "SC3001 leaf-operation-unaccounted": 6590,
+  "SC3001 leaf-operation-unaccounted": 6592,
   "SC3001 leaf-owner-unproven": 67,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
@@ -118,7 +118,7 @@
   "SC4001 handler-member-unresolved": 39,
   "SC4001 handler-spread-unresolved": 59,
   "SC4001 owner-allocation-unproven": 23,
-  "SC4001 owner-callers-unenumerated": 3321,
+  "SC4001 owner-callers-unenumerated": 3322,
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 13,
@@ -178,8 +178,8 @@
   "SC5008 pending-read-unresolved": 23,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5023,
-  "SC6002 effect-owner-unproven": 31,
+  "SC6002 effect-creation-unaccounted": 5022,
+  "SC6002 effect-owner-unproven": 34,
   "SC6002 function-run-unplaced": 48,
   "SC6002 generator-step-unplaced": 1,
   "SC6002 package-finding-at-entry": 26,
@@ -192,6 +192,7 @@
   "SC7001 effect-runtime-entry-uncertain": 1,
   "SC7002 callee-callback-timing": 1,
   "SC7002 compute-return-unproven": 17,
+  "SC7002 creation-throws-first": 1,
   "SC7002 package-finding-at-entry": 6,
   "SC7002 primitive-alias-call": 3,
   "SC7002 site-reach-undecided": 3,
@@ -2367,6 +2368,15 @@
     "open": "reactive-ir/iteration-written-slots-handed-timer-callback-member-written"
    },
    "note": "the reads of the accessors whose slots the withdrawal held: with the slots exact, each is a plain signal read and the pending-read obligation has nothing to stand on."
+  },
+  {
+   "fixture": "reactive-ir/returned-closure-unrun",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 11,
+   "to": 10,
+   "adr": "ADR 1020",
+   "kind": "relabel",
+   "relabeledTo": "SC6002 effect-owner-unproven"
   }
  ],
  "renames": []

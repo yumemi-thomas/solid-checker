@@ -24765,5 +24765,19 @@
   "code": "SYNC_NODE_RECEIVED_ASYNC",
   "ids": ["lg-sync-node-received-async-apply-void-value-untrack-memo-direct-none", "lg-sync-node-received-async-apply-void-value-row-memo-direct-none"],
   "rediscovered": "main c2779cb39 violation (Chrome: no diagnostic, the site never executes), this build uncertifiable `site-reach-undecided`: 120 of 120"
- }
+ },
+{
+ "finding": "SC7002 falsely proved inside a returned compute closure called by its apply: primitive creation throws PRIMITIVE_IN_EFFECT_CALLBACK before the async-result probe",
+ "found": "Mac 24 rejected bc96fab61; W4 Chrome rc.21 confirms the restored ReturnedAndCalled fixture and all four generated apply-void-call programs; zero typing errors",
+ "fixed": "ADR 1020 (static_api.rs returned compute closure competing-diagnostic gate; creation-throws-first)",
+ "grid": "mx-census",
+ "code": "SYNC_NODE_RECEIVED_ASYNC",
+ "ids": [
+  "mx-sync-node-received-async-apply-void-call-row-memo-direct-none",
+  "mx-sync-node-received-async-apply-void-call-row-effect-direct-none",
+  "mx-sync-node-received-async-apply-void-call-untrack-memo-direct-none",
+  "mx-sync-node-received-async-apply-void-call-untrack-effect-direct-none"
+ ],
+ "rediscovered": "Prior f1 build reports SC7002 violation on all four; Chrome reports only PRIMITIVE_IN_EFFECT_CALLBACK. Narrow gate retains a named SC7002 obligation. These existing mx-census programs stay in the smoke census."
+}
 ]

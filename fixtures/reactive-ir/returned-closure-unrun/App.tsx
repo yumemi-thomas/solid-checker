@@ -74,3 +74,18 @@ export function AppliedVoidCallUntrack() {
   });
   return <div />;
 }
+
+// Obligation: the apply calls the returned closure, so the memo is created inside the apply with no owner set: rc.21 throws
+// PRIMITIVE_IN_EFFECT_CALLBACK at the creation (SC6002) and never probes the computation, so SC7002 is not proven (Chrome reports
+// PRIMITIVE_IN_EFFECT_CALLBACK there, not SYNC_NODE_RECEIVED_ASYNC).
+export function ReturnedAndCalled() {
+  createEffect(
+    () => () => {
+      createMemo(async () => 5, { sync: true });
+    },
+    (v) => {
+      v();
+    },
+  );
+  return <div />;
+}

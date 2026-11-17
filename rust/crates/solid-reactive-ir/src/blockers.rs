@@ -88,6 +88,9 @@ pub(crate) const ACCESSOR_VALUE_COERCED: &str = "accessor-value-coerced";
 pub(crate) const HANDLER_ROOT_UNPROVEN: &str = "handler-root-unproven";
 pub(crate) const STATIC_SOURCE_UNPROVEN: &str = "static-source-unproven";
 pub(crate) const COMPUTE_RETURN_UNPROVEN: &str = "compute-return-unproven";
+/// ADR 1020: a returned compute closure may create the node in an ownerless effect apply, where
+/// PRIMITIVE_IN_EFFECT_CALLBACK precedes the result probe; SYNC_NODE_RECEIVED_ASYNC is unproven.
+pub(crate) const CREATION_THROWS_FIRST: &str = "creation-throws-first";
 pub(crate) const DESTRUCTURE_ROOT_UNPROVEN: &str = "destructure-root-unproven";
 pub(crate) const CAUGHT_READ_UNPROVEN: &str = "caught-read-unproven";
 pub(crate) const ASYNC_PROVENANCE_UNPROVEN: &str = "async-provenance-unproven";
