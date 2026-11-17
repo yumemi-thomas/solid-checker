@@ -393,6 +393,17 @@ impl StaticApiContext<'_> {
         else {
             return;
         };
+        // The action calls the generator function before its first step: a parameter list that may throw there (a default
+        // that runs code, a destructuring of a missing argument: `function* ({ id } = undefined as any)`) ends the call
+        // before any step, with no flush.
+        if !generator.parameters_inert
+            || generator
+                .parameters
+                .iter()
+                .any(|parameter| parameter.shape != solid_facts::ast::BindingShape::Identifier)
+        {
+            return;
+        }
         // The generator's first statement is a `yield` of a plain value: only whitespace between the body's `{` and it.
         let resuming = crate::owners::action_resuming_yields(file, self.lookup);
         let Some(first) = file.ast.yields.iter().find(|yielded| {

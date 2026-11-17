@@ -25739,5 +25739,23 @@
    "mx-flush-in-effect-callback-action-plain-yield-from-apply-x-direct-none"
   ],
   "rediscovered": "main 5780918b8 uncertifiable at the site, this build SC2008 violation at the action call, Chrome reporting FLUSH_IN_EFFECT_CALLBACK at that line"
+ },
+ {
+  "finding": "a false positive: SC2008 at the call of an action whose first `yield`'s operand is an operator expression whose text starts and ends with a quote (`yield \"z\" < \"a\" || Promise.resolve() || \"\"`): `yield_operand_plain` read the text as a string literal, but `yield` binds looser than `||`, `?:` and `+`, so the step yields a promise, the next step runs from its continuation, and Chrome rc.21 warns nothing at the call",
+  "found": "the Fable review of ADR 1047/1051 (owner_context.rs `yield_operand_plain`)",
+  "fixed": "ADR 1051's review fix (facts schema 96 `YieldFact::operand_literal`: one literal node, no text test)",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-action-compound-yield-from-apply-signal-direct-module-helper",
+   "lg-reactive-write-in-owned-scope-action-compound-yield-from-apply-signal-destructured-none"
+  ],
+  "rediscovered": "a9a00a06b false-positive (SC2008 at the action call, Chrome silent) on all 1,000 sampled programs of the context `action-compound-yield-from-apply` (lg-recall 960, mx-census 40); this build nothing needs a look"
+ },
+ {
+  "finding": "a false positive: SC2008 at the call of an action whose first step never stops at its plain-looking `yield`: the operand throws (`yield \"a\" + fail() + \"b\"`, the step settles the action), or the parameter list throws when the action calls the generator function (`function* ({ id } = undefined as any)`, a default that throws), so no step resumes and nothing flushes; Chrome rc.21 is silent",
+  "found": "the Fable review of ADR 1047/1051",
+  "fixed": "ADR 1051's review fix (one literal node as the operand; a parameter list that is not inert identifiers leaves the call unreported)",
+  "outside": "the throw ends the action before any site of its body runs, so no grid program places a site there (the generator puts the site in the body, which never runs); fixture `action-resume-flush` (`YieldConcatThrows`, `ParameterDestructured`, `ParameterDefaultThrows`) and its oracle case pin them: a9a00a06b SC2008 static-only at each, this build no row, Chrome silent"
  }
 ]

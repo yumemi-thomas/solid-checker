@@ -2824,6 +2824,10 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 .map(|argument| span(argument.span())),
             delegate: expression.delegate,
             region,
+            operand_literal: expression
+                .argument
+                .as_ref()
+                .is_some_and(|argument| self.literal_operand(argument)),
         });
         if expression.delegate
             && let Some(argument) = &expression.argument
