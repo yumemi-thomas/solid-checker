@@ -3922,6 +3922,46 @@
    "to": 1,
    "adr": "ADR 1023",
    "fact": "a member call on a closed const literal under an assertion dispatches to the literal's own method (closed_literal_dispatch); the method hands the callback to queueMicrotask, so the read is no longer withheld and keeps its own callee-callback-timing obligation"
+  },
+  {
+   "fixture": "reactive-ir/returned-closure-unrun",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 9,
+   "to": 20,
+   "adr": "ADR 1020",
+   "fact": "fixture extended (third cut): returned compute values called in an apply, as a memo's value, through a helper, and in the body; creation-throws-first is the site's reach (UnreachedSite::returned_value_run)"
+  },
+  {
+   "fixture": "reactive-ir/returned-closure-unrun",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 3,
+   "to": 7,
+   "adr": "ADR 1020",
+   "fact": "fixture extended (third cut): returned compute values called in an apply, as a memo's value, through a helper, and in the body; creation-throws-first is the site's reach (UnreachedSite::returned_value_run)"
+  },
+  {
+   "fixture": "reactive-ir/returned-closure-unrun",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 9,
+   "to": 16,
+   "adr": "ADR 1020",
+   "fact": "fixture extended (third cut): returned compute values called in an apply, as a memo's value, through a helper, and in the body; creation-throws-first is the site's reach (UnreachedSite::returned_value_run)"
+  },
+  {
+   "fixture": "reactive-ir/returned-closure-unrun",
+   "key": "SC6002 effect-owner-unproven",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 1020",
+   "fact": "fixture extended (third cut): returned compute values called in an apply, as a memo's value, through a helper, and in the body; creation-throws-first is the site's reach (UnreachedSite::returned_value_run)"
+  },
+  {
+   "fixture": "reactive-ir/returned-closure-unrun",
+   "key": "SC7002 creation-throws-first",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 1020",
+   "fact": "fixture extended (third cut): returned compute values called in an apply, as a memo's value, through a helper, and in the body; creation-throws-first is the site's reach (UnreachedSite::returned_value_run)"
   }
  ]
 }

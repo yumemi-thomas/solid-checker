@@ -25728,5 +25728,19 @@
    "mx-dynamic-static-promise-fire-return-body-x-direct-none"
   ],
   "rediscovered": "main 2e2b60bb6: recall-gap (uncertifiable, `function-run-unplaced`) on each; ADR 1049's build: agree (60 of 60 fire-return rows)"
+ },
+ {
+  "finding": "SC7002 falsely proved where a sync memo is created only through a call of a value a compute returned (the apply calls it, a memo's value is called in an apply, a helper the closure calls): Chrome rc.21 throws PRIMITIVE_IN_EFFECT_CALLBACK at the creation first",
+  "found": "Mac 24 rejected bc96fab61; W4's Chrome run on the four generated apply-void-call programs; Mac 21's review of cd3a554fa: its origin-walk guard left 5 probe shapes proved (memo value, untrack(m)(), helper, nested function, helper via memo), Chrome PRIMITIVE_IN_EFFECT_CALLBACK at each",
+  "fixed": "ADR 1020 third cut (site_reach.rs SiteReach::withholding_returned_values, UnreachedSite::returned_value_run; SC7002 only: creation-throws-first)",
+  "grid": "mx-census",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "mx-sync-node-received-async-apply-void-call-row-memo-direct-none",
+   "mx-sync-node-received-async-apply-void-call-row-effect-direct-none",
+   "mx-sync-node-received-async-apply-void-call-untrack-memo-direct-none",
+   "mx-sync-node-received-async-apply-void-call-untrack-effect-direct-none"
+  ],
+  "rediscovered": "make fuzz-focus CODES=SYNC_NODE_RECEIVED_ASYNC: the build before the guard (0f866a89a, bc96fab61 on main) fails with these 4 as unlisted stacked-claim once their rows leave open-defects-rows.json (R-stacked 153 -> 149); this build: not-fired, the 4 gone. The other probe shapes (memo value, helper, nested) are not generated: fixture returned-closure-unrun pins them. Unchanged on main and here: mx-sync-node-received-async-tracked-sibling-async-effect-direct-none (unlisted stacked-claim, PRIMITIVE_IN_FORBIDDEN_SCOPE)"
  }
 ]

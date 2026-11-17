@@ -1932,6 +1932,11 @@ pub struct UnreachedSite {
     /// spread, computed key or repeated key of the literal may replace.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub member_may_be_replaced: bool,
+    /// ADR 1020 (third cut): the site may run, but only through a call of a function an effect's or a memo's compute returned
+    /// as a value, and such a call may be on an effect apply's stack: a claim a creation there would throw first
+    /// (PRIMITIVE_IN_EFFECT_CALLBACK) is not proven. Every other claim reads the site as reached.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub returned_value_run: bool,
     /// ADR 0560: the query stopped at its depth limit or work bound before
     /// it decided whether any execution reaches the site.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]

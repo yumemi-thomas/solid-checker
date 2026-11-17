@@ -556,9 +556,15 @@ impl DiagnosticSession {
                     finding.primary_location.start_byte,
                     finding.primary_location.end_byte,
                 )
+                // ADR 1020 (third cut): reached only through a call of a value a compute returned, which may be on an effect
+                // apply's stack, where a creation throws PRIMITIVE_IN_EFFECT_CALLBACK before a sync node's result probe (rc.21):
+                // SC7002's claim alone is not proven there.
+                && (!site.returned_value_run || finding.id == "SC7002")
             {
                 finding.kind = "uncertifiable".into();
-                let blocker = if site.undecided {
+                let blocker = if site.returned_value_run {
+                    "creation-throws-first"
+                } else if site.undecided {
                     "site-reach-undecided"
                 } else if site.lazy_unread {
                     "lazy-compute-unread"
@@ -573,7 +579,9 @@ impl DiagnosticSession {
                 };
                 finding.analysis_context =
                     solid_reactive_ir::blocked_context(blocker, &finding.analysis_context);
-                finding.message.push_str(if site.undecided {
+                finding.message.push_str(if site.returned_value_run {
+                    "; this code runs only where a function an effect's or a memo's compute returned is called, which may be on an effect apply's stack with no owner set, where creating a computation throws PRIMITIVE_IN_EFFECT_CALLBACK before its result is probed, so this is not proven"
+                } else if site.undecided {
                     "; whether any execution reaches this code was not decided within the site-reach query's depth and work bounds, so this is not proven"
                 } else if site.lazy_unread {
                     "; this code runs only when a lazy computation (`lazy: true`) is first read, and no read of it is proven, so this is not proven"

@@ -47,7 +47,37 @@ export function ReturnedFromMemo() {
   return <div />;
 }
 
-// Known miss (uncertifiable, Chrome reports): the apply calls the returned closure. Whether a hand-on value is called is not read.
+// Violations: the apply calls the value the compute returned (#271's smoke census: MISSING_EFFECT_FN, Chrome reports it), so the
+// closure runs and the effect created there without an effect function is reported.
+export function AppliedVoidCall() {
+  createEffect(
+    () => () => {
+      createEffect(() => 1, undefined as unknown as () => void);
+    },
+    (v) => {
+      void v();
+    },
+  );
+  return <div />;
+}
+
+export function AppliedVoidCallUntrack() {
+  untrack(() => {
+    createEffect(
+      () => () => {
+        createEffect(() => 1, undefined as unknown as () => void);
+      },
+      (v) => {
+        void v();
+      },
+    );
+  });
+  return <div />;
+}
+
+// Obligation: the apply calls the returned closure, so the memo is created inside the apply with no owner set: rc.21 throws
+// PRIMITIVE_IN_EFFECT_CALLBACK at the creation (SC6002) and never probes the computation, so SC7002 is not proven (Chrome reports
+// PRIMITIVE_IN_EFFECT_CALLBACK there, not SYNC_NODE_RECEIVED_ASYNC).
 export function ReturnedAndCalled() {
   createEffect(
     () => () => {
@@ -57,5 +87,47 @@ export function ReturnedAndCalled() {
       v();
     },
   );
+  return <div />;
+}
+
+// Obligations (third cut): the creation runs only where a returned value is called. A memo's value read by an effect's compute
+// and called in the apply, and a helper the returned closure calls: Chrome reports PRIMITIVE_IN_EFFECT_CALLBACK, never
+// SYNC_NODE_RECEIVED_ASYNC. The guard is the site's reach, not the closure's text, so neither is a violation.
+export function MemoValueCalledInApply() {
+  const m = createMemo(() => () => {
+    createMemo(async () => 6, { sync: true });
+  });
+  createEffect(
+    () => m(),
+    (f) => {
+      f();
+    },
+  );
+  return <div />;
+}
+
+function makeSync() {
+  createMemo(async () => 7, { sync: true });
+}
+
+export function HelperCalledInApply() {
+  createEffect(
+    () => () => {
+      makeSync();
+    },
+    (v) => {
+      v();
+    },
+  );
+  return <div />;
+}
+
+// Obligation: called in the component body, the sync memo does throw SYNC_NODE_RECEIVED_ASYNC (Chrome), but whether a call of a
+// returned value is on an apply's stack is not decided per call: uncertifiable, as on main.
+export function MemoValueCalledInBody() {
+  const m = createMemo(() => () => {
+    createMemo(async () => 8, { sync: true });
+  });
+  untrack(m)();
   return <div />;
 }
