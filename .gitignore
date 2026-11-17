@@ -707,6 +707,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/route-components/node_modules/**
 !fixtures/reactive-ir/route-config/node_modules/
 !fixtures/reactive-ir/route-config/node_modules/**
+!fixtures/reactive-ir/route-mount-throw/node_modules/
+!fixtures/reactive-ir/route-mount-throw/node_modules/**
 !fixtures/reactive-ir/route-entries/node_modules/
 !fixtures/reactive-ir/route-entries/node_modules/**
 !fixtures/reactive-ir/route-entries-shadowed/node_modules/

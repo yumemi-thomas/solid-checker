@@ -24836,5 +24836,11 @@
    "lg-untracked-read-after-await-ob-field-helper-effect-async-never-x-direct-none"
   ],
   "rediscovered": "main 993e83f74 unexecuted (the 38 programs of the six constructs' `-never` contexts; Chrome 29 of 29 sampled never ran the site), this build uncertifiable (38 of 38). `make fuzz-focus` exits 0 on both builds: an `unexecuted` row is not gated until ADR 1018's oracle guard"
+ },
+ {
+  "finding": "A route component with no binding (an inline arrow written as a @solidjs/router route definition’s `component`) had no mount the stored-throw walk found, and an empty mount list reported: a plain throw in it (flush() in a tracked effect) was an SC3001 violation under an `<Errored>` with a handling fallback above the only `<Router>` tag, where Chrome is silent",
+  "found": "ADR 1026 (Mac 22), the guarded case of its Chrome lane",
+  "fixed": "ADR 1026",
+  "outside": "the grids install no router and have no route-table shape; fixtures/runtime-oracle/route-mount-guarded holds it (main c2779cb39: static-only at routes.tsx:21; ADR 1026: quiet, uncertifiable) and fixtures/reactive-ir/route-mount-throw `/guarded-inline`"
  }
 ]

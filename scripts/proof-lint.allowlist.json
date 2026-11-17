@@ -1245,8 +1245,8 @@
     },
     "rust/crates/solid-reactive-ir/src/stored_throw.rs": {
       "name-only-match": {
-        "count": 1,
-        "why": "`fallback` is read only off an element with `element_primitive == Errored` (`handled_above`)"
+        "count": 5,
+        "why": "`fallback` is read only off an element with `element_primitive == Errored` (`handled_above`). ADR 1026: `component`, `routes` and `children` are literal property keys of a route definition or config that `solid_router_component_value` (ADR 0335: an audited @solidjs/router, the exact `createRouter` import) already proved a route table, read as the router reads them (`createRoutes`, `createBranches`); `children` of the route props is the static member the router defines as the outlet getter, on the parameter of a parent component every reference of which is a static member read"
       },
       "primitive-name-match": {
         "count": 2,
@@ -1255,6 +1255,10 @@
       "silent-unmatched-slot": {
         "count": 1,
         "why": "pending-review"
+      },
+      "default-on-missing": {
+        "count": 2,
+        "why": "ADR 1026: both answer `handled` (the throw is unobserved: uncertifiable, never a report) when a fact is missing: a `<Router>` tag whose file the lookup does not hold, and a route value whose mounts the reading refuses"
       }
     },
     "rust/crates/solid-reactive-ir/src/symbols.rs": {

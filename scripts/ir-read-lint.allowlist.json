@@ -352,7 +352,10 @@
     "typescript-table": 2
   },
   "rust/crates/solid-reactive-ir/src/stored_throw.rs": {
-    "file_by_path": 2
+    "file_by_path": 4,
+    "pending-review": [
+      "file_by_path rose 2 -> 4 (--allow-rise): unreviewed"
+    ]
   },
   "rust/crates/solid-reactive-ir/src/symbols.rs": {
     "file_slots": 1,
