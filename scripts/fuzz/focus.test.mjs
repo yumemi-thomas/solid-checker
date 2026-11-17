@@ -167,3 +167,14 @@ describe("where a unit's files go, and whether they fit", () => {
     } finally { rmSync(root, { recursive: true, force: true }); }
   }, 60_000);
 });
+
+describe("a full recall grid is split by code", () => {
+  it("--recall-full splits a recall grid of more than one code into a process per code; a smoke run or another grid is not", async () => {
+    const { splitsRecall } = await import("./focus.mjs");
+    expect(splitsRecall("mx-recall", { recallFull: true })).toBe(true);
+    expect(splitsRecall("lg-recall", { recallFull: true })).toBe(true);
+    expect(splitsRecall("mx-recall", {})).toBe(false);
+    expect(splitsRecall("mx-recall", { recallFull: true, smoke: true })).toBe(false);
+    expect(splitsRecall("mx-pairs", { recallFull: true })).toBe(false);
+  });
+});

@@ -13,6 +13,7 @@
 //     [--boundary open|closed|both] [--entry namespace|named]
 //     [--budget-ms 1000] [--budget-mb 500] [--idle-stretch-s 10] [--perf-against <earlier run dir> [--perf-threshold 0.2]]
 // `--split-codes`: one grid process per code (`<grid>/<code>/`), so a large grid (mx-recall, 277k programs) stays within a heap and a
+// (a recall grid run with `--recall-full` is split so whenever it holds more than one code)
 // failure or hang costs one code; `--prune-cases`: delete each grid's `cases/` and `chrome-cases/` once its rows are read (a program is
 // a directory of files: three full runs filled a VM disk's inodes); `--grid-timeout`: a grid process that runs longer is killed and
 // reported (default 120 minutes; a stalled Chrome or a paused VM once hung a run for hours); `--heap-mb`: the grid process's heap
@@ -80,6 +81,9 @@ export const whole = (grid) => grid === "mx-census";
 /** The grids a focus or smoke run takes when `--grids` is not given: every grid but the recall and pair ones. */
 export const DEFAULT_GRIDS = Object.keys(GRIDS).filter((grid) => !grid.endsWith("-recall") && !grid.endsWith("-pairs"));
 export { PROBLEMS } from "./codes.mjs";
+
+/** Whether a grid of a run is split by code without `--split-codes`: a recall grid run in full (`--recall-full`), never a smoke run. */
+export const splitsRecall = (grid, options) => Boolean(options.recallFull) && !options.smoke && grid.endsWith("-recall");
 
 /**
  * One grid's outcomes (programs.jsonl) and its oracle comparison (runtime-diff.json), from its output directory. A grid process that
@@ -488,7 +492,10 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       const chosen = covered?.[grid];
       if (chosen?.ids.length === 0) { console.log(`  ${grid.padEnd(8)}    -  no program of the sample`); continue; }
       // `--split-codes`: one process per code of the grid's cells, in the cells' order.
-      const units = options.splitCodes ? [...new Set(cells.map((cell) => cell.code))].map((code) => ({ codes: [code], dir: join(out, grid, code), label: `${grid}/${code}` })) : [{ codes, dir: join(out, grid), label: grid }];
+      // A full recall grid of more than one code is split too: one process holding every program of mx-recall's seven largest codes ran out
+      // of its 12 GB heap with 0 programs judged (2026-11-17), and a process per code fits.
+      const splitHere = options.splitCodes || (splitsRecall(grid, options) && new Set(cells.map((cell) => cell.code)).size > 1);
+      const units = splitHere ? [...new Set(cells.map((cell) => cell.code))].map((code) => ({ codes: [code], dir: join(out, grid, code), label: `${grid}/${code}` })) : [{ codes, dir: join(out, grid), label: grid }];
       for (const unit of units) runUnit(grid, script, shape, unit, manifest);
     }
     if (options.splitCodes) for (const [code, judged] of judgedByCode) if (judged === 0) attention.push(`${code}: no grid of the run judged a program of it`);
