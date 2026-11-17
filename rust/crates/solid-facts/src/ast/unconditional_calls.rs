@@ -37,7 +37,15 @@ pub fn unconditional_calls(
     function: Span,
     folds: &[HostConstantFold],
 ) -> Option<Vec<Span>> {
-    calls_on_every_completion(path, source, function, folds, false, false)
+    calls_on_every_completion(
+        path,
+        source,
+        function,
+        folds,
+        false,
+        false,
+        Mode::ExactlyOnce,
+    )
 }
 
 /// The calls a call of the function at `function` runs before it returns, on
@@ -54,7 +62,15 @@ pub fn synchronously_unconditional_calls(
     function: Span,
     folds: &[HostConstantFold],
 ) -> Option<Vec<Span>> {
-    calls_on_every_completion(path, source, function, folds, true, false)
+    calls_on_every_completion(
+        path,
+        source,
+        function,
+        folds,
+        true,
+        false,
+        Mode::AtLeastOnce,
+    )
 }
 
 /// ADR 0550: the calls the first `next()` of the generator at `function`
@@ -70,7 +86,7 @@ pub fn first_step_unconditional_calls(
     function: Span,
     folds: &[HostConstantFold],
 ) -> Option<Vec<Span>> {
-    calls_on_every_completion(path, source, function, folds, true, true)
+    calls_on_every_completion(path, source, function, folds, true, true, Mode::AtLeastOnce)
 }
 
 /// ADR 0714: in one parse, every call and `new` expression that runs exactly
@@ -124,7 +140,14 @@ pub fn every_unconditional_call(path: &Path, source: &str) -> Option<HashSet<Spa
                 .get(&owner)
                 .is_none_or(|suspension| span.end <= *suspension)
                 && match owner {
-                    Some(owner) => runs_on_every_completion(nodes, scope, node.id(), owner, true),
+                    Some(owner) => runs_on_every_completion(
+                        nodes,
+                        scope,
+                        node.id(),
+                        owner,
+                        true,
+                        Mode::AtLeastOnce,
+                    ),
                     None => runs_on_every_module_evaluation(nodes, scope, node.id()),
                 }
         })
@@ -172,7 +195,9 @@ fn runs_on_every_module_evaluation(
                         .value
                         .as_ref()
                         .is_some_and(|value| value.span() == nodes.kind(child).span()) => {}
-            _ if !evaluates_child_once(nodes, scope, parent, child, true) => return false,
+            _ if !evaluates_child_once(nodes, scope, parent, child, true, Mode::AtLeastOnce) => {
+                return false;
+            }
             _ => {}
         }
         child = parent;
@@ -186,6 +211,7 @@ fn calls_on_every_completion(
     folds: &[HostConstantFold],
     synchronous_prefix: bool,
     generator_first_step: bool,
+    mode: Mode,
 ) -> Option<Vec<Span>> {
     if source.len() > 4 * 1024 * 1024 {
         return None;
@@ -255,7 +281,14 @@ fn calls_on_every_completion(
                 && first_suspension.is_none_or(|suspension| span.end <= suspension)
         })
         .filter(|node| {
-            runs_on_every_completion(nodes, scope, node.id(), owner.id(), synchronous_prefix)
+            runs_on_every_completion(
+                nodes,
+                scope,
+                node.id(),
+                owner.id(),
+                synchronous_prefix,
+                mode,
+            )
         })
         .map(|node| {
             let span = node.kind().span();
@@ -291,6 +324,7 @@ fn runs_on_every_completion(
     call: NodeId,
     owner: NodeId,
     throws_exit: bool,
+    mode: Mode,
 ) -> bool {
     if let AstKind::CallExpression(expression) = nodes.kind(call)
         && expression.optional
@@ -307,25 +341,46 @@ fn runs_on_every_completion(
             return matches!(nodes.kind(child), AstKind::FunctionBody(_))
                 || matches!(nodes.kind(owner), AstKind::ArrowFunctionExpression(arrow) if arrow.expression);
         }
-        if !evaluates_child_once(nodes, scope, parent, child, throws_exit) {
+        if !evaluates_child_once(nodes, scope, parent, child, throws_exit, mode) {
             return false;
         }
         child = parent;
     }
 }
 
-/// Whether evaluating `parent` evaluates `child` exactly once, whatever the
-/// values involved.
+/// What a walk proves of a call it admits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Mode {
+    /// It runs exactly once on every completion: [`unconditional_calls`], the producer's whitelist (ADR 0161).
+    ExactlyOnce,
+    /// ADR 1042: it runs at least once on every completion. Admits, besides, a label's body, a `try`'s finalizer and the
+    /// block of a `try` with no `catch`, a `do` body, the body of a `while` or `for` whose first test is decided true (or
+    /// a `for` with no test), and the parts a loop evaluates once before its body (a `for`'s initializer and first test, a
+    /// `while`'s first test, a `for … in`/`of` object). Every reader of this mode asks whether the call runs, never how
+    /// often: the owner graph's edges (ADR 0714), a leaf scope's reach (`cleanup.rs`), a rerun's read
+    /// (`write_roles.rs`, `read_context.rs`).
+    AtLeastOnce,
+}
+
+/// Whether evaluating `parent` evaluates `child` exactly once (or, under [`Mode::AtLeastOnce`], at least once), whatever
+/// the values involved.
 fn evaluates_child_once(
     nodes: &AstNodes<'_>,
     scope: Option<&HostConstantScope<'_, '_>>,
     parent: NodeId,
     child: NodeId,
     throws_exit: bool,
+    mode: Mode,
 ) -> bool {
     let child_span = nodes.kind(child).span();
     let is = |span: oxc_span::Span| span == child_span;
     let decided = |test: &Expression<'_>| scope.and_then(|scope| scope.truthiness(test));
+    if mode == Mode::AtLeastOnce
+        && let Some(admitted) =
+            evaluates_child_at_least_once(nodes.kind(parent), child_span, &decided)
+    {
+        return admitted;
+    }
     match nodes.kind(parent) {
         AstKind::FunctionBody(body) => {
             statements_before_exit_free(scope, &body.statements, child_span, throws_exit)
@@ -391,6 +446,49 @@ fn evaluates_child_once(
         | AstKind::AwaitExpression(_) => true,
         _ => false,
     }
+}
+
+/// ADR 1042: the parents [`Mode::AtLeastOnce`] reads beyond the exactly-once whitelist: `Some` for a loop, label or
+/// `try`, `None` for every other kind (the whitelist answers). An earlier exit inside the admitted statement (a `break`,
+/// `continue` or `return` before the call in a loop body, a label's block, a finalizer) is the enclosing block's to
+/// refuse, as for any block.
+fn evaluates_child_at_least_once(
+    parent: AstKind<'_>,
+    child: oxc_span::Span,
+    decided: &dyn Fn(&Expression<'_>) -> Option<(bool, bool)>,
+) -> Option<bool> {
+    let is = |span: oxc_span::Span| span == child;
+    // A first test a literal or a fold decides true: the body is entered.
+    let entered = |test: Option<&Expression<'_>>| {
+        test.is_none_or(|test| matches!(decided(test), Some((true, _))))
+    };
+    Some(match parent {
+        // A labelled statement evaluates its body once.
+        AstKind::LabeledStatement(statement) => is(statement.body.span()),
+        // The finalizer runs whenever the `try` is entered; the block runs as a plain block when nothing catches. The
+        // handler runs only on a throw, and a block a `catch` guards may complete without its later statements.
+        AstKind::TryStatement(statement) => {
+            statement
+                .finalizer
+                .as_ref()
+                .is_some_and(|finalizer| is(finalizer.span()))
+                || (statement.handler.is_none() && is(statement.block.span()))
+        }
+        // The body's first pass runs before any test.
+        AstKind::DoWhileStatement(statement) => is(statement.body.span()),
+        AstKind::WhileStatement(statement) => {
+            is(statement.test.span())
+                || (is(statement.body.span()) && entered(Some(&statement.test)))
+        }
+        AstKind::ForStatement(statement) => {
+            statement.init.as_ref().is_some_and(|init| is(init.span()))
+                || statement.test.as_ref().is_some_and(|test| is(test.span()))
+                || (is(statement.body.span()) && entered(statement.test.as_ref()))
+        }
+        AstKind::ForInStatement(statement) => is(statement.right.span()),
+        AstKind::ForOfStatement(statement) => is(statement.right.span()),
+        _ => return None,
+    })
 }
 
 /// Whether the statement at `child` in `statements` exists and no earlier one

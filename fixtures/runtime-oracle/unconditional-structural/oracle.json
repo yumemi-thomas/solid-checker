@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1042: a call under a label, in a finalizer or a `try` block no `catch` guards, in a `do` body, or in a loop whose first test is true runs at least once on every run of its function: each handler runs `fN` with no owner and NO_OWNER_CLEANUP fires at `wrapUseN`'s `onCleanup`, a proven violation for the nine admitted forms and an uncertifiable row for the brief's counterexamples (at run time `maybe` is false, so they fire too); `LabelRead` is Chrome's STRICT_READ_UNTRACKED, uncertifiable (a function summary the producer places)."
+}
