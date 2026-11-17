@@ -2519,6 +2519,114 @@ fn an_own_prototype_write_vetoes_the_standard_member() {
     );
 }
 
+/// ADR 1045: a standard definer called on an object made there (`const o = {}; Object.defineProperty(o, k, d)`) defines
+/// nothing on a standard root, so it is no `ReflectiveDefinition(*)`: it records `ReflectiveDefinitionMade`, which
+/// counts as one again where a patch may reach a definer. A parameter target, a local `Object`, a definer held as a value
+/// or a `__defineGetter__` keep it.
+#[test]
+fn a_definer_on_a_made_target_defines_no_standard_member() {
+    use super::Hazard;
+    let any = |source: &str| {
+        let hazards = hazards_of(&format!("export {{}}; {source}"));
+        let made = hazards.contains(&Hazard::ReflectiveDefinitionMade);
+        let present = |hazard| hazards.contains(&hazard);
+        (
+            hazards.contains(&Hazard::ReflectiveDefinitionAny)
+                || super::contributions::reflective_definition_through_made(
+                    Hazard::ReflectiveDefinitionAny,
+                    &present,
+                ),
+            made,
+        )
+    };
+    let d = "{ get: () => 1, enumerable: true }";
+    assert_eq!(
+        any(&format!(
+            "declare const ks: string[]; const o = {{}}; for (const k of ks) Object.defineProperty(o, k, {d});"
+        )),
+        (false, true)
+    );
+    assert_eq!(
+        any(&format!(
+            "declare const ks: string[]; const o = {{}}; for (const k of ks) Reflect.defineProperty(o, k, {d});"
+        )),
+        (false, true)
+    );
+    assert_eq!(
+        any(
+            "declare const m: PropertyDescriptorMap; const r = Object.defineProperties({}, { ...m });"
+        ),
+        (false, true)
+    );
+    // a parameter target, a target that is not proven made, a shadowed `Object`
+    assert_eq!(
+        any(&format!(
+            "export const def = (o: object, k: string) => Object.defineProperty(o, k, {d});"
+        )),
+        (true, false)
+    );
+    assert_eq!(
+        any(&format!(
+            "declare const ks: string[]; declare const o: object; for (const k of ks) Object.defineProperty(o, k, {d});"
+        )),
+        (true, false)
+    );
+    assert_eq!(
+        any(&format!(
+            "declare const ks: string[]; const Object = {{ defineProperty: (o: object, k: string, d: object) => o }}; const o = {{}}; for (const k of ks) Object.defineProperty(o, k, {d});"
+        )),
+        (true, false)
+    );
+    // held as a value, destructured, `__defineGetter__`
+    assert!(any("const def = Object.defineProperty; const o = {}; def(o, 'k', {});").0);
+    assert!(any("const { defineProperty } = Object; const o = {}; defineProperty(o, 'k', {});").0);
+    assert!(any("declare const k: string; const o: any = {}; o.__defineGetter__(k, () => 1);").0);
+    // a definer replaced: the made-target call may define any key again (the first-patch induction's hypothesis fails)
+    let through = |patched: &[Hazard]| {
+        super::contributions::reflective_definition_through_made(
+            Hazard::ReflectiveDefinitionAny,
+            &|hazard| hazard == Hazard::ReflectiveDefinitionMade || patched.contains(&hazard),
+        )
+    };
+    assert!(!through(&[]));
+    for name in [
+        "ObjectConstructor.defineProperty",
+        "ObjectConstructor.defineProperties",
+        "Reflect.defineProperty",
+    ] {
+        let mut patched = super::contributions::patch_veto(name);
+        patched.push(Hazard::AnyStandardPatch);
+        assert!(through(&patched), "{name}");
+    }
+}
+
+/// ADR 1045: a write under a key a never-written `let` or `var` of a module holds, bound to `Symbol()`, is a symbol's
+/// site (`OpenMemberWrite(<symbol>)`), not a key no fact names; a written one, a second declaration of the name, a
+/// direct `eval` or a classic script keep `OpenMemberWrite(*)`.
+#[test]
+fn a_never_written_symbol_binding_is_a_symbol_key() {
+    let open_any = |source: &str| {
+        hazards_of(source).contains(&super::contributions::open_member_write_for_test("*"))
+    };
+    let body = "function P(this: any, p: unknown) { this[m] = p; }";
+    assert!(!open_any(&format!(
+        "export const z = 1; var m = Symbol(); {body}"
+    )));
+    assert!(!open_any(&format!(
+        "export const z = 1; let m = Symbol(); {body}"
+    )));
+    assert!(open_any(&format!(
+        "export const z = 1; var m = Symbol(); m = \"isFinite\" as any; {body}"
+    )));
+    assert!(open_any(&format!(
+        "export const z = 1; var m = Symbol(); function g() {{ var m = 1; return m; }} {body}"
+    )));
+    assert!(open_any(&format!(
+        "export const z = 1; var m = Symbol(); eval(\"\"); {body}"
+    )));
+    assert!(open_any(&format!("var m = Symbol(); {body}")));
+}
+
 /// ADR 0939: a standard root handed on beside a write of a key no literal
 /// names on an object not made there withholds every standard member; either
 /// alone, or a root only `map` calls, or a write to a fresh object, does not.

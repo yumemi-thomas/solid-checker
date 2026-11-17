@@ -1736,3 +1736,17 @@ packages/wasm/owned/
 !fixtures/reactive-ir/fresh-written-function-shadowed/node_modules/**
 !fixtures/reactive-ir/action-plain-yield-layers/node_modules/
 !fixtures/reactive-ir/action-plain-yield-layers/node_modules/**
+!fixtures/reactive-ir/handed-root-patch-definer-made/node_modules/
+!fixtures/reactive-ir/handed-root-patch-definer-made/node_modules/**
+!fixtures/reactive-ir/handed-root-patch-definer-made-param/node_modules/
+!fixtures/reactive-ir/handed-root-patch-definer-made-param/node_modules/**
+!fixtures/reactive-ir/handed-root-patch-definer-made-shadowed/node_modules/
+!fixtures/reactive-ir/handed-root-patch-definer-made-shadowed/node_modules/**
+!fixtures/reactive-ir/handed-root-patch-definer-made-patched/node_modules/
+!fixtures/reactive-ir/handed-root-patch-definer-made-patched/node_modules/**
+!fixtures/reactive-ir/handed-root-patch-definer-made-held/node_modules/
+!fixtures/reactive-ir/handed-root-patch-definer-made-held/node_modules/**
+!fixtures/reactive-ir/handed-root-patch-symbol-var/node_modules/
+!fixtures/reactive-ir/handed-root-patch-symbol-var/node_modules/**
+!fixtures/reactive-ir/handed-root-patch-symbol-var-written/node_modules/
+!fixtures/reactive-ir/handed-root-patch-symbol-var-written/node_modules/**

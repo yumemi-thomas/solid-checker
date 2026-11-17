@@ -907,7 +907,7 @@ mod tests {
     #[test]
     fn a_definer_on_a_made_object_defines_on_no_root() {
         use super::super::Hazard;
-        let hazards = |source: &str| super::super::root_definitions(&file(source));
+        let hazards = |source: &str| super::super::root_definitions(&file(source)).0;
         let any = Hazard::ReflectiveDefinitionAny;
         let factory = Hazard::FreshFactoryDefinitionAny;
         for (source, expected) in [
@@ -963,6 +963,13 @@ mod tests {
                 "export const m = (v: any) => Reflect.defineProperty({}, \"isFinite\", { value: v });"
             ),
             vec![]
+        );
+        // ADR 1045: the made target is kept as `ReflectiveDefinitionMade` (any key while a patch may reach a definer).
+        assert!(
+            super::super::root_definitions(&file(
+                "export const m = (v: any) => Reflect.defineProperty({}, \"isFinite\", { value: v });"
+            ))
+            .1
         );
     }
 
