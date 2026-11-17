@@ -295,7 +295,12 @@ impl ProgramDraft {
             early_mention_sites: Vec::new(),
             blocked_by: Vec::new(),
             hazards: Vec::new(),
-            blocker_census: self.blocker_census,
+            blocker_census: {
+                // ADR 1065: after ADR 1061's rows, the rows analyses with no draft recorded.
+                let mut rows = self.blocker_census;
+                rows.extend(crate::blocker_census::drain());
+                rows
+            },
             #[cfg(feature = "what-if")]
             assumed_premises: Vec::new(),
             package_entries: Vec::new(),

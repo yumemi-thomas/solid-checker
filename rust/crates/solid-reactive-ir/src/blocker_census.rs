@@ -33,6 +33,32 @@ impl CensusRow {
     }
 }
 
+/// ADR 1065: rows an analysis that holds no program draft records (the creation pair's declines, the role engine's undecided answers), drained into the
+/// program's table when it is built ([`drain`]). Census only: nothing is recorded with the census off.
+static PENDING: std::sync::Mutex<Vec<CensusRow>> = std::sync::Mutex::new(Vec::new());
+
+/// Records `row` for the program being built, when the census is on.
+pub(crate) fn record(row: impl FnOnce() -> CensusRow) {
+    if enabled() {
+        PENDING
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(row());
+    }
+}
+
+/// The rows [`record`] holds, taken out, in a fixed order (they may come from worker threads).
+pub(crate) fn drain() -> Vec<CensusRow> {
+    let mut rows = std::mem::take(
+        &mut *PENDING
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner),
+    );
+    rows.sort();
+    rows.dedup();
+    rows
+}
+
 /// The census of one package root: every problem of its closure, and, for a writer under an unfixed key, the files that write so.
 pub(crate) fn root_blockers(index: &PackageReachIndex, root: &str, out: &mut Vec<String>) {
     match index.census.get(root) {
