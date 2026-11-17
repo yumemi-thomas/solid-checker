@@ -2911,6 +2911,19 @@
     "open": "reactive-ir/owner-call-getter-placed"
    },
    "note": "A getter of a project component placed at its reads (ADR 1031): project wrappers read their children inside an in-place renderer or intrinsic JSX; the owner-call questions answer it there as for code written at the read."
+  },
+  {
+   "fixture": "reactive-ir/after-await-exact-callbacks",
+   "key": "SC1001 function-run-unplaced",
+   "from": 5,
+   "to": 2,
+   "adr": "ADR 1038",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/body_roles.rs::for_await_body_suspension",
+   "fixtures": {
+    "proved": "reactive-ir/after-await-exact-callbacks",
+    "open": "reactive-ir/after-await-exact-callbacks"
+   },
+   "note": "the strict reads in the body of a `for await` (`ObjectSlotForAwait`, `ObjectSlotForAwaitLayers`) run past the loop's suspension with no observer: no strict read; SC1002's rows at them stay uncertifiable."
   }
  ],
  "renames": []
