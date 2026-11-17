@@ -304,8 +304,12 @@ On rc.17 the guard stands down while an owner is disposed, so a write an
 `createOwner()`, `createRoot`), also in an inline layer, is legal; a named
 function a cleanup calls or hands to `createRoot` is uncertifiable, and an action
 call stays a violation. An effect's returned cleanup also runs when the effect's
-owner is disposed (a memo rerun, a `Show` turned off), where the write is legal,
-and nothing orders that against a rerun: uncertifiable. Earlier releases throw
+owner is disposed (a memo rerun, a `Show` turned off, a `For` row removed), where
+the write is legal, and on a rerun from the drain with no owner, also legal: a
+setter or `refresh` written directly in the cleanup of an inline apply is silent
+unless a `flush()` drains under an owner (ADR 1037). A named apply, a function
+inside the cleanup, and an action call (it throws under a row's disposal) stay
+uncertifiable. Earlier releases throw
 (ADR 0455, `fixtures/reactive-ir/write-owner-in-cleanup`).
 
 rc.17's `onCleanup` returns its callback, so calling the handle runs the

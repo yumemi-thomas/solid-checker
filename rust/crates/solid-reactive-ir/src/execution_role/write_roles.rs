@@ -1232,6 +1232,57 @@ pub(crate) fn inside_rerun_effect_cleanup(
     })
 }
 
+/// ADR 1037: the role of a setter or `refresh` written directly in the cleanup an inline effect apply returns, where the walk left it
+/// unplaced, with the effect call (the premise's span). The cleanup runs only from the effect: on a rerun, from the queue's drain with no owner set (ADR 0613: unless a `flush()` of
+/// the program drains it under an owner, `flush_drains_under_owner`), or at a disposal, where the release's write guard stands down
+/// (`write_guard_in_disposal`: a `For` row's disposal runs it under the row's owner, and the write is still exempt). A write is legal on
+/// every one of those runs, so it takes [`ExecutionRole::UntrackedCallback`], the role that reports no disallowed write. Only for a
+/// `ReactiveWrite` row: an action call or `onFlush` there throws under a `For` row's disposal (no disposal exemption), so the shared
+/// write role is not changed. The apply must be the inline literal at the primitive's own apply slot (a named apply may also be called
+/// elsewhere, `apply()()`, and run the cleanup on that stack), and the site written directly in the cleanup's body.
+pub(crate) fn returned_cleanup_write_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<(ExecutionRole, Span)> {
+    if lookup.dialect.write_guard_in_disposal() != solid_dialect::WriteGuardInDisposal::StandsDown
+        || lookup.flush_drains_under_owner()
+    {
+        return None;
+    }
+    let cleanup = crate::owners::owning_function(&file.ast, span).filter(|function| {
+        function.body.contains(span) && !function.generator && !function.r#async
+    })?;
+    let apply = function_returning(file, cleanup)?;
+    if apply.generator {
+        return None;
+    }
+    let (effect, _) = file
+        .ast
+        .arguments_containing(apply.span)
+        .find(|(call, index)| {
+            !call.arguments[*index].spread
+                && file.ast.peel_ts_sugar_span(call.arguments[*index].span) == apply.span
+                && lookup
+                    .primitive_at_call(file, call.span)
+                    .is_some_and(|primitive| {
+                        lookup
+                            .dialect
+                            .returned_cleanup_reruns_in_read_window(primitive, *index)
+                            && lookup
+                                .dialect
+                                .returned_cleanup_runs_outside_disposal(primitive, *index)
+                    })
+        })?;
+    Some((
+        role_arm!(
+            "write_roles.returned-cleanup-write",
+            ExecutionRole::UntrackedCallback
+        ),
+        effect.span,
+    ))
+}
+
 pub(super) fn windowed_returned_cleanup(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,

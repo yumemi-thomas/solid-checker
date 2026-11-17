@@ -64,6 +64,10 @@ export const TABLE_GAP_GROUPS = [
 // <arm-gaps>
 export const ARM_GAPS = [
   {
+    reason: "ADR 1037: a setter or `refresh` in the cleanup an inline apply returns. The generator's cleanup cells (`effect-cleanup-*`, legal; `effect-cleanup-flush-rerun`, misuse) never run clean: the effect's own creation in the component keeps its SC3001/SC6002 rows (`boundary.mjs verify --only returned-cleanup-write`, 2026-11-17: 15 programs, the arm seen silent in no clean cell). The fixtures `effect-cleanup-write-role` (silent) and `effect-cleanup-write-role-flush` (kept) separate it, with the Chrome oracle case `effect-cleanup-write-role`.",
+    arms: ["write_roles.returned-cleanup-write"],
+  },
+  {
     reason: "The compiler's Elided regions (code it deletes) are produced by no generated program; the one fixture, jsx-void-child-divergence-solid-2, holds the template-root void-child case and not this arm's use. A pair needs a program the compiler deletes a value of, and the same program with the value live.",
     arms: [
       "execution_role.execution_role_where.discarded-rendering",

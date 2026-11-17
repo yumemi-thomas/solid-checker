@@ -395,6 +395,10 @@ pub(crate) enum PremiseKind {
     /// write guard (`optimistic_signal_setter_guarded`,
     /// `optimistic_store_setter_guarded`: rc.0, rc.17).
     OptimisticSetterUnguarded,
+    /// ADR 1037: a setter or `refresh` written directly in the cleanup an inline effect apply returns, where the release's write guard stands down at a
+    /// disposal and no `flush()` of the program drains a rerun under an owner: every run of the cleanup meets no owned-scope write guard. The span is the
+    /// effect call.
+    ReturnedCleanupWriteGuard,
     /// An exact call edge of the call graph enters the function that holds the
     /// read: the summaries attribute its reads at the call, where the call's
     /// own role decides (`function_call_site_references`). The span is the
