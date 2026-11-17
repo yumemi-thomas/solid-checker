@@ -21,7 +21,8 @@ A `let` nothing reassigns is exact too (ADR 0516); a written `let` and a
 `var` are not, so a helper held in one stays uncertifiable.
 An action call in a lazy memo (`createMemo(fn, { lazy: true })`) no proven
 read of its accessor computes, or in code no execution reaches (ADRs 0458,
-0578), is uncertifiable (ADR 0576).
+0578; a callback a standard-library iteration of an empty literal never runs,
+ADR 1019), is uncertifiable (ADR 0576).
 An action call in a function no call edge reaches but that may run (called
 from a getter, `toString`, an iterator, a tag, a `Map` slot, a method, a
 constructor or an instance field) is uncertifiable too, never certified (ADR

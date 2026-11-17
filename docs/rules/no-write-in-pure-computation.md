@@ -324,6 +324,11 @@ only dead code calls: ADR 0578) is uncertifiable (ADR 0458,
 `fixtures/reactive-ir/dead-code-sites`). So is a write in a lazy memo
 (`createMemo(fn, { lazy: true })`) no proven read of its accessor computes
 (ADR 0576, `fixtures/reactive-ir/lazy-memo-unread`).
+So is a write in a callback handed to a standard-library iteration of a literal
+nothing can fill (`[].forEach(f)`, `new Set().forEach(f)`, `Array.from([], f)`,
+`[1].reduce(f)` with no initial value: [ADR 1019](../decisions.md#adr-1019),
+`fixtures/reactive-ir/dead-site-empty-collection`); a named array keeps the
+violation.
 So is a write or `refresh` in a function no call edge reaches but that may
 run (a method, constructor, instance field, getter, `toString`, iterator, `Map`
 slot, or a helper one of those calls; ADR 0721); directly in a tag the body

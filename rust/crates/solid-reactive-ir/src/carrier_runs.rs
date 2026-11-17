@@ -239,3 +239,180 @@ fn defined_literal_elements(file: &solid_facts::FileFacts, span: Span) -> usize 
         })
         .count()
 }
+
+/// ADR 1019: whether the carrier at `carrier` (a call's span) provably never
+/// runs the callback it is handed, the dual of [`carrier_provably_runs`]. The
+/// caller has already established that the callback sits at the carrier's
+/// inline position (`HandOff::Inline`, an `InlineCallback` row: the carrier
+/// runs it before it returns or never, and keeps no reference to it). The
+/// receiver or source must be written as a literal no execution can fill:
+///
+/// - an `Array`/`ReadonlyArray` iteration method (`forEach`, `map`, `filter`,
+///   `some`, `every`, `find`, ..., `sort`) on an empty array literal `[]`;
+/// - `reduce`/`reduceRight` on `[]`, or on a one-element literal with no
+///   spread or hole and no initial value (it returns the element uncalled);
+/// - `Array.from` (and the typed-array `from`s) with `[]` as its source;
+/// - `Set.forEach`/`Map.forEach` on `new Set()`/`new Map()` written there
+///   with no argument, the constructor the standard-library one;
+/// - `String.replace`/`replaceAll` with a string literal receiver and a
+///   non-empty string literal pattern (no escape) the receiver does not
+///   contain.
+///
+/// Anything else (a name, a property, a literal with an element, a
+/// `NodeList`) answers `false`: the callback may run.
+pub(crate) fn carrier_provably_never_runs(
+    file: &solid_facts::FileFacts,
+    carrier: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    let Some(call) = ast.calls.iter().find(|call| call.span == carrier) else {
+        return false;
+    };
+    if call.construct || call.arguments.iter().any(|argument| argument.spread) {
+        return false;
+    }
+    let Some(declaration) = crate::indexes::standard_library_declaration_of(
+        lookup.resolved_callee_call(file, call.callee),
+        typefacts::CallKind::Call,
+    ) else {
+        return false;
+    };
+    let receiver = || {
+        ast.member_at(ast.peel_ts_sugar_span(call.callee))
+            .map(|member| member.object)
+    };
+    let empty = |span: Span| {
+        ast.array_literal_at(ast.peel_ts_sugar_span(span))
+            .is_some_and(|array| array.elements.is_empty())
+    };
+    match declaration.qualified_name.as_ref() {
+        "Array.forEach"
+        | "ReadonlyArray.forEach"
+        | "Array.map"
+        | "ReadonlyArray.map"
+        | "Array.flatMap"
+        | "ReadonlyArray.flatMap"
+        | "Array.filter"
+        | "ReadonlyArray.filter"
+        | "Array.some"
+        | "ReadonlyArray.some"
+        | "Array.every"
+        | "ReadonlyArray.every"
+        | "Array.find"
+        | "ReadonlyArray.find"
+        | "Array.findIndex"
+        | "ReadonlyArray.findIndex"
+        | "Array.findLast"
+        | "ReadonlyArray.findLast"
+        | "Array.findLastIndex"
+        | "ReadonlyArray.findLastIndex"
+        | "Array.sort" => receiver().is_some_and(empty),
+        "Array.reduce"
+        | "ReadonlyArray.reduce"
+        | "Array.reduceRight"
+        | "ReadonlyArray.reduceRight" => receiver().is_some_and(|receiver| {
+            empty(receiver) || (literal_elements(file, receiver) == 1 && call.arguments.len() == 1)
+        }),
+        "ArrayConstructor.from"
+        | "Int8ArrayConstructor.from"
+        | "Uint8ArrayConstructor.from"
+        | "Uint8ClampedArrayConstructor.from"
+        | "Int16ArrayConstructor.from"
+        | "Uint16ArrayConstructor.from"
+        | "Int32ArrayConstructor.from"
+        | "Uint32ArrayConstructor.from"
+        | "Float32ArrayConstructor.from"
+        | "Float64ArrayConstructor.from"
+        | "BigInt64ArrayConstructor.from"
+        | "BigUint64ArrayConstructor.from" => call
+            .arguments
+            .first()
+            .is_some_and(|source| empty(source.span)),
+        "Set.forEach" => receiver().is_some_and(|receiver| {
+            fresh_collection(file, receiver, lookup, "SetConstructor.construct")
+        }),
+        "Map.forEach" => receiver().is_some_and(|receiver| {
+            fresh_collection(file, receiver, lookup, "MapConstructor.construct")
+        }),
+        "String.replace" | "String.replaceAll" => {
+            let text = |span: Span| string_literal_text(file, span);
+            receiver()
+                .and_then(text)
+                .zip(
+                    call.arguments
+                        .first()
+                        .and_then(|pattern| text(pattern.span)),
+                )
+                .is_some_and(|(receiver, pattern)| {
+                    !pattern.is_empty() && !receiver.contains(pattern)
+                })
+        }
+        _ => false,
+    }
+}
+
+/// ADR 1019: whether `span` (a reference to a function's name, or a function
+/// literal) is handed, as it stands, to a standard-library inline carrier that
+/// [`carrier_provably_never_runs`] it: the carrier neither calls it nor keeps
+/// it, so the value goes nowhere from there.
+pub(crate) fn handed_to_idle_carrier(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    ast.arguments_containing(span).any(|(call, index)| {
+        let argument = &call.arguments[index];
+        if argument.spread || ast.peel_ts_sugar_span(argument.span) != span {
+            return false;
+        }
+        if lookup.primitive_at_call(file, call.span).is_some() {
+            return false;
+        }
+        let Some(resolved) = lookup.resolved_callee_call(file, call.callee) else {
+            return false;
+        };
+        let callability = lookup
+            .entity_at(file.path.as_str(), argument.span)
+            .and_then(|entity| entity.callability);
+        crate::runtime_semantics::is_inline_standard_callback(resolved, callability, index)
+            && carrier_provably_never_runs(file, call.span, lookup)
+    })
+}
+
+/// Whether `span` (through parentheses and type assertions) is a `new`
+/// expression with no argument whose constructor is the standard-library
+/// `constructor` (`SetConstructor.construct`, `MapConstructor.construct`).
+fn fresh_collection(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    constructor: &str,
+) -> bool {
+    let ast = &file.ast;
+    let span = ast.peel_ts_sugar_span(span);
+    let Some(construct) = ast
+        .calls
+        .iter()
+        .find(|call| call.span == span && call.construct)
+    else {
+        return false;
+    };
+    construct.arguments.is_empty()
+        && crate::indexes::standard_library_declaration_of(
+            lookup.resolved_callee_call(file, construct.callee),
+            typefacts::CallKind::Construct,
+        )
+        .is_some_and(|declaration| declaration.qualified_name.as_ref() == constructor)
+}
+
+/// The value of the string literal at `span` (through parentheses and type
+/// assertions) when it is written in single or double quotes with no escape:
+/// its text between the quotes is its value. `None` for anything else.
+fn string_literal_text(file: &solid_facts::FileFacts, span: Span) -> Option<&str> {
+    let text = file.source_text(file.ast.peel_ts_sugar_span(span))?;
+    let quote = text.chars().next().filter(|c| *c == '"' || *c == '\'')?;
+    let inner = text.strip_prefix(quote)?.strip_suffix(quote)?;
+    (!inner.contains(quote) && !inner.contains('\\') && !inner.contains('\n')).then_some(inner)
+}

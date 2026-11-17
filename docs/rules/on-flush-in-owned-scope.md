@@ -13,6 +13,9 @@ under an owner that is no leaf (`onFlush`, `@solidjs/signals@2.0.0-rc.21`
 a compute and a root body are reported, and an effect's apply, `onSettled`,
 `createTrackedEffect` and a handler are not (ADR 0625). A call no role places is
 uncertifiable. The callback itself runs from a microtask with no owner.
+A call in a callback a standard-library iteration of an empty literal never runs
+(`[].forEach(() => onFlush(...))`, `new Map().forEach(...)`) is uncertifiable,
+never a violation ([ADR 1019](../decisions.md#adr-1019)).
 
 Generators are placed as for [no-write-in-pure-computation](no-write-in-pure-computation.md) (ADRs 0851, 0853).
 

@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1019: a callback handed to a standard-library iteration of a literal nothing can fill (`[].forEach(f)`, `[1].reduce(f)` with no initial value, `Array.from([], f)`, `Uint8Array.from([], f)`, `new Set().forEach(f)`, `new Map().forEach(f)`, `\"x\".replace(\"z\", f)`) never runs: no dev diagnostic, so the checker's SC2001, SC2002 and SC3002 there are uncertifiable (function-unentered), never a violation. Its pair, dead-site-empty-collection-live, is the same write where the callback may run."
+}
