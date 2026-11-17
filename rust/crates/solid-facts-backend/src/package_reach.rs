@@ -41,6 +41,8 @@ use solid_facts::package_reach::{
 
 use crate::host_constants::{find_package_root, split_bare_specifier};
 
+// ADR 1028: an unknown global decided by the global-write census.
+mod census;
 // The second re-check of #232: whether a package's closure runs code the build does not see, a step of the one walk below.
 mod prototype;
 
@@ -144,6 +146,17 @@ pub fn package_reach_index(
     facts: &solid_facts::ProjectFacts,
     solid: &SolidPackages<'_>,
 ) -> PackageReachIndex {
+    package_reach_index_in(facts, solid, None)
+}
+
+/// [`package_reach_index`] for the project in `directory` (ADR 1028): a lookup of an unknown global is decided by the global-write census of the packages, the
+/// project's files and the HTML entries below the package root that holds `directory`. With no directory nothing is decided by it.
+#[must_use]
+pub fn package_reach_index_in(
+    facts: &solid_facts::ProjectFacts,
+    solid: &SolidPackages<'_>,
+    directory: Option<&Path>,
+) -> PackageReachIndex {
     let _reading = Reading::fresh();
     // Each declaration root, with the runtime root that holds its code, the runtime files beside its declarations and the subpaths the program imports.
     struct Named {
@@ -203,13 +216,21 @@ pub fn package_reach_index(
         .map(|(runtime, _)| runtime.clone())
         .collect::<HashSet<_>>();
     let mut memo = Memo::default();
-    let verdicts = by_runtime
+    let mut verdicts = by_runtime
         .into_iter()
         .map(|(runtime, (demand, siblings))| {
             let closure = package_reach(&runtime, solid, &demand, &siblings, &mut memo);
             (runtime, closure)
         })
         .collect::<HashMap<_, _>>();
+    // ADR 1028: the unknown globals the census decides.
+    let project_js = project_js(facts, &project_declarations);
+    let project = census::project_writes(
+        facts,
+        &project_js,
+        directory.and_then(package_root_holding).as_deref(),
+    );
+    census::decide(&mut verdicts, &project);
     let mut index = PackageReachIndex::default();
     for (root, named) in roots {
         let (reach, accessors) = match &named.runtime {
@@ -286,7 +307,7 @@ pub fn package_reach_index(
         index.by_root.insert(root, reach);
     }
     index.linked = linked_roots(facts);
-    index.project_js = project_js(facts, &project_declarations);
+    index.project_js = project_js;
     // ADR 0974: the reviewed premises whose files match the installed bytes.
     let installed_roots = index
         .by_root
@@ -298,6 +319,15 @@ pub fn package_reach_index(
         crate::reviewed_packages::PREMISES,
     );
     index
+}
+
+/// The nearest directory at or above `directory` that holds a `package.json`: the package the project is part of, where its HTML entries are.
+fn package_root_holding(directory: &Path) -> Option<PathBuf> {
+    let directory = directory.canonicalize().ok()?;
+    directory
+        .ancestors()
+        .find(|candidate| candidate.join("package.json").is_file())
+        .map(Path::to_path_buf)
 }
 
 /// The linked workspace packages the project imports: for each attested import of a `node_modules` link (the compiler's `symlink_path`), the real
@@ -773,8 +803,13 @@ struct Closure {
     /// The verdict: the first thing that makes the closure reach Solid or not decided, in walk order, else clear.
     reach: PackageReach,
     /// Everything that makes it so, each once, in walk order (the verdict first).
-    #[cfg_attr(not(test), allow(dead_code))]
     problems: Vec<PackageReach>,
+    /// ADR 1028: by problem, the unknown globals whose lookup it is (empty for any other problem).
+    problem_globals: Vec<BTreeSet<String>>,
+    /// ADR 1028: `problems` stopped at [`MAX_PROBLEMS`]: a problem past it is not known.
+    truncated: bool,
+    /// The program loads the package (an attested import names it), as against naming it by declarations only.
+    loaded: bool,
     /// Where the closure may define an accessor.
     accessors: AccessorFacts,
     /// The globals the closure writes (ADR 0974).
@@ -801,6 +836,9 @@ fn package_reach(
         return Closure {
             reach: PackageReach::ReachesSolid { via: name.clone() },
             problems: vec![PackageReach::ReachesSolid { via: name }],
+            problem_globals: vec![BTreeSet::new()],
+            truncated: false,
+            loaded: !demand.subpaths.is_empty(),
             accessors: AccessorFacts::open(),
             global_writes: solid_facts::module_reach::GlobalWrites::default(),
             // Solid's own packages are the dialect's and are not asked.
@@ -827,12 +865,18 @@ fn package_reach(
         // Only a package the program loads is asked what its code runs that the build does not see (a package only a declaration names loads nothing the program runs):
         // the rule's answer on a file is a second parse of it, which no other closure needs.
         wants_unseen: !demand.subpaths.is_empty(),
+        truncated: false,
     };
     walk.run(root, demand, extra_entries);
     let problems = walk
         .problems
         .iter()
         .map(|&problem| walk.memo.problem(problem).clone())
+        .collect::<Vec<_>>();
+    let problem_globals = walk
+        .problems
+        .iter()
+        .map(|&problem| walk.memo.problem_globals[problem.0].clone())
         .collect::<Vec<_>>();
     // Only a load of Solid's runtime is a known value from outside the closure: any other problem leaves code, or a value, the walk did not read.
     let closed = problems
@@ -844,6 +888,9 @@ fn package_reach(
     Closure {
         reach: problems.first().cloned().unwrap_or(PackageReach::Clear),
         problems,
+        problem_globals,
+        truncated: walk.truncated,
+        loaded: !demand.subpaths.is_empty(),
         accessors: AccessorFacts {
             closed,
             names: walk.accessor_names,
@@ -970,6 +1017,8 @@ struct Memo {
     /// By file: what visiting it does, once worked out.
     visits: Vec<Option<Rc<Visit>>>,
     problems: Vec<PackageReach>,
+    /// ADR 1028: by problem, the unknown globals whose lookup it is (empty for any other problem).
+    problem_globals: Vec<BTreeSet<String>>,
     problem_ids: HashMap<ProblemKey, ProblemId>,
     entries: Vec<Entry>,
     entry_ids: HashMap<(PathBuf, String), EntryId>,
@@ -1001,6 +1050,7 @@ impl Memo {
         let id = ProblemId(self.problems.len());
         self.problem_ids.insert(key, id);
         self.problems.push(problem);
+        self.problem_globals.push(BTreeSet::new());
         id
     }
 
@@ -1078,7 +1128,11 @@ impl Memo {
             .steps
             .into_iter()
             .map(|step| match step {
-                RawStep::Note(problem) => Step::Note(self.problem_id(problem)),
+                RawStep::Note(problem, globals) => {
+                    let id = self.problem_id(problem);
+                    self.problem_globals[id.0].extend(globals);
+                    Step::Note(id)
+                }
                 RawStep::Push(path) => Step::Push(self.file(path)),
                 RawStep::Enter(root, subpath) => Step::Enter(self.entry(root, subpath)),
                 RawStep::Unseen(text) => Step::Unseen(self.unseen_id(text)),
@@ -1096,7 +1150,8 @@ impl Memo {
 
 /// One thing visiting a file does to a walk, before the memo has numbered what it names.
 enum RawStep {
-    Note(PackageReach),
+    /// A problem, with the unknown globals it names (ADR 1028: empty for any other blocker).
+    Note(PackageReach, Vec<String>),
     Push(PathBuf),
     /// A package (canonical root) entered at a subpath.
     Enter(PathBuf, String),
@@ -1140,7 +1195,7 @@ struct Recorder<'a, 'd> {
 
 impl Recorder<'_, '_> {
     fn note(&mut self, problem: PackageReach) {
-        self.steps.push(RawStep::Note(problem));
+        self.steps.push(RawStep::Note(problem, Vec::new()));
     }
 
     /// A load that fails: noted, and where it is no load of Solid's runtime (the dialect's, not walked) it leaves the closure not read to its end.
@@ -1214,10 +1269,13 @@ impl Recorder<'_, '_> {
                     hazard.detail
                 )));
             }
-            self.note(PackageReach::Undecided {
-                blocker: blocker_of(hazard.kind),
-                detail: format!("{}: {}", short(file), hazard.detail),
-            });
+            self.steps.push(RawStep::Note(
+                PackageReach::Undecided {
+                    blocker: blocker_of(hazard.kind),
+                    detail: format!("{}: {}", short(file), hazard.detail),
+                },
+                hazard.global.iter().cloned().collect(),
+            ));
         }
         // Whether the file names `Object.prototype` or builds code as a string, and whether it holds a receiver: asked by a walk that wants it, at this place.
         self.steps.push(RawStep::Routes);
@@ -1346,6 +1404,8 @@ struct Walk<'s, 'd, 'm> {
     reads_receiver: bool,
     /// Whether this closure is asked what it runs that the build does not see ([`Step::Routes`] is replayed, [`Step::Unseen`] noted, only then).
     wants_unseen: bool,
+    /// ADR 1028: a problem past [`MAX_PROBLEMS`] was not kept, so `problems` is not the whole list.
+    truncated: bool,
 }
 
 impl Walk<'_, '_, '_> {
@@ -1424,8 +1484,12 @@ impl Walk<'_, '_, '_> {
                 ..
             }
         );
-        if self.problems.len() < MAX_PROBLEMS && self.noted.insert(problem.0) {
-            self.problems.push(problem);
+        if self.noted.insert(problem.0) {
+            if self.problems.len() < MAX_PROBLEMS {
+                self.problems.push(problem);
+            } else {
+                self.truncated = true;
+            }
         }
     }
 

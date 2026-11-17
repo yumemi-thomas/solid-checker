@@ -87,6 +87,9 @@ impl ModuleHazardKind {
 pub struct ModuleHazard {
     pub kind: ModuleHazardKind,
     pub detail: String,
+    /// ADR 1028: for [`ModuleHazardKind::UnknownGlobal`], the global's own name as the lookup asks it (`__createBinding` of `this.__createBinding`,
+    /// `trustedTypes` of `window.trustedTypes`): the name the global-write census is asked about. `None` for every other kind.
+    pub global: Option<String>,
 }
 
 /// The ways a file defines an accessor (a `get` or `set` that runs code when a member is read or assigned), by the name it defines them under (ADR 0974).
@@ -554,6 +557,7 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
         scan.hazards.push(ModuleHazard {
             kind: ModuleHazardKind::Unparseable,
             detail: detail.to_owned(),
+            global: None,
         });
     };
     let Ok(source_type) = SourceType::from_path(path) else {
@@ -575,10 +579,11 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
     let mut loads = Vec::<String>::new();
     let mut writes = GlobalWrites::default();
     let mut hazards = Vec::<ModuleHazard>::new();
-    let mut hazard = |kind: ModuleHazardKind, detail: &str| {
+    let mut hazard = |kind: ModuleHazardKind, detail: &str, global: Option<&str>| {
         hazards.push(ModuleHazard {
             kind,
             detail: detail.to_owned(),
+            global: global.map(str::to_owned),
         });
     };
     for statement in &program.body {
@@ -618,7 +623,7 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
         match node.kind() {
             AstKind::ImportExpression(import) => match literal_specifier(&import.source) {
                 Some(specifier) => loads.push(specifier),
-                None => hazard(ModuleHazardKind::DynamicLoad, "import()"),
+                None => hazard(ModuleHazardKind::DynamicLoad, "import()", None),
             },
             AstKind::MetaProperty(meta) if meta.meta.name == "import" => {
                 let member = match nodes.parent_kind(node.id()) {
@@ -627,7 +632,7 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                 };
                 // `import.meta.url`, `import.meta.env` load nothing; a glob, a computed member or an alias of `import.meta` may.
                 if member.is_none_or(|name| name == "glob") {
-                    hazard(ModuleHazardKind::DynamicLoad, "import.meta");
+                    hazard(ModuleHazardKind::DynamicLoad, "import.meta", None);
                 }
             }
             _ => {}
@@ -695,25 +700,25 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                         };
                         match specifier {
                             Some(specifier) => loads.push(specifier),
-                            None => hazard(ModuleHazardKind::DynamicLoad, "require()"),
+                            None => hazard(ModuleHazardKind::DynamicLoad, "require()", None),
                         }
                     }
-                    _ => hazard(ModuleHazardKind::DynamicLoad, "require"),
+                    _ => hazard(ModuleHazardKind::DynamicLoad, "require", None),
                 },
                 "eval" => {
-                    hazard(ModuleHazardKind::CodeGeneration, "eval");
+                    hazard(ModuleHazardKind::CodeGeneration, "eval", None);
                     code_generated(&mut writes);
                 }
                 // A timer given a string evaluates it (`setTimeout("code", 0)`): as `eval`. A function or a name is the timer's ordinary use.
                 "setTimeout" | "setInterval" | "setImmediate" | "execScript"
                     if string_timer(nodes, id) =>
                 {
-                    hazard(ModuleHazardKind::CodeGeneration, name);
+                    hazard(ModuleHazardKind::CodeGeneration, name, None);
                     code_generated(&mut writes);
                 }
                 "Function" => {
                     if !function_use_is_inert(nodes, id) {
-                        hazard(ModuleHazardKind::CodeGeneration, "Function");
+                        hazard(ModuleHazardKind::CodeGeneration, "Function", None);
                         code_generated(&mut writes);
                     }
                 }
@@ -724,7 +729,7 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                     if !member
                         .is_some_and(|member| matches!(member, "exports" | "id" | "hot" | "loaded"))
                     {
-                        hazard(ModuleHazardKind::DynamicLoad, "module");
+                        hazard(ModuleHazardKind::DynamicLoad, "module", None);
                     }
                 }
                 // `document.defaultView` is the global object, so `document` is followed too; any other use of `document` holds no global object.
@@ -733,17 +738,17 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                         for (member, path) in reads {
                             defined_by_receiver(scoping, nodes, &member, at, &mut writes);
                             if generates_code_by_member(nodes, &member, at) {
-                                hazard(ModuleHazardKind::CodeGeneration, &path);
+                                hazard(ModuleHazardKind::CodeGeneration, &path, None);
                                 code_generated(&mut writes);
                             }
                             if !is_known_global(&member) {
-                                hazard(ModuleHazardKind::UnknownGlobal, &path);
+                                hazard(ModuleHazardKind::UnknownGlobal, &path, Some(&member));
                             }
                         }
                     }
                     GlobalUse::Escape { path, at } => {
                         if !call_writes(scoping, nodes, at, &mut writes) {
-                            hazard(ModuleHazardKind::GlobalObjectEscape, &path);
+                            hazard(ModuleHazardKind::GlobalObjectEscape, &path, None);
                             escaped(&mut writes);
                         }
                     }
@@ -759,15 +764,15 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                             for (member, path) in reads {
                                 defined_by_receiver(scoping, nodes, &member, at, &mut writes);
                                 if generates_code_by_member(nodes, &member, at) {
-                                    hazard(ModuleHazardKind::CodeGeneration, &path);
+                                    hazard(ModuleHazardKind::CodeGeneration, &path, None);
                                     code_generated(&mut writes);
                                 }
                                 if member == "valueOf" {
-                                    hazard(ModuleHazardKind::GlobalObjectEscape, &path);
+                                    hazard(ModuleHazardKind::GlobalObjectEscape, &path, None);
                                     escaped(&mut writes);
                                 }
                                 if !is_known_global(&member) {
-                                    hazard(ModuleHazardKind::UnknownGlobal, &path);
+                                    hazard(ModuleHazardKind::UnknownGlobal, &path, Some(&member));
                                 }
                             }
                         }
@@ -779,7 +784,7 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                         GlobalUse::Reassigned | GlobalUse::Inert => {}
                         GlobalUse::Escape { path, at } => {
                             if !call_writes(scoping, nodes, at, &mut writes) {
-                                hazard(ModuleHazardKind::GlobalObjectEscape, &path);
+                                hazard(ModuleHazardKind::GlobalObjectEscape, &path, None);
                                 escaped(&mut writes);
                             }
                         }
@@ -787,7 +792,7 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                 }
                 _ if is_known_global(name) => {}
                 _ if !read => {}
-                _ => hazard(ModuleHazardKind::UnknownGlobal, name),
+                _ => hazard(ModuleHazardKind::UnknownGlobal, name, Some(name)),
             }
         }
     }
@@ -852,7 +857,7 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
             continue;
         }
         if constructor_generates_code(nodes, node.id(), member) {
-            hazard(ModuleHazardKind::CodeGeneration, ".constructor");
+            hazard(ModuleHazardKind::CodeGeneration, ".constructor", None);
             code_generated(&mut writes);
         }
     }
@@ -1309,20 +1314,19 @@ fn global_use(
 /// A member of the global object written under `keys`: the global is installed, a key nothing decides hands the object on, and an operator that reads the member first
 /// (`window.x += 1`, `window.x ||= f`) looks the name up too.
 fn written(
-    hazard: &mut impl FnMut(ModuleHazardKind, &str),
+    hazard: &mut impl FnMut(ModuleHazardKind, &str, Option<&str>),
     writes: &mut GlobalWrites,
     keys: Keys,
     path: &str,
     read: bool,
 ) {
     if matches!(keys, Keys::Unknown) {
-        hazard(ModuleHazardKind::GlobalObjectEscape, path);
+        hazard(ModuleHazardKind::GlobalObjectEscape, path, None);
     }
-    if read
-        && let Keys::Names(names) = &keys
-        && names.iter().any(|name| !is_known_global(name))
-    {
-        hazard(ModuleHazardKind::UnknownGlobal, path);
+    if read && let Keys::Names(names) = &keys {
+        for name in names.iter().filter(|name| !is_known_global(name)) {
+            hazard(ModuleHazardKind::UnknownGlobal, path, Some(name));
+        }
     }
     writes.keys(keys);
 }
@@ -1550,7 +1554,7 @@ fn route_use(
     id: NodeId,
     root: &str,
     lookup: bool,
-    hazard: &mut impl FnMut(ModuleHazardKind, &str),
+    hazard: &mut impl FnMut(ModuleHazardKind, &str, Option<&str>),
     writes: &mut GlobalWrites,
 ) {
     match global_use(scoping, nodes, id, root, Holder::Global) {
@@ -1558,18 +1562,18 @@ fn route_use(
             for (name, path) in reads {
                 defined_by_receiver(scoping, nodes, &name, at, writes);
                 if generates_code_by_member(nodes, &name, at) {
-                    hazard(ModuleHazardKind::CodeGeneration, &path);
+                    hazard(ModuleHazardKind::CodeGeneration, &path, None);
                     code_generated(writes);
                 }
                 if lookup && !is_known_global(&name) {
-                    hazard(ModuleHazardKind::UnknownGlobal, &path);
+                    hazard(ModuleHazardKind::UnknownGlobal, &path, Some(&name));
                 }
             }
         }
         GlobalUse::Written { keys, path, read } => written(hazard, writes, keys, &path, read),
         GlobalUse::Escape { path, at } => {
             if !call_writes(scoping, nodes, at, writes) {
-                hazard(ModuleHazardKind::GlobalObjectEscape, &path);
+                hazard(ModuleHazardKind::GlobalObjectEscape, &path, None);
                 escaped(writes);
             }
         }

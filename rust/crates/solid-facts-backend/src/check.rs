@@ -356,12 +356,13 @@ pub fn package_inputs(
     let mut boundary = crate::external_package_boundary(facts, source_refusals);
     // ADR 0972: whether each installed package a project call may enter can reach a Solid action, from its source.
     let reach_started = Instant::now();
-    let reach = crate::package_reach::package_reach_index(
+    let reach = crate::package_reach::package_reach_index_in(
         facts,
         &crate::package_reach::SolidPackages {
             names: dialect.vocabulary.primitive_defining_packages(),
             scopes: dialect.vocabulary.ecosystem_scopes(),
         },
+        Some(directory),
     );
     // ADR 0974: the walk reads every file of a closure, so what it costs is measured where it is paid.
     if std::env::var_os("SOLID_CHECKER_TIMINGS").is_some() {

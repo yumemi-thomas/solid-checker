@@ -23,6 +23,9 @@ serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 memchr = "2"
+# ADR 1028: the project's HTML entries are read as the browser reads them (the versions the compiler already locks).
+html5ever = "0.39"
+markup5ever_rcdom = "0.39"
 oxc_diagnostics.workspace = true
 oxc_miette.workspace = true
 oxc_allocator.workspace = true
