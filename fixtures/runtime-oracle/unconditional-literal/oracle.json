@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1046: a counter `for` whose literal bounds pass the first test and the case a literal `switch` enters run at least once: each handler runs `fN` with no owner and NO_OWNER_CLEANUP fires at `wrapUseN`, a proven violation for the five admitted forms and an uncertifiable row for the counterexamples that run (`maybe` is false, `count` is 1; a zero-iteration loop, a missed case and a never-taken `break` never run their call)."
+}

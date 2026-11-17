@@ -443,3 +443,111 @@ fn every_unconditional_call_reads_at_least_once() {
                   function l() {\n  while (true) { const g = () => c1(); d(); break; }\n}\n";
     assert_eq!(every(source), ["a()", "b()", "c1()", "d()"]);
 }
+
+/// ADR 1046: a counter loop whose literal bounds pass the first test, and the case a literal `switch` enters, run at least
+/// once; zero-iteration bounds, an early exit, a non-literal test, fall-through and `default` stay out.
+#[test]
+fn at_least_once_admits_counter_loops_and_literal_switch_cases() {
+    for (source, admitted) in [
+        (
+            "function f() {\n  for (let i = 0; i < 1; i += 1) { a(); }\n}\n",
+            true,
+        ),
+        (
+            "function f() {\n  for (let i = 0; i < 3; i++) a();\n}\n",
+            true,
+        ),
+        (
+            "function f() {\n  for (var i = 5; i >= 0; i--) { a(); }\n}\n",
+            true,
+        ),
+        (
+            "function f() {\n  for (let i = 0; i !== 2; i++) { a(); }\n}\n",
+            true,
+        ),
+        (
+            "function f() {\n  switch ((1)) {\n    case 1: { a(); break; }\n  }\n}\n",
+            true,
+        ),
+        (
+            "function f() {\n  switch (\"b\") {\n    case \"a\": x(); break;\n    case \"b\": a(); break;\n  }\n}\n",
+            true,
+        ),
+        (
+            "function f() {\n  switch (true) {\n    case false: break;\n    case true: a();\n  }\n}\n",
+            true,
+        ),
+        // Zero iterations, an exit before the call, a test no literal decides.
+        (
+            "function f() {\n  for (let i = 0; i < 0; i++) a();\n}\n",
+            false,
+        ),
+        (
+            "function f() {\n  for (let i = 1; i <= 0; i++) a();\n}\n",
+            false,
+        ),
+        (
+            "function f(n) {\n  for (let i = 0; i < n; i++) a();\n}\n",
+            false,
+        ),
+        (
+            "function f(c) {\n  for (let i = 0; i < 1; i++) { if (c) break; a(); }\n}\n",
+            false,
+        ),
+        (
+            "function f(c) {\n  for (let i = 0; i < 1; i++) { if (c) continue; a(); }\n}\n",
+            false,
+        ),
+        (
+            "function f(j) {\n  for (let i = 0; j < 1; i++) a();\n}\n",
+            false,
+        ),
+        (
+            "function f() {\n  for (let i = 0, j = 1; i < 1; i++) a();\n}\n",
+            false,
+        ),
+        // A case no literal decides, a missed case, an earlier equal case, fall-through, `default`, an early `break`.
+        (
+            "function f(x) {\n  switch (x) {\n    case 1: a();\n  }\n}\n",
+            false,
+        ),
+        (
+            "function f() {\n  switch (1) {\n    case g(): break;\n    case 1: a();\n  }\n}\n",
+            false,
+        ),
+        (
+            "function f() {\n  switch (2) {\n    case 1: a();\n  }\n}\n",
+            false,
+        ),
+        (
+            "function f() {\n  switch (1) {\n    case 1: break;\n    case 1: a();\n  }\n}\n",
+            false,
+        ),
+        (
+            "function f() {\n  switch (1) {\n    case 1: x();\n    case 2: a();\n  }\n}\n",
+            false,
+        ),
+        (
+            "function f() {\n  switch (1) {\n    default: a();\n  }\n}\n",
+            false,
+        ),
+        (
+            "function f(c) {\n  switch (1) {\n    case 1: if (c) break; a();\n  }\n}\n",
+            false,
+        ),
+        (
+            "function f() {\n  switch (1) {\n    case \"1\": a();\n  }\n}\n",
+            false,
+        ),
+    ] {
+        assert_eq!(
+            synchronous(source, "f").contains(&"a()".to_owned()),
+            admitted,
+            "{source}"
+        );
+        assert!(
+            !unconditional(source, "f").contains(&"a()".to_owned()),
+            "{source}"
+        );
+    }
+}
