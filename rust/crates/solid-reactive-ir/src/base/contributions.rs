@@ -1831,17 +1831,33 @@ fn open_writes(file: &FileFacts, open: Vec<(CensusKey, Span)>) -> Vec<(String, S
     keys
 }
 
+/// ADR 0939: the program's first open write of each key (by path and offset), every file's census read once: what
+/// [`handed_root_detail_in`] answers each withheld call from. Asked once per build; before, every withheld call re-read every
+/// file's census (on app-game, 70 s of an 85 s analysis).
+pub(crate) fn handed_root_writes(files: &[FileFacts]) -> BTreeMap<String, (&FileFacts, Span)> {
+    let mut first = BTreeMap::<String, (&FileFacts, Span)>::new();
+    for file in files {
+        for (key, at) in open_writes(file, impostor_sites(file).2) {
+            let earlier = first.get(&key).is_some_and(|(held, span)| {
+                (held.path.as_str(), span.start) <= (file.path.as_str(), at.start)
+            });
+            if !earlier {
+                first.insert(key, (file, at));
+            }
+        }
+    }
+    first
+}
+
 /// ADR 0939: the detail of a call [`handed_root_patch`] withholds: the
 /// program's first write (by path and offset) that may put `member` there.
-pub(crate) fn handed_root_detail(files: &[FileFacts], member: &str) -> Option<String> {
-    let (file, at) = files
-        .iter()
-        .flat_map(|file| {
-            open_writes(file, impostor_sites(file).2)
-                .into_iter()
-                .filter(|(key, _)| key == ANY_MEMBER || key == member)
-                .map(move |(_, at)| (file, at))
-        })
+pub(crate) fn handed_root_detail_in(
+    writes: &BTreeMap<String, (&FileFacts, Span)>,
+    member: &str,
+) -> Option<String> {
+    let (file, at) = [ANY_MEMBER, member]
+        .into_iter()
+        .filter_map(|key| writes.get(key))
         .min_by_key(|(file, at)| (file.path.as_str(), at.start))?;
     let start = usize::try_from(at.start).unwrap_or(0);
     let line = file.source.as_bytes()[..start.min(file.source.len())]
