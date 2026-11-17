@@ -75,17 +75,26 @@ fn closed_binding_members(
     members: &HashMap<Span, &MemberFact>,
     binding: &BindingFact,
 ) -> Vec<(Span, Span)> {
-    if !binding.immutable
-        || binding.shape != BindingShape::Identifier
-        || binding.names.len() != 1
-        || binding.initializer_value_kind != RuntimeValueKind::Object
-    {
+    if !binding.immutable || binding.shape != BindingShape::Identifier || binding.names.len() != 1 {
         return Vec::new();
     }
     let Some(initializer) = binding.initializer else {
         return Vec::new();
     };
-    let literal = file.ast.peel_ts_sugar_span(initializer);
+    // ADR 1058: `const box = h(f)` where `h` returns a fresh literal holding its parameter (`return { cb }`) is that literal,
+    // with the parameter's property naming the argument.
+    let boxed = if binding.initializer_value_kind == RuntimeValueKind::Object {
+        None
+    } else {
+        match boxed_literal(lookup, file, initializer) {
+            Some(boxed) => Some(boxed),
+            None => return Vec::new(),
+        }
+    };
+    let literal = boxed.map_or_else(
+        || file.ast.peel_ts_sugar_span(initializer),
+        |boxed| boxed.literal,
+    );
     let Some(text) = file.source_text(literal) else {
         return Vec::new();
     };
@@ -113,7 +122,14 @@ fn closed_binding_members(
             .unwrap_or_default()
             .trim_matches(['"', '\'']);
         *keys.entry(key).or_default() += 1;
-        let value = file.ast.peel_ts_sugar_span(property.value);
+        let mut value = file.ast.peel_ts_sugar_span(property.value);
+        if let Some(boxed) = boxed {
+            // The helper's other values are its own: only the parameter's property is the caller's function.
+            if value != boxed.parameter_use {
+                continue;
+            }
+            value = boxed.argument;
+        }
         if file.ast.function_at(value).is_some() || crate::owners::is_identifier_span(file, value) {
             functions.insert(key, value);
         }
@@ -175,4 +191,129 @@ fn closed_binding_members(
         }
     }
     reads
+}
+
+/// A call that evaluates to a fresh object literal holding one of its arguments (ADR 1058): `h(f)` where `h` is a synchronous,
+/// non-generator function declared in this file under a name nothing writes, whose only completion is one straight-line `return`
+/// (or an arrow's expression body) of an object literal, and whose parameter at `f`'s position is a plain identifier read exactly
+/// once, as a property value of that literal (`return { cb }`, `return { cb: cb }`). Each call makes a new object nothing else
+/// names, so the caller's `const` holds the only reference.
+#[derive(Clone, Copy)]
+struct BoxedLiteral {
+    /// The object literal in the helper.
+    literal: Span,
+    /// The parameter's read in the literal: the property value that holds the argument.
+    parameter_use: Span,
+    /// The argument at the parameter's position, peeled.
+    argument: Span,
+}
+
+fn boxed_literal(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    initializer: Span,
+) -> Option<BoxedLiteral> {
+    let call = file.ast.call_at(file.ast.peel_ts_sugar_span(initializer))?;
+    if call.construct || !crate::owners::is_identifier_span(file, call.callee) {
+        return None;
+    }
+    let path = file.path.as_str();
+    let symbol = lookup.entities.value_symbol(file, call.callee)?;
+    let helper = file.ast.functions.as_slice().iter().find(|function| {
+        function.kind == solid_facts::ast::FunctionKind::Declaration
+            && function.name.as_ref().is_some_and(|name| {
+                lookup.entities.at(path, name.span) == Some(symbol)
+                    && !super::binding_written_through_wrappers(file, name.span)
+            })
+    })?;
+    boxing_helper(file, helper).and_then(|(literal, index, parameter_use)| {
+        if call.arguments.len() <= index
+            || call
+                .arguments
+                .iter()
+                .take(index + 1)
+                .any(|argument| argument.spread)
+        {
+            return None;
+        }
+        Some(BoxedLiteral {
+            literal,
+            parameter_use,
+            argument: file.ast.peel_ts_sugar_span(call.arguments[index].span),
+        })
+    })
+}
+
+/// The literal `helper` returns, the index of the parameter it holds, and that parameter's one read (see [`BoxedLiteral`]).
+fn boxing_helper(file: &FileFacts, helper: &FunctionFact) -> Option<(Span, usize, Span)> {
+    if helper.r#async || helper.generator || helper.parameters.is_empty() {
+        return None;
+    }
+    let returns = if helper.expression_body {
+        helper.expression_return.iter().collect::<Vec<_>>()
+    } else {
+        file.ast
+            .returns
+            .iter()
+            .filter(|returned| {
+                crate::owners::containing_ast_function(&file.ast, returned.span)
+                    .is_some_and(|owner| owner.span == helper.span)
+            })
+            .collect()
+    };
+    let [returned] = returns.as_slice() else {
+        return None;
+    };
+    if returned.runtime_value_kind != RuntimeValueKind::Object
+        || !(returned.straight_line || helper.expression_body)
+    {
+        return None;
+    }
+    // `runtime_value_kind` is `Object` only for an object literal node.
+    let literal = file.ast.peel_ts_sugar_span(returned.argument?);
+    let mut held = None;
+    for property in &file.ast.object_properties {
+        if !literal.contains(property.span) || property.computed || !property.data {
+            continue;
+        }
+        let value = file.ast.peel_ts_sugar_span(property.value);
+        if !crate::owners::is_identifier_span(file, value) {
+            continue;
+        }
+        let text = file.source_text(value)?;
+        let Some(index) = helper.parameters.iter().position(|parameter| {
+            parameter.shape == BindingShape::Identifier
+                && parameter.names.len() == 1
+                && file.source_text(parameter.names[0].span) == Some(text)
+        }) else {
+            continue;
+        };
+        if held.is_some() {
+            return None;
+        }
+        held = Some((index, value, property.key, text));
+    }
+    let (index, value, key, text) = held?;
+    let parameter = helper.parameters[index].names[0].span;
+    // Any other occurrence of the name in the helper (a store, a call, a default that captures it, a shadowing binding), and
+    // `arguments` or `eval`, may hand the parameter on or read another value under the name.
+    for identifier in &file.ast.identifiers {
+        if !helper.span.contains(identifier.span) {
+            continue;
+        }
+        let spelled = file.source_text(identifier.span);
+        if spelled == Some("arguments") || spelled == Some("eval") {
+            return None;
+        }
+        if spelled == Some(text) && ![parameter, value, key].contains(&identifier.span) {
+            return None;
+        }
+    }
+    // The read must be the parameter's own binding, not a nested function's parameter of the same name.
+    if !crate::owners::containing_ast_function(&file.ast, value)
+        .is_some_and(|owner| owner.span == helper.span)
+    {
+        return None;
+    }
+    Some((literal, index, value))
 }
