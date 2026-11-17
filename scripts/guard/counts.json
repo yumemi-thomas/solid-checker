@@ -29,7 +29,7 @@
   "SC1002 package-finding-at-entry": 17,
   "SC1002 package-operation-after-await": 3,
   "SC1002 parameter-initializer-unplaced": 8,
-  "SC1002 read-after-await-unaccounted": 699,
+  "SC1002 read-after-await-unaccounted": 702,
   "SC1002 search-depth-limit": 1,
   "SC1002 site-reach-undecided": 1,
   "SC1002 tuple-iteration-written": 82,
@@ -111,7 +111,7 @@
   "SC3001 function-run-unplaced": 35,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 7,
-  "SC3001 leaf-operation-unaccounted": 6809,
+  "SC3001 leaf-operation-unaccounted": 6807,
   "SC3001 leaf-owner-unproven": 67,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
@@ -125,7 +125,7 @@
   "SC4001 handler-member-unresolved": 39,
   "SC4001 handler-spread-unresolved": 59,
   "SC4001 owner-allocation-unproven": 23,
-  "SC4001 owner-callers-unenumerated": 3434,
+  "SC4001 owner-callers-unenumerated": 3435,
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 13,
@@ -185,7 +185,7 @@
   "SC5008 pending-read-unresolved": 23,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5164,
+  "SC6002 effect-creation-unaccounted": 5163,
   "SC6002 effect-owner-unproven": 40,
   "SC6002 function-run-unplaced": 54,
   "SC6002 generator-step-unplaced": 1,
@@ -259,7 +259,7 @@
   "SC9012 returned-callable-outside-source-universe": 47,
   "SC9012 search-depth-limit": 6,
   "SC9012 solid-call-rejected-unchecked": 3,
-  "SC9012 standard-member-impostor": 442,
+  "SC9012 standard-member-impostor": 443,
   "SC9012 store-key-undecided": 12,
   "SC9012 tuple-iteration-written": 1416,
   "SC9012 type-only-source": 86,
@@ -3030,6 +3030,42 @@
     "open": "reactive-ir/stored-throw-returned-literal"
    },
    "note": "`ReturnedInLiteral`: `function boxed(cb) { return { cb } }` boxes the literal, so the closed `const box = boxed(…)` is that literal and `box.cb()` runs it in the component body: an SC2007 violation (Chrome: DYNAMIC_STATIC_PROMISE at the line). The refusals (a helper that also stores, two returns, a spread, a box handed on or written, an imported helper) keep their rows in `stored-throw-returned-literal`."
+  },
+  {
+   "fixture": "uncertifiable-repro/other-rules",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 1071",
+   "proof": "rust/crates/solid-facts/src/ast/visitor.rs::then_callback_names",
+   "fixtures": {
+    "proved": "uncertifiable-repro/other-rules",
+    "open": "uncertifiable-repro/other-rules"
+   }
+  },
+  {
+   "fixture": "uncertifiable-repro/other-rules",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 1071",
+   "proof": "rust/crates/solid-facts/src/ast/visitor.rs::then_callback_names",
+   "fixtures": {
+    "proved": "uncertifiable-repro/other-rules",
+    "open": "uncertifiable-repro/other-rules"
+   }
+  },
+  {
+   "fixture": "reactive-ir/identity-wrapper-rejections",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 6,
+   "to": 5,
+   "adr": "ADR 1071",
+   "proof": "rust/crates/solid-facts/src/ast/visitor.rs::visit_if_statement",
+   "fixtures": {
+    "proved": "reactive-ir/identity-wrapper-rejections",
+    "open": "reactive-ir/identity-wrapper-rejections"
+   }
   }
  ],
  "renames": []
