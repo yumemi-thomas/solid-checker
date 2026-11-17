@@ -2639,6 +2639,28 @@
    "adr": "ADR 1021",
    "kind": "relabel",
    "relabeledTo": "SC4001 owner-callers-unenumerated"
+  },
+  {
+   "fixture": "reactive-ir/handed-call-results",
+   "key": "SC1001 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1022",
+   "kind": "relabel",
+   "relabeledTo": "SC1001 read-backing-unproven"
+  },
+  {
+   "fixture": "reactive-ir/read-in-place-layers-summary",
+   "key": "SC1001 function-run-unplaced",
+   "from": 7,
+   "to": 4,
+   "adr": "ADR 1022",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/construct_only.rs::construct_only_member_run",
+   "fixtures": {
+    "proved": "reactive-ir/read-in-place-layers-summary",
+    "open": "reactive-ir/construct-only-class"
+   },
+   "note": "`ClassCtorWrapper` and `ClassMethodHookResult`: each class is construct-only (one `new` in the component body, no `this`), so the helper and the hook's accessor called in its constructor or method are read in the body: SC1001 violations (rc.17 warns, as the fixture's README said); the three rows were the read in `wrapUse`, the call in the constructor and the call in the method."
   }
  ],
  "renames": []
