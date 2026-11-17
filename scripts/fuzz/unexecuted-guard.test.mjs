@@ -24,8 +24,8 @@ describe("an unexecuted violation", () => {
   });
 
   it("an entry removed from the ledger (its fix landed) makes the same row fail again", () => {
-    const row = legal("lg-untracked-read-after-await-ob-ctor-new-memo-async-never-x-direct-none");
-    const without = { entries: UNEXECUTED_KNOWN.entries.filter((entry) => entry.item !== "ob-async-never") };
+    const row = legal("lg-sync-node-received-async-apply-void-value-row-memo-direct-none");
+    const without = { entries: UNEXECUTED_KNOWN.entries.filter((entry) => entry.item !== "apply-void-value") };
     expect(rowProblem(row)).toBeNull();
     expect(rowProblem(row, { unexecutedKnown: without })).toBe("unexecuted-violation");
   });
@@ -67,13 +67,13 @@ describe("the ledger", () => {
   it("the seed holds the Chrome-confirmed groups of the full audit at 78ddeb849 whose fix has not landed", () => {
     const ids = {
       "apply-void-value": "lg-sync-node-received-async-apply-void-value-untrack-memo-alias-iife",
-      "ob-async-never": "lg-untracked-read-after-await-ob-getter-memo-async-never-x-direct-helper",
     };
     for (const [item, id] of Object.entries(ids)) expect(unexecutedEntry(legal(id))?.item).toBe(item);
   });
 
-  it("a group whose fix landed is out of the ledger, so its shape fails again if it comes back (tbl-zero, ADR 1019; gate-throw, ADR 1010)", () => {
+  it("a group whose fix landed is out of the ledger, so its shape fails again if it comes back (tbl-zero, ADR 1019; gate-throw, ADR 1010; ob-async-never, ADR 1021)", () => {
     expect(rowProblem(legal("lg-action-called-in-owned-scope-tbl-map-foreach-zero-x-direct-none"))).toBe("unexecuted-violation");
     expect(rowProblem(legal("lg-reactive-write-in-owned-scope-gate-throw-store-destructured-helper"))).toBe("unexecuted-violation");
+    expect(rowProblem(legal("lg-untracked-read-after-await-ob-getter-memo-async-never-x-direct-helper"))).toBe("unexecuted-violation");
   });
 });
