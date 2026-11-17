@@ -2578,18 +2578,9 @@ fn a_definer_on_a_made_target_defines_no_standard_member() {
         (true, false)
     );
     // held as a value, destructured, `__defineGetter__`
-    assert_eq!(
-        any("const def = Object.defineProperty; const o = {}; def(o, 'k', {});").0,
-        true
-    );
-    assert_eq!(
-        any("const { defineProperty } = Object; const o = {}; defineProperty(o, 'k', {});").0,
-        true
-    );
-    assert_eq!(
-        any("declare const k: string; const o: any = {}; o.__defineGetter__(k, () => 1);").0,
-        true
-    );
+    assert!(any("const def = Object.defineProperty; const o = {}; def(o, 'k', {});").0);
+    assert!(any("const { defineProperty } = Object; const o = {}; defineProperty(o, 'k', {});").0);
+    assert!(any("declare const k: string; const o: any = {}; o.__defineGetter__(k, () => 1);").0);
     // a definer replaced: the made-target call may define any key again (the first-patch induction's hypothesis fails)
     let through = |patched: &[Hazard]| {
         super::contributions::reflective_definition_through_made(
