@@ -1,0 +1,1 @@
+{"note":"ADR 1056: the literal is stored by an assignment argument; tuple iteration stays uncertifiable."}

@@ -4098,6 +4098,30 @@
    "to": 1,
    "adr": "ADR 1059",
    "fact": "fixture extended: a closed literal used through a hoisted function before its declarator (Chrome: ReferenceError only) is no longer named (initialized_before_every_use); the two new cases are uncertifiable, not SC2007 violations"
+  },
+  {
+   "fixture": "reactive-ir/rc13-flush-in-effect-callback",
+   "key": "SC2008 function-unentered",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1068",
+   "fact": "fixture dead-flush-1068 and the reach of rc13-flush-in-effect-callback's never-run flushes: SC2008 uncertifiable where the flush provably never runs"
+  },
+  {
+   "fixture": "reactive-ir/rc13-flush-in-effect-callback",
+   "key": "SC2008 refused-creation-unrun",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1068",
+   "fact": "fixture dead-flush-1068 and the reach of rc13-flush-in-effect-callback's never-run flushes: SC2008 uncertifiable where the flush provably never runs"
+  },
+  {
+   "fixture": "reactive-ir/rc13-flush-in-effect-callback",
+   "key": "SC2008 unreached-dead-code",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1068",
+   "fact": "fixture dead-flush-1068 and the reach of rc13-flush-in-effect-callback's never-run flushes: SC2008 uncertifiable where the flush provably never runs"
   }
  ]
 }

@@ -145,7 +145,7 @@ createRoot(() => {
     untrack(() => flush());
   });
 
-  // Positive: `createRoot` runs its init during the call.
+  // Uncertifiable (ADR 1068): `createRoot` in an apply is refused (PRIMITIVE_IN_EFFECT_CALLBACK), so its init never runs.
   createEffect(value, () => {
     createRoot(() => {
       flush();
@@ -396,9 +396,9 @@ createRoot(() => {
     error: () => {},
   });
 
-  // Positive: dead code is reported, because the call is pointless wherever it
-  // runs: after a return, under a constant condition, in an apply whose compute
-  // never returns, and in an effect that is never registered.
+  // Uncertifiable (ADR 1068, under ADR 1018): a flush that provably never runs
+  // is no violation: after a return, under a constant condition, in an apply
+  // whose compute never returns, and in an effect that is never registered.
   createEffect(value, () => {
     return;
     flush();

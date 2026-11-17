@@ -25947,5 +25947,17 @@
    "lg-sync-node-received-async-apply-member-value-untrack-effect-destructured-none"
   ],
   "rediscovered": "New contexts apply-ref-{call,value}-untrack and apply-member-{call,value}-untrack (misuse.mjs APPLY_VOID_CONTEXTS, APPLY_VOID_UNRUN). `node scripts/fuzz/focus.mjs --codes SYNC_NODE_RECEIVED_ASYNC --grids lg-recall`: main fa8f33277 fails (120 unexecuted-violation, the -value- programs of both forms); this build passes, 0 legal violations. The second-path shape is pinned by fixture reactive-ir/returned-by-reference (R4, R5)."
+ },
+ {
+  "finding": "a false positive: FLUSH_IN_EFFECT_CALLBACK at a flush that provably never runs (after a `return`, after a `try` that always returns, in the apply of an effect whose compute starts with a `throw`, in `[].forEach`): Chrome reports nothing",
+  "found": "ADR 1057's re-judge of the runtime oracle (runtime-oracle/flush-in-effect-callback, ledgered false positives)",
+  "fixed": "ADR 1068 (`diagnostics.rs`: SC2008 no longer exempt from site reach; `unreachable.rs` `exits` takes `try`; `site_reach.rs` `after_throwing_value_callback`)",
+  "outside": "the grids' dead contexts put the site in the component body, not in an effect's apply; scripts/fuzz/patterns/deadflush/ holds the five shapes: `node scripts/fuzz/patterns.mjs --only deadflush/` on the build before gives 5 new false positives, on this build 5 fine"
+ },
+ {
+  "finding": "ADR 0803's census proved a timer callback that is a parameter of a function referenced as the value of an assignment callee (`(slot = afterNextPaint)(() => \u2026)`): ADR 0515's peel read the reference as the direct callee, so `slot`, an entry no call of the function shows, could later be called with a function that reads `this` (the window), and the tuple slots stayed exact",
+  "found": "Mac 23's twin for ADR 1056 (fixture iteration-timer-parameter-composite-stored: a violation on 5a5d1321f)",
+  "fixed": "ADR 1056 (`mutation_sites.rs` `closed_parameter_seen`: a reference in an assignment's value fails the parameter; the handed-member proof likewise refuses stored members/literals, receiver escapes, rewritten/defaulted parameters and inherited reads)",
+  "outside": "Not generated: the grids write a timer's callback inline or by name in the site's own function, and `assign-callee` (CALLEE_FORMS) is a form of calling the site function itself, never of the function that receives a timer callback as a parameter. They also do not put the scheduler in a handed literal whose callback parameter is rewritten/defaulted, whose member or literal is stored, or whose method leaks its receiver. Pinned by fixture reactive-ir/iteration-timer-parameter-composite-stored (a violation on 5a5d1321f, uncertifiable here; Chrome reports the write, covered-uncertifiable) beside its proved twin iteration-timer-parameter-composite, and the iteration-timer-handed-literal refusal twins."
  }
 ]

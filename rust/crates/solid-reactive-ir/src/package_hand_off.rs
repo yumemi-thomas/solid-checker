@@ -169,6 +169,22 @@ struct Walk {
     /// re-check, N2: `[0].map(() => (c ? helper : o))` cut the object's flow after the function's).
     returned_positions: HashSet<((Key, Key), bool, Option<Key>)>,
     returned_bindings: HashSet<((Key, Key), bool, Option<Key>)>,
+    /// ADR 1065 (B1a): under the blocker census, the first place the walk answered "handed" (`<reason>|<path>:<start>-<end>`): the deepest, since a walk
+    /// answers from the inside out. Never read by an answer.
+    leaf: Option<String>,
+}
+
+/// ADR 1065 (B1a): `true`, after noting under the blocker census the place the walk first answered "handed".
+fn mark(walk: &mut Walk, reason: &str, file: &FileFacts, at: Span) -> bool {
+    if walk.leaf.is_none() && crate::blocker_census::enabled() {
+        walk.leaf = Some(format!(
+            "{reason}|{}:{}-{}",
+            file.path.as_str(),
+            at.start,
+            at.end
+        ));
+    }
+    true
 }
 
 impl Walk {
@@ -209,6 +225,8 @@ pub(crate) struct UnreadPackageHandOff<'l, 'a> {
     /// The files of the program by path (`SemanticLookup::files`, read once by the pass).
     files: &'l HashMap<&'l str, &'a FileFacts>,
     asked: RefCell<HashMap<Key, bool>>,
+    /// ADR 1065 (B1a): under the blocker census, the leaf of each function [`Self::asked`] answered "handed" for.
+    leaves: RefCell<HashMap<Key, String>>,
     /// The spans of every `this` and `super` expression of a file, parsed once (`None`: the file does not parse, so nothing is known of its receiver).
     receiver_spans: RefCell<HashMap<Arc<str>, ReceiverSpans>>,
     /// The object literals of a file that write `this` or `super` anywhere in their text (`None`: the file's receivers cannot be read, so every literal may).
@@ -260,6 +278,7 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             lookup,
             files,
             asked: RefCell::new(HashMap::new()),
+            leaves: RefCell::new(HashMap::new()),
             receiver_spans: RefCell::new(HashMap::new()),
             receiver_literals: RefCell::new(HashMap::new()),
             proto_key_spelled: std::cell::OnceCell::new(),
@@ -287,9 +306,41 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         if let Some(answer) = self.asked.borrow().get(&key) {
             return *answer;
         }
-        let answer = self.function_in(file, function, &mut Walk::default());
+        let mut walk = Walk::default();
+        let answer = self.function_in(file, function, &mut walk);
+        if answer && let Some(leaf) = walk.leaf {
+            self.leaves.borrow_mut().insert(key.clone(), leaf);
+        }
         self.asked.borrow_mut().insert(key, answer);
         answer
+    }
+
+    /// ADR 1065 (B1a): the leaf a function [`Self::asked`] answered "handed" for, into `walk` (which keeps its first one).
+    fn copy_leaf(&self, key: &Key, walk: &mut Walk) {
+        if walk.leaf.is_none()
+            && let Some(leaf) = self.leaves.borrow().get(key)
+        {
+            walk.leaf = Some(leaf.clone());
+        }
+    }
+
+    /// ADR 1065 (B1a): for the blocker census only, where [`Self::may_run`] answers yes: the first place its walk answered "handed", or `unknown`.
+    pub(crate) fn may_run_leaf(&self, file: &'a FileFacts, span: Span) -> Option<String> {
+        for function in file.ast.functions_owning(span) {
+            if self.function(file, function) {
+                let key = (file.path.shared(), function.span);
+                return Some(
+                    self.leaves
+                        .borrow()
+                        .get(&key)
+                        .cloned()
+                        .unwrap_or_else(|| "unknown".to_owned()),
+                );
+            }
+        }
+        let mut walk = Walk::default();
+        self.evaluated_by_element(file, span, &mut walk)
+            .then(|| walk.leaf.unwrap_or_else(|| "unknown".to_owned()))
     }
 
     /// The function as a value (written where it is, or named by its binding's references), and the functions that call it. Its positions are asked of the
@@ -319,6 +370,7 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             return false;
         }
         if self.asked.borrow().get(&key) == Some(&true) {
+            self.copy_leaf(&key, walk);
             return true;
         }
         let ast = &file.ast;
@@ -329,13 +381,13 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             .iter()
             .any(|class| class.span.contains(function.span))
         {
-            return true;
+            return mark(walk, "class-member", file, function.span);
         }
         if self.exported(file, function) {
             // An export of a program whose boundary is open is entered by code this build cannot see. In a closed program a namespace that escapes with no name the
             // analysis can read (`runNs(NS)`: passed along, spread, an alias, an element access) hands out every export of the module (the namespace census, ADR 0347).
             if !self.lookup.program_closed || self.lookup.escapes_unnamed(file.path.as_str()) {
-                return true;
+                return mark(walk, "open-world-export", file, function.span);
             }
         }
         // An accessor of an object literal (`{ get g() { … } }`) runs where a member of the object is read, not where the function is a value: the object is followed as
@@ -343,18 +395,18 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         if let Some(object) = accessor_object(ast, function) {
             // No literal fact holds the property: handed.
             let Some(object) = object else {
-                return true;
+                return mark(walk, "accessor-object", file, function.span);
             };
             // `this` or `super` in the literal's own functions reads its members through no reference of the object (the review of #226, B3; `super.x` runs the
             // prototype's `x` against the object, which a getter of the literal may be read through): handed, as is a file whose receivers cannot be read.
             let Some(receiver_spans) = self.receiver_spans(file) else {
-                return true;
+                return mark(walk, "accessor-object", file, function.span);
             };
             let receiver_in_literal = receiver_spans.iter().any(|span| object.contains(*span));
             if receiver_in_literal
                 || self.as_accessors(walk, None, |walk| self.position(file, object, walk))
             {
-                return true;
+                return mark(walk, "accessor-object", file, function.span);
             }
         }
         // A function declaration is hoisted, not written at a position: only its references are.
@@ -382,7 +434,7 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             .into_iter()
             .any(|(holder, at)| self.position(holder, at, walk))
         {
-            return true;
+            return mark(walk, "position", file, function.span);
         }
         // A call site runs where it is written: in the function that owns it, or where the element whose prop or child expression holds it evaluates it
         // (`<Pkg>{helper()}</Pkg>`: the re-review of #222, N1).
@@ -424,7 +476,7 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             // In a class (a field initializer, a method): the class's code runs where an instance is made or a method called, which nothing here follows, as a
             // class's functions are handed whole.
             if ast.classes.iter().any(|class| class.span.contains(at)) {
-                return true;
+                return mark(walk, "accessor-class", file, at);
             }
             let in_owner = walk.accessor_owner.as_ref().is_some_and(|(path, owner)| {
                 path.as_ref() == file.path.as_str()
@@ -440,7 +492,7 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
                 self.runs_where_written(file, at, walk)
             };
             if runs {
-                return true;
+                return mark(walk, "accessor-read-runs", file, at);
             }
         }
         // `ReturnType<typeof f>` is erased: nothing runs there.
@@ -450,12 +502,12 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         // A value placed directly in an object literal that writes `this` or `super` may be run, or read, through that receiver, which no reference of the object shows:
         // a method called by `this.m()` in a closure a package runs, a prototype's getter read by `super.g` (the review of #227's check, G1).
         if self.placed_in_receiver_literal(file, at) {
-            return true;
+            return mark(walk, "placed-in-receiver-literal", file, at);
         }
         // A value stored under a key a receiver reads, in a function a package may run, is reached by that read wherever the object it is stored in came from (an
         // object assigned after the literal, a prototype, an instance of a class, a parameter: the review of #229, B2).
         if self.placed_under_read_key(file, at, walk) {
-            return true;
+            return mark(walk, "placed-under-read-key", file, at);
         }
         // The value is called, not handed: `f()`, `new C()`, `(() => …)()`, a tag. It runs on the stack of the function the call is written in; an instance a constructor
         // builds is a value of its own.
@@ -499,7 +551,7 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             placed = true;
             let receiver = self.call_receiver(file, call, index);
             if self.receiver_hands(file, receiver, walk) {
-                return true;
+                return mark(walk, "argument", file, at);
             }
         }
         for template in &ast.tagged_templates {
@@ -511,7 +563,7 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
                 placed = true;
                 let receiver = self.tag_receiver(file, template.tag);
                 if self.receiver_hands(file, receiver, walk) {
-                    return true;
+                    return mark(walk, "template-tag", file, at);
                 }
             }
         }
@@ -522,7 +574,7 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             if let Some(handed) = self.element_hands(file, index, element, at, walk) {
                 placed = true;
                 if handed {
-                    return true;
+                    return mark(walk, "element", file, at);
                 }
             }
         }
@@ -539,7 +591,7 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
                     .iter()
                     .any(|name| self.binding(file, name.span, walk))
                 {
-                    return true;
+                    return mark(walk, "binding", file, at);
                 }
             }
         }
@@ -555,7 +607,7 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
                 || self.assigned_under_read_key(file, assignment.target, walk)
                 || self.assignment_hands(file, assignment.target, walk)
             {
-                return true;
+                return mark(walk, "assignment-target", file, at);
             }
             // The assignment expression's own value is the value it writes (a plain `=`; a logical one's value is the target's or this one): `const first = (last = cb)`,
             // `first = last = cb` and `[(last = cb)].map(f)` take it on from there, so the expression is asked as any value is, and one written as a statement is an operand
@@ -569,12 +621,12 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
                     walk,
                 )
             {
-                return true;
+                return mark(walk, "assignment-value", file, at);
             }
         }
         let returned = self.returned(file, at, walk);
         if returned == Some(true) {
-            return true;
+            return mark(walk, "returned", file, at);
         }
         placed |= returned.is_some();
         // A holder a member of which is read, called or written: `holder.run()` runs a function the project declares on the stack of the function the call is written in;
@@ -591,14 +643,14 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             }
             // A method call on an object of accessors binds `this` to it: the method may read an accessor through `this`, which no reference of the object shows.
             if walk.accessor && self.method_call_may_read_receiver(file, member.span) {
-                return true;
+                return mark(walk, "accessor-method-receiver", file, at);
             }
             let handed = match ast.calls_with_peeled_callee(member.span).next() {
                 Some(call) => self.member_call_hands(file, call, walk),
                 None => self.position(file, member.span, walk),
             };
             if handed {
-                return true;
+                return mark(walk, "member", file, at);
             }
         }
         if placed {
@@ -610,7 +662,7 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             .inert_operands
             .iter()
             .any(|operand| ast.peel_ts_sugar_span(*operand) == at);
-        !inert
+        !inert && mark(walk, "not-carried", file, at)
     }
 
     /// Whether a file of the program (a dependency source file too) spells the `__proto__` key anywhere, escapes read: what makes a write, or a read, through a key the

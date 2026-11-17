@@ -1,0 +1,3 @@
+# iteration-timer-handed-literal
+
+**Claim (ADR 1056).** `run` is a parameter of an arrow written as the `schedule` member of a closed object literal handed whole, as written, to the exact project function `createHealth` (called through a namespace import). `createHealth` reads its parameter only through static members, calls `schedule` with an arrow, and calls `now` (an arrow, so the literal it receives as `this` reaches nothing). What enters the arrow is exactly those calls, the timer calls an arrow, and the slots stay exact: `set(2)` is SC2001, which Chrome reports. kui's `shell/src/App.tsx:156,193`. Twins: `-receiver`, `-escape`.

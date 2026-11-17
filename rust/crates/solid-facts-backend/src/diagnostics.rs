@@ -427,6 +427,7 @@ impl DiagnosticSession {
         // ADR 0949: the one place a package's finding leaves the report: it stands again as an
         // uncertifiable one at the project sites that enter the package code, never silent
         // (`package_drop::hand_off`), including the obligations of a rule the project disabled.
+        let mut drop_census = Vec::new();
         if !facts.dependency_source_roots.is_empty() {
             // The proof log's stages (the style drop, the hand-off) are written inside `hand_off`.
             let report = crate::package_drop::hand_off(&mut findings, facts, &program, true);
@@ -439,6 +440,8 @@ impl DiagnosticSession {
                 report.attributed,
                 withheld.attributed
             );
+            drop_census.extend(report.census);
+            drop_census.extend(withheld.census);
         }
         crate::package_drop::supersede_claims(&mut findings, true);
         suppress_findings_owned_by_enabled_rules(&mut findings, self.dialect.catalog_capabilities);
@@ -548,7 +551,8 @@ impl DiagnosticSession {
         let stage = solid_reactive_ir::ProofStage::begin(&findings);
         // ADR 0458: a violation at a site no execution reaches claims what
         // happens where nothing happens. Style rules claim nothing about
-        // execution, and SC2008 claims a no-op wherever it runs.
+        // execution. ADR 1068: SC2008 too (it was exempt as "a no-op wherever it runs", the reading ADR 1018 retired: a site
+        // that provably never runs gives no violation).
         for finding in &mut findings {
             if finding.kind == "violation"
                 && !finding.id.starts_with("SC80")
@@ -564,8 +568,6 @@ impl DiagnosticSession {
                 && (!site.returned_value_run
                     || site.returned_value_creation
                     || finding.id == "SC7002")
-                // SC2008 claims a no-op wherever it runs: only a site whose callback never runs (ADR 1020, fourth cut) is not one.
-                && (finding.id != "SC2008" || site.returned_value_creation)
             {
                 finding.kind = "uncertifiable".into();
                 let blocker = if site.returned_value_run {
@@ -718,6 +720,8 @@ impl DiagnosticSession {
         let metrics = analysis_metrics(facts, &program);
         let mut snapshot = snapshot_of(sources, metrics, findings);
         attach_blocked_by(&mut snapshot, &program);
+        // ADR 1065 (B6): the package hand-off's census rows (empty unless the census is on).
+        snapshot.blocker_census.extend(drop_census);
         // A disabled coverage rule hides its obligations, not the gap they
         // name: the analysis is still incomplete there, so it cannot certify.
         if snapshot.status == "certified" && !withheld_coverage.is_empty() {

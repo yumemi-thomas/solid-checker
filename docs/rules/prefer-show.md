@@ -52,3 +52,7 @@ Native projects opt out with `"prefer-show": { "enabled": false }` in
 ## Related
 
 - [prefer-for](prefer-for.md) — explicit list control flow
+
+## Tuple provenance
+
+ADR 1056 proves timer callback parameters through composite callees and closed literal members handed to exact project source. Escaping values, rewritten or defaulted parameters and unproved receiver uses keep tuple iteration uncertifiable.
