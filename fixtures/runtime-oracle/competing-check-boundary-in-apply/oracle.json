@@ -1,0 +1,5 @@
+{
+  "note": "ADR 1052, negative: a boundary called in an effect apply reports NO_OWNER_BOUNDARY before it creates anything, so SC4001 stays a violation. Generated program `mx-no-owner-boundary-effect-apply-loading-direct-none` (differential fuzzer, generator 2).",
+  "haltMarker": true,
+  "steps": []
+}

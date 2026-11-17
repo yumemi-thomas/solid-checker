@@ -16,6 +16,38 @@
    "removed": 1,
    "adr": "ADR 1033",
    "why": "the violation was false: ChildNodes iterates the childNodes of an element document.createElement(\"i\") makes there, which has no child, so the callback never runs (Chrome silent); it is uncertifiable function-unentered, never a violation"
+  },
+  {
+   "fixture": "reactive-ir/deferred-effect-apply-callees",
+   "path": "fixtures/reactive-ir/deferred-effect-apply-callees/App.tsx",
+   "code": "SC4001",
+   "removed": 2,
+   "adr": "ADR 1052",
+   "why": "an earlier check Solid makes at the same call is proven to throw first (SC6002 at an effect created on an apply's stack; SC3001's refusal on a tracked caller's run of the same onCleanup), so the owner check is not proven reached: Chrome reports only the earlier code (runtime-oracle/competing-check-*)"
+  },
+  {
+   "fixture": "reactive-ir/flush-veto-kept",
+   "path": "fixtures/reactive-ir/flush-veto-kept/App.tsx",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1052",
+   "why": "an earlier check Solid makes at the same call is proven to throw first (SC6002 at an effect created on an apply's stack; SC3001's refusal on a tracked caller's run of the same onCleanup), so the owner check is not proven reached: Chrome reports only the earlier code (runtime-oracle/competing-check-*)"
+  },
+  {
+   "fixture": "reactive-ir/leaf-owner",
+   "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1052",
+   "why": "an earlier check Solid makes at the same call is proven to throw first (SC6002 at an effect created on an apply's stack; SC3001's refusal on a tracked caller's run of the same onCleanup), so the owner check is not proven reached: Chrome reports only the earlier code (runtime-oracle/competing-check-*)"
+  },
+  {
+   "fixture": "reactive-ir/primitive-in-effect-callback-tag",
+   "path": "fixtures/reactive-ir/primitive-in-effect-callback-tag/App.tsx",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1052",
+   "why": "an earlier check Solid makes at the same call is proven to throw first (SC6002 at an effect created on an apply's stack; SC3001's refusal on a tracked caller's run of the same onCleanup), so the owner check is not proven reached: Chrome reports only the earlier code (runtime-oracle/competing-check-*)"
   }
  ]
 }
