@@ -1,0 +1,1 @@
+{"note":"ADR 1056: six SC1001 site probes from frozen kui (TopicListPage 298/314, both reads on TopicsRoute 522, shell App 154/836). The facet probe forces the second short-circuit operand. health.ts is verbatim corpus source; these are extracted site probes, not a full-app run."}

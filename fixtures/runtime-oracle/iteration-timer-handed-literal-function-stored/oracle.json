@@ -1,0 +1,1 @@
+{"note":"ADR 1056: the scheduling function is saved inside its literal property initializer; tuple iteration stays uncertifiable."}
