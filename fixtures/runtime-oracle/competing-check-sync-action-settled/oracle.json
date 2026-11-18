@@ -1,0 +1,5 @@
+{
+  "note": "ADR 1052 part 6: a sync memo in an action generator only onSettled calls: the step keeps the leaf owner, PRIMITIVE_IN_FORBIDDEN_SCOPE; SC7002 uncertifiable. Generated program `mx-sync-node-received-async-action-from-settled-memo-direct-none` (differential fuzzer, generator 2).",
+  "haltMarker": true,
+  "steps": []
+}

@@ -8,8 +8,9 @@
 //! The earlier checks, by the order of the pinned rc.21 source (`@solidjs/signals` `dev.js`):
 //! - creating a primitive: the effect-callback guard (SC6002's `PRIMITIVE_IN_EFFECT_CALLBACK`) and the leaf owner's
 //!   refusal (SC3001's `PRIMITIVE_IN_FORBIDDEN_SCOPE`, `CLEANUP_IN_FORBIDDEN_SCOPE`) throw before the owner check
-//!   (`NO_OWNER_EFFECT` and the other owner codes, SC4001) is reached; a leaf owner's caller throws and halts the
-//!   system, so a caller of the same helper that runs later never reports (the order is not proven: an obligation);
+//!   (`NO_OWNER_EFFECT` and the other owner codes, SC4001) is reached; on a leaf owner's caller's run the refusal throws
+//!   first, and nothing orders that run against another caller's (a halt does not stop a later creation: rc.21 `halted`
+//!   gates only `schedule` and `flush`), so the owner row is an obligation;
 //! - `createEffect` with no callable effect function throws `MISSING_EFFECT_FN` (SC7001) before the leaf owner's
 //!   refusal (SC3001);
 //! - `useContext` throws `NO_OWNER_CONTEXT` (SC4001's context read) before it looks for a provider
@@ -48,9 +49,9 @@ pub(crate) fn mark(program: &mut Program, lookup: &SemanticLookup<'_>) {
     // - the effect-callback guard (SC6002's violations) throws when an effect is created, before `createEffect` reports
     //   `NO_OWNER_EFFECT` at its end; a boundary reports `NO_OWNER_BOUNDARY` before it creates anything, so the guard is
     //   earlier for an effect only;
-    // - the leaf owner's refusal (SC3001's violations, at the operation's own call) throws on the leaf caller's run and
-    //   halts the reactive system, so an unowned caller that runs later never reports; which runs first is not proven
-    //   in general, so the owner row is an obligation either way: every operation.
+    // - the leaf owner's refusal (SC3001's violations, at the operation's own call) throws on the leaf caller's run, and
+    //   nothing orders that run against an unowned caller's (a halt does not stop a later creation), so the owner row is
+    //   an obligation: every operation.
     let effect_guarded: Vec<Location> = program
         .static_violations
         .iter()
@@ -174,6 +175,7 @@ pub(crate) fn mark(program: &mut Program, lookup: &SemanticLookup<'_>) {
             .any(|refused| same_call(refused, &violation.location))
             || (!anchors.is_empty() && every_run_refused(&violation.location, &anchors, lookup))
             || later_render_apply_run_only(&violation.location, lookup)
+            || in_rerun_cleanup(&violation.location, lookup)
         {
             violation.uncertain = true;
             violation.analysis_context = crate::blockers::with_detail(
@@ -215,16 +217,24 @@ fn every_run_refused(site: &Location, anchors: &[&Location], lookup: &SemanticLo
     else {
         return false;
     };
-    if function.r#async
-        || function.generator
-        || crate::execution_role::module_exports(file, function, lookup)
+    // The name every run goes through: the function's own (a declaration or the `const` it initializes), or, for a generator,
+    // the `const` the `action(...)` it is handed to initializes (ADR 1052 part 6: each call of the action steps the generator,
+    // and its first step runs on that call's stack).
+    let binding = if function.r#async {
+        None
+    } else if function.generator {
+        action_binding(file, function, lookup)
+    } else if crate::execution_role::module_exports(file, function, lookup)
         || !lookup.function_value_is_current(file, function)
     {
-        return false;
-    }
-    let Some(binding) = crate::owners::function_binding_name(file, function) else {
+        None
+    } else {
+        crate::owners::function_binding_name(file, function).map(|name| name.span)
+    };
+    let Some(binding) = binding else {
         return false;
     };
+    let binding = solid_facts::ast::NamedSpan { span: binding };
     let Some(symbol) = lookup.entities().at(file.path.as_str(), binding.span) else {
         return false;
     };
@@ -287,4 +297,55 @@ fn later_render_apply_run_only(site: &Location, lookup: &SemanticLookup<'_>) -> 
             .completion_sites
             .iter()
             .any(|completion| completion.start == span.start && apply.body.contains(*completion))
+}
+
+/// ADR 1052 part 6: the name of the `const` that `action(generator)` initializes, `generator` written as the action's only
+/// callback argument (no spread), the binding a single identifier that is a local or no export statement holds, and nothing
+/// writes. `None` for anything else.
+fn action_binding(
+    file: &solid_facts::FileFacts,
+    generator: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<solid_facts::core::Span> {
+    let ast = &file.ast;
+    // The exact recognition the leaf walk steps the action with (`named_action_generator`).
+    let (call, _) = crate::owners::stepped_action_generator(file, generator, lookup)?;
+    let binding = ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding.names.len() == 1
+            && binding
+                .initializer
+                .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == call.span)
+    })?;
+    if ast
+        .exports
+        .iter()
+        .any(|export| export.span.contains(binding.declaration))
+        // A binding written in a function is a local: an export statement around that function exports the function.
+        && crate::owners::owning_function(ast, binding.declaration).is_none()
+        || crate::indexes::binding_written(file, binding.names[0].span)
+    {
+        return None;
+    }
+    Some(binding.names[0].span)
+}
+
+/// ADR 1052 part 6: `site` is written directly in the cleanup an effect's apply returns, and the effect may rerun
+/// (`directly_in_rerun_effect_cleanup`, ADR 0539's `WindowedCleanup::MayRerun`): a rerun calls the cleanup inside the effect
+/// callback, where a creation meets the guard first, and nothing orders that rerun against the disposal that would run it
+/// outside. An effect whose compute provably tracks nothing never reruns and is not this.
+fn in_rerun_cleanup(site: &Location, lookup: &SemanticLookup<'_>) -> bool {
+    let Some(file) = lookup.file_by_path(site.path.as_ref()) else {
+        return false;
+    };
+    let (Ok(start), Ok(end)) = (u32::try_from(site.start_byte), u32::try_from(site.end_byte))
+    else {
+        return false;
+    };
+    crate::execution_role::directly_in_rerun_effect_cleanup(
+        file,
+        solid_facts::core::Span::new(start, end),
+        lookup,
+    )
 }

@@ -4210,6 +4210,46 @@
    "to": 7,
    "adr": "ADR 1052",
    "fact": "part 5: fixture competing-check-sync-memo extended (a helper every reference to which is a refused call; a render-effect apply behind an early return; their controls)"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 14,
+   "to": 20,
+   "adr": "ADR 1052",
+   "fact": "part 6: fixture competing-check-sync-memo extended (a cleanup the rerun calls, an action only a leaf callback calls, and their controls)"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 9,
+   "to": 12,
+   "adr": "ADR 1052",
+   "fact": "part 6: fixture competing-check-sync-memo extended (a cleanup the rerun calls, an action only a leaf callback calls, and their controls)"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 10,
+   "to": 15,
+   "adr": "ADR 1052",
+   "fact": "part 6: fixture competing-check-sync-memo extended (a cleanup the rerun calls, an action only a leaf callback calls, and their controls)"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC6002 effect-owner-unproven",
+   "from": 2,
+   "to": 4,
+   "adr": "ADR 1052",
+   "fact": "part 6: fixture competing-check-sync-memo extended (a cleanup the rerun calls, an action only a leaf callback calls, and their controls)"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC7002 creation-throws-first",
+   "from": 7,
+   "to": 9,
+   "adr": "ADR 1052",
+   "fact": "part 6: fixture competing-check-sync-memo extended (a cleanup the rerun calls, an action only a leaf callback calls, and their controls)"
   }
  ]
 }

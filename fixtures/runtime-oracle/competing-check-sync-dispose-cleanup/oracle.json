@@ -1,0 +1,10 @@
+{
+  "note": "ADR 1052 part 6, negative: the effect never reruns, so only the disposal calls the cleanup, outside the callback: SYNC_NODE_RECEIVED_ASYNC; SC7002 stays a violation. Generated program `mx-sync-node-received-async-effect-cleanup-dispose-memo-direct-none` (differential fuzzer, generator 2).",
+  "haltMarker": true,
+  "steps": [
+    {
+      "action": "click",
+      "selector": "[data-act=\"b1\"], body:not(:has([data-act=\"b1\"])) > #sc-halted"
+    }
+  ]
+}

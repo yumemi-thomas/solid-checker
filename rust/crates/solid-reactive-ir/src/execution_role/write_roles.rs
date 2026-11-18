@@ -1214,6 +1214,19 @@ pub(super) enum WindowedCleanup {
     MayRerun,
 }
 
+/// ADR 1052 part 6: whether `span` is written directly in the cleanup an effect's apply returns, a rerun of which may call
+/// it ([`WindowedCleanup::MayRerun`]). No in-place climb: a site reached through a helper or a callback answers `false`,
+/// and so does an exhausted climb (unlike [`inside_rerun_effect_cleanup`], which answers `true` there for its own reads).
+pub(crate) fn directly_in_rerun_effect_cleanup(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    crate::owners::containing_ast_function(&file.ast, span).is_some_and(|function| {
+        windowed_returned_cleanup(file, function, lookup) == Some(WindowedCleanup::MayRerun)
+    })
+}
+
 /// ADR 0539: whether `span` runs in place in the cleanup an effect's apply
 /// returns, a rerun of which may call it in the apply's strict-read window
 /// ([`WindowedCleanup::MayRerun`]). An exhausted climb answers `true`.
