@@ -66,6 +66,7 @@
 //! of the family overlaps the site without standing at one of its spans), `test` (the function is a literal a reviewed runner schedules), `never` (`SiteReach`), `host`
 //! (the callee that takes the function as an argument), `reason` (the typed reason that ended the site) and `filed` (whether the site got its row).
 
+mod flight_census;
 mod handlers;
 mod library_call;
 mod member_reads;
@@ -720,6 +721,8 @@ pub(crate) fn account<'a>(
     let candidates = crate::proof_candidates::enabled();
     let mut filed: Vec<StaticDefect> = Vec::new();
     let mut seen: HashSet<(String, u32, u32)> = HashSet::default();
+    // ADR 1087 step 0: census only, asked with the blocker census on.
+    let mut flight = flight_census::FlightCensus::default();
     for site in &found {
         let (end, overlap) = end_of(&rows, site);
         let reason = if end == "none" {
@@ -790,6 +793,12 @@ pub(crate) fn account<'a>(
                         site.host.chars().take(60).collect::<String>()
                     )
                 },
+            );
+            crate::blocker_census::cause_at(
+                site.file.path.as_str(),
+                site.at,
+                "read-after-await-flight",
+                || flight.cause(site.file, site.at, ctx.semantic_lookup),
             );
         }
         if candidates {
