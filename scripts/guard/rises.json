@@ -4637,6 +4637,14 @@
    "to": 9,
    "adr": "ADR 1052",
    "fact": "competing-check-sync-memo now holds part 10's components and part 9's deferred-apply twin (MemoSharedDeferredApplyAndHandler, SC7002 kept a violation); measured against main 28fde14bf"
+  },
+  {
+   "fixture": "reactive-ir/prop-callback-roles",
+   "key": "SC9012 closed-parameter-member-dispatch",
+   "from": 5,
+   "to": 6,
+   "adr": "ADR 1100",
+   "fact": "prop-callback-roles MergedBody (exported, p.onSelect(7) on a merge view) stays uncertifiable, relabeled from handed-member-dispatch to closed-parameter-member-dispatch"
   }
  ]
 }
