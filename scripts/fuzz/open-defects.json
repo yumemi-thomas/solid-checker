@@ -437,15 +437,6 @@
  ],
  "patterns": [
   {
-   "id": "values/d2n-slice-element-write",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": false
-  },
-  {
    "id": "pkgaction/patch-f32-undeclared",
    "item": "ADR 0974 named miss: a builtin prototype a package extends without declaring it (`Float32Array.prototype.reverse = …`): no fact of the whole program says who writes the shared object",
    "outcome": "false-clean",

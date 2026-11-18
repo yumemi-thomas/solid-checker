@@ -3141,6 +3141,27 @@ impl<'c> ParameterFlow<'_, 'c> {
             self.value(file, at, compute, frame, in_place, linked, depth - 1);
             return true;
         }
+        // ADR 1104 (d2n): read past, a method call nothing resolves (no standard declaration, no project function: Type Facts placed
+        // `st.items.slice()` nowhere) may answer what it was handed, as a standard call's result may: a store handed to it is open.
+        if linked
+            && let Some(receiver) = receiver
+            && lookup
+                .standard_library_declaration(file, call, typefacts::CallKind::Call)
+                .is_none()
+            && lookup
+                .function_called_at(file.path.as_str(), callee)
+                .is_none()
+        {
+            let handed: Vec<Span> = call
+                .arguments
+                .iter()
+                .map(|argument| argument.span)
+                .filter(|argument| file.ast.functions_within(*argument).next().is_none())
+                .chain(std::iter::once(receiver))
+                .collect();
+            self.probe(file, at, &handed, frame, depth - 1);
+            return true;
+        }
         false
     }
 

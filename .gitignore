@@ -1888,3 +1888,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-created-label-apply-flush/node_modules/**
 !fixtures/reactive-ir/store-setter-after-await/node_modules/
 !fixtures/reactive-ir/store-setter-after-await/node_modules/**
+!fixtures/reactive-ir/store-copy-element-write/node_modules/
+!fixtures/reactive-ir/store-copy-element-write/node_modules/**
