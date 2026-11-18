@@ -24,17 +24,6 @@
       "fixes": 0
     },
     {
-      "rule": "flush-in-action",
-      "code": "SC2006",
-      "kind": "uncertifiable",
-      "blocker": "flush-in-action-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/leaf-unmodelled-slot/App.tsx",
-      "start": 735,
-      "end": 742,
-      "fixes": 0
-    },
-    {
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
@@ -54,17 +43,6 @@
       "path": "fixtures/reactive-ir/leaf-unmodelled-slot/App.tsx",
       "start": 735,
       "end": 740,
-      "fixes": 0
-    },
-    {
-      "rule": "flush-in-action",
-      "code": "SC2006",
-      "kind": "uncertifiable",
-      "blocker": "flush-in-action-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/leaf-unmodelled-slot/App.tsx",
-      "start": 948,
-      "end": 955,
       "fixes": 0
     },
     {

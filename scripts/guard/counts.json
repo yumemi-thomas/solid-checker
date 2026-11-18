@@ -84,8 +84,8 @@
   "SC2005 async-slot-unmodelled": 2,
   "SC2005 computation-error-unobserved": 6,
   "SC2005 function-run-unplaced": 6,
-  "SC2006 flush-in-action-unaccounted": 482,
-  "SC2006 function-run-unplaced": 76,
+  "SC2006 flush-in-action-unaccounted": 472,
+  "SC2006 function-run-unplaced": 43,
   "SC2006 package-finding-at-entry": 1,
   "SC2006 parameter-initializer-unplaced": 14,
   "SC2006 primitive-alias-call": 2,
@@ -94,8 +94,8 @@
   "SC2007 static-source-unproven": 7,
   "SC2008 callee-callback-timing": 1,
   "SC2008 creation-throws-first": 1,
-  "SC2008 flush-in-effect-unaccounted": 511,
-  "SC2008 function-run-unplaced": 38,
+  "SC2008 flush-in-effect-unaccounted": 514,
+  "SC2008 function-run-unplaced": 37,
   "SC2008 function-unentered": 5,
   "SC2008 generator-step-unplaced": 6,
   "SC2008 handler-dispatch-unproven": 23,
@@ -111,10 +111,10 @@
   "SC3001 computation-error-unobserved": 13,
   "SC3001 creation-throws-first": 1,
   "SC3001 field-initializer-unplaced": 5,
-  "SC3001 function-run-unplaced": 35,
+  "SC3001 function-run-unplaced": 34,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 7,
-  "SC3001 leaf-operation-unaccounted": 6867,
+  "SC3001 leaf-operation-unaccounted": 6802,
   "SC3001 leaf-owner-unproven": 67,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
@@ -194,7 +194,7 @@
   "SC6002 generator-step-unplaced": 1,
   "SC6002 package-finding-at-entry": 26,
   "SC6002 package-operation-in-effect-apply": 1,
-  "SC6002 parameter-initializer-unplaced": 4,
+  "SC6002 parameter-initializer-unplaced": 3,
   "SC6002 primitive-alias-call": 3,
   "SC6002 search-depth-limit": 2,
   "SC7001 creation-throws-first": 1,
@@ -3492,6 +3492,257 @@
    "kind": "relabel",
    "relabeledTo": "SC2006 flush-in-action-unaccounted",
    "note": "the flush's function is now placed (its component's same-file tag hands it to no code nothing follows), so the row names the flush accounting's own blocker; still uncertifiable"
+  },
+  {
+   "fixture": "reactive-ir/after-await-universe",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1095",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes.rs::namespace_entries_unreached",
+   "fixtures": {
+    "proved": "reactive-ir/after-await-universe",
+    "open": "reactive-ir/namespace-names-escape"
+   },
+   "note": "the fixture's namespace import of solid-js is read only through static members or static slots, so it names only those primitives: no primitive the program names steps an action, defers an apply or opens a leaf scope (as the key's code needs), and the flush accounting's program reason holds"
+  },
+  {
+   "fixture": "reactive-ir/directive-owned-subscopes",
+   "key": "SC6002 parameter-initializer-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1095",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes.rs::namespace_entries_unreached",
+   "fixtures": {
+    "proved": "reactive-ir/directive-owned-subscopes",
+    "open": "reactive-ir/directive-owned-effects"
+   },
+   "note": "the fixture's namespace import of solid-js is read only through static members or static slots, so it names only those primitives: no primitive the program names steps an action, defers an apply or opens a leaf scope (as the key's code needs), and the flush accounting's program reason holds"
+  },
+  {
+   "fixture": "reactive-ir/flush-in-action-unmodelled-slot",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 11,
+   "to": 0,
+   "adr": "ADR 1095",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes.rs::namespace_entries_unreached",
+   "fixtures": {
+    "proved": "reactive-ir/flush-in-action-unmodelled-slot",
+    "open": "reactive-ir/namespace-names-escape"
+   },
+   "note": "the fixture's namespace import of solid-js is read only through static members or static slots, so it names only those primitives: no primitive the program names steps an action, defers an apply or opens a leaf scope (as the key's code needs), and the flush accounting's program reason holds"
+  },
+  {
+   "fixture": "reactive-ir/flush-write-path",
+   "key": "SC2006 function-run-unplaced",
+   "from": 12,
+   "to": 0,
+   "adr": "ADR 1095",
+   "kind": "relabel",
+   "relabeledTo": "SC2006 flush-in-action-unaccounted",
+   "note": "the program names no primitive that steps an action once the namespace import names only the members it reads, so SC2006's producer leaves the flush to the flush accounting, which keeps it uncertifiable under its own blocker (a package may run the function); still uncertifiable"
+  },
+  {
+   "fixture": "reactive-ir/lazy-default-consumer",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 23,
+   "to": 21,
+   "adr": "ADR 1095",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes.rs::namespace_entries_unreached",
+   "fixtures": {
+    "proved": "reactive-ir/lazy-default-consumer",
+    "open": "reactive-ir/namespace-names-escape"
+   },
+   "note": "the fixture's namespace import of solid-js is read only through static members or static slots, so it names only those primitives: no primitive the program names steps an action, defers an apply or opens a leaf scope (as the key's code needs), and the flush accounting's program reason holds"
+  },
+  {
+   "fixture": "reactive-ir/lazy-entry-owner",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 7,
+   "to": 5,
+   "adr": "ADR 1095",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes.rs::namespace_entries_unreached",
+   "fixtures": {
+    "proved": "reactive-ir/lazy-entry-owner",
+    "open": "reactive-ir/namespace-names-escape"
+   },
+   "note": "the fixture's namespace import of solid-js is read only through static members or static slots, so it names only those primitives: no primitive the program names steps an action, defers an apply or opens a leaf scope (as the key's code needs), and the flush accounting's program reason holds"
+  },
+  {
+   "fixture": "reactive-ir/leaf-unmodelled-slot",
+   "key": "SC2006 flush-in-action-unaccounted",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 1095",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes.rs::namespace_entries_unreached",
+   "fixtures": {
+    "proved": "reactive-ir/leaf-unmodelled-slot",
+    "open": "reactive-ir/namespace-names-escape"
+   },
+   "note": "the fixture's namespace import of solid-js is read only through static members or static slots, so it names only those primitives: no primitive the program names steps an action, defers an apply or opens a leaf scope (as the key's code needs), and the flush accounting's program reason holds"
+  },
+  {
+   "fixture": "reactive-ir/leaf-visited-entry-namespace",
+   "key": "SC2006 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1095",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes.rs::namespace_entries_unreached",
+   "fixtures": {
+    "proved": "reactive-ir/leaf-visited-entry-namespace",
+    "open": "reactive-ir/flush-in-action-generator"
+   },
+   "note": "the fixture's namespace import of solid-js is read only through static members or static slots, so it names only those primitives: no primitive the program names steps an action, defers an apply or opens a leaf scope (as the key's code needs), and the flush accounting's program reason holds"
+  },
+  {
+   "fixture": "reactive-ir/leaf-visited-entry-namespace",
+   "key": "SC2008 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1095",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes.rs::namespace_entries_unreached",
+   "fixtures": {
+    "proved": "reactive-ir/leaf-visited-entry-namespace",
+    "open": "reactive-ir/flush-in-action-generator"
+   },
+   "note": "the fixture's namespace import of solid-js is read only through static members or static slots, so it names only those primitives: no primitive the program names steps an action, defers an apply or opens a leaf scope (as the key's code needs), and the flush accounting's program reason holds"
+  },
+  {
+   "fixture": "reactive-ir/loading-entry-cover",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 14,
+   "to": 4,
+   "adr": "ADR 1095",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes.rs::namespace_entries_unreached",
+   "fixtures": {
+    "proved": "reactive-ir/loading-entry-cover",
+    "open": "reactive-ir/namespace-names-escape"
+   },
+   "note": "the fixture's namespace import of solid-js is read only through static members or static slots, so it names only those primitives: no primitive the program names steps an action, defers an apply or opens a leaf scope (as the key's code needs), and the flush accounting's program reason holds"
+  },
+  {
+   "fixture": "reactive-ir/owner-handed-inline",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1095",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes.rs::namespace_entries_unreached",
+   "fixtures": {
+    "proved": "reactive-ir/owner-handed-inline",
+    "open": "reactive-ir/namespace-names-escape"
+   },
+   "note": "the fixture's namespace import of solid-js is read only through static members or static slots, so it names only those primitives: no primitive the program names steps an action, defers an apply or opens a leaf scope (as the key's code needs), and the flush accounting's program reason holds"
+  },
+  {
+   "fixture": "reactive-ir/rc13-flush-in-effect-callback",
+   "key": "SC2006 flush-in-action-unaccounted",
+   "from": 32,
+   "to": 6,
+   "adr": "ADR 1095",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes.rs::namespace_entries_unreached",
+   "fixtures": {
+    "proved": "reactive-ir/rc13-flush-in-effect-callback",
+    "open": "reactive-ir/namespace-names-escape"
+   },
+   "note": "the fixture's namespace import of solid-js is read only through static members or static slots, so it names only those primitives: no primitive the program names steps an action, defers an apply or opens a leaf scope (as the key's code needs), and the flush accounting's program reason holds"
+  },
+  {
+   "fixture": "reactive-ir/rc13-flush-in-effect-callback",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 43,
+   "to": 6,
+   "adr": "ADR 1095",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes.rs::namespace_entries_unreached",
+   "fixtures": {
+    "proved": "reactive-ir/rc13-flush-in-effect-callback",
+    "open": "reactive-ir/namespace-names-escape"
+   },
+   "note": "the fixture's namespace import of solid-js is read only through static members or static slots, so it names only those primitives: no primitive the program names steps an action, defers an apply or opens a leaf scope (as the key's code needs), and the flush accounting's program reason holds"
+  },
+  {
+   "fixture": "reactive-ir/rc13-flush-in-effect-callback",
+   "key": "SC2006 function-run-unplaced",
+   "from": 15,
+   "to": 0,
+   "adr": "ADR 1095",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes.rs::namespace_entries_unreached",
+   "fixtures": {
+    "proved": "reactive-ir/rc13-flush-in-effect-callback",
+    "open": "reactive-ir/flush-in-action-generator"
+   },
+   "note": "the fixture's namespace import of solid-js is read only through static members or static slots, so it names only those primitives: no primitive the program names steps an action, defers an apply or opens a leaf scope (as the key's code needs), and the flush accounting's program reason holds"
+  },
+  {
+   "fixture": "reactive-ir/rc13-flush-in-effect-callback",
+   "key": "SC3001 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1095",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes.rs::namespace_entries_unreached",
+   "fixtures": {
+    "proved": "reactive-ir/rc13-flush-in-effect-callback",
+    "open": "reactive-ir/handed-residuals"
+   },
+   "note": "the fixture's namespace import of solid-js is read only through static members or static slots, so it names only those primitives: no primitive the program names steps an action, defers an apply or opens a leaf scope (as the key's code needs), and the flush accounting's program reason holds"
+  },
+  {
+   "fixture": "reactive-ir/rc17-dynamic-component",
+   "key": "SC2006 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1095",
+   "kind": "relabel",
+   "relabeledTo": "SC2006 flush-in-action-unaccounted",
+   "note": "the program names no primitive that steps an action once the namespace import names only the members it reads, so SC2006's producer leaves the flush to the flush accounting, which keeps it uncertifiable under its own blocker (a package may run the function); still uncertifiable"
+  },
+  {
+   "fixture": "reactive-ir/rc17-lazy-module",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 5,
+   "to": 4,
+   "adr": "ADR 1095",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes.rs::namespace_entries_unreached",
+   "fixtures": {
+    "proved": "reactive-ir/rc17-lazy-module",
+    "open": "reactive-ir/namespace-names-escape"
+   },
+   "note": "the fixture's namespace import of solid-js is read only through static members or static slots, so it names only those primitives: no primitive the program names steps an action, defers an apply or opens a leaf scope (as the key's code needs), and the flush accounting's program reason holds"
+  },
+  {
+   "fixture": "reactive-ir/resolve-until-slots",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 66,
+   "to": 64,
+   "adr": "ADR 1095",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes.rs::namespace_entries_unreached",
+   "fixtures": {
+    "proved": "reactive-ir/resolve-until-slots",
+    "open": "reactive-ir/namespace-names-escape"
+   },
+   "note": "the fixture's namespace import of solid-js is read only through static members or static slots, so it names only those primitives: no primitive the program names steps an action, defers an apply or opens a leaf scope (as the key's code needs), and the flush accounting's program reason holds"
+  },
+  {
+   "fixture": "reactive-ir/setter-in-root-rc9",
+   "key": "SC2006 flush-in-action-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1095",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes.rs::namespace_entries_unreached",
+   "fixtures": {
+    "proved": "reactive-ir/setter-in-root-rc9",
+    "open": "reactive-ir/namespace-names-escape"
+   },
+   "note": "the fixture's namespace import of solid-js is read only through static members or static slots, so it names only those primitives: no primitive the program names steps an action, defers an apply or opens a leaf scope (as the key's code needs), and the flush accounting's program reason holds"
+  },
+  {
+   "fixture": "reactive-ir/undecided-flush-closure",
+   "key": "SC2006 function-run-unplaced",
+   "from": 4,
+   "to": 0,
+   "adr": "ADR 1095",
+   "kind": "relabel",
+   "relabeledTo": "SC2006 flush-in-action-unaccounted",
+   "note": "the program names no primitive that steps an action once the namespace import names only the members it reads, so SC2006's producer leaves the flush to the flush accounting, which keeps it uncertifiable under its own blocker (a package may run the function); still uncertifiable"
   }
  ],
  "renames": []

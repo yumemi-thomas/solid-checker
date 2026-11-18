@@ -4170,6 +4170,33 @@
    "to": 5,
    "adr": "ADR 1091",
    "fact": "a row's blocker relabelled function-run-unplaced -> flush-in-action-unaccounted (U to U): the component's JSX tag is no longer an unfollowed hand-off, so the flush in an action is reached and accounted as such; no count rose overall"
+  },
+  {
+   "fixture": "reactive-ir/flush-write-path",
+   "key": "SC2006 flush-in-action-unaccounted",
+   "from": 1,
+   "to": 13,
+   "adr": "ADR 1095",
+   "fact": "relabel: function-run-unplaced -> flush-in-action-unaccounted (package-hand-off may_run withholds NoSteppedAction)",
+   "why": "the same SC2006 row under the flush accounting's blocker once the namespace names no action primitive; no site gained a row"
+  },
+  {
+   "fixture": "reactive-ir/rc17-dynamic-component",
+   "key": "SC2006 flush-in-action-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1095",
+   "fact": "relabel: function-run-unplaced -> flush-in-action-unaccounted (package-hand-off may_run withholds NoSteppedAction)",
+   "why": "the same SC2006 row under the flush accounting's blocker once the namespace names no action primitive; no site gained a row"
+  },
+  {
+   "fixture": "reactive-ir/undecided-flush-closure",
+   "key": "SC2006 flush-in-action-unaccounted",
+   "from": 1,
+   "to": 5,
+   "adr": "ADR 1095",
+   "fact": "relabel: function-run-unplaced -> flush-in-action-unaccounted (package-hand-off may_run withholds NoSteppedAction)",
+   "why": "the same SC2006 row under the flush accounting's blocker once the namespace names no action primitive; no site gained a row"
   }
  ]
 }

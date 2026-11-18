@@ -26,11 +26,11 @@
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/undecided-flush-closure/App.tsx",
       "start": 855,
-      "end": 860,
+      "end": 888,
       "fixes": 0
     },
     {
@@ -91,11 +91,11 @@
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/undecided-flush-closure/App.tsx",
       "start": 1122,
-      "end": 1133,
+      "end": 1162,
       "fixes": 0
     },
     {
@@ -157,11 +157,11 @@
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/undecided-flush-closure/App.tsx",
       "start": 1380,
-      "end": 1385,
+      "end": 1413,
       "fixes": 0
     },
     {
@@ -234,11 +234,11 @@
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/undecided-flush-closure/App.tsx",
       "start": 1650,
-      "end": 1655,
+      "end": 1664,
       "fixes": 0
     },
     {
