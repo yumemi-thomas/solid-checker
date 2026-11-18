@@ -169,13 +169,28 @@ export function WidenedRefused() {
   const refreshesNonAccessor = () => {
     refresh(box.get);
   };
-  // Uncertifiable: a transitive read, recursion, past the depth bound, a `let` alias, `refresh` of a member.
+  // The review of fc71ff16a: an argument that coerces an object runs its `toString`, which reads a signal here.
+  const host = { toString: () => String(count()) };
+  const coercesTemplate = () => {
+    setW(`${host}`);
+  };
+  const coercesPlus = () => {
+    setW("" + host);
+  };
+  // Uncertifiable: a transitive read, recursion, past the depth bound, a `let` alias, `refresh` of a member, and the coercing arguments
+  // (in a wrapper, an IIFE and the direct setter call).
   Promise.resolve().then(() => {
     callsReader();
     recursive();
     d1();
     viaLet();
     refreshesNonAccessor();
+    coercesTemplate();
+    coercesPlus();
+    (() => {
+      setW(`${host}`);
+    })();
+    setW(`${host}`);
   });
   return <p />;
 }

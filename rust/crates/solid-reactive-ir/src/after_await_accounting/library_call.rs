@@ -540,11 +540,44 @@ fn argument_is_inert(
             // fact, an unread package included), a library that reads a member of the literal (`JSON.stringify` looks up `toJSON`) runs project code.
             && (!matches!(argument.literal_value, ArgumentLiteralFact::Object(_))
                 || !object_prototype_touched()))
-        || ctx
+        || (ctx
             .semantic_lookup
             .proven_primitive(file, argument.span, PROOF_DEPTH)
+            && evaluates_without_code(ctx, file, argument.span))
         // ADR 0984: a `let` timer handle every reference of which is a proven write or a clear, in a browser.
         || super::timer_handle::is_timer_handle(ctx, file, argument.span)
+}
+
+/// ADR 1097 (the review of fc71ff16a): whether evaluating the expression at `span` runs no user code. `proven_primitive` proves the value's kind,
+/// not what computing it runs: `${host}`, `"" + host` and `String(host)` are strings that call `host`'s `toString`. Within the span: no call or
+/// construct, member, tagged template, function, class, JSX, assignment, spread, `yield` or `await`; every operand an operator coerces
+/// (`AstFacts::coercing_operands`: a template substitution, a `+`) itself proven primitive (`this` is not); and every name referenced resolves to a
+/// declaration of the program (an unresolved global may be a getter of the global object).
+pub(super) fn evaluates_without_code(ctx: &AnalysisContext<'_>, file: &FileFacts, span: solid_facts::core::Span) -> bool {
+    let ast = &file.ast;
+    let inside = |inner: solid_facts::core::Span| span.contains(inner);
+    if ast.calls.iter().any(|call| inside(call.span))
+        || ast.members.iter().any(|member| inside(member.span))
+        || ast.tagged_templates.iter().any(|tagged| inside(tagged.span))
+        || ast.functions.iter().any(|function| inside(function.span))
+        || ast.classes.iter().any(|class| inside(class.span))
+        || ast.jsx_elements.iter().any(|element| inside(element.span))
+        || ast.assignments.iter().any(|assignment| inside(assignment.target))
+        || ast.spreads.iter().any(|spread| inside(spread.span))
+        || ast.yields.iter().any(|yielded| inside(yielded.span))
+        || ast.awaits.iter().any(|awaited| inside(*awaited))
+    {
+        return false;
+    }
+    ast.coercing_operands
+        .iter()
+        .filter(|operand| inside(**operand))
+        .all(|operand| ctx.semantic_lookup.proven_primitive(file, *operand, PROOF_DEPTH))
+        && ast.identifiers.iter().all(|identifier| {
+            identifier.role != solid_facts::ast::IdentifierRole::Reference
+                || !inside(identifier.span)
+                || ast.reference_declaration(identifier.span).is_some()
+        })
 }
 
 /// Whether `argument` is a function by an exact fact: a function literal, or an identifier that names a project function.

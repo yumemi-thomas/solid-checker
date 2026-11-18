@@ -37,6 +37,10 @@ pub(super) fn only_calls_setters(
     call: &CallFact,
     object_prototype_touched: &dyn Fn() -> bool,
 ) -> bool {
+    // The review of fc71ff16a: a body with no proved call never asks `runs_nothing`, so the built-ins question is asked here too.
+    if !super::library_call::builtins_untouched(ctx) {
+        return false;
+    }
     let mut visiting = Vec::new();
     proved_call(ctx, file, call, 0, &mut visiting, object_prototype_touched).is_some()
 }
@@ -276,6 +280,8 @@ fn body_qualifies_inner(
             .iter()
             .any(|assignment| free(assignment.target))
         || ast.deleted_targets.iter().any(|target| free(*target))
+        // The review of fc71ff16a: a coercion (a template substitution, a `+`) may reach a value's `toString`, `this` included.
+        || ast.coercing_operands.iter().any(|operand| free(*operand))
     {
         return false;
     }

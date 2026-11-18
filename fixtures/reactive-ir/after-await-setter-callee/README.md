@@ -27,4 +27,4 @@ Violation or uncertifiable, never clean: `Twin`'s wrapper reads after the memo's
 
 Clean: `Widened`'s handler.
 
-Uncertifiable, in `WidenedRefused`: a callee that calls a reader, recursion, a chain past the depth bound, a `let` alias, and `refresh` of a member.
+Uncertifiable, in `WidenedRefused`: a callee that calls a reader, recursion, a chain past the depth bound, a `let` alias, `refresh` of a member, and a setter argument that coerces an object (`${host}`, `"" + host`) in a wrapper, an IIFE and the direct setter call. The last comes from the review of fc71ff16a: `argument_is_inert` asks `evaluates_without_code` beside the kind, because `proven_primitive` proves only the value's kind.
