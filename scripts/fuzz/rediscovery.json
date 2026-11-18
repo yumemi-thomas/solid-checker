@@ -25959,5 +25959,35 @@
   "found": "Mac 23's twin for ADR 1056 (fixture iteration-timer-parameter-composite-stored: a violation on 5a5d1321f)",
   "fixed": "ADR 1056 (`mutation_sites.rs` `closed_parameter_seen`: a reference in an assignment's value fails the parameter; the handed-member proof likewise refuses stored members/literals, receiver escapes, rewritten/defaulted parameters and inherited reads)",
   "outside": "Not generated: the grids write a timer's callback inline or by name in the site's own function, and `assign-callee` (CALLEE_FORMS) is a form of calling the site function itself, never of the function that receives a timer callback as a parameter. They also do not put the scheduler in a handed literal whose callback parameter is rewritten/defaulted, whose member or literal is stored, or whose method leaks its receiver. Pinned by fixture reactive-ir/iteration-timer-parameter-composite-stored (a violation on 5a5d1321f, uncertifiable here; Chrome reports the write, covered-uncertifiable) beside its proved twin iteration-timer-parameter-composite, and the iteration-timer-handed-literal refusal twins."
+ },
+ {
+  "finding": "F1: `AfterAwaitSafe::PromiseUnconsumed` ended a read after an await in the handler of a discarded `.then` whose receiver was a `Promise` subclass that keeps its instances (`Kp.resolve().then(async () => { await ..; read(); })`, the constructor storing `this`): be4990c64 took any receiver whose callee the default library declares for a native promise, and an async memo awaiting the kept derived promise carries the handler's flight. Chrome rc.21 reports UNTRACKED_READ_AFTER_AWAIT at the read; be4990c64 certified the program",
+  "found": "the Fable soundness review of be4990c64 (ADR 1090 G1, 2026-11-18), probe programs in Chrome rc.21",
+  "fixed": "ADR 1090 G1 (review fixes): the `.then` handler case is dropped (`after_await_accounting/unconsumed.rs`); no exact fact says a receiver is a native promise",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": ["mx-untracked-read-after-await-pu-then-sub-x-direct-none"],
+  "rediscovered": "be4990c64 (release): false-clean, certified (focus exit 1); the fix: recall-gap (SC1002 read-after-await-unaccounted at the read)"
+ },
+ {
+  "finding": "F2: `AfterAwaitSafe::PromiseUnconsumed` ended a read in a loop that awaits after it (`for (..) { read(); await ..; }`) in a function called only by discarded calls. The loop's first pass reads before the first await, on the caller's stack: a `toString` method that an async memo's template literal runs after its own await. Chrome rc.21 reports UNTRACKED_READ_AFTER_AWAIT at the read; be4990c64 kept only SC1001's row there, which covers nothing for this code",
+  "found": "the Fable soundness review of be4990c64 (ADR 1090 G1, 2026-11-18), probe programs in Chrome rc.21",
+  "fixed": "ADR 1090 G1 (review fixes): the read must be past an await the function runs on every run (`AstFacts::unconditional_awaits` ending before it, `unconsumed.rs` `past_prefix`)",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": ["mx-untracked-read-after-await-pu-loop-x-direct-none"],
+  "rediscovered": "be4990c64 (release): false-clean (only SC1001 function-run-unplaced at the read, focus exit 1); the fix: recall-gap (SC1002 read-after-await-unaccounted at the read)"
+ },
+ {
+  "finding": "F3: `AfterAwaitSafe::PromiseUnconsumed` ended a read after an await in a function every written reference of which is a discarded call, in a program whose memo calls it through direct `eval(\"f()\")`, which keeps the promise (the memo's compute returns it). Chrome rc.21 reports UNTRACKED_READ_AFTER_AWAIT at the read; be4990c64 kept only SC1001's row",
+  "found": "the Fable soundness review of be4990c64 (ADR 1090 G1, 2026-11-18), probe programs in Chrome rc.21",
+  "fixed": "ADR 1090 G1 (review fixes): no site is ended in a program with a direct `eval` or a code-evaluating call (`Hazard::Eval`, `Hazard::CodeEvaluatingCall`, as library_call.rs asks)",
+  "outside": "not generated: UNTRACKED_READ_AFTER_AWAIT's variants read a signal tuple or a store, and a program with direct `eval` withdraws their slots (SC9012 `tuple-iteration-written` at the read, a withholding that covers the code), so a generated eval program is recall-gap on every build. Fixture reactive-ir/after-await-promise-unconsumed-eval holds the hole with a memo accessor (be4990c64: only SC1001 at the read; the fix: SC1002 uncertifiable)"
+ },
+ {
+  "finding": "Review of be4990c64: `AfterAwaitSafe::PromiseUnconsumed` did not refuse a classic script's top-level function, a global another file may call as `window.f()` where its promise is kept",
+  "found": "the Fable soundness review of be4990c64 (ADR 1090 G1, 2026-11-18), probe programs in Chrome rc.21",
+  "fixed": "ADR 1090 G1 (review fixes): the function must be written in a module (`execution_role::file_is_module`)",
+  "outside": "not generated: the generator writes ES modules only (`App.tsx` with imports), never a classic script; the reason is pinned in unconsumed.rs's module documentation"
  }
 ]

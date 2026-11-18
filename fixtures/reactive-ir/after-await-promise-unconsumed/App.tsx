@@ -14,10 +14,31 @@ const fire = async () => {
 };
 fire();
 
-// Clean: a handler of a discarded standard `Promise.then` on a native promise.
+// Uncertifiable (review F1 of be4990c64): a `.then` handler. Its receiver is a native promise only when no `Promise` subclass or patch stands
+// in, and no exact fact says so: a subclass whose constructor keeps `this` hands the derived promise to whatever awaits it.
 Promise.resolve().then(() => {
   peek();
 });
+class Kept extends Promise<void> {
+  static last?: Promise<unknown>;
+  constructor(executor: (resolve: (value: void) => void, reject: (reason?: unknown) => void) => void) {
+    super(executor);
+    Kept.last = this;
+  }
+}
+Kept.resolve().then(async () => {
+  await pause();
+  peek();
+});
+
+// Uncertifiable (review F2): the loop's first pass reads before the first await, on the caller's stack, inside whatever computation calls it.
+const looped = async () => {
+  for (let i = 0; i < 2; i++) {
+    peek();
+    await pause();
+  }
+};
+looped();
 
 // Uncertifiable (fail closed): the promise is consumed by `void`, a unary whose operand is the promise.
 const voided = async () => {

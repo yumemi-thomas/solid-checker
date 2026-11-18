@@ -4002,18 +4002,20 @@ Real Chrome: focus's oracle sample compared 84 moved lg-base programs, and every
 
 ## ADR 1090 G1 — A read after an await in a function whose promise nothing consumes is accounted
 **The gap.** After ADR 1089, 246 lg-base programs were still uncertifiable on SC1002 `read-after-await-unaccounted` (the 54 SC2003 ones go to G4). There were two blockers, 123 programs each: an async helper called from a component, and the handler of `Promise.resolve().then(...)`. rc.21 warns UNTRACKED_READ_AFTER_AWAIT only when V8's async stack of the read holds `__solidAsyncCompute_<id>` (`attributedFlight`, dev-shared.js). V8 follows only the chain of awaiters, so if no code awaits or keeps the function's promise, no computation can be on that stack.
-**Decision.** New reason `AfterAwaitSafe::PromiseUnconsumed` (`after_await_accounting/unconsumed.rs`). For a named function, it holds when all of these hold:
-- the function is not a generator, a method or a named function expression;
-- its value is current, unseen code cannot enter it, and it is not exported;
+**Decision.** New reason `AfterAwaitSafe::PromiseUnconsumed` (`after_await_accounting/unconsumed.rs`). It holds for a read in a named function when all of these hold:
+- the function is `async` in code, and not a generator, a method or a named function expression;
+- it is written in a module, its value is current, unseen code cannot enter it, and it is not exported;
 - it has no foreign references and no calls from other files;
-- it has at least one reference, and every reference is a direct call that is not a construct and whose result is discarded.
+- the program has no direct `eval` and no code-evaluating call;
+- it has at least one reference, and every reference is a direct call that is not a construct and whose result is discarded;
+- an await of the function that runs on every run (`unconditional_awaits`) ends before the read, so the read never runs in the synchronous prefix.
 
-For a function literal, it holds when the literal is argument 0 or 1 (not spread) of a discarded `Promise.then` call (the standard declaration), and the receiver is a call to a standard or default-library declaration. Anything else stays open: `void f()`, a stored promise, an export, a chained `.then`, an unresolved receiver. Fixture `after-await-promise-unconsumed` covers both proofs (clean), four refusals (uncertifiable), and the misuse twin `createMemo(async () => await f())` (violation).
-*Evidence.* Release build, against the census-only build on the same base:
-- The 246 residual programs: all clean.
-- Probe over 31,950 programs: 14,706 rows went from uncertifiable to clean, and 0 violation rows were lost.
-- Of 2,273 moved misuse programs, 0 lost their violation.
-- Chrome: 10 of 10 sampled cleared programs showed no warning.
-- `fuzz-focus` UNTRACKED_READ_AFTER_AWAIT gave the same counts on both builds (mx-base 336 agree; mx-src 900 recall-gap / 48 agree; mx-combo 291 / 45).
+Anything else stays open: `void f()`, a stored promise, an export, a function literal.
+*Review (Fable, be4990c64: unsound).* The first head also ended the handler of a discarded `.then` whose receiver was a default-library call. A `Promise` subclass that keeps its instances defeats that (F1), and no exact fact says a receiver is a native promise, so the case is dropped. The head also missed three things, each now refused as listed above: a loop that reads before its await (F2), a direct `eval` that calls the function (F3), and a classic script's global function. The fuzzer generates F1 and F2 (`pu-shapes.mjs`). F3 and the classic script cannot be generated, and rediscovery.json says why. Fixtures: `after-await-promise-unconsumed` (`fire` clean; the `.then` handlers, `looped`, `voided`, `stored`, `exported` and `chained` uncertifiable; the misuse twin a violation) and `after-await-promise-unconsumed-eval` (uncertifiable).
+*Evidence.* Release build, compared with the census-only build on dc08f97b3:
+- Of the 246 residual programs, 123 are now clean: all of the async-helper half. The `.then` half stays uncertifiable.
+- Probe over 31,950 programs: 4,455 rows go from uncertifiable to clean, and 0 violation rows are lost. No misuse program becomes clean.
+- Fuzz: on be4990c64 the two `pu-*` programs are false clean (focus exit 1); on the fix they are recall-gap. Scoped `fuzz-focus` UNTRACKED_READ_AFTER_AWAIT gives the same counts as before.
+- Chrome rc.21: F1 and F2 through focus's oracle. For F3, the eval fixture's program is unproven-clean on be4990c64 and covered-uncertifiable on the fix.
 
-Fixtures: nine snapshots lose only SC1002 rows. `write-owner-in-cleanup` goes from 5 to 4 (a drops row in counts.json).
+Fixture snapshots: the nine moved by be4990c64 are back to their base bytes (every row it removed there was a `.then` handler), so counts.json needs no drops row.

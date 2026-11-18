@@ -22,6 +22,17 @@
       "start": 268,
       "end": 275,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/top-window-patch/App.tsx",
+      "start": 317,
+      "end": 321,
+      "fixes": 0
     }
   ]
 }
