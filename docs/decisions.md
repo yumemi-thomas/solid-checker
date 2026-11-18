@@ -4192,3 +4192,18 @@ ADR 1080's census reads a registration's event type from its literal fact or a h
 **Evidence.**
 - `hook-member-helper-read`: `Shown` proved; the helper called in the body and the member read in the body keep their SC1001 violations.
 - `hook-member-store-draft`: `Draft` proved; `Handed` (the member hands the store itself to the callback) stays uncertifiable; `Misuse` (`thing.useIt.v = 7`) keeps its SC2003 violation.
+
+<a id="adr-1097"></a>
+## ADR 1097 — After-await calls through a wrapper or an action alias: not built, needs a ruling
+**The group.** W3's ADR 1095 census, unowned group 3: 11 layer-2 legal programs (27 more on the mounts), SC1002 `read-after-await-unaccounted` in a promise handler written in a component body. Two forms:
+- **Wrapper** (`REACTIVE_WRITE_IN_OWNED_SCOPE` then, `STORE_WRITE_OUTSIDE_SETTER` then): `const wrapUse = () => { setW1(7); }; Promise.resolve().then(() => { wrapUse(); })`, census `via: call`.
+- **Alias** (`ACTION_CALLED_IN_OWNED_SCOPE` then, `REACTIVE_WRITE_IN_OWNED_SCOPE` async): `const a1 = action(function* () { setW1(7); }); const useIt = a1; … useIt()`, census `via: action`.
+
+The direct setter call in the same handler is clean (`library-runs-nothing`).
+**Why it needs a ruling.** Ending these sites means reading the called function's body and concluding it reads nothing: a callee reason. ADR 0973 built one, the review of #233 found it unsound (reads reach a continuation through aliases, getters, a stored generator's iteration, props aliases), and it was removed by owner ruling. A unit test pins that no after-await reason is a callee reason.
+**A narrow design, if the ruling is reopened.**
+- **Wrapper:** the callee is an exact same-file `const` arrow, never reassigned, whose whole body is calls of an exact setter, with arguments that pass `library_call::argument_is_inert`. That means no member read, spread, iteration or identifier other than the setter, which closes each route the review named.
+- **Action:** the action's generator body meets the same condition.
+- **Cost:** about one implementer-day plus a review, and the pinning test changes.
+
+**Also seen.** A direct `a1()` of an action in the same handler is uncertifiable as well (`via: inexact`): every action call after an await stays uncertifiable unless it never runs or a reviewed runner schedules it, under the same ruling.
