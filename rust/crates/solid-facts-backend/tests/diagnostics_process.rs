@@ -378,7 +378,7 @@ fn factory_read_summaries_respect_dialect_callback_boundaries() {
         ("MemoHelper", None),
         ("MemoReturned", None),
         ("NamespaceMemo", None),
-        // ADR 0802: an SC5003 uncertifiable of its own, pinned below.
+        // ADR 0802: an SC5003 uncertifiable of its own until ADR 1074.
         ("MemoArray", None),
         ("EffectCompute", None),
         ("SettledRead", None),
@@ -402,15 +402,12 @@ fn factory_read_summaries_respect_dialect_callback_boundaries() {
             .collect::<Vec<_>>();
         // ADR 0802: a memo whose compute calls a value it was handed
         // (`objects.map(item => item.read())`) is open until the handed net
-        // follows the callback parameter to the literal.
+        // follows the callback parameter to the literal; ADR 1074's twelve
+        // steps reach the two closed literals, so no row is open.
         let (open, rows): (Vec<_>, Vec<_>) = rows.into_iter().partition(|row| {
             row["id"] == "SC5003" && row["analysisContext"] == "async-provenance-unproven"
         });
-        assert_eq!(
-            open.len(),
-            usize::from(name == "MemoArray"),
-            "{name}: {open:#?}"
-        );
+        assert!(open.is_empty(), "{name}: {open:#?}");
         for row in &open {
             assert_eq!(row["kind"], "uncertifiable", "{name}");
         }
@@ -3277,8 +3274,8 @@ fn walks_past_their_depth_limit_are_uncertifiable() {
 /// ADR 0751: a value chain past its limit is unknown. `is_own_setter`'s four
 /// aliases: the sixth-alias setter's callback is a window not proven either
 /// way, so the write in it is uncertifiable, not dropped (Chrome is quiet);
-/// `handed_value`'s six steps: the eighth member's call after an await opens
-/// the handed-read obligation.
+/// `handed_value`'s steps (twelve, ADR 1074): the eighth member's call after an
+/// await, rooted at a prop, opens the handed-read obligation.
 #[test]
 fn value_chains_past_their_limit_are_uncertifiable() {
     let Some(findings) = diagnostic_fixture("bounds-value-depth-limit") else {

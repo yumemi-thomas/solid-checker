@@ -1668,17 +1668,6 @@
       "fixes": 0
     },
     {
-      "rule": "async-outside-loading-boundary",
-      "code": "SC5003",
-      "kind": "uncertifiable",
-      "blocker": "async-provenance-unproven",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/accessor-provenance/Scope.tsx",
-      "start": 1780,
-      "end": 1786,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",

@@ -212,8 +212,9 @@ pub(crate) const HELD_OPEN_SOURCE: &str = "held-open-source";
 pub(crate) const UNRESOLVED_HANDED_READ: &str = "handed-member-read";
 
 /// How many member, alias and destructuring steps [`UNRESOLVED_HANDED_MEMBER`]
-/// follows from a callee to the value a caller supplied.
-pub(crate) const HANDED_DEPTH: usize = 6;
+/// follows from a callee to the value a caller supplied. ADR 1074: twelve (six
+/// before); past them the value is unknown and the answer is "handed".
+pub(crate) const HANDED_DEPTH: usize = 12;
 
 /// The tables [`handed_value`] reads.
 pub(crate) struct HandedTables<'a, 'l> {

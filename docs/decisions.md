@@ -3992,3 +3992,21 @@ The handed-member proof reuses `parameter_argument`: a callback parameter must b
 **The trace.** ADR 1055's lead (`open-world-export`, 16,600 rows in closed programs) was the namespace census (ADR 0347) answering `escapes_unnamed`. In the router projects the escape is `@solidjs/router` `dist/data/events.js`: `import("./serverForms.js").then(m => m.submitServerForm(…))`, read as an unnamed load, so `serverForms.js`, and through `export { submitServerForm } from "./action.js"` every export of `action.js`, escaped. Other projects hold another cause (inferay: a computed load in `@solidjs/vite-plugin`; probus-hk: `async_hooks` in a server module; app-game: a dynamic load in `abr-parser`), the entry closure's question (ADR 1055).
 **The decision.** Four exact reads. (1) Facts schema 97: `import(x).then(m => …)` whose one plain parameter is only the object of static members, or a destructuring parameter, is a `Members` consumer, as `(await import(x)).a` is. (2) `exported_function` follows a named re-export (`export { n } from "./m"`) into the one project module its specifier loads (four hops at most). (3) `direct_specifier_target`: where the compiler resolved the declaration file (`./m.js` to `m.d.ts`), a relative specifier with an explicit runtime extension loads exactly that file (`explicit_runtime_files`, ADR 0193), when one candidate is a program file. (4) Facts: an `if` statement's test and the operand of `!` are inert operands: `ToBoolean` runs no code of any value. The router chain then stops at `Object.assign(RouterComponent, { routes: config.routes })`: the route components are stored on a value the project holds (object flow, not this ADR).
 **Measured.** rc.21 frozen corpus v2 with ADR 1070 on top, main `7a2457579`: dev U 250,089 → 250,077, std 237,335 → 237,322, V unchanged; coverage: two fixtures lose rows (`clean-lazy-route`'s `<Loading>` pair, an `identity-wrapper-rejections` cleanup whose stored callback is only tested); the `sc4001` repro's loader now hands its namespace on, as the corpus sites it stands for do. Fixtures `namespace-then-named` and its twin `namespace-then-escape`.
+
+<a id="adr-1074"></a>
+## ADR 1074 — The handed-value walk follows twelve steps
+**The gap.** `handed_value` (ADR 0509) answers "a caller may have supplied this callee" past `HANDED_DEPTH` steps (ADR 0751, fail closed). At six, ADR 1065 part 2's census found 2,748 `handed-member-dispatch` rows held only by depth exhaustion (`cause|handed|depth-exhausted`).
+**Decision.** `HANDED_DEPTH` is 12. The walk's steps are unchanged and each is exact; a deeper bound only lets it reach an answer it was cut off from. Past twelve the answer is still "handed".
+**Measured** (rc.21 frozen corpus v2, release, main 84cc06485 against this constant):
+
+| Depth | Dev U | Standard U | V | Corpus time, dev / standard |
+|---|---|---|---|---|
+| 6 (main) | 250,089 | 237,335 | 244 / 236 | 311 s / 164 s |
+| 8 | 248,805 (−1,284) | 236,082 (−1,253) | unchanged | 303 s / 160 s |
+| 12 | 248,227 (−1,862) | 235,515 (−1,820) | unchanged | 297 s / 158 s |
+| 16 | 248,154 (−1,935), dev only | — | unchanged | 304 s |
+
+Twelve keeps 96% of sixteen's gain. The rows that leave are mostly SC9012 `handed-member-dispatch`/`-read` (1,780 dev), plus SC5003, SC5008 and SC5001. Up to 72 SC1002 and 45 SC9012 rows stand where an obligation left: the next blocker of the same site.
+**Evidence.** Fixture `bounds-value-depth-twelve`: eight `const` aliases of a local literal lose the handed obligation (its next blocker, SC1002 `unresolved-invocation`, stands). Fourteen aliases, and eight aliases of a prop, keep it. Seventeen fixture snapshots lose a handed row the bound held, each read:
+- in the `iteration-written-slots-handed-*` variants and `sloppy-this-dependency`, the walk now reaches an event parameter or a standard iterator, and every `tuple-iteration-written` row those fixtures pin stands;
+- in `accessor-provenance` `Scope.tsx` `MemoArray`, the compute calls members of two closed local literals, so its async provenance is proved.
