@@ -2685,7 +2685,7 @@ impl<'c> ParameterFlow<'_, 'c> {
                             frame,
                             in_place,
                             linked,
-                            depth - 1,
+                            depth,
                         );
                         return;
                     }
