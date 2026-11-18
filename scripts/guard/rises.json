@@ -4154,6 +4154,46 @@
    "to": 10,
    "adr": "ADR 1073",
    "fact": "fixture extended: App.test.tsx gains a callback a reviewed runner schedules (handed to no computation); its reads are uncertifiable rows, the fixture's two SC1002 violations are unchanged"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 7,
+   "to": 14,
+   "adr": "ADR 1052",
+   "fact": "part 5: fixture competing-check-sync-memo extended (a helper every reference to which is a refused call; a render-effect apply behind an early return; their controls)"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 4,
+   "to": 9,
+   "adr": "ADR 1052",
+   "fact": "part 5: fixture competing-check-sync-memo extended (a helper every reference to which is a refused call; a render-effect apply behind an early return; their controls)"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 6,
+   "to": 10,
+   "adr": "ADR 1052",
+   "fact": "part 5: fixture competing-check-sync-memo extended (a helper every reference to which is a refused call; a render-effect apply behind an early return; their controls)"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC6002 effect-owner-unproven",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1052",
+   "fact": "part 5: fixture competing-check-sync-memo extended (a helper every reference to which is a refused call; a render-effect apply behind an early return; their controls)"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC7002 creation-throws-first",
+   "from": 4,
+   "to": 7,
+   "adr": "ADR 1052",
+   "fact": "part 5: fixture competing-check-sync-memo extended (a helper every reference to which is a refused call; a render-effect apply behind an early return; their controls)"
   }
  ]
 }

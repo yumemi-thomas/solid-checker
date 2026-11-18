@@ -1,0 +1,10 @@
+{
+  "note": "ADR 1052 part 5: useContext in a render effect apply behind an early return: the rerun has no owner, NO_OWNER_CONTEXT first; SC4002 uncertifiable. Generated program `mx-context-not-found-render-apply-guarded-rerun-x-direct-none` (differential fuzzer, generator 2).",
+  "haltMarker": true,
+  "steps": [
+    {
+      "action": "click",
+      "selector": "[data-act=\"b1\"], body:not(:has([data-act=\"b1\"])) > #sc-halted"
+    }
+  ]
+}
