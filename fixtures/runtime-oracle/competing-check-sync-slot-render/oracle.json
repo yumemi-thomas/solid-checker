@@ -1,0 +1,8 @@
+{
+  "note": "ADR 1052 part 8: the same slot a render effect apply calls: the owned first run probes, SYNC_NODE_RECEIVED_ASYNC; SC7002 stays a violation. Mounted as ADR 1089's entry.",
+  "haltMarker": true,
+  "mount": [
+    "C1"
+  ],
+  "steps": []
+}

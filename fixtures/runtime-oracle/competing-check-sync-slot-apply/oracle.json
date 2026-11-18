@@ -1,0 +1,8 @@
+{
+  "note": "ADR 1052 part 8: a sync memo in a module object slot only an effect apply calls: PRIMITIVE_IN_EFFECT_CALLBACK, never SYNC_NODE_RECEIVED_ASYNC; SC7002 uncertifiable. Generated program `mx-sync-node-received-async-flw-apply-slot-module-memo-direct-none` (differential fuzzer, generator 2). Mounted as ADR 1089's entry.",
+  "haltMarker": true,
+  "mount": [
+    "C1"
+  ],
+  "steps": []
+}
