@@ -951,6 +951,15 @@ pub(crate) fn callee_home(
 pub(crate) use after_await::SolidCall;
 
 /// See [`after_await::solid_owned_call`].
+/// ADR 1098: the symbol of a call's callee, as [`solid_owned_call`] asks it (a plain callee, a member's property, an ADR 0481 member alias).
+pub(crate) fn solid_call_symbol<'s>(
+    ctx: &'s AnalysisContext<'_>,
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> Option<&'s SymbolId> {
+    call_accessor_symbol(ctx, file, call)
+}
+
 pub(crate) fn solid_owned_call(
     ctx: &AnalysisContext<'_>,
     file: &solid_facts::FileFacts,

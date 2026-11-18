@@ -223,40 +223,72 @@ fn setter_runs_nothing(
     }
     let lookup = ctx.semantic_lookup;
     let callee = file.ast.peel_ts_sugar_span(call.callee);
-    if !crate::owners::is_identifier_span(file, callee) {
-        return false;
-    }
-    let Some((binding_file, binding, _)) = lookup.binding_at_reference(file.path.as_str(), callee)
-    else {
-        return false;
+    let (binding_file, binding) = if crate::owners::is_identifier_span(file, callee) {
+        let Some((binding_file, binding, _)) =
+            lookup.binding_at_reference(file.path.as_str(), callee)
+        else {
+            return false;
+        };
+        let Some(setter) = binding.array_slots.get(1).and_then(Option::as_ref) else {
+            return false;
+        };
+        if binding_file.path != file.path
+            || !binding.immutable
+            || binding.shape != BindingShape::Array
+            || file.ast.reference_declaration(callee) != Some(setter.span)
+        {
+            return false;
+        }
+        (binding_file, binding)
+    } else {
+        // ADR 1098: a signal setter a value carries (`thing.useIt(7)`, the setter a hook's returned literal holds): the callee's symbol
+        // is a setter of the table (the transport the write rules use), and its declaration is the setter slot of an exact
+        // `const [get, set] = createSignal(…)`, asked as the plain callee's is.
+        let Some((_, declared, _, kind)) = crate::static_rules::solid_call_symbol(ctx, file, call)
+            .and_then(|symbol| ctx.setters.get(symbol))
+        else {
+            return false;
+        };
+        if *kind != crate::ReactiveSourceKind::Accessor {
+            return false;
+        }
+        let Some(declaring) = lookup.file_by_path(declared.path.as_ref()) else {
+            return false;
+        };
+        let Some(binding) = declaring.ast.bindings.iter().find(|binding| {
+            binding
+                .array_slots
+                .get(1)
+                .and_then(Option::as_ref)
+                .is_some_and(|slot| {
+                    u64::from(slot.span.start) == declared.start_byte
+                        && u64::from(slot.span.end) == declared.end_byte
+                })
+        }) else {
+            return false;
+        };
+        if !binding.immutable || binding.shape != BindingShape::Array {
+            return false;
+        }
+        (declaring, binding)
     };
-    let Some(setter) = binding.array_slots.get(1).and_then(Option::as_ref) else {
-        return false;
-    };
-    if binding_file.path != file.path
-        || !binding.immutable
-        || binding.shape != BindingShape::Array
-        || file.ast.reference_declaration(callee) != Some(setter.span)
-    {
-        return false;
-    }
     let Some(created) = binding
         .initializer
-        .map(|initializer| file.ast.peel_ts_sugar_span(initializer))
-        .and_then(|initializer| file.ast.call_at(initializer))
+        .map(|initializer| binding_file.ast.peel_ts_sugar_span(initializer))
+        .and_then(|initializer| binding_file.ast.call_at(initializer))
     else {
         return false;
     };
     // The call is the dialect's signal creation, and its options argument is the dialect's.
     let Some(options) = lookup
-        .primitive_at_call(file, created.span)
+        .primitive_at_call(binding_file, created.span)
         .and_then(|primitive| ctx.dialect.signal_creation_options(primitive))
     else {
         return false;
     };
     !created.construct
         && matches!(
-            crate::call_option_literal(file, created, options, "equals"),
+            crate::call_option_literal(binding_file, created, options, "equals"),
             OptionLiteral::Absent | OptionLiteral::False
         )
 }
