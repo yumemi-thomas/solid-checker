@@ -806,11 +806,11 @@
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-write-path/App.tsx",
       "start": 3841,
-      "end": 3846,
+      "end": 3874,
       "fixes": 0
     },
     {

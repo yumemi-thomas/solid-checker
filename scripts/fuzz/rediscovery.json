@@ -25977,5 +25977,11 @@
   "found": "ADR 1082's follow-up (Mac 23, 2026-11-18): the runner recognition missed the same layout in jandibat-web; fixture flush-universe-fake-timers-store on the 1082 head loses the nine rows flush-universe-fake-timers holds",
   "fixed": "ADR 1086: every check that recognises a package by the path of a declaration or file reads it as the slot's manifest names it (`solid_facts::package_reach::installed_spelling`; the router's own files by the root its imports resolve to)",
   "outside": "the grids' programs run in the Chrome oracle's page, where vitest cannot load, and the generator writes no install layout (no `node_modules` tree of its own), so no generated program installs a reviewed fake clock from a store slot; fixture flush-universe-fake-timers-store holds it (nine rows, equal to flush-universe-fake-timers)"
+ },
+ {
+  "finding": "not a defect: a navigation (`history.go`, `location.reload`/`assign`/`replace`) raised the program-wide dispatch veto although it delivers only `beforeunload` (and `popstate` for a fragment `assign`/`replace`), withholding every handler's proofs in programs with no listener for those types",
+  "found": "R5's report (unlock #3: @solidjs/router's three `history.go` lines)",
+  "fixed": "ADR 1080 (`runtime_semantics::synchronously_delivered_event_types`, `event_delivery.rs` `program_listens_for_any`)",
+  "outside": "precision gain, no released defect to rediscover; the grids generate no navigation call (a page that navigates ends the oracle's run), so the fixtures `navigation-delivers-beforeunload*` pin the host fact, the census and its negatives, and the corpus delta measures it"
  }
 ]

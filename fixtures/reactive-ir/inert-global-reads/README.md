@@ -1,0 +1,15 @@
+# inert-global-reads
+
+**Claim (ADR 1077).** The package scan (ADR 0972/0974) counts a use of the global object it cannot follow as an escape: the code that has it may write any global, so every call of a global the libraries declare, in a program that loads the package, is a site (`package-may-call-action`, SC2002 uncertifiable). Three reads do nothing with the object and are no escape:
+
+- **(a)** a string-literal `in` test of the unbound global object (`"Deno" in globalThis`, @tanstack/query-core's `isServer`): it asks for a key and reads nothing;
+- **(b)** a TypeScript type query (`ReturnType<typeof globalThis.setTimeout>`, kui `RecordRow.tsx:82`): erased, nothing of it runs;
+- **(c)** `x.defaultView` where the program's types prove it holds no object (its primitive domain has no object, kui `MessagesTab.tsx`'s `props.defaultView ?? "pages"`), and `x`, as written and with assertions peeled, has a closed runtime domain and no library type a document may be. The scan keeps such a read apart; the walk leaves it out only for a file of the program whose source is the bytes the types were taken from.
+
+Each fails closed: a key the syntax does not fix, `typeof` written as a value beside a value use, an `any` receiver, a document receiver, an assertion over a document, and installed JavaScript the program does not compile keep today's rows.
+
+- **Certified**: `App.tsx` (`@ws/inert` holds all three reads, and nothing else uses the global object).
+- **Uncertifiable** (`package-may-call-action`, the five global calls of `Globals`): `variants/in-key` (`key in globalThis`, plus the row of the package's own file), `variants/typeof-value` (`typeof globalThis.setTimeout === "function"` reads only, but `const root: typeof globalThis = globalThis` hands the object on), `variants/any-receiver` (`props: any`), `variants/document-receiver` (`element.ownerDocument.defaultView`), `variants/cast-receiver` (`(document as unknown as ViewProps).defaultView`: the peeled receiver is a `Document`), `variants/untyped` (`fz-untyped-view`, installed JavaScript: no type facts).
+- **Certified, before and after**: `variants/shadowed` (a parameter named `globalThis` is no global object; the scan follows only unbound names).
+
+`packages/*` and `node_modules/fz-untyped-view` are **not** published bytes: each is written for this fixture. The `@ws/*` packages are workspace links (`node_modules/@ws/<name> -> ../../packages/<name>`) whose entry is TypeScript source, so the compiler reads it as program code (`@ws/shadowed`'s entry is JavaScript the program does not compile). `node_modules/solid-js` and `@solidjs/*` are the manifests of `action-in-owned-scope-global-writes-any`; `.solid-checker/runtime.json` closes the program boundary. No runtime claim: no row is a violation, before or after.

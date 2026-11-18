@@ -72,6 +72,7 @@ import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { NODE } from "./lib/node-runtime.mjs";
+import { enteredExports } from "./fuzz/checker.mjs";
 import { placelessExcess, siteKey } from "./fuzz/site-judge.mjs";
 import { recommendedConcurrency } from "./lib/pool.mjs";
 
@@ -144,9 +145,8 @@ const compilerOptions = {
   jsxImportSource: "@solidjs/web", lib: ["ES2022", "DOM", "DOM.Iterable"], types: [],
   skipLibCheck: true, strict: true, noEmit: true,
 };
-const mainSource = (observations, mount) => `${observations.length ? 'import { flush } from "solid-js";\n' : ""}import { render } from "@solidjs/web";
-import * as mod from "./App";
-${mount ? `import { ${[...mount].sort().join(", ")} } from "./App";
+const mainSource = (observations, mount, entered) => `${observations.length ? 'import { flush } from "solid-js";\n' : ""}import { render } from "@solidjs/web";
+${mount && entered && entered.every((name) => mount.includes(name)) ? "" : 'import * as mod from "./App";\n'}${mount ? `import { ${[...mount].sort().join(", ")} } from "./App";
 
 // Each exported component is rendered as a component, so Solid creates it the
 // way an application does, with the component's strict-read window open, and
@@ -167,7 +167,10 @@ ${[...mount].sort().map((name) => `try {
   console.error("render failed", "${name}", error);
   setTimeout(() => { throw error; });
 }
-`).join("")}const mounted = new Set<string>(${JSON.stringify([...mount].sort())});
+`).join("")}${entered && entered.every((name) => mount.includes(name)) ? `// Every export the namespace would enter is mounted above by name (ADR 1089), so
+// no loop hands the module's namespace to code a reader cannot see.
+
+` : `const mounted = new Set<string>(${JSON.stringify([...mount].sort())});
 for (const [name, value] of Object.entries(mod as Record<string, unknown>)) {
   if (typeof value !== "function" || !(name === "default" || /^[A-Z]/.test(name)) || mounted.has(name)) continue;
   const Component = value as (props: {}) => any;
@@ -181,7 +184,7 @@ for (const [name, value] of Object.entries(mod as Record<string, unknown>)) {
   }
 }
 
-` : `
+`}` : `
 // Each exported component is rendered as a component, so Solid creates it the
 // way an application does, with the component's strict-read window open, and
 // in its own root, so one component's failure does not hide the others.
@@ -714,7 +717,8 @@ async function runCase(id, slot) {
   assert(spec.mount === undefined || (Array.isArray(spec.mount) && spec.mount.length > 0 && spec.mount.every((name) => /^[A-Z][A-Za-z0-9_]*$/.test(name))), `${id}: mount must be a non-empty list of component names`);
   // `main` is the entry's own text, for a case that asks for an entry other than the namespace loop's (the fuzzer's named entry, scripts/fuzz/checker.mjs `namedEntry`, ADR 0990).
   assert(spec.main === undefined || typeof spec.main === "string", `${id}: main must be the entry's text`);
-  writeFileSync(join(dir, "main.tsx"), spec.main ?? mainSource(observations, spec.mount));
+  // ADR 1089: a mount that names every export the namespace loop would enter leaves the loop out (the checker's entry is the same text, scripts/fuzz/checker.mjs `mainSourceFor`).
+  writeFileSync(join(dir, "main.tsx"), spec.main ?? mainSource(observations, spec.mount, spec.mount ? enteredExports(readFileSync(join(source, "App.tsx"), "utf8")) : null));
   assert(spec.haltMarker === undefined || typeof spec.haltMarker === "boolean", `${id}: haltMarker must be a boolean`);
   if (spec.haltMarker) writeFileSync(join(dir, "sc-halt.ts"), haltModule);
   // `external` names case files the page loads by a script of its own after the entry's and the checker's program does not hold: an importer outside the program, the

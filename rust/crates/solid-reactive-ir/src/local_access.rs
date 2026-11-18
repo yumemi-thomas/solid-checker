@@ -2290,6 +2290,18 @@ impl LocalAccessContext<'_, '_> {
         // definition-site obligation for every such helper buried the corpus
         // in derived getters and handler helpers (ADR 0222).
         if unproven_use && definition_admitted {
+            // ADR 1088 (census only): a helper's read that keeps its definition site's undecided role.
+            if read.execution == ExecutionRole::Unknown {
+                crate::blocker_census::record(|| {
+                    crate::blocker_census::CensusRow::at(
+                        &read.location,
+                        "read-unknown",
+                        vec![
+                            "cause|read-unknown|helper-definition|unproven-use-admitted".to_owned(),
+                        ],
+                    )
+                });
+            }
             let counts = counts_as_strict_read_root(file, site, read.execution, self.lookup);
             result.reads.push(Arc::new(read));
             if counts {
@@ -2299,6 +2311,22 @@ impl LocalAccessContext<'_, '_> {
             // The helper may run in the render window through the reference
             // that keeps it: not proven, not silent.
             let mut retained = read;
+            if retained.execution == ExecutionRole::Unknown {
+                crate::blocker_census::record(|| {
+                    crate::blocker_census::CensusRow::at(
+                        &retained.location,
+                        "read-unknown",
+                        vec![format!(
+                            "cause|read-unknown|helper-definition|{}",
+                            if retained_in_layer {
+                                "retained-in-layer"
+                            } else {
+                                "nested-in-named"
+                            }
+                        )],
+                    )
+                });
+            }
             retained.callee_callback_timing = true;
             let counts = counts_as_strict_read_root(file, site, retained.execution, self.lookup);
             result.reads.push(Arc::new(retained));
@@ -2311,6 +2339,14 @@ impl LocalAccessContext<'_, '_> {
             // runs the helper where nothing here places it: the read is
             // unplaced at its definition, never silent.
             let mut open = read;
+            // ADR 1088 (census only): ADR 0934's unproven use of the helper is what leaves this read unplaced.
+            crate::blocker_census::record(|| {
+                crate::blocker_census::CensusRow::at(
+                    &open.location,
+                    "read-unknown",
+                    vec!["cause|read-unknown|unproven-use".to_owned()],
+                )
+            });
             open.execution = ExecutionRole::Unknown;
             let counts = counts_as_strict_read_root(file, site, open.execution, self.lookup);
             result.reads.push(Arc::new(open));
@@ -7787,6 +7823,26 @@ impl LocalAccessContext<'_, '_> {
                     }
                     return;
                 }
+                // ADR 1088 (census only): which test left the member read unplaced.
+                crate::blocker_census::cause_at(
+                    file.path.as_str(),
+                    member.span,
+                    "read-unknown",
+                    || {
+                        format!(
+                            "cause|read-unknown|member|{}",
+                            if gate_refuses {
+                                "gate-refuses"
+                            } else if unplaced {
+                                "handed-unplaced"
+                            } else if escapes {
+                                "escapes"
+                            } else {
+                                "nested-handed-to-unknown-code"
+                            }
+                        )
+                    },
+                );
                 execution = ExecutionRole::Unknown;
             }
         }
@@ -9992,11 +10048,25 @@ fn function_handed_unfollowed(
     // retaining standard-library call, a slot of a literal argument) hands it
     // to code nothing places. A `const` copy is followed into its own
     // references; an object slot handed on through a `const` holder as before.
+    //
+    // ADR 1091: a reference that is the tag of a JSX element (`<Content />`, its closing tag too) is no hand-off here: Solid's
+    // `createComponent` runs the component during the render that holds the tag, which the render roles place, as they place a
+    // component a tag in another file renders (this test reads same-file references only). Every other reference keeps its class.
     let mut hand_offs = Vec::new();
-    binding_hand_offs(file, name.span, lookup, &mut hand_offs);
-    hand_offs.contains(&HandOff::Unfollowed)
-        || hand_offs.contains(&HandOff::Retained)
-        || references(name.span).into_iter().any(slot_handed)
+    binding_reference_hand_offs(file, name.span, lookup, &mut hand_offs);
+    hand_offs.iter().any(|(at, hand_off)| {
+        matches!(hand_off, HandOff::Unfollowed | HandOff::Retained) && !rendering_tag(file, *at)
+    }) || references(name.span).into_iter().any(slot_handed)
+}
+
+/// ADR 1091: whether `at` is the tag name of a JSX element that is no intrinsic element, written as a plain identifier (not a
+/// dotted `<Ns.Tag>`), opening or closing.
+fn rendering_tag(file: &solid_facts::FileFacts, at: solid_facts::core::Span) -> bool {
+    file.ast.jsx_elements.iter().any(|element| {
+        element.member_property.is_none()
+            && !crate::execution_role::intrinsic_element(file, element)
+            && (element.name.span == at || element.closing_name == Some(at))
+    })
 }
 
 /// ADR 0531: how one reference of a function's binding hands the function

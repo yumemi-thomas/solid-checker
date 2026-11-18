@@ -53,6 +53,19 @@ describe("mainSourceFor (ADR 0501)", () => {
     expect(main).toContain("mounted.has(name)");
     expect(main).toContain("async function exercise()");
   });
+  it("leaves the namespace loop out when the mount names every export it would enter (ADR 1089), and keeps it otherwise", () => {
+    const oracle = JSON.stringify({ mount: ["C1"] });
+    const app = 'export function C1() {\n  return <div />;\n}\nexport const helper = 1;\n';
+    const named = mainSourceFor(oracle, app);
+    expect(named).not.toContain("import * as mod");
+    expect(named).not.toContain("Object.entries(mod");
+    expect(named).toContain('render(() => <C1 />, host("C1"));');
+    expect(named.slice(named.indexOf("// Drive every handler"))).toBe(mainSourceFor(oracle).slice(mainSourceFor(oracle).indexOf("// Drive every handler")));
+    // Another entered export, or exports the text cannot classify, keep the loop.
+    expect(mainSourceFor(oracle, `${app}export function C2() {\n  return null;\n}\n`)).toContain("Object.entries(mod");
+    expect(mainSourceFor(oracle, `${app}export * from "./other";\n`)).toContain("Object.entries(mod");
+    expect(mainSourceFor(oracle)).toContain("Object.entries(mod");
+  });
 });
 
 describe("MAIN_SOURCE", () => {
@@ -78,7 +91,8 @@ describe("materializeForChecker", () => {
     expect(readFileSync(join(dir, "App.tsx"), "utf8")).toBe(built.text);
     // The oracle's entry for this case: its exported components are mounted by name (ADR 0501).
     expect(JSON.parse(built.files["oracle.json"]).mount).toEqual(["C1"]);
-    expect(readFileSync(join(dir, "main.tsx"), "utf8")).toBe(mainSourceFor(built.files["oracle.json"]));
+    // ADR 1089: with the case's App.tsx, as the oracle writes it (no namespace loop when the mount names every entered export).
+    expect(readFileSync(join(dir, "main.tsx"), "utf8")).toBe(mainSourceFor(built.files["oracle.json"], built.files["App.tsx"]));
     const tsconfig = JSON.parse(readFileSync(join(dir, "tsconfig.json"), "utf8"));
     expect(tsconfig.files).toEqual(["main.tsx", "App.tsx"]);
     expect(tsconfig.compilerOptions).toMatchObject({ jsx: "preserve", jsxImportSource: "@solidjs/web", strict: true, types: [] });

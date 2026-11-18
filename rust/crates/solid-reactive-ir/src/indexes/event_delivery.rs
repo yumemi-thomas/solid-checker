@@ -490,6 +490,16 @@ impl SemanticLookup<'_> {
                         {
                             DispatchReceiver::NoListener
                         }
+                        // ADR 1080: a navigation delivers only the event types the host fact names (`History.go` and
+                        // `Location.reload`: `beforeunload`; `Location.assign` and `Location.replace`: `beforeunload`, and
+                        // `popstate` for a fragment). With no listener for any of them, it delivers to none.
+                        _ if crate::runtime_semantics::synchronously_delivered_event_types(
+                            name,
+                        )
+                        .is_some_and(|events| !self.program_listens_for_any(events)) =>
+                        {
+                            DispatchReceiver::NoListener
+                        }
                         "EventTarget.dispatchEvent" => self.dispatch_receiver(file, call),
                         // ADR 0937: lib.dom's global `dispatchEvent`, the
                         // window's own method called bare.
@@ -655,12 +665,40 @@ impl SemanticLookup<'_> {
     /// a bare `addEventListener`, a literal key, a read of the method (`.call`,
     /// an alias), a computed key on a DOM global.
     fn program_listens_for_click(&self) -> bool {
+        self.program_listens(&["onclick"], &|file, call| {
+            self.registers_no_click(file, call)
+        })
+    }
+
+    /// ADR 1080: [`Self::program_listens_for_click`] for any of `events` (the types a dispatch delivers): a handler on a JSX
+    /// `body` or `html`, an `on<event>` property, or an `addEventListener` that may register one of them (an event nothing
+    /// names, or a helper's type parameter some call fills with anything but a literal of another type), on a target other
+    /// than one whose declaration has no place on a DOM path.
+    fn program_listens_for_any(&self, events: &[&str]) -> bool {
+        let properties = events
+            .iter()
+            .map(|event| format!("on{event}"))
+            .collect::<Vec<_>>();
+        let properties = properties.iter().map(String::as_str).collect::<Vec<_>>();
+        self.program_listens(&properties, &|file, call| {
+            self.registers_none_of(file, call, events)
+        })
+    }
+
+    /// The census walk [`Self::program_listens_for_click`] and [`Self::program_listens_for_any`] share: `properties` are the
+    /// `on*` names that register a listener by assignment or by a literal's key, `quiet` says a registration call names none
+    /// of the events.
+    fn program_listens(
+        &self,
+        properties: &[&str],
+        registers_none: &dyn Fn(&solid_facts::FileFacts, &solid_facts::ast::CallFact) -> bool,
+    ) -> bool {
         self.file_slots().iter().any(|file| {
             let ast = &file.ast;
             let quiet = |callee: Span| {
                 ast.calls_with_peeled_callee(callee)
                     .next()
-                    .is_some_and(|call| self.registers_no_click(file, call))
+                    .is_some_and(|call| registers_none(file, call))
             };
             let named = |member: &solid_facts::ast::MemberFact, name: &str| {
                 if ast.computed_members.binary_search(&member.span).is_ok() {
@@ -680,12 +718,14 @@ impl SemanticLookup<'_> {
             }) || ast.assignments.iter().any(|assignment| {
                 let target = ast.peel_ts_sugar_span(assignment.target);
                 file.source_text(target).is_none()
-                    || ast
-                        .member_at(target)
-                        .is_some_and(|member| named(member, "onclick"))
+                    || ast.member_at(target).is_some_and(|member| {
+                        properties.iter().any(|property| named(member, property))
+                    })
             }) || ast.object_properties.iter().any(|property| {
-                file.source_text(property.key)
-                    .is_some_and(|key| key.trim_matches(['\'', '"']) == "onclick")
+                file.source_text(property.key).is_some_and(|key| {
+                    let key = key.trim_matches(['\'', '"']);
+                    properties.contains(&key)
+                })
             }) || ast.members.iter().any(|member| {
                 (named(member, "addEventListener") && !quiet(member.span))
                     || (ast.computed_members.binary_search(&member.span).is_ok()
@@ -699,6 +739,9 @@ impl SemanticLookup<'_> {
             }) || ast.identifiers.iter().any(|identifier| {
                 file.source_text(identifier.span) == Some("addEventListener")
                     && ast.reference_declaration(identifier.span).is_none()
+                    // ADR 1080: `typeof addEventListener` reads no member and hands the method nowhere (an inert operand:
+                    // the operand of `typeof` or `void`, either side of a strict equality).
+                    && !ast.inert_operands.contains(&identifier.span)
                     && !ast
                         .members
                         .iter()
@@ -743,6 +786,118 @@ impl SemanticLookup<'_> {
                         )
                     })
                 })
+    }
+
+    /// ADR 1080: the call registers a listener for none of `events`: its type is a string literal of another event (the
+    /// argument's literal fact, compared without case), or a plain parameter of the function the call is written in whose
+    /// every call fills it so, or the target is one whose declaration has no place on a DOM path (as
+    /// [`Self::registers_no_click`] reads it).
+    fn registers_none_of(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        events: &[&str],
+    ) -> bool {
+        let other_literal = |argument: &solid_facts::ast::ArgumentFact| {
+            !argument.spread
+                && matches!(&argument.literal_value, solid_facts::ast::ArgumentLiteralFact::String(name)
+                    if !events.iter().any(|event| name.eq_ignore_ascii_case(event)))
+        };
+        let Some(event) = call.arguments.first() else {
+            return false;
+        };
+        other_literal(event)
+            || self.parameter_filled_only_by(file, event.span, &other_literal)
+            || self
+                .resolved_callee_call(file, call.callee)
+                .and_then(crate::runtime_semantics::standard_call_name)
+                .is_some_and(|name| {
+                    name.split('.').next().is_some_and(|target| {
+                        matches!(
+                            target,
+                            "AbortSignal"
+                                | "BroadcastChannel"
+                                | "EventSource"
+                                | "MediaQueryList"
+                                | "MessagePort"
+                                | "WebSocket"
+                                | "Worker"
+                                | "XMLHttpRequest"
+                        )
+                    })
+                })
+    }
+
+    /// ADR 1080: `value` is a plain parameter of the function it is written in (an identifier, no default, never written),
+    /// that function is bound by a name every reference of which, in any file, is the callee of a direct call in this file
+    /// (no copy, export, hand-off or `new`), and every such call passes, at the parameter's position and before any spread,
+    /// an argument `accepted` takes. `@solidjs/router`'s `bindEvent(target, type, handler)` is one, its calls passing
+    /// `"popstate"`, `"hashchange"`, `"scroll"`, `"pagehide"`, `"pageshow"` and `"load"`.
+    fn parameter_filled_only_by(
+        &self,
+        file: &solid_facts::FileFacts,
+        value: Span,
+        accepted: &dyn Fn(&solid_facts::ast::ArgumentFact) -> bool,
+    ) -> bool {
+        let ast = &file.ast;
+        let value = ast.peel_ts_sugar_span(value);
+        let Some(declaration) = ast.reference_declaration(value) else {
+            return false;
+        };
+        let Some(function) = crate::owners::containing_ast_function(ast, value) else {
+            return false;
+        };
+        let Some(index) = function.parameters.iter().position(|parameter| {
+            parameter.shape == solid_facts::ast::BindingShape::Identifier
+                && parameter.initializer.is_none()
+                && parameter.names.first().map(|name| name.span) == Some(declaration)
+        }) else {
+            return false;
+        };
+        if super::binding_written(file, declaration) {
+            return false;
+        }
+        let Some(name) = crate::owners::function_binding_name(file, function) else {
+            return false;
+        };
+        if super::binding_written(file, name.span) {
+            return false;
+        }
+        let Some(symbol) = self.entities.at(file.path.as_str(), name.span) else {
+            return false;
+        };
+        let references = self.symbol_references(symbol.as_ref());
+        let mut calls = 0usize;
+        for reference in references {
+            if reference.path.as_ref() != file.path.as_str() {
+                return false;
+            }
+            let (Ok(start), Ok(end)) = (
+                u32::try_from(reference.start_byte),
+                u32::try_from(reference.end_byte),
+            ) else {
+                return false;
+            };
+            let at = Span::new(start, end);
+            if at == name.span {
+                continue;
+            }
+            let Some(caller) = ast.calls_with_peeled_callee(at).next() else {
+                return false;
+            };
+            if caller.construct
+                || caller
+                    .arguments
+                    .iter()
+                    .take(index + 1)
+                    .any(|argument| argument.spread)
+                || !caller.arguments.get(index).is_some_and(accepted)
+            {
+                return false;
+            }
+            calls += 1;
+        }
+        calls > 0
     }
 
     /// ADR 0639: `site` is written directly in a `createEffect`'s apply. A render
