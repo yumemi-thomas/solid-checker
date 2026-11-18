@@ -71,17 +71,6 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "handed-member-read",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/iteration-written-slots/variants/handed-stored-map/wire.ts",
-      "start": 115,
-      "end": 123,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
       "blocker": "standard-member-impostor",
       "severity": "warning",
       "path": "fixtures/reactive-ir/iteration-written-slots/variants/handed-stored-map/wire.ts",
@@ -104,33 +93,11 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "handed-member-read",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/iteration-written-slots/variants/handed-stored-map/wire.ts",
-      "start": 135,
-      "end": 143,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
       "blocker": "standard-member-impostor",
       "severity": "warning",
       "path": "fixtures/reactive-ir/iteration-written-slots/variants/handed-stored-map/wire.ts",
       "start": 135,
       "end": 143,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "handed-member-dispatch",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/iteration-written-slots/variants/handed-stored-map/wire.ts",
-      "start": 194,
-      "end": 201,
       "fixes": 0
     }
   ]

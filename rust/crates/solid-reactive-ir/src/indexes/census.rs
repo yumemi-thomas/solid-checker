@@ -404,7 +404,7 @@ adapter! {
                 .declarations()
                 .iter()
                 .filter(|declaration| {
-                    declared_in_package(declaration.location.path.as_ref(), packages)
+                    declared_in_package(&lookup.installed_spelling(declaration.location.path.as_ref()), packages)
                 })
                 .map(|declaration| Arc::from(declaration.name.as_ref()))
                 .collect()

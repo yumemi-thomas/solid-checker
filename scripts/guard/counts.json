@@ -9,31 +9,31 @@
   "SC1001 client-root-unproven": 1,
   "SC1001 compiler-refused-file": 1,
   "SC1001 component-identity-unproven": 136,
-  "SC1001 function-run-unplaced": 1500,
+  "SC1001 function-run-unplaced": 1512,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
   "SC1001 mount-form-window": 2,
   "SC1001 no-hydration-subtree": 2,
   "SC1001 package-finding-at-entry": 141,
   "SC1001 package-value-read": 158,
-  "SC1001 read-backing-unproven": 385,
+  "SC1001 read-backing-unproven": 386,
   "SC1001 store-handed-to-package": 1,
   "SC1001 strict-read-unaccounted": 18,
   "SC1001 summary-read-unplaced": 95,
   "SC1001 write-path-read-unproven": 13,
   "SC1002 field-initializer-unplaced": 2,
-  "SC1002 function-run-unplaced": 78,
+  "SC1002 function-run-unplaced": 72,
   "SC1002 function-unentered": 4,
   "SC1002 generator-stepped": 11,
   "SC1002 handed-read-after-await": 189,
   "SC1002 package-finding-at-entry": 17,
   "SC1002 package-operation-after-await": 3,
   "SC1002 parameter-initializer-unplaced": 8,
-  "SC1002 read-after-await-unaccounted": 699,
+  "SC1002 read-after-await-unaccounted": 704,
   "SC1002 search-depth-limit": 1,
   "SC1002 site-reach-undecided": 1,
   "SC1002 tuple-iteration-written": 82,
-  "SC1002 unresolved-invocation": 115,
+  "SC1002 unresolved-invocation": 116,
   "SC1003 destructure-root-unproven": 29,
   "SC1003 package-finding-at-entry": 14,
   "SC1003 props-callers-unenumerated": 18,
@@ -47,7 +47,7 @@
   "SC1007 unchecked-native-handler-value": 2,
   "SC2001 binding-before-initialization": 3,
   "SC2001 component-identity-unproven": 9,
-  "SC2001 function-run-unplaced": 496,
+  "SC2001 function-run-unplaced": 505,
   "SC2001 function-unentered": 12,
   "SC2001 lazy-compute-unread": 7,
   "SC2001 owned-write-option-unread": 4,
@@ -62,7 +62,7 @@
   "SC2002 function-unentered": 2,
   "SC2002 lazy-compute-unread": 1,
   "SC2002 package-finding-at-entry": 72,
-  "SC2002 package-may-call-action": 1229,
+  "SC2002 package-may-call-action": 1231,
   "SC2002 refused-creation-unrun": 1,
   "SC2003 binding-before-initialization": 2,
   "SC2003 build-constant-arm": 2,
@@ -84,7 +84,7 @@
   "SC2005 async-slot-unmodelled": 2,
   "SC2005 computation-error-unobserved": 6,
   "SC2005 function-run-unplaced": 6,
-  "SC2006 flush-in-action-unaccounted": 477,
+  "SC2006 flush-in-action-unaccounted": 480,
   "SC2006 function-run-unplaced": 78,
   "SC2006 package-finding-at-entry": 1,
   "SC2006 parameter-initializer-unplaced": 14,
@@ -94,7 +94,7 @@
   "SC2007 static-source-unproven": 7,
   "SC2008 callee-callback-timing": 1,
   "SC2008 creation-throws-first": 1,
-  "SC2008 flush-in-effect-unaccounted": 508,
+  "SC2008 flush-in-effect-unaccounted": 511,
   "SC2008 function-run-unplaced": 38,
   "SC2008 function-unentered": 5,
   "SC2008 generator-step-unplaced": 6,
@@ -114,7 +114,7 @@
   "SC3001 function-run-unplaced": 35,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 7,
-  "SC3001 leaf-operation-unaccounted": 6829,
+  "SC3001 leaf-operation-unaccounted": 6860,
   "SC3001 leaf-owner-unproven": 67,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
@@ -128,11 +128,11 @@
   "SC4001 handler-member-unresolved": 39,
   "SC4001 handler-spread-unresolved": 59,
   "SC4001 owner-allocation-unproven": 23,
-  "SC4001 owner-callers-unenumerated": 3442,
+  "SC4001 owner-callers-unenumerated": 3468,
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 13,
-  "SC4001 owner-varies-by-caller": 108,
+  "SC4001 owner-varies-by-caller": 109,
   "SC4001 package-finding-at-entry": 68,
   "SC4001 unreached-dead-code": 2,
   "SC4002 component-identity-unproven": 2,
@@ -163,16 +163,16 @@
   "SC5001 source-module-unresolved": 1,
   "SC5001 source-pending-unproven": 341,
   "SC5003 async-options-opaque": 37,
-  "SC5003 async-provenance-unproven": 147,
+  "SC5003 async-provenance-unproven": 146,
   "SC5003 async-read-caught": 4,
   "SC5003 async-read-unaccounted": 351,
   "SC5003 call-attributed-read": 154,
   "SC5003 carrier-run-unproven": 2,
   "SC5003 component-identity-unproven": 1,
   "SC5003 mount-form-window": 2,
-  "SC5003 mount-unresolved": 380,
+  "SC5003 mount-unresolved": 383,
   "SC5003 package-finding-at-entry": 113,
-  "SC5003 pending-read-unresolved": 770,
+  "SC5003 pending-read-unresolved": 772,
   "SC5003 root-mount-pass-unproven": 56,
   "SC5003 server-rendering-unresolved": 1,
   "SC5003 source-module-unresolved": 1,
@@ -188,7 +188,7 @@
   "SC5008 pending-read-unresolved": 23,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5176,
+  "SC6002 effect-creation-unaccounted": 5203,
   "SC6002 effect-owner-unproven": 40,
   "SC6002 function-run-unplaced": 54,
   "SC6002 generator-step-unplaced": 1,
@@ -233,18 +233,18 @@
   "SC9012 dialect-specifier-mapped": 10,
   "SC9012 exported-parameter-member-dispatch": 83,
   "SC9012 forwarded-to-undescribed-callee": 28,
-  "SC9012 function-call-target-unresolved": 9,
+  "SC9012 function-call-target-unresolved": 8,
   "SC9012 function-prototype-callee-unresolved": 2,
-  "SC9012 function-run-unplaced": 2,
-  "SC9012 handed-member-dispatch": 471,
-  "SC9012 handed-member-read": 72,
-  "SC9012 handed-read-after-await": 10,
+  "SC9012 function-run-unplaced": 1,
+  "SC9012 handed-member-dispatch": 458,
+  "SC9012 handed-member-read": 70,
+  "SC9012 handed-read-after-await": 12,
   "SC9012 import-unresolved": 46,
-  "SC9012 installed-member": 135,
+  "SC9012 installed-member": 136,
   "SC9012 leaf-callback-opaque": 170,
   "SC9012 listener-reach": 61,
   "SC9012 package-callee": 26,
-  "SC9012 package-finding-at-entry": 181,
+  "SC9012 package-finding-at-entry": 180,
   "SC9012 parameter-call-argument-unproven": 98,
   "SC9012 parameter-default-unresolved": 5,
   "SC9012 parameter-member-path-unresolved": 21,
@@ -262,15 +262,15 @@
   "SC9012 returned-callable-outside-source-universe": 47,
   "SC9012 search-depth-limit": 6,
   "SC9012 solid-call-rejected-unchecked": 3,
-  "SC9012 standard-member-impostor": 442,
+  "SC9012 standard-member-impostor": 467,
   "SC9012 store-key-undecided": 12,
-  "SC9012 tuple-iteration-written": 1436,
+  "SC9012 tuple-iteration-written": 1438,
   "SC9012 type-only-source": 86,
   "SC9012 value-as-parameter-default": 9,
   "SC9012 value-bound-held": 6,
   "SC9012 value-escaped-from-untrack": 8,
   "SC9012 value-exported-unnamed": 6,
-  "SC9012 value-forwarded": 255,
+  "SC9012 value-forwarded": 272,
   "SC9012 value-from-primitive-callback": 26,
   "SC9012 value-held-in-binding": 121,
   "SC9012 value-held-in-member": 24,
@@ -287,7 +287,7 @@
   "SC9012 value-to-unresolved-callee": 334,
   "SC9012 value-use-unclassified": 50,
   "SC9012 withheld-object-member": 86,
-  "SC9014 dialect-detection": 206,
+  "SC9014 dialect-detection": 207,
   "SC9014 router-release": 4,
   "SC9015 compiler-facts": 4,
   "SC9016 suppression-comments": 4
@@ -3059,6 +3059,354 @@
     "open": "reactive-ir/dead-flush-1068"
    },
    "note": "the apply of an effect whose compute starts with a `throw` is never entered, so its flush runs nowhere: the obligation rows of the call (ADR 0966 accounting) end on that reach, as at any site that never runs"
+  },
+  {
+   "fixture": "uncertifiable-repro/other-rules",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 1071",
+   "proof": "rust/crates/solid-facts/src/ast/visitor.rs::then_callback_names",
+   "fixtures": {
+    "proved": "uncertifiable-repro/other-rules",
+    "open": "uncertifiable-repro/other-rules"
+   }
+  },
+  {
+   "fixture": "uncertifiable-repro/other-rules",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 1071",
+   "proof": "rust/crates/solid-facts/src/ast/visitor.rs::then_callback_names",
+   "fixtures": {
+    "proved": "uncertifiable-repro/other-rules",
+    "open": "uncertifiable-repro/other-rules"
+   }
+  },
+  {
+   "fixture": "reactive-ir/identity-wrapper-rejections",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 6,
+   "to": 5,
+   "adr": "ADR 1071",
+   "proof": "rust/crates/solid-facts/src/ast/visitor.rs::visit_if_statement",
+   "fixtures": {
+    "proved": "reactive-ir/identity-wrapper-rejections",
+    "open": "reactive-ir/identity-wrapper-rejections"
+   }
+  },
+  {
+   "fixture": "reactive-ir/accessor-provenance",
+   "key": "SC5003 async-provenance-unproven",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 1074",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::HANDED_DEPTH",
+   "fixtures": {
+    "proved": "reactive-ir/accessor-provenance",
+    "open": "reactive-ir/accessor-provenance"
+   },
+   "note": "the handed-value walk answered `handed` here only because it ran past six steps; at twelve the same exact steps reach a value no caller supplied (an event parameter, a standard iterator, a closed local literal); the rows the fixture pins stand"
+  },
+  {
+   "fixture": "reactive-ir/flush-holder-alias",
+   "key": "SC9012 handed-member-dispatch",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 1074",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::HANDED_DEPTH",
+   "fixtures": {
+    "proved": "reactive-ir/flush-holder-alias",
+    "open": "reactive-ir/handed-call-results"
+   },
+   "note": "the handed-value walk answered `handed` here only because it ran past six steps; at twelve the same exact steps reach a value no caller supplied (an event parameter, a standard iterator, a closed local literal); the rows the fixture pins stand"
+  },
+  {
+   "fixture": "reactive-ir/impostor-withheld-rows",
+   "key": "SC9012 handed-member-dispatch",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1074",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::HANDED_DEPTH",
+   "fixtures": {
+    "proved": "reactive-ir/impostor-withheld-rows",
+    "open": "reactive-ir/handed-call-results"
+   },
+   "note": "the handed-value walk answered `handed` here only because it ran past six steps; at twelve the same exact steps reach a value no caller supplied (an event parameter, a standard iterator, a closed local literal); the rows the fixture pins stand"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-global-alias-hook",
+   "key": "SC9012 handed-member-dispatch",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1074",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::HANDED_DEPTH",
+   "fixtures": {
+    "proved": "reactive-ir/iteration-written-slots-global-alias-hook",
+    "open": "reactive-ir/handed-call-results"
+   },
+   "note": "the handed-value walk answered `handed` here only because it ran past six steps; at twelve the same exact steps reach a value no caller supplied (an event parameter, a standard iterator, a closed local literal); the rows the fixture pins stand"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-any-default-view",
+   "key": "SC9012 handed-member-dispatch",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1074",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::HANDED_DEPTH",
+   "fixtures": {
+    "proved": "reactive-ir/iteration-written-slots-handed-any-default-view",
+    "open": "reactive-ir/handed-call-results"
+   },
+   "note": "the handed-value walk answered `handed` here only because it ran past six steps; at twelve the same exact steps reach a value no caller supplied (an event parameter, a standard iterator, a closed local literal); the rows the fixture pins stand"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-call",
+   "key": "SC9012 handed-member-dispatch",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1074",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::HANDED_DEPTH",
+   "fixtures": {
+    "proved": "reactive-ir/iteration-written-slots-handed-call",
+    "open": "reactive-ir/handed-call-results"
+   },
+   "note": "the handed-value walk answered `handed` here only because it ran past six steps; at twelve the same exact steps reach a value no caller supplied (an event parameter, a standard iterator, a closed local literal); the rows the fixture pins stand"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-composed-path",
+   "key": "SC9012 handed-member-dispatch",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1074",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::HANDED_DEPTH",
+   "fixtures": {
+    "proved": "reactive-ir/iteration-written-slots-handed-composed-path",
+    "open": "reactive-ir/handed-call-results"
+   },
+   "note": "the handed-value walk answered `handed` here only because it ran past six steps; at twelve the same exact steps reach a value no caller supplied (an event parameter, a standard iterator, a closed local literal); the rows the fixture pins stand"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-global-stored",
+   "key": "SC9012 handed-member-dispatch",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1074",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::HANDED_DEPTH",
+   "fixtures": {
+    "proved": "reactive-ir/iteration-written-slots-handed-global-stored",
+    "open": "reactive-ir/handed-call-results"
+   },
+   "note": "the handed-value walk answered `handed` here only because it ran past six steps; at twelve the same exact steps reach a value no caller supplied (an event parameter, a standard iterator, a closed local literal); the rows the fixture pins stand"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-path-find-open-key",
+   "key": "SC9012 handed-member-dispatch",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1074",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::HANDED_DEPTH",
+   "fixtures": {
+    "proved": "reactive-ir/iteration-written-slots-handed-path-find-open-key",
+    "open": "reactive-ir/handed-call-results"
+   },
+   "note": "the handed-value walk answered `handed` here only because it ran past six steps; at twelve the same exact steps reach a value no caller supplied (an event parameter, a standard iterator, a closed local literal); the rows the fixture pins stand"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-path-find-patched",
+   "key": "SC9012 handed-member-dispatch",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1074",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::HANDED_DEPTH",
+   "fixtures": {
+    "proved": "reactive-ir/iteration-written-slots-handed-path-find-patched",
+    "open": "reactive-ir/handed-call-results"
+   },
+   "note": "the handed-value walk answered `handed` here only because it ran past six steps; at twelve the same exact steps reach a value no caller supplied (an event parameter, a standard iterator, a closed local literal); the rows the fixture pins stand"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-path-find-unguarded",
+   "key": "SC9012 handed-member-dispatch",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1074",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::HANDED_DEPTH",
+   "fixtures": {
+    "proved": "reactive-ir/iteration-written-slots-handed-path-find-unguarded",
+    "open": "reactive-ir/handed-call-results"
+   },
+   "note": "the handed-value walk answered `handed` here only because it ran past six steps; at twelve the same exact steps reach a value no caller supplied (an event parameter, a standard iterator, a closed local literal); the rows the fixture pins stand"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-seen-relay-back",
+   "key": "SC9012 handed-member-dispatch",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1074",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::HANDED_DEPTH",
+   "fixtures": {
+    "proved": "reactive-ir/iteration-written-slots-handed-seen-relay-back",
+    "open": "reactive-ir/handed-call-results"
+   },
+   "note": "the handed-value walk answered `handed` here only because it ran past six steps; at twelve the same exact steps reach a value no caller supplied (an event parameter, a standard iterator, a closed local literal); the rows the fixture pins stand"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-stored-map",
+   "key": "SC9012 handed-member-read",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 1074",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::HANDED_DEPTH",
+   "fixtures": {
+    "proved": "reactive-ir/iteration-written-slots-handed-stored-map",
+    "open": "reactive-ir/handed-call-results"
+   },
+   "note": "the handed-value walk answered `handed` here only because it ran past six steps; at twelve the same exact steps reach a value no caller supplied (an event parameter, a standard iterator, a closed local literal); the rows the fixture pins stand"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-stored-map",
+   "key": "SC9012 handed-member-dispatch",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1074",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::HANDED_DEPTH",
+   "fixtures": {
+    "proved": "reactive-ir/iteration-written-slots-handed-stored-map",
+    "open": "reactive-ir/handed-call-results"
+   },
+   "note": "the handed-value walk answered `handed` here only because it ran past six steps; at twelve the same exact steps reach a value no caller supplied (an event parameter, a standard iterator, a closed local literal); the rows the fixture pins stand"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-timer",
+   "key": "SC9012 handed-member-dispatch",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1074",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::HANDED_DEPTH",
+   "fixtures": {
+    "proved": "reactive-ir/iteration-written-slots-handed-timer",
+    "open": "reactive-ir/handed-call-results"
+   },
+   "note": "the handed-value walk answered `handed` here only because it ran past six steps; at twelve the same exact steps reach a value no caller supplied (an event parameter, a standard iterator, a closed local literal); the rows the fixture pins stand"
+  },
+  {
+   "fixture": "reactive-ir/sloppy-this-dependency",
+   "key": "SC9012 package-finding-at-entry",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1074",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::HANDED_DEPTH",
+   "fixtures": {
+    "proved": "reactive-ir/sloppy-this-dependency",
+    "open": "reactive-ir/package-handed-values"
+   },
+   "note": "the handed-value walk answered `handed` here only because it ran past six steps; at twelve the same exact steps reach a value no caller supplied (an event parameter, a standard iterator, a closed local literal); the rows the fixture pins stand"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc1001",
+   "key": "SC9012 handed-member-dispatch",
+   "from": 11,
+   "to": 9,
+   "adr": "ADR 1074",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::HANDED_DEPTH",
+   "fixtures": {
+    "proved": "uncertifiable-repro/sc1001",
+    "open": "reactive-ir/handed-call-results"
+   },
+   "note": "the handed-value walk answered `handed` here only because it ran past six steps; at twelve the same exact steps reach a value no caller supplied (an event parameter, a standard iterator, a closed local literal); the rows the fixture pins stand"
+  },
+  {
+   "fixture": "reactive-ir/after-await-runner-callback",
+   "key": "SC1002 function-run-unplaced",
+   "from": 3,
+   "to": 1,
+   "adr": "ADR 1073",
+   "proof": "rust/crates/solid-reactive-ir/src/static_rules/handed_compute.rs::handed_compute",
+   "fixtures": {
+    "proved": "reactive-ir/after-await-runner-callback",
+    "open": "reactive-ir/after-await-net"
+   },
+   "note": "the after-await walk started a member for a callback literal a reviewed runner schedules (via `it`); the runner calls it from its own loop (ADR 0438/1004's premise), so it is handed to no computation and the walk's rows for it leave"
+  },
+  {
+   "fixture": "reactive-ir/after-await-runner-callback",
+   "key": "SC9012 function-run-unplaced",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 1073",
+   "proof": "rust/crates/solid-reactive-ir/src/static_rules/handed_compute.rs::handed_compute",
+   "fixtures": {
+    "proved": "reactive-ir/after-await-runner-callback",
+    "open": "reactive-ir/after-await-runner-callback"
+   },
+   "note": "the after-await walk started a member for a callback literal a reviewed runner schedules (via `it`); the runner calls it from its own loop (ADR 0438/1004's premise), so it is handed to no computation and the walk's rows for it leave"
+  },
+  {
+   "fixture": "reactive-ir/after-await-runner-callback",
+   "key": "SC9012 function-call-target-unresolved",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1073",
+   "proof": "rust/crates/solid-reactive-ir/src/static_rules/handed_compute.rs::handed_compute",
+   "fixtures": {
+    "proved": "reactive-ir/after-await-runner-callback",
+    "open": "reactive-ir/read-after-await-reach"
+   },
+   "note": "the after-await walk started a member for a callback literal a reviewed runner schedules (via `it`); the runner calls it from its own loop (ADR 0438/1004's premise), so it is handed to no computation and the walk's rows for it leave"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-async-dispatch",
+   "key": "SC1002 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1073",
+   "proof": "rust/crates/solid-reactive-ir/src/static_rules/handed_compute.rs::handed_compute",
+   "fixtures": {
+    "proved": "reactive-ir/test-runner-vitest-async-dispatch",
+    "open": "reactive-ir/after-await-net"
+   },
+   "note": "the after-await walk started a member for a callback literal a reviewed runner schedules (via `it`); the runner calls it from its own loop (ADR 0438/1004's premise), so it is handed to no computation and the walk's rows for it leave"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-literal-async-component",
+   "key": "SC1002 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1073",
+   "proof": "rust/crates/solid-reactive-ir/src/static_rules/handed_compute.rs::handed_compute",
+   "fixtures": {
+    "proved": "reactive-ir/test-runner-vitest-helper-literal-async-component",
+    "open": "reactive-ir/after-await-net"
+   },
+   "note": "the after-await walk started a member for a callback literal a reviewed runner schedules (via `it`); the runner calls it from its own loop (ADR 0438/1004's premise), so it is handed to no computation and the walk's rows for it leave"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-literal-async-destructured",
+   "key": "SC1002 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1073",
+   "proof": "rust/crates/solid-reactive-ir/src/static_rules/handed_compute.rs::handed_compute",
+   "fixtures": {
+    "proved": "reactive-ir/test-runner-vitest-helper-literal-async-destructured",
+    "open": "reactive-ir/after-await-net"
+   },
+   "note": "the after-await walk started a member for a callback literal a reviewed runner schedules (via `it`); the runner calls it from its own loop (ADR 0438/1004's premise), so it is handed to no computation and the walk's rows for it leave"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-test-only",
+   "key": "SC1002 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1073",
+   "proof": "rust/crates/solid-reactive-ir/src/static_rules/handed_compute.rs::handed_compute",
+   "fixtures": {
+    "proved": "reactive-ir/test-runner-vitest-helper-test-only",
+    "open": "reactive-ir/after-await-net"
+   },
+   "note": "the after-await walk started a member for a callback literal a reviewed runner schedules (via `it`); the runner calls it from its own loop (ADR 0438/1004's premise), so it is handed to no computation and the walk's rows for it leave"
   }
  ],
  "renames": []

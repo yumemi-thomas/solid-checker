@@ -57,17 +57,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "handed-member-dispatch",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/iteration-written-slots/variants/global-alias-hook/patch.ts",
-      "start": 176,
-      "end": 183,
-      "fixes": 0
-    },
-    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",

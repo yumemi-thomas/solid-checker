@@ -1,0 +1,9 @@
+# function-member-read
+
+**Claim (ADR 1062).** The package scan counts a reference of the global `Function` as code generation (`code-generation: Function`), so every package whose closure names it is undecided and each call of it in an owned scope is an SC2002 row. Babel's `_isNativeFunction` helper (`Function.toString.call(fn).indexOf("[native code]")`, in prosemirror-model and many other compiled packages) only reads `Function.prototype.toString` and applies it: the result is a string or a throw, neither of which constructs code. That exact shape (`Function.toString.call(…)` or `.apply(…)`, called at once) and the data members `Function.name` and `Function.length` are now inert, as `Function.prototype` already was.
+
+- **Silent** (`App.tsx`, a call in a `createRoot` body): `fnstrpkg` names `Function` only as `Function.toString.call(fn)`; its closure is clear. Main a3ba1dd92 and fa8f33277 gave the call an SC2002 row (`package-may-call-action:code-generation`).
+- **Uncertifiable** `variants/bind`: `fnbindpkg` is Babel's `_construct` fallback, `Function.bind.apply(fn, a)`; applied to `Function` itself (`Function.bind.apply(Function, [null, "code"])`) that constructs code from a string, and the receiver is a value the scan does not follow, so it stays `package-may-call-action:code-generation`.
+- **Uncertifiable** `variants/held`: `fnheldpkg` hands `Function.toString` on; its `.constructor` is `Function`, so it stays `code-generation`.
+
+Each variant is its own program, so one package's code generation (which also lets it write any global) does not reach the others' calls. The three packages are **not** published bytes: each is written for this fixture, a declaration file and the module the closure walk reads, with a manifest that names no Solid package. `node_modules/solid-js` and `@solidjs/*` are the manifests of `action-in-owned-scope-unread-packages`. `.solid-checker/runtime.json` closes the program boundary.

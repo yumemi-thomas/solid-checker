@@ -1,4 +1,4 @@
-// ADR 0751: `handed_value` follows six member steps to the value a caller supplied; past them the callee may be one,
+// ADR 0751: `handed_value` follows its steps (twelve since ADR 1074) to the value a caller supplied; past them the callee may be one,
 // so a call after an await is an obligation, never clean.
 import { createMemo } from "solid-js";
 

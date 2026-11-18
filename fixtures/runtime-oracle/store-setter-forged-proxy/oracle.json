@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1067 negative: a Proxy forging rc.21's private target protocol is returned unchanged and its real setter forwards the updater's Object.assign to Number. Chrome must observe STRICT_READ_UNTRACKED when the replaced isFinite runs sf1. The checker must retain uncertifiability."
+}

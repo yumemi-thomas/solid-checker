@@ -664,8 +664,10 @@ impl<'a> SemanticLookup<'a> {
             .find(|(export, _)| {
                 !declarations.is_empty()
                     && declarations.iter().all(|declaration| {
-                        declared_in_package(declaration.location.path.as_ref(), packages)
-                            && declaration.name.as_ref() == *export
+                        declared_in_package(
+                            &self.installed_spelling(declaration.location.path.as_ref()),
+                            packages,
+                        ) && declaration.name.as_ref() == *export
                     })
             })?;
         Some(prop)
@@ -712,8 +714,10 @@ impl<'a> SemanticLookup<'a> {
         declarations
             .iter()
             .all(|declaration| {
-                declared_in_package(declaration.location.path.as_ref(), packages)
-                    && declaration.name.as_ref() == export
+                declared_in_package(
+                    &self.installed_spelling(declaration.location.path.as_ref()),
+                    packages,
+                ) && declaration.name.as_ref() == export
             })
             .then_some(export)
     }
