@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { MAIN_SOURCE } from "./checker.mjs";
 
-// ADR 1099: after the settled phase the harness sends the program's own nodes outside #root (and the window's error listeners) the
+// ADR 1101: after the settled phase the harness sends the program's own nodes outside #root (and the window's error listeners) the
 // later events a user or the page would: the oracle in a page module of its own (`laterModule`), the fuzzer's hosts at the same moment.
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (path) => readFileSync(join(here, path), "utf8");
@@ -12,7 +12,7 @@ const oracle = read("../runtime-oracle.mjs");
 const hosts = { chrome: read("chrome-host/runner.tsx"), fast: read("fast/runner.tsx") };
 const LATER_TYPES = ["reset", "formdata", "invalid", "beforetoggle"];
 
-describe("the later events (ADR 1099)", () => {
+describe("the later events (ADR 1101)", () => {
   it("are not in the entry the checker reads: they come from outside the program", () => {
     expect(MAIN_SOURCE).not.toContain("sc-later-error");
     expect(MAIN_SOURCE).not.toContain("document.body.children");

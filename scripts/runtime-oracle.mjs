@@ -252,7 +252,7 @@ const html = `<!doctype html><html><head><meta charset="utf-8"></head><body><div
 const haltModule = `Error.stackTraceLimit = 41;
 import { OBSERVE } from "solid-js";
 OBSERVE?.diagnostics.subscribe((event) => { if (event.code === "REACTIVITY_HALTED" || event.severity === "error") mark(); });
-// ADR 1099: the later error the entry sends the window (message "sc-later-error") is the harness's, no uncaught error.
+// ADR 1101: the later error the entry sends the window (message "sc-later-error") is the harness's, no uncaught error.
 window.addEventListener("error", (event) => { if (event.message !== "sc-later-error") mark(); });
 function mark() {
   if (document.getElementById("sc-halted")) return;
@@ -290,7 +290,7 @@ import("/main.tsx").then(() => show("entered"), () => {
 `;
 const phaseStep = { action: "wait-for-selector", selector: PHASE_SELECTOR };
 
-// ADR 1099: the later events a user or the page sends after the settled phase, to the program's own nodes outside #root (an element
+// ADR 1101: the later events a user or the page sends after the settled phase, to the program's own nodes outside #root (an element
 // it appends to document.body, a portal's mount) and to the window's error listeners. A listener a settled callback fires once (the
 // fuzzer's evt-settled-fire and flw-settled shapes) otherwise never hears another event in a harness that drives #root only, and a
 // violation that holds for that later run reads as a false positive. A page module of its own, loaded after the entry and not in the

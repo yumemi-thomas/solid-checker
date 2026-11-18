@@ -68,13 +68,13 @@ function events() {
   ];
 }
 
-// ADR 1099, as the oracle's later module (scripts/runtime-oracle.mjs `laterModule`): once the settled phase is over, the program's own nodes
+// ADR 1101, as the oracle's later module (scripts/runtime-oracle.mjs `laterModule`): once the settled phase is over, the program's own nodes
 // outside #root get the entry's events and a form's reset and formdata, a control's invalid, a toggle's beforetoggle; the window gets an error.
 const harnessIds = new Set(['root', 'ready', 'sc-halted', 'sc-hits', 'sc-phase', 'oracle-behaviour']);
 const outside = () => Array.from(document.body.children)
   .filter(element => !harnessIds.has(element.id) && element.tagName !== 'SCRIPT')
   .flatMap(element => [element, ...Array.from(element.querySelectorAll('*'))]);
-/** ADR 1099: the message of the later error the harness sends the window; the harness's own error listeners skip it. */
+/** ADR 1101: the message of the later error the harness sends the window; the harness's own error listeners skip it. */
 const LATER_ERROR = 'sc-later-error';
 const LATER_TYPES = ['reset', 'formdata', 'invalid', 'beforetoggle'];
 

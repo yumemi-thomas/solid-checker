@@ -26144,7 +26144,7 @@
  {
   "finding": "a harness artifact read as a false positive: SC7002 at a sync memo in a listener on a node outside #root (or the window's error listener) that an owned onSettled fires synchronously: the harness never sent the later event that runs it with no owner, so Chrome reported only PRIMITIVE_IN_FORBIDDEN_SCOPE",
   "found": "ADR 1052 part 4's ledger (evt-settled-fire-*, flw-settled-form-submit, flw-settled-report-error; coordinator ruling 2026-11-18: V is right, fix the harness)",
-  "fixed": "ADR 1099 (`scripts/runtime-oracle.mjs` `laterModule`; `chrome-host/runner.tsx`, `fast/runner.tsx`)",
+  "fixed": "ADR 1101 (`scripts/runtime-oracle.mjs` `laterModule`; `chrome-host/runner.tsx`, `fast/runner.tsx`)",
   "grid": "mx-census",
   "code": "SYNC_NODE_RECEIVED_ASYNC",
   "ids": [
