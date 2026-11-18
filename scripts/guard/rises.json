@@ -4821,6 +4821,22 @@
    "to": 2,
    "adr": "ADR 1104",
    "fact": "part 1: a read through a carrier has a row at the read; fixture snapshots gain uncertifiable rows only (none removed), two held repro cases expect the new rows"
+  },
+  {
+   "fixture": "reactive-ir/project-callback-uses",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 43,
+   "to": 44,
+   "adr": "ADR 1104",
+   "fact": "1b: project-callback-uses String(value()) keeps SC3001/SC6002 uncertifiable instead of an SC9012 at the call (relabel, drops row)"
+  },
+  {
+   "fixture": "reactive-ir/project-callback-uses",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 28,
+   "to": 29,
+   "adr": "ADR 1104",
+   "fact": "1b: project-callback-uses String(value()) keeps SC3001/SC6002 uncertifiable instead of an SC9012 at the call (relabel, drops row)"
   }
  ]
 }
