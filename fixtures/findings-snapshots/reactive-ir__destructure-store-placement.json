@@ -1,0 +1,91 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructure-store-placement/App.tsx",
+      "start": 435,
+      "end": 440,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructure-store-placement/App.tsx",
+      "start": 652,
+      "end": 657,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "blocker": "props-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructure-store-placement/App.tsx",
+      "start": 915,
+      "end": 920,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "blocker": "props-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructure-store-placement/App.tsx",
+      "start": 1170,
+      "end": 1175,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "blocker": "props-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructure-store-placement/App.tsx",
+      "start": 1453,
+      "end": 1458,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "blocker": "props-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructure-store-placement/App.tsx",
+      "start": 1822,
+      "end": 1827,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "blocker": "props-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructure-store-placement/App.tsx",
+      "start": 2091,
+      "end": 2096,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "withheld-object-member",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/destructure-store-placement/App.tsx",
+      "start": 2173,
+      "end": 2183,
+      "fixes": 0
+    }
+  ]
+}
