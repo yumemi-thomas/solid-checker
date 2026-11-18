@@ -1,0 +1,4 @@
+{
+  "note": "ADR 1099 twin: the helper is also handed to runWithOwner from a second button, so a delivery may carry the component's owner (Chrome: ContextNotFoundError from that click, NoOwnerError from the apply and a direct click); the checker keeps the handler open (SC4001 and SC4002 uncertifiable).",
+  "steps": []
+}

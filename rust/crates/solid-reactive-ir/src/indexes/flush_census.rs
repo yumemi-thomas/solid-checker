@@ -102,6 +102,67 @@ impl<'a> SemanticLookup<'a> {
         self.flush_sites().iter().any(FlushSite::vetoes)
     }
 
+    /// ADR 1099: whether project code (not a package analyzed as source, whose flushes are ADR 0613's premise) may drain the
+    /// queue from a stack with an owner: a call of a primitive that drains it on its caller's stack whose written position
+    /// names no ownerless caller ([`Self::dispatch_caller`], which reads no event proof), or any other reference to one
+    /// (handed to code nothing follows). The census's sites before the event-handler caller each asks: that question reads
+    /// the dispatch veto, which reads this, never [`Self::flush_drains_under_owner`]. Read only inside
+    /// [`Self::dispatch_veto`], whose memo reads the whole program and binds the answer; it notes no section.
+    pub(crate) fn flush_referenced(&self) -> bool {
+        *self.flush_referenced.get_or_init(|| {
+            crate::base::reads::suppress(|| {
+                let drains = |primitive: solid_dialect::Primitive| {
+                    self.dialect.drains_queue_on_caller_stack(primitive)
+                };
+                if !self
+                    .project_primitives()
+                    .iter()
+                    .any(|primitive| drains(*primitive))
+                {
+                    return false;
+                }
+                self.file_slots().iter().any(|file| {
+                    if self
+                        .facts
+                        .dependency_source_root(file.path.as_str())
+                        .is_some()
+                    {
+                        return false;
+                    }
+                    let calls = file
+                        .ast
+                        .calls
+                        .iter()
+                        .filter(|call| self.primitive_at_call(file, call.span).is_some_and(drains))
+                        .collect::<Vec<_>>();
+                    calls
+                        .iter()
+                        .any(|call| self.dispatch_caller(file, call).is_none())
+                        || file
+                            .ast
+                            .reference_declarations
+                            .iter()
+                            .map(|(reference, _)| *reference)
+                            .chain(file.ast.members.iter().map(|member| member.span))
+                            .any(|reference| {
+                                !calls.iter().any(|call| {
+                                    file.ast.peel_ts_sugar_span(call.callee) == reference
+                                }) && crate::referenced_primitive(
+                                    file,
+                                    reference,
+                                    self.entities,
+                                    self.symbol_names,
+                                    self.dialect,
+                                )
+                                .as_ref()
+                                .and_then(crate::PrimitiveName::primitive)
+                                .is_some_and(drains)
+                            })
+                })
+            })
+        })
+    }
+
     /// Every reference of the program to the flush primitive, classified.
     pub(crate) fn flush_sites(&self) -> &[FlushSite] {
         self.synchronous_flush.get_or_init(|| {

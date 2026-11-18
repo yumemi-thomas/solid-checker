@@ -9,7 +9,7 @@
   "SC1001 client-root-unproven": 1,
   "SC1001 compiler-refused-file": 1,
   "SC1001 component-identity-unproven": 136,
-  "SC1001 function-run-unplaced": 1513,
+  "SC1001 function-run-unplaced": 1512,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
   "SC1001 mount-form-window": 2,
@@ -47,7 +47,7 @@
   "SC1007 unchecked-native-handler-value": 2,
   "SC2001 binding-before-initialization": 3,
   "SC2001 component-identity-unproven": 9,
-  "SC2001 function-run-unplaced": 510,
+  "SC2001 function-run-unplaced": 509,
   "SC2001 function-unentered": 12,
   "SC2001 lazy-compute-unread": 7,
   "SC2001 owned-write-option-unread": 4,
@@ -84,7 +84,7 @@
   "SC2005 async-slot-unmodelled": 2,
   "SC2005 computation-error-unobserved": 6,
   "SC2005 function-run-unplaced": 6,
-  "SC2006 flush-in-action-unaccounted": 472,
+  "SC2006 flush-in-action-unaccounted": 473,
   "SC2006 function-run-unplaced": 45,
   "SC2006 package-finding-at-entry": 1,
   "SC2006 parameter-initializer-unplaced": 14,
@@ -98,7 +98,7 @@
   "SC2008 function-run-unplaced": 38,
   "SC2008 function-unentered": 5,
   "SC2008 generator-step-unplaced": 6,
-  "SC2008 handler-dispatch-unproven": 23,
+  "SC2008 handler-dispatch-unproven": 24,
   "SC2008 package-finding-at-entry": 9,
   "SC2008 package-operation-in-effect-apply": 1,
   "SC2008 parameter-initializer-unplaced": 11,
@@ -114,7 +114,7 @@
   "SC3001 function-run-unplaced": 34,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 7,
-  "SC3001 leaf-operation-unaccounted": 6821,
+  "SC3001 leaf-operation-unaccounted": 6826,
   "SC3001 leaf-owner-unproven": 67,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
@@ -128,18 +128,18 @@
   "SC4001 handler-member-unresolved": 39,
   "SC4001 handler-spread-unresolved": 59,
   "SC4001 owner-allocation-unproven": 23,
-  "SC4001 owner-callers-unenumerated": 3487,
+  "SC4001 owner-callers-unenumerated": 3491,
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 13,
-  "SC4001 owner-varies-by-caller": 109,
+  "SC4001 owner-varies-by-caller": 112,
   "SC4001 package-finding-at-entry": 68,
   "SC4001 unreached-dead-code": 2,
   "SC4002 component-identity-unproven": 2,
   "SC4002 computation-error-unobserved": 31,
   "SC4002 function-unentered": 4,
   "SC4002 lazy-compute-unread": 2,
-  "SC4002 owner-unproven": 5,
+  "SC4002 owner-unproven": 8,
   "SC4002 package-finding-at-entry": 29,
   "SC4002 provider-not-proven-above": 198,
   "SC4002 unreached-dead-code": 10,
@@ -188,7 +188,7 @@
   "SC5008 pending-read-unresolved": 23,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5223,
+  "SC6002 effect-creation-unaccounted": 5227,
   "SC6002 effect-owner-unproven": 44,
   "SC6002 function-run-unplaced": 56,
   "SC6002 generator-step-unplaced": 1,
@@ -4010,6 +4010,58 @@
    "kind": "relabel",
    "relabeledTo": "SC2006 flush-in-action-unaccounted",
    "note": "the program names no primitive that steps an action once the namespace import names only the members it reads, so SC2006's producer leaves the flush to the flush accounting, which keeps it uncertifiable under its own blocker (a package may run the function); still uncertifiable"
+  },
+  {
+   "fixture": "reactive-ir/rc21-created-anchor-listener",
+   "key": "SC2001 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1099",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes/event_delivery.rs::created_element_unattached_to_a_listener",
+   "fixtures": {
+    "proved": "reactive-ir/rc21-created-anchor-listener",
+    "open": "reactive-ir/rc21-created-anchor-host-handler"
+   },
+   "note": "the created anchor's click and remove deliver only along its own path (anchor, body, html), which holds no JSX element, so the counter handler's owner and read proofs no longer wait on them; the handler runs from a user click, with no owner and no strict-read window"
+  },
+  {
+   "fixture": "reactive-ir/rc21-created-anchor-listener",
+   "key": "SC1001 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1099",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes/event_delivery.rs::created_element_unattached_to_a_listener",
+   "fixtures": {
+    "proved": "reactive-ir/rc21-created-anchor-listener",
+    "open": "reactive-ir/rc21-created-anchor-host-handler"
+   },
+   "note": "the created anchor's click and remove deliver only along its own path (anchor, body, html), which holds no JSX element, so the counter handler's owner and read proofs no longer wait on them; the handler runs from a user click, with no owner and no strict-read window"
+  },
+  {
+   "fixture": "reactive-ir/rc21-created-anchor-removed",
+   "key": "SC2001 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1099",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes/event_delivery.rs::created_element_unattached_to_a_listener",
+   "fixtures": {
+    "proved": "reactive-ir/rc21-created-anchor-removed",
+    "open": "reactive-ir/rc21-created-anchor-host-handler"
+   },
+   "note": "the created anchor's click and remove deliver only along its own path (anchor, body, html), which holds no JSX element, so the counter handler's owner and read proofs no longer wait on them; the handler runs from a user click, with no owner and no strict-read window"
+  },
+  {
+   "fixture": "reactive-ir/rc21-created-anchor-removed",
+   "key": "SC1001 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1099",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes/event_delivery.rs::created_element_unattached_to_a_listener",
+   "fixtures": {
+    "proved": "reactive-ir/rc21-created-anchor-removed",
+    "open": "reactive-ir/rc21-created-anchor-host-handler"
+   },
+   "note": "the created anchor's click and remove deliver only along its own path (anchor, body, html), which holds no JSX element, so the counter handler's owner and read proofs no longer wait on them; the handler runs from a user click, with no owner and no strict-read window"
   }
  ],
  "renames": []

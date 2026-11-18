@@ -18,12 +18,19 @@ pub(crate) enum DispatchReceiver {
     /// or the root element, on a path nothing in the program listens on
     /// (ADR 0640).
     NoListener,
+    /// ADR 1099: a click (or `remove()`) of an anchor the function creates and appends to `document.body` or the root element (ADR 0640) in a
+    /// program that listens for `click`: its path holds no JSX element, so it reaches no element handler (Solid's delegated
+    /// handler walks the target's path), while a listener on `document` or `window` still hears it.
+    NoElementHandler,
 }
 
 impl DispatchReceiver {
     /// A receiver that cannot reach an element handler.
     const fn excluded(self) -> bool {
-        matches!(self, Self::Window | Self::Document | Self::NoListener)
+        matches!(
+            self,
+            Self::Window | Self::Document | Self::NoListener | Self::NoElementHandler
+        )
     }
 }
 
@@ -84,9 +91,12 @@ pub(crate) struct DispatchSite {
 
 impl DispatchSite {
     /// Whether the site withholds ownerless event proofs (owner and write
-    /// roles): a delivery can inherit its caller's owner.
+    /// roles): a delivery can inherit its caller's owner. ADR 1099: an effect's apply runs from the queue's flush with no owner of
+    /// its own (rc.21 `@solidjs/signals` runs `_effectFn` under no `runWithOwner`), so its delivery carries an owner only where a
+    /// flush drains under one: [`Self::delivers_in_effect_apply`] with `SemanticLookup::flush_referenced`
+    /// (the owner bit of `SemanticLookup::dispatch_veto`).
     pub(crate) const fn withholds_owner_proofs(&self) -> bool {
-        !self.receiver.excluded() && matches!(self.caller, None | Some(DispatchCaller::EffectApply))
+        !self.receiver.excluded() && self.caller.is_none()
     }
 
     /// Whether the site withholds an event handler's untracked-read proof: a
@@ -357,12 +367,17 @@ impl SemanticLookup<'_> {
             return (false, false, false, false, false);
         }
         let sites = self.event_dispatch_sites();
+        let delivers_in_effect_apply = sites.iter().any(DispatchSite::delivers_in_effect_apply);
         (
-            sites.iter().any(DispatchSite::withholds_owner_proofs),
+            // ADR 1099: an apply's delivery has an owner only when a flush drains the queue under one. The flush census
+            // asks this answer (its sites' callers), so the owner bit takes the answer before it
+            // (`SemanticLookup::flush_referenced`), inside this memo.
+            sites.iter().any(DispatchSite::withholds_owner_proofs)
+                || (delivers_in_effect_apply && self.flush_referenced()),
             sites.iter().any(DispatchSite::withholds_read_proofs),
             sites.iter().any(DispatchSite::withholds_flush_proofs),
             sites.iter().any(DispatchSite::withholds_listener_proofs),
-            sites.iter().any(DispatchSite::delivers_in_effect_apply),
+            delivers_in_effect_apply,
         )
     }
 
@@ -384,10 +399,12 @@ impl SemanticLookup<'_> {
                         DispatchReceiver::Window => "window",
                         DispatchReceiver::Document => "document",
                         DispatchReceiver::NoListener => "no listener",
+                        DispatchReceiver::NoElementHandler => "no element handler",
                     }
                     .to_owned(),
                     caller: site.caller.map(|caller| caller.word().to_owned()),
-                    withholds_owner_proofs: site.withholds_owner_proofs(),
+                    withholds_owner_proofs: site.withholds_owner_proofs()
+                        || (site.delivers_in_effect_apply() && self.flush_referenced()),
                     withholds_read_proofs: site.withholds_read_proofs(),
                 })
             })
@@ -477,18 +494,32 @@ impl SemanticLookup<'_> {
                                 receiver: DispatchReceiver::Unknown,
                                 caller: self
                                     .dispatch_caller(file, call)
-                                    .or_else(|| self.dispatch_in_effect_apply(file, call.span)),
+                                    .or_else(|| self.dispatch_in_effect_apply(file, call.span))
+                                    .or_else(|| {
+                                        self.dispatch_in_effect_apply_helper(file, call.span)
+                                    }),
                             });
                         }
                         continue;
                     };
                     let receiver = match name {
-                        "HTMLElement.click"
-                            if self.created_element_unattached_to_a_listener(file, call)
-                                && !*click_listener
-                                    .get_or_insert_with(|| self.program_listens_for_click()) =>
+                        // ADR 1099: removing the created anchor delivers only to its own path
+                        // (the anchor, then the root): no element handler either.
+                        "ChildNode.remove"
+                            if self.created_element_unattached_to_a_listener(file, call) =>
                         {
-                            DispatchReceiver::NoListener
+                            DispatchReceiver::NoElementHandler
+                        }
+                        "HTMLElement.click"
+                            if self.created_element_unattached_to_a_listener(file, call) =>
+                        {
+                            if *click_listener
+                                .get_or_insert_with(|| self.program_listens_for_click())
+                            {
+                                DispatchReceiver::NoElementHandler
+                            } else {
+                                DispatchReceiver::NoListener
+                            }
                         }
                         // ADR 1080: a navigation delivers only the event types the host fact names (`History.go` and
                         // `Location.reload`: `beforeunload`; `Location.assign` and `Location.replace`: `beforeunload`, and
@@ -512,7 +543,8 @@ impl SemanticLookup<'_> {
                         receiver,
                         caller: self
                             .dispatch_caller(file, call)
-                            .or_else(|| self.dispatch_in_effect_apply(file, call.span)),
+                            .or_else(|| self.dispatch_in_effect_apply(file, call.span))
+                            .or_else(|| self.dispatch_in_effect_apply_helper(file, call.span)),
                     });
                 }
             }
@@ -552,7 +584,7 @@ impl SemanticLookup<'_> {
             })
     }
 
-    /// ADR 0640: the receiver of this `click()` is a `const` the function fills
+    /// ADR 0640: the receiver of this `click()` (ADR 1099: or `remove()`) is a `const` the function fills
     /// from `document.createElement("a")`, and every use of it is a property write
     /// (no `on*`), `click()`, `remove()`, or the argument of an append to
     /// `document.body` or the root element. Its path holds no JSX element.
@@ -921,6 +953,51 @@ impl SemanticLookup<'_> {
                         == Some(index)
             }))
         .then_some(DispatchCaller::EffectApply)
+    }
+
+    /// ADR 1099: `site` belongs directly to a `const` arrow or function expression (not a generator) declared inside a
+    /// function body, so no other module names it, and every reference to that binding is the callee of a call an
+    /// effect's apply makes directly ([`Self::dispatch_in_effect_apply`]): the helper runs only on the apply's stack. A
+    /// helper never called, or read any other way (an argument, `.call`, `new`), is no answer.
+    fn dispatch_in_effect_apply_helper(
+        &self,
+        file: &solid_facts::FileFacts,
+        site: Span,
+    ) -> Option<DispatchCaller> {
+        let ast = &file.ast;
+        let helper = ast.innermost_function_owning(site)?;
+        if helper.generator {
+            return None;
+        }
+        let binding = ast.bindings.iter().find(|binding| {
+            binding.immutable
+                && binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding
+                    .initializer
+                    .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == helper.span)
+        })?;
+        if binding.names.len() != 1 || !ast.any_function_body_containing(binding.declaration) {
+            return None;
+        }
+        let declared = binding.names[0].span;
+        let mut references = ast
+            .identifiers
+            .iter()
+            .filter(|identifier| {
+                identifier.span != declared
+                    && ast.reference_declaration(identifier.span) == Some(declared)
+            })
+            .peekable();
+        references.peek()?;
+        references
+            .all(|identifier| {
+                let mut calls = ast.calls_with_peeled_callee(identifier.span);
+                calls
+                    .next()
+                    .is_some_and(|call| self.dispatch_in_effect_apply(file, call.span).is_some())
+                    && calls.next().is_none()
+            })
+            .then_some(DispatchCaller::EffectApply)
     }
 
     /// `window.dispatchEvent(…)` and `document.dispatchEvent(…)` where the

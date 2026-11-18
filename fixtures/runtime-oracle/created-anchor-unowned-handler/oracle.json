@@ -1,0 +1,4 @@
+{
+  "note": "ADR 1099: a created anchor appended to body is clicked and removed during render; its path holds no JSX element, so the button's handler runs only from a later click, with no owner: NoOwnerError, SC4001 violation, no SC4002. Generated program mx-context-not-found-evt-created-anchor-* (differential fuzzer).",
+  "steps": []
+}
