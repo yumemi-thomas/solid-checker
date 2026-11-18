@@ -7850,7 +7850,12 @@ impl LocalAccessContext<'_, '_> {
                     );
                     return;
                 }
-                if !(unplaced || placed_nowhere(file, member.span, self.lookup)) {
+                // ADR 1103: the silence rests on the summaries claiming the read at the call edges into the function around it, or
+                // (ADR 0936) into the named function around an anonymous one. An anonymous function handed whole to a call that is no
+                // primitive's (`h1(() => props.m1)` in `const dir1 = () => …`) is entered by that call, and no summary carries its reads
+                // to `dir1()`: the read has no row anywhere, so it is unplaced, never placed elsewhere.
+                let handed_literal = handed_anonymous_literal(file, member.span, self.lookup);
+                if !(unplaced || handed_literal || placed_nowhere(file, member.span, self.lookup)) {
                     let ends_before = result.ends.len();
                     result.ends.end_with(
                         file,
@@ -7877,7 +7882,9 @@ impl LocalAccessContext<'_, '_> {
                     || {
                         format!(
                             "cause|read-unknown|member|{}",
-                            if gate_refuses {
+                            if handed_literal {
+                                "handed-literal"
+                            } else if gate_refuses {
                                 "gate-refuses"
                             } else if unplaced {
                                 "handed-unplaced"
@@ -9625,6 +9632,27 @@ pub(crate) fn nested_named_function(
             !lookup.function_may_be_component(file, function)
                 && function_binding_name(file, function).is_some()
         })
+}
+
+/// ADR 1103: whether the function written directly around `span` is an anonymous function literal (no name, no binding)
+/// handed whole as an argument to a call that is no primitive's: that call enters it, not the named function around it, so
+/// ADR 0936's fallback to the named function's call edges does not place it.
+pub(crate) fn handed_anonymous_literal(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    containing_ast_function(&file.ast, span).is_some_and(|function| {
+        function.name.is_none()
+            && function_binding_name(file, function).is_none()
+            && file
+                .ast
+                .arguments_containing(function.span)
+                .any(|(call, index)| {
+                    file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
+                        && lookup.primitive_at_call(file, call.span).is_none()
+                })
+    })
 }
 
 /// ADR 0535: whether `span` is in a non-component function written as a
