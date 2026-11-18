@@ -4,10 +4,11 @@ const [count] = createSignal(0);
 const pause = () => Promise.resolve();
 const peek = () => count();
 
-// ADR 1090 (G1 residual): rc.21 raises UNTRACKED_READ_AFTER_AWAIT only for a read whose V8 async stack holds the frame that awaits an async computation's returned promise
+// ADR 1090 (G1 residual, not built): rc.21 raises UNTRACKED_READ_AFTER_AWAIT only for a read whose V8 async stack holds the frame that awaits an async computation's returned promise
 // (`attributedFlight`). The async stack is the chain of code awaiting the current promise, so a function whose promise nothing consumes cannot carry that frame.
 
-// Clean: a named async function every reference of which is a discarded direct call, whose site is a direct read of an exact accessor.
+// Uncertifiable (ADR 1090 G1 not built): a named async function every reference of which is a discarded direct call, the site a direct read.
+// No reason ends it: rc.21 attributes a read to a flight by the frame's name and stack, which a discarded call does not bound (fourth review, I1-I3).
 const fire = async () => {
   await pause();
   count();

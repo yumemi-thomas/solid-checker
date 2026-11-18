@@ -317,7 +317,7 @@ pub(super) fn is_unpatched_ecmascript_global(
 }
 
 /// Whether `argument` cannot carry project code onto this stack (module docs). `behavior` is the audited table's answer for the argument's slot, when the call is exactly resolved.
-pub(super) fn argument_is_inert(
+fn argument_is_inert(
     ctx: &AnalysisContext<'_>,
     file: &FileFacts,
     argument: &ArgumentFact,
