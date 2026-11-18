@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
-import { DEFAULT_GRIDS, GRIDS, HOST_LIMIT, SMOKE_LEGS, diskFilled, hostArgs, hostLimits, noRoom, parse, readGrid, roleLogPath, roomAt, runGridProcess, unitPlaces, unitProblems } from "./focus.mjs";
+import { DEFAULT_GRIDS, GRIDS, HOST_LIMIT, SMOKE_LEGS, diskFilled, hostArgs, hostLimits, noRoom, parse, plannedLines, readGrid, roleLogPath, roomAt, runGridProcess, unitPlaces, unitProblems } from "./focus.mjs";
 
 describe("hostLimits", () => {
   it("caps every pool by default, on any machine, and takes every core only when named", () => {
@@ -176,5 +176,27 @@ describe("a full recall grid is split by code", () => {
     expect(splitsRecall("mx-recall", {})).toBe(false);
     expect(splitsRecall("mx-recall", { recallFull: true, smoke: true })).toBe(false);
     expect(splitsRecall("mx-pairs", { recallFull: true })).toBe(false);
+  });
+});
+
+describe("--sample outside --smoke", () => {
+  it("samples every grid of a focus run, the recall grids included, with a seed of its own (it used to be read by the smoke only)", () => {
+    const options = parse(["--codes", "STORE_WRITE_OUTSIDE_SETTER", "--grids", "mx-recall,lg-recall", "--sample", "0.05"]);
+    expect(options.gridSampleAll).toBe("0.05");
+    expect(options.gridSampleSeed).toBe("1");
+    expect(parse(["--codes", "A", "--sample", "0.05", "--sample-seed", "7"]).gridSampleSeed).toBe("7");
+    // The default (the smoke's 0.015) samples nothing in a focus run that does not ask for it.
+    expect(parse(["--codes", "A"]).gridSampleAll).toBeUndefined();
+    expect(parse(["--smoke"]).gridSampleAll).toBeUndefined();
+  });
+  it("refuses a fraction out of range and --sample beside --sample-big", () => {
+    expect(() => parse(["--codes", "A", "--sample", "5"])).toThrow(/--sample takes a fraction/);
+    expect(() => parse(["--codes", "A", "--sample", "0.1", "--sample-big", "0.2"])).toThrow(/give one/);
+  });
+  it("prints the programs a run will judge before it starts, per grid, and what a sample keeps", () => {
+    const lines = plannedLines({ grids: ["mx-recall"], codes: ["STORE_WRITE_OUTSIDE_SETTER"], sample: "0.05" });
+    expect(lines[0]).toMatch(/^fuzz-focus: [\d,]+ program\(s\) planned, a stratified sample of about 0\.05 of each/);
+    expect(lines[1]).toMatch(/^ {2}mx-recall: [\d,]+ program\(s\) \(recall lean\)$/);
+    expect(Number(lines[1].match(/([\d,]+) program/)[1].replaceAll(",", ""))).toBeGreaterThan(0);
   });
 });

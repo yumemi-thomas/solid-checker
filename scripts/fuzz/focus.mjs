@@ -55,6 +55,7 @@ import { fileURLToPath } from "node:url";
 import { rowProblem } from "./codes.mjs";
 import { gridStanding, heldLine, ledgerCovers, manifestIds, offLedger, readOpenDefects } from "./open-defects.mjs";
 import { GRIDS, SMOKE_LEGS } from "./focus-grids.mjs";
+import { gridCount } from "./grid-ids.mjs";
 import { legalCells, pairLegalCells } from "./legal.mjs";
 import { cellList, censusCells } from "./matrix.mjs";
 import { FIXED_SEED, wholeGrid, writeSample } from "./cover.mjs";
@@ -252,6 +253,18 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
   };
   export const hostArgs = (options = {}) => [...hostLimits(options), "--fast-host", "chrome", "--chrome-pages", "reuse", "--chrome-clock", "virtual-time", "--executor", "rust", ...(options.noWarmChecker ? ["--no-warm-checker"] : options.warmChecker ? ["--warm-checker"] : [])];
 
+  /** The lines focus prints before it starts: each grid's program count for the run's codes, and what a sample keeps of it. */
+  export function plannedLines({ grids, codes, full = false, sample, sampleBig }) {
+    let total = 0;
+    const lines = grids.map((grid) => {
+      const count = gridCount(grid, codes, { full: full && grid.endsWith("-recall") });
+      total += count;
+      return `  ${grid}: ${count.toLocaleString("en-US")} program(s)${grid.endsWith("-recall") ? (full ? " (recall full)" : " (recall lean)") : ""}`;
+    });
+    const share = sample !== undefined ? `, a stratified sample of about ${sample} of each (at least one per stratum)` : sampleBig !== undefined ? `, the big codes sampled at ${sampleBig}` : "";
+    return [`fuzz-focus: ${total.toLocaleString("en-US")} program(s) planned${share}`, ...lines];
+  }
+
   export function parse(argv) {
     const split = argv.indexOf("--");
     const own = split < 0 ? argv : argv.slice(0, split);
@@ -268,6 +281,14 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     if (options.rolesAgainst && !options.roleLog) throw new Error("focus.mjs: --roles-against needs --role-log");
     // A smoke manifest names one grid's programs across its codes: a per-code process would not generate them all.
     if (options.splitCodes && options.smoke) throw new Error("focus.mjs: --split-codes does not apply to --smoke (a smoke grid is small)");
+    // `--sample <fraction>` outside `--smoke`: every grid's stratified sample of every code (sample.mjs, the recall grids included). It was
+    // read by the smoke only, so a focus run ignored it and judged its whole grids (252,760 mx-recall programs for a 0.05 sample).
+    if (!options.smoke && own.includes("--sample")) {
+      if (options.sampleBig !== undefined) throw new Error("focus.mjs: --sample samples every code; --sample-big samples some: give one");
+      if (!(Number(options.sample) > 0 && Number(options.sample) <= 1)) throw new Error(`focus.mjs: --sample takes a fraction in (0, 1], not ${options.sample}`);
+      options.gridSampleAll = options.sample;
+      options.gridSampleSeed = own.includes("--sample-seed") ? options.sampleSeed : "1";
+    }
     if (options.sampleBig !== undefined) {
       if (options.smoke) throw new Error("focus.mjs: --sample-big does not apply to --smoke (a smoke manifest names its programs)");
       if (!(Number(options.sampleBig) > 0 && Number(options.sampleBig) <= 1)) throw new Error(`focus.mjs: --sample-big takes a fraction in (0, 1], not ${options.sampleBig}`);
@@ -356,7 +377,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     const host = [...hostArgs(options), ...oracle, ...(options.oracleCap ? ["--runtime-diff-cap", options.oracleCap] : [])];
     // `--sample-big`: the grids' stratified sample of the big codes (sample.mjs); the others stay whole.
     const sampleCodes = options.sampleCodes ? options.sampleCodes.split(",") : BIG_CODES;
-    const sampled = options.sampleBig === undefined ? [] : ["--grid-sample", options.sampleBig, "--grid-sample-codes", sampleCodes.join(","), "--grid-sample-seed", options.sampleBigSeed ?? "1", "--grid-sample-min", options.sampleBigMin ?? "1"];
+    const sampled = options.gridSampleAll !== undefined ? ["--grid-sample", options.gridSampleAll, "--grid-sample-seed", options.gridSampleSeed, "--grid-sample-min", "1"] : options.sampleBig === undefined ? [] : ["--grid-sample", options.sampleBig, "--grid-sample-codes", sampleCodes.join(","), "--grid-sample-seed", options.sampleBigSeed ?? "1", "--grid-sample-min", options.sampleBigMin ?? "1"];
     // `--shard i/N`: every grid keeps its part i of N (shard.mjs); the N parts of a run are the whole run.
     const shardArgs = options.shard === undefined ? [] : ["--grid-shard", options.shard];
     const budgetArgs = [...(options.budgetMs ? ["--budget-ms", options.budgetMs] : []), ...(options.budgetMb ? ["--budget-mb", options.budgetMb] : [])];
@@ -378,6 +399,8 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     console.log(`fuzz-${options.smoke ? "smoke" : "focus"}: codes ${options.codes}; output ${out}${options.smoke ? `; sample ${options.sample} of the other programs, seed ${options.sampleSeed} (--sample-seed ${options.sampleSeed} repeats it)` : ""}${sampled.length ? `; SAMPLED: ${options.sampleBig} of every stratum of ${sampleCodes.join(", ")} (seed ${options.sampleBigSeed ?? "1"}, at least ${options.sampleBigMin ?? "1"} each), not a full run` : ""}${options.shard === undefined ? "" : `; SHARD ${options.shard} of every grid, one part of the run`}`);
     // `--codes all`: every code (the full grids); `--runtime-diff 0`: no oracle sample.
     const codes = options.codes === "all" ? undefined : options.codes.split(",");
+    // What the run will judge, before it starts: each grid's programs for these codes (the ids, no program generated), and the sample's share.
+    if (!options.smoke) console.log(plannedLines({ grids: options.grids.split(","), codes, full: Boolean(options.recallFull), sample: options.gridSampleAll, sampleBig: options.sampleBig }).join("\n"));
     // One grid process: its output streamed to `<dir>.log`, a deadline, then its rows judged.
     const provedLedger = readLedger(), provedChanges = readChanges();
     const covered = options.cover ? writeSample({ perCode: options.cover === "per-code", seed: Number(options.coverSeed ?? FIXED_SEED), grids: (options.coverGrids ?? options.grids).split(",").filter((grid) => !wholeGrid(grid, options.cover)), runSeed: options.seed, dir: join(out, "cover") }) : null;
@@ -403,7 +426,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       if (roles) { mkdirSync(dirname(roles), { recursive: true }); rmSync(roles, { force: true }); }
       const env = roles ? { ...process.env, SOLID_CHECKER_IR_ROLE_LOG: roles } : process.env;
       // A unit with none of the sampled codes runs whole without the flag (its report then says nothing of a sample).
-      const unitSampled = sampled.length && (!unit.codes || unit.codes.some((code) => sampleCodes.includes(code))) ? sampled : [];
+      const unitSampled = sampled.length && (options.gridSampleAll !== undefined || !unit.codes || unit.codes.some((code) => sampleCodes.includes(code))) ? sampled : [];
       const run = runGridProcess(join(here, script), ["--seed", options.seed, "--grid", ...shape, ...select, ...unitSampled, ...shardArgs, ...budgetArgs, ...recallArgs, "--out", unit.dir, ...(unitScratch ? ["--scratch", unitScratch] : []), ...tools, ...unitHost, ...options.extra], { logPath, timeoutMs: Number(options.gridTimeout ?? 120) * 60_000, heapMb: heap, env });
       const ended = Date.now();
       const seconds = Math.round((ended - started) / 1000);
@@ -532,7 +555,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     writeFileSync(join(out, "roles.json"), `${JSON.stringify(report, null, 2)}\n`);
     console.log(`\n${summaryLine(report)} (${join(out, "roles.json")})`);
   }
-  if (sampledUnits.length) console.log(`\nsampled (--sample-big ${options.sampleBig}), not a full run: ${sampledUnits.join(", ")}`);
+  if (sampledUnits.length) console.log(`\nsampled (${options.gridSampleAll !== undefined ? `--sample ${options.gridSampleAll}` : `--sample-big ${options.sampleBig}`}), not a full run: ${sampledUnits.join(", ")}`);
   if (attention.length) {
     console.log(`\nneeds a look (${attention.length}):`);
     for (const line of attention) console.log(`  ${line}`);
