@@ -167,7 +167,9 @@ impl SemanticLookup<'_> {
                 return None;
             }
             let name = declaration.name.as_ref();
-            let timing = crate::runtime_semantics::test_runner_function_declaration(path, name)?;
+            let spelled = self.manifest_spelling(path);
+            let timing =
+                crate::runtime_semantics::test_runner_function_declaration(&spelled, name)?;
             let is_suite = crate::runtime_semantics::test_runner_suite_function(name);
             if *suite.get_or_insert(is_suite) != is_suite {
                 return None;
@@ -178,6 +180,23 @@ impl SemanticLookup<'_> {
             });
         }
         Some((suite?, bodies?))
+    }
+
+    /// ADR 1082: `path` spelled as a plain install would place it (`…/node_modules/<name>/<rest>`) when it lies in a linker's store slot
+    /// (`…/node_modules/.store/<slot>/package/<rest>`, [`solid_facts::package_reach::package_root_of`]) whose `package.json` the backend read
+    /// (`PackageReachIndex::name_of`): the package is what its manifest names, whatever directory the linker gave it. Any other path, a slot
+    /// whose manifest was not read, and an adapter with no filesystem keep `path` as written, so nothing unread is taken for a runner.
+    fn manifest_spelling<'p>(&self, path: &'p str) -> std::borrow::Cow<'p, str> {
+        let slot = solid_facts::package_reach::package_root_of(path).and_then(|root| {
+            let (prefix, below) = root.rsplit_once("/node_modules/")?;
+            below.starts_with(".store/").then_some(())?;
+            let name = self.package_reach()?.name_of(root)?;
+            Some(format!(
+                "{prefix}/node_modules/{name}{}",
+                &path[root.len()..]
+            ))
+        });
+        slot.map_or(std::borrow::Cow::Borrowed(path), std::borrow::Cow::Owned)
     }
 
     /// Whether the identifier at `span` is an object a reviewed fake-timer library declares (`vi` of `import { vi } from "vitest"`, the global `jest` of `@types/jest`,
