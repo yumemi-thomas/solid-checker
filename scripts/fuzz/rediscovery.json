@@ -25984,7 +25984,25 @@
   "fixed": "ADR 1090 (`flush_accounting.rs` `climbed_caller`, `indexes/flush_census.rs` `flush_caller_of_layer_call`)",
   "grid": "lg-base",
   "code": "FLUSH_IN_ACTION",
-  "ids": ["lg-flush-in-action-timer-x-direct-closure", "lg-flush-in-tracked-queue-callback-timer-x-alias-closure-helper"],
-  "rediscovered": "main 34473465d uncertifiable, this build clean: 312 of 312 (FLUSH_IN_ACTION, FLUSH_IN_EFFECT_CALLBACK, FLUSH_IN_TRACKED_QUEUE_CALLBACK 104 each); no misuse program of the 600 moved"
+  "ids": ["lg-flush-in-action-timer-x-namespace-closure", "lg-flush-in-action-timer-x-alias-iife", "lg-flush-in-action-timer-x-destructured-closure-helper"],
+  "rediscovered": "main 34473465d uncertifiable, this build clean: 104 of 104 FLUSH_IN_ACTION programs (312 over the three flush codes); no misuse program of the 600 moved"
+ },
+ {
+  "finding": "no defect: an uncertifiable legal program. A `flush()` in a wrapper layer (a local closure, a helper, an IIFE) inside a timer's callback kept SC2006, SC2008 and SC3001 rows while the same flush written directly in the callback is clean: the flush accounting asked its class questions only of a flush with a census class of its own",
+  "found": "W4's grouping of lg-base programs uncertifiable while their `-direct-none` sibling is clean (ADR 1090, 2026-11-18): 312 programs",
+  "fixed": "ADR 1090 (`flush_accounting.rs` `climbed_caller`, `indexes/flush_census.rs` `flush_caller_of_layer_call`)",
+  "grid": "lg-base",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": ["lg-flush-in-effect-callback-timer-x-direct-closure", "lg-flush-in-effect-callback-timer-x-direct-iife", "lg-flush-in-effect-callback-timer-x-alias-closure-helper"],
+  "rediscovered": "main 34473465d uncertifiable, this build clean: 104 of 104 FLUSH_IN_EFFECT_CALLBACK programs (312 over the three flush codes); no misuse program of the 600 moved"
+ },
+ {
+  "finding": "no defect: an uncertifiable legal program. A `flush()` in a wrapper layer (a local closure, a helper, an IIFE) inside a timer's callback kept SC2006, SC2008 and SC3001 rows while the same flush written directly in the callback is clean: the flush accounting asked its class questions only of a flush with a census class of its own",
+  "found": "W4's grouping of lg-base programs uncertifiable while their `-direct-none` sibling is clean (ADR 1090, 2026-11-18): 312 programs",
+  "fixed": "ADR 1090 (`flush_accounting.rs` `climbed_caller`, `indexes/flush_census.rs` `flush_caller_of_layer_call`)",
+  "grid": "lg-base",
+  "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
+  "ids": ["lg-flush-in-tracked-queue-callback-timer-x-alias-helper", "lg-flush-in-tracked-queue-callback-timer-x-direct-iife", "lg-flush-in-tracked-queue-callback-timer-x-destructured-closure"],
+  "rediscovered": "main 34473465d uncertifiable, this build clean: 104 of 104 FLUSH_IN_TRACKED_QUEUE_CALLBACK programs (312 over the three flush codes); no misuse program of the 600 moved"
  }
 ]
