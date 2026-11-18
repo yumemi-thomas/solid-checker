@@ -1669,6 +1669,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/after-await-promise-unconsumed/node_modules/**
 !fixtures/reactive-ir/after-await-promise-unconsumed-eval/node_modules/
 !fixtures/reactive-ir/after-await-promise-unconsumed-eval/node_modules/**
+!fixtures/reactive-ir/after-await-class-value/node_modules/
+!fixtures/reactive-ir/after-await-class-value/node_modules/**
 !fixtures/reactive-ir/after-await-library/node_modules/
 !fixtures/reactive-ir/after-await-library/node_modules/**
 !fixtures/reactive-ir/after-await-timer-handle/node_modules/
