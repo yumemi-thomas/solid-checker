@@ -4266,6 +4266,46 @@
    "to": 10,
    "adr": "ADR 1093",
    "fact": "U to U relabels: a hook's returned getter read by its member call is now followed, so the SC9012 parameter-call-argument-unproven row stands as the read's own row (SC1002 read-after-await-unaccounted, SC9012 handed-member-read); no violation moved"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-first",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 14,
+   "to": 18,
+   "adr": "ADR 1052",
+   "fact": "part 7: fixture competing-check-first extended (a module slot only an apply calls; one a timer also calls)"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-first",
+   "key": "SC4001 creation-throws-first",
+   "from": 6,
+   "to": 7,
+   "adr": "ADR 1052",
+   "fact": "part 7: fixture competing-check-first extended (a module slot only an apply calls; one a timer also calls)"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-first",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 10,
+   "to": 12,
+   "adr": "ADR 1052",
+   "fact": "part 7: fixture competing-check-first extended (a module slot only an apply calls; one a timer also calls)"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-first",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 9,
+   "to": 11,
+   "adr": "ADR 1052",
+   "fact": "part 7: fixture competing-check-first extended (a module slot only an apply calls; one a timer also calls)"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-first",
+   "key": "SC6002 function-run-unplaced",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1052",
+   "fact": "part 7: fixture competing-check-first extended (a module slot only an apply calls; one a timer also calls)"
   }
  ]
 }

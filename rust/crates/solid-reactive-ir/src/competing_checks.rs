@@ -113,9 +113,10 @@ pub(crate) fn mark(program: &mut Program, lookup: &SemanticLookup<'_>) {
             OwnerRequirementOperation::ContextRead => false,
             operation => {
                 (operation == OwnerRequirementOperation::Effect
-                    && effect_may_guard
+                    && (effect_may_guard
                         .iter()
-                        .any(|guarded| same_call(guarded, &requirement.location)))
+                        .any(|guarded| same_call(guarded, &requirement.location))
+                        || in_slot_called_only_in_applies(&requirement.location, lookup)))
                     || leaf_refused
                         .iter()
                         .any(|refused| same_call(refused, &requirement.location))
@@ -348,4 +349,113 @@ fn in_rerun_cleanup(site: &Location, lookup: &SemanticLookup<'_>) -> bool {
         solid_facts::core::Span::new(start, end),
         lookup,
     )
+}
+
+/// ADR 1052 part 7: `site` is written directly in a function that is the value of a data property of an object literal a
+/// module-scope `const` holds (nothing exports or writes that binding), and every reference to the binding is the object of a
+/// member that resolves exactly to that function (`object_member_function`) and is the callee of a call written directly in an
+/// apply the effect phase runs (`Dialect::callback_runs_in_effect_phase`, an effect's apply, or `callback_reruns_in_effect_phase`,
+/// a render effect's, whose first run is owned). Every unowned run of the function is then on an apply's stack, where creating
+/// an effect throws PRIMITIVE_IN_EFFECT_CALLBACK before `NO_OWNER_EFFECT` is reported. (Under ADR 1089's closed module entry the
+/// owner graph places `h1.go()` there, while SC6002's walk leaves the slot `function-run-unplaced`.) `false` for anything else:
+/// another reference (a handler, a hand-off, an export), a computed member, a slot of a literal no `const` holds.
+fn in_slot_called_only_in_applies(site: &Location, lookup: &SemanticLookup<'_>) -> bool {
+    let Some(file) = lookup.file_by_path(site.path.as_ref()) else {
+        return false;
+    };
+    let (Ok(start), Ok(end)) = (u32::try_from(site.start_byte), u32::try_from(site.end_byte))
+    else {
+        return false;
+    };
+    let ast = &file.ast;
+    let Some(function) =
+        crate::owners::owning_function(ast, solid_facts::core::Span::new(start, end))
+    else {
+        return false;
+    };
+    if function.r#async || function.generator {
+        return false;
+    }
+    if !ast.object_properties.iter().any(|property| {
+        property.data
+            && !property.computed
+            && ast.peel_ts_sugar_span(property.value) == function.span
+    }) {
+        return false;
+    }
+    // The module `const` whose initializer is the literal holding the slot.
+    let Some(binding) = ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding.names.len() == 1
+            && binding.initializer.is_some_and(|initializer| {
+                initializer.contains(function.span)
+                    && ast.object_properties.iter().any(|property| {
+                        ast.peel_ts_sugar_span(property.value) == function.span
+                            && ast.peel_ts_sugar_span(initializer).contains(property.span)
+                    })
+            })
+    }) else {
+        return false;
+    };
+    let name = binding.names[0].span;
+    if crate::owners::owning_function(ast, binding.declaration).is_some()
+        || ast
+            .exports
+            .iter()
+            .any(|export| export.span.contains(binding.declaration))
+        || crate::indexes::binding_written(file, name)
+    {
+        return false;
+    }
+    let Some(symbol) = lookup.entities().at(file.path.as_str(), name) else {
+        return false;
+    };
+    let references: Vec<_> = lookup
+        .symbol_references(symbol.as_str())
+        .into_iter()
+        .filter(|reference| {
+            !(reference.path.as_ref() == file.path.as_str()
+                && reference.start_byte == u64::from(name.start))
+        })
+        .collect();
+    let in_apply = |call: &solid_facts::ast::CallFact| {
+        crate::owners::owning_function(ast, call.span).is_some_and(|apply| {
+            ast.arguments_containing(apply.span).any(|(holder, index)| {
+                ast.peel_ts_sugar_span(holder.arguments[index].span) == apply.span
+                    && holder.arguments[..=index]
+                        .iter()
+                        .all(|argument| !argument.spread)
+                    && lookup
+                        .primitive_at_call(file, holder.span)
+                        .is_some_and(|primitive| {
+                            lookup
+                                .dialect
+                                .callback_runs_in_effect_phase(primitive, index)
+                                || lookup
+                                    .dialect
+                                    .callback_reruns_in_effect_phase(primitive, index)
+                        })
+            })
+        })
+    };
+    !references.is_empty()
+        && references.iter().all(|reference| {
+            reference.path.as_ref() == file.path.as_str()
+                && ast.members.iter().any(|member| {
+                    u64::from(ast.peel_ts_sugar_span(member.object).start) == reference.start_byte
+                        && ast.computed_members.binary_search(&member.span).is_err()
+                        && lookup
+                            .object_member_function(file, member.span)
+                            .is_some_and(|(target, slot)| {
+                                target.path.as_str() == file.path.as_str()
+                                    && slot.span == function.span
+                            })
+                        && ast.calls.iter().any(|call| {
+                            !call.construct
+                                && ast.peel_ts_sugar_span(call.callee) == member.span
+                                && in_apply(call)
+                        })
+                })
+        })
 }

@@ -26086,5 +26086,17 @@
    "mx-sync-node-received-async-action-from-tracked-memo-direct-none"
   ],
   "rediscovered": "main 34473465d: false-positive (ledgered, owner Mac 20); with the rows out of open-defects-rows.json `make fuzz-focus` on the ledgered ids fails there and passes on this build (10 to not-fired)"
+ },
+ {
+  "finding": "a false positive: missing-owner (NO_OWNER_EFFECT) at an effect a module object's slot creates (`const h1 = { go: () => createRenderEffect(...) }`) that only an effect's apply calls (`h1.go()`): Chrome throws PRIMITIVE_IN_EFFECT_CALLBACK first and halts. Latent on main until ADR 1089's closed module entry let the owner graph place the slot in the apply (before, the module escaped: uncertifiable)",
+  "found": "Mac 24's bisect of bundle n (91eab81ac): main harness + main checker not-fired, n harness + main checker false-positive",
+  "fixed": "ADR 1052 part 7 (`competing_checks.rs` `in_slot_called_only_in_applies`)",
+  "grid": "mx-census",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-flw-apply-slot-module-render-direct-none",
+   "mx-no-owner-effect-flw-apply-slot-module-effect-direct-none"
+  ],
+  "rediscovered": "main 91eab81ac: false-positive (missing-owner stacked behind PRIMITIVE_IN_EFFECT_CALLBACK), `make fuzz-focus` fails; this build: not-fired"
  }
 ]

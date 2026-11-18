@@ -87,7 +87,40 @@ export function ApplyAndRender() {
   return <i>{(g(), "x")}</i>;
 }
 
+// Part 7: a module object's slot that only an effect's apply calls (`slotted.go()`): every unowned run of the effect it
+// creates is on the apply's stack, where PRIMITIVE_IN_EFFECT_CALLBACK throws first: missing-owner is uncertifiable.
+const slotted = {
+  go: () => {
+    createEffect(() => 1, () => {});
+  },
+};
+export function SlotCalledInApply() {
+  createEffect(
+    () => 1,
+    () => {
+      slotted.go();
+    },
+  );
+  return <i />;
+}
+
 // Violations kept: no earlier check throws at the call.
+// A slot a timer calls too: the timer's run has no owner and reports NO_OWNER_EFFECT (a halt does not stop it).
+const timed = {
+  go: () => {
+    createEffect(() => 1, () => {});
+  },
+};
+export function SlotAlsoInTimer() {
+  createEffect(
+    () => 1,
+    () => {
+      timed.go();
+    },
+  );
+  setTimeout(() => timed.go(), 0);
+  return <i />;
+}
 export function HandlerOnly() {
   const g = () => {
     createEffect(() => 1, () => {});
