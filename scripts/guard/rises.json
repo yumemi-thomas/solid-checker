@@ -4541,6 +4541,14 @@
    "to": 17,
    "adr": "ADR 1052",
    "fact": "part 9: competing-check-sync-memo gains four components (a helper refused at mount with a handler or a tracked effect, and its timer and apply twins); measured against main 76477c121, which holds part 8"
+  },
+  {
+   "fixture": "reactive-ir/accessor-provenance",
+   "key": "SC1001 function-run-unplaced",
+   "from": 16,
+   "to": 17,
+   "adr": "ADR 1111",
+   "fact": "a function the body also calls by name where untracked reads are reported is unplaced: U at its own read, the V through it stays"
   }
  ]
 }
