@@ -662,15 +662,13 @@
   "mx-census/mx-context-not-found-dny-flush-popover-x-direct-none": "Mac 20",
   "mx-census/mx-context-not-found-dny-flush-unmount-x-direct-none": "Mac 20",
   "mx-census/mx-context-not-found-evt-created-anchor-x-direct-none": "Mac 20",
-  "mx-census/mx-context-not-found-evt-created-label-x-direct-none": "Mac 20",
-  "mx-census/mx-sync-node-received-async-evt-settled-fire-remove-effect-direct-none": "Mac 20",
-  "mx-census/mx-sync-node-received-async-evt-settled-fire-remove-memo-direct-none": "Mac 20"
+  "mx-census/mx-context-not-found-evt-created-label-x-direct-none": "Mac 20"
  },
  "corpusBlockers": [],
  "ratchet": {
   "certified": 0,
   "certifiedF2": 0,
-  "falsePositive": 7,
+  "falsePositive": 5,
   "stackedClaim": 0,
   "stackedPairs": {},
   "unjudgedClaim": 0,
@@ -678,7 +676,7 @@
   "causes": {
    "R-unplaced": 8,
    "R-halted": 2,
-   "false-positive": 7
+   "false-positive": 5
   }
  }
 }

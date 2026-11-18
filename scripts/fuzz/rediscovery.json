@@ -26176,5 +26176,17 @@
    "mx-sync-node-received-async-flw-settled-report-error-memo-direct-none"
   ],
   "rediscovered": "old harness (6be8e3e34), same checker: `focus.mjs --codes SYNC_NODE_RECEIVED_ASYNC --grids mx-census` on the ids fails (false-positive); this harness: 26 agree"
+ },
+ {
+  "finding": "a false positive: SC7002 at a sync memo in a blur listener on a fresh element that an owned onSettled fires by removing the element: every run is the leaf owner's (PRIMITIVE_IN_FORBIDDEN_SCOPE) and the detached element hears no later event",
+  "found": "ADR 1052 part 4's ledger (evt-settled-fire-remove); left after ADR 1101's harness fix",
+  "fixed": "ADR 1052 part 10 (`competing_checks.rs` `listener_detached_in_owned_leaf`)",
+  "grid": "mx-census",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "mx-sync-node-received-async-evt-settled-fire-remove-memo-direct-none",
+   "mx-sync-node-received-async-evt-settled-fire-remove-effect-direct-none"
+  ],
+  "rediscovered": "base aed152831 (main 2b4adb9c6 + parts 8/9 + ADR 1101): with the rows out of open-defects-rows.json `focus.mjs --codes SYNC_NODE_RECEIVED_ASYNC --grids mx-census` on the 2 ids fails (2 false-positive); this build: 2 not-fired"
  }
 ]

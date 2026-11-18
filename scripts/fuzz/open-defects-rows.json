@@ -17,9 +17,7 @@
    "mx-dynamic-static-promise-mount-named-x-direct-none": {"outcome":"unplaced","cause":"R-unplaced"},
    "mx-dynamic-static-promise-patch-define-x-direct-none": {"outcome":"unplaced","cause":"R-unplaced"},
    "mx-dynamic-static-promise-patch-global-x-direct-none": {"outcome":"unplaced","cause":"R-unplaced"},
-   "mx-dynamic-static-promise-patch-window-x-direct-none": {"outcome":"unplaced","cause":"R-unplaced"},
-   "mx-sync-node-received-async-evt-settled-fire-remove-effect-direct-none": {"outcome":"false-positive","cause":"false-positive","owner":"Mac 20"},
-   "mx-sync-node-received-async-evt-settled-fire-remove-memo-direct-none": {"outcome":"false-positive","cause":"false-positive","owner":"Mac 20"}
+   "mx-dynamic-static-promise-patch-window-x-direct-none": {"outcome":"unplaced","cause":"R-unplaced"}
   },
   "mx-recall": {
    "mx-settled-cleanup-unowned-flw-flow-for-async-x-direct-none": {"outcome":"halted-claim","cause":"R-halted","rules":["missing-owner"]},
