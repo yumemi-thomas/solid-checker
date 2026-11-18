@@ -3975,3 +3975,21 @@ The handed-member proof reuses `parameter_argument`: a callback parameter must b
 **The question.** ADR 1056 found kui shell's `createCapabilities` hand-off held by `object_prototype_touched`, true there because `packages_run_unseen_code` is. Which package sets it, and how many rows does it hold?
 **Measured** (rc.21 frozen corpus v2, kui's 11 projects, release build of 5a5d1321f + ADR 1056, a scratch build that switches the premise off; unsound, never kept). Per project, `unseen_code` lists 6 to 9 roots, none unread for missing source. Ten projects list openapi-fetch (`dist/index.cjs`), vitest (`dist/chunks/index.DmDMHCg8.js`), storybook-solidjs-vite (`dist/renderer/docs.js`) and the linked `@kui/api` (`bootstrap.ts`), each because a file names `Object.prototype`. Nine list `@kui/kernel` (`store.ts`, "generates code"), eight axe-core (undecided: a dynamic load in `axe.js`), and fewer list `@testing-library/*`, storybook and the other `@kui/*` workspaces. `project_js` is empty. Lifting the package premise alone: 0 rows move, dev and standard. Lifting it with `files_name_object_prototype` (kui's own files name the prototype as well, e.g. `bootstrap.ts:65` `raw[key]` with `key: keyof Bootstrap`): dev U 49,604 to 49,562, standard 48,536 to 48,494, all in shell (21 sites: SC3001 `leaf-operation-unaccounted` and SC6002 `effect-creation-unaccounted`), V 37 unchanged.
 **Decision.** No change. The source exists and is read, so there is nothing to pin under ADRs 0266/0300. The gain is 42 rows and needs exact proofs for about ten spellings across project and package code. Recorded in `docs/open-work.md` §2.
+
+<a id="adr-1074"></a>
+## ADR 1074 — The handed-value walk follows twelve steps
+**The gap.** `handed_value` (ADR 0509) answers "a caller may have supplied this callee" past `HANDED_DEPTH` steps (ADR 0751, fail closed). At six, ADR 1065 part 2's census found 2,748 `handed-member-dispatch` rows held only by depth exhaustion (`cause|handed|depth-exhausted`).
+**Decision.** `HANDED_DEPTH` is 12. The walk's steps are unchanged and each is exact; a deeper bound only lets it reach an answer it was cut off from. Past twelve the answer is still "handed".
+**Measured** (rc.21 frozen corpus v2, release, main 84cc06485 against this constant):
+
+| Depth | Dev U | Standard U | V | Corpus time, dev / standard |
+|---|---|---|---|---|
+| 6 (main) | 250,089 | 237,335 | 244 / 236 | 311 s / 164 s |
+| 8 | 248,805 (−1,284) | 236,082 (−1,253) | unchanged | 303 s / 160 s |
+| 12 | 248,227 (−1,862) | 235,515 (−1,820) | unchanged | 297 s / 158 s |
+| 16 | 248,154 (−1,935), dev only | — | unchanged | 304 s |
+
+Twelve keeps 96% of sixteen's gain. The rows that leave are mostly SC9012 `handed-member-dispatch`/`-read` (1,780 dev), plus SC5003, SC5008 and SC5001. Up to 72 SC1002 and 45 SC9012 rows stand where an obligation left: the next blocker of the same site.
+**Evidence.** Fixture `bounds-value-depth-twelve`: eight `const` aliases of a local literal lose the handed obligation (its next blocker, SC1002 `unresolved-invocation`, stands). Fourteen aliases, and eight aliases of a prop, keep it. Seventeen fixture snapshots lose a handed row the bound held, each read:
+- in the `iteration-written-slots-handed-*` variants and `sloppy-this-dependency`, the walk now reaches an event parameter or a standard iterator, and every `tuple-iteration-written` row those fixtures pin stands;
+- in `accessor-provenance` `Scope.tsx` `MemoArray`, the compute calls members of two closed local literals, so its async provenance is proved.

@@ -66,17 +66,6 @@
       "start": 133,
       "end": 134,
       "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "handed-member-dispatch",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/iteration-written-slots/variants/handed-any-default-view/wire.ts",
-      "start": 175,
-      "end": 182,
-      "fixes": 0
     }
   ]
 }
