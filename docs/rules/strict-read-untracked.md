@@ -114,7 +114,12 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   A dispatch on the global `window` (or `document` on web rc.17), or written in
   a scheduler callback or at module top level, does not withhold it (ADR 0435);
   one in a `runWithOwner(null, …)` callback does, because that leaves the
-  enclosing strict-read window open. A dispatch in a callback a reviewed test
+  enclosing strict-read window open. A navigation delivers only the event types the host
+  fact names ([ADR 1080](../decisions.md#adr-1080): `history.go` and `location.reload`
+  at most `beforeunload`, `location.assign`/`replace` also `popstate` for a fragment):
+  with no listener for them anywhere the program is read (an `on<type>` property, a
+  `body`/`html` handler, an `addEventListener` whose type is unnamed or one of them),
+  it delivers to none and withholds nothing. A dispatch in a callback a reviewed test
   runner registers (ADR 0438, an async one included, or a helper only such
   callbacks call, in a closed program, exported or not when every other
   module's reference to it is a call, and a call past an `await` in an async

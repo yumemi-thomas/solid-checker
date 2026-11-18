@@ -962,6 +962,22 @@ pub(crate) fn event_keeps_delivery_proof(attribute: &str) -> bool {
     )
 }
 
+/// ADR 1080: the event types a synchronously dispatching `lib.dom` member (by exact qualified name, as
+/// [`delivers_synchronously`]) can deliver before it returns, when they are known: `None` for every other member, which may
+/// deliver any. Measured in Chrome (rc.21's playwright build): `history.go(0)` and `location.reload()` fire `beforeunload`
+/// before returning, `history.go(±1)` fires nothing synchronously (same- or cross-document); `location.assign` and
+/// `location.replace` fire `beforeunload` for another document and `popstate` for a fragment-only URL, before returning
+/// (ADR 0705 measured the first part).
+pub(crate) fn synchronously_delivered_event_types(
+    qualified_name: &str,
+) -> Option<&'static [&'static str]> {
+    match qualified_name {
+        "History.go" | "Location.reload" => Some(&["beforeunload"]),
+        "Location.assign" | "Location.replace" => Some(&["beforeunload", "popstate"]),
+        _ => None,
+    }
+}
+
 pub(crate) fn delivers_synchronously(qualified_name: &str) -> bool {
     // ADR 0705: the global `reportError` dispatches `error` at the window.
     // ADR 0937: lib.dom's global `dispatchEvent` is the window's own method.
