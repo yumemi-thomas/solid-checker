@@ -266,16 +266,6 @@ impl<'a> SemanticLookup<'a> {
     /// classes, then a function every invocation of which is an event
     /// delivery (only while no synchronous dispatch can deliver it under an
     /// owner, ADR 0356), then a test-only helper (ADR 0438).
-    /// ADR 1090: [`Self::flush_caller`] of the call at the end of an in-place layer climb (the flush accounting's placement through
-    /// exact layers): the class of the call that runs the layers, never of the flush itself.
-    pub(crate) fn flush_caller_of_layer_call(
-        &self,
-        file: &'a solid_facts::FileFacts,
-        call: &solid_facts::ast::CallFact,
-    ) -> Option<DispatchCaller> {
-        self.flush_caller(file, call)
-    }
-
     fn flush_caller(
         &self,
         file: &'a solid_facts::FileFacts,

@@ -264,30 +264,24 @@ fn reasons<'a>(
     // The census class says where the function around the call runs; it is a statement about this call's stack only when facts of the call's own syntax hold
     // ([`callback_runs_it`] for the scheduler's and the runner's classes, the first alone for the continuation after an await). The call is written in the body of its
     // function: a default value in a parameter list runs wherever that function is called, which the class of the code around it does not say (the review of #213, B2).
-    // ADR 1090: a flush with no census class of its own, written in exact in-place layers (an IIFE, a named function called once, a helper's callback it calls in its
-    // body: `climb_in_place_layers`), is asked at the outermost layer's call, the class of that call's position: the layers run on its stack. Any other shape of the
-    // climb (a layer in a parameter list, one also handed on, a suspension on the way, a withheld or unmodelled layer) keeps the site where it is, with no class.
-    let (at, caller) = match site.caller {
-        Some(caller) => (site.span, Some(caller)),
-        None => climbed_caller(lookup, file, site.span)
-            .map_or((site.span, None), |(at, caller)| (at, Some(caller))),
-    };
-    let in_body = !crate::owners::in_parameter_list(&file.ast, at);
-    let class = match caller {
+    let in_body = !crate::owners::in_parameter_list(&file.ast, site.span);
+    let class = match site.caller {
         // A program that installs fake timers runs the scheduler's callbacks on the stack of whatever advances the clock (F1 of the review of #213): no reason, so the
         // site keeps its row. A test runner's callback is run by the runner whatever the clock is, so the next arm does not ask.
-        Some(DispatchCaller::FreshStack) => (callback_runs_it(lookup, file, at)
+        Some(DispatchCaller::FreshStack) => (callback_runs_it(lookup, file, site.span)
             && !fake_timers.installed())
         .then_some(FlushSafe::FreshStack),
         Some(DispatchCaller::AwaitContinuation) => in_body.then_some(FlushSafe::AwaitContinuation),
         // Module top level is evaluated before any callback runs. A site in a function body has this class only through the suite body a runner runs inside the
         // registration call (ADR 0438): the census asked the class, the parameter list, JSX and tracked region questions of the registration call, not of the flush, so
         // the same questions as the callback's are asked here of everything written inside the registration (the second re-review of #213, N4).
-        Some(DispatchCaller::ModuleInitialization) => (!file.ast.any_function_body_containing(at)
-            || suite_body_runs_it(lookup, file, at))
-        .then_some(FlushSafe::ModuleInitialization),
+        Some(DispatchCaller::ModuleInitialization) => {
+            (!file.ast.any_function_body_containing(site.span)
+                || suite_body_runs_it(lookup, file, site.span))
+            .then_some(FlushSafe::ModuleInitialization)
+        }
         Some(DispatchCaller::TestRunner) => {
-            callback_runs_it(lookup, file, at).then_some(FlushSafe::TestRunner)
+            callback_runs_it(lookup, file, site.span).then_some(FlushSafe::TestRunner)
         }
         // No reason, so the site gets its uncertifiable row: `DetachedOwner` keeps the stack's action depth, `TestHelper` may be called from a step
         // inside a test, an event handler's delivery may be dispatched from a step, `EffectApply` is the apply itself, and no census class (`None`)
@@ -308,28 +302,6 @@ fn reasons<'a>(
         reasons.push(FlushSafe::NeverRuns);
     }
     reasons
-}
-
-/// ADR 1090: the call at the end of the exact in-place layers around `span` and its census class: the climb crossed at least one layer, no layer holds the site in a
-/// parameter list, no helper on the way also hands its callback on, nothing on the way follows an await, and no call crossed is withheld or an unmodelled slot.
-fn climbed_caller<'a>(
-    lookup: &crate::indexes::SemanticLookup<'a>,
-    file: &'a FileFacts,
-    span: Span,
-) -> Option<(Span, crate::indexes::DispatchCaller)> {
-    let climb = crate::execution_role::climb_in_place_layers(file, span, lookup)?;
-    if climb.in_list.is_some()
-        || climb.among_others
-        || climb.suspended.is_some()
-        || climb.withheld
-        || climb.unmodelled
-    {
-        return None;
-    }
-    let call = file.ast.calls.iter().find(|call| call.span == climb.at)?;
-    lookup
-        .flush_caller_of_layer_call(file, call)
-        .map(|caller| (climb.at, caller))
 }
 
 /// Whether a flush written in a scheduler's or a runner's callback runs on the stack that callback was given: everything between the flush and the call that hands the
