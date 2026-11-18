@@ -26203,5 +26203,17 @@
   "found": "the third Fable review of 1090 G1 (229d00f0c, 2026-11-18)",
   "fixed": "ADR 1090 G1 (third review): no site in a JSX element or fragment is discharged (`unconsumed.rs`); superseded: ADR 1090 G1 not built, the PromiseUnconsumed discharge was removed (fourth review), so no site is ended by it",
   "outside": "not generated: the generator writes JSX only in a component's view (its return), never in an async function's continuation. Fixture reactive-ir/after-await-promise-unconsumed holds it (`jsxed`, uncertifiable)"
+ },
+ {
+  "finding": "a false positive: SC4002 (missing-context-provider) at a handler's useContext when the program's only dispatches are a created anchor's click and remove (path holds no JSX element) or a created label clicked by a helper only an effect apply calls (an ownerless stack): Chrome throws NO_OWNER_CONTEXT first on every run",
+  "found": "mx-census ledger (owned false positives evt-created-anchor, evt-created-label; sc7002-split.md)",
+  "fixed": "ADR 1099 (`event_delivery.rs` `NoElementHandler`, `dispatch_in_effect_apply_helper`; `flush_census.rs` `flush_referenced`)",
+  "grid": "mx-census",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-evt-created-anchor-x-direct-none",
+   "mx-context-not-found-evt-created-label-x-direct-none"
+  ],
+  "rediscovered": "bundle p 5371502c4: false-positive (missing-context-provider stacked behind NO_OWNER_CONTEXT), `make fuzz-focus CODES=CONTEXT_NOT_FOUND` fails; this build: not-fired"
  }
 ]

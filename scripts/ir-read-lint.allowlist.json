@@ -153,7 +153,10 @@
     ]
   },
   "rust/crates/solid-reactive-ir/src/indexes/flush_census.rs": {
-    "file_slots": 1
+    "file_slots": 2,
+    "pending-review": [
+      "file_slots rose 1 -> 2 (--allow-rise): unreviewed"
+    ]
   },
   "rust/crates/solid-reactive-ir/src/indexes/initialization.rs": {
     "file_slots": 6,

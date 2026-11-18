@@ -1870,3 +1870,13 @@ packages/wasm/owned/
 !fixtures/reactive-ir/store-setter-after-await/node_modules/**
 !fixtures/reactive-ir/action-after-await/node_modules/
 !fixtures/reactive-ir/action-after-await/node_modules/**
+!fixtures/reactive-ir/rc21-created-anchor-unowned-handler/node_modules/
+!fixtures/reactive-ir/rc21-created-anchor-unowned-handler/node_modules/**
+!fixtures/reactive-ir/rc21-created-anchor-host-handler/node_modules/
+!fixtures/reactive-ir/rc21-created-anchor-host-handler/node_modules/**
+!fixtures/reactive-ir/rc21-created-label-apply-handler/node_modules/
+!fixtures/reactive-ir/rc21-created-label-apply-handler/node_modules/**
+!fixtures/reactive-ir/rc21-created-label-apply-and-owned/node_modules/
+!fixtures/reactive-ir/rc21-created-label-apply-and-owned/node_modules/**
+!fixtures/reactive-ir/rc21-created-label-apply-flush/node_modules/
+!fixtures/reactive-ir/rc21-created-label-apply-flush/node_modules/**
