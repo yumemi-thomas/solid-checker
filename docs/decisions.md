@@ -4222,6 +4222,7 @@ Outside the proved calls' own arguments, a body holds no function, class, member
 - The rest stay uncertifiable: helpers that run a callback, aliased or destructured setters from hooks, tuples and other bindings.
 
 Fixture `after-await-setter-callee`: the clean forms, a refusal twin for each excluded shape, and a misuse twin that stays a violation.
+Five fixtures lose only SC1002 rows, read and recorded as drops rows: setter-only IIFEs and closures; wrappers that only call a setter; and `localArrow = () => 2`, a callee whose body makes no call (vacuously qualifying: it runs nothing).
 
 <a id="adr-1095"></a>
 ## ADR 1095 — A namespace import names only the members its references read

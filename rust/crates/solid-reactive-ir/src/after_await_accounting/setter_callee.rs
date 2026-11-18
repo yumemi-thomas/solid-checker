@@ -48,7 +48,9 @@ fn exact_const_initializer(ctx: &AnalysisContext<'_>, file: &FileFacts, at: Span
     if !crate::owners::is_identifier_span(file, at) {
         return None;
     }
-    let (binding_file, binding, _) = ctx.semantic_lookup.binding_at_reference(file.path.as_str(), at)?;
+    let (binding_file, binding, _) = ctx
+        .semantic_lookup
+        .binding_at_reference(file.path.as_str(), at)?;
     let [name] = binding.names.as_slice() else {
         return None;
     };
@@ -96,7 +98,14 @@ fn proved_call(
     if let Some(function) = ast.function_at(callee) {
         return (call.arguments.is_empty()
             && plain_function(function)
-            && body_qualifies(ctx, file, function, depth + 1, visiting, object_prototype_touched))
+            && body_qualifies(
+                ctx,
+                file,
+                function,
+                depth + 1,
+                visiting,
+                object_prototype_touched,
+            ))
         .then_some(call.span);
     }
     let target = resolve_alias(ctx, file, callee)?;
@@ -129,12 +138,25 @@ fn proved_call(
     if let Some(function) = ast.function_at(initializer) {
         return (plain_function(function)
             && !visiting.contains(&function.span)
-            && body_qualifies(ctx, file, function, depth + 1, visiting, object_prototype_touched))
+            && body_qualifies(
+                ctx,
+                file,
+                function,
+                depth + 1,
+                visiting,
+                object_prototype_touched,
+            ))
         .then_some(Span::new(call.span.end, call.span.end));
     }
     // An action source discovery records, made of a generator whose body qualifies.
     let made = ast.call_at(initializer)?;
-    let name = ctx.semantic_lookup.binding_at_reference(file.path.as_str(), target)?.1.names.first()?.span;
+    let name = ctx
+        .semantic_lookup
+        .binding_at_reference(file.path.as_str(), target)?
+        .1
+        .names
+        .first()?
+        .span;
     let action = ctx
         .entities
         .at(file.path.as_str(), name)
@@ -152,13 +174,23 @@ fn proved_call(
         && generator.parameters.is_empty()
         && !generator.rest_parameter
         && !visiting.contains(&generator.span)
-        && body_qualifies(ctx, file, generator, depth + 1, visiting, object_prototype_touched))
+        && body_qualifies(
+            ctx,
+            file,
+            generator,
+            depth + 1,
+            visiting,
+            object_prototype_touched,
+        ))
     .then_some(Span::new(call.span.end, call.span.end))
 }
 
 /// A parameterless function literal that is neither async nor a generator.
 fn plain_function(function: &FunctionFact) -> bool {
-    !function.r#async && !function.generator && function.parameters.is_empty() && !function.rest_parameter
+    !function.r#async
+        && !function.generator
+        && function.parameters.is_empty()
+        && !function.rest_parameter
 }
 
 /// The body of `function` qualifies: every outer call in it is proved, and outside the proved calls' left-out spans it holds none of the shapes the module
@@ -175,7 +207,14 @@ fn body_qualifies(
         return false;
     }
     visiting.push(function.span);
-    let answer = body_qualifies_inner(ctx, file, function, depth, visiting, object_prototype_touched);
+    let answer = body_qualifies_inner(
+        ctx,
+        file,
+        function,
+        depth,
+        visiting,
+        object_prototype_touched,
+    );
     visiting.pop();
     answer
 }
@@ -190,7 +229,11 @@ fn body_qualifies_inner(
 ) -> bool {
     let ast = &file.ast;
     let body = function.body;
-    let calls = ast.calls.iter().filter(|call| body.contains(call.span)).collect::<Vec<_>>();
+    let calls = ast
+        .calls
+        .iter()
+        .filter(|call| body.contains(call.span))
+        .collect::<Vec<_>>();
     // The outer calls: in no other call of the body's arguments or IIFE. Each must be proved; what it leaves out is asked by its own proof.
     let outer = calls
         .iter()
@@ -198,11 +241,13 @@ fn body_qualifies_inner(
             !calls.iter().any(|other| {
                 other.span != call.span
                     && other.span.contains(call.span)
-                    && !Span::new(other.span.start, ast.peel_ts_sugar_span(other.callee).end).contains(call.span)
-            }) && !ast
-                .functions
-                .iter()
-                .any(|inner| inner.span != function.span && body.contains(inner.span) && inner.span.contains(call.span))
+                    && !Span::new(other.span.start, ast.peel_ts_sugar_span(other.callee).end)
+                        .contains(call.span)
+            }) && !ast.functions.iter().any(|inner| {
+                inner.span != function.span
+                    && body.contains(inner.span)
+                    && inner.span.contains(call.span)
+            })
         })
         .collect::<Vec<_>>();
     let mut left_out = Vec::with_capacity(outer.len());
@@ -213,7 +258,10 @@ fn body_qualifies_inner(
         }
     }
     let free = |span: Span| body.contains(span) && !left_out.iter().any(|out| out.contains(span));
-    if ast.functions.iter().any(|other| other.span != function.span && free(other.span))
+    if ast
+        .functions
+        .iter()
+        .any(|other| other.span != function.span && free(other.span))
         || ast.classes.iter().any(|class| free(class.span))
         || ast.members.iter().any(|member| free(member.span))
         || ast.spreads.iter().any(|spread| free(spread.span))
@@ -223,12 +271,18 @@ fn body_qualifies_inner(
         || ast.tagged_templates.iter().any(|tagged| free(tagged.span))
         || ast.jsx_elements.iter().any(|element| free(element.span))
         || ast.module_loads.iter().any(|load| free(load.span))
-        || ast.assignments.iter().any(|assignment| free(assignment.target))
+        || ast
+            .assignments
+            .iter()
+            .any(|assignment| free(assignment.target))
         || ast.deleted_targets.iter().any(|target| free(*target))
     {
         return false;
     }
-    let callees = outer.iter().map(|call| ast.peel_ts_sugar_span(call.callee)).collect::<Vec<_>>();
+    let callees = outer
+        .iter()
+        .map(|call| ast.peel_ts_sugar_span(call.callee))
+        .collect::<Vec<_>>();
     ast.identifiers.iter().all(|identifier| {
         identifier.role != solid_facts::ast::IdentifierRole::Reference
             || !free(identifier.span)

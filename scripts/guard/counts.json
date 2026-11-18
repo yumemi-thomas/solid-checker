@@ -9,7 +9,7 @@
   "SC1001 client-root-unproven": 1,
   "SC1001 compiler-refused-file": 1,
   "SC1001 component-identity-unproven": 136,
-  "SC1001 function-run-unplaced": 1516,
+  "SC1001 function-run-unplaced": 1517,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
   "SC1001 mount-form-window": 2,
@@ -29,7 +29,7 @@
   "SC1002 package-finding-at-entry": 17,
   "SC1002 package-operation-after-await": 3,
   "SC1002 parameter-initializer-unplaced": 8,
-  "SC1002 read-after-await-unaccounted": 726,
+  "SC1002 read-after-await-unaccounted": 733,
   "SC1002 search-depth-limit": 1,
   "SC1002 site-reach-undecided": 1,
   "SC1002 tuple-iteration-written": 82,
@@ -47,7 +47,7 @@
   "SC1007 unchecked-native-handler-value": 2,
   "SC2001 binding-before-initialization": 3,
   "SC2001 component-identity-unproven": 9,
-  "SC2001 function-run-unplaced": 509,
+  "SC2001 function-run-unplaced": 510,
   "SC2001 function-unentered": 12,
   "SC2001 lazy-compute-unread": 7,
   "SC2001 owned-write-option-unread": 4,
@@ -170,7 +170,7 @@
   "SC5003 carrier-run-unproven": 2,
   "SC5003 component-identity-unproven": 1,
   "SC5003 mount-form-window": 2,
-  "SC5003 mount-unresolved": 383,
+  "SC5003 mount-unresolved": 384,
   "SC5003 package-finding-at-entry": 113,
   "SC5003 pending-read-unresolved": 766,
   "SC5003 root-mount-pass-unproven": 54,
@@ -272,7 +272,7 @@
   "SC9012 value-exported-unnamed": 6,
   "SC9012 value-forwarded": 272,
   "SC9012 value-from-primitive-callback": 26,
-  "SC9012 value-held-in-binding": 121,
+  "SC9012 value-held-in-binding": 123,
   "SC9012 value-held-in-member": 24,
   "SC9012 value-in-carrier": 324,
   "SC9012 value-in-class-field": 14,
@@ -287,7 +287,7 @@
   "SC9012 value-to-unresolved-callee": 335,
   "SC9012 value-use-unclassified": 50,
   "SC9012 withheld-object-member": 86,
-  "SC9014 dialect-detection": 212,
+  "SC9014 dialect-detection": 213,
   "SC9014 router-release": 4,
   "SC9015 compiler-facts": 4,
   "SC9016 suppression-comments": 4
@@ -4140,6 +4140,71 @@
     "open": "reactive-ir/value-walk-chain"
    },
    "note": "a pending async memo read in exact in-place layers (a named closure called once, an IIFE, a helper's callback) whose outermost call is a tracked, suspending read of a computation's own callback (no leaf owner): the read is that computation's, as the direct read is (SuspendsInComputation, NotRenderEffect)"
+  },
+  {
+   "fixture": "reactive-ir/prop-callback-roles-after-await",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 3,
+   "to": 2,
+   "adr": "ADR 1097",
+   "proof": "rust/crates/solid-reactive-ir/src/after_await_accounting/setter_callee.rs::only_calls_setters",
+   "fixtures": {
+    "proved": "reactive-ir/prop-callback-roles-after-await",
+    "open": "reactive-ir/after-await-setter-callee"
+   },
+   "note": "an after-await call whose callee runs only proved setter-like calls (exact setters, a literal store updater, refresh of an accessor, qualifying const callees, IIFEs, recorded actions without yield): the call reads no source (ADR 1097, reopened narrowly)"
+  },
+  {
+   "fixture": "reactive-ir/stored-function-after-await",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 15,
+   "to": 14,
+   "adr": "ADR 1097",
+   "proof": "rust/crates/solid-reactive-ir/src/after_await_accounting/setter_callee.rs::only_calls_setters",
+   "fixtures": {
+    "proved": "reactive-ir/stored-function-after-await",
+    "open": "reactive-ir/after-await-setter-callee"
+   },
+   "note": "an after-await call whose callee runs only proved setter-like calls (exact setters, a literal store updater, refresh of an accessor, qualifying const callees, IIFEs, recorded actions without yield): the call reads no source (ADR 1097, reopened narrowly)"
+  },
+  {
+   "fixture": "reactive-ir/write-fold-withheld-caller-no-veto",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 4,
+   "to": 2,
+   "adr": "ADR 1097",
+   "proof": "rust/crates/solid-reactive-ir/src/after_await_accounting/setter_callee.rs::only_calls_setters",
+   "fixtures": {
+    "proved": "reactive-ir/write-fold-withheld-caller-no-veto",
+    "open": "reactive-ir/after-await-setter-callee"
+   },
+   "note": "an after-await call whose callee runs only proved setter-like calls (exact setters, a literal store updater, refresh of an accessor, qualifying const callees, IIFEs, recorded actions without yield): the call reads no source (ADR 1097, reopened narrowly)"
+  },
+  {
+   "fixture": "reactive-ir/write-past-layered-await",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 7,
+   "to": 2,
+   "adr": "ADR 1097",
+   "proof": "rust/crates/solid-reactive-ir/src/after_await_accounting/setter_callee.rs::only_calls_setters",
+   "fixtures": {
+    "proved": "reactive-ir/write-past-layered-await",
+    "open": "reactive-ir/after-await-setter-callee"
+   },
+   "note": "an after-await call whose callee runs only proved setter-like calls (exact setters, a literal store updater, refresh of an accessor, qualifying const callees, IIFEs, recorded actions without yield): the call reads no source (ADR 1097, reopened narrowly)"
+  },
+  {
+   "fixture": "reactive-ir/write-render-apply-row-layers",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1097",
+   "proof": "rust/crates/solid-reactive-ir/src/after_await_accounting/setter_callee.rs::only_calls_setters",
+   "fixtures": {
+    "proved": "reactive-ir/write-render-apply-row-layers",
+    "open": "reactive-ir/after-await-setter-callee"
+   },
+   "note": "an after-await call whose callee runs only proved setter-like calls (exact setters, a literal store updater, refresh of an accessor, qualifying const callees, IIFEs, recorded actions without yield): the call reads no source (ADR 1097, reopened narrowly)"
   }
  ],
  "renames": []

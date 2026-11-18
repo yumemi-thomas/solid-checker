@@ -150,7 +150,12 @@ impl AfterAwaitSafe {
             Self::SetterOnlyCallee => {
                 matches!(site.via, "call" | "action" | "inexact" | "setter" | "iife")
                     && site.call.is_some_and(|call| {
-                        setter_callee::only_calls_setters(ctx, site.file, call, object_prototype_touched)
+                        setter_callee::only_calls_setters(
+                            ctx,
+                            site.file,
+                            call,
+                            object_prototype_touched,
+                        )
                     })
             }
             Self::NeverRuns => matches!(
