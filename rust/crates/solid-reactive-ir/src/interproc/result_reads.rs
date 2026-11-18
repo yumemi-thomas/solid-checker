@@ -409,6 +409,17 @@ fn call_result_reads(
                             lookup,
                         )))))
     {
+        // ADR 1088 (census only): the call's reads are placed nowhere.
+        crate::blocker_census::cause_at(file.path.as_str(), call.callee, "read-unknown", || {
+            format!(
+                "cause|read-unknown|call|{}",
+                if crate::local_access::escapes_nested(file, call.callee, lookup) {
+                    "escapes-nested"
+                } else {
+                    "named-callback-unplaced"
+                }
+            )
+        });
         execution = ExecutionRole::Unknown;
     } else if !object_callable
         && (inside_non_component_function(file, call.callee, lookup)
@@ -460,6 +471,10 @@ fn call_result_reads(
             }
             return;
         }
+        // ADR 1088 (census only): a call in a class member, a rerun cleanup or a function no carrier runs.
+        crate::blocker_census::cause_at(file.path.as_str(), call.callee, "read-unknown", || {
+            "cause|read-unknown|call|non-component-unplaced".to_owned()
+        });
         execution = ExecutionRole::Unknown;
     }
     // ADR 0536: the timing of reads a carrier places is the carrier's.

@@ -4065,3 +4065,22 @@ The router's own files (`router_params.rs`: replacement spellings, `history`, th
 **Sweep.** The remaining path checks in the analysis are `contains("/node_modules/")` (installed or not: a store slot is inside `node_modules`) and `route_components.rs`'s audited install directories (real paths): neither names a package by its directory.
 **Measured** (rc.21 frozen corpus v2, release, the 1082 head against this): both builds unchanged (development U 248,376, V 244; standard U 235,575, V 236). No corpus project combines a store-slot vitest with fake timers and a flush, and jandibat-web's store-slot `solid-js` moves nothing through the tag checks.
 **Evidence.** `flush-universe-fake-timers-store` gives `flush-universe-fake-timers`'s nine rows. Unit test `a_store_slot_is_spelled_as_its_manifest_names_it`. Rediscovery: `outside` (the generator writes no install layout, and vitest cannot load in the oracle's page), entry in `scripts/fuzz/rediscovery.json`. No Chrome case: the runtime half is ADR 0967's vitest run.
+
+<a id="adr-1088"></a>
+## ADR 1088 — The census names what places a B4 read nowhere; no fix, the top cause is a ruling
+**The question.** ADR 1065 part 2 left 1,447 SC1001 `function-run-unplaced` rows (dev) with no cause: a read seed with no `via`, no origin and no role decision at or around its span.
+**Recorded** (census only, `SOLID_CHECKER_BLOCKER_CENSUS=1`): `cause|read-unknown|<site>|<test>` where local access or the result reads set a read's role to `Unknown` without the role engine: ADR 0934's unproven use of a helper (`unproven-use`), a helper read that keeps its definition site's role (`helper-definition|…`), a member read (`member|gate-refuses|handed-unplaced|escapes|nested-handed-to-unknown-code`) and a call's reads (`call|…`).
+**Measured** (rc.21 frozen corpus v2, release, main e2d9d4a8f; findings, status, hazards and premises identical with the census off and on in both builds: development U 250,089, V 244; standard U 237,335, V 236). Most of the 1,447 were a join artifact: the row stands at the call (`activeAction()`) and its cause at the callee (`activeAction`), which part 2's exact-span join missed. Joined at the callee too, by rows (distinct sites, apps):
+
+| Rows | Sites | Apps | Cause |
+|---|---|---|---|
+| 482 | 260 | 17 | ADR 0934 unproven use |
+| 334 | 229 | 15 | `placed-nowhere|exhaustive` |
+| 275 | 213 | 15 | `escapes-unfollowed` |
+| 246 | 199 | 17 | the role engine's `Unknown` at the callee |
+| 64 | 47 | 9 | `withheld-layer` |
+| 37 | 8 | 3 | `entered-unseen` |
+| 9 | 9 | 3 | no cause |
+
+A nested decision (asked inside another, so not framed by the role log) was also tried as a census row: it explained none of them and added about 245,000 rows, so it was not kept.
+**Decision.** No verdict change. The top cause is ADR 0934's owner ruling (a helper used in a way no fact follows is unplaced at its definition, never silent), not a precision gap. The next, `runs_unplaced_exhaustive` (ADRs 0673/0674) holding helpers such as jandibat-web `ConnectionsRelayPage.tsx` `page` (used only in `<Show when={page()}>`), is the open research item (`docs/open-work.md`).

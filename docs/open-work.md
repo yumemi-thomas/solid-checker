@@ -235,6 +235,7 @@ ADR 1011, SC5003: a closure handed to a member callee is read as run in place on
 
 - ADR 1073: in kui, jandibat-web, solid-groove and compass-ui, 4,651 SC1002 rows in vitest test files sit in `it`/`test` callbacks that `test_runner_callback` does not recognise as registrations (`test=no` in ADR 1065's census), although the files import `it` from `vitest`. Why the resolution misses (layout, version, alias) is not yet read.
 - The fuzz oracle cannot compare a census program whose mount throws during module evaluation (`mx-async-outside-loading-boundary-mount-named-x-direct-none`, SC5003 focus, on main 84cc06485): Happy DOM's runner records the throw as an `import` failure, while the Chrome oracle path (`chrome.mjs`, the feedback harness) has no phases, waits 12 s on a scenario step and reports `execution` (its row still lists the same `NotReadyError` in `pageErrors`). Both runtimes agree; the phase vocabularies do not, so `fuzz-focus` counts a behaviour difference. The audit ledgers the same programs (`audit-known.json`, ADR 1012, page-timeouts). Fix at the source: give the oracle page the fast runner's phases.
+- ADR 1088: 334 SC1001 rows (229 sites, 15 apps) are reads in local helpers that `runs_unplaced_exhaustive` (ADRs 0673/0674) places nowhere, e.g. jandibat-web `ConnectionsRelayPage.tsx` `page`, used only in `<Show when={page()}>`. Which hidden hand-off the walk holds there is not yet read.
 
 ## 2. Decisions not to build
 
