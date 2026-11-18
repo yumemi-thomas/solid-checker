@@ -29,7 +29,7 @@
   "SC1002 package-finding-at-entry": 17,
   "SC1002 package-operation-after-await": 3,
   "SC1002 parameter-initializer-unplaced": 8,
-  "SC1002 read-after-await-unaccounted": 704,
+  "SC1002 read-after-await-unaccounted": 705,
   "SC1002 search-depth-limit": 1,
   "SC1002 site-reach-undecided": 1,
   "SC1002 tuple-iteration-written": 82,
@@ -74,7 +74,7 @@
   "SC2003 store-handed-to-package": 1,
   "SC2003 store-operation-may-not-write": 38,
   "SC2003 store-write-unproven": 98,
-  "SC2003 unproven-container-root": 149,
+  "SC2003 unproven-container-root": 150,
   "SC2004 async-slot-unmodelled": 4,
   "SC2004 component-identity-unproven": 1,
   "SC2004 computation-error-unobserved": 26,
@@ -237,7 +237,7 @@
   "SC9012 function-prototype-callee-unresolved": 2,
   "SC9012 function-run-unplaced": 1,
   "SC9012 handed-member-dispatch": 458,
-  "SC9012 handed-member-read": 70,
+  "SC9012 handed-member-read": 72,
   "SC9012 handed-read-after-await": 12,
   "SC9012 import-unresolved": 46,
   "SC9012 installed-member": 136,
@@ -245,7 +245,7 @@
   "SC9012 listener-reach": 63,
   "SC9012 package-callee": 26,
   "SC9012 package-finding-at-entry": 180,
-  "SC9012 parameter-call-argument-unproven": 98,
+  "SC9012 parameter-call-argument-unproven": 91,
   "SC9012 parameter-default-unresolved": 5,
   "SC9012 parameter-member-path-unresolved": 21,
   "SC9012 parameter-member-target-unresolved": 150,
@@ -284,7 +284,7 @@
   "SC9012 value-through-logical": 37,
   "SC9012 value-through-new": 32,
   "SC9012 value-thrown": 49,
-  "SC9012 value-to-unresolved-callee": 334,
+  "SC9012 value-to-unresolved-callee": 335,
   "SC9012 value-use-unclassified": 50,
   "SC9012 withheld-object-member": 86,
   "SC9014 dialect-detection": 207,
@@ -3492,6 +3492,52 @@
    "kind": "relabel",
    "relabeledTo": "SC2006 flush-in-action-unaccounted",
    "note": "the flush's function is now placed (its component's same-file tag hands it to no code nothing follows), so the row names the flush accounting's own blocker; still uncertifiable"
+  },
+  {
+   "fixture": "reactive-ir/accessor-provenance",
+   "key": "SC9012 parameter-call-argument-unproven",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1093",
+   "kind": "relabel",
+   "relabeledTo": "SC1002 read-after-await-unaccounted",
+   "note": "the call is the read of the getter it was handed back; the site keeps the after-await accounting's own row"
+  },
+  {
+   "fixture": "reactive-ir/async-creation-pass-forms",
+   "key": "SC9012 parameter-call-argument-unproven",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 1093",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 handed-member-read",
+   "note": "the call is the read of the transported getter; the handed-member obligation stands at the same site"
+  },
+  {
+   "fixture": "reactive-ir/context-member-identity",
+   "key": "SC9012 parameter-call-argument-unproven",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 1093",
+   "proof": "rust/crates/solid-reactive-ir/src/interproc/result_reads.rs::call_result_reads",
+   "fixtures": {
+    "proved": "reactive-ir/context-member-identity",
+    "open": "reactive-ir/closed-literal-dispatch"
+   },
+   "note": "a call of a getter a hook or context carries is the read of that getter, not a read through a value the call hands over (it hands over nothing): ADR 0771's obligation does not apply, and the read is the helper's, claimed where the helper runs"
+  },
+  {
+   "fixture": "reactive-ir/read-in-place-layers-summary",
+   "key": "SC9012 parameter-call-argument-unproven",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 1093",
+   "proof": "rust/crates/solid-reactive-ir/src/interproc/result_reads.rs::call_result_reads",
+   "fixtures": {
+    "proved": "reactive-ir/read-in-place-layers-summary",
+    "open": "reactive-ir/closed-literal-dispatch"
+   },
+   "note": "a call of a getter a hook or context carries is the read of that getter, not a read through a value the call hands over (it hands over nothing): ADR 0771's obligation does not apply, and the read is the helper's, claimed where the helper runs"
   }
  ],
  "renames": []

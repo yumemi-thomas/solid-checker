@@ -912,11 +912,11 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
       "kind": "uncertifiable",
-      "blocker": "parameter-call-argument-unproven",
-      "severity": "warning",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
       "path": "fixtures/reactive-ir/accessor-provenance/App.tsx",
       "start": 9243,
       "end": 9253,
