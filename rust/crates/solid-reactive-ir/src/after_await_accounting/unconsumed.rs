@@ -7,7 +7,11 @@
 //! only, for a read in a named async function (a declaration or a `const` binding) when all of these hold:
 //!
 //! - the function is `async` in code, not a generator, a method or a named function expression, and its value is current;
-//! - it is written in a module (a classic script's top-level function is a global another file may call as `window.f()`);
+//! - it is written in a module with runtime module syntax: a value import a runtime reference uses, a side-effect import, or a value export.
+//!   A classic script's top-level function is a global another file may call as `window.f()`, and a file whose only module syntax is
+//!   type-only is one under a stripping transpiler (the second review of 1090 G1, G2);
+//! - no class body lies between the function and the read: a field initializer, an accessor, a constructor or a static block is code of the
+//!   class, run wherever `new` (or `Reflect.construct`) runs, not the function's own straight-line code (the second review, G1);
 //! - it is not exported, unseen code does not enter it, and no other file references or calls it;
 //! - the program has no direct `eval` and no code-evaluating call (code a string holds may call the function where its promise is kept);
 //! - it has at least one reference, and every one is a direct call whose result is discarded (`f();` as a statement);
@@ -45,7 +49,12 @@ pub(super) fn holder_promise_unconsumed(
     if function.kind == solid_facts::ast::FunctionKind::Expression && function.name.is_some() {
         return false;
     }
-    if !crate::execution_role::file_is_module(file)
+    if !runtime_module_syntax(file)
+        || file
+            .ast
+            .classes
+            .iter()
+            .any(|class| function.span.contains(class.span) && class.span.contains(at))
         || lookup.hazard_present(crate::base::Hazard::Eval)
         || lookup.hazard_present(crate::base::Hazard::CodeEvaluatingCall)
         || !past_prefix(file, function.span, at)
@@ -82,6 +91,30 @@ pub(super) fn holder_promise_unconsumed(
     })
 }
 
+/// The file has module syntax a stripping transpiler keeps: a value import whose binding a runtime reference uses, a side-effect import, or a
+/// module-level export that is not type-only (`export {}` included: it is value syntax). `import type`, all-type specifiers, a value binding used
+/// only as a type and `export type`/`export interface` are erased, and the file may then be loaded as a classic script.
+fn runtime_module_syntax(file: &FileFacts) -> bool {
+    let ast = &file.ast;
+    ast.imports.iter().any(|import| {
+        !import.type_only
+            && (import.bindings.is_empty()
+                || import
+                    .bindings
+                    .iter()
+                    .any(|binding| !binding.type_only && binding.runtime_referenced))
+    }) || ast.module_level_exports().any(|export| {
+        !export.type_only
+            && (export.kind != solid_facts::ast::ExportKind::Named
+                || !export.declarations.is_empty()
+                || export.specifiers.is_empty()
+                || export
+                    .specifiers
+                    .iter()
+                    .any(|specifier| !specifier.type_only))
+    })
+}
+
 /// An await of the function at `function` that runs on every run of it ends before `at`: the code at `at` runs only after the function suspended.
 fn past_prefix(file: &FileFacts, function: Span, at: Span) -> bool {
     let ast = &file.ast;
@@ -91,4 +124,65 @@ fn past_prefix(file: &FileFacts, function: Span, at: Span) -> bool {
             && crate::owners::owning_function(ast, *await_span)
                 .is_some_and(|owner| owner.span == function)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::runtime_module_syntax;
+    use solid_facts::FileFacts;
+    use solid_facts::compiler::ExecutionMap;
+    use solid_facts::core::{Generation, SourceHash, SourcePath};
+    use std::sync::Arc;
+
+    fn file(source: &str) -> FileFacts {
+        let ast = solid_facts::ast::extract("unconsumed.ts", source).unwrap();
+        FileFacts {
+            generation: Generation::new(1).unwrap(),
+            path: SourcePath::new("unconsumed.ts").unwrap(),
+            source_hash: SourceHash::of(source),
+            source: Arc::from(source),
+            ast: Arc::new(ast),
+            compiler: Arc::new(ExecutionMap {
+                compiler_facts_protocol: solid_facts::compiler::COMPILER_FACTS_PROTOCOL,
+                source_hash: SourceHash::of(source),
+                semantic_model: Default::default(),
+                tracked_regions: vec![],
+                untracked_regions: vec![],
+                discarded_regions: vec![],
+                ownership_regions: vec![],
+                callback_roles: vec![],
+                jsx_operations: vec![],
+            }),
+        }
+    }
+
+    /// The second review of 1090 G1, G2: a file whose only module syntax a stripping transpiler erases may load as a classic script.
+    #[test]
+    fn only_module_syntax_a_stripping_transpiler_keeps_makes_a_module() {
+        for source in [
+            "import { f } from \"m\"; f();",
+            "import \"m\";",
+            "import * as n from \"m\"; n.f();",
+            "export const x = 1;",
+            "export function g() {}",
+            "export {};",
+            "const y = 1; export { y };",
+            "export default 1;",
+            "export * from \"m\";",
+        ] {
+            assert!(runtime_module_syntax(&file(source)), "{source}");
+        }
+        for source in [
+            "const y = 1;",
+            "import type { T } from \"m\"; let v: T;",
+            "import { type T } from \"m\"; let v: T;",
+            "import { T } from \"m\"; let v: T;",
+            "export type T = number;",
+            "export interface I { a: number }",
+            "type U = 1; export type { U };",
+            "export type * from \"m\";",
+        ] {
+            assert!(!runtime_module_syntax(&file(source)), "{source}");
+        }
+    }
 }

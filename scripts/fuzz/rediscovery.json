@@ -26013,5 +26013,20 @@
   "found": "R5's report (unlock #3: @solidjs/router's three `history.go` lines)",
   "fixed": "ADR 1080 (`runtime_semantics::synchronously_delivered_event_types`, `event_delivery.rs` `program_listens_for_any`)",
   "outside": "precision gain, no released defect to rediscover; the grids generate no navigation call (a page that navigates ends the oracle's run), so the fixtures `navigation-delivers-beforeunload*` pin the host fact, the census and its negatives, and the corpus delta measures it"
+ },
+ {
+  "finding": "G1: `AfterAwaitSafe::PromiseUnconsumed` ended a read written as a class's instance field initializer inside the async function, after its await (`box.K = class { x = read(); }`): a field initializer is no function fact, so the read was attributed to the function, but it runs wherever `new` runs, here in a `toString` an async memo's template literal runs after its own await. Chrome rc.21 reports UNTRACKED_READ_AFTER_AWAIT at the read; aa617ea2a certified the program",
+  "found": "the second Fable review of 1090 G1 (aa617ea2a, 2026-11-18)",
+  "fixed": "ADR 1090 G1 (second review): no read is ended when a class body lies between the function and the read (`unconsumed.rs`, `ast.classes`)",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": ["mx-untracked-read-after-await-pu-class-x-direct-none"],
+  "rediscovered": "aa617ea2a (release): false-clean, Chrome firing (focus exit 1); the fix: recall-gap (SC1002 read-after-await-unaccounted at the helper call). The read written in the initializer itself was already refused on aa617ea2a (SC1002 field-initializer-unplaced), so the generated cell reads through a helper"
+ },
+ {
+  "finding": "G2 (ruling): `AfterAwaitSafe::PromiseUnconsumed` took a file whose only module syntax is type-only (`import type`, `export type`) for a module, but a stripping transpiler erases that syntax and the file may load as a classic script, its function a global that `setTimeout(\"f()\")` or `window[\"eval\"]` reaches",
+  "found": "the second Fable review of 1090 G1 (aa617ea2a, 2026-11-18)",
+  "fixed": "ADR 1090 G1 (second review): the file must have module syntax a stripping transpiler keeps (`unconsumed.rs` `runtime_module_syntax`, unit test `only_module_syntax_a_stripping_transpiler_keeps_makes_a_module`)",
+  "outside": "not generated, and no fixture holds a site of it: a read site needs a reactive source, and a file gets one only through a value import a runtime reference uses (`createSignal`, a hook), which is runtime module syntax. The generator writes ES modules with such imports only. The unit test pins the module test on the type-only forms"
  }
 ]

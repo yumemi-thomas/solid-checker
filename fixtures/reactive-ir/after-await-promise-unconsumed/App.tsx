@@ -40,6 +40,17 @@ const looped = async () => {
 };
 looped();
 
+// Uncertifiable (second review of 1090 G1, G1): the read is a class's instance field initializer, which runs wherever `new` runs (here a
+// `toString` an async memo's template literal may run after its own await), not in the function that wrote the class.
+const classBox: { K?: new () => unknown } = {};
+const classed = async () => {
+  await pause();
+  classBox.K = class {
+    x = peek();
+  };
+};
+classed();
+
 // Uncertifiable (fail closed): the promise is consumed by `void`, a unary whose operand is the promise.
 const voided = async () => {
   await pause();

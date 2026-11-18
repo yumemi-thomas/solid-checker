@@ -2,6 +2,28 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/after-await-promise-unconsumed/App.tsx",
+      "start": 145,
+      "end": 152,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-promise-unconsumed/App.tsx",
+      "start": 145,
+      "end": 152,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
@@ -63,8 +85,8 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-promise-unconsumed/App.tsx",
-      "start": 1649,
-      "end": 1653,
+      "start": 1879,
+      "end": 1883,
       "fixes": 0
     },
     {
@@ -74,8 +96,8 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-promise-unconsumed/App.tsx",
-      "start": 1765,
-      "end": 1769,
+      "start": 2060,
+      "end": 2064,
       "fixes": 0
     },
     {
@@ -85,8 +107,8 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-promise-unconsumed/App.tsx",
-      "start": 1935,
-      "end": 1939,
+      "start": 2176,
+      "end": 2180,
       "fixes": 0
     },
     {
@@ -96,8 +118,19 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-promise-unconsumed/App.tsx",
-      "start": 2098,
-      "end": 2102,
+      "start": 2346,
+      "end": 2350,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-promise-unconsumed/App.tsx",
+      "start": 2509,
+      "end": 2513,
       "fixes": 0
     },
     {
@@ -107,8 +140,8 @@
       "blocker": "handed-read-after-await",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-promise-unconsumed/App.tsx",
-      "start": 2334,
-      "end": 2339,
+      "start": 2745,
+      "end": 2750,
       "fixes": 0
     },
     {

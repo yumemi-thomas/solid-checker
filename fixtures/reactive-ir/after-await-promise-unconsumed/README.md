@@ -4,4 +4,4 @@
 
 Clean: `fire` (a discarded call).
 
-Uncertifiable (fail closed): the two `.then` handlers (no exact fact says the receiver is a native promise; `Kept` is a subclass that keeps its instances), `looped` (its loop reads before the first await), `voided` (`void f()`: the promise is an operand), `stored` (the promise is kept), `exported` (a host may call and await an export, referenced or not), `chained` (the derived promise is returned), and `awaited`, which an async memo awaits: its read is the producers' (Chrome reports UNTRACKED_READ_AFTER_AWAIT there).
+Uncertifiable (fail closed): the two `.then` handlers (no exact fact says the receiver is a native promise; `Kept` is a subclass that keeps its instances), `looped` (its loop reads before the first await), `classed` (the read is a class field initializer, run where `new` runs), `voided` (`void f()`: the promise is an operand), `stored` (the promise is kept), `exported` (a host may call and await an export, referenced or not), `chained` (the derived promise is returned), and `awaited`, which an async memo awaits: its read is the producers' (Chrome reports UNTRACKED_READ_AFTER_AWAIT there).
