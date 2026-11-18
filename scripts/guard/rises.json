@@ -4138,6 +4138,22 @@
    "to": 22,
    "adr": "ADR 1071",
    "fact": "the sc4001 repro's loader now hands its namespace on (import(...).then(featureModule)), as the corpus sites it stands for do: the new line's own SC9012 and SC1002 rows"
+  },
+  {
+   "fixture": "reactive-ir/after-await-runner-callback",
+   "key": "SC1001 function-run-unplaced",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 1073",
+   "fact": "fixture extended: App.test.tsx gains a callback a reviewed runner schedules (handed to no computation); its reads are uncertifiable rows, the fixture's two SC1002 violations are unchanged"
+  },
+  {
+   "fixture": "reactive-ir/after-await-runner-callback",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 8,
+   "to": 10,
+   "adr": "ADR 1073",
+   "fact": "fixture extended: App.test.tsx gains a callback a reviewed runner schedules (handed to no computation); its reads are uncertifiable rows, the fixture's two SC1002 violations are unchanged"
   }
  ]
 }
