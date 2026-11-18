@@ -533,6 +533,13 @@ export const ROWS = [
     owner: "the differential fuzzer (operator tooling; its unit tests are a verify lane)",
     checks: ["fuzz-tests"],
   },
+  // The Chrome oracle page and judge the fuzzer's oracle runs drive (ADRs 1092, 1101). Its tests are fuzz tests (chrome, later-events, codes,
+  // checker, cache); unmapped, a one-line change to it escalated to a full `make verify`.
+  {
+    prefix: "scripts/runtime-oracle.mjs",
+    owner: "the fuzzer's Chrome oracle page and judge (its tests are in the fuzz lane)",
+    checks: ["fuzz-tests"],
+  },
   // A rule page is prose two tests read; the CLI tests and
   // emitted findings name its URL, which no check resolves. A renamed page is
   // what `rule-pages` catches.
