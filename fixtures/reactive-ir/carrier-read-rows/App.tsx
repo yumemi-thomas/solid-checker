@@ -1,6 +1,8 @@
-import { createSignal } from "solid-js";
+import { createMemo, createSignal } from "solid-js";
 
 declare function ext(): number;
+declare const extC: () => number;
+declare var extV: () => number;
 
 // Element call: the carrier's element is called in the body.
 export function ElementCall() {
@@ -79,4 +81,94 @@ export function Ambient() {
   const x = ext();
   console.log(x);
   return <p>{a()}</p>;
+}
+
+// ADR 1104 1b: near variants, each with its row at the read.
+export function LetForOf() {
+  const [a] = createSignal(1);
+  const src = [a];
+  let f: () => number;
+  let t = 0;
+  for (f of src) t += f();
+  console.log(t);
+  return <p>{a()}</p>;
+}
+
+export function SelfAlias() {
+  const [s] = createSignal(1);
+  const o = {
+    s,
+    get v() {
+      const self = this;
+      return self.s();
+    },
+  };
+  const x = o.v;
+  console.log(x);
+  return <p>{s()}</p>;
+}
+
+export function NestedThis() {
+  const [s] = createSignal(1);
+  const o = { inner: { s }, get v() { return this.inner.s(); } };
+  const x = o.v;
+  console.log(x);
+  return <p>{s()}</p>;
+}
+
+export function DefinedGetter() {
+  const [s] = createSignal(1);
+  const o = { s };
+  Object.defineProperty(o, "v", { get() { return this.s(); } });
+  console.log((o as unknown as { v: number }).v);
+  return <p>{s()}</p>;
+}
+
+export function AmbientConst() {
+  const [a] = createSignal(1);
+  (globalThis as unknown as { extC: () => number }).extC = a;
+  const x = extC();
+  console.log(x);
+  return <p>{a()}</p>;
+}
+
+export function AmbientVar() {
+  const [a] = createSignal(1);
+  (globalThis as unknown as { extV: () => number }).extV = a;
+  const x = extV();
+  console.log(x);
+  return <p>{a()}</p>;
+}
+
+// Twins of the narrowing: another slot read through `this`, an entries key, a props value summed in a memo.
+export function OtherSlot() {
+  const [s] = createSignal(1);
+  const o = { s, k: () => 1, get v() { return this.k(); } };
+  const x = o.v;
+  console.log(x);
+  return <p>{s()}</p>;
+}
+
+function Keys(props: { a: number }) {
+  let t = 0;
+  for (const [key, v] of Object.entries(props)) {
+    t += key.length;
+    t += Math.min(10, v);
+  }
+  console.log(t);
+  return <i>k</i>;
+}
+
+function Summed(props: { a: number }) {
+  const m = createMemo(() => {
+    let t = 0;
+    for (const v of Object.values(props)) t += Math.abs(v);
+    return t;
+  });
+  return <p>{m()}</p>;
+}
+
+export function PropsLoops() {
+  const [s] = createSignal(1);
+  return <div><Keys a={s()} /><Summed a={s()} /></div>;
 }

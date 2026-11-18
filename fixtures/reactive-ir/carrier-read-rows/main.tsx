@@ -1,5 +1,5 @@
 import { render } from "@solidjs/web";
-import { Ambient, ElementCall, ElementHeld, ForOf, ForOfHeld, ForOfHolder, HostRead, ThisGetter } from "./App";
+import { LetForOf, SelfAlias, NestedThis, DefinedGetter, AmbientConst, AmbientVar, OtherSlot, PropsLoops, Ambient, ElementCall, ElementHeld, ForOf, ForOfHeld, ForOfHolder, HostRead, ThisGetter } from "./App";
 
 render(() => <ElementCall />, document.body);
 render(() => <ElementHeld />, document.body);
@@ -9,3 +9,11 @@ render(() => <ForOfHeld />, document.body);
 render(() => <ThisGetter />, document.body);
 render(() => <HostRead />, document.body);
 render(() => <Ambient />, document.body);
+render(() => <LetForOf />, document.body);
+render(() => <SelfAlias />, document.body);
+render(() => <NestedThis />, document.body);
+render(() => <DefinedGetter />, document.body);
+render(() => <AmbientConst />, document.body);
+render(() => <AmbientVar />, document.body);
+render(() => <OtherSlot />, document.body);
+render(() => <PropsLoops />, document.body);
