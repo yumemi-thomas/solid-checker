@@ -1,0 +1,5 @@
+{
+  "note": "ADR 1052 part 8: a sync memo in a named function a child calls only from an owned onSettled: PRIMITIVE_IN_FORBIDDEN_SCOPE; SC7002 uncertifiable. Generated program `mx-sync-node-received-async-cbp-settled-named-memo-direct-none` (differential fuzzer, generator 2).",
+  "haltMarker": true,
+  "steps": []
+}

@@ -43,7 +43,11 @@ fn operation_sites(operation: &crate::LeafOwnerOperation) -> &[Location] {
 }
 
 /// Marks each row whose call meets an earlier check that throws (see the module docs).
-pub(crate) fn mark(program: &mut Program, lookup: &SemanticLookup<'_>) {
+pub(crate) fn mark(
+    program: &mut Program,
+    settled_gates: &crate::owners::SettledGateDecisions,
+    lookup: &SemanticLookup<'_>,
+) {
     // Calls an earlier check is proven to refuse, and so never reach the owner check (an obligation of either proves no
     // throw: where it does not throw, the owner check is reached, and Chrome reports NO_OWNER_* at such calls):
     // - the effect-callback guard (SC6002's violations) throws when an effect is created, before `createEffect` reports
@@ -116,7 +120,7 @@ pub(crate) fn mark(program: &mut Program, lookup: &SemanticLookup<'_>) {
                     && (effect_may_guard
                         .iter()
                         .any(|guarded| same_call(guarded, &requirement.location))
-                        || in_slot_called_only_in_applies(&requirement.location, lookup)))
+                        || in_slot_called_only_in_applies(&requirement.location, true, lookup)))
                     || leaf_refused
                         .iter()
                         .any(|refused| same_call(refused, &requirement.location))
@@ -177,6 +181,9 @@ pub(crate) fn mark(program: &mut Program, lookup: &SemanticLookup<'_>) {
             || (!anchors.is_empty() && every_run_refused(&violation.location, &anchors, lookup))
             || later_render_apply_run_only(&violation.location, lookup)
             || in_rerun_cleanup(&violation.location, lookup)
+            // ADR 1052 part 8: a render effect's apply is no such run here, since its first run is owned and reaches the probe.
+            || in_slot_called_only_in_applies(&violation.location, false, lookup)
+            || prop_runs_only_in_owned_leaf(&violation.location, settled_gates, lookup)
         {
             violation.uncertain = true;
             violation.analysis_context = crate::blockers::with_detail(
@@ -358,8 +365,13 @@ fn in_rerun_cleanup(site: &Location, lookup: &SemanticLookup<'_>) -> bool {
 /// a render effect's, whose first run is owned). Every unowned run of the function is then on an apply's stack, where creating
 /// an effect throws PRIMITIVE_IN_EFFECT_CALLBACK before `NO_OWNER_EFFECT` is reported. (Under ADR 1089's closed module entry the
 /// owner graph places `h1.go()` there, while SC6002's walk leaves the slot `function-run-unplaced`.) `false` for anything else:
-/// another reference (a handler, a hand-off, an export), a computed member, a slot of a literal no `const` holds.
-fn in_slot_called_only_in_applies(site: &Location, lookup: &SemanticLookup<'_>) -> bool {
+/// another reference (a handler, a hand-off, an export), a computed member, a slot of a literal no `const` holds. Part 8: SC7002
+/// asks with `rerunning_applies` false, since a render effect's owned first run reaches the result probe (no guard there).
+fn in_slot_called_only_in_applies(
+    site: &Location,
+    rerunning_applies: bool,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
     let Some(file) = lookup.file_by_path(site.path.as_ref()) else {
         return false;
     };
@@ -432,9 +444,10 @@ fn in_slot_called_only_in_applies(site: &Location, lookup: &SemanticLookup<'_>) 
                             lookup
                                 .dialect
                                 .callback_runs_in_effect_phase(primitive, index)
-                                || lookup
-                                    .dialect
-                                    .callback_reruns_in_effect_phase(primitive, index)
+                                || rerunning_applies
+                                    && lookup
+                                        .dialect
+                                        .callback_reruns_in_effect_phase(primitive, index)
                         })
             })
         })
@@ -456,6 +469,79 @@ fn in_slot_called_only_in_applies(site: &Location, lookup: &SemanticLookup<'_>) 
                                 && ast.peel_ts_sugar_span(call.callee) == member.span
                                 && in_apply(call)
                         })
+                })
+        })
+}
+
+/// ADR 1052 part 8: `site` is a creation the leaf owner refuses (`creates_forbidden_primitive`), written directly in a
+/// synchronous function that a project component's prop holds, and every call that runs it
+/// (`prop_callback_invocations`: through a named function, a forwarded prop or a spread props object) is written directly
+/// in the callback of a leaf owner (`CallbackOwner::Leaf`, `onSettled`'s), whose own call the owner fixed point decided
+/// runs under a live owner (`LeafGateDecision::Owned`; a gate with no decision proves nothing here). Every run of the
+/// creation is then on that leaf owner's stack, where it throws PRIMITIVE_IN_FORBIDDEN_SCOPE before the result probe.
+/// `false` for anything else: another call of the function, a call in a nested function, an out-of-band or undecided
+/// `onSettled`.
+fn prop_runs_only_in_owned_leaf(
+    site: &Location,
+    settled_gates: &crate::owners::SettledGateDecisions,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some(file) = lookup.file_by_path(site.path.as_ref()) else {
+        return false;
+    };
+    let (Ok(start), Ok(end)) = (u32::try_from(site.start_byte), u32::try_from(site.end_byte))
+    else {
+        return false;
+    };
+    let span = solid_facts::core::Span::new(start, end);
+    let Some(creation) = file.ast.calls.iter().find(|call| call.span.start == start) else {
+        return false;
+    };
+    if !lookup
+        .primitive_at_call(file, creation.span)
+        .is_some_and(|primitive| {
+            crate::cleanup::creates_forbidden_primitive(lookup.dialect, file, creation, primitive)
+        })
+    {
+        return false;
+    }
+    let Some(function) = crate::owners::owning_function(&file.ast, span) else {
+        return false;
+    };
+    if function.r#async || function.generator {
+        return false;
+    }
+    let Some(calls) = crate::execution_role::prop_callback_invocations(file, function, lookup)
+    else {
+        return false;
+    };
+    !calls.is_empty()
+        && calls.iter().all(|(call_file, call)| {
+            let ast = &call_file.ast;
+            let Some(callback) = crate::owners::owning_function(ast, *call) else {
+                return false;
+            };
+            ast.arguments_containing(callback.span)
+                .any(|(owner_call, index)| {
+                    ast.peel_ts_sugar_span(owner_call.arguments[index].span) == callback.span
+                        && owner_call.arguments[..=index]
+                            .iter()
+                            .all(|argument| !argument.spread)
+                        && lookup
+                            .primitive_at_call(call_file, owner_call.span)
+                            .is_some_and(|primitive| {
+                                crate::owners::callback_owner_at_call(
+                                    call_file, owner_call, primitive, index, lookup,
+                                ) == Some(solid_dialect::CallbackOwner::Leaf)
+                                    && (!lookup
+                                        .dialect
+                                        .leaf_owner_requires_owned_call_site(primitive)
+                                        || settled_gates.get(&(
+                                            call_file.path.to_string(),
+                                            u64::from(owner_call.span.start),
+                                            u64::from(owner_call.span.end),
+                                        )) == Some(&crate::owners::LeafGateDecision::Owned))
+                            })
                 })
         })
 }

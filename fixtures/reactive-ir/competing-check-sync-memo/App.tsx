@@ -144,3 +144,136 @@ export function MemoInBody() {
   createMemo(async () => 1, { sync: true });
   return <i />;
 }
+// Part 8 (1): a module object's slot only an effect's apply calls: the effect-callback guard first.
+const slots = {
+  go: () => {
+    createMemo(async () => 1, { sync: true });
+  },
+};
+export function MemoInSlotCalledInApply() {
+  createEffect(
+    () => 1,
+    () => {
+      slots.go();
+    },
+  );
+  return <i />;
+}
+// Violation kept: a render effect's apply runs first at creation, owned, and probes.
+const renderSlots = {
+  go: () => {
+    createMemo(async () => 1, { sync: true });
+  },
+};
+export function MemoInSlotCalledInRenderApply() {
+  createRenderEffect(
+    () => 1,
+    () => {
+      renderSlots.go();
+    },
+  );
+  return <i />;
+}
+// Part 8 (2): a prop callback an effect's apply calls, named, forwarded and spread: the effect-callback guard first.
+function ApplyKid(props: { run: () => void }) {
+  createEffect(
+    () => 1,
+    () => {
+      props.run();
+    },
+  );
+  return <i />;
+}
+function ApplyForward(props: { run: () => void }) {
+  return <ApplyKid run={props.run} />;
+}
+function ApplySpread(props: { run: () => void }) {
+  return <ApplyKid {...props} />;
+}
+export function MemoInNamedPropApply() {
+  function run() {
+    createMemo(async () => 1, { sync: true });
+  }
+  return <ApplyKid run={run} />;
+}
+export function MemoInForwardedPropApply() {
+  return (
+    <ApplyForward
+      run={() => {
+        createMemo(async () => 1, { sync: true });
+      }}
+    />
+  );
+}
+export function MemoInSpreadPropApply() {
+  return (
+    <ApplySpread
+      run={() => {
+        createMemo(async () => 1, { sync: true });
+      }}
+    />
+  );
+}
+// Violation kept: the forwarding component also calls the prop in its body, owned, and the probe runs.
+function ApplyForwardAndCall(props: { run: () => void }) {
+  props.run();
+  return <ApplyKid run={props.run} />;
+}
+export function MemoInForwardedPropAlsoInBody() {
+  return (
+    <ApplyForwardAndCall
+      run={() => {
+        createMemo(async () => 1, { sync: true });
+      }}
+    />
+  );
+}
+// Part 8 (3): a prop callback only an owned onSettled calls: the leaf owner's refusal first.
+function SettledKid(props: { run: () => void }) {
+  onSettled(() => {
+    props.run();
+  });
+  return <i />;
+}
+function SettledForward(props: { run: () => void }) {
+  return <SettledKid run={props.run} />;
+}
+export function MemoInPropSettled() {
+  return (
+    <SettledKid
+      run={() => {
+        createMemo(async () => 1, { sync: true });
+      }}
+    />
+  );
+}
+export function MemoInForwardedPropSettled() {
+  return (
+    <SettledForward
+      run={() => {
+        createMemo(async () => 1, { sync: true });
+      }}
+    />
+  );
+}
+// Violation kept: an onSettled called from a click handler has no owner, so its callback is no leaf owner's.
+function HandlerSettledKid(props: { run: () => void }) {
+  return (
+    <button
+      onClick={() => {
+        onSettled(() => {
+          props.run();
+        });
+      }}
+    />
+  );
+}
+export function MemoInPropUnownedSettled() {
+  return (
+    <HandlerSettledKid
+      run={() => {
+        createMemo(async () => 1, { sync: true });
+      }}
+    />
+  );
+}

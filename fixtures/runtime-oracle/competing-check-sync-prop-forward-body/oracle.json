@@ -1,0 +1,5 @@
+{
+  "note": "ADR 1052 part 8: the forwarding component also calls the prop in its body (owned) before the apply: SYNC_NODE_RECEIVED_ASYNC; SC7002 stays a violation.",
+  "haltMarker": true,
+  "steps": []
+}

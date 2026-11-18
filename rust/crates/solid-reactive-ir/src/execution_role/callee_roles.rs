@@ -1737,7 +1737,8 @@ pub(super) fn callee_parameter_use_role(
 /// runs nothing). `None` when the element spreads, another prop's value binds
 /// `this` and is reached through the props object, the parameter or the
 /// binding is written, a slot is computed or a rest, or a use is anything
-/// else (a value passed on, a forwarded prop, a member of the function).
+/// else (a value passed on, a forwarded prop, a member of the function), or
+/// when the calls are not all in one file.
 pub(crate) fn component_prop_invocations<'a>(
     file: &solid_facts::FileFacts,
     literal: &solid_facts::ast::FunctionFact,
@@ -1749,7 +1750,118 @@ pub(crate) fn component_prop_invocations<'a>(
         return None;
     }
     let (element, prop) = component_prop_literal(file, literal.span)?;
-    if !element.spreads.is_empty()
+    let mut calls = Vec::new();
+    element_prop_calls_from(file, element, prop, None, lookup, false, 0, &mut calls)?;
+    let (callee_file, _) = *calls.first()?;
+    calls
+        .iter()
+        .all(|(call_file, _)| call_file.path == callee_file.path)
+        .then(|| {
+            (
+                callee_file,
+                calls.into_iter().map(|(_, call)| call).collect(),
+            )
+        })
+}
+
+/// ADR 1052 part 8: [`component_prop_invocations`] that also follows the function to the component that calls it: a named function
+/// (`function run1() {}`, or a `const` holding an arrow) whose every reference is the whole value of a project component's prop, a
+/// prop's value handed on whole as another component's prop (`run={props.run}`, `run={run}` of a destructured prop), and the props
+/// object handed whole as another component's only spread (`<Kid {...props} />`, no attribute of the same name). A function that
+/// binds its own `this` counts only when its file has no `this` or `super` (`uses_receiver`): `props.run()` calls it with the props
+/// object as `this`. Each call comes with the file it is written in. `None` when any use of the function or of a prop on the way is
+/// anything else.
+pub(crate) fn prop_callback_invocations<'a>(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'a>,
+) -> Option<Vec<(&'a solid_facts::FileFacts, Span)>> {
+    if function.kind != solid_facts::ast::FunctionKind::Arrow && file.ast.uses_receiver {
+        return None;
+    }
+    let mut calls = Vec::new();
+    if let Some((element, prop)) = component_prop_literal(file, function.span) {
+        element_prop_calls_from(file, element, prop, None, lookup, true, 0, &mut calls)?;
+    } else {
+        // The name the function is bound to: its declaration's, or a `const` initialized with exactly it.
+        let name = match function.kind {
+            solid_facts::ast::FunctionKind::Declaration => function.name.as_ref()?.span,
+            _ => {
+                let binding = file.ast.bindings.iter().find(|binding| {
+                    binding.immutable
+                        && binding.shape == solid_facts::ast::BindingShape::Identifier
+                        && binding.names.len() == 1
+                        && binding.initializer.is_some_and(|initializer| {
+                            file.ast.peel_ts_sugar_span(initializer) == function.span
+                        })
+                })?;
+                binding.names[0].span
+            }
+        };
+        if crate::indexes::binding_written(file, name)
+            || file
+                .ast
+                .exports
+                .iter()
+                .any(|export| export.span.contains(name))
+                && crate::owners::owning_function(&file.ast, name).is_none()
+        {
+            return None;
+        }
+        let symbol = lookup.entities().at(file.path.as_str(), name)?;
+        let mut any = false;
+        for reference in lookup.symbol_references(symbol.as_str()) {
+            if reference.path.as_ref() != file.path.as_str() {
+                return None;
+            }
+            let span = Span::new(
+                u32::try_from(reference.start_byte).ok()?,
+                u32::try_from(reference.end_byte).ok()?,
+            );
+            if span == name {
+                continue;
+            }
+            let (element, prop) = forwarded_component_prop(file, span)?;
+            if element
+                .attributes
+                .iter()
+                .filter(|attribute| file.source_text(attribute.name) == Some(prop))
+                .count()
+                != 1
+            {
+                return None;
+            }
+            element_prop_calls_from(file, element, prop, None, lookup, true, 0, &mut calls)?;
+            any = true;
+        }
+        if !any {
+            return None;
+        }
+    }
+    (!calls.is_empty()).then_some(calls)
+}
+
+/// The depth past which [`element_prop_calls`] stops following forwards and spreads (`None`).
+const PROP_FORWARD_DEPTH: usize = 8;
+
+/// The element's checks of [`component_prop_invocations`] (no spread but `spread`, the one ADR 1052 part 8 followed, and no other
+/// attribute a function that binds `this`), then the calls of the component it renders.
+#[allow(clippy::too_many_arguments)]
+fn element_prop_calls_from<'a>(
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+    prop: &str,
+    spread: Option<Span>,
+    lookup: &SemanticLookup<'a>,
+    follow: bool,
+    depth: usize,
+    calls: &mut Vec<(&'a solid_facts::FileFacts, Span)>,
+) -> Option<()> {
+    if depth > PROP_FORWARD_DEPTH
+        || element
+            .spreads
+            .iter()
+            .any(|own| Some(file.ast.peel_ts_sugar_span(own.argument)) != spread)
         || element.attributes.iter().any(|attribute| {
             attribute
                 .expression
@@ -1758,6 +1870,16 @@ pub(crate) fn component_prop_invocations<'a>(
     {
         return None;
     }
+    let element_prop_calls =
+        |file: &solid_facts::FileFacts,
+         element: &solid_facts::ast::JsxElementFact,
+         prop: &str,
+         spread: Option<Span>,
+         lookup: &SemanticLookup<'a>,
+         depth: usize,
+         calls: &mut Vec<(&'a solid_facts::FileFacts, Span)>| {
+            element_prop_calls_from(file, element, prop, spread, lookup, follow, depth, calls)
+        };
     let (callee_file, callee) = lookup.function_called_at(file.path.as_str(), element.name.span)?;
     if callee.r#async || callee.generator {
         return None;
@@ -1804,7 +1926,25 @@ pub(crate) fn component_prop_invocations<'a>(
                     && ast.peel_ts_sugar_span(logical.left) == span
             })
     };
-    let mut calls = Vec::new();
+    // ADR 1052 part 8: `<Kid run={props.run} />`, the prop's value handed on whole as another component's prop: that component's calls.
+    // `Some(false)` when `value` is no such attribute value.
+    let forward =
+        |value: Span, calls: &mut Vec<(&'a solid_facts::FileFacts, Span)>| -> Option<bool> {
+            let Some((next, name)) = forwarded_component_prop(callee_file, value) else {
+                return Some(false);
+            };
+            if next
+                .attributes
+                .iter()
+                .filter(|attribute| callee_file.source_text(attribute.name) == Some(name))
+                .count()
+                != 1
+            {
+                return None;
+            }
+            element_prop_calls(callee_file, next, name, None, lookup, depth + 1, calls)?;
+            Some(true)
+        };
     match parameter.shape {
         solid_facts::ast::BindingShape::Identifier => {
             let [name] = parameter.names.as_slice() else {
@@ -1814,6 +1954,38 @@ pub(crate) fn component_prop_invocations<'a>(
                 return None;
             }
             for reference in references_of(name.span)? {
+                // ADR 1052 part 8: `<Kid {...props} />`, the props object handed whole to another component, which receives this prop.
+                if follow
+                    && let Some(spread_element) = ast.jsx_elements.iter().find(|candidate| {
+                        candidate
+                            .spreads
+                            .iter()
+                            .any(|spread| ast.peel_ts_sugar_span(spread.argument) == reference)
+                    })
+                {
+                    if spread_element.spreads.len() != 1
+                        || crate::execution_role::events::intrinsic_element(
+                            callee_file,
+                            spread_element,
+                        )
+                        || spread_element
+                            .attributes
+                            .iter()
+                            .any(|attribute| callee_file.source_text(attribute.name) == Some(prop))
+                    {
+                        return None;
+                    }
+                    element_prop_calls(
+                        callee_file,
+                        spread_element,
+                        prop,
+                        Some(reference),
+                        lookup,
+                        depth + 1,
+                        calls,
+                    )?;
+                    continue;
+                }
                 let member = ast
                     .members
                     .iter()
@@ -1855,7 +2027,10 @@ pub(crate) fn component_prop_invocations<'a>(
                 if tested(member.span) {
                     continue;
                 }
-                calls.push(direct_call(member.span)?);
+                if follow && forward(member.span, calls)? {
+                    continue;
+                }
+                calls.push((callee_file, direct_call(member.span)?));
             }
         }
         solid_facts::ast::BindingShape::Object => {
@@ -1891,12 +2066,15 @@ pub(crate) fn component_prop_invocations<'a>(
                 if tested(reference) {
                     continue;
                 }
-                calls.push(direct_call(reference)?);
+                if follow && forward(reference, calls)? {
+                    continue;
+                }
+                calls.push((callee_file, direct_call(reference)?));
             }
         }
         solid_facts::ast::BindingShape::Array => return None,
     }
-    (!calls.is_empty()).then_some((callee_file, calls))
+    Some(())
 }
 
 /// The project component element and prop name `value` is exactly the

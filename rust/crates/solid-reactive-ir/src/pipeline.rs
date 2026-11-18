@@ -54,6 +54,9 @@ pub(crate) struct ProgramDraft {
     /// ADR 0949: the owner graph's dense view, kept for the package entry table
     /// (built over the final rows, `owners::package_entry_table`).
     pub(crate) owner_view: Option<crate::owners::OwnerView>,
+    /// ADR 1052 part 8: the owner fixed point's decision for each call-site-gated leaf owner (`onSettled`), kept for
+    /// `competing_checks` over the final rows.
+    pub(crate) settled_gates: crate::owners::SettledGateDecisions,
     /// ADR 0936: the silences the producers named for sites they gave no row,
     /// filed beside the rows of the same results.
     pub(crate) site_ends: crate::site_accounting::SiteEnds,
@@ -935,6 +938,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     );
     let mut site_ends = std::mem::take(&mut draft.site_ends);
     let owner_view = draft.owner_view.take();
+    let settled_gates = std::mem::take(&mut draft.settled_gates);
     let mut program = draft.into_program(factory_instances);
     program.execution_paths = crate::execution_paths::execution_paths(
         facts,
@@ -1015,7 +1019,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         program.static_defects.extend(claims.defects);
     }
     // ADR 1052: a row whose call meets an earlier check that throws, over the final rows.
-    crate::competing_checks::mark(&mut program, semantic_lookup);
+    crate::competing_checks::mark(&mut program, &settled_gates, semantic_lookup);
     // ADR 0947: the typed blocker of each row a veto formula holds, over the final rows.
     (program.blocked_by, program.hazards) =
         crate::blocked_by::typed_blockers(&program, semantic_lookup);

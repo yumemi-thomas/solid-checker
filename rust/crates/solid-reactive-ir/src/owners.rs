@@ -94,6 +94,7 @@ pub(crate) fn collect_project(
         apply_settled_gates(&mut draft.leaf_operations, &gates);
         apply_settled_read_gates(&mut draft.async_reads, &gates);
         apply_settled_requirement_gates(ctx.semantic_lookup, &mut draft.missing_owners, &gates);
+        draft.settled_gates = gates;
         timings.absorb_owner(&owner_timings);
     } else {
         // A build with no retained cache runs the same pass over a scratch
@@ -118,6 +119,7 @@ pub(crate) fn collect_project(
         apply_settled_gates(&mut draft.leaf_operations, &gates);
         apply_settled_read_gates(&mut draft.async_reads, &gates);
         apply_settled_requirement_gates(ctx.semantic_lookup, &mut draft.missing_owners, &gates);
+        draft.settled_gates = gates;
         timings.absorb_owner(&owner_timings);
         timings.owner_recomputed_files =
             u64::try_from(crate::base::reads::file_slots(ctx.facts).len()).unwrap_or(u64::MAX);
