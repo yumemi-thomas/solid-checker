@@ -8,6 +8,8 @@
 
 - `ApplyAndHandler`, `ApplyAndRender` (part 3): a helper an apply and a handler or a render both call. SC6002's `effect-owner-unproven` obligation names the apply caller, whose run throws `PRIMITIVE_IN_EFFECT_CALLBACK` and halts.
 
-Violations kept: `HandlerOnly` (SC4001), `EffectFunctionPresentInTracked` (SC3001), and SC6002, SC3001 and SC7001 where they are the earlier check.
+- `SlotCalledInApply` (part 7): a module object's slot only an apply calls; every unowned run of its effect meets the guard first.
+
+Violations kept: `SlotAlsoInTimer` (a timer calls the slot too), `HandlerOnly` (SC4001), `EffectFunctionPresentInTracked` (SC3001), and SC6002, SC3001 and SC7001 where they are the earlier check.
 
 Chrome: `fixtures/runtime-oracle/competing-check-*` (one case per family: a halt stops the page). Stubs: `rc21-create-in-effect-unplaced`'s layout (a package the calls resolve to), reduced from rc.21.

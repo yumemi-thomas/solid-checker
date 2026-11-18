@@ -1,0 +1,5 @@
+{
+  "note": "ADR 1052 part 6, negative: an action an effect apply calls: the step lowers the effect flag, SYNC_NODE_RECEIVED_ASYNC; SC7002 stays a violation. Generated program `mx-sync-node-received-async-action-from-apply-memo-direct-none` (differential fuzzer, generator 2).",
+  "haltMarker": true,
+  "steps": []
+}

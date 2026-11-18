@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createRenderEffect, createTrackedEffect, onSettled } from "solid-js";
+import { action, createEffect, createMemo, createRenderEffect, createTrackedEffect, onSettled } from "solid-js";
 import * as S from "solid-js";
 
 // ADR 1052, part 2: `createMemo(async, { sync: true })` throws SYNC_NODE_RECEIVED_ASYNC (SC7002) only at its result probe; a
@@ -74,6 +74,28 @@ export function MemoInGuardedRenderApply(props: { on: number }) {
   return <i />;
 }
 
+// Part 6: in the cleanup an effect's apply returns, when the effect may rerun: the rerun calls it inside the effect
+// callback (PRIMITIVE_IN_EFFECT_CALLBACK first), and nothing orders that rerun against the disposal.
+export function MemoInRerunCleanup(props: { n: number }) {
+  createEffect(
+    () => props.n,
+    () => () => {
+      createMemo(async () => 1, { sync: true });
+    },
+  );
+  return <i />;
+}
+// Part 6: in the generator of an action only a leaf owner's callback calls: each call steps it under the leaf owner.
+export function MemoInActionFromSettled() {
+  const step = action(function* () {
+    createMemo(async () => 1, { sync: true });
+  });
+  onSettled(() => {
+    step();
+  });
+  return <i />;
+}
+
 // Violations kept: the render effect's owned first run creates it (straight line), and a helper the render also calls.
 export function MemoInRenderApply() {
   createRenderEffect(
@@ -95,6 +117,29 @@ export function MemoInTrackedAndBodyHelper() {
   return <i />;
 }
 // Violation kept: created in the component body, no earlier check throws.
+// The effect never reruns (its compute tracks nothing): only the disposal calls the cleanup, outside the callback.
+export function MemoInNeverRerunCleanup() {
+  createEffect(
+    () => 1,
+    () => () => {
+      createMemo(async () => 1, { sync: true });
+    },
+  );
+  return <i />;
+}
+// An action an apply calls: the step lowers the effect flag and keeps the owner, so the probe runs.
+export function MemoInActionFromApply() {
+  const step = action(function* () {
+    createMemo(async () => 1, { sync: true });
+  });
+  createEffect(
+    () => 1,
+    () => {
+      step();
+    },
+  );
+  return <i />;
+}
 export function MemoInBody() {
   createMemo(async () => 1, { sync: true });
   return <i />;
