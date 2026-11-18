@@ -202,7 +202,10 @@ pub fn package_reach_index(
         .filter(|(_, (demand, _))| !demand.subpaths.is_empty())
         .map(|(runtime, _)| runtime.clone())
         .collect::<HashSet<_>>();
-    let mut memo = Memo::default();
+    let mut memo = Memo {
+        inert_default_views: inert_default_views(facts),
+        ..Memo::default()
+    };
     let verdicts = by_runtime
         .into_iter()
         .map(|(runtime, (demand, siblings))| {
@@ -1008,6 +1011,102 @@ struct Memo {
     entry_ids: HashMap<(PathBuf, String), EntryId>,
     unseen: Vec<String>,
     unseen_ids: HashMap<String, UnseenId>,
+    /// ADR 1077: the `defaultView` reads the program's types prove hold no global object.
+    inert_default_views: InertDefaultViews,
+}
+
+/// ADR 1077: the static `x.defaultView` reads of the program's own files that the program's types prove hold no global object, by the file's canonical path, with
+/// the digest of the source the types were taken from (a scan of other bytes is not the same reads).
+#[derive(Default)]
+struct InertDefaultViews(HashMap<PathBuf, (typefacts::SourceHash, HashSet<(u32, u32)>)>);
+
+impl InertDefaultViews {
+    /// The scan of `file` with the reads proven inert left out; `None` when none is (the scan stands).
+    fn lifted(&self, file: &Path, scan: &ModuleScan) -> Option<ModuleScan> {
+        let base = scan.without_default_view_routes.as_deref()?;
+        let (hash, members) = self.0.get(file)?;
+        if *hash != base.source_hash {
+            return None;
+        }
+        scan.without_inert_default_views(|route| members.contains(&route.member))
+    }
+}
+
+/// ADR 1077: the library types a document may be typed as: its own, its subtypes, every interface it extends or implements in `lib.dom`, and `Object`.
+const DOCUMENT_TYPES: &[&str] = &[
+    "Document",
+    "HTMLDocument",
+    "XMLDocument",
+    "Node",
+    "EventTarget",
+    "DocumentOrShadowRoot",
+    "FontFaceSource",
+    "GlobalEventHandlers",
+    "NonElementParentNode",
+    "ParentNode",
+    "XPathEvaluatorBase",
+    "Object",
+];
+
+/// ADR 1077: for each file of the program, the static `x.defaultView` reads whose value the program's types prove holds no global object: the read is of a type
+/// with no object in it (its primitive domain: `"pages" | "infinite" | undefined`), and the receiver, as written and with assertions peeled, has a closed runtime
+/// domain and no library type a document may be. Any missing, `any` or `unknown` fact keeps the read.
+fn inert_default_views(facts: &solid_facts::ProjectFacts) -> InertDefaultViews {
+    let mut inert = InertDefaultViews::default();
+    for file in &facts.files {
+        let mut members = HashSet::new();
+        let entities = facts.typescript.entities_for_path(file.path.as_str());
+        for member in crate::demand_plan::default_view_members(file) {
+            let at = |span: solid_facts::core::Span| {
+                let found = entities
+                    .iter()
+                    .filter(|entity| {
+                        entity.location.start_byte == u64::from(span.start)
+                            && entity.location.end_byte == u64::from(span.end)
+                    })
+                    .collect::<Vec<_>>();
+                (!found.is_empty()).then_some(found)
+            };
+            let value_holds_no_object = at(member.span).is_some_and(|found| {
+                found.iter().all(|entity| {
+                    entity
+                        .primitive_value_domain
+                        .present()
+                        .is_some_and(|domain| !domain.unknown() && !domain.may_be_object())
+                })
+            });
+            let receiver_no_document = |span| {
+                at(span).is_some_and(|found| {
+                    found.iter().all(|entity| {
+                        entity
+                            .runtime_value_domain
+                            .is_some_and(|domain| !domain.unknown())
+                            && entity.library_types.as_deref().is_none_or(|types| {
+                                types
+                                    .iter()
+                                    .all(|name| !DOCUMENT_TYPES.contains(&name.as_ref()))
+                            })
+                    })
+                })
+            };
+            if value_holds_no_object
+                && receiver_no_document(member.object)
+                && receiver_no_document(file.ast.peel_ts_sugar_span(member.object))
+            {
+                members.insert((member.span.start, member.span.end));
+            }
+        }
+        if members.is_empty() {
+            continue;
+        }
+        let Ok(path) = fs::canonicalize(file.path.as_str()) else {
+            continue;
+        };
+        inert
+            .0
+            .insert(path, (typefacts::SourceHash::of(&file.source), members));
+    }
+    inert
 }
 
 impl Memo {
@@ -1101,7 +1200,7 @@ impl Memo {
         if let Some(visit) = &self.visits[file.0] {
             return Rc::clone(visit);
         }
-        let raw = record(&self.paths[file.0], solid);
+        let raw = record(&self.paths[file.0], solid, &self.inert_default_views);
         self.keep(file, raw)
     }
 
@@ -1147,9 +1246,10 @@ struct RawVisit {
 
 /// What visiting `file` does to a walk: its hazards are noted and its loads followed, in the order the visit meets them. It depends on the file, the dialect's Solid
 /// packages and the tree alone, so any thread may work it out.
-fn record(file: &Path, solid: &SolidPackages<'_>) -> RawVisit {
+fn record(file: &Path, solid: &SolidPackages<'_>, inert: &InertDefaultViews) -> RawVisit {
     let mut recorder = Recorder {
         solid,
+        inert,
         steps: Vec::new(),
     };
     let scan = match recorder.visit(file) {
@@ -1168,6 +1268,7 @@ fn record(file: &Path, solid: &SolidPackages<'_>) -> RawVisit {
 /// Works out what visiting one file does: its hazards are noted and its loads followed, as steps.
 struct Recorder<'a, 'd> {
     solid: &'a SolidPackages<'d>,
+    inert: &'a InertDefaultViews,
     steps: Vec<RawStep>,
 }
 
@@ -1232,6 +1333,8 @@ impl Recorder<'_, '_> {
                 return Err(problem);
             }
         };
+        // ADR 1077: a `defaultView` read the program's types prove holds no global object is no route to it.
+        let scan = self.inert.lifted(file, &scan).map_or(scan, Arc::new);
         for hazard in &scan.hazards {
             // A global the libraries do not declare and the global object handed on hide no code (the second is the rule's own question of the file's text).
             if matches!(
@@ -1674,6 +1777,7 @@ fn prepare(memo: &mut Memo, solid: &SolidPackages<'_>, level: &[FileId], wants_r
         .map(|file| memo.path(*file))
         .collect::<Vec<_>>();
     let reading = snapshot();
+    let inert = &memo.inert_default_views;
     std::thread::scope(|scope| {
         for _ in 0..threads {
             scope.spawn(|| {
@@ -1716,7 +1820,7 @@ fn prepare(memo: &mut Memo, solid: &SolidPackages<'_>, level: &[FileId], wants_r
                             let _ = prototype::routes_in(file);
                         }
                     }
-                    let raw = record(file, solid);
+                    let raw = record(file, solid, inert);
                     locked(&results)[at] = Some(raw);
                 }
             });

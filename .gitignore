@@ -1499,6 +1499,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/function-member-read/node_modules/**
 !fixtures/reactive-ir/action-in-owned-scope-linked-package/node_modules/
 !fixtures/reactive-ir/action-in-owned-scope-linked-package/node_modules/**
+!fixtures/reactive-ir/inert-global-reads/node_modules/
+!fixtures/reactive-ir/inert-global-reads/node_modules/**
 !fixtures/reactive-ir/action-in-owned-scope-origins/node_modules/
 !fixtures/reactive-ir/action-in-owned-scope-origins/node_modules/**
 !fixtures/reactive-ir/action-in-owned-scope-globals/node_modules/
