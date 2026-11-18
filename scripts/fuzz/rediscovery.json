@@ -26140,5 +26140,41 @@
    "mx-sync-node-received-async-effect-apply-shared-effect-direct-none"
   ],
   "rediscovered": "base 09f1a8f2f (main 2b4adb9c6 + part 8): with the rows out of open-defects-rows.json `focus.mjs --codes SYNC_NODE_RECEIVED_ASYNC --grids mx-census` on the 4 ids fails (4 false-positive); this build: 4 not-fired"
+ },
+ {
+  "finding": "a harness artifact read as a false positive: SC7002 at a sync memo in a listener on a node outside #root (or the window's error listener) that an owned onSettled fires synchronously: the harness never sent the later event that runs it with no owner, so Chrome reported only PRIMITIVE_IN_FORBIDDEN_SCOPE",
+  "found": "ADR 1052 part 4's ledger (evt-settled-fire-*, flw-settled-form-submit, flw-settled-report-error; coordinator ruling 2026-11-18: V is right, fix the harness)",
+  "fixed": "ADR 1099 (`scripts/runtime-oracle.mjs` `laterModule`; `chrome-host/runner.tsx`, `fast/runner.tsx`)",
+  "grid": "mx-census",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "mx-sync-node-received-async-evt-settled-fire-blur-effect-direct-none",
+   "mx-sync-node-received-async-evt-settled-fire-blur-memo-direct-none",
+   "mx-sync-node-received-async-evt-settled-fire-focus-effect-direct-none",
+   "mx-sync-node-received-async-evt-settled-fire-focus-memo-direct-none",
+   "mx-sync-node-received-async-evt-settled-fire-focus-member-effect-direct-none",
+   "mx-sync-node-received-async-evt-settled-fire-focus-member-memo-direct-none",
+   "mx-sync-node-received-async-evt-settled-fire-focus-wrapper-effect-direct-none",
+   "mx-sync-node-received-async-evt-settled-fire-focus-wrapper-memo-direct-none",
+   "mx-sync-node-received-async-evt-settled-fire-modal-effect-direct-none",
+   "mx-sync-node-received-async-evt-settled-fire-modal-memo-direct-none",
+   "mx-sync-node-received-async-evt-settled-fire-popover-effect-direct-none",
+   "mx-sync-node-received-async-evt-settled-fire-popover-memo-direct-none",
+   "mx-sync-node-received-async-evt-settled-fire-reset-effect-direct-none",
+   "mx-sync-node-received-async-evt-settled-fire-reset-memo-direct-none",
+   "mx-sync-node-received-async-evt-settled-fire-select-effect-direct-none",
+   "mx-sync-node-received-async-evt-settled-fire-select-memo-direct-none",
+   "mx-sync-node-received-async-evt-settled-fire-steal-effect-direct-none",
+   "mx-sync-node-received-async-evt-settled-fire-steal-memo-direct-none",
+   "mx-sync-node-received-async-evt-settled-fire-submit-effect-direct-none",
+   "mx-sync-node-received-async-evt-settled-fire-submit-memo-direct-none",
+   "mx-sync-node-received-async-evt-settled-fire-validity-effect-direct-none",
+   "mx-sync-node-received-async-evt-settled-fire-validity-memo-direct-none",
+   "mx-sync-node-received-async-flw-settled-form-submit-effect-direct-none",
+   "mx-sync-node-received-async-flw-settled-form-submit-memo-direct-none",
+   "mx-sync-node-received-async-flw-settled-report-error-effect-direct-none",
+   "mx-sync-node-received-async-flw-settled-report-error-memo-direct-none"
+  ],
+  "rediscovered": "old harness (6be8e3e34), same checker: `focus.mjs --codes SYNC_NODE_RECEIVED_ASYNC --grids mx-census` on the ids fails (false-positive); this harness: 26 agree"
  }
 ]
