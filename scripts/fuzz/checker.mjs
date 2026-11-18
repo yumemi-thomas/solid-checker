@@ -22,21 +22,28 @@ import { tsconfigFor } from "./typecheck.mjs";
  * the checker reads that driver (ADR 0435: a synchronous dispatch withholds event-handler owner proofs), so a verdict
  * computed without it is not the verdict Chrome's run sees.
  */
-export function oracleMainSource(oracleText = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../runtime-oracle.mjs"), "utf8"), mount) {
+export function oracleMainSource(oracleText = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../runtime-oracle.mjs"), "utf8"), mount, entered = null) {
   const open = "const mainSource = ";
   const start = oracleText.indexOf(open);
   const end = oracleText.indexOf("\n`;", start);
   if (start < 0 || end < 0) throw new Error("scripts/runtime-oracle.mjs no longer defines mainSource as a template literal");
   // eslint-disable-next-line no-new-func
   // `behaviourProbe` is "" without observations (scripts/runtime-oracle.mjs: `if (!observations.length) return ""`).
-  return new Function("behaviourProbe", `return (${oracleText.slice(start + open.length, end + 2)});`)(() => "")([], mount);
+  return new Function("behaviourProbe", `return (${oracleText.slice(start + open.length, end + 2)});`)(() => "")([], mount, entered);
 }
 export const MAIN_SOURCE = oracleMainSource();
-/** The entry a case's oracle.json `mount` gives (ADR 0501), the one the oracle writes for it; MAIN_SOURCE without one. */
-export const mainSourceFor = (oracleJson) => {
+/**
+ * The entry a case's oracle.json `mount` gives (ADR 0501), the one the oracle writes for it; MAIN_SOURCE without one. ADR 1089: with the case's App.tsx, a mount that names
+ * every export the namespace loop would enter (`enteredExports`) gets the entry without the loop, as the oracle writes it, so the checker reads no namespace hand-out the
+ * runtime's entry does not have.
+ */
+export const mainSourceFor = (oracleJson, appText) => {
   const mount = oracleJson ? JSON.parse(oracleJson).mount : undefined;
-  return mount ? oracleMainSource(undefined, mount) : MAIN_SOURCE;
+  return mount ? oracleMainSource(undefined, mount, appText === undefined ? null : enteredExports(appText)) : MAIN_SOURCE;
 };
+
+/** ADR 1089: the version of the harness's entry (`mainSourceFor`), recorded beside GENERATOR_VERSION in grid and audit headers: 2 leaves the namespace loop out of a mount that covers every entered export. */
+export const ENTRY_VERSION = 2;
 
 /**
  * `SOLID_CHECKER_FUZZ_BOUNDARY=open|closed` (focus.mjs `--boundary`): every program's checker project gets that boundary's manifest, whatever its
@@ -155,7 +162,7 @@ ${base.slice(driver)}`;
 }
 
 /** The entry a case's checker project gets: the named one under `entryOverride`, the oracle's otherwise. */
-export const entryFor = (oracleJson, appText) => (entryOverride() ? namedEntry(oracleJson, appText) ?? mainSourceFor(oracleJson) : mainSourceFor(oracleJson));
+export const entryFor = (oracleJson, appText) => (entryOverride() ? namedEntry(oracleJson, appText) ?? mainSourceFor(oracleJson, appText) : mainSourceFor(oracleJson, appText));
 
 /** The manifest a case's oracle.json `programBoundary` asks for, the one the oracle writes (scripts/runtime-oracle.mjs): a publishing one (an entry field) is open, a private one closed; none without it. */
 export const boundaryManifest = (oracleJson, id, override = boundaryOverride()) => {
