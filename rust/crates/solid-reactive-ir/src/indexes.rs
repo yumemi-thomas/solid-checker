@@ -1476,16 +1476,78 @@ impl<'a> SemanticLookup<'a> {
     /// primitive absent from this set cannot appear at any call, JSX tag, or
     /// binding initializer in this project. That makes the set a sound domain
     /// for probing what the dialect models.
+    ///
+    /// ADR 1095: a namespace import of a dialect module enters every primitive
+    /// in the table (`symbols::add_solid_import_names`, `S::<primitive>`), so
+    /// that `S.flush()` resolves. Those entries name a primitive here only when
+    /// some code may reach it: a namespace every reference of which is a
+    /// static member or a pattern of static slots
+    /// ([`crate::attribution::namespace_static_member_names`]) reaches the
+    /// members it names and no other. Any other reference keeps all of them.
     fn project_primitives(&self) -> &HashSet<solid_dialect::Primitive> {
         // Every file's names: a reader's answer moves with any file's (final
         // review R2, finding 4).
         crate::base::reads::note_once(crate::base::reads::Section::ProjectPrimitives);
         self.project_primitives.get_or_init(|| {
+            let unreached = self.namespace_entries_unreached();
             self.symbol_names
-                .values()
-                .filter_map(|name| self.dialect.primitive(name.as_str()))
+                .iter()
+                .filter(|(symbol, _)| !unreached.contains(*symbol))
+                .filter_map(|(_, name)| self.dialect.primitive(name.as_str()))
                 .collect()
         })
+    }
+
+    /// ADR 1095: the namespace entries of the symbol-name table
+    /// (`S::<primitive>`) that no namespace binding of the program may reach.
+    /// An entry is kept when any binding that has it may reach it: a binding
+    /// with a reference that is no static member or static slot keeps all its
+    /// entries, the others keep the members they name. The bindings of two
+    /// files may share one symbol, so an entry is dropped only when every
+    /// binding drops it.
+    fn namespace_entries_unreached(&self) -> HashSet<SymbolId> {
+        let mut entries = Vec::new();
+        let mut kept = HashSet::default();
+        for file in self.file_slots() {
+            for import in &file.ast.imports {
+                let primitives = self
+                    .dialect
+                    .namespace_import_primitives(import.module.as_str());
+                if primitives.is_empty() {
+                    continue;
+                }
+                for binding in &import.bindings {
+                    if binding.kind != solid_facts::ast::ImportKind::Namespace {
+                        continue;
+                    }
+                    let Some(symbol) = self.entities.at(file.path.as_str(), binding.local.span)
+                    else {
+                        continue;
+                    };
+                    let named =
+                        crate::attribution::namespace_static_member_names(file, binding.local.span);
+                    for primitive in primitives {
+                        let entry = super::symbol_id(&format!("{symbol}::{primitive}"));
+                        if !self.symbol_names.contains_key(&entry) {
+                            continue;
+                        }
+                        let escapes = named.is_none();
+                        if escapes
+                            || named
+                                .as_ref()
+                                .is_some_and(|named| named.contains(primitive))
+                        {
+                            kept.insert(entry.clone());
+                        }
+                        entries.push(entry);
+                    }
+                }
+            }
+        }
+        entries
+            .into_iter()
+            .filter(|entry| !kept.contains(entry))
+            .collect()
     }
 
     /// ADR 0695: whether code anywhere in the project can dispose an owner on a

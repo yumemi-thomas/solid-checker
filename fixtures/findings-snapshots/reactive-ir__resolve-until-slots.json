@@ -846,17 +846,6 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/resolve-until-slots/App.tsx",
-      "start": 3877,
-      "end": 3884,
-      "fixes": 0
-    },
-    {
       "rule": "primitive-in-effect-callback",
       "code": "SC6002",
       "kind": "uncertifiable",
@@ -1709,17 +1698,6 @@
       "path": "fixtures/reactive-ir/resolve-until-slots/App.tsx",
       "start": 6805,
       "end": 6810,
-      "fixes": 0
-    },
-    {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/resolve-until-slots/App.tsx",
-      "start": 7102,
-      "end": 7107,
       "fixes": 0
     },
     {

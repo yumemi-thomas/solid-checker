@@ -542,14 +542,14 @@
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/rc17-dynamic-component/App.tsx",
       "start": 5174,
-      "end": 5179,
+      "end": 5225,
       "fixes": 0,
-      "message": "flush() is called in a function that runs where no call edge places it, and this program steps an action's body; if a step is on the stack when it runs, the installed @solidjs/signals throws FLUSH_IN_ACTION in dev, and in production the call drains nothing",
-      "hint": "Call flush() only from code proven outside every action body (an event handler that starts no action, a timer), or remove it: an action's writes commit when the action settles."
+      "message": "this flush (`flush(() => { inlineLayer(() => { wrapUse(); });`) has no row and no recorded proof that places it, so whether this rule applies here is not decided",
+      "hint": "No analysis produced a row for this flush and none named a fact that rules this rule out; it is reported as an obligation until one does."
     },
     {
       "rule": "flush-in-effect-callback",

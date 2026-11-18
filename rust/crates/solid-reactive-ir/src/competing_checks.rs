@@ -8,8 +8,9 @@
 //! The earlier checks, by the order of the pinned rc.21 source (`@solidjs/signals` `dev.js`):
 //! - creating a primitive: the effect-callback guard (SC6002's `PRIMITIVE_IN_EFFECT_CALLBACK`) and the leaf owner's
 //!   refusal (SC3001's `PRIMITIVE_IN_FORBIDDEN_SCOPE`, `CLEANUP_IN_FORBIDDEN_SCOPE`) throw before the owner check
-//!   (`NO_OWNER_EFFECT` and the other owner codes, SC4001) is reached; a leaf owner's caller throws and halts the
-//!   system, so a caller of the same helper that runs later never reports (the order is not proven: an obligation);
+//!   (`NO_OWNER_EFFECT` and the other owner codes, SC4001) is reached; on a leaf owner's caller's run the refusal throws
+//!   first, and nothing orders that run against another caller's (a halt does not stop a later creation: rc.21 `halted`
+//!   gates only `schedule` and `flush`), so the owner row is an obligation;
 //! - `createEffect` with no callable effect function throws `MISSING_EFFECT_FN` (SC7001) before the leaf owner's
 //!   refusal (SC3001);
 //! - `useContext` throws `NO_OWNER_CONTEXT` (SC4001's context read) before it looks for a provider
@@ -48,9 +49,9 @@ pub(crate) fn mark(program: &mut Program, lookup: &SemanticLookup<'_>) {
     // - the effect-callback guard (SC6002's violations) throws when an effect is created, before `createEffect` reports
     //   `NO_OWNER_EFFECT` at its end; a boundary reports `NO_OWNER_BOUNDARY` before it creates anything, so the guard is
     //   earlier for an effect only;
-    // - the leaf owner's refusal (SC3001's violations, at the operation's own call) throws on the leaf caller's run and
-    //   halts the reactive system, so an unowned caller that runs later never reports; which runs first is not proven
-    //   in general, so the owner row is an obligation either way: every operation.
+    // - the leaf owner's refusal (SC3001's violations, at the operation's own call) throws on the leaf caller's run, and
+    //   nothing orders that run against an unowned caller's (a halt does not stop a later creation), so the owner row is
+    //   an obligation: every operation.
     let effect_guarded: Vec<Location> = program
         .static_violations
         .iter()
@@ -112,9 +113,10 @@ pub(crate) fn mark(program: &mut Program, lookup: &SemanticLookup<'_>) {
             OwnerRequirementOperation::ContextRead => false,
             operation => {
                 (operation == OwnerRequirementOperation::Effect
-                    && effect_may_guard
+                    && (effect_may_guard
                         .iter()
-                        .any(|guarded| same_call(guarded, &requirement.location)))
+                        .any(|guarded| same_call(guarded, &requirement.location))
+                        || in_slot_called_only_in_applies(&requirement.location, lookup)))
                     || leaf_refused
                         .iter()
                         .any(|refused| same_call(refused, &requirement.location))
@@ -174,6 +176,7 @@ pub(crate) fn mark(program: &mut Program, lookup: &SemanticLookup<'_>) {
             .any(|refused| same_call(refused, &violation.location))
             || (!anchors.is_empty() && every_run_refused(&violation.location, &anchors, lookup))
             || later_render_apply_run_only(&violation.location, lookup)
+            || in_rerun_cleanup(&violation.location, lookup)
         {
             violation.uncertain = true;
             violation.analysis_context = crate::blockers::with_detail(
@@ -215,16 +218,24 @@ fn every_run_refused(site: &Location, anchors: &[&Location], lookup: &SemanticLo
     else {
         return false;
     };
-    if function.r#async
-        || function.generator
-        || crate::execution_role::module_exports(file, function, lookup)
+    // The name every run goes through: the function's own (a declaration or the `const` it initializes), or, for a generator,
+    // the `const` the `action(...)` it is handed to initializes (ADR 1052 part 6: each call of the action steps the generator,
+    // and its first step runs on that call's stack).
+    let binding = if function.r#async {
+        None
+    } else if function.generator {
+        action_binding(file, function, lookup)
+    } else if crate::execution_role::module_exports(file, function, lookup)
         || !lookup.function_value_is_current(file, function)
     {
-        return false;
-    }
-    let Some(binding) = crate::owners::function_binding_name(file, function) else {
+        None
+    } else {
+        crate::owners::function_binding_name(file, function).map(|name| name.span)
+    };
+    let Some(binding) = binding else {
         return false;
     };
+    let binding = solid_facts::ast::NamedSpan { span: binding };
     let Some(symbol) = lookup.entities().at(file.path.as_str(), binding.span) else {
         return false;
     };
@@ -287,4 +298,164 @@ fn later_render_apply_run_only(site: &Location, lookup: &SemanticLookup<'_>) -> 
             .completion_sites
             .iter()
             .any(|completion| completion.start == span.start && apply.body.contains(*completion))
+}
+
+/// ADR 1052 part 6: the name of the `const` that `action(generator)` initializes, `generator` written as the action's only
+/// callback argument (no spread), the binding a single identifier that is a local or no export statement holds, and nothing
+/// writes. `None` for anything else.
+fn action_binding(
+    file: &solid_facts::FileFacts,
+    generator: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<solid_facts::core::Span> {
+    let ast = &file.ast;
+    // The exact recognition the leaf walk steps the action with (`named_action_generator`).
+    let (call, _) = crate::owners::stepped_action_generator(file, generator, lookup)?;
+    let binding = ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding.names.len() == 1
+            && binding
+                .initializer
+                .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == call.span)
+    })?;
+    if ast
+        .exports
+        .iter()
+        .any(|export| export.span.contains(binding.declaration))
+        // A binding written in a function is a local: an export statement around that function exports the function.
+        && crate::owners::owning_function(ast, binding.declaration).is_none()
+        || crate::indexes::binding_written(file, binding.names[0].span)
+    {
+        return None;
+    }
+    Some(binding.names[0].span)
+}
+
+/// ADR 1052 part 6: `site` is written directly in the cleanup an effect's apply returns, and the effect may rerun
+/// (`directly_in_rerun_effect_cleanup`, ADR 0539's `WindowedCleanup::MayRerun`): a rerun calls the cleanup inside the effect
+/// callback, where a creation meets the guard first, and nothing orders that rerun against the disposal that would run it
+/// outside. An effect whose compute provably tracks nothing never reruns and is not this.
+fn in_rerun_cleanup(site: &Location, lookup: &SemanticLookup<'_>) -> bool {
+    let Some(file) = lookup.file_by_path(site.path.as_ref()) else {
+        return false;
+    };
+    let (Ok(start), Ok(end)) = (u32::try_from(site.start_byte), u32::try_from(site.end_byte))
+    else {
+        return false;
+    };
+    crate::execution_role::directly_in_rerun_effect_cleanup(
+        file,
+        solid_facts::core::Span::new(start, end),
+        lookup,
+    )
+}
+
+/// ADR 1052 part 7: `site` is written directly in a function that is the value of a data property of an object literal a
+/// module-scope `const` holds (nothing exports or writes that binding), and every reference to the binding is the object of a
+/// member that resolves exactly to that function (`object_member_function`) and is the callee of a call written directly in an
+/// apply the effect phase runs (`Dialect::callback_runs_in_effect_phase`, an effect's apply, or `callback_reruns_in_effect_phase`,
+/// a render effect's, whose first run is owned). Every unowned run of the function is then on an apply's stack, where creating
+/// an effect throws PRIMITIVE_IN_EFFECT_CALLBACK before `NO_OWNER_EFFECT` is reported. (Under ADR 1089's closed module entry the
+/// owner graph places `h1.go()` there, while SC6002's walk leaves the slot `function-run-unplaced`.) `false` for anything else:
+/// another reference (a handler, a hand-off, an export), a computed member, a slot of a literal no `const` holds.
+fn in_slot_called_only_in_applies(site: &Location, lookup: &SemanticLookup<'_>) -> bool {
+    let Some(file) = lookup.file_by_path(site.path.as_ref()) else {
+        return false;
+    };
+    let (Ok(start), Ok(end)) = (u32::try_from(site.start_byte), u32::try_from(site.end_byte))
+    else {
+        return false;
+    };
+    let ast = &file.ast;
+    let Some(function) =
+        crate::owners::owning_function(ast, solid_facts::core::Span::new(start, end))
+    else {
+        return false;
+    };
+    if function.r#async || function.generator {
+        return false;
+    }
+    if !ast.object_properties.iter().any(|property| {
+        property.data
+            && !property.computed
+            && ast.peel_ts_sugar_span(property.value) == function.span
+    }) {
+        return false;
+    }
+    // The module `const` whose initializer is the literal holding the slot.
+    let Some(binding) = ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding.names.len() == 1
+            && binding.initializer.is_some_and(|initializer| {
+                initializer.contains(function.span)
+                    && ast.object_properties.iter().any(|property| {
+                        ast.peel_ts_sugar_span(property.value) == function.span
+                            && ast.peel_ts_sugar_span(initializer).contains(property.span)
+                    })
+            })
+    }) else {
+        return false;
+    };
+    let name = binding.names[0].span;
+    if crate::owners::owning_function(ast, binding.declaration).is_some()
+        || ast
+            .exports
+            .iter()
+            .any(|export| export.span.contains(binding.declaration))
+        || crate::indexes::binding_written(file, name)
+    {
+        return false;
+    }
+    let Some(symbol) = lookup.entities().at(file.path.as_str(), name) else {
+        return false;
+    };
+    let references: Vec<_> = lookup
+        .symbol_references(symbol.as_str())
+        .into_iter()
+        .filter(|reference| {
+            !(reference.path.as_ref() == file.path.as_str()
+                && reference.start_byte == u64::from(name.start))
+        })
+        .collect();
+    let in_apply = |call: &solid_facts::ast::CallFact| {
+        crate::owners::owning_function(ast, call.span).is_some_and(|apply| {
+            ast.arguments_containing(apply.span).any(|(holder, index)| {
+                ast.peel_ts_sugar_span(holder.arguments[index].span) == apply.span
+                    && holder.arguments[..=index]
+                        .iter()
+                        .all(|argument| !argument.spread)
+                    && lookup
+                        .primitive_at_call(file, holder.span)
+                        .is_some_and(|primitive| {
+                            lookup
+                                .dialect
+                                .callback_runs_in_effect_phase(primitive, index)
+                                || lookup
+                                    .dialect
+                                    .callback_reruns_in_effect_phase(primitive, index)
+                        })
+            })
+        })
+    };
+    !references.is_empty()
+        && references.iter().all(|reference| {
+            reference.path.as_ref() == file.path.as_str()
+                && ast.members.iter().any(|member| {
+                    u64::from(ast.peel_ts_sugar_span(member.object).start) == reference.start_byte
+                        && ast.computed_members.binary_search(&member.span).is_err()
+                        && lookup
+                            .object_member_function(file, member.span)
+                            .is_some_and(|(target, slot)| {
+                                target.path.as_str() == file.path.as_str()
+                                    && slot.span == function.span
+                            })
+                        && ast.calls.iter().any(|call| {
+                            !call.construct
+                                && ast.peel_ts_sugar_span(call.callee) == member.span
+                                && in_apply(call)
+                        })
+                })
+        })
 }

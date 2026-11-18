@@ -1,0 +1,8 @@
+{
+  "note": "ADR 1052 part 7, negative: the same slot also called from a timer: the timer run has no owner and reports NO_OWNER_EFFECT; SC4001 stays a violation.",
+  "haltMarker": true,
+  "mount": [
+    "C1"
+  ],
+  "steps": []
+}

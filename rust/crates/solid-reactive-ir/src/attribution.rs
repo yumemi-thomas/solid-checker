@@ -2287,6 +2287,65 @@ pub(crate) fn namespace_used_by_static_members(
         })
 }
 
+/// ADR 1095: the export names every runtime reference to the namespace binding
+/// declared at `declaration` reads, or `None` when a reference may hand the
+/// namespace object to code that reads others. A reference is a member with a
+/// static name (`S.flush`, `S["flush"]`), erased in a type query, or the
+/// initializer of an object pattern each bound name of which is a namespace
+/// member slot of this binding (`const { flush: f } = S`; a rest element, a
+/// nested pattern, a computed key or another default binds a name that is no
+/// such slot). Anything else (`const N = S`, an argument, an export, a JSX
+/// tag) is `None`.
+pub(crate) fn namespace_static_member_names(
+    file: &solid_facts::FileFacts,
+    declaration: Span,
+) -> Option<HashSet<&str>> {
+    let mut read = HashSet::default();
+    for (reference, _) in file
+        .ast
+        .reference_declarations
+        .iter()
+        .filter(|(_, declared)| *declared == declaration)
+    {
+        if file
+            .ast
+            .type_queries
+            .iter()
+            .any(|query| query.contains(*reference))
+        {
+            continue;
+        }
+        if let Some(member) = file
+            .ast
+            .members
+            .iter()
+            .find(|member| file.ast.peel_ts_sugar_span(member.object) == *reference)
+        {
+            read.insert(crate::installed_members::member_name(file, member)?);
+            continue;
+        }
+        let pattern = file.ast.bindings.iter().find(|binding| {
+            binding.shape == solid_facts::ast::BindingShape::Object
+                && binding
+                    .initializer_identifier
+                    .as_ref()
+                    .is_some_and(|initializer| initializer.span == *reference)
+        })?;
+        if pattern.names.is_empty() {
+            return None;
+        }
+        for name in &pattern.names {
+            let slot = file
+                .ast
+                .namespace_member_bindings
+                .iter()
+                .find(|slot| slot.local == name.span && slot.namespace == declaration)?;
+            read.insert(slot.key.as_str());
+        }
+    }
+    Some(read)
+}
+
 /// A call's callee, by file and byte range.
 type CallSiteKey = (String, u32, u32);
 /// A reference, by file and byte range.

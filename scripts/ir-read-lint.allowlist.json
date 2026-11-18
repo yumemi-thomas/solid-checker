@@ -60,9 +60,11 @@
     "file_by_path": 4
   },
   "rust/crates/solid-reactive-ir/src/competing_checks.rs": {
-    "file_by_path": 2,
+    "file_by_path": 4,
     "pending-review": [
-      "file_by_path rose 0 -> 2 (--allow-rise): unreviewed"
+      "file_by_path rose 0 -> 2 (--allow-rise): unreviewed",
+      "file_by_path rose 2 -> 3 (--allow-rise): unreviewed",
+      "file_by_path rose 3 -> 4 (--allow-rise): unreviewed"
     ]
   },
   "rust/crates/solid-reactive-ir/src/development_feedback.rs": {
@@ -185,14 +187,15 @@
     "symbols_by_id": 1
   },
   "rust/crates/solid-reactive-ir/src/indexes.rs": {
-    "file_slots": 22,
+    "file_slots": 23,
     "file_by_path": 3,
     "symbols_by_id": 7,
     "typescript-table": 3,
     "symbol_names-scan": 2,
     "hashmap-iteration": 1,
     "pending-review": [
-      "symbol_names-scan rose 1 -> 2 (--allow-rise): unreviewed"
+      "symbol_names-scan rose 1 -> 2 (--allow-rise): unreviewed",
+      "file_slots rose 22 -> 23 (--allow-rise): unreviewed"
     ]
   },
   "rust/crates/solid-reactive-ir/src/interproc/graph.rs": {

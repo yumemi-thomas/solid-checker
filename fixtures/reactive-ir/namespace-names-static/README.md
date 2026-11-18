@@ -1,0 +1,3 @@
+# namespace-names-static
+
+**Claim (ADR 1095).** A namespace import of `solid-js` whose every reference is a static member (`S.flush`) or a pattern of static slots (`const { flush: flushD } = S`) names only those members in the project's primitive census. The program names `createSignal` and `flush`, so `NoSteppedAction`, `NoDeferringPrimitive` and `NoLeafScope` hold and both handler flushes are clean, as they are with `flush` imported by name (`lg-flush-in-action-handler-x-direct-none`). Twins: `namespace-names-escape` (a `const` holder), `namespace-names-rest` (a rest element), `namespace-names-effect` (the violation). `solid-js.d.ts` is `flush-universe-no-action`'s.

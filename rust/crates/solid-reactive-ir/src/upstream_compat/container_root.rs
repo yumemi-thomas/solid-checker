@@ -394,6 +394,15 @@ impl Routes<'_, '_> {
         else {
             return self.open();
         };
+        // ADR 1093: the symbol the binder resolves the reference to is the same question as `source_symbol_at`'s, for a
+        // reference whose entity the Type Facts table does not hold (one written in an expression-bodied arrow's returned literal:
+        // `const useThing = () => ({ useIt: setStore })`).
+        if context.accessors.contains_key(&symbol)
+            || context.setters.contains_key(&symbol)
+            || context.actions.contains_key(&symbol)
+        {
+            return self.leaves.push(Leaf::Source(symbol, path.len()));
+        }
         if !binding.immutable
             || binding
                 .names
