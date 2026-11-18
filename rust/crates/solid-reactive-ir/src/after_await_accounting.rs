@@ -71,6 +71,7 @@ mod handlers;
 mod library_call;
 mod member_reads;
 mod timer_handle;
+mod unconsumed;
 
 use solid_facts::FileFacts;
 use solid_facts::ast::ArgumentValueKind;
@@ -106,16 +107,21 @@ enum AfterAwaitSafe {
     /// The facts asked are the flush accounting's for the same class ([`crate::flush_accounting::runs_when_the_call_runs`]): the site is in the callback's body and nothing
     /// written between runs it elsewhere, the callback is no generator, and its own name (a named function expression) is used nowhere.
     RunnerScheduled,
+    /// ADR 1090: the promise of the function holding the site is never consumed ([`unconsumed`]): a named async function every reference of which is a discarded direct
+    /// call, or a handler of a discarded standard `Promise.then` on a native promise. rc.21 raises the code only for a read whose async stack holds the frame that awaits
+    /// an async computation's returned promise, and nothing awaits this one.
+    PromiseUnconsumed,
 }
 
 impl AfterAwaitSafe {
     /// In the order they are asked, the cheapest first.
-    const ALL: [Self; 5] = [
+    const ALL: [Self; 6] = [
         Self::NeverRuns,
         Self::RunnerScheduled,
         Self::LibraryRunsNothing,
         Self::OwnerCaptured,
         Self::PlainReceiver,
+        Self::PromiseUnconsumed,
     ];
 
     /// The id the proof log writes, and `SOLID_CHECKER_IR_ABLATE_SILENCE` names (`<module>.<function>.<end>`).
@@ -126,6 +132,7 @@ impl AfterAwaitSafe {
             Self::OwnerCaptured => "after_await_accounting.account.owner-captured",
             Self::PlainReceiver => "after_await_accounting.account.plain-receiver",
             Self::RunnerScheduled => "after_await_accounting.account.runner-scheduled",
+            Self::PromiseUnconsumed => "after_await_accounting.account.promise-unconsumed",
         }
     }
 
@@ -138,6 +145,9 @@ impl AfterAwaitSafe {
         object_prototype_touched: &dyn Fn() -> bool,
     ) -> bool {
         match self {
+            Self::PromiseUnconsumed => {
+                unconsumed::holder_promise_unconsumed(ctx, site.file, site.at)
+            }
             Self::NeverRuns => matches!(
                 reach.site(site.file, site.at),
                 crate::execution_role::Reach::Unreached(_)
@@ -860,7 +870,8 @@ mod tests {
                 "after_await_accounting.account.runner-scheduled",
                 "after_await_accounting.account.library-runs-nothing",
                 "after_await_accounting.account.owner-captured",
-                "after_await_accounting.account.plain-receiver"
+                "after_await_accounting.account.plain-receiver",
+                "after_await_accounting.account.promise-unconsumed"
             ]
         );
         // ADR 0973: a closure that reads nothing the universe lists (the review of #233: a store read through an alias, a stored generator stepped by a spread, a trap or a
