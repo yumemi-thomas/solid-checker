@@ -70,6 +70,7 @@ mod flight_census;
 mod handlers;
 mod library_call;
 mod member_reads;
+mod setter_callee;
 mod timer_handle;
 
 use solid_facts::FileFacts;
@@ -106,16 +107,21 @@ enum AfterAwaitSafe {
     /// The facts asked are the flush accounting's for the same class ([`crate::flush_accounting::runs_when_the_call_runs`]): the site is in the callback's body and nothing
     /// written between runs it elsewhere, the callback is no generator, and its own name (a named function expression) is used nowhere.
     RunnerScheduled,
+    /// ADR 1097 (reopened narrowly): an argument-less call whose callee is an exact same-file, unexported, never-written `const` (or a `const x = y` chain of them)
+    /// holding a function literal, or an action's generator, whose body is nothing but exact setter calls that run nothing ([`setter_callee`]). The only callee
+    /// reason: it asks no question of what a body reads, only whether the body is, by its facts, setter calls and nothing else.
+    SetterOnlyCallee,
 }
 
 impl AfterAwaitSafe {
     /// In the order they are asked, the cheapest first.
-    const ALL: [Self; 5] = [
+    const ALL: [Self; 6] = [
         Self::NeverRuns,
         Self::RunnerScheduled,
         Self::LibraryRunsNothing,
         Self::OwnerCaptured,
         Self::PlainReceiver,
+        Self::SetterOnlyCallee,
     ];
 
     /// The id the proof log writes, and `SOLID_CHECKER_IR_ABLATE_SILENCE` names (`<module>.<function>.<end>`).
@@ -126,6 +132,7 @@ impl AfterAwaitSafe {
             Self::OwnerCaptured => "after_await_accounting.account.owner-captured",
             Self::PlainReceiver => "after_await_accounting.account.plain-receiver",
             Self::RunnerScheduled => "after_await_accounting.account.runner-scheduled",
+            Self::SetterOnlyCallee => "after_await_accounting.account.setter-only-callee",
         }
     }
 
@@ -138,6 +145,13 @@ impl AfterAwaitSafe {
         object_prototype_touched: &dyn Fn() -> bool,
     ) -> bool {
         match self {
+            // The wrapper (`call`), an action alias (`action`) and an action whose call the census takes for replaced (`inexact`): the callee proof decides.
+            Self::SetterOnlyCallee => {
+                matches!(site.via, "call" | "action" | "inexact")
+                    && site.call.is_some_and(|call| {
+                        setter_callee::only_calls_setters(ctx, site.file, call, object_prototype_touched)
+                    })
+            }
             Self::NeverRuns => matches!(
                 reach.site(site.file, site.at),
                 crate::execution_role::Reach::Unreached(_)
@@ -857,7 +871,7 @@ mod tests {
     }
 
     #[test]
-    fn the_reasons_are_never_runs_library_runs_nothing_and_owner_captured_and_there_is_no_callee_or_census_reason()
+    fn the_reasons_are_never_runs_library_runs_nothing_and_owner_captured_and_the_only_callee_reason_is_setter_only()
      {
         assert_eq!(
             AfterAwaitSafe::ALL.map(AfterAwaitSafe::id),
@@ -866,15 +880,26 @@ mod tests {
                 "after_await_accounting.account.runner-scheduled",
                 "after_await_accounting.account.library-runs-nothing",
                 "after_await_accounting.account.owner-captured",
-                "after_await_accounting.account.plain-receiver"
+                "after_await_accounting.account.plain-receiver",
+                "after_await_accounting.account.setter-only-callee"
             ]
         );
         // ADR 0973: a closure that reads nothing the universe lists (the review of #233: a store read through an alias, a stored generator stepped by a spread, a trap or a
-        // getter installed by reference) and the absence of a recognized computation (the oracle cases `after-await-universe-census-*`) are no endings.
-        assert!(AfterAwaitSafe::ALL.iter().all(|reason| {
-            let id = reason.id();
-            !id.contains("callee") && !id.contains("tracked-async-computation")
-        }));
+        // getter installed by reference) and the absence of a recognized computation (the oracle cases `after-await-universe-census-*`) are no endings. ADR 1097 (reopened
+        // narrowly): the one callee reason asks no question of what a body reads, only whether it is exact setter calls and nothing else (`setter_callee`).
+        assert_eq!(
+            AfterAwaitSafe::ALL
+                .iter()
+                .filter(|reason| reason.id().contains("callee"))
+                .map(|reason| reason.id())
+                .collect::<Vec<_>>(),
+            ["after_await_accounting.account.setter-only-callee"]
+        );
+        assert!(
+            AfterAwaitSafe::ALL
+                .iter()
+                .all(|reason| !reason.id().contains("tracked-async-computation"))
+        );
     }
 
     #[test]
