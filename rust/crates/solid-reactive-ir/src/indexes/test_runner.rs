@@ -167,7 +167,7 @@ impl SemanticLookup<'_> {
                 return None;
             }
             let name = declaration.name.as_ref();
-            let spelled = self.manifest_spelling(path);
+            let spelled = self.installed_spelling(path);
             let timing =
                 crate::runtime_semantics::test_runner_function_declaration(&spelled, name)?;
             let is_suite = crate::runtime_semantics::test_runner_suite_function(name);
@@ -182,21 +182,9 @@ impl SemanticLookup<'_> {
         Some((suite?, bodies?))
     }
 
-    /// ADR 1082: `path` spelled as a plain install would place it (`…/node_modules/<name>/<rest>`) when it lies in a linker's store slot
-    /// (`…/node_modules/.store/<slot>/package/<rest>`, [`solid_facts::package_reach::package_root_of`]) whose `package.json` the backend read
-    /// (`PackageReachIndex::name_of`): the package is what its manifest names, whatever directory the linker gave it. Any other path, a slot
-    /// whose manifest was not read, and an adapter with no filesystem keep `path` as written, so nothing unread is taken for a runner.
-    fn manifest_spelling<'p>(&self, path: &'p str) -> std::borrow::Cow<'p, str> {
-        let slot = solid_facts::package_reach::package_root_of(path).and_then(|root| {
-            let (prefix, below) = root.rsplit_once("/node_modules/")?;
-            below.starts_with(".store/").then_some(())?;
-            let name = self.package_reach()?.name_of(root)?;
-            Some(format!(
-                "{prefix}/node_modules/{name}{}",
-                &path[root.len()..]
-            ))
-        });
-        slot.map_or(std::borrow::Cow::Borrowed(path), std::borrow::Cow::Owned)
+    /// ADR 1082/1086: [`solid_facts::package_reach::installed_spelling`] with this build's package index.
+    pub(crate) fn installed_spelling<'p>(&self, path: &'p str) -> std::borrow::Cow<'p, str> {
+        solid_facts::package_reach::installed_spelling(self.package_reach(), path)
     }
 
     /// Whether the identifier at `span` is an object a reviewed fake-timer library declares (`vi` of `import { vi } from "vitest"`, the global `jest` of `@types/jest`,
@@ -211,7 +199,7 @@ impl SemanticLookup<'_> {
         self.alias_root_at(file, span).is_some_and(|symbol| {
             symbol.declarations().iter().any(|declaration| {
                 crate::runtime_semantics::fake_timer_library_declaration(
-                    declaration.location.path.as_ref(),
+                    &self.installed_spelling(declaration.location.path.as_ref()),
                 )
             })
         })

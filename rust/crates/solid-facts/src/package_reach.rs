@@ -505,6 +505,28 @@ pub fn package_root_of(path: &str) -> Option<&str> {
     Some(&path[..start + length])
 }
 
+/// ADR 1082/1086: `path` spelled as a plain install places it (`…/node_modules/<name>/<rest>`) when it lies in a linker's store slot
+/// (`…/node_modules/.store/<slot>/package/<rest>`, [`package_root_of`]) whose `package.json` the backend read ([`PackageReachIndex::name_of`]):
+/// a package is what its manifest names, whatever directory the linker gave it. Every check that recognises a package by the path
+/// segments of a declaration or file asks this first. Any other path, a slot whose manifest was not read, and an adapter with no
+/// filesystem (`index` is `None`) keep `path` as written, so nothing unread is taken for a named package.
+#[must_use]
+pub fn installed_spelling<'p>(
+    index: Option<&PackageReachIndex>,
+    path: &'p str,
+) -> std::borrow::Cow<'p, str> {
+    let slot = package_root_of(path).and_then(|root| {
+        let (prefix, below) = root.rsplit_once("/node_modules/")?;
+        below.starts_with(".store/").then_some(())?;
+        let name = index?.name_of(root)?;
+        Some(format!(
+            "{prefix}/node_modules/{name}{}",
+            &path[root.len()..]
+        ))
+    });
+    slot.map_or(std::borrow::Cow::Borrowed(path), std::borrow::Cow::Owned)
+}
+
 /// The name a package root goes by in a report: the directory under its last `node_modules` (`@scope/name`), and for a `.store` slot
 /// (`@babel-code-frame-npm-7.29.7-cc910f9962`) the package name it is named for (`@babel/code-frame`).
 #[must_use]
@@ -534,6 +556,32 @@ pub fn is_declaration_file(path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ADR 1086: a store slot reads as the package its manifest names; an unread manifest, a plain install and no index keep the path.
+    #[test]
+    fn a_store_slot_is_spelled_as_its_manifest_names_it() {
+        let slot = "/p/node_modules/.store/vitest-virtual-0a1b/package";
+        let path = format!("{slot}/dist/index.d.ts");
+        let mut index = PackageReachIndex::default();
+        assert_eq!(installed_spelling(Some(&index), &path), path.as_str());
+        assert_eq!(installed_spelling(None, &path), path.as_str());
+        index.names.insert(slot.to_owned(), "vitest".to_owned());
+        assert_eq!(
+            installed_spelling(Some(&index), &path),
+            "/p/node_modules/vitest/dist/index.d.ts"
+        );
+        assert_eq!(installed_spelling(None, &path), path.as_str());
+        let plain = "/p/node_modules/vitest/dist/index.d.ts";
+        assert_eq!(installed_spelling(Some(&index), plain), plain);
+        index.names.insert(
+            "/p/node_modules/.store/x/package".to_owned(),
+            "@vitest/runner".to_owned(),
+        );
+        assert_eq!(
+            installed_spelling(Some(&index), "/p/node_modules/.store/x/package/dist/a.d.ts"),
+            "/p/node_modules/@vitest/runner/dist/a.d.ts"
+        );
+    }
 
     #[test]
     fn the_package_root_is_the_last_node_modules_package() {
