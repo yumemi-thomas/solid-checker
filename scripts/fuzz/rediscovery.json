@@ -25986,5 +25986,11 @@
   "code": "FLUSH_IN_ACTION",
   "ids": ["lg-flush-in-action-timer-x-direct-closure", "lg-flush-in-tracked-queue-callback-timer-x-alias-closure-helper"],
   "rediscovered": "main 34473465d uncertifiable, this build clean: 312 of 312 (FLUSH_IN_ACTION, FLUSH_IN_EFFECT_CALLBACK, FLUSH_IN_TRACKED_QUEUE_CALLBACK 104 each); no misuse program of the 600 moved"
+ },
+ {
+  "finding": "not a defect: a navigation (`history.go`, `location.reload`/`assign`/`replace`) raised the program-wide dispatch veto although it delivers only `beforeunload` (and `popstate` for a fragment `assign`/`replace`), withholding every handler's proofs in programs with no listener for those types",
+  "found": "R5's report (unlock #3: @solidjs/router's three `history.go` lines)",
+  "fixed": "ADR 1080 (`runtime_semantics::synchronously_delivered_event_types`, `event_delivery.rs` `program_listens_for_any`)",
+  "outside": "precision gain, no released defect to rediscover; the grids generate no navigation call (a page that navigates ends the oracle's run), so the fixtures `navigation-delivers-beforeunload*` pin the host fact, the census and its negatives, and the corpus delta measures it"
  }
 ]

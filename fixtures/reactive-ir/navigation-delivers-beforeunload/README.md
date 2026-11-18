@@ -1,0 +1,3 @@
+# navigation-delivers-beforeunload
+
+**Claim (ADR 1080).** `history.go` and `location.reload` deliver at most `beforeunload` before they return; `location.assign` and `location.replace` at most `beforeunload` or, for a fragment-only URL, `popstate` (Chrome, measured; `runtime_semantics::synchronously_delivered_event_types`). Nothing in this program listens for either, so the navigations deliver to no listener (`DispatchReceiver::NoListener`, as ADR 0640's anchor) and withhold no handler's proof: the click handler's write (SC2001) and read (SC1001) are certified, `function-run-unplaced` on main. Twins keep the rows: `-listener`, `-property`, `-computed`, `-popstate`, `-helper-open`; `-helper` lifts as this does. Stubs: `rc21-created-anchor`'s. `tsc --noEmit` clean.
