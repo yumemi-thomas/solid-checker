@@ -9,14 +9,14 @@
   "SC1001 client-root-unproven": 1,
   "SC1001 compiler-refused-file": 1,
   "SC1001 component-identity-unproven": 136,
-  "SC1001 function-run-unplaced": 1515,
+  "SC1001 function-run-unplaced": 1516,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
   "SC1001 mount-form-window": 2,
   "SC1001 no-hydration-subtree": 2,
   "SC1001 package-finding-at-entry": 141,
   "SC1001 package-value-read": 158,
-  "SC1001 read-backing-unproven": 388,
+  "SC1001 read-backing-unproven": 389,
   "SC1001 store-handed-to-package": 1,
   "SC1001 strict-read-unaccounted": 18,
   "SC1001 summary-read-unplaced": 95,
@@ -47,7 +47,7 @@
   "SC1007 unchecked-native-handler-value": 2,
   "SC2001 binding-before-initialization": 3,
   "SC2001 component-identity-unproven": 9,
-  "SC2001 function-run-unplaced": 510,
+  "SC2001 function-run-unplaced": 509,
   "SC2001 function-unentered": 12,
   "SC2001 lazy-compute-unread": 7,
   "SC2001 owned-write-option-unread": 4,
@@ -84,7 +84,7 @@
   "SC2005 async-slot-unmodelled": 2,
   "SC2005 computation-error-unobserved": 6,
   "SC2005 function-run-unplaced": 6,
-  "SC2006 flush-in-action-unaccounted": 472,
+  "SC2006 flush-in-action-unaccounted": 473,
   "SC2006 function-run-unplaced": 45,
   "SC2006 package-finding-at-entry": 1,
   "SC2006 parameter-initializer-unplaced": 14,
@@ -98,7 +98,7 @@
   "SC2008 function-run-unplaced": 38,
   "SC2008 function-unentered": 5,
   "SC2008 generator-step-unplaced": 6,
-  "SC2008 handler-dispatch-unproven": 23,
+  "SC2008 handler-dispatch-unproven": 24,
   "SC2008 package-finding-at-entry": 9,
   "SC2008 package-operation-in-effect-apply": 1,
   "SC2008 parameter-initializer-unplaced": 11,
@@ -114,7 +114,7 @@
   "SC3001 function-run-unplaced": 34,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 7,
-  "SC3001 leaf-operation-unaccounted": 6851,
+  "SC3001 leaf-operation-unaccounted": 6856,
   "SC3001 leaf-owner-unproven": 67,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
@@ -128,18 +128,18 @@
   "SC4001 handler-member-unresolved": 39,
   "SC4001 handler-spread-unresolved": 59,
   "SC4001 owner-allocation-unproven": 23,
-  "SC4001 owner-callers-unenumerated": 3494,
+  "SC4001 owner-callers-unenumerated": 3498,
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 13,
-  "SC4001 owner-varies-by-caller": 109,
+  "SC4001 owner-varies-by-caller": 112,
   "SC4001 package-finding-at-entry": 68,
   "SC4001 unreached-dead-code": 2,
   "SC4002 component-identity-unproven": 2,
   "SC4002 computation-error-unobserved": 31,
   "SC4002 function-unentered": 4,
   "SC4002 lazy-compute-unread": 2,
-  "SC4002 owner-unproven": 5,
+  "SC4002 owner-unproven": 8,
   "SC4002 package-finding-at-entry": 29,
   "SC4002 provider-not-proven-above": 198,
   "SC4002 unreached-dead-code": 10,
@@ -156,24 +156,24 @@
   "SC5001 creation-pass-unproven": 18,
   "SC5001 declared-loading-value": 4,
   "SC5001 host-callback-timing": 1,
-  "SC5001 invocation-context-unproven": 168,
+  "SC5001 invocation-context-unproven": 169,
   "SC5001 mount-form-window": 1,
   "SC5001 mount-unresolved": 2,
   "SC5001 package-finding-at-entry": 44,
   "SC5001 source-module-unresolved": 1,
-  "SC5001 source-pending-unproven": 340,
+  "SC5001 source-pending-unproven": 341,
   "SC5003 async-options-opaque": 37,
   "SC5003 async-provenance-unproven": 146,
   "SC5003 async-read-caught": 4,
   "SC5003 async-read-unaccounted": 351,
-  "SC5003 call-attributed-read": 152,
+  "SC5003 call-attributed-read": 155,
   "SC5003 carrier-run-unproven": 2,
   "SC5003 component-identity-unproven": 1,
   "SC5003 mount-form-window": 2,
   "SC5003 mount-unresolved": 383,
   "SC5003 package-finding-at-entry": 113,
-  "SC5003 pending-read-unresolved": 771,
-  "SC5003 root-mount-pass-unproven": 56,
+  "SC5003 pending-read-unresolved": 766,
+  "SC5003 root-mount-pass-unproven": 54,
   "SC5003 server-rendering-unresolved": 1,
   "SC5003 source-module-unresolved": 1,
   "SC5003 source-pending-unproven": 1,
@@ -188,7 +188,7 @@
   "SC5008 pending-read-unresolved": 23,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5245,
+  "SC6002 effect-creation-unaccounted": 5249,
   "SC6002 effect-owner-unproven": 48,
   "SC6002 function-run-unplaced": 58,
   "SC6002 generator-step-unplaced": 1,
@@ -4023,6 +4023,123 @@
     "open": "reactive-ir/write-cleanup-handle-call"
    },
    "note": "`await ...; act()` of `const act = action(function* () {})`: the wrapper runs the empty body's first step on this stack, which runs nothing"
+  },
+  {
+   "fixture": "reactive-ir/rc21-created-anchor-listener",
+   "key": "SC2001 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1099",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes/event_delivery.rs::created_element_unattached_to_a_listener",
+   "fixtures": {
+    "proved": "reactive-ir/rc21-created-anchor-listener",
+    "open": "reactive-ir/rc21-created-anchor-host-handler"
+   },
+   "note": "the created anchor's click and remove deliver only along its own path (anchor, body, html), which holds no JSX element, so the counter handler's owner and read proofs no longer wait on them; the handler runs from a user click, with no owner and no strict-read window"
+  },
+  {
+   "fixture": "reactive-ir/rc21-created-anchor-listener",
+   "key": "SC1001 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1099",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes/event_delivery.rs::created_element_unattached_to_a_listener",
+   "fixtures": {
+    "proved": "reactive-ir/rc21-created-anchor-listener",
+    "open": "reactive-ir/rc21-created-anchor-host-handler"
+   },
+   "note": "the created anchor's click and remove deliver only along its own path (anchor, body, html), which holds no JSX element, so the counter handler's owner and read proofs no longer wait on them; the handler runs from a user click, with no owner and no strict-read window"
+  },
+  {
+   "fixture": "reactive-ir/rc21-created-anchor-removed",
+   "key": "SC2001 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1099",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes/event_delivery.rs::created_element_unattached_to_a_listener",
+   "fixtures": {
+    "proved": "reactive-ir/rc21-created-anchor-removed",
+    "open": "reactive-ir/rc21-created-anchor-host-handler"
+   },
+   "note": "the created anchor's click and remove deliver only along its own path (anchor, body, html), which holds no JSX element, so the counter handler's owner and read proofs no longer wait on them; the handler runs from a user click, with no owner and no strict-read window"
+  },
+  {
+   "fixture": "reactive-ir/rc21-created-anchor-removed",
+   "key": "SC1001 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1099",
+   "proof": "rust/crates/solid-reactive-ir/src/indexes/event_delivery.rs::created_element_unattached_to_a_listener",
+   "fixtures": {
+    "proved": "reactive-ir/rc21-created-anchor-removed",
+    "open": "reactive-ir/rc21-created-anchor-host-handler"
+   },
+   "note": "the created anchor's click and remove deliver only along its own path (anchor, body, html), which holds no JSX element, so the counter handler's owner and read proofs no longer wait on them; the handler runs from a user click, with no owner and no strict-read window"
+  },
+  {
+   "fixture": "reactive-ir/async-unsuspendable-call-attributed",
+   "key": "SC5001 invocation-context-unproven",
+   "from": 6,
+   "to": 5,
+   "adr": "ADR 1096",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::computation_layer_call",
+   "fixtures": {
+    "proved": "reactive-ir/async-unsuspendable-call-attributed",
+    "open": "reactive-ir/pending-memo-layers"
+   },
+   "note": "a pending async memo read in exact in-place layers (a named closure called once, an IIFE, a helper's callback) whose outermost call is a tracked, suspending read of a computation's own callback (no leaf owner): the read is that computation's, as the direct read is (SuspendsInComputation, NotRenderEffect)"
+  },
+  {
+   "fixture": "reactive-ir/async-unsuspendable-call-attributed",
+   "key": "SC5003 call-attributed-read",
+   "from": 4,
+   "to": 3,
+   "adr": "ADR 1096",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::computation_layer_call",
+   "fixtures": {
+    "proved": "reactive-ir/async-unsuspendable-call-attributed",
+    "open": "reactive-ir/pending-memo-layers"
+   },
+   "note": "a pending async memo read in exact in-place layers (a named closure called once, an IIFE, a helper's callback) whose outermost call is a tracked, suspending read of a computation's own callback (no leaf owner): the read is that computation's, as the direct read is (SuspendsInComputation, NotRenderEffect)"
+  },
+  {
+   "fixture": "reactive-ir/read-after-await-reach",
+   "key": "SC5003 pending-read-unresolved",
+   "from": 82,
+   "to": 77,
+   "adr": "ADR 1096",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::computation_layer_call",
+   "fixtures": {
+    "proved": "reactive-ir/read-after-await-reach",
+    "open": "reactive-ir/read-after-await-reach"
+   },
+   "note": "a pending async memo read in exact in-place layers (a named closure called once, an IIFE, a helper's callback) whose outermost call is a tracked, suspending read of a computation's own callback (no leaf owner): the read is that computation's, as the direct read is (SuspendsInComputation, NotRenderEffect)"
+  },
+  {
+   "fixture": "reactive-ir/value-walk-chain",
+   "key": "SC5001 invocation-context-unproven",
+   "from": 3,
+   "to": 1,
+   "adr": "ADR 1096",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::computation_layer_call",
+   "fixtures": {
+    "proved": "reactive-ir/value-walk-chain",
+    "open": "reactive-ir/pending-memo-layers"
+   },
+   "note": "a pending async memo read in exact in-place layers (a named closure called once, an IIFE, a helper's callback) whose outermost call is a tracked, suspending read of a computation's own callback (no leaf owner): the read is that computation's, as the direct read is (SuspendsInComputation, NotRenderEffect)"
+  },
+  {
+   "fixture": "reactive-ir/value-walk-chain",
+   "key": "SC5003 root-mount-pass-unproven",
+   "from": 6,
+   "to": 4,
+   "adr": "ADR 1096",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::computation_layer_call",
+   "fixtures": {
+    "proved": "reactive-ir/value-walk-chain",
+    "open": "reactive-ir/value-walk-chain"
+   },
+   "note": "a pending async memo read in exact in-place layers (a named closure called once, an IIFE, a helper's callback) whose outermost call is a tracked, suspending read of a computation's own callback (no leaf owner): the read is that computation's, as the direct read is (SuspendsInComputation, NotRenderEffect)"
   }
  ],
  "renames": []

@@ -1,0 +1,4 @@
+{
+  "note": "ADR 1099: a helper only an effect apply calls clicks a created label for the button: the button's handler runs on the apply's stack, which has no owner (rc.21 runs an apply with no runWithOwner): NoOwnerError, SC4001 violation, no SC4002. Generated program mx-context-not-found-evt-created-label-* (differential fuzzer).",
+  "steps": []
+}
