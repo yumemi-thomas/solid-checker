@@ -21,8 +21,8 @@ const textOf = (context) => {
 };
 
 describe("the pu contexts (a flight the proof took for unconsumed)", () => {
-  it("are three misuse recall contexts of UNTRACKED_READ_AFTER_AWAIT, base-only, out of the census and api-fire's plan", () => {
-    expect(PU_CONTEXT_NAMES).toEqual(["pu-then-sub", "pu-loop", "pu-class"]);
+  it("are six misuse recall contexts of UNTRACKED_READ_AFTER_AWAIT, base-only, out of the census and api-fire's plan", () => {
+    expect(PU_CONTEXT_NAMES).toEqual(["pu-then-sub", "pu-loop", "pu-class", "pu-class-made", "pu-class-ctor", "pu-class-meth"]);
     expect(PU_CODES).toEqual(["UNTRACKED_READ_AFTER_AWAIT"]);
     for (const name of PU_CONTEXT_NAMES) {
       expect(PU_CONTEXTS[name]).toBe("misuse");
@@ -61,5 +61,18 @@ describe("the pu contexts (a flight the proof took for unconsumed)", () => {
     expect(lines[fn + 1]).toBe("await Promise.resolve();");
     expect(lines[fn + 2]).toMatch(/^pb\d+\.K = class \{ x = ph\d+\(\); \};$/);
     expect(lines.some((line) => /^const po\d+ = \{ toString\(\) \{ new pb\d+\.K!\(\); return ""; \} \};?$/.test(line))).toBe(true);
+  });
+  it("pu-class-made, -ctor, -meth (ADR 1105): a helper holding the site, called in the field, the constructor or a method of a class a module-scope helper returns; a `toString` the memo runs constructs it", () => {
+    const members = { "pu-class-made": /^x = ph\d+\(\);$/, "pu-class-ctor": /^constructor\(\) \{ ph\d+\(\); \}$/, "pu-class-meth": /^constructor\(\) \{ this\.run\(\); \} run\(\) \{ ph\d+\(\); \}$/ };
+    for (const [context, member] of Object.entries(members)) {
+      const lines = textOf(context);
+      expect(lines.some((line) => /^const ph\d+ = \(\) => \{$/.test(line)), context).toBe(true);
+      const made = lines.find((line) => /^const pm\d+ = \(\) => class \{ .* \};?$/.test(line));
+      expect(made, context).toBeDefined();
+      expect(made.replace(/^const pm\d+ = \(\) => class \{ /, "").replace(/ \};?$/, ""), context).toMatch(member);
+      expect(lines.some((line) => /^pb\d+\.K = pm\d+\(\);$/.test(line)), context).toBe(true);
+      expect(lines.some((line) => /^const po\d+ = \{ toString\(\) \{ new pb\d+\.K!\(\); return ""; \} \};?$/.test(line)), context).toBe(true);
+      expect(lines.some((line) => /^void `\$\{po\d+\}`;$/.test(line)), context).toBe(true);
+    }
   });
 });

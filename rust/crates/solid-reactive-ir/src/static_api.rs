@@ -2951,6 +2951,7 @@ fn unplaced_step<'s, 'f: 's>(
     // `toString`. The hand-off census asks nothing of reach.
     if crate::execution_role::unplaced_run(file, site, lookup)
         || crate::local_access::function_escapes_unfollowed(file, site, lookup)
+        || field_initializer_on_the_way(file, site, lookup)
     {
         return true;
     }
@@ -3163,7 +3164,9 @@ fn unplaced_member_step<'s, 'f: 's>(
     visited: &mut HashSet<(String, Span)>,
     pending: &mut Vec<(&'s FileFacts, Span)>,
 ) -> bool {
-    if member_route_runs(routes, file, site, lookup) {
+    if member_route_runs(routes, file, site, lookup)
+        || field_initializer_on_the_way(file, site, lookup)
+    {
         return true;
     }
     let at = match climb_in_place_layers(file, site, lookup) {
@@ -3285,7 +3288,8 @@ fn runs_unplaced_once(
         Routes::Members | Routes::MembersAndGenerators => {
             member_route_runs(routes, file, site, lookup)
         }
-    } {
+    } || field_initializer_on_the_way(file, site, lookup)
+    {
         // ADR 1065 part 2 (B4, producer 2): the layer that leaves the run unplaced, census only.
         crate::blocker_census::cause_at(file.path.as_str(), site, "unplaced", || {
             format!(
@@ -3343,8 +3347,8 @@ fn runs_unplaced_once(
         }
         return stepped.then_some(crate::blockers::FUNCTION_RUN_UNPLACED);
     }
-    crate::owners::function_binding_name(file, function)?;
-    let calls = lookup
+    let name = crate::owners::function_binding_name(file, function)?.span;
+    let mut calls = lookup
         .function_call_sites(file.path.as_str(), function.span)
         .into_iter()
         .flat_map(|(caller, callee)| {
@@ -3358,6 +3362,21 @@ fn runs_unplaced_once(
                 .map(move |call| (caller, call))
         })
         .collect::<Vec<_>>();
+    // ADR 1105: a call of the binding in this file the call graph withholds (one that may run before the declarator, ADR 0339:
+    // a call in a constructor or a method may) is still a run when it follows it, as the exhaustive walks read it (ADR 0673).
+    for call in &file.ast.calls {
+        if !call.construct
+            && file
+                .ast
+                .reference_declaration(file.ast.peel_ts_sugar_span(call.callee))
+                == Some(name)
+            && !calls.iter().any(|(caller, known)| {
+                caller.path.as_str() == file.path.as_str() && known.span == call.span
+            })
+        {
+            calls.push((file, call));
+        }
+    }
     if calls.is_empty() {
         return None;
     }
@@ -3459,6 +3478,23 @@ fn parameter_initializer_on_the_way(
         || crate::execution_role::in_place_layer_calls(file, site, lookup)
             .into_iter()
             .any(|call| parameter_initializer_run(file, call, lookup))
+}
+
+/// ADR 1105: whether the climb of in-place layers from `site` crosses a call written directly in an instance field's initializer
+/// that no construct-only placement places (ADR 1022) and that may run. An initializer is no function fact, so the climb takes the
+/// call for code of the function the class is written in (a helper that returns the class, called at module scope) and goes on
+/// from that function's call; the initializer runs where `new` runs instead, which no call edge places: the run is unplaced.
+fn field_initializer_on_the_way(file: &FileFacts, site: Span, lookup: &SemanticLookup<'_>) -> bool {
+    crate::execution_role::in_place_layer_calls(file, site, lookup)
+        .into_iter()
+        .any(|call| {
+            crate::local_access::in_instance_field_initializer_directly(file, call)
+                && !crate::execution_role::construct_only_placed(file, call)
+                && !matches!(
+                    crate::execution_role::SiteReach::new(lookup).site(file, call),
+                    crate::execution_role::Reach::Unreached(_)
+                )
+        })
 }
 
 /// Whether `function` is called or referenced anywhere in the program: a member (reached by any access) or a literal written

@@ -4285,3 +4285,22 @@ The 24 `wrapper` programs stay uncertifiable on SC5003 `async-options-opaque`, a
 - uncertifiable twins: the closure in an effect's apply, under `untrack`, also kept, or handed to the helper as a value.
 
 Chrome rc.21 is quiet on the four clean components, and reports PENDING_ASYNC_UNTRACKED_READ only at the apply twin. A first build without the leaf-owner condition lost `async-unsuspendable-call-attributed`'s `TrackedWrapper` violation; the regress gate caught it. Three fixtures lose only U rows, recorded as drops rows: `MemoClosure` in that fixture (claimed silent), five `read-after-await-reach` helpers each called in a memo's compute before any await, and the `value-walk-chain` caught cases (their SC5008 stands, as Chrome reports).
+
+<a id="adr-1105"></a>
+## ADR 1105 — A class a helper returns runs its field initializers and constructor where `new` runs
+**The gap.** Probe k1n (a review): `const mk = () => class { x = peek(); }; box.K = mk();` at module scope, constructed in a `toString` that an async memo's template literal runs after its await. Chrome rc.21 warns UNTRACKED_READ_AFTER_AWAIT at `peek`'s read, and main 28fde14bf gave no row at all, not even under ablation. Two causes, both in the unplaced walks (`static_api.rs`):
+- an instance field initializer is no function fact, so the in-place climb from the read crossed `peek` to its call in the initializer and went on to `mk()`, at module scope. That call was never asked whether a member route runs it. With no row, the read ended `CallPlacedElsewhere`;
+- the depth-bounded walk (`runs_unplaced_once`, the SC1002 member net's and the SC6002, SC2006, SC2008, SC3001 nets') read only the call graph. The graph withholds a call in a constructor or a method (ADR 0339: it may run before the helper's declarator), so a helper called from a made class's constructor, or from a method it calls, had no caller there. SC1001 kept an uncertifiable row (the exhaustive walk scans the binding's calls), and SC1002 had none.
+
+**Decision.** `field_initializer_on_the_way`: a climb that crosses a call written directly in an instance field initializer (no construct-only placement, ADR 1022, and not proven unreached) is unplaced, in all three walks. `runs_unplaced_once` also takes the binding's calls in its own file that the graph withholds, as the exhaustive walks do (ADR 0673). Both only add uncertifiable rows. A read is attributed where `new` runs only when that is exact, and here it never is: no fact follows a class value through a store.
+*Cost.* A made class nothing constructs keeps the row (`peekNever` in the fixture; clean on main). A class declaration nothing names stays clean (ADR 1021).
+*Evidence.* Fixture `after-await-class-value`:
+- now uncertifiable on SC1002 and SC1001: `Made` (the probe), `MadeCtor` and `MadeMethod`, the three main missed;
+- as on main: `Stored` (an escaping declaration, uncertifiable), `InPlace` (constructed in place: SC1002 violation), `Unused` (clean).
+
+Chrome (runtime-oracle case `after-await-class-value`, concurrency 2): main has three unproven-clean sites (lines 14, 39, 66), the fix covers all five diagnostics (covered-uncertifiable, `InPlace` covered-violation), and there are no typing errors against rc.21. Fuzz: the new contexts `pu-class-made`, `-ctor` and `-meth` (`pu-shapes.mjs`, mx-recall) are 3 false cleans on main (the field form certified) and 3 recall gaps on the fix. The touched codes on the seven focus grids have no moves. Coverage moves one other row: `closed-literal-dispatch`'s `Wrapper` gains SC1002 `unresolved-invocation` at `g()` in `call`, the helper its thenable's `then` method calls. The graph withheld `call(f)`, and the sibling components already had the row.
+*Measured* (rc.21 frozen corpus, 34 projects, release build, development flags), main 28fde14bf against this:
+- open: U 242,722 to 242,799, V 244 to 244;
+- `--program-boundary closed`: U 233,363 to 233,440, V 244 to 244.
+
+Both modes move the same rows, all SC1002: +76 `unresolved-invocation` in project code (a helper's call of a function value, the helper called from an object literal's methods: kui `csrf.ts` `release`, app-game `controller.ts`), +1 in a test, and +2 `function-run-unplaced`. Two `read-after-await-unaccounted` rows take `unresolved-invocation` at the same sites. No status moves, and no violation is lost or gained.

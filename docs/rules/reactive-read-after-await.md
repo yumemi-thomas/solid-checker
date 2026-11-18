@@ -383,7 +383,10 @@ initializer), never a violation, while the program holds a tracked async computa
 implicit suspension or a `then`, `catch`, `finally` call). Only reads the role engine could not place are asked. A function
 handed where nothing follows it is run by a call, and a parameter initializer is the call-site net's (above): not this net's.
 The row is coarse: a read in a member stands whatever the continuation touches and whatever the computation tracked before
-its first suspension.
+its first suspension. A class a helper returns is the same ([ADR 1105](../decisions.md#adr-1105)): its field initializers
+and constructor run where `new` runs, not in the helper that wrote it, so a read in a helper they call is a row, and so is
+one a helper called from a constructor or method makes (the call graph withholds such a call, ADR 0339). Cost: a made class
+nothing constructs keeps the row, since where a stored class value is constructed is not modelled.
 
 A function stored under a key the host reads by itself runs the same way, written as a method, an arrow, a `function`, a name
 bound to one or an assigned member (batch 10c): the keys of a coercion (`toString`, `toLocaleString`, `valueOf`, `toJSON`), the
