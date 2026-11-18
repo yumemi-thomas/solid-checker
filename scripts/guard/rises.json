@@ -4645,6 +4645,14 @@
    "to": 6,
    "adr": "ADR 1100",
    "fact": "prop-callback-roles MergedBody (exported, p.onSelect(7) on a merge view) stays uncertifiable, relabeled from handed-member-dispatch to closed-parameter-member-dispatch"
+  },
+  {
+   "fixture": "reactive-ir/closed-literal-dispatch",
+   "key": "SC1002 unresolved-invocation",
+   "from": 5,
+   "to": 6,
+   "adr": "ADR 1105",
+   "fact": "closed-literal-dispatch Wrapper gains SC1002 U unresolved-invocation at g() in call, the helper its thenable's then calls: the graph withheld call(f); siblings already had the row"
   }
  ]
 }
