@@ -39,7 +39,9 @@ export function chromeRuntime(row, checkpoints, sites) {
   // as a step that timed out cuts it short, and is a partial run (the judges never read a missing diagnostic past it as silence).
   const halted = (checkpoints ?? []).filter((checkpoint) => (checkpoint.text ?? "").trim() === HALT_TEXT);
   const failure = ["harness-error", "type-error"].includes(row.verdict) ? { phase: row.verdict, message: row.error ?? row.failure ?? row.verdict }
-    : row.failure ? { phase: "execution", message: typeof row.failure === "string" ? row.failure : JSON.stringify(row.failure) }
+    // ADR 1092: the page's own phase at the failure (runtime-oracle.mjs `phaseModule`, hits.mjs `phaseAtFailure`): an entry that threw while App.tsx
+    // evaluated is `import`, as the fast runners record it; a row from a page with no phase record stays `execution`.
+    : row.failure ? { phase: row.pagePhase ?? "execution", message: typeof row.failure === "string" ? row.failure : JSON.stringify(row.failure) }
       : halted.length ? { phase: "halted", message: `reactivity halted: ${halted.length} step(s) found no element (${halted[0].selector.split(",")[0]})` } : null;
   const text = (selector) => {
     const found = (checkpoints ?? []).filter((checkpoint) => checkpoint.selector === selector || checkpoint.selector === haltable(selector)).at(-1);
