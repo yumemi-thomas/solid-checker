@@ -1,0 +1,10 @@
+{
+  "note": "ADR 1052 part 9: the same with a tracked effect: PRIMITIVE_IN_FORBIDDEN_SCOPE at mount, the handler never runs; SC7002 uncertifiable. Generated program `mx-sync-node-received-async-tracked-shared-memo-direct-none` (differential fuzzer, generator 2).",
+  "haltMarker": true,
+  "steps": [
+    {
+      "action": "click",
+      "selector": "[data-act=\"b1\"], body:not(:has([data-act=\"b1\"])) > #sc-halted"
+    }
+  ]
+}

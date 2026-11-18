@@ -1,0 +1,10 @@
+{
+  "note": "ADR 1052 part 9: a sync memo in a helper an effect apply and a click handler of the same component call: the apply throws PRIMITIVE_IN_EFFECT_CALLBACK at mount, render disposes the root and its delegated events, the handler never runs; SC7002 uncertifiable. Generated program `mx-sync-node-received-async-effect-apply-shared-memo-direct-none` (differential fuzzer, generator 2).",
+  "haltMarker": true,
+  "steps": [
+    {
+      "action": "click",
+      "selector": "[data-act=\"b1\"], body:not(:has([data-act=\"b1\"])) > #sc-halted"
+    }
+  ]
+}
