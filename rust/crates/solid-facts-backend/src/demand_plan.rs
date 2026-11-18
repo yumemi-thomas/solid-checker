@@ -51,6 +51,22 @@ struct DemandSpans {
     writable_optional_property_spans: HashSet<Span>,
     async_symbol_spans: HashSet<Span>,
     async_value_spans: Vec<Span>,
+    /// ADR 1077: static `x.defaultView` reads, asked their primitive value
+    /// domain, and their receivers, asked their library types and runtime
+    /// value domain; no symbol observation.
+    default_view_value_spans: HashSet<Span>,
+    default_view_receiver_spans: HashSet<Span>,
+}
+
+/// ADR 1077: the static `x.defaultView` members of a file (a computed key is
+/// not asked).
+pub(crate) fn default_view_members(
+    file: &FileFacts,
+) -> impl Iterator<Item = &solid_facts::ast::MemberFact> {
+    file.ast.members.iter().filter(|member| {
+        !file.ast.computed_members.contains(&member.span)
+            && file.source_text(member.property) == Some("defaultView")
+    })
 }
 
 fn add_symbol_span(symbol_spans: &mut HashMap<Span, bool>, span: Span, references: bool) {
@@ -132,6 +148,15 @@ fn plan_file(
         spans.library_type_spans.insert(span);
         // Review D4: `any` or `unknown` there may be a window.
         spans.runtime_value_domain_spans.insert(span);
+    }
+    // ADR 1077: whether a static `x.defaultView` holds no global object, for the package walk: the value's primitive domain, and the receiver's types, as
+    // written and with assertions peeled. No symbol is observed there.
+    for member in default_view_members(file) {
+        spans.default_view_value_spans.insert(member.span);
+        spans.default_view_receiver_spans.insert(member.object);
+        spans
+            .default_view_receiver_spans
+            .insert(file.ast.peel_ts_sugar_span(member.object));
     }
     collect_chain_link_spans(dialect, file, &mut spans);
     collect_delete_spans(dialect, file, &mut spans);
@@ -1148,6 +1173,8 @@ fn emit_span_demands(
         writable_optional_property_spans,
         async_symbol_spans,
         async_value_spans,
+        default_view_value_spans,
+        default_view_receiver_spans,
     } = spans;
     // Reference-space discovery must not introduce symbol observations at
     // otherwise undemanded uses (for example a typeof constructor wrapper).
@@ -1211,6 +1238,17 @@ fn emit_span_demands(
     for span in chain_link_spans {
         let mut planned = demand(file_location(path, span));
         planned.primitive_value_domain = true;
+        demands.push(planned);
+    }
+    for span in default_view_value_spans {
+        let mut planned = demand(file_location(path, span));
+        planned.primitive_value_domain = true;
+        demands.push(planned);
+    }
+    for span in default_view_receiver_spans {
+        let mut planned = demand(file_location(path, span));
+        planned.library_types = true;
+        planned.runtime_value_domain = true;
         demands.push(planned);
     }
 
