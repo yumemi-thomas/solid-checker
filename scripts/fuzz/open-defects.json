@@ -437,15 +437,6 @@
  ],
  "patterns": [
   {
-   "id": "values/d2n-slice-element-write",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": false
-  },
-  {
    "id": "flip/st-tracked-handled-sync-memo",
    "item": "ADR 1052: a sync memo in a helper a tracked effect runs under <Errored>: Chrome reports PRIMITIVE_IN_FORBIDDEN_SCOPE at the site and never SYNC_NODE_RECEIVED_ASYNC; the V beside it is a false positive (its stacked pair is retired; the refusal reached through a helper is not counted, owner Mac 20)",
    "outcome": "false-positive",

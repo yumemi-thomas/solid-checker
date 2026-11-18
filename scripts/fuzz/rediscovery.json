@@ -26327,5 +26327,17 @@
   ],
   "rediscovered": "make fuzz-patterns: false clean on main 28fde14bf and on ADR 1104 part 1; FIXED on part 2 (SC9012 uncertifiable at the read)",
   "outside": "the pattern lane holds these programs (scripts/fuzz/patterns, make fuzz-patterns); no grid generator writes a destructured parameter of a carrier yet"
+ },
+ {
+  "finding": "R-carrier d2n: a write through an element of a store array's copy (`const c = st.items.slice(); c[0].v = 5`): the only SC2003 row stood at the `slice()` call (ADR 0638's store-method obligation); the write had none, because Type Facts placed `slice` nowhere and the container flow followed nothing through an unresolved call",
+  "found": "open-defects patterns (R-carrier): values/d2n-slice-element-write",
+  "fixed": "ADR 1104 d2n (`shared_reactivity.rs` `call_value`: a linked method call nothing resolves may answer what it was handed, as a standard call's result may)",
+  "grid": "patterns",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "values/d2n-slice-element-write"
+  ],
+  "rediscovered": "make fuzz-patterns: false clean on main 28fde14bf and on 4eea43735; FIXED here (SC2003 uncertifiable at the write)",
+  "outside": "the pattern lane holds the program (scripts/fuzz/patterns); no grid generator writes a write through a copy's element yet"
  }
 ]
