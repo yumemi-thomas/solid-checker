@@ -11018,7 +11018,7 @@
   ],
   "rediscovered": "29b3f9312 (release; checker sha256 7f5a78f05b36…, producer 998ad2d92a37…): 84 programs false-clean (dotcall 8, getter 8, hop 12, jsx 12, jsx-inner 12, new 16, reflect 8, tagged 8); the cell's 208 programs: agree 40, false-clean 84, not-fired 32, recall-gap 40, unplaced 12. Chrome and the real oracle agree on all."
  },
-{
+ {
   "finding": "CLEANUP_IN_FORBIDDEN_SCOPE's site behind a primitive layer whose callback takes an unused parameter (`untrack((p0?: number) => …)`) or is async (`untrack(async () => { … })`) was certified clean or declined by a rule that does not name the code: the slot climbs of the leaf-owner, flush and cleanup walks stop at such a callback, where the same layer with a plain callback is reported. Chrome reports the code at the site in both.",
   "found": "ADR 0960 (W agent w-b10-2, 2026-11-11): the callback forms `param` and `async` of the primitive-layer axis (`pl-<layer>-<form>-<host>`), and a researcher's 5 Chrome false cleans on main (FLUSH_IN_ACTION `untrack((x) => flush())`, `untrack(async () => { flush(); })`, `latest((x) => flush())`; FLUSH_IN_TRACKED_QUEUE_CALLBACK `untrack((x) => flush())`, `untrack(async () => { flush(); })`; onCleanup behind such a slot); each program through the Chrome host and the real oracle (0 behaviour differences)",
   "fixed": "ADR 0959 (a callback of a primitive that runs it in place with a parameter, an async or a generator callback: the typed obligation of the asking rule, never silence; ADR 0961's visited key for the action and leaf walks) on the Mac agent's batch-10 build (bf4906405 … 3c1b1e865): 16 of this entry's ids on the final release rel-17, checker sha256 85a62f7cc595…, HEAD 05e4e80ad (`node mac-b10-4/tools/plcells.mjs`, mx-recall, Chrome host, --runtime-diff all): recall-gap 16, 0 false clean. Corrected: an earlier text of this entry said ADR 0949 had closed it (0d472d4e4, package cells); the package cells do not generate these programs, and the ADR 0960 cells were still false-clean on 588affbf3 (all 553 of the family).",
@@ -11197,7 +11197,7 @@
   ],
   "rediscovered": "29b3f9312 (release; checker sha256 7f5a78f05b36…, producer 998ad2d92a37…): 1 programs false-clean (layers ispending-async); the code's 4 new callback-form programs: agree 3, false-clean 1. Chrome and the real oracle agree on all."
  },
-{
+ {
   "finding": "ACTION_CALLED_IN_OWNED_SCOPE's site in a dependency package reached through an entry that is not an exact call (package-site.mjs: reflect, new, getter, jsx, jsx-inner, hop, dynamic, dotcall, callback) was certified clean, or declined by a rule that does not name the code; Chrome reports the code at the entry. A finding in package source is dropped (ADR 0284) and re-reported only at the project's call that runs it, for the owner requirements ADRs 0290 and 0943 attribute (not for this code).",
   "found": "ADR 0957 part 2 (W agent w-b10-2, 2026-11-11): the package site widened to every code with a template (`PACKAGE_SITE_CODES`, the coordinator's ruling after the stratum sample), each program through the Chrome host and the real oracle (0 behaviour differences); the package class of ADR 0957's first four codes, found by the fuzzer in the others",
   "fixed": "ADR 0949 (the Mac agent, 2026-11-11): a capability handed to package code in any shape (new, Reflect.apply, createComponent, a dynamic() carrier, a getter holder, a JSX prop) is the claiming rule's own uncertifiable row, and a package finding stands at every project site that enters it (calls, renders, carriers; once per package and rule at the first import when none is proven) (package_handed_value_claims, package_drop::hand_off); 0d472d4e4 (release, `node scripts/fuzz/package-cells.mjs`): 0 false cleans on this entry's ids",
@@ -20060,19 +20060,19 @@
   ],
   "rediscovered": "`rel-f1c` (release, #216's head bda149308; Chrome host and the real oracle, `--runtime-diff all`): 13 programs false-clean (ph-set-leaf, ph-forof-leaf, ph-recv-leaf, ph-resolve-leaf, ph-class-leaf, ph-assign-leaf, ph-props-leaf, ph-getter-leaf, ph-reflect-leaf, ph-inline-leaf, ph-param-leaf, ph-untrack-leaf, ph-dynamic-leaf); the thirteen new routes' 13 programs: false-clean 13. `rel-flip10` (release, the flip): recall-gap 13"
  },
-  {
+ {
    "finding": "FLUSH_IN_ACTION's site, a `flush()` written in a function a module exports, was certified with no row where a namespace import of that module is handed whole to an installed package the build does not read as source (`runStepNs(NS)`: the package runs every member of the namespace as an action's step): no reference names the function, so no hand-off followed it. Chrome reports FLUSH_IN_ACTION at the flush",
    "found": "batch 11 (mac-b10-4, 2026-11-12): the Fable review of #216 (B3, ADR 0967), BLOCKED with fourteen probed programs that stay silent where the package runs the flush as a step, all false cleans on main too; owner ruling: flip the default, and exports a framework enters fail closed too",
    "fixed": "ADR 0967 (the flip, the PR after #216): a value counts as handed unless a fact of the program proves where it goes (`package_hand_off.rs`): a module whose namespace escapes with no readable name hands out every export it has (the namespace census, ADR 0347), so the exported function has no census reason",
    "outside": "the cells place the site in App.tsx and cannot express a second module's export reached through a namespace import; patterns/pkghand/namespace-step holds it (the lane: a false clean on #216's build, fine on the flip's), and fixture flush-universe-package-hand-off-flip pins it (`Namespaced`, three rows; `NamespaceCalled`, silent)"
   },
-  {
+ {
    "finding": "A `flush()` written in a function a program with an open boundary exports was certified on the program censuses: an export may be entered by code this build cannot see (a framework, a consumer package: an action's step among it), and the censuses read only the primitives the program names",
    "found": "batch 11 (mac-b10-4, 2026-11-12): the Fable review of #216 (B3, ADR 0967), BLOCKED with fourteen probed programs that stay silent where the package runs the flush as a step, all false cleans on main too; owner ruling: flip the default, and exports a framework enters fail closed too",
    "fixed": "ADR 0967 (the flip, the PR after #216): a value counts as handed unless a fact of the program proves where it goes (`package_hand_off.rs`): a function exported from an open program (or a binding it exports) gets no program-wide census reason, so it keeps its uncertifiable row of each code; a closed program (the owner's declared boundary, ADR 0193) keeps the reason, an export nothing in it enters never runs",
    "outside": "an export's caller lies outside the program, and the oracle's page renders the program itself (its entry is the page's own main), so Chrome cannot enter an export from outside; fixture flush-universe-package-hand-off-flip/variants/open holds it (three rows) with the closed parent's `Unreferenced` silent"
   },
-  {
+ {
     "finding": "PRIMITIVE_IN_EFFECT_CALLBACK's site, a creation (`createMemo`) written directly in a `createEffect` apply, was certified with no row where the callee's declarations sit under no installed package directory (a project's own ambient `declare module \"solid-js\"`, or declarations that disagree on the package): the effect-phase walk asks the package the callee is declared in (`callee_package_root`) and files nothing without one, and nothing else accounted for the creation. Chrome reports PRIMITIVE_IN_EFFECT_CALLBACK at the creation",
     "found": "batch 11 (mac-b10-4, 2026-11-12): slice 6 (the owner-call universe), the first fixtures' ambient stubs; the coordinator asked for the confirmation and a fixture",
     "fixed": "ADR 0969 (slice 6): the creation is a site of the owner-call universe, and no silence names a fact the throw needs and the code lacks, so it gets `effect-creation-unaccounted` (SC6002, uncertifiable). Fixture owner-call-effect-creation-unresolved-package",
@@ -25979,15 +25979,6 @@
   "outside": "the grids' programs run in the Chrome oracle's page, where vitest cannot load, and the generator writes no install layout (no `node_modules` tree of its own), so no generated program installs a reviewed fake clock from a store slot; fixture flush-universe-fake-timers-store holds it (nine rows, equal to flush-universe-fake-timers)"
  },
  {
-  "finding": "no defect: an uncertifiable legal program. A `flush()` in a wrapper layer (a local closure, a helper, an IIFE) inside a timer's callback kept SC2006, SC2008 and SC3001 rows while the same flush written directly in the callback is clean: the flush accounting asked its class questions only of a flush with a census class of its own",
-  "found": "W4's grouping of lg-base programs uncertifiable while their `-direct-none` sibling is clean (ADR 1090, 2026-11-18): 312 programs",
-  "fixed": "ADR 1090 (`flush_accounting.rs` `climbed_caller`, `indexes/flush_census.rs` `flush_caller_of_layer_call`)",
-  "grid": "lg-base",
-  "code": "FLUSH_IN_ACTION",
-  "ids": ["lg-flush-in-action-timer-x-direct-closure", "lg-flush-in-tracked-queue-callback-timer-x-alias-closure-helper"],
-  "rediscovered": "main 34473465d uncertifiable, this build clean: 312 of 312 (FLUSH_IN_ACTION, FLUSH_IN_EFFECT_CALLBACK, FLUSH_IN_TRACKED_QUEUE_CALLBACK 104 each); no misuse program of the 600 moved"
- },
- {
   "finding": "not a defect: a navigation (`history.go`, `location.reload`/`assign`/`replace`) raised the program-wide dispatch veto although it delivers only `beforeunload` (and `popstate` for a fragment `assign`/`replace`), withholding every handler's proofs in programs with no listener for those types",
   "found": "R5's report (unlock #3: @solidjs/router's three `history.go` lines)",
   "fixed": "ADR 1080 (`runtime_semantics::synchronously_delivered_event_types`, `event_delivery.rs` `program_listens_for_any`)",
@@ -26036,5 +26027,32 @@
    "mx-loading-on-outside-hold-mount-named-x-direct-none"
   ],
   "rediscovered": "locally (2026-11-18): focus.mjs on mx-census with the four ADR 1092 ids, on origin/main 34473465d: each an oracle differ (`failure happy import chrome execution`); on the fix: compared, no difference"
+ },
+ {
+  "finding": "no defect: an uncertifiable legal program. A `flush()` in a wrapper layer (a local closure, a helper, an IIFE) inside a timer's callback kept SC2006, SC2008 and SC3001 rows while the same flush written directly in the callback is clean: the flush accounting asked its class questions only of a flush with a census class of its own",
+  "found": "W4's grouping of lg-base programs uncertifiable while their `-direct-none` sibling is clean (ADR 1090, 2026-11-18): 312 programs",
+  "fixed": "ADR 1090 (`flush_accounting.rs` `climbed_caller`, `indexes/flush_census.rs` `flush_caller_of_layer_call`)",
+  "grid": "lg-base",
+  "code": "FLUSH_IN_ACTION",
+  "ids": ["lg-flush-in-action-timer-x-namespace-closure", "lg-flush-in-action-timer-x-alias-iife", "lg-flush-in-action-timer-x-destructured-closure-helper"],
+  "rediscovered": "main 34473465d uncertifiable, this build clean: 104 of 104 FLUSH_IN_ACTION programs (312 over the three flush codes); no misuse program of the 600 moved"
+ },
+ {
+  "finding": "no defect: an uncertifiable legal program. A `flush()` in a wrapper layer (a local closure, a helper, an IIFE) inside a timer's callback kept SC2006, SC2008 and SC3001 rows while the same flush written directly in the callback is clean: the flush accounting asked its class questions only of a flush with a census class of its own",
+  "found": "W4's grouping of lg-base programs uncertifiable while their `-direct-none` sibling is clean (ADR 1090, 2026-11-18): 312 programs",
+  "fixed": "ADR 1090 (`flush_accounting.rs` `climbed_caller`, `indexes/flush_census.rs` `flush_caller_of_layer_call`)",
+  "grid": "lg-base",
+  "code": "FLUSH_IN_EFFECT_CALLBACK",
+  "ids": ["lg-flush-in-effect-callback-timer-x-direct-closure", "lg-flush-in-effect-callback-timer-x-direct-iife", "lg-flush-in-effect-callback-timer-x-alias-closure-helper"],
+  "rediscovered": "main 34473465d uncertifiable, this build clean: 104 of 104 FLUSH_IN_EFFECT_CALLBACK programs (312 over the three flush codes); no misuse program of the 600 moved"
+ },
+ {
+  "finding": "no defect: an uncertifiable legal program. A `flush()` in a wrapper layer (a local closure, a helper, an IIFE) inside a timer's callback kept SC2006, SC2008 and SC3001 rows while the same flush written directly in the callback is clean: the flush accounting asked its class questions only of a flush with a census class of its own",
+  "found": "W4's grouping of lg-base programs uncertifiable while their `-direct-none` sibling is clean (ADR 1090, 2026-11-18): 312 programs",
+  "fixed": "ADR 1090 (`flush_accounting.rs` `climbed_caller`, `indexes/flush_census.rs` `flush_caller_of_layer_call`)",
+  "grid": "lg-base",
+  "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
+  "ids": ["lg-flush-in-tracked-queue-callback-timer-x-alias-helper", "lg-flush-in-tracked-queue-callback-timer-x-direct-iife", "lg-flush-in-tracked-queue-callback-timer-x-destructured-closure"],
+  "rediscovered": "main 34473465d uncertifiable, this build clean: 104 of 104 FLUSH_IN_TRACKED_QUEUE_CALLBACK programs (312 over the three flush codes); no misuse program of the 600 moved"
  }
 ]
