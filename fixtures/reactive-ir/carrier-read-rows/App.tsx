@@ -172,3 +172,36 @@ export function PropsLoops() {
   const [s] = createSignal(1);
   return <div><Keys a={s()} /><Summed a={s()} /></div>;
 }
+
+// ADR 1104 part 2: an exact project callee destructures the carrier in its parameter.
+export function DestructuredParameter() {
+  const [a] = createSignal(1);
+  const use = ({ get }: { get: () => number }) => get();
+  const x = use({ get: a });
+  console.log(x);
+  return <p>{a()}</p>;
+}
+
+// Twin: the destructured slot is never called.
+export function DestructuredHeld() {
+  const [a] = createSignal(1);
+  const keep = ({ get }: { get: () => number }) => typeof get;
+  const x = keep({ get: a });
+  console.log(x);
+  return <p>{a()}</p>;
+}
+
+function pick({ a }: { a: number }) {
+  return a;
+}
+
+function Picker(props: { a: number }) {
+  const x = pick(props);
+  console.log(x);
+  return <i>x</i>;
+}
+
+export function DestructuredProps() {
+  const [s] = createSignal(1);
+  return <div><Picker a={s()} /></div>;
+}

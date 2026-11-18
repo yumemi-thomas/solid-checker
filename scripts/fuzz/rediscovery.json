@@ -26313,5 +26313,19 @@
    "mx-strict-read-untracked-render-apply-memo-loop-callee-none"
   ],
   "rediscovered": "focus --grids mx-recall --ids (24 programs): main 28fde14bf 16 false-clean; this build 24 recall-gap (SC9012 at the read). this-method already had its row on main (a recall gap)"
+ },
+ {
+  "finding": "R-carrier (part 2): a reactive read through a carrier an exact project callee destructures in its parameter (`({ get }) => get()` handed `{ get: a }`; `function pick({ a })` handed props or a store root): the census row stood at the argument and none at the read",
+  "found": "open-defects patterns (R-carrier): values/d3-options-destructure, values/t5-helper-destructure-param, values/t5-store-helper-destructure",
+  "fixed": "ADR 1104 part 2 (`value_use.rs` `escaped_argument`: a pattern parameter reads a root at the pattern and holds what it read in its names)",
+  "grid": "patterns",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "values/d3-options-destructure",
+   "values/t5-helper-destructure-param",
+   "values/t5-store-helper-destructure"
+  ],
+  "rediscovered": "make fuzz-patterns: false clean on main 28fde14bf and on ADR 1104 part 1; FIXED on part 2 (SC9012 uncertifiable at the read)",
+  "outside": "the pattern lane holds these programs (scripts/fuzz/patterns, make fuzz-patterns); no grid generator writes a destructured parameter of a carrier yet"
  }
 ]

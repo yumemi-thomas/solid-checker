@@ -2013,6 +2013,25 @@ impl<'l, 'a> Census<'l, 'a> {
             self.parameter_hops -= 1;
             return Position::Followed;
         }
+        // ADR 1104 (part 2): an exact project callee whose parameter is a pattern (`({ get }) => get()`, `function pick({ a })`)
+        // reads the argument there (a root's members: a row at the pattern) and holds what it read in the pattern's names, walked
+        // late. The argument stays the use below, as before.
+        if !call.construct
+            && !call.arguments[index].spread
+            && let Some((callee_file, callee, true)) =
+                crate::execution_role::project_callee_at_parameter(file, call, index, self.lookup)
+            && let Some(parameter) = callee
+                .parameters
+                .get(index)
+                .filter(|parameter| parameter.shape != solid_facts::ast::BindingShape::Identifier)
+        {
+            if root {
+                self.late_site(callee_file, parameter.pattern, Site::Read, blocker);
+            }
+            for name in &parameter.names {
+                self.late.push(Late::Name(callee_file, name.span, mode));
+            }
+        }
         // ADR 0928: a spread hands what it holds to each parameter at or past
         // its place (`((h) => h())(...[s])`); a callee reading `arguments`
         // reads it there too, with no name.

@@ -1,5 +1,5 @@
 import { render } from "@solidjs/web";
-import { LetForOf, SelfAlias, NestedThis, DefinedGetter, AmbientConst, AmbientVar, OtherSlot, PropsLoops, Ambient, ElementCall, ElementHeld, ForOf, ForOfHeld, ForOfHolder, HostRead, ThisGetter } from "./App";
+import { DestructuredHeld, DestructuredParameter, DestructuredProps, LetForOf, SelfAlias, NestedThis, DefinedGetter, AmbientConst, AmbientVar, OtherSlot, PropsLoops, Ambient, ElementCall, ElementHeld, ForOf, ForOfHeld, ForOfHolder, HostRead, ThisGetter } from "./App";
 
 render(() => <ElementCall />, document.body);
 render(() => <ElementHeld />, document.body);
@@ -17,3 +17,6 @@ render(() => <AmbientConst />, document.body);
 render(() => <AmbientVar />, document.body);
 render(() => <OtherSlot />, document.body);
 render(() => <PropsLoops />, document.body);
+render(() => <DestructuredParameter />, document.body);
+render(() => <DestructuredHeld />, document.body);
+render(() => <DestructuredProps />, document.body);

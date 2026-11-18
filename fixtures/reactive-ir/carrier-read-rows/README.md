@@ -13,6 +13,9 @@ read, besides the carrier's row (the R-carrier patterns: Chrome reports STRICT_R
 | `ThisGetter` (`get v() { return this.s(); }`) | `this.s()` |
 | `HostRead` (`JSON.stringify(props)` in `Child`) | the standard call (and, by ADR 0860's hand-on, `console.log` of its result) |
 | `Ambient` (`declare function ext`, `globalThis.ext = a`) | `ext()` |
+| `DestructuredParameter` (part 2: `use({ get: a })`, `({ get }) => get()`) | `get()` |
+| `DestructuredHeld` (twin: the slot is only `typeof`) | none past the argument |
+| `DestructuredProps` (part 2: `pick(props)`, `function pick({ a })`) | the pattern `{ a }` |
 
 | `LetForOf` (1b: `let f; for (f of src) f()`) | `f()` |
 | `SelfAlias` (1b: `const self = this; self.s()`) | `self.s()` |
