@@ -636,6 +636,7 @@ fn refused_at_mount_else_handlers(
                             lookup
                                 .dialect
                                 .callback_runs_in_effect_phase(primitive, *index)
+                                && apply_runs_at_mount(file, owner_call, primitive, *index, lookup)
                                 || crate::owners::callback_owner_at_call(
                                     file, owner_call, primitive, *index, lookup,
                                 ) == Some(solid_dialect::CallbackOwner::Leaf)
@@ -686,6 +687,28 @@ fn refused_at_mount_else_handlers(
                 .is_some_and(|holder| holder.span == mounted)
         })
     })
+}
+
+/// ADR 1052 part 9, the mount premise: an effect's apply runs on the mount's first flush only when its `defer` option is absent or the
+/// literal `false`. A deferred apply (`{ defer: true }`, or an option no literal decides) first runs on a later flush (a handler's
+/// `flush()`), where no PRIMITIVE_IN_EFFECT_CALLBACK precedes the creation's own check: Chrome reports SYNC_NODE_RECEIVED_ASYNC there
+/// (mx-recall `effect-apply-defer-flush-rerun`), so such a call is no refusal at mount.
+fn apply_runs_at_mount(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    primitive: solid_dialect::Primitive,
+    argument: usize,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    lookup
+        .dialect
+        .effect_apply_defer_options(primitive, argument)
+        .is_none_or(|options| {
+            matches!(
+                crate::call_option_literal(file, call, options, "defer"),
+                solid_dialect::OptionLiteral::Absent | solid_dialect::OptionLiteral::False
+            )
+        })
 }
 
 /// Whether `call` is written directly in the callback of a leaf owner (`CallbackOwner::Leaf`) whose own call the owner fixed

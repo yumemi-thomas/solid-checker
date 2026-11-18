@@ -26275,5 +26275,16 @@
    "mx-sync-node-received-async-evt-settled-fire-remove-effect-direct-none"
   ],
   "rediscovered": "base aed152831 (main 2b4adb9c6 + parts 8/9 + ADR 1101): with the rows out of open-defects-rows.json `focus.mjs --codes SYNC_NODE_RECEIVED_ASYNC --grids mx-census` on the 2 ids fails (2 false-positive); this build: 2 not-fired"
+ },
+ {
+  "finding": "a proved verdict lost (recall, not a false positive): ADR 1052 part 9 read a helper called from an effect's apply as refused at mount, though the effect is `{ defer: true }` and its apply first runs on a handler's flush; there no PRIMITIVE_IN_EFFECT_CALLBACK precedes the creation's probe and Chrome reports SYNC_NODE_RECEIVED_ASYNC, so SC7002 went violation -> uncertifiable (creation-throws-first)",
+  "found": "the smoke of #287 (run 44304355728): `mx-recall: proved verdict lost mx-sync-node-received-async-effect-apply-defer-flush-rerun-memo-direct-closure -> recall-gap`; bisected to part 9 (3870a6c6e loses it, 76477c121 holds it)",
+  "fixed": "ADR 1052 part 9's mount premise (`competing_checks.rs` `apply_runs_at_mount`: an effect's apply refuses at mount only when its `defer` option is absent or `false`); fixture competing-check-sync-memo `MemoSharedDeferredApplyAndHandler`",
+  "grid": "mx-recall",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "mx-sync-node-received-async-effect-apply-defer-flush-rerun-memo-direct-closure"
+  ],
+  "rediscovered": "main ea8cca2fd and 28fde14bf recall-gap (SC7002 uncertifiable at line 9), this build agree (SC7002 violation, Chrome corroborates SYNC_NODE_RECEIVED_ASYNC); main 76477c121 agree"
  }
 ]

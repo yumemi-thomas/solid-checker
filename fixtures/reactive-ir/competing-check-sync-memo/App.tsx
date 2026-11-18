@@ -291,6 +291,21 @@ export function MemoSharedApplyAndHandler() {
   );
   return <button onClick={() => make()} />;
 }
+// Violation kept: a deferred apply does not run at mount (`defer: true`); it first runs on the handler's flush, where no refusal
+// precedes the creation's probe (Chrome: SYNC_NODE_RECEIVED_ASYNC; mx-recall `effect-apply-defer-flush-rerun`).
+export function MemoSharedDeferredApplyAndHandler() {
+  const make = () => {
+    createMemo(async () => 1, { sync: true });
+  };
+  createEffect(
+    () => 1,
+    () => {
+      make();
+    },
+    { defer: true },
+  );
+  return <button onClick={() => make()} />;
+}
 export function MemoSharedTrackedAndHandler() {
   const make = () => {
     createMemo(async () => 1, { sync: true });
