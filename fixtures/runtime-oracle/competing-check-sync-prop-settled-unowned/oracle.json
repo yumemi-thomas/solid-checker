@@ -1,0 +1,10 @@
+{
+  "note": "ADR 1052 part 8: onSettled called from a click handler has no owner, so its callback is no leaf owner's: SYNC_NODE_RECEIVED_ASYNC; SC7002 stays a violation.",
+  "haltMarker": true,
+  "steps": [
+    {
+      "action": "click",
+      "selector": "[data-act=\"b1\"], body:not(:has([data-act=\"b1\"])) > #sc-halted"
+    }
+  ]
+}

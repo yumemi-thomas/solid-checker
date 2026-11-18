@@ -26098,5 +26098,33 @@
    "mx-no-owner-effect-flw-apply-slot-module-effect-direct-none"
   ],
   "rediscovered": "main 91eab81ac: false-positive (missing-owner stacked behind PRIMITIVE_IN_EFFECT_CALLBACK), `make fuzz-focus` fails; this build: not-fired"
+ },
+ {
+  "finding": "a false positive: SC7002 at a sync memo or effect whose every run meets an earlier check: in a module object's slot only an effect's apply calls (the effect-callback guard), in a callback prop a child calls only in an effect's apply through a named function, a forward or a spread (the guard; SC6002 did not follow those), and in a callback prop a child calls only in an owned onSettled (the leaf owner's refusal). Chrome reports PRIMITIVE_IN_EFFECT_CALLBACK or PRIMITIVE_IN_FORBIDDEN_SCOPE, never SYNC_NODE_RECEIVED_ASYNC",
+  "found": "ADR 1052 part 4's ledger (owned false positives flw-apply-slot-module, cbp-apply-*, cbp-settled*; split in coord-land/sc7002-split.md)",
+  "fixed": "ADR 1052 part 8 (`competing_checks.rs` `in_slot_called_only_in_applies` for SC7002, `prop_runs_only_in_owned_leaf`; `effect_phase.rs` `prop_layer` over `execution_role::prop_callback_invocations`)",
+  "grid": "mx-census",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "mx-sync-node-received-async-cbp-apply-forwarded-effect-direct-none",
+   "mx-sync-node-received-async-cbp-apply-forwarded-memo-direct-none",
+   "mx-sync-node-received-async-cbp-apply-named-effect-direct-none",
+   "mx-sync-node-received-async-cbp-apply-named-memo-direct-none",
+   "mx-sync-node-received-async-cbp-apply-spread-effect-direct-none",
+   "mx-sync-node-received-async-cbp-apply-spread-memo-direct-none",
+   "mx-sync-node-received-async-cbp-settled-destructured-effect-direct-none",
+   "mx-sync-node-received-async-cbp-settled-destructured-memo-direct-none",
+   "mx-sync-node-received-async-cbp-settled-effect-direct-none",
+   "mx-sync-node-received-async-cbp-settled-memo-direct-none",
+   "mx-sync-node-received-async-cbp-settled-forwarded-effect-direct-none",
+   "mx-sync-node-received-async-cbp-settled-forwarded-memo-direct-none",
+   "mx-sync-node-received-async-cbp-settled-named-effect-direct-none",
+   "mx-sync-node-received-async-cbp-settled-named-memo-direct-none",
+   "mx-sync-node-received-async-cbp-settled-spread-effect-direct-none",
+   "mx-sync-node-received-async-cbp-settled-spread-memo-direct-none",
+   "mx-sync-node-received-async-flw-apply-slot-module-effect-direct-none",
+   "mx-sync-node-received-async-flw-apply-slot-module-memo-direct-none"
+  ],
+  "rediscovered": "base 2607cbf0a (main e4712a977 + parts 6/7): with the rows out of open-defects-rows.json `focus.mjs --codes SYNC_NODE_RECEIVED_ASYNC --grids mx-census` on the 18 ids fails (18 false-positive); this build: 18 not-fired"
  }
 ]

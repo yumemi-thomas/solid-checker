@@ -18,8 +18,9 @@ and sets no owner), `runWithOwner(null, fn)` or `runWithOwner(owner, fn)` with
 the `owner` that `getOwner()` returned in the apply itself (both `context ===
 null`), or project helpers,
 a named function handed to such a callback position or a callback prop the
-child component only calls (ADR 0538; a hand-off nothing places is
-uncertifiable), and never through `createRoot` or another call that sets an
+child component only calls (ADR 0538; ADR 1052 part 8: also a named function
+whose every reference is such a prop, and a prop forwarded whole or spread whole
+to the component that calls it; a hand-off nothing places is uncertifiable), and never through `createRoot` or another call that sets an
 owner, nor through `runWithOwner(undefined, fn)` (the guard tests `=== null`),
 an owner captured in a component body, or an owner the walk cannot follow
 (ADR 0483). `getOwner()` is no earlier call. A `createReaction` callback, the apply of a

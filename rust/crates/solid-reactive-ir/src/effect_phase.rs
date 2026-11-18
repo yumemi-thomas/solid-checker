@@ -489,8 +489,8 @@ impl<'l, 'a> Walk<'l, 'a> {
     }
 
     /// ADR 0538: `literal` is the arrow value of a project component's prop
-    /// that the component only ever calls
-    /// ([`crate::execution_role::component_prop_invocations`]): each call is a
+    /// that the component only ever calls (ADR 1052 part 8: or a named function, or
+    /// a prop handed on whole, [`crate::execution_role::prop_callback_invocations`]): each call is a
     /// layer, walked in the component's file. One proven run with others
     /// unproven is an obligation (ADR 0516); none proven answers nothing.
     fn prop_layer(
@@ -499,15 +499,15 @@ impl<'l, 'a> Walk<'l, 'a> {
         literal: &FunctionFact,
         helper_calls: usize,
     ) -> Option<EffectPhaseOrigin> {
-        let (callee_file, calls) =
-            crate::execution_role::component_prop_invocations(file, literal, self.lookup)?;
+        // ADR 1052 part 8: a named function, a forwarded prop and a spread props object are followed to the component that calls it.
+        let calls = crate::execution_role::prop_callback_invocations(file, literal, self.lookup)?;
         let key = (file.path.to_string(), literal.span);
         if !self.visiting.insert(key.clone()) {
             return None;
         }
         let mut found: Option<EffectPhaseOrigin> = None;
         let mut every = true;
-        for call in calls {
+        for (callee_file, call) in calls {
             if self.budget == 0 {
                 self.limited
                     .set(Some(crate::blockers::SEARCH_BUDGET_EXHAUSTED));

@@ -4290,6 +4290,78 @@
    "to": 2,
    "adr": "ADR 1052",
    "fact": "part 7: fixture competing-check-first extended (a module slot only an apply calls; one a timer also calls)"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC1001 read-backing-unproven",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1052",
+   "fact": "part 8: competing-check-sync-memo gains nine components (module slot, prop callbacks through apply and onSettled, with their violation twins); the rises are their own rows, no existing component moved"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 14,
+   "to": 43,
+   "adr": "ADR 1052",
+   "fact": "part 8: competing-check-sync-memo gains nine components (module slot, prop callbacks through apply and onSettled, with their violation twins); the rises are their own rows, no existing component moved"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 9,
+   "to": 14,
+   "adr": "ADR 1052",
+   "fact": "part 8: competing-check-sync-memo gains nine components (module slot, prop callbacks through apply and onSettled, with their violation twins); the rises are their own rows, no existing component moved"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 10,
+   "to": 32,
+   "adr": "ADR 1052",
+   "fact": "part 8: competing-check-sync-memo gains nine components (module slot, prop callbacks through apply and onSettled, with their violation twins); the rises are their own rows, no existing component moved"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC6002 effect-owner-unproven",
+   "from": 2,
+   "to": 5,
+   "adr": "ADR 1052",
+   "fact": "part 8: competing-check-sync-memo gains nine components (module slot, prop callbacks through apply and onSettled, with their violation twins); the rises are their own rows, no existing component moved"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC6002 function-run-unplaced",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1052",
+   "fact": "part 8: competing-check-sync-memo gains nine components (module slot, prop callbacks through apply and onSettled, with their violation twins); the rises are their own rows, no existing component moved"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC7002 creation-throws-first",
+   "from": 7,
+   "to": 15,
+   "adr": "ADR 1052",
+   "fact": "part 8: competing-check-sync-memo gains nine components (module slot, prop callbacks through apply and onSettled, with their violation twins); the rises are their own rows, no existing component moved"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC9012 closed-parameter-member-dispatch",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1052",
+   "fact": "part 8: competing-check-sync-memo gains nine components (module slot, prop callbacks through apply and onSettled, with their violation twins); the rises are their own rows, no existing component moved"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC9012 leaf-callback-opaque",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1052",
+   "fact": "part 8: competing-check-sync-memo gains nine components (module slot, prop callbacks through apply and onSettled, with their violation twins); the rises are their own rows, no existing component moved"
   }
  ]
 }
