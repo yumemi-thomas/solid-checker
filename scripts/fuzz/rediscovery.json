@@ -26296,5 +26296,14 @@
   "ids": ["flip/st-tracked-handled-sync-memo"],
   "rediscovered": "make fuzz-patterns --only st-tracked-handled-sync-memo: false positive on main 28fde14bf built with both clauses off; FIXED on main (and on e4712a977 + parts 6/7, part 5 alone)",
   "outside": "the pattern lane holds this program (scripts/fuzz/patterns/flip); mx-census tracked-sibling-async and tracked-shared generate the family (ADR 1052 parts 5 and 9 entries above)"
+ },
+ {
+  "finding": "a false clean: SC1001 at a component prop read in an anonymous literal handed to a project helper inside a named local function the render runs (`dir1 = () => { h1(() => { props.m1 }) }`): Chrome reports STRICT_READ_UNTRACKED, and the read ended as `placed-elsewhere` with no row at the named function's calls",
+  "found": "Mac 20's count of the dead false-clean families on main 28fde14bf (a sample of R-near memo); exposed by ADR 1091 (e2d9d4a8f U, 6c9420b8d clean), older than it",
+  "fixed": "ADR 1103 (`local_access.rs` `handed_anonymous_literal`)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": ["mx-strict-read-untracked-ref-factory-body-memo-direct-helper-s-prop-value-cast"],
+  "rediscovered": "`focus.mjs --codes STRICT_READ_UNTRACKED --grids mx-recall --ids`: main 28fde14bf false-clean; this build recall-gap"
  }
 ]

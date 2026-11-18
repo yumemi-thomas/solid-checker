@@ -1,0 +1,46 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-literal-prop-read/App.tsx",
+      "start": 555,
+      "end": 566,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-literal-prop-read/App.tsx",
+      "start": 825,
+      "end": 829,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-literal-prop-read/App.tsx",
+      "start": 1020,
+      "end": 1031,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-literal-prop-read/App.tsx",
+      "start": 1298,
+      "end": 1302,
+      "fixes": 0
+    }
+  ]
+}
