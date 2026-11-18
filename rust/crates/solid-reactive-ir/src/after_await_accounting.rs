@@ -145,9 +145,10 @@ impl AfterAwaitSafe {
         object_prototype_touched: &dyn Fn() -> bool,
     ) -> bool {
         match self {
-            // The wrapper (`call`), an action alias (`action`) and an action whose call the census takes for replaced (`inexact`): the callee proof decides.
+            // The wrapper (`call`), an action alias (`action`), an action whose call the census takes for replaced (`inexact`), a setter through `const` aliases
+            // (`setter`) and an IIFE (`iife`): the callee proof decides.
             Self::SetterOnlyCallee => {
-                matches!(site.via, "call" | "action" | "inexact")
+                matches!(site.via, "call" | "action" | "inexact" | "setter" | "iife")
                     && site.call.is_some_and(|call| {
                         setter_callee::only_calls_setters(ctx, site.file, call, object_prototype_touched)
                     })

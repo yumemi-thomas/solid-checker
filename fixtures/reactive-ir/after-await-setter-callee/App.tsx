@@ -1,4 +1,4 @@
-import { action, createMemo, createSignal } from "solid-js";
+import { action, createMemo, createSignal, createStore, refresh } from "solid-js";
 
 // ADR 1097 (reopened narrowly): an argument-less call after an await whose callee is an exact same-file, unexported, never-written `const` holding a function
 // literal (or an action's generator) whose body is nothing but exact setter calls with inert arguments runs no project code and reads no source.
@@ -97,6 +97,83 @@ export function Refused() {
     (() => {
       setW(1);
     })();
+  });
+  return <p />;
+}
+
+// ADR 1097 widened (step 1, the ruling of 2026-11-19): transitive qualifying callees, an IIFE, exact `const` aliases of a setter, `refresh(accessor)` (ADR 1089 C)
+// and a plain store setter with a literal-only updater (ADR 1089 D).
+export function Widened() {
+  const [, setW] = createSignal(0);
+  const [store, setStore] = createStore({ v: 0 });
+  void store;
+  const source = createMemo(() => 1);
+  const inner = () => {
+    setW(1);
+  };
+  const outer = () => {
+    inner();
+    setW(2);
+  };
+  const set = setW;
+  const viaAlias = () => {
+    set(3);
+  };
+  const refreshes = () => {
+    refresh(source);
+  };
+  const storeWrite = () => {
+    setStore((draft) => {
+      draft.v = 4;
+    });
+  };
+  // Clean: each call below runs only proved calls.
+  Promise.resolve().then(() => {
+    outer();
+    viaAlias();
+    set(5);
+    refreshes();
+    storeWrite();
+    (() => {
+      inner();
+      setW(6);
+    })();
+  });
+  return <p />;
+}
+
+export function WidenedRefused() {
+  const [count, setW] = createSignal(0);
+  const reads = () => {
+    count();
+  };
+  const callsReader = () => {
+    reads();
+  };
+  const recursive = (): void => {
+    recursive();
+  };
+  const d5 = () => setW(1);
+  const d4 = () => d5();
+  const d3 = () => d4();
+  const d2 = () => d3();
+  const d1 = () => d2();
+  let setLet = setW;
+  setLet = setW;
+  const viaLet = () => {
+    setLet(1);
+  };
+  const box = { get: () => 1 };
+  const refreshesNonAccessor = () => {
+    refresh(box.get);
+  };
+  // Uncertifiable: a transitive read, recursion, past the depth bound, a `let` alias, `refresh` of a member.
+  Promise.resolve().then(() => {
+    callsReader();
+    recursive();
+    d1();
+    viaLet();
+    refreshesNonAccessor();
   });
   return <p />;
 }

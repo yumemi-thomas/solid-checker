@@ -15,3 +15,14 @@ Uncertifiable, one twin per excluded shape, in `Refused`:
 - a reassigned `let`, an action generator that yields, an export, an IIFE.
 
 Violation or uncertifiable, never clean: `Twin`'s wrapper reads after the memo's await.
+
+**Widened (step 1 of the ruling of 2026-11-19).** A qualifying body may also call:
+- other qualifying callees, transitively, at most four deep and never one already on the chain;
+- IIFEs whose bodies qualify;
+- setters through exact `const` aliases;
+- `refresh(accessor)`, ADR 1089 C's untouched target;
+- a plain store setter with a literal-only updater (ADR 1089 D, `setter_runs_nothing`).
+
+Clean: `Widened`'s handler.
+
+Uncertifiable, in `WidenedRefused`: a callee that calls a reader, recursion, a chain past the depth bound, a `let` alias, and `refresh` of a member.
