@@ -1868,3 +1868,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/refresh-target-untouched/node_modules/**
 !fixtures/reactive-ir/store-setter-after-await/node_modules/
 !fixtures/reactive-ir/store-setter-after-await/node_modules/**
+!fixtures/reactive-ir/action-after-await/node_modules/
+!fixtures/reactive-ir/action-after-await/node_modules/**
