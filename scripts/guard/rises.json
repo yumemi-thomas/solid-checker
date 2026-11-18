@@ -4837,6 +4837,14 @@
    "to": 29,
    "adr": "ADR 1104",
    "fact": "1b: project-callback-uses String(value()) keeps SC3001/SC6002 uncertifiable instead of an SC9012 at the call (relabel, drops row)"
+  },
+  {
+   "fixture": "reactive-ir/store-sub-value-flow",
+   "key": "SC9012 value-to-unresolved-callee",
+   "from": 3,
+   "to": 5,
+   "adr": "ADR 1104",
+   "fact": "part 2: store-sub-value-flow gains two pattern-parameter rows (a carrier a project function destructures has a row at the read); additions only, all uncertifiable"
   }
  ]
 }
