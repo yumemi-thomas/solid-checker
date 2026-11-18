@@ -127,7 +127,7 @@ pub(super) fn runs_nothing_failure(
 }
 
 /// Whether no analyzed file touches a built-in or evaluates code from a string ([`TOUCHED_BUILTINS`]).
-fn builtins_untouched(ctx: &AnalysisContext<'_>) -> bool {
+pub(super) fn builtins_untouched(ctx: &AnalysisContext<'_>) -> bool {
     TOUCHED_BUILTINS
         .into_iter()
         .all(|hazard| !ctx.semantic_lookup.hazard_present(hazard))
@@ -281,7 +281,7 @@ fn receiver_is_the_librarys(ctx: &AnalysisContext<'_>, file: &FileFacts, call: &
 /// Whether `object` is an identifier no declaration of the program binds whose symbol the compiler declares only in the default library's ECMAScript files (`lib.es5.d.ts`,
 /// `lib.es2015.promise.d.ts`): a global the realm provides. A global the DOM library declares (`window`, `document`, `console`) is a host object with listeners and hooks of its
 /// own, and a global a project declares is the project's.
-fn is_ecmascript_global(
+pub(super) fn is_ecmascript_global(
     ctx: &AnalysisContext<'_>,
     file: &FileFacts,
     object: solid_facts::core::Span,

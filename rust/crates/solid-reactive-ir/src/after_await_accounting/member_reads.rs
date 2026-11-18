@@ -145,3 +145,163 @@ pub(super) fn root_is_plain(ctx: &AnalysisContext<'_>, file: &FileFacts, root: S
         )
         || super::library_call::is_unpatched_ecmascript_global(ctx, file, root)
 }
+
+/// ADR 1084 (census only): why [`root_is_plain`] answered no, as one sub-fact. Each disjunct failed; this names the one a proof would have
+/// to change: for a root no declaration binds, the global test (`global:not-ecmascript`, `global:builtins-touched`); else what
+/// `value_origin` stopped on, followed through the root's binding to its initializer (`origin:project-class`, `binding:parameter`,
+/// `binding:mutable`, `binding:destructured`, `binding:import`, `binding:none` (a declaration the binding table does not hold: a catch
+/// parameter, a function or class name), `init:none` (a `for … of`/`in` head), `init:builtin-shared` where the initializer
+/// is a fresh built-in the binding does not keep closed, `init:call:<callee>`, `init:await:<shape>`, `init:object-literal`, `init:member`,
+/// `init:other`), and for a root that is itself a call or a member, `call:<callee>` or `member`. A primitive proof that failed is
+/// implied by each: the first disjunct needs a primitive-valued expression, which none of these shapes is.
+pub(super) fn plain_failure(ctx: &AnalysisContext<'_>, file: &FileFacts, root: Span) -> String {
+    use solid_facts::ast::RuntimeValueKind;
+    let lookup = ctx.semantic_lookup;
+    let ast = &file.ast;
+    let root = ast.peel_ts_sugar_span(root);
+    if let Some(call) = ast.call_at(root) {
+        return format!("call:{}", callee_class(ctx, file, call));
+    }
+    if ast.member_at(root).is_some() {
+        return "member".to_owned();
+    }
+    if ast.reference_declaration(root).is_none() {
+        return if !super::library_call::is_ecmascript_global(ctx, file, root) {
+            "global:not-ecmascript".to_owned()
+        } else if !super::library_call::builtins_untouched(ctx) {
+            "global:builtins-touched".to_owned()
+        } else {
+            "global:other".to_owned()
+        };
+    }
+    if let Some(crate::indexes::ValueOrigin::ProjectClass(..)) =
+        lookup.value_origin(file, root, RuntimeValueKind::Unknown, 4)
+    {
+        return "origin:project-class".to_owned();
+    }
+    let declaration = ast.reference_declaration(root);
+    let is_parameter = |span: Span| {
+        ast.functions.iter().any(|function| {
+            function
+                .parameters
+                .iter()
+                .any(|parameter| parameter.names.iter().any(|name| name.span == span))
+        })
+    };
+    if declaration.is_some_and(is_parameter) {
+        return "binding:parameter".to_owned();
+    }
+    if declaration.is_some_and(|declaration| {
+        ast.imports.iter().any(|import| {
+            import
+                .bindings
+                .iter()
+                .any(|binding| binding.local.span == declaration)
+        })
+    }) {
+        return "binding:import".to_owned();
+    }
+    let Some((binding_file, binding, _)) = lookup.binding_at_reference(file.path.as_str(), root)
+    else {
+        return "binding:none".to_owned();
+    };
+    let declared = |span: Span| {
+        binding_file.ast.functions.iter().any(|function| {
+            function
+                .parameters
+                .iter()
+                .any(|parameter| parameter.names.iter().any(|name| name.span == span))
+        })
+    };
+    if binding.names.iter().any(|name| declared(name.span)) {
+        return "binding:parameter".to_owned();
+    }
+    if binding_file.path != file.path {
+        return "binding:import".to_owned();
+    }
+    if !binding.immutable {
+        return "binding:mutable".to_owned();
+    }
+    if binding.shape != solid_facts::ast::BindingShape::Identifier {
+        return "binding:destructured".to_owned();
+    }
+    let Some(initializer) = binding.initializer else {
+        return "init:none".to_owned();
+    };
+    let initializer = ast.peel_ts_sugar_span(initializer);
+    if matches!(
+        lookup.value_origin(file, initializer, binding.initializer_value_kind, 4),
+        Some(crate::indexes::ValueOrigin::Builtin)
+    ) {
+        return "init:builtin-shared".to_owned();
+    }
+    if let Some(call) = ast.call_at(initializer) {
+        return format!("init:call:{}", callee_class(ctx, file, call));
+    }
+    let text = file
+        .source_text(initializer)
+        .unwrap_or_default()
+        .trim_start();
+    if let Some(awaited) = text.strip_prefix("await") {
+        let operand = ast
+            .calls
+            .iter()
+            .filter(|call| initializer.contains(call.span) && call.span.start > initializer.start)
+            .min_by_key(|call| call.span.start)
+            .filter(|call| {
+                file.source_text(call.span)
+                    .is_some_and(|call_text| awaited.trim_start().starts_with(call_text))
+            });
+        return match operand {
+            Some(call) => format!("init:await:call:{}", callee_class(ctx, file, call)),
+            None => "init:await:other".to_owned(),
+        };
+    }
+    if text.starts_with('{') {
+        return "init:object-literal".to_owned();
+    }
+    if ast.member_at(initializer).is_some() {
+        return "init:member".to_owned();
+    }
+    "init:other".to_owned()
+}
+
+/// ADR 1084 (census only): what a call's callee resolves to: `construct:` before a constructor; then `std:<qualified name>` (a standard
+/// library declaration), `package:<package>`, `project-function`, `project-method`, `project-other`, or `unresolved`.
+fn callee_class(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> String {
+    let lookup = ctx.semantic_lookup;
+    let prefix = if call.construct { "construct:" } else { "" };
+    let kind = if call.construct {
+        typefacts::CallKind::Construct
+    } else {
+        typefacts::CallKind::Call
+    };
+    if let Some(declaration) = lookup.standard_library_declaration(file, call, kind) {
+        return format!("{prefix}std:{}", declaration.qualified_name);
+    }
+    let Some(declaration) = lookup
+        .resolved_callee_call(file, call.callee)
+        .and_then(|resolved| resolved.declaration.as_ref())
+    else {
+        return format!("{prefix}unresolved");
+    };
+    let path = declaration.location.path.as_ref();
+    if let Some(root) = solid_facts::package_reach::package_root_of(path) {
+        let package = root.rsplit("/node_modules/").next().unwrap_or(root);
+        return format!("{prefix}package:{package}");
+    }
+    let callee = file.ast.peel_ts_sugar_span(call.callee);
+    if file.ast.member_at(callee).is_some() {
+        return format!("{prefix}project-method");
+    }
+    match declaration.kind.as_ref() {
+        "function" | "arrow-function" | "function-expression" | "variable" => {
+            format!("{prefix}project-function")
+        }
+        other => format!("{prefix}project-other:{other}"),
+    }
+}
