@@ -139,6 +139,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/pending-source-first-run/node_modules/**
 !fixtures/reactive-ir/pending-source-layers/node_modules/
 !fixtures/reactive-ir/pending-source-layers/node_modules/**
+!fixtures/reactive-ir/pending-memo-layers/node_modules/
+!fixtures/reactive-ir/pending-memo-layers/node_modules/**
 !fixtures/reactive-ir/effect-phase-layers/node_modules/
 !fixtures/reactive-ir/effect-phase-layers/node_modules/**
 !fixtures/reactive-ir/flush-veto-body/node_modules/
