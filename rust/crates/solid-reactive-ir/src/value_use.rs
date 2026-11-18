@@ -1801,12 +1801,36 @@ impl<'l, 'a> Census<'l, 'a> {
             self.parameter_hops -= 1;
             return Position::Followed;
         }
-        let blocker = if call.construct {
+        let blocker_here = if call.construct {
             blockers::VALUE_THROUGH_NEW
         } else {
             blockers::VALUE_TO_UNRESOLVED_CALLEE
         };
-        self.uses.push((at.location(file.path.as_str()), blocker));
+        self.uses.push((at.location(file.path.as_str()), blocker_here));
+        // ADR 1104 part 2: a project function's destructuring parameter reads what the call
+        // hands it (`({ get }) => get()`, `function pick({ a })`), where Chrome rc.21 warns.
+        // The row at the argument stays; a root's pattern is a Get of it, as a binding's
+        // pattern is, and the names any other pattern declares may be, or hold, the value.
+        if !call.construct
+            && !call.arguments[index].spread
+            && let Some((callee_file, callee, true)) =
+                crate::execution_role::project_callee_at_parameter(file, call, index, self.lookup)
+            && let Some(parameter) = callee.parameters.get(index).filter(|parameter| {
+                parameter.shape != solid_facts::ast::BindingShape::Identifier
+                    && !reads_arguments(callee_file, callee.span)
+            })
+            && self.parameter_hops < MAX_HOPS
+        {
+            if root {
+                self.site(callee_file, parameter.pattern, Site::Read, blocker);
+            } else {
+                self.parameter_hops += 1;
+                for name in &parameter.names {
+                    self.name_uses(callee_file, name.span, mode);
+                }
+                self.parameter_hops -= 1;
+            }
+        }
         // ADR 0998: a callee nothing resolves is handed a package's value; what it answers is its own (a package's result is a start).
         if !self.package_value {
             self.handed_on(file, call, index, mode);

@@ -2669,6 +2669,25 @@ impl<'c> ParameterFlow<'_, 'c> {
                         if self.call_value(file, at, call, frame, in_place, linked, depth) {
                             return;
                         }
+                        // ADR 1104 part 2: a call no row describes is read as the same call
+                        // written at the sink is (`st.items.slice()[0].v`): its callee's
+                        // returns, or what it was handed. `const c = st.items.slice();
+                        // c[0].v = 5` (no call fact for the zero-argument `slice`) was clean.
+                        if handed_container(file, context, expression, 6) {
+                            self.open = true;
+                            return;
+                        }
+                        self.sub_values(
+                            file,
+                            at,
+                            call.span,
+                            call.span,
+                            frame,
+                            in_place,
+                            linked,
+                            depth - 1,
+                        );
+                        return;
                     }
                 }
             }
