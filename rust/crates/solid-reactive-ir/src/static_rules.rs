@@ -590,23 +590,52 @@ fn component_props_destructure(
             // re-subscribe; event handlers, deferred/leaf callbacks, effect
             // apply, untrack, and directive application read current values
             // when they execute. None of those misbehaves at runtime.
-            if matches!(
-                role,
-                crate::ExecutionRole::TrackedJsx
-                    | crate::ExecutionRole::EventCallback
-                    | crate::ExecutionRole::DeferredCallback
-                    | crate::ExecutionRole::UntrackedCallback
-                    | crate::ExecutionRole::UntrackedUnwindowed
-                    | crate::ExecutionRole::EffectApply
-                    | crate::ExecutionRole::DirectiveApply
-            ) {
+            // ADR 1106: a deferred role a destructure takes from the named callback around it holds only where it is written in
+            // that callback itself. In a function nested in it (`const f1 = () => { const { v } = s1; }; f1();` in a ref
+            // callback), the callback's own pass may run it (ADR 0585): fresh is not proven.
+            let nested_in_named_callback = role == crate::ExecutionRole::DeferredCallback
+                && crate::execution_role::named_callback_containing(
+                    file,
+                    binding.pattern,
+                    ctx.semantic_lookup,
+                )
+                .is_some_and(|callback| {
+                    crate::owners::containing_ast_function(&file.ast, binding.pattern)
+                        .is_some_and(|inner| inner.span != callback.span)
+                });
+            if !nested_in_named_callback
+                && matches!(
+                    role,
+                    crate::ExecutionRole::TrackedJsx
+                        | crate::ExecutionRole::EventCallback
+                        | crate::ExecutionRole::DeferredCallback
+                        // No strict-read window is open there (after an await, a timer, a disposal or an error arm).
+                        | crate::ExecutionRole::UntrackedUnwindowed
+                )
+            {
                 continue;
             }
+            // ADR 1106: an effect's apply, an `untrack` callback and a directive's (a ref's) application read
+            // fresh values, so SC1003's frozen snapshot is no claim there; but a strict-read window may be open in them
+            // (Chrome reports STRICT_READ_UNTRACKED at such a destructure, as SC1001 does at the member read), and no other rule
+            // claims the destructure. Uncertifiable, never silent.
+            let fresh_windowed = matches!(
+                role,
+                crate::ExecutionRole::UntrackedCallback
+                    | crate::ExecutionRole::EffectApply
+                    | crate::ExecutionRole::DirectiveApply
+            );
             // The same guard the strict-read member loop applies: a
             // destructure inside a body-defined handler or helper executes
             // when that function is invoked and reads values fresh at that
             // moment — only a proven setup-time role above makes it a
             // once-frozen snapshot.
+            //
+            // ADR 1106: that holds where every run of the helper is fresh. A helper the component body calls runs during setup,
+            // where Chrome reports STRICT_READ_UNTRACKED at the destructure and no other rule claims it: the destructure is
+            // uncertifiable unless every reference to the innermost named function around it is a direct call whose own role is
+            // fresh (`helper_runs_only_fresh`).
+            let mut helper_setup = false;
             if crate::owners::inside_non_component_function(
                 file,
                 binding.pattern,
@@ -618,17 +647,28 @@ fn component_props_destructure(
             )
             .is_none()
             {
-                continue;
+                // A destructure that runs where no strict-read window is open (after its function's await: `Unreported`)
+                // is fresh however the helper is entered.
+                if role == crate::ExecutionRole::Unreported
+                    || helper_runs_only_fresh(ctx, file, binding.pattern, &allowed)
+                {
+                    continue;
+                }
+                helper_setup = true;
             }
             // An unknown role proves no setup-time read: it is either no fact
             // at all, or invocations in several non-reporting roles (ADR
             // 0323's merge: a tracked memo and an `untrack`, an event and a
             // lazy memo), each fresh at call time. Not a proven snapshot.
-            let mut uncertain = matches!(
-                role,
-                crate::ExecutionRole::Unknown | crate::ExecutionRole::Unreported
-            ) || prop_symbol
-                .is_some_and(|symbol| tables.uncertain_prop_source(symbol));
+            let mut uncertain = helper_setup
+                || fresh_windowed
+                || nested_in_named_callback
+                || !written_in_setup(ctx, file, binding.pattern)
+                || matches!(
+                    role,
+                    crate::ExecutionRole::Unknown | crate::ExecutionRole::Unreported
+                )
+                || prop_symbol.is_some_and(|symbol| tables.uncertain_prop_source(symbol));
             if let Some(declaration) = &prop_declaration {
                 match destructured_props_use(tables, binding, declaration) {
                     crate::source_discovery::PropUse::Static => continue,
@@ -655,6 +695,186 @@ fn component_props_destructure(
         }
     }
     defects
+}
+
+/// ADR 1106: the roles a strict-read window may be open in, or nothing is known of: setup, an `untrack` callback, an effect's
+/// apply, a directive's, module initialization, and an unknown role.
+fn window_may_be_open(role: crate::ExecutionRole) -> bool {
+    matches!(
+        role,
+        crate::ExecutionRole::ModuleInitialization
+            | crate::ExecutionRole::UntrackedRendering
+            | crate::ExecutionRole::UntrackedCallback
+            | crate::ExecutionRole::EffectApply
+            | crate::ExecutionRole::DirectiveApply
+            | crate::ExecutionRole::Unknown
+    )
+}
+
+/// ADR 1106: whether every run of the innermost named function around `pattern` (through immediately invoked functions) reads
+/// fresh: the function has a name (its own
+/// or the `const` it initializes), and every reference to it is the callee of a direct call whose execution role is one SC1003
+/// leaves alone (tracked, an event handler, a deferred or leaf callback; not a callback a strict-read window may cover). `false` for an anonymous function, a reference that is no direct call, a call in a setup-time or unknown
+/// role, and a function with no reference.
+fn helper_runs_only_fresh(
+    ctx: &AnalysisContext<'_>,
+    file: &solid_facts::FileFacts,
+    pattern: solid_facts::core::Span,
+    allowed: &[solid_facts::core::Span],
+) -> bool {
+    let ast = &file.ast;
+    let Some(mut function) = crate::owners::containing_ast_function(ast, pattern) else {
+        return false;
+    };
+    // An immediately invoked function runs in place, where it is written: the function around it answers.
+    while ast
+        .calls
+        .iter()
+        .any(|call| !call.construct && ast.peel_ts_sugar_span(call.callee) == function.span)
+    {
+        let Some(outer) = crate::owners::containing_ast_function(ast, function.span) else {
+            return false;
+        };
+        function = outer;
+    }
+    let Some(name) = crate::owners::function_binding_name(file, function).map(|name| name.span)
+    else {
+        return false;
+    };
+    let Some(symbol) = ctx.semantic_lookup.entities().at(file.path.as_str(), name) else {
+        return false;
+    };
+    let mut calls = 0;
+    for reference in ctx.semantic_lookup.symbol_references(symbol.as_str()) {
+        if reference.path.as_ref() != file.path.as_str() {
+            return false;
+        }
+        if reference.start_byte == u64::from(name.start) {
+            continue;
+        }
+        let Some(call) = ast.calls.iter().find(|call| {
+            !call.construct
+                && u64::from(ast.peel_ts_sugar_span(call.callee).start) == reference.start_byte
+        }) else {
+            // A reference that is no direct call (`t1.forEach(f1)`): the carriers the binding is handed to place it, as they
+            // place a member read there (`handed_read_role`); fresh only where that role reports no untracked read.
+            let handed = crate::local_access::handed_read_role(
+                file,
+                pattern,
+                allowed,
+                ctx.entities,
+                ctx.symbol_names,
+                ctx.semantic_lookup,
+            );
+            if handed.is_some_and(|(role, _)| {
+                role != crate::ExecutionRole::Unknown && !role.reports_untracked_read()
+            }) {
+                calls += 1;
+                continue;
+            }
+            return false;
+        };
+        // The read-role engine, as for a member read at the call: it knows the windows of an error arm, a disposal and a
+        // dead arm (`if (isServer) f1()`), which the plain semantic role leaves unknown or rendering.
+        let role = read_execution_role(
+            file,
+            call.span,
+            allowed,
+            ctx.entities,
+            ctx.symbol_names,
+            ctx.semantic_lookup,
+        );
+        // As at the destructure: a deferred role the call takes from a named callback holds only for a call written in it.
+        let nested = role == crate::ExecutionRole::DeferredCallback
+            && crate::execution_role::named_callback_containing(
+                file,
+                call.span,
+                ctx.semantic_lookup,
+            )
+            .is_some_and(|callback| {
+                crate::owners::containing_ast_function(ast, call.span)
+                    .is_some_and(|inner| inner.span != callback.span)
+            });
+        if nested || window_may_be_open(role) {
+            return false;
+        }
+        calls += 1;
+    }
+    calls > 0
+}
+
+/// ADR 1106: whether a destructure at `pattern` is written where setup runs it, the one place SC1003's violation rests on an exact
+/// fact: at module scope, or in a component's own body, through layers that run their function in place on the caller's stack (an
+/// immediately invoked function, a standard-library inline callback such as `forEach`, a project helper that calls its argument
+/// in its body: `layer_run`; a primitive's slot the dialect runs in place: `createRoot`, `untrack`, `runWithOwner`, `flush(fn)`; a
+/// function the compiler places in the render: a flow component's function child). Anywhere else (a listener, an object's method,
+/// a function handed to a call or to `render`) the role is the lexical fallback of the code around it, not a proof of when it runs:
+/// uncertifiable, never a violation (the lg-recall `store-dstr-object` programs in event-dispatch, synchronous-fire and listener
+/// contexts, where Chrome reports nothing).
+fn written_in_setup(
+    ctx: &AnalysisContext<'_>,
+    file: &solid_facts::FileFacts,
+    pattern: solid_facts::core::Span,
+) -> bool {
+    let ast = &file.ast;
+    let lookup = ctx.semantic_lookup;
+    // The innermost function strictly around `span`.
+    let around = |span: solid_facts::core::Span| {
+        ast.functions
+            .iter()
+            .filter(|function| function.span.contains(span) && function.span != span)
+            .min_by_key(|function| function.span.end - function.span.start)
+    };
+    let Some(mut function) = crate::owners::containing_ast_function(ast, pattern) else {
+        return true;
+    };
+    for _ in 0..16 {
+        if lookup.function_may_be_component(file, function) {
+            return true;
+        }
+        // The call that runs `function` in place: the function holding it is next.
+        let in_place = match crate::execution_role::layer_run(file, function, lookup) {
+            crate::execution_role::LayerRun::InPlace(call)
+            | crate::execution_role::LayerRun::InPlaceAmongOthers(call) => Some(call),
+            _ => ast
+                .arguments_containing(function.span)
+                .find(|(call, index)| {
+                    ast.peel_ts_sugar_span(call.arguments[*index].span) == function.span
+                        && call.arguments[..=*index]
+                            .iter()
+                            .all(|argument| !argument.spread)
+                        && lookup
+                            .primitive_at_call(file, call.span)
+                            .is_some_and(|primitive| {
+                                matches!(
+                                    lookup.dialect.slot_run(
+                                        primitive,
+                                        *index,
+                                        call.arguments.len()
+                                    ),
+                                    solid_dialect::SlotRun::InPlace(_)
+                                )
+                            })
+                })
+                .map(|(call, _)| call.span),
+        };
+        // A function the compiler places in the render (a flow component's function child) runs where it is written.
+        let rendered = file.compiler.callback_roles.iter().any(|callback| {
+            callback.span == function.span
+                && callback.role == solid_facts::compiler::CallbackRoleKind::Render
+        });
+        let next = match in_place {
+            Some(call) => around(call),
+            None if rendered => around(function.span),
+            None => return false,
+        };
+        let Some(next) = next else {
+            // Module scope runs it during the module's initialization.
+            return true;
+        };
+        function = next;
+    }
+    false
 }
 
 /// ADR 0657: a destructure no exact root reaches. An assignment, a `for…of`, a

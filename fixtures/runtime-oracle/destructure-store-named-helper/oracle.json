@@ -1,0 +1,6 @@
+{
+  "note": "ADR 1106: a store destructured in a named helper the component body calls: Chrome reports STRICT_READ_UNTRACKED at the destructure; SC1003 uncertifiable (it was a clean nothing explained). The fuzzer's `store-dstr-object` variant, e.g. `mx-strict-read-untracked-body-store-dstr-object-direct-closure`.",
+  "haltMarker": true,
+  "mount": ["C1"],
+  "steps": []
+}

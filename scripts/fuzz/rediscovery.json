@@ -26383,5 +26383,23 @@
   "code": "STRICT_READ_UNTRACKED",
   "ids": ["mx-strict-read-untracked-ref-factory-body-memo-direct-helper-s-prop-value-cast"],
   "rediscovered": "`focus.mjs --codes STRICT_READ_UNTRACKED --grids mx-recall --ids`: main 28fde14bf false-clean; this build recall-gap"
+ },
+ {
+  "finding": "a false clean: SC1003 at a store destructure (`const { v } = store`) in a named helper the body calls, an effect's apply, a ref's application or a function nested in a named ref callback: Chrome reports STRICT_READ_UNTRACKED, and SC1003 skipped it as a fresh read (530 of the 1,938 `store-dstr-object` mx-recall programs on main 28fde14bf)",
+  "found": "Mac 20 checking ADR 1103's siblings (a Chrome probe), then the new fuzz variant `store-dstr-object`",
+  "fixed": "ADR 1106 (`static_rules.rs` `component_props_destructure`: `helper_runs_only_fresh`, `nested_in_named_callback`, `written_in_setup`)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": ["mx-strict-read-untracked-body-store-dstr-object-direct-closure", "mx-strict-read-untracked-effect-apply-store-dstr-object-direct-none", "mx-strict-read-untracked-ref-named-store-dstr-object-direct-closure", "mx-strict-read-untracked-ref-named-store-dstr-object-wrapper-helper"],
+  "rediscovered": "`focus.mjs --codes STRICT_READ_UNTRACKED --grids mx-recall --ids` (the 1,938 `store-dstr-object` ids): main 28fde14bf 530 false-clean; this build 0"
+ },
+ {
+  "finding": "a false positive: SC1003 violation at a store destructure in a listener, an object's method or a function handed to `render` (event-dispatch, synchronous-fire and listener contexts), whose role was the lexical fallback of the code around it: Chrome reports nothing (60 lg-recall `store-dstr-object` programs on main 28fde14bf)",
+  "found": "the new fuzz variant `store-dstr-object` (lg-recall)",
+  "fixed": "ADR 1106 (`static_rules.rs` `written_in_setup`)",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": ["lg-strict-read-untracked-evt-handler-dispatch-store-dstr-object-direct-none", "lg-strict-read-untracked-lst-none-method-store-dstr-object-direct-none", "lg-strict-read-untracked-mount-named-store-dstr-object-direct-none"],
+  "rediscovered": "`focus.mjs --codes STRICT_READ_UNTRACKED --grids lg-recall --ids` (the 6,795 destructure ids): main 28fde14bf 60 false-positive; this build 0"
  }
 ]
