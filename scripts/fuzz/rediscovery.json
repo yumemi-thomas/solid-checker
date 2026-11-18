@@ -25959,5 +25959,11 @@
   "found": "Mac 23's twin for ADR 1056 (fixture iteration-timer-parameter-composite-stored: a violation on 5a5d1321f)",
   "fixed": "ADR 1056 (`mutation_sites.rs` `closed_parameter_seen`: a reference in an assignment's value fails the parameter; the handed-member proof likewise refuses stored members/literals, receiver escapes, rewritten/defaulted parameters and inherited reads)",
   "outside": "Not generated: the grids write a timer's callback inline or by name in the site's own function, and `assign-callee` (CALLEE_FORMS) is a form of calling the site function itself, never of the function that receives a timer callback as a parameter. They also do not put the scheduler in a handed literal whose callback parameter is rewritten/defaulted, whose member or literal is stored, or whose method leaks its receiver. Pinned by fixture reactive-ir/iteration-timer-parameter-composite-stored (a violation on 5a5d1321f, uncertifiable here; Chrome reports the write, covered-uncertifiable) beside its proved twin iteration-timer-parameter-composite, and the iteration-timer-handed-literal refusal twins."
+ },
+ {
+  "finding": "ADR 1067: a genuine store setter's inline updater can close an open write only with an independently proven fresh ordinary seed and tuple identity",
+  "found": "corpus investigation of standard-member-impostor; an rc.21 source probe also showed a user Proxy can forge value[$TARGET].px and forward updater writes to Number",
+  "fixed": "ADR 1067",
+  "outside": "precision improvement, no released defect to rediscover as a baseline failure. The storesetterproxy and storesettershadowed seam forms generate the forged private-target protocol and local tuple/setter lookalike, each with legal twins; the smoke manifests were not re-recorded for them. Scoped fuzz-focus and the runtime-oracle forged-proxy case check the refusals."
  }
 ]

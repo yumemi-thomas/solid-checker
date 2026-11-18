@@ -2816,8 +2816,82 @@ impl<'a> SemanticLookup<'a> {
                 .map(|(symbol, _)| {
                     crate::base::contributions::projection_callee_hash(symbol.as_ref())
                 })
+                .chain(self.store_setter_symbols())
                 .collect()
         })
+    }
+
+    /// ADR 1067: the hashes of the symbols bound to a store setter whose updater receives its store
+    /// (`Dialect::setter_updater_receives_store`), created from a fresh closed ordinary object seed:
+    /// the second name of a `const` array pattern of one initializer,
+    /// a call the dialect names such a primitive (`const [values, setValues] = createStore(…)`), the name never written. A
+    /// setter copied, passed on, read off the tuple another way or bound by `let` has no symbol here, so a draft written in its
+    /// updater stays an open write.
+    fn store_setter_symbols(&self) -> Vec<u32> {
+        let mut found = Vec::new();
+        // Use the raw, strictly stronger form of ADR 0801's iteration premise. The seen-code
+        // refinement reads standard-member integrity, which itself asks this draft-write answer;
+        // using it here would let the setter proof justify its own tuple identity.
+        let hazards = self.hazards_index();
+        if [
+            crate::base::Hazard::Eval,
+            crate::base::Hazard::ArrayIntrinsicObtained,
+            crate::base::Hazard::IntrinsicHandedAtCall,
+            crate::base::Hazard::WindowValuedCandidate,
+            crate::base::Hazard::CodeEvaluatingCall,
+            crate::base::Hazard::RootPatch,
+            crate::base::Hazard::ReflectiveDefinitionSpelling,
+        ]
+        .iter()
+        .any(|hazard| hazards.contains_key(hazard))
+        {
+            return found;
+        }
+        for file in self.files() {
+            for binding in &file.ast.bindings {
+                if !crate::interproc::accessor_provenance::simple_array_binding(binding) {
+                    continue;
+                }
+                let Some(Some(setter)) = binding.array_slots.get(1) else {
+                    continue;
+                };
+                let Some(call) = binding
+                    .initializer
+                    .and_then(|initializer| {
+                        file.ast.call_at(file.ast.peel_ts_sugar_span(initializer))
+                    })
+                    .filter(|call| !call.construct)
+                else {
+                    continue;
+                };
+                let Some(primitive) = self.primitive_at_call(file, call.span) else {
+                    continue;
+                };
+                // `wrap` accepts an existing proxy through value[$TARGET]. An arbitrary Proxy
+                // can forge that protocol, so the runtime question alone proves no allocation.
+                // Only a fresh, closed seed with an ordinary prototype is admitted here.
+                if !call.arguments.first().is_some_and(|seed| {
+                    !seed.spread
+                        && seed.exact_object_literal
+                        && file.ast.object_get_shapes.iter().any(|shape| {
+                            shape.span == file.ast.peel_ts_sugar_span(seed.span) && shape.closed
+                        })
+                }) {
+                    continue;
+                }
+                if !self.dialect.setter_updater_receives_store(primitive)
+                    || binding_written(file, setter.span)
+                {
+                    continue;
+                }
+                if let Some(symbol) = self.entities.at(file.path.as_str(), setter.span) {
+                    found.push(crate::base::contributions::projection_callee_hash(
+                        symbol.as_ref(),
+                    ));
+                }
+            }
+        }
+        found
     }
 
     /// ADR 0965: the blocker kinds this run assumed away (`--assume Premise(kind)`), each asked of the seam, which is how the run records that it flipped.
