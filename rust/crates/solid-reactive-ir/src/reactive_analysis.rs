@@ -871,6 +871,11 @@ pub(crate) fn collect_project<'facts>(
         .collect::<HashSet<_>>();
     // ADR 0771: so may a read a helper makes at a tracked position through a
     // value it was handed, with no boundary to catch it (`<p>{peek(a)}</p>`).
+    // ADR 1102: not at a call a computation's own callback makes, that
+    // suspends it (`createMemo(() => { wrapUse(); })`): a non-render
+    // computation raises no boundary code, and the question moves to whoever
+    // reads it, as for the placed rows below; and not at such a call through
+    // exact in-place layers (ADR 1096's `computation_layer_call`).
     let attributed_at_tracked = |read: &crate::ReactiveRead| {
         read.execution == crate::ExecutionRole::TrackedJsx
             && read.origin.is_some()
@@ -881,10 +886,26 @@ pub(crate) fn collect_project<'facts>(
                 ) else {
                     return true;
                 };
-                crate::owners::read_loading_cover(
+                let span = solid_facts::core::Span::new(start, end);
+                !file.ast.call_at(span).is_some_and(|call| {
+                    crate::execution_role::computation_read_suspends(
+                        file,
+                        call.callee,
+                        ctx.entities,
+                        ctx.symbol_names,
+                        ctx.semantic_lookup,
+                    ) || crate::local_access::computation_layer_call(
+                        file,
+                        call.callee,
+                        ctx.entities,
+                        ctx.symbol_names,
+                        ctx.semantic_lookup,
+                    )
+                    .is_some()
+                }) && crate::owners::read_loading_cover(
                     ctx.semantic_lookup,
                     file,
-                    solid_facts::core::Span::new(start, end),
+                    span,
                     ctx.symbol_names,
                 ) != crate::owners::LoadingCover::Covered
             })
@@ -1032,6 +1053,7 @@ pub(crate) fn collect_project<'facts>(
         let symbol = ctx.entities.get(&read.declaration)?;
         // A probe meets the source pending by design, and a computation's
         // own read suspends it: the question moves to whoever reads that.
+        // ADR 1102: so does a read whose exact in-place layers end at such a read (ADR 1096's `computation_layer_call`).
         (!file.ast.call_at(span).is_some_and(|call| {
             crate::execution_role::pending_accessor_probe(file, call.callee, ctx.semantic_lookup)
                 || crate::execution_role::computation_read_suspends(
@@ -1041,6 +1063,14 @@ pub(crate) fn collect_project<'facts>(
                     ctx.symbol_names,
                     ctx.semantic_lookup,
                 )
+                || crate::local_access::computation_layer_call(
+                    file,
+                    call.callee,
+                    ctx.entities,
+                    ctx.symbol_names,
+                    ctx.semantic_lookup,
+                )
+                .is_some()
         }))
         .then_some((file, span, symbol))
     });

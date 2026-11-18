@@ -4285,3 +4285,13 @@ The 24 `wrapper` programs stay uncertifiable on SC5003 `async-options-opaque`, a
 - uncertifiable twins: the closure in an effect's apply, under `untrack`, also kept, or handed to the helper as a value.
 
 Chrome rc.21 is quiet on the four clean components, and reports PENDING_ASYNC_UNTRACKED_READ only at the apply twin. A first build without the leaf-owner condition lost `async-unsuspendable-call-attributed`'s `TrackedWrapper` violation; the regress gate caught it. Three fixtures lose only U rows, recorded as drops rows: `MemoClosure` in that fixture (claimed silent), five `read-after-await-reach` helpers each called in a memo's compute before any await, and the `value-walk-chain` caught cases (their SC5008 stands, as Chrome reports).
+
+<a id="adr-1102"></a>
+## ADR 1102 — The census of the next simplest-legal layer; group b: a wrapper's call that a memo's compute makes is the memo's own read: no opaque boundary row
+**The gap.** The census (W4, 5865a470f, on bundle s) left 24 legal lg-base programs unowned: PENDING_ASYNC_UNTRACKED_READ memo with the `wrapper` binding, SC5003 `async-options-opaque` (6 on layer 2, 18 on the mounts). The program is `const wrapUse = () => { a1(); }` called in a memo's compute, directly or through a closure, an IIFE, a helper or a closure in a helper. Local access places the read at the call (ADR 0510/0531, role decided, `SuspendsInComputation`). `reactive_analysis.rs` then synthesized an opaque SC5003 row at that call twice: once as ADR 0771's attributed read at a tracked position with no `Loading`, and once as the open row placed for a read of an over-async source.
+**Decision.** Neither synthesis applies at a call that is a computation's own suspending read: either `computation_read_suspends`, which the placed-row producer already asked, or exact in-place layers ending at one (ADR 1096's `computation_layer_call`, which requires a tracked role and no leaf owner). A non-render computation raises no ASYNC_OUTSIDE_LOADING_BOUNDARY, and its reader is a site of its own. Render effects stay excluded (`tracked_computation_read` excludes `computation_read_is_render`), and a leaf owner keeps its violation from its own path.
+*Evidence.* Release, main 28fde14bf against this change. All 7,704 PENDING_ASYNC_UNTRACKED_READ programs of the six base grids:
+- the 24 group programs from uncertifiable to clean, plus lg-combo 3 and lg-src 12;
+- no misuse moved, and 0 violation rows lost.
+
+Fixture `pending-wrapper-memo`: `Direct`, `Closure` and `Iife` are clean; the twins `RenderCompute` and `ApplyCall` are not ended.

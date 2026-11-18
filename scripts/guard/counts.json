@@ -16,7 +16,7 @@
   "SC1001 no-hydration-subtree": 2,
   "SC1001 package-finding-at-entry": 141,
   "SC1001 package-value-read": 158,
-  "SC1001 read-backing-unproven": 389,
+  "SC1001 read-backing-unproven": 390,
   "SC1001 store-handed-to-package": 1,
   "SC1001 strict-read-unaccounted": 18,
   "SC1001 summary-read-unplaced": 95,
@@ -156,24 +156,24 @@
   "SC5001 creation-pass-unproven": 18,
   "SC5001 declared-loading-value": 4,
   "SC5001 host-callback-timing": 1,
-  "SC5001 invocation-context-unproven": 169,
+  "SC5001 invocation-context-unproven": 170,
   "SC5001 mount-form-window": 1,
   "SC5001 mount-unresolved": 2,
   "SC5001 package-finding-at-entry": 44,
   "SC5001 source-module-unresolved": 1,
-  "SC5001 source-pending-unproven": 341,
-  "SC5003 async-options-opaque": 37,
+  "SC5001 source-pending-unproven": 342,
+  "SC5003 async-options-opaque": 35,
   "SC5003 async-provenance-unproven": 146,
   "SC5003 async-read-caught": 4,
   "SC5003 async-read-unaccounted": 351,
-  "SC5003 call-attributed-read": 155,
+  "SC5003 call-attributed-read": 157,
   "SC5003 carrier-run-unproven": 2,
   "SC5003 component-identity-unproven": 1,
   "SC5003 mount-form-window": 2,
   "SC5003 mount-unresolved": 383,
   "SC5003 package-finding-at-entry": 113,
   "SC5003 pending-read-unresolved": 766,
-  "SC5003 root-mount-pass-unproven": 54,
+  "SC5003 root-mount-pass-unproven": 51,
   "SC5003 server-rendering-unresolved": 1,
   "SC5003 source-module-unresolved": 1,
   "SC5003 source-pending-unproven": 1,
@@ -4140,6 +4140,45 @@
     "open": "reactive-ir/value-walk-chain"
    },
    "note": "a pending async memo read in exact in-place layers (a named closure called once, an IIFE, a helper's callback) whose outermost call is a tracked, suspending read of a computation's own callback (no leaf owner): the read is that computation's, as the direct read is (SuspendsInComputation, NotRenderEffect)"
+  },
+  {
+   "fixture": "reactive-ir/accessor-provenance",
+   "key": "SC5003 async-options-opaque",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 1102",
+   "proof": "rust/crates/solid-reactive-ir/src/reactive_analysis.rs::collect_project",
+   "fixtures": {
+    "proved": "reactive-ir/accessor-provenance",
+    "open": "reactive-ir/accessor-provenance"
+   },
+   "note": "no opaque SC5003 row is synthesized at a call that is a computation's own suspending read, directly or through ADR 1096's exact in-place layers: a non-render computation raises no ASYNC_OUTSIDE_LOADING_BOUNDARY, and its reader is a site of its own (ADR 1102)"
+  },
+  {
+   "fixture": "reactive-ir/value-walk-chain",
+   "key": "SC5003 root-mount-pass-unproven",
+   "from": 4,
+   "to": 1,
+   "adr": "ADR 1102",
+   "proof": "rust/crates/solid-reactive-ir/src/reactive_analysis.rs::collect_project",
+   "fixtures": {
+    "proved": "reactive-ir/value-walk-chain",
+    "open": "reactive-ir/value-walk-chain"
+   },
+   "note": "no opaque SC5003 row is synthesized at a call that is a computation's own suspending read, directly or through ADR 1096's exact in-place layers: a non-render computation raises no ASYNC_OUTSIDE_LOADING_BOUNDARY, and its reader is a site of its own (ADR 1102)"
+  },
+  {
+   "fixture": "reactive-ir/walk-bounds",
+   "key": "SC5003 async-options-opaque",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1102",
+   "proof": "rust/crates/solid-reactive-ir/src/reactive_analysis.rs::collect_project",
+   "fixtures": {
+    "proved": "reactive-ir/walk-bounds",
+    "open": "reactive-ir/accessor-provenance"
+   },
+   "note": "no opaque SC5003 row is synthesized at a call that is a computation's own suspending read, directly or through ADR 1096's exact in-place layers: a non-render computation raises no ASYNC_OUTSIDE_LOADING_BOUNDARY, and its reader is a site of its own (ADR 1102)"
   }
  ],
  "renames": []

@@ -46,17 +46,6 @@
       "fixes": 0
     },
     {
-      "rule": "async-outside-loading-boundary",
-      "code": "SC5003",
-      "kind": "uncertifiable",
-      "blocker": "root-mount-pass-unproven",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/value-walk-chain/caught-at-five.tsx",
-      "start": 288,
-      "end": 292,
-      "fixes": 0
-    },
-    {
       "rule": "caught-reactive-read",
       "code": "SC5008",
       "kind": "uncertifiable",
@@ -153,17 +142,6 @@
       "path": "fixtures/reactive-ir/value-walk-chain/caught-at-seven.tsx",
       "start": 307,
       "end": 317,
-      "fixes": 0
-    },
-    {
-      "rule": "async-outside-loading-boundary",
-      "code": "SC5003",
-      "kind": "uncertifiable",
-      "blocker": "root-mount-pass-unproven",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/value-walk-chain/caught-at-seven.tsx",
-      "start": 339,
-      "end": 343,
       "fixes": 0
     },
     {
@@ -9635,17 +9613,6 @@
       "path": "fixtures/reactive-ir/value-walk-chain/caught-past-budget.tsx",
       "start": 8617,
       "end": 8627,
-      "fixes": 0
-    },
-    {
-      "rule": "async-outside-loading-boundary",
-      "code": "SC5003",
-      "kind": "uncertifiable",
-      "blocker": "root-mount-pass-unproven",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/value-walk-chain/caught-past-budget.tsx",
-      "start": 8649,
-      "end": 8655,
       "fixes": 0
     },
     {
