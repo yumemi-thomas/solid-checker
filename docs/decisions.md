@@ -4065,3 +4065,22 @@ The router's own files (`router_params.rs`: replacement spellings, `history`, th
 **Sweep.** The remaining path checks in the analysis are `contains("/node_modules/")` (installed or not: a store slot is inside `node_modules`) and `route_components.rs`'s audited install directories (real paths): neither names a package by its directory.
 **Measured** (rc.21 frozen corpus v2, release, the 1082 head against this): both builds unchanged (development U 248,376, V 244; standard U 235,575, V 236). No corpus project combines a store-slot vitest with fake timers and a flush, and jandibat-web's store-slot `solid-js` moves nothing through the tag checks.
 **Evidence.** `flush-universe-fake-timers-store` gives `flush-universe-fake-timers`'s nine rows. Unit test `a_store_slot_is_spelled_as_its_manifest_names_it`. Rediscovery: `outside` (the generator writes no install layout, and vitest cannot load in the oracle's page), entry in `scripts/fuzz/rediscovery.json`. No Chrome case: the runtime half is ADR 0967's vitest run.
+
+<a id="adr-1093"></a>
+## ADR 1093 — A hook's returned literal: the getter its member call reads, the setter its expression body holds
+**The gap.** In the legal fuzz grid, the `hook-member` binding (`const useThing = () => ({ useIt: x }); const thing = useThing(); thing.useIt(…)`) left two families uncertifiable on textbook code:
+- **The read.** `thing.useIt()` in a local helper (`const shown = () => thing.useIt()`) filed SC9012 `parameter-call-argument-unproven`. ADR 0771's obligation counts any read with the call as its origin, meant for reads "this call makes through a value it hands over". The getter the hook carried is read by the call itself; the call hands over nothing.
+- **The draft.** `thing.useIt((s) => { s.v = 7; })` with a store setter in the returned literal was SC2003 `unproven-container-root`. The container-root walk (`handed_store_setter`) reached the setter reference inside an expression-bodied hook's literal and found no symbol: the Type Facts entity table holds none there, while a block-bodied `return` has one. It also failed for any value an expression body returns (`() => held`).
+
+**Decision.**
+- (1) `call_result_reads`: a read that is the call's own transported getter (`site.transported` is `Callable::Accessor` of the read's symbol, `transported`) doesn't count toward that obligation. Reads through the arguments still do.
+- (2) `container_root::Routes::identifier`: after `binding_at_reference`, a symbol that is a source's getter, setter or action is that source's leaf, the same question `source_symbol_at` asks, answered by the binder.
+
+**Measured.**
+- Fuzz, main 34473465d against this, mx-base and lg-base for STRICT_READ_UNTRACKED, REACTIVE_WRITE_IN_OWNED_SCOPE and STORE_WRITE_OUTSIDE_SETTER: lg-base clean 4,256 → 4,408. 136 REACTIVE_WRITE store `hook-member` programs (ADR 1090's G4) and 16 STRICT_READ `hook-member` programs move from uncertifiable to clean; nothing moves the other way. mx-base: 14,688 agree in both. The oracle shows 0 behaviour and 0 attribution differences.
+- Corpus (rc.21 frozen v2, release): development U 243,170 unchanged, standard 230,414 → 230,412 (two SC9012), V unchanged (244, 236), nothing added.
+- Left: 24 lg-base `hook-member` programs (signal and store writes 8 each, the store draft and in-setter variants 4 each).
+
+**Evidence.**
+- `hook-member-helper-read`: `Shown` proved; the helper called in the body and the member read in the body keep their SC1001 violations.
+- `hook-member-store-draft`: `Draft` proved; `Handed` (the member hands the store itself to the callback) stays uncertifiable; `Misuse` (`thing.useIt.v = 7`) keeps its SC2003 violation.

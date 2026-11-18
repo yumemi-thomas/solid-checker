@@ -444,7 +444,17 @@ fn call_result_reads(
             // has no row here, and an async source may be pending wherever the
             // function around it runs: the arguments decide, as above.
             let here = location(file.path.shared(), call.span);
-            if effective.iter().any(|read| read.origin == here) {
+            // ADR 1093: the read of the accessor this call is a call of (`thing.useIt()` where a hook's returned literal carries
+            // the getter) is the call itself, not a read through a value the call hands over: it is claimed where the
+            // function around the call runs, as the same read through a plain literal is. Reads through the arguments still count.
+            let calls_transported = |read: &&crate::interproc::SummaryRead| {
+                read.transported
+                    && matches!(transported, Some(accessor_provenance::Callable::Accessor(symbol)) if *symbol == read.symbol)
+            };
+            if effective
+                .iter()
+                .any(|read| read.origin == here && !calls_transported(&read))
+            {
                 let mut defect = StaticDefect {
                     kind: StaticDefectKind::ReactiveDispatchUnresolved {
                         callee: label.clone(),
