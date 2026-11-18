@@ -4605,6 +4605,38 @@
    "to": 5,
    "adr": "ADR 1052",
    "fact": "part 10: competing-check-sync-memo gains the listener-detached components (a listener removed in the leaf callback that fires it, and its attached twin); measured against main 28fde14bf"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 50,
+   "to": 55,
+   "adr": "ADR 1052",
+   "fact": "competing-check-sync-memo now holds part 10's components and part 9's deferred-apply twin (MemoSharedDeferredApplyAndHandler, SC7002 kept a violation); measured against main 28fde14bf"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 18,
+   "to": 19,
+   "adr": "ADR 1052",
+   "fact": "competing-check-sync-memo now holds part 10's components and part 9's deferred-apply twin (MemoSharedDeferredApplyAndHandler, SC7002 kept a violation); measured against main 28fde14bf"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 36,
+   "to": 40,
+   "adr": "ADR 1052",
+   "fact": "competing-check-sync-memo now holds part 10's components and part 9's deferred-apply twin (MemoSharedDeferredApplyAndHandler, SC7002 kept a violation); measured against main 28fde14bf"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC6002 effect-owner-unproven",
+   "from": 8,
+   "to": 9,
+   "adr": "ADR 1052",
+   "fact": "competing-check-sync-memo now holds part 10's components and part 9's deferred-apply twin (MemoSharedDeferredApplyAndHandler, SC7002 kept a violation); measured against main 28fde14bf"
   }
  ]
 }
