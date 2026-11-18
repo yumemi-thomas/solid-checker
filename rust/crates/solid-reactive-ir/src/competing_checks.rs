@@ -18,6 +18,7 @@
 //! Only a proven earlier check counts (an obligation of it proves no throw), only rows that would be violations are touched, and a call is matched by its path and first byte (a call and its
 //! callee start at the same byte; a call nested in another's arguments does not).
 
+use crate::indexes::SemanticLookup;
 use crate::{Location, OwnerRequirementOperation, Program, StaticDefectKind};
 
 /// The blocker an uncertain static violation is reported under: the one its context names, else the rule's own
@@ -41,7 +42,7 @@ fn operation_sites(operation: &crate::LeafOwnerOperation) -> &[Location] {
 }
 
 /// Marks each row whose call meets an earlier check that throws (see the module docs).
-pub(crate) fn mark(program: &mut Program) {
+pub(crate) fn mark(program: &mut Program, lookup: &SemanticLookup<'_>) {
     // Calls an earlier check is proven to refuse, and so never reach the owner check (an obligation of either proves no
     // throw: where it does not throw, the owner check is reached, and Chrome reports NO_OWNER_* at such calls):
     // - the effect-callback guard (SC6002's violations) throws when an effect is created, before `createEffect` reports
@@ -102,9 +103,12 @@ pub(crate) fn mark(program: &mut Program) {
             continue;
         }
         let earlier = match requirement.operation {
-            OwnerRequirementOperation::ContextProvider => unowned_reads
-                .iter()
-                .any(|read| same_call(read, &requirement.location)),
+            OwnerRequirementOperation::ContextProvider => {
+                unowned_reads
+                    .iter()
+                    .any(|read| same_call(read, &requirement.location))
+                    || later_render_apply_run_only(&requirement.location, lookup)
+            }
             OwnerRequirementOperation::ContextRead => false,
             operation => {
                 (operation == OwnerRequirementOperation::Effect
@@ -142,13 +146,34 @@ pub(crate) fn mark(program: &mut Program) {
                 .map(|operation| operation.location.clone()),
         )
         .collect();
+    // ADR 1052 part 5: a refusal reached through a helper counts when it refuses every run of the creation: the helper holding
+    // it is a named function nothing exports or reassigns, and every reference to it is the exact call of a proven refusal of
+    // that creation (the anchor of an SC3001 violation whose `sites` hold it). Another caller would be a run nothing refuses.
+    let refused_through: Vec<(Location, Location)> = program
+        .leaf_operations
+        .iter()
+        .filter(|operation| !operation.uncertain && !operation.possible)
+        .flat_map(|operation| {
+            operation
+                .sites
+                .iter()
+                .map(|site| (site.clone(), operation.location.clone()))
+        })
+        .collect();
     for violation in &mut program.static_violations {
         if violation.id != "SC7002" || violation.uncertain {
             continue;
         }
+        let anchors: Vec<&Location> = refused_through
+            .iter()
+            .filter(|(site, _)| same_call(site, &violation.location))
+            .map(|(_, anchor)| anchor)
+            .collect();
         if creation_may_throw
             .iter()
             .any(|refused| same_call(refused, &violation.location))
+            || (!anchors.is_empty() && every_run_refused(&violation.location, &anchors, lookup))
+            || later_render_apply_run_only(&violation.location, lookup)
         {
             violation.uncertain = true;
             violation.analysis_context = crate::blockers::with_detail(
@@ -171,4 +196,95 @@ pub(crate) fn mark(program: &mut Program) {
             operation.earlier_check_throws = true;
         }
     }
+}
+
+/// ADR 1052 part 5: whether every run of the code at `site` is one of `anchors`: the function written directly around it is a
+/// synchronous, non-generator function bound to a name (`function_binding_name`) that no module exports and nothing rebinds,
+/// with at least one reference, each of them the callee of a call that starts where an anchor does (the same file). `false`
+/// for anything else (a method, a slot, an alias, a handler, an argument, a reference in another file).
+fn every_run_refused(site: &Location, anchors: &[&Location], lookup: &SemanticLookup<'_>) -> bool {
+    let Some(file) = lookup.file_by_path(site.path.as_ref()) else {
+        return false;
+    };
+    let (Ok(start), Ok(end)) = (u32::try_from(site.start_byte), u32::try_from(site.end_byte))
+    else {
+        return false;
+    };
+    let Some(function) =
+        crate::owners::owning_function(&file.ast, solid_facts::core::Span::new(start, end))
+    else {
+        return false;
+    };
+    if function.r#async
+        || function.generator
+        || crate::execution_role::module_exports(file, function, lookup)
+        || !lookup.function_value_is_current(file, function)
+    {
+        return false;
+    }
+    let Some(binding) = crate::owners::function_binding_name(file, function) else {
+        return false;
+    };
+    let Some(symbol) = lookup.entities().at(file.path.as_str(), binding.span) else {
+        return false;
+    };
+    let references: Vec<_> = lookup
+        .symbol_references(symbol.as_str())
+        .into_iter()
+        .filter(|reference| {
+            !(reference.path.as_ref() == file.path.as_str()
+                && reference.start_byte == u64::from(binding.span.start))
+        })
+        .collect();
+    !references.is_empty()
+        && references.iter().all(|reference| {
+            reference.path.as_ref() == file.path.as_str()
+                && file.ast.calls.iter().any(|call| {
+                    !call.construct
+                        && u64::from(file.ast.peel_ts_sugar_span(call.callee).start)
+                            == reference.start_byte
+                        && anchors.iter().any(|anchor| {
+                            anchor.path.as_ref() == file.path.as_str()
+                                && anchor.start_byte == u64::from(call.span.start)
+                        })
+                })
+        })
+}
+
+/// ADR 1052 part 5: `site` is written directly in the apply of a primitive whose apply runs first at creation under the
+/// caller's owner and on every later run in the effect phase with no owner (`Dialect::callback_reruns_in_effect_phase`:
+/// `createRenderEffect`'s), and it is no completion site of that apply (`completion_sites`: an earlier `return`, `throw`,
+/// `break` or `continue`, or a branch, may skip it). The owned first run may never reach it; every later run meets the
+/// effect-callback guard (a creation) or the owner check (a context read) first. `false` for anything else.
+fn later_render_apply_run_only(site: &Location, lookup: &SemanticLookup<'_>) -> bool {
+    let Some(file) = lookup.file_by_path(site.path.as_ref()) else {
+        return false;
+    };
+    let (Ok(start), Ok(end)) = (u32::try_from(site.start_byte), u32::try_from(site.end_byte))
+    else {
+        return false;
+    };
+    let span = solid_facts::core::Span::new(start, end);
+    let Some(apply) = crate::owners::owning_function(&file.ast, span) else {
+        return false;
+    };
+    let ast = &file.ast;
+    let rerunning_apply = ast.arguments_containing(apply.span).any(|(call, index)| {
+        ast.peel_ts_sugar_span(call.arguments[index].span) == apply.span
+            && call.arguments[..=index]
+                .iter()
+                .all(|argument| !argument.spread)
+            && lookup
+                .primitive_at_call(file, call.span)
+                .is_some_and(|primitive| {
+                    lookup
+                        .dialect
+                        .callback_reruns_in_effect_phase(primitive, index)
+                })
+    });
+    rerunning_apply
+        && !ast
+            .completion_sites
+            .iter()
+            .any(|completion| completion.start == span.start && apply.body.contains(*completion))
 }

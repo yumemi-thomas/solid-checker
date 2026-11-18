@@ -26054,5 +26054,17 @@
   "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
   "ids": ["lg-flush-in-tracked-queue-callback-timer-x-alias-helper", "lg-flush-in-tracked-queue-callback-timer-x-direct-iife", "lg-flush-in-tracked-queue-callback-timer-x-destructured-closure"],
   "rediscovered": "main 34473465d uncertifiable, this build clean: 104 of 104 FLUSH_IN_TRACKED_QUEUE_CALLBACK programs (312 over the three flush codes); no misuse program of the 600 moved"
+ },
+ {
+  "finding": "a false positive: SC7002 at a sync memo a helper creates that only a tracked effect calls, and SC7002/SC4002 in a createRenderEffect apply behind an early return (the owned first run skips the site, every rerun meets the effect-callback guard or the owner check first): Chrome reports only the earlier code",
+  "found": "ADR 1052 part 4's ledger (owned false positives tracked-sibling-async, render-apply-guarded-rerun)",
+  "fixed": "ADR 1052 part 5 (`competing_checks.rs` `every_run_refused`, `later_render_apply_run_only`)",
+  "grid": "mx-census",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "mx-sync-node-received-async-render-apply-guarded-rerun-memo-direct-none",
+   "mx-sync-node-received-async-render-apply-guarded-rerun-effect-direct-none"
+  ],
+  "rediscovered": "main 34473465d: false-positive (ledgered, owner Mac 20); with the rows out of open-defects-rows.json `make fuzz-focus` on the 70 ledgered ids fails there and passes on this build (5 to not-fired). The tracked-sibling-async twins are not in the census smoke manifest (adding them needs a whole-census `smoke.mjs record`): fixture competing-check-sync-memo and runtime-oracle/competing-check-sync-sibling-helper hold the shape"
  }
 ]

@@ -1015,7 +1015,7 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         program.static_defects.extend(claims.defects);
     }
     // ADR 1052: a row whose call meets an earlier check that throws, over the final rows.
-    crate::competing_checks::mark(&mut program);
+    crate::competing_checks::mark(&mut program, semantic_lookup);
     // ADR 0947: the typed blocker of each row a veto formula holds, over the final rows.
     (program.blocked_by, program.hazards) =
         crate::blocked_by::typed_blockers(&program, semantic_lookup);
