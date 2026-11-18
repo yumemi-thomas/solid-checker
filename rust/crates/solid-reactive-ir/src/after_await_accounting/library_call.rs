@@ -553,16 +553,26 @@ fn argument_is_inert(
 /// construct, member, tagged template, function, class, JSX, assignment, spread, `yield` or `await`; every operand an operator coerces
 /// (`AstFacts::coercing_operands`: a template substitution, a `+`) itself proven primitive (`this` is not); and every name referenced resolves to a
 /// declaration of the program (an unresolved global may be a getter of the global object).
-pub(super) fn evaluates_without_code(ctx: &AnalysisContext<'_>, file: &FileFacts, span: solid_facts::core::Span) -> bool {
+pub(super) fn evaluates_without_code(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    span: solid_facts::core::Span,
+) -> bool {
     let ast = &file.ast;
     let inside = |inner: solid_facts::core::Span| span.contains(inner);
     if ast.calls.iter().any(|call| inside(call.span))
         || ast.members.iter().any(|member| inside(member.span))
-        || ast.tagged_templates.iter().any(|tagged| inside(tagged.span))
+        || ast
+            .tagged_templates
+            .iter()
+            .any(|tagged| inside(tagged.span))
         || ast.functions.iter().any(|function| inside(function.span))
         || ast.classes.iter().any(|class| inside(class.span))
         || ast.jsx_elements.iter().any(|element| inside(element.span))
-        || ast.assignments.iter().any(|assignment| inside(assignment.target))
+        || ast
+            .assignments
+            .iter()
+            .any(|assignment| inside(assignment.target))
         || ast.spreads.iter().any(|spread| inside(spread.span))
         || ast.yields.iter().any(|yielded| inside(yielded.span))
         || ast.awaits.iter().any(|awaited| inside(*awaited))
@@ -572,7 +582,10 @@ pub(super) fn evaluates_without_code(ctx: &AnalysisContext<'_>, file: &FileFacts
     ast.coercing_operands
         .iter()
         .filter(|operand| inside(**operand))
-        .all(|operand| ctx.semantic_lookup.proven_primitive(file, *operand, PROOF_DEPTH))
+        .all(|operand| {
+            ctx.semantic_lookup
+                .proven_primitive(file, *operand, PROOF_DEPTH)
+        })
         && ast.identifiers.iter().all(|identifier| {
             identifier.role != solid_facts::ast::IdentifierRole::Reference
                 || !inside(identifier.span)

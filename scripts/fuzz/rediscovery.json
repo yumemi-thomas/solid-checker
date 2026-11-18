@@ -26263,5 +26263,32 @@
    "mx-sync-node-received-async-flw-settled-report-error-memo-direct-none"
   ],
   "rediscovered": "old harness (6be8e3e34), same checker: `focus.mjs --codes SYNC_NODE_RECEIVED_ASYNC --grids mx-census` on the ids fails (false-positive); this harness: 26 agree"
+ },
+ {
+  "finding": "An async memo's continuation calls a setter whose argument coerces an object (`pw(`${po}`)`), whose `toString` reads a signal; Chrome rc.21 reports UNTRACKED_READ_AFTER_AWAIT at the read. In the direct setter call in the continuation (ADR 0976's LibraryRunsNothing) the call lost its only SC1002 row: `argument_is_inert` trusted `proven_primitive`, which proves the argument a string, not that computing it runs no code",
+  "found": "the Fable review of ADR 1097 widened (fc71ff16a, round 1)",
+  "fixed": "ADR 1097 (review round 1): `library_call::evaluates_without_code` beside `proven_primitive` in `argument_is_inert`; the row at the coerced operand",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": ["mx-untracked-read-after-await-pu-coerce-direct-x-direct-none"],
+  "rediscovered": "fc71ff16a (release): false-clean, Chrome firing (focus --runtime-diff all, exit 1); this fix: recall-gap (SC1002 read-after-await-unaccounted)"
+ },
+ {
+  "finding": "An async memo's continuation calls a setter whose argument coerces an object (`pw(`${po}`)`), whose `toString` reads a signal; Chrome rc.21 reports UNTRACKED_READ_AFTER_AWAIT at the read. In a `const` wrapper of the setter call (ADR 1097's SetterOnlyCallee) the call lost its only SC1002 row: `argument_is_inert` trusted `proven_primitive`, which proves the argument a string, not that computing it runs no code",
+  "found": "the Fable review of ADR 1097 widened (fc71ff16a, round 1)",
+  "fixed": "ADR 1097 (review round 1): `library_call::evaluates_without_code` beside `proven_primitive` in `argument_is_inert`; the row at the coerced operand",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": ["mx-untracked-read-after-await-pu-coerce-wrapper-x-direct-none"],
+  "rediscovered": "fc71ff16a (release): false-clean, Chrome firing (focus --runtime-diff all, exit 1); this fix: recall-gap (SC1002 read-after-await-unaccounted)"
+ },
+ {
+  "finding": "An async memo's continuation calls a setter whose argument coerces an object (`pw(`${po}`)`), whose `toString` reads a signal; Chrome rc.21 reports UNTRACKED_READ_AFTER_AWAIT at the read. In an IIFE of the setter call (ADR 1097's SetterOnlyCallee) the call lost its only SC1002 row: `argument_is_inert` trusted `proven_primitive`, which proves the argument a string, not that computing it runs no code",
+  "found": "the Fable review of ADR 1097 widened (fc71ff16a, round 1)",
+  "fixed": "ADR 1097 (review round 1): `library_call::evaluates_without_code` beside `proven_primitive` in `argument_is_inert`; the row at the coerced operand",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": ["mx-untracked-read-after-await-pu-coerce-iife-x-direct-none"],
+  "rediscovered": "fc71ff16a (release): false-clean, Chrome firing (focus --runtime-diff all, exit 1); this fix: recall-gap (SC1002 read-after-await-unaccounted)"
  }
 ]

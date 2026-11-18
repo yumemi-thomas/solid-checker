@@ -167,14 +167,14 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
       "kind": "uncertifiable",
-      "blocker": "read-after-await-unaccounted",
-      "severity": "error",
+      "blocker": "callee-callback-timing",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-setter-callee/App.tsx",
-      "start": 4130,
-      "end": 4141,
+      "start": 4136,
+      "end": 4143,
       "fixes": 0
     },
     {
@@ -184,8 +184,8 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-setter-callee/App.tsx",
-      "start": 4149,
-      "end": 4158,
+      "start": 4495,
+      "end": 4506,
       "fixes": 0
     },
     {
@@ -195,8 +195,8 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-setter-callee/App.tsx",
-      "start": 4166,
-      "end": 4168,
+      "start": 4514,
+      "end": 4523,
       "fixes": 0
     },
     {
@@ -206,8 +206,8 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-setter-callee/App.tsx",
-      "start": 4176,
-      "end": 4182,
+      "start": 4531,
+      "end": 4533,
       "fixes": 0
     },
     {
@@ -217,8 +217,63 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-setter-callee/App.tsx",
-      "start": 4190,
-      "end": 4210,
+      "start": 4541,
+      "end": 4547,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-setter-callee/App.tsx",
+      "start": 4555,
+      "end": 4575,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-setter-callee/App.tsx",
+      "start": 4583,
+      "end": 4598,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-setter-callee/App.tsx",
+      "start": 4606,
+      "end": 4617,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-setter-callee/App.tsx",
+      "start": 4626,
+      "end": 4662,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-setter-callee/App.tsx",
+      "start": 4679,
+      "end": 4683,
       "fixes": 0
     },
     {
@@ -227,8 +282,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-setter-callee/App.tsx",
-      "start": 4468,
-      "end": 4473,
+      "start": 4942,
+      "end": 4947,
       "fixes": 0
     },
     {
@@ -238,8 +293,8 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-setter-callee/App.tsx",
-      "start": 4556,
-      "end": 4564,
+      "start": 5030,
+      "end": 5038,
       "fixes": 0
     },
     {
@@ -249,8 +304,8 @@
       "blocker": "mount-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/after-await-setter-callee/App.tsx",
-      "start": 4601,
-      "end": 4608,
+      "start": 5075,
+      "end": 5082,
       "fixes": 0
     },
     {
