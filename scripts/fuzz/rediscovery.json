@@ -26386,5 +26386,19 @@
   "code": "STRICT_READ_UNTRACKED",
   "ids": ["lg-strict-read-untracked-evt-handler-dispatch-store-dstr-object-direct-none", "lg-strict-read-untracked-lst-none-method-store-dstr-object-direct-none", "lg-strict-read-untracked-mount-named-store-dstr-object-direct-none"],
   "rediscovered": "`focus.mjs --codes STRICT_READ_UNTRACKED --grids lg-recall --ids` (the 6,795 destructure ids): main 28fde14bf 60 false-positive; this build 0"
+ },
+ {
+  "finding": "R-carrier (part 2): a reactive read through a carrier an exact project callee destructures in its parameter (`({ get }) => get()` handed `{ get: a }`; `function pick({ a })` handed props or a store root): the census row stood at the argument and none at the read",
+  "found": "open-defects patterns (R-carrier): values/d3-options-destructure, values/t5-helper-destructure-param, values/t5-store-helper-destructure",
+  "fixed": "ADR 1104 part 2 (`value_use.rs` `escaped_argument`: a pattern parameter reads a root at the pattern and holds what it read in its names)",
+  "grid": "patterns",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "values/d3-options-destructure",
+   "values/t5-helper-destructure-param",
+   "values/t5-store-helper-destructure"
+  ],
+  "rediscovered": "make fuzz-patterns: false clean on main 28fde14bf and on ADR 1104 part 1; FIXED on part 2 (SC9012 uncertifiable at the read)",
+  "outside": "the pattern lane holds these programs (scripts/fuzz/patterns, make fuzz-patterns); no grid generator writes a destructured parameter of a carrier yet"
  }
 ]
