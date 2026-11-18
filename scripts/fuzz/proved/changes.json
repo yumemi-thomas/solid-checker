@@ -1,0 +1,85 @@
+{
+ "rows": [
+  {
+   "grid": "lg-combo",
+   "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+   "from": "clean",
+   "to": "uncertifiable",
+   "count": 4,
+   "adr": "ADR 1091",
+   "why": "ADR 1091 (bundle n, 1f1011a61) added the legal context jsx-helper to misuse.mjs, which reshuffles the combine grid’s drawn extras: the same id is another program, whose drawn extra (mostly PENDING_ASYNC_UNTRACKED_READ@render-apply-guarded-closure, NO_OWNER_CLEANUP@root) is uncertifiable while the code’s own site stays proved. Not a checker loss: bundle m’s checker (2e4429b64) proves all 42 with the generator before 1091 (841dde80b) and none with the generator after it (1f1011a61). Audit 44353494239."
+  },
+  {
+   "grid": "lg-combo",
+   "code": "NO_OWNER_CONTEXT",
+   "from": "clean",
+   "to": "uncertifiable",
+   "count": 4,
+   "adr": "ADR 1091",
+   "why": "ADR 1091 (bundle n, 1f1011a61) added the legal context jsx-helper to misuse.mjs, which reshuffles the combine grid’s drawn extras: the same id is another program, whose drawn extra (mostly PENDING_ASYNC_UNTRACKED_READ@render-apply-guarded-closure, NO_OWNER_CLEANUP@root) is uncertifiable while the code’s own site stays proved. Not a checker loss: bundle m’s checker (2e4429b64) proves all 42 with the generator before 1091 (841dde80b) and none with the generator after it (1f1011a61). Audit 44353494239."
+  },
+  {
+   "grid": "lg-combo",
+   "code": "NO_OWNER_EFFECT",
+   "from": "clean",
+   "to": "uncertifiable",
+   "count": 1,
+   "adr": "ADR 1091",
+   "why": "ADR 1091 (bundle n, 1f1011a61) added the legal context jsx-helper to misuse.mjs, which reshuffles the combine grid’s drawn extras: the same id is another program, whose drawn extra (mostly PENDING_ASYNC_UNTRACKED_READ@render-apply-guarded-closure, NO_OWNER_CLEANUP@root) is uncertifiable while the code’s own site stays proved. Not a checker loss: bundle m’s checker (2e4429b64) proves all 42 with the generator before 1091 (841dde80b) and none with the generator after it (1f1011a61). Audit 44353494239."
+  },
+  {
+   "grid": "lg-combo",
+   "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+   "from": "clean",
+   "to": "uncertifiable",
+   "count": 27,
+   "adr": "ADR 1091",
+   "why": "ADR 1091 (bundle n, 1f1011a61) added the legal context jsx-helper to misuse.mjs, which reshuffles the combine grid’s drawn extras: the same id is another program, whose drawn extra (mostly PENDING_ASYNC_UNTRACKED_READ@render-apply-guarded-closure, NO_OWNER_CLEANUP@root) is uncertifiable while the code’s own site stays proved. Not a checker loss: bundle m’s checker (2e4429b64) proves all 42 with the generator before 1091 (841dde80b) and none with the generator after it (1f1011a61). Audit 44353494239."
+  },
+  {
+   "grid": "lg-combo",
+   "code": "SETTLED_CLEANUP_UNOWNED",
+   "from": "clean",
+   "to": "uncertifiable",
+   "count": 2,
+   "adr": "ADR 1091",
+   "why": "ADR 1091 (bundle n, 1f1011a61) added the legal context jsx-helper to misuse.mjs, which reshuffles the combine grid’s drawn extras: the same id is another program, whose drawn extra (mostly PENDING_ASYNC_UNTRACKED_READ@render-apply-guarded-closure, NO_OWNER_CLEANUP@root) is uncertifiable while the code’s own site stays proved. Not a checker loss: bundle m’s checker (2e4429b64) proves all 42 with the generator before 1091 (841dde80b) and none with the generator after it (1f1011a61). Audit 44353494239."
+  },
+  {
+   "grid": "lg-combo",
+   "code": "STORE_WRITE_OUTSIDE_SETTER",
+   "from": "clean",
+   "to": "uncertifiable",
+   "count": 4,
+   "adr": "ADR 1091",
+   "why": "ADR 1091 (bundle n, 1f1011a61) added the legal context jsx-helper to misuse.mjs, which reshuffles the combine grid’s drawn extras: the same id is another program, whose drawn extra (mostly PENDING_ASYNC_UNTRACKED_READ@render-apply-guarded-closure, NO_OWNER_CLEANUP@root) is uncertifiable while the code’s own site stays proved. Not a checker loss: bundle m’s checker (2e4429b64) proves all 42 with the generator before 1091 (841dde80b) and none with the generator after it (1f1011a61). Audit 44353494239."
+  },
+  {
+   "grid": "mx-combo",
+   "code": "PENDING_ASYNC_UNTRACKED_READ",
+   "from": "agree",
+   "to": "recall-gap",
+   "count": 6,
+   "adr": "ADR 1091",
+   "why": "the combine grid’s draws changed in bundle n (ADR 1091’s new legal context jsx-helper reshuffles the drawn extras): the same id is another program. Not a checker loss: bundle m’s checker (2e4429b64) proves all 8 with bundle m’s generator (34473465d) and none with bundle n’s (91eab81ac). Audit 44353494239."
+  },
+  {
+   "grid": "mx-combo",
+   "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+   "from": "agree",
+   "to": "recall-gap",
+   "count": 2,
+   "adr": "ADR 1091",
+   "why": "the combine grid’s draws changed in bundle n (ADR 1091’s new legal context jsx-helper reshuffles the drawn extras): the same id is another program. Not a checker loss: bundle m’s checker (2e4429b64) proves all 8 with bundle m’s generator (34473465d) and none with bundle n’s (91eab81ac). Audit 44353494239."
+  },
+  {
+   "grid": "mx-recall",
+   "code": "SYNC_NODE_RECEIVED_ASYNC",
+   "from": "agree",
+   "to": "recall-gap",
+   "count": 16,
+   "adr": "ADR 1052",
+   "why": "ADR 1052 part 6 (bundle p, f3ce01e0f): a creation written in the cleanup an effect’s or a render effect’s apply returns, when the effect may rerun (the effect-cleanup-flush-rerun and render-cleanup-flush-rerun contexts, 8 each): a rerun calls the cleanup inside the effect callback, where the creation meets the guard first, and nothing orders it against the disposal that calls it outside; uncertifiable by design (part 6’s cleanup-at-rerun family). Measured: proved at 56ee95405, lost at f3ce01e0f (part 6’s merge). Audit 44353494239."
+  }
+ ]
+}
