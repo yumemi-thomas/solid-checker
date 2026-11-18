@@ -43,6 +43,21 @@ pub(super) fn handed_compute(
             {
                 continue;
             }
+            // ADR 1073: a literal written directly as the callback of a registration a reviewed runner schedules, the runner's published bytes
+            // read (ADR 0438's premise, as ADR 1004's `RunnerScheduled`), is called from the runner's own loop: that call hands it to no
+            // computation. Handed by name or through a helper, it is not this literal (`exact_arguments` above), and stays open; a generator,
+            // or a function expression whose own name is used (it may hand itself on, `flush_accounting::reentered_by_name`), stays open too.
+            if file.ast.peel_ts_sugar_span(argument.span) == function.span
+                && !function.generator
+                && !crate::flush_accounting::reentered_by_name(file, function)
+                && ctx.semantic_lookup.test_runner_callback(file, call)
+                    == Some(crate::indexes::TestRunnerCallback::Scheduled)
+                && ctx
+                    .semantic_lookup
+                    .test_runner_schedules_by_read_bytes(file, call)
+            {
+                continue;
+            }
             answer = stronger(answer, at_call(ctx, file, call, index, MAX_FORWARDS));
         }
     }
