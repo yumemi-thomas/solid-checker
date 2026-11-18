@@ -121,6 +121,86 @@ fn awaited_import<'e, 'a>(expression: &'e Expression<'a>) -> Option<&'e ImportEx
     }
 }
 
+/// ADR 1071: the export names a `.then` callback of a dynamic import reads from the module it settles with: `import(x).then(m => m.a(…))`
+/// where every reference of the one plain parameter `m` is the object of a static member, or `import(x).then(({ a }) => …)`. `None` for any
+/// other use of the parameter (it may hand the namespace on), a rest or default, or no parameter.
+fn then_callback_names(
+    callback: &Argument<'_>,
+    scoping: &oxc_semantic::Scoping,
+) -> Option<Vec<CompactString>> {
+    let (params, body) = match callback {
+        Argument::ArrowFunctionExpression(arrow) => (&arrow.params, Some(&*arrow.body)),
+        Argument::FunctionExpression(function) => (&function.params, function.body.as_deref()),
+        _ => return None,
+    };
+    if params.rest.is_some() || params.items.len() != 1 {
+        return None;
+    }
+    let parameter = &params.items[0];
+    if parameter.initializer.is_some() || parameter.optional {
+        return None;
+    }
+    match &parameter.pattern {
+        BindingPattern::ObjectPattern(pattern) => pattern_names(pattern),
+        BindingPattern::BindingIdentifier(identifier) => {
+            let symbol = identifier.symbol_id.get()?;
+            let mut reads = ParameterReads {
+                scoping,
+                symbol,
+                names: Vec::new(),
+                escapes: false,
+            };
+            if let Some(body) = body {
+                reads.visit_function_body(body);
+            }
+            (!reads.escapes).then(|| {
+                let mut names = reads.names;
+                names.sort();
+                names.dedup();
+                names
+            })
+        }
+        _ => None,
+    }
+}
+
+/// ADR 1071: the static members read of one parameter in a callback's body, and whether it is used any other way.
+struct ParameterReads<'s> {
+    scoping: &'s oxc_semantic::Scoping,
+    symbol: oxc_semantic::SymbolId,
+    names: Vec<CompactString>,
+    escapes: bool,
+}
+
+impl ParameterReads<'_> {
+    fn is_parameter(&self, identifier: &oxc_ast::ast::IdentifierReference<'_>) -> bool {
+        identifier
+            .reference_id
+            .get()
+            .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
+            == Some(self.symbol)
+    }
+}
+
+impl<'a> Visit<'a> for ParameterReads<'_> {
+    fn visit_static_member_expression(&mut self, member: &StaticMemberExpression<'a>) {
+        if let Expression::Identifier(object) = &member.object
+            && self.is_parameter(object)
+        {
+            self.names
+                .push(CompactString::from(member.property.name.as_str()));
+            return;
+        }
+        walk::walk_static_member_expression(self, member);
+    }
+
+    fn visit_identifier_reference(&mut self, identifier: &oxc_ast::ast::IdentifierReference<'a>) {
+        if self.is_parameter(identifier) {
+            self.escapes = true;
+        }
+    }
+}
+
 /// The dynamic import a concise arrow returns: `() => import(x)`.
 fn concise_import<'e, 'a>(
     arrow: &'e ArrowFunctionExpression<'a>,
@@ -821,6 +901,18 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_call_expression(&mut self, call: &CallExpression<'a>) {
+        // ADR 1071: `import(x).then(m => m.a(…))`: the export names the callback reads.
+        if let Expression::StaticMemberExpression(member) = unwrapped(&call.callee)
+            && member.property.name.as_str() == "then"
+            && !call.optional
+            && !member.optional
+            && let Expression::ImportExpression(import) = unwrapped(&member.object)
+            && let Some(callback) = call.arguments.first()
+            && let Some(names) = then_callback_names(callback, self.scoping)
+        {
+            self.module_consumers
+                .push((span(import.span), ModuleLoadConsumer::Members { names }));
+        }
         // `lazy(() => import(x), options)`: whether this `lazy` is Solid's is
         // the reactive IR's answer, from the call's primitive.
         if let Expression::Identifier(callee) = &call.callee
@@ -1676,6 +1768,8 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_if_statement(&mut self, statement: &IfStatement<'a>) {
+        // ADR 1071: the test is only converted to a boolean, which runs no code of any value (`ToBoolean`): nothing is called and nothing leaves.
+        self.inert_operands.push(span(statement.test.span()));
         let test = span(statement.test.span());
         self.conditional_tests.push(test);
         self.if_regions.push(IfRegionFact {
@@ -2967,9 +3061,10 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         if expression.operator == UnaryOperator::Delete {
             self.deleted_targets.push(span(expression.argument.span()));
         }
+        // ADR 1071: `!x` only converts its operand to a boolean (`ToBoolean`, no code runs).
         if matches!(
             expression.operator,
-            UnaryOperator::Void | UnaryOperator::Typeof
+            UnaryOperator::Void | UnaryOperator::Typeof | UnaryOperator::LogicalNot
         ) {
             self.inert_operands.push(span(expression.argument.span()));
         }

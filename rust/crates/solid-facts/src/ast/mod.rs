@@ -61,7 +61,10 @@ use thiserror::Error;
 /// computed key that nothing proves is a number, a symbol or a plain non-text
 /// value (`computed_keys`), and the places the file runs code it builds
 /// (`code_sinks`).
-pub const AST_FACTS_SCHEMA: u32 = 96;
+/// 97 (ADR 1071): a dynamic import whose settled value a `.then` callback reads only as static members of its one parameter
+/// (`import(x).then(m => m.a(…))`, or a destructuring parameter) is a `Members` consumer, as `(await import(x)).a` is; an `if`
+/// statement's test and the operand of `!` are inert operands (`ToBoolean` runs no code).
+pub const AST_FACTS_SCHEMA: u32 = 97;
 
 mod argument_completion;
 mod code_sinks;

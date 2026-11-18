@@ -196,7 +196,7 @@ fn names_fake_timer_installer(
                 .flatten()
                 .any(|declaration| {
                     crate::runtime_semantics::fake_timer_installer_declaration(
-                        declaration.location.path.as_ref(),
+                        &lookup.installed_spelling(declaration.location.path.as_ref()),
                         declaration.name.as_ref(),
                     )
                 })
@@ -364,7 +364,10 @@ pub(crate) fn runs_when_the_call_runs(file: &FileFacts, span: Span, call: Span) 
 /// A named function expression whose name is used: `setTimeout(function tick() { … tick(true) })`. The name is bound inside the function only, so the code that
 /// uses it is written in it, and calls it from the stack that code runs on (an action's step, an effect's apply, a leaf callback), never the one the scheduler
 /// or the runner gave the first run. A name nothing uses cannot be called again: the function runs only as often as its host calls it.
-fn reentered_by_name(file: &FileFacts, function: &solid_facts::ast::FunctionFact) -> bool {
+pub(crate) fn reentered_by_name(
+    file: &FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> bool {
     function.kind == solid_facts::ast::FunctionKind::Expression
         && function
             .name

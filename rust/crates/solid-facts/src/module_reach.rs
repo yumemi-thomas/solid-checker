@@ -136,6 +136,23 @@ impl GlobalWrites {
             && !self.accessors_any_name
     }
 
+    /// Adds what `other` writes (left unsorted: [`Self::normalize`] after).
+    fn absorb(&mut self, other: &GlobalWrites) {
+        self.names.extend(other.names.iter().cloned());
+        self.any_name |= other.any_name;
+        self.accessor_names
+            .extend(other.accessor_names.iter().cloned());
+        self.accessors_any_name |= other.accessors_any_name;
+    }
+
+    /// Sorts the names and drops repeats.
+    fn normalize(&mut self) {
+        self.names.sort();
+        self.names.dedup();
+        self.accessor_names.sort();
+        self.accessor_names.dedup();
+    }
+
     fn name(&mut self, name: &str) {
         // `globalThis.__proto__ = p` makes the members of `p` globals (an unbound name is looked up through the global object's prototype chain): any name, and any of them
         // may be an accessor.
@@ -531,6 +548,66 @@ pub struct ModuleScan {
     pub accessors: AccessorScan,
     /// The globals it writes.
     pub global_writes: GlobalWrites,
+    /// ADR 1077: each static `x.defaultView` of an object the syntax does not follow whose value, taken for the global object, adds a hazard or a write above. Its value is
+    /// the global object only where `x` is a document, which a type may rule out; the walk is given the program's types. Empty when no such read adds anything.
+    pub default_view_routes: Vec<DefaultViewRoute>,
+    /// ADR 1077: the hazards and global writes without the reads above, and the digest of the source the scan read; `None` when there is no such read.
+    pub without_default_view_routes: Option<Box<WithoutDefaultViewRoutes>>,
+}
+
+/// ADR 1077: one static `x.defaultView` read off an object the syntax does not follow, and what taking its value for the global object adds to the scan.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct DefaultViewRoute {
+    /// The member's byte span (`x.defaultView`).
+    pub member: (u32, u32),
+    /// The hazards this read alone adds, sorted and distinct.
+    pub hazards: Vec<ModuleHazard>,
+    /// The global writes this read alone adds.
+    pub global_writes: GlobalWrites,
+}
+
+/// ADR 1077: what a scan answers when no [`DefaultViewRoute`] holds the global object, and the source it read.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WithoutDefaultViewRoutes {
+    pub hazards: Vec<ModuleHazard>,
+    pub global_writes: GlobalWrites,
+    pub source_hash: typefacts::SourceHash,
+}
+
+impl ModuleScan {
+    /// ADR 1077: the scan with each [`DefaultViewRoute`] that `inert` proves holds no global object left out, the others kept; `None` when it proves none (the scan
+    /// stands as it is).
+    #[must_use]
+    pub fn without_inert_default_views(
+        &self,
+        inert: impl Fn(&DefaultViewRoute) -> bool,
+    ) -> Option<Self> {
+        let base = self.without_default_view_routes.as_deref()?;
+        let (lifted, kept): (Vec<_>, Vec<_>) = self
+            .default_view_routes
+            .iter()
+            .partition(|route| inert(route));
+        if lifted.is_empty() {
+            return None;
+        }
+        let mut hazards = base.hazards.clone();
+        let mut writes = base.global_writes.clone();
+        for route in &kept {
+            hazards.extend(route.hazards.iter().cloned());
+            writes.absorb(&route.global_writes);
+        }
+        hazards.sort();
+        hazards.dedup();
+        writes.normalize();
+        Some(Self {
+            loads: self.loads.clone(),
+            hazards,
+            accessors: self.accessors.clone(),
+            global_writes: writes,
+            default_view_routes: kept.into_iter().cloned().collect(),
+            without_default_view_routes: self.without_default_view_routes.clone(),
+        })
+    }
 }
 
 /// Whether `name` is a global value the pinned TypeScript's `lib.es*`/`lib.dom*` files declare.
@@ -654,8 +731,10 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
             let reference = scoping.get_reference(*reference);
             let id = reference.node_id();
             let at = nodes.get_node(id).kind().span();
-            // A reference in a type position (`callback: Function`, `session: XRSession`) is erased: no value is looked up.
+            // A reference in a type position (`callback: Function`, `session: XRSession`) is erased: no value is looked up. So is one in a type query
+            // (`ReturnType<typeof globalThis.setTimeout>`, ADR 1077), whatever flags the semantic analysis leaves on an unresolved name there.
             if reference.is_type()
+                || in_type_query(nodes, id)
                 || under_typeof(nodes, id)
                 || dead
                     .iter()
@@ -810,6 +889,8 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
             }
         }
     }
+    // ADR 1077: what the hazards and writes are without the static `x.defaultView` reads below, before any is counted.
+    let mut default_view_routes = Vec::<DefaultViewRoute>::new();
     {
         for node in nodes.iter() {
             // ADR 0999: `x["defaultView"]` is the same read as `x.defaultView` (a string literal key, or one the file's constants decide to be that one name).
@@ -828,7 +909,34 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                 }
                 _ => false,
             };
-            if reads_default_view {
+            // ADR 1077: a static read is kept apart with what it adds, so a walk the program's types prove `x` no document for can leave it out.
+            if reads_default_view && let AstKind::StaticMemberExpression(member) = node.kind() {
+                let mut route = DefaultViewRoute {
+                    member: (member.span.start, member.span.end),
+                    ..DefaultViewRoute::default()
+                };
+                let mut route_hazard = |kind: ModuleHazardKind, detail: &str| {
+                    route.hazards.push(ModuleHazard {
+                        kind,
+                        detail: detail.to_owned(),
+                    });
+                };
+                route_use(
+                    scoping,
+                    nodes,
+                    node.id(),
+                    "defaultView",
+                    false,
+                    &mut route_hazard,
+                    &mut route.global_writes,
+                );
+                if !route.hazards.is_empty() || !route.global_writes.is_empty() {
+                    route.hazards.sort();
+                    route.hazards.dedup();
+                    route.global_writes.normalize();
+                    default_view_routes.push(route);
+                }
+            } else if reads_default_view {
                 route_use(
                     scoping,
                     nodes,
@@ -865,10 +973,26 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
     scan.accessors = scan_accessors(nodes);
     // The writer functions used where the global object they write is not named (ADR 0974).
     indirect_writers(scoping, nodes, &mut writes);
-    writes.names.sort();
-    writes.names.dedup();
-    writes.accessor_names.sort();
-    writes.accessor_names.dedup();
+    writes.normalize();
+    // ADR 1077: the scan counts every `defaultView` read as the global object; what it says without the static ones is kept beside, for the walk to fall back on
+    // where the program's types prove a receiver no document.
+    if !default_view_routes.is_empty() {
+        let mut all_hazards = scan.hazards.clone();
+        let mut all_writes = writes.clone();
+        for route in &default_view_routes {
+            all_hazards.extend(route.hazards.iter().cloned());
+            all_writes.absorb(&route.global_writes);
+        }
+        all_hazards.sort();
+        all_hazards.dedup();
+        all_writes.normalize();
+        scan.without_default_view_routes = Some(Box::new(WithoutDefaultViewRoutes {
+            hazards: std::mem::replace(&mut scan.hazards, all_hazards),
+            global_writes: std::mem::replace(&mut writes, all_writes),
+            source_hash: typefacts::SourceHash::of(source),
+        }));
+        scan.default_view_routes = default_view_routes;
+    }
     scan.global_writes = writes;
     scan
 }
@@ -1112,6 +1236,14 @@ fn parent_past_wrappers(nodes: &AstNodes<'_>, mut id: NodeId) -> (NodeId, NodeId
 fn under_typeof(nodes: &AstNodes<'_>, id: NodeId) -> bool {
     let (_, parent) = parent_past_wrappers(nodes, id);
     matches!(nodes.get_node(parent).kind(), AstKind::UnaryExpression(unary) if unary.operator == UnaryOperator::Typeof)
+}
+
+/// ADR 1077: whether the reference at `id` is inside a TypeScript type query (`typeof globalThis.setTimeout` written as a type): everything in one is a type and is
+/// erased, so nothing there runs.
+fn in_type_query(nodes: &AstNodes<'_>, id: NodeId) -> bool {
+    nodes
+        .ancestor_kinds(id)
+        .any(|kind| matches!(kind, AstKind::TSTypeQuery(_)))
 }
 
 /// The static member name read off the reference at `id` (`module.exports`), if it is the object of one.
@@ -1524,13 +1656,23 @@ fn only_inspected(nodes: &AstNodes<'_>, child: oxc_span::Span, parent: NodeId) -
                 UnaryOperator::Typeof | UnaryOperator::LogicalNot
             )
         }
-        AstKind::BinaryExpression(binary) => matches!(
-            binary.operator,
-            BinaryOperator::StrictEquality
-                | BinaryOperator::StrictInequality
-                | BinaryOperator::Equality
-                | BinaryOperator::Inequality
-        ),
+        AstKind::BinaryExpression(binary) => {
+            matches!(
+                binary.operator,
+                BinaryOperator::StrictEquality
+                    | BinaryOperator::StrictInequality
+                    | BinaryOperator::Equality
+                    | BinaryOperator::Inequality
+            )
+            // ADR 1077: `"Deno" in globalThis` asks whether the object has a property of a key the string literal fixes: nothing is read off it and it goes
+            // nowhere. A key the syntax does not fix (`k in window`, a template, a call) may run code to become one.
+                || (binary.operator == BinaryOperator::In
+                    && binary.right.span() == child
+                    && matches!(
+                        binary.left.get_inner_expression(),
+                        Expression::StringLiteral(_)
+                    ))
+        }
         AstKind::ConditionalExpression(conditional) => conditional.test.span() == child,
         AstKind::IfStatement(statement) => statement.test.span() == child,
         AstKind::WhileStatement(statement) => statement.test.span() == child,
@@ -2098,13 +2240,21 @@ impl WriterFlow<'_, '_> {
     }
 }
 
-/// Whether a reference of the global `Function` constructs nothing: `Function.prototype…`, the right of `instanceof`, a strict comparison.
+/// Whether a reference of the global `Function` constructs nothing: `Function.prototype…`, a data member (`name`, `length`), `Function.toString` applied
+/// at once (`Function.toString.call(fn)`, `.apply(fn)`: `Function.prototype.toString` returns a string or throws, neither of which constructs code), the right of
+/// `instanceof`, a strict comparison. Not `Function.toString` handed on (its `.constructor` is `Function`), and not `Function.call`, `Function.apply` or
+/// `Function.bind`: applied to `Function` itself they reach the constructor (`Function.apply.call(Function, null, ["code"])`,
+/// `Function.bind.apply(Function, [null, "code"])`), and the receiver is a value the scan does not follow.
 fn function_use_is_inert(nodes: &AstNodes<'_>, id: NodeId) -> bool {
     let (child, parent) = parent_past_wrappers(nodes, id);
     let child_span = nodes.get_node(child).kind().span();
     match nodes.get_node(parent).kind() {
-        AstKind::StaticMemberExpression(member) => {
-            member.property.name == "prototype" && member.object.span() == child_span
+        AstKind::StaticMemberExpression(member) if member.object.span() == child_span => {
+            match member.property.name.as_str() {
+                "prototype" | "name" | "length" => true,
+                "toString" => to_string_applied(nodes, parent),
+                _ => false,
+            }
         }
         AstKind::BinaryExpression(binary) => {
             use oxc_syntax::operator::BinaryOperator;
@@ -2119,6 +2269,26 @@ fn function_use_is_inert(nodes: &AstNodes<'_>, id: NodeId) -> bool {
         }
         _ => false,
     }
+}
+
+/// ADR 1062: whether the member at `id` (`Function.toString`) is the object of a `.call` or `.apply` that is called right there.
+fn to_string_applied(nodes: &AstNodes<'_>, id: NodeId) -> bool {
+    let (child, parent) = parent_past_wrappers(nodes, id);
+    let child_span = nodes.get_node(child).kind().span();
+    let AstKind::StaticMemberExpression(applier) = nodes.get_node(parent).kind() else {
+        return false;
+    };
+    if applier.object.span() != child_span
+        || !matches!(applier.property.name.as_str(), "call" | "apply")
+    {
+        return false;
+    }
+    let (applier_child, call) = parent_past_wrappers(nodes, parent);
+    let applier_span = nodes.get_node(applier_child).kind().span();
+    matches!(
+        nodes.get_node(call).kind(),
+        AstKind::CallExpression(call) if call.callee.get_inner_expression().span() == applier_span
+    )
 }
 
 /// Whether the `.constructor` member at `id` can generate code: its object is itself a `.constructor` (`x.constructor.constructor`, the `Function`
@@ -2881,7 +3051,8 @@ mod tests {
             "G();",
             "new G();",
             "async function a() { await G; } use(a);",
-            "use('x' in G);",
+            // ADR 1077: a string-literal key's `in` test is no escape; a key the syntax does not fix is.
+            "use(k in G);",
             "const { btoa } = G; use(btoa);",
             "export default G;",
             "for (const k in G) use(k);",
@@ -3048,6 +3219,113 @@ mod tests {
         }
     }
 
+    /// ADR 1077: an `in` test of a string-literal key against the global object reads nothing off it; a key the syntax does not fix, and the object on the left, still
+    /// hand it on.
+    #[test]
+    fn a_literal_in_test_of_the_global_object_is_no_escape() {
+        for source in [
+            "export const isServer = typeof window === 'undefined' || 'Deno' in globalThis;",
+            "use(\"ontouchstart\" in window);",
+            "use(('k') in (globalThis));",
+            "use('k' in self.window);",
+        ] {
+            let found = scan(source);
+            assert!(
+                !kinds(&found)
+                    .iter()
+                    .any(|(kind, _)| *kind == ModuleHazardKind::GlobalObjectEscape),
+                "{source}: {:?}",
+                kinds(&found)
+            );
+            assert!(!found.global_writes.any_name, "{source}");
+        }
+        for source in [
+            "export const f = (k) => k in globalThis;",
+            "use(`k` in globalThis);",
+            "use(key() in globalThis);",
+            "use(globalThis in o);",
+            "use(1 in globalThis);",
+        ] {
+            assert!(scan(source).global_writes.any_name, "{source}");
+        }
+        // A local `globalThis` is no global object: the scan follows no unbound name there, before or after.
+        assert!(
+            scan("const globalThis = {}; export const f = (k) => k in globalThis;")
+                .hazards
+                .is_empty()
+        );
+    }
+
+    /// ADR 1077: a type query is erased: `typeof globalThis.setTimeout` written as a type runs nothing. The same `typeof` written as a value reads the member.
+    #[test]
+    fn a_type_query_of_the_global_object_is_erased() {
+        let at = |source: &str| scan_module(Path::new("/p/node_modules/x/RecordRow.tsx"), source);
+        for source in [
+            "let timer: ReturnType<typeof globalThis.setTimeout> | undefined; export const t = timer;",
+            "type W = typeof window; export const w: W | null = null;",
+            "export const f = (t: typeof globalThis.fzNope) => t;",
+            "export const g = (x: unknown) => x as keyof typeof globalThis;",
+        ] {
+            let found = at(source);
+            assert!(found.hazards.is_empty(), "{source}: {:?}", kinds(&found));
+            assert!(found.global_writes.is_empty(), "{source}");
+        }
+        // As a value, `typeof` reads the member it names (an unknown one is a lookup), and the object itself is only inspected.
+        assert_eq!(
+            kinds(&at("export const k = typeof globalThis.fzNope;")),
+            [(ModuleHazardKind::UnknownGlobal, "globalThis.fzNope")]
+        );
+        assert!(
+            at("export const k = typeof globalThis.setTimeout;")
+                .hazards
+                .is_empty()
+        );
+        assert!(
+            at("export const g = globalThis; type T = typeof globalThis;")
+                .global_writes
+                .any_name
+        );
+    }
+
+    /// ADR 1077: a static `x.defaultView` is kept apart with what it adds, so a walk that proves `x` no document can leave it out; a computed one and `document`'s own
+    /// are not.
+    #[test]
+    fn a_static_default_view_read_is_kept_apart() {
+        let found =
+            scan("export const v = (props) => props.defaultView ?? 'pages'; document.body;");
+        assert!(found.global_writes.any_name);
+        assert_eq!(found.default_view_routes.len(), 1);
+        let route = &found.default_view_routes[0];
+        assert_eq!(route.member, (28, 45));
+        assert!(route.global_writes.any_name);
+        let base = found.without_default_view_routes.as_deref().unwrap();
+        assert!(base.global_writes.is_empty() && base.hazards.is_empty());
+        let lifted = found.without_inert_default_views(|_| true).unwrap();
+        assert!(lifted.hazards.is_empty() && lifted.global_writes.is_empty());
+        assert!(lifted.default_view_routes.is_empty());
+        assert!(found.without_inert_default_views(|_| false).is_none());
+        // A route proven inert leaves what another read adds.
+        let found = scan(
+            "export const v = (a, b, k) => [a.defaultView ?? 1, b.defaultView, globalThis[k]];",
+        );
+        assert_eq!(found.default_view_routes.len(), 2);
+        let first = found.default_view_routes[0].member;
+        let lifted = found
+            .without_inert_default_views(|route| route.member == first)
+            .unwrap();
+        assert!(lifted.global_writes.any_name);
+        assert_eq!(lifted.default_view_routes.len(), 1);
+        assert_eq!(lifted.hazards, found.hazards);
+        // `document.defaultView`, a computed key and a read that adds nothing are no route.
+        for source in [
+            "use(document.defaultView);",
+            "use(el.ownerDocument['defaultView']);",
+            "use(!el.defaultView);",
+        ] {
+            assert!(scan(source).default_view_routes.is_empty(), "{source}");
+        }
+    }
+
     /// ADR 0974: a read of the global object by a key the file's constants decide to several names is one read of each (no escape, no writer); one of the names the object goes by
     /// hands it back.
     #[test]
@@ -3098,8 +3376,44 @@ mod tests {
             "window.setTimeout(() => {}, 0);",
             "use(x instanceof window.Function);",
             "use(window.Function.prototype);",
+            "use(window.Function.toString.call(fn));",
         ] {
             assert!(!has(source, ModuleHazardKind::CodeGeneration), "{source}");
+        }
+    }
+
+    /// ADR 1062: `Function.toString` (and a data member) read off the constructor generates nothing, however it is called; `call`, `apply` and
+    /// `bind` read off it may be applied to `Function` itself, which constructs code, so they stay code generation.
+    #[test]
+    fn function_to_string_is_no_code_generation_and_its_appliers_are() {
+        let has = |source: &str| {
+            kinds(&scan(source))
+                .iter()
+                .any(|(found, _)| *found == ModuleHazardKind::CodeGeneration)
+        };
+        for source in [
+            "use(Function.toString.call(fn).indexOf('[native code]'));",
+            "use(Function.toString.apply(fn));",
+            "use(Function.name, Function.length);",
+            "use(Function.prototype.toString.call(fn));",
+        ] {
+            assert!(!has(source), "{source}");
+            assert!(!scan(source).global_writes.any_name, "{source}");
+        }
+        for source in [
+            "var C = Function.bind.apply(Parent, a); new C();",
+            "Function.apply.call(Function, null, ['return this'])();",
+            "Function.call(null, 'return this')();",
+            "use(Function.toString.constructor);",
+            "use(Function.toString);",
+            "use(Function.toString.call);",
+            "use(Function.toString.bind(fn));",
+            "use(Function);",
+            "Function('return this')();",
+            "new Function('a', 'return a');",
+            "use(Function['toString']);",
+        ] {
+            assert!(has(source), "{source}");
         }
     }
 

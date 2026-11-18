@@ -574,17 +574,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "handed-member-dispatch",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/flush-holder-alias/App.tsx",
-      "start": 4380,
-      "end": 4402,
-      "fixes": 0
-    },
-    {
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",

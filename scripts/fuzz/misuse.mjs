@@ -572,7 +572,7 @@ export const SPEC = {
   },
   // `settled`: an async memo read after it settled (ADR 0511 review: probe pending-async/hook-shared-instance, rc.17 warns this code in an
   // apply, no pending throw), through the module-scope hook result beside the body's own call.
-  STRICT_READ_UNTRACKED: { legal: ["memo", "effect-compute", "render-compute", "jsx", "untrack"], recallContexts: ["evt-body-dispatch", ...firesAt("body"), ...listenersAt("body"), ...DENIED_CONTEXTS.filter((context) => !context.startsWith("dny-unmount-flush") && !["dny-dispose-memo", "dny-dispose-compute", "dny-dispose-untrack"].includes(context))], recallLegal: [...EVENT_LEGAL, ...ZERO_READS, "handed-flush"],
+  STRICT_READ_UNTRACKED: { legal: ["memo", "effect-compute", "render-compute", "jsx", "jsx-helper", "untrack"], recallContexts: ["evt-body-dispatch", ...firesAt("body"), ...listenersAt("body"), ...DENIED_CONTEXTS.filter((context) => !context.startsWith("dny-unmount-flush") && !["dny-dispose-memo", "dny-dispose-compute", "dny-dispose-untrack"].includes(context))], recallLegal: [...EVENT_LEGAL, ...ZERO_READS, "handed-flush"],
     // `settled` is a grid variant (never drawn at random, so random programs and combinations' extras keep theirs) and a legal one.
     variants: ["signal", "memo"], gridVariants: ["settled"], legalVariants: ["signal", "memo", "settled"],
     contexts: ["body", "effect-apply", "root", "render-apply"], bindings: ["direct", "alias", "destructured", "wrapper"],
@@ -1896,6 +1896,12 @@ function inContext(context, stmts, kit) {
     case "timer-from-apply": return { body: [expr(prim("effect", fn([ret(num(1))]), { apply: fn([expr(prim("timer", fn(stmts)))]) }))], view: [] };
     case "micro-from-apply": return { body: [expr(prim("effect", fn([ret(num(1))]), { apply: fn([expr(prim("micro", fn(stmts)))]) }))], view: [] };
     case "async": { const f = kit.name("f"); return { body: [decl(f, fn([awaitStmt(), ...stmts], { async: true })), expr(call(ref(f)))], view: [] }; }
+    // ADR 1091: a helper `const` of the component body, read only in a JSX child (`{h1()}`): the render runs it tracked wherever
+    // the component is mounted (a tag of an exported parent, `child`, included).
+    case "jsx-helper": {
+      const h = kit.name("rh");
+      return { body: [decl(h, fn([...stmts, ret(num(1))]))], view: asView([child(v(), call(ref(h)))]) };
+    }
     case "jsx": case "show": case "for": {
       const item = child(v(), iife(fn([...stmts, ret(num(1))])));
       return { body: [], view: asView([context === "show" ? show(num(1), [item]) : context === "for" ? forEach([item]) : item]) };

@@ -181,6 +181,9 @@ pub fn router_params_status(
     let mut reached: Vec<Reached> = Vec::new();
     let mut uses_params = false;
     let mut replaced: Option<&'static str> = None;
+    // ADR 1086: the package roots the router's imports resolve to, so the router's own files are known by their root (a store slot's
+    // too, `package_root_of`), not by a path spelling only a plain install has.
+    let mut router_roots: BTreeSet<String> = BTreeSet::new();
     for file in crate::base::reads::file_slots(facts) {
         for import in &file.ast.imports {
             if import.module.as_str() != ROUTER_PACKAGE
@@ -241,6 +244,11 @@ pub fn router_params_status(
                                 "a bundler resolution that does not load the installed package",
                             );
                             return None;
+                        }
+                        if let Some(root) =
+                            solid_facts::package_reach::package_root_of(&row.resolved_path)
+                        {
+                            router_roots.insert(root.to_owned());
                         }
                         let version = row.package_version.as_deref()?;
                         let digest = dialect.audited_router_digest(version);
@@ -305,12 +313,13 @@ pub fn router_params_status(
         .first()
         .and_then(|entry| entry.version.clone())
         .unwrap_or_default();
+    let router_file = |path: &str| {
+        path.contains("/node_modules/@solidjs/router/")
+            || solid_facts::package_reach::package_root_of(path)
+                .is_some_and(|root| router_roots.contains(root))
+    };
     for file in crate::base::reads::file_slots(facts) {
-        if file
-            .path
-            .as_str()
-            .contains("/node_modules/@solidjs/router/")
-        {
+        if router_file(file.path.as_str()) {
             continue;
         }
         for spelling in REPLACEMENT_SPELLINGS {
@@ -319,14 +328,10 @@ pub fn router_params_status(
             }
         }
     }
-    if let Some(reason) = history_not_stock(facts) {
+    if let Some(reason) = history_not_stock(facts, &router_file) {
         return RouterParamsStatus::Replaced { spelling: reason };
     }
-    if let Some(reason) = router_context_as_this(facts, &|file| {
-        file.path
-            .as_str()
-            .contains("/node_modules/@solidjs/router/")
-    }) {
+    if let Some(reason) = router_context_as_this(facts, &|file| router_file(file.path.as_str())) {
         return RouterParamsStatus::Replaced { spelling: reason };
     }
     RouterParamsStatus::Applies { version }
@@ -377,15 +382,14 @@ pub(crate) fn runtime_agrees(
 /// a closed literal, a history of another origin, a history passed on, a
 /// router reached through a re-export, a namespace member, a dynamic load --
 /// is a history the checker cannot read, and withholds the premise.
-fn history_not_stock(facts: &ProjectFacts) -> Option<&'static str> {
+fn history_not_stock(
+    facts: &ProjectFacts,
+    router_file: &dyn Fn(&str) -> bool,
+) -> Option<&'static str> {
     let mut accepted_values: BTreeSet<(String, Span)> = BTreeSet::new();
     let mut constants: Vec<(usize, Span)> = Vec::new();
     for (index, file) in crate::base::reads::file_slots(facts).iter().enumerate() {
-        if file
-            .path
-            .as_str()
-            .contains("/node_modules/@solidjs/router/")
-        {
+        if router_file(file.path.as_str()) {
             continue;
         }
         let ast = &*file.ast;

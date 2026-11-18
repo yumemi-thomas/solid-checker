@@ -9,7 +9,8 @@ The facts asked, the flush accounting's for the same class (`flush_accounting::r
 | site (`App.test.tsx`) | outcome |
 |---|---|
 | `reads()`, `expect(…)` and its `.toBe`, `new Map(…)`, `setCount(1)` in `it("a read", async …)` | ended, no row |
-| `count()`, `state.n` and the `count()` inside `expect(…)` in the same callback | each keeps another producer's row, SC1002 `function-run-unplaced` (the walk's own obligation for a read whose function it cannot place): the reason ends only a site no row stands at, so it is not asked there |
+| `count()`, `state.n` and the `count()` inside `expect(…)` in the same callback | ended, no row: ADR 1073, the callback literal is handed to no computation, so the walk starts no member for it (before, each kept the walk's `function-run-unplaced`) |
+| `count()` in `it("a stored name", async function self …)`, which stores `self` | SC1002 `function-run-unplaced`: a name the function hands on may reach a computation (ADR 1073 refuses it) |
 | `reads()` in `beforeEach`, in vitest's `describe` body, under `test.only`, `it.each(…)(…)`, the alias `check` and the re-export `spec` (`runner.ts`) | ended, no row |
 | `reads()` in a wrapper's argument (`wrap(async …)`) and in a binding handed by name (`shared`) | SC1002 uncertifiable, `read-after-await-unaccounted`: no literal in the registration |
 | `reads()` under a block-scoped `it` bound to a project function | the same: a project declaration is not the runner |

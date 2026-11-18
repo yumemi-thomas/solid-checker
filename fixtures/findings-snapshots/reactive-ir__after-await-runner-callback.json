@@ -2,39 +2,6 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/after-await-runner-callback/App.test.tsx",
-      "start": 1067,
-      "end": 1072,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/after-await-runner-callback/App.test.tsx",
-      "start": 1083,
-      "end": 1090,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/after-await-runner-callback/App.test.tsx",
-      "start": 1112,
-      "end": 1117,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -155,17 +122,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/after-await-runner-callback/App.test.tsx",
-      "start": 3021,
-      "end": 3033,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
@@ -185,28 +141,6 @@
       "path": "fixtures/reactive-ir/after-await-runner-callback/App.test.tsx",
       "start": 3103,
       "end": 3108,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "function-call-target-unresolved",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/after-await-runner-callback/App.test.tsx",
-      "start": 3213,
-      "end": 3244,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/after-await-runner-callback/App.test.tsx",
-      "start": 3654,
-      "end": 3666,
       "fixes": 0
     },
     {
@@ -240,6 +174,61 @@
       "path": "fixtures/reactive-ir/after-await-runner-callback/App.test.tsx",
       "start": 3996,
       "end": 4006,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-runner-callback/App.test.tsx",
+      "start": 4461,
+      "end": 4466,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-runner-callback/App.test.tsx",
+      "start": 4477,
+      "end": 4482,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/after-await-runner-callback/App.test.tsx",
+      "start": 4477,
+      "end": 4489,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/after-await-runner-callback/App.test.tsx",
+      "start": 4496,
+      "end": 4503,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-runner-callback/App.test.tsx",
+      "start": 4496,
+      "end": 4503,
       "fixes": 0
     },
     {

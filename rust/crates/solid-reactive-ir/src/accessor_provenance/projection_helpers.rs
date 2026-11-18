@@ -724,7 +724,7 @@ pub(super) fn simple_object_binding(binding: &ast::BindingFact) -> bool {
 /// (`[a = f]`), a nested pattern (`[[a]]`, `[{ a }]`) or a rest element binds a
 /// name that has no identifier slot, so the counts differ and the pattern is
 /// refused. A hole (`[, a]`) skips a position and keeps every other exact.
-pub(super) fn simple_array_binding(binding: &ast::BindingFact) -> bool {
+pub(crate) fn simple_array_binding(binding: &ast::BindingFact) -> bool {
     binding.immutable
         && binding.shape == ast::BindingShape::Array
         && !binding.names.is_empty()

@@ -2622,6 +2622,19 @@ impl Dialect for Solid2 {
         argument == 0 && primitive == Primitive::CreateProjection
     }
 
+    /// Source: rc.21 `@solidjs/signals` `dist/dev.js`. `createStore` (9742) returns `createStore$1`'s `[proxy, setter]` (6885-6921) or
+    /// `createStoreDerived`'s `[store, f => storeSetter(store, f)]` (7920-7922); either setter is `fn => storeSetter(proxy, fn)`, and
+    /// `storeSetter` (6819) calls `fn(proxy)` with the store's own proxy, the `wrap` (4700) proxy over a new `{}`/`[]` (`createTarget`).
+    /// A genuine proxy's `set` (6663), `defineProperty` and `deleteProperty` traps write `ensurePB(target)` (5159): a clone of the store's value
+    /// (`cloneRaw`), an `Object.create` overlay of it, or an adopted object cloned before the write; `__proto__` is refused, and a trap
+    /// the proxy lacks (`setPrototypeOf`) acts on its own new target. A `markRaw` seed comes back raw from `wrap`, and the setter then
+    /// throws at `scopeKey(proxy[$TARGET])` (`target._fam` of `undefined`) before the updater runs. `createProjection` returns a store
+    /// with no setter; `createOptimisticStore` is not read here. `wrap` also accepts `value[$TARGET].px === value`:
+    /// a user Proxy can forge that protocol, so callers must prove a fresh ordinary seed separately.
+    fn setter_updater_receives_store(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::CreateStore
+    }
+
     fn accepts_cleanup_return(&self, primitive: Primitive) -> bool {
         matches!(
             primitive,
