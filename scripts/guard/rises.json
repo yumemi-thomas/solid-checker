@@ -4250,6 +4250,22 @@
    "to": 9,
    "adr": "ADR 1052",
    "fact": "part 6: fixture competing-check-sync-memo extended (a cleanup the rerun calls, an action only a leaf callback calls, and their controls)"
+  },
+  {
+   "fixture": "reactive-ir/accessor-provenance",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 7,
+   "to": 8,
+   "adr": "ADR 1093",
+   "fact": "U to U relabels: a hook's returned getter read by its member call is now followed, so the SC9012 parameter-call-argument-unproven row stands as the read's own row (SC1002 read-after-await-unaccounted, SC9012 handed-member-read); no violation moved"
+  },
+  {
+   "fixture": "reactive-ir/async-creation-pass-forms",
+   "key": "SC9012 handed-member-read",
+   "from": 8,
+   "to": 10,
+   "adr": "ADR 1093",
+   "fact": "U to U relabels: a hook's returned getter read by its member call is now followed, so the SC9012 parameter-call-argument-unproven row stands as the read's own row (SC1002 read-after-await-unaccounted, SC9012 handed-member-read); no violation moved"
   }
  ]
 }
