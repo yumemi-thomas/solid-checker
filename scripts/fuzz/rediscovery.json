@@ -26364,5 +26364,15 @@
    "mx-strict-read-untracked-render-apply-guarded-rerun-store-byname-wrapper-none"
   ],
   "rediscovered": "main 28fde14bf: `focus.mjs --codes STRICT_READ_UNTRACKED --grids mx-recall` on the store-byname ids fails (29 false-positive: render-apply-guarded-rerun 18, effect-apply 6, reaction 5); ADR 1111's build: 0 false-positive (not-fired)"
+ },
+ {
+  "finding": "a false positive: SC7002 at a sync memo in a helper only a tracked effect's callback calls, under <Errored>: Chrome reports PRIMITIVE_IN_FORBIDDEN_SCOPE at the site and never SYNC_NODE_RECEIVED_ASYNC",
+  "found": "open-defects pattern flip/st-tracked-handled-sync-memo (ADR 1052 part 4 retired its stacked pair)",
+  "fixed": "ADR 1052 part 5 (`competing_checks.rs` `every_run_refused`: a refusal reached through a helper every reference of which is a refused call); part 9's `refused_at_mount_else_handlers` covers it too",
+  "grid": "patterns",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": ["flip/st-tracked-handled-sync-memo"],
+  "rediscovered": "make fuzz-patterns --only st-tracked-handled-sync-memo: false positive on main 28fde14bf built with both clauses off; FIXED on main (and on e4712a977 + parts 6/7, part 5 alone)",
+  "outside": "the pattern lane holds this program (scripts/fuzz/patterns/flip); mx-census tracked-sibling-async and tracked-shared generate the family (ADR 1052 parts 5 and 9 entries above)"
  }
 ]
