@@ -26132,5 +26132,19 @@
    "mx-sync-node-received-async-flw-apply-slot-module-memo-direct-none"
   ],
   "rediscovered": "base 2607cbf0a (main e4712a977 + parts 6/7): with the rows out of open-defects-rows.json `focus.mjs --codes SYNC_NODE_RECEIVED_ASYNC --grids mx-census` on the 18 ids fails (18 false-positive); this build: 18 not-fired"
+ },
+ {
+  "finding": "a false positive: SC7002 at a sync memo or effect in a helper that an effect's apply or a tracked effect calls at mount and a click handler of the same component calls: the mount throws PRIMITIVE_IN_EFFECT_CALLBACK or PRIMITIVE_IN_FORBIDDEN_SCOPE first and render disposes the root and its delegated events, so the handler never runs",
+  "found": "ADR 1052 part 4's ledger (owned false positives tracked-shared, effect-apply-shared; coord-land/sc7002-split.md)",
+  "fixed": "ADR 1052 part 9 (`competing_checks.rs` `refused_at_mount_else_handlers`)",
+  "grid": "mx-census",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "mx-sync-node-received-async-tracked-shared-memo-direct-none",
+   "mx-sync-node-received-async-tracked-shared-effect-direct-none",
+   "mx-sync-node-received-async-effect-apply-shared-memo-direct-none",
+   "mx-sync-node-received-async-effect-apply-shared-effect-direct-none"
+  ],
+  "rediscovered": "base 09f1a8f2f (main 2b4adb9c6 + part 8): with the rows out of open-defects-rows.json `focus.mjs --codes SYNC_NODE_RECEIVED_ASYNC --grids mx-census` on the 4 ids fails (4 false-positive); this build: 4 not-fired"
  }
 ]
