@@ -43,6 +43,7 @@ export function Refused() {
   const readsMember = () => {
     setW(box.v);
   };
+  // Clean since step 1: `n` is a `const` of a primitive literal, an inert argument (`argument_is_inert`), so the setter call is proved.
   const otherIdentifier = () => {
     setW(n);
   };
@@ -80,7 +81,7 @@ export function Refused() {
     setW(1);
     yield;
   });
-  // Uncertifiable: each call below has a callee outside the narrow form.
+  // Uncertifiable: each call below has a callee outside the narrow form, except the two marked clean since step 1.
   Promise.resolve().then(() => {
     readsMember();
     otherIdentifier();
@@ -94,6 +95,7 @@ export function Refused() {
     reassigned();
     yields();
     exportedWrap();
+    // Clean since step 1: an IIFE whose body is a proved setter call.
     (() => {
       setW(1);
     })();

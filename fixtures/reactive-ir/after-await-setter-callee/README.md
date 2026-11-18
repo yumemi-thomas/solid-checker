@@ -9,10 +9,12 @@
 Clean: every call in `Clean`'s handler (`wrapUse`, `wrapShort`, the action alias `useIt`, `callsAction`, the local closure).
 
 Uncertifiable, one twin per excluded shape, in `Refused`:
-- a member read, another identifier, another call, an updater function, iteration, a class;
+- a member read, another call, an updater function, iteration, a class;
 - a signal with its own `equals`;
 - a helper that runs a callback, a parameter;
-- a reassigned `let`, an action generator that yields, an export, an IIFE.
+- a reassigned `let`, an action generator that yields, an export.
+
+Since step 1, two `Refused` calls are clean: `otherIdentifier` (`setW(n)`, where `n` is a `const` primitive, an inert argument) and the IIFE.
 
 Violation or uncertifiable, never clean: `Twin`'s wrapper reads after the memo's await.
 
