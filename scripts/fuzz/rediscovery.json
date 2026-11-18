@@ -26422,5 +26422,23 @@
   "ids": [],
   "families": ["ref in a control-flow callback: mx-strict-read-untracked-*store-dstr- [ref-row]", "layer inside a named ref: mx-strict-read-untracked-*store-dstr- [ref-named,ref-factory]", "census: mx-untracked-read-after-await-then-named- [then-named]", "g2d named hand-off: mx-caught-reactive-read- [handed-flush]", "createRoot inside onCleanup inside createRoot: mx-action-called-in-owned-scope- [cleanup-mount]", "createRoot inside onCleanup inside createRoot: mx-on-flush-in-owned-scope- [cleanup-mount]", "R-call-arg: mx-reactive-write-in-owned-scope-*refresh", "R-placeless: mx-caught-reactive-read-*async", "R-placeless: mx-settled-cleanup-unowned- [action-after-yield,async-finally,async-loop,effect-apply,effect-async,effect-async-finally,effect-async-for-await,effect-async-loop,effect-cleanup-rerun,handler-async-finally,handler-async-loop,memo-async,memo-async-for-await,memo-async-loop,micro,owner-null,reaction-error-arm,ref,ref-array,ref-factory,ref-row,render-apply-guarded-rerun,render-cleanup-rerun,then,timer]", "R-alias-call: mx-no-owner-boundary-*errored", "R-alias-call: mx-flush-in-effect-callback- [effect-apply-shared,effect-cleanup-rerun,evt-anchor-apply-listener,evt-apply-dispatch,evt-apply-helper-dispatch,evt-apply-window-dispatch,render-apply-guarded-rerun,render-cleanup-rerun]", "R-alias-call: mx-no-owner-cleanup- [action-from-apply,action-from-error-arm,effect-async,effect-cleanup-rerun,effect-error-arm,memo-async-finally,memo-async-loop,pos-handler-untrack,reaction,ref,ref-array,timer]", "R-alias-call: mx-no-owner-effect-*effect", "R-alias-call: mx-no-owner-context- [action-after-yield,action-from-error-arm,async,async-for-await,async-loop,effect-cleanup-dispose,effect-cleanup-rerun-named,handler,reaction,ref-cond,ref-factory,ref-row]", "R-alias-call: mx-no-owner-effect-*render", "R-alias-call: mx-sync-node-received-async-*memo", "R-alias-call: mx-no-owner-boundary-*loading", "R-alias-call: mx-context-not-found- [flw-ctx-sibling,flw-ctx-two-renders,for,lst-body-shared,memo,show]", "R-alias-call: mx-sync-node-received-async-*effect", "R-alias-call: mx-resolve-in-reactive-scope- [flush-iife,handed-flush-call,memo,memo-shared,named-flush-call]", "R-alias-call: mx-primitive-in-effect-callback-*effect", "R-alias-call: mx-until-in-reactive-scope- [flush-iife,handed-flush-call,handed-flush-each,render-compute]", "R-alias-call: mx-flush-in-action- [action,action-after-yield,action-shared,flw-action-slot]", "R-alias-call: mx-primitive-in-effect-callback-*memo", "R-alias-call: mx-on-flush-in-owned-scope- [body,effect-compute,render-compute,root]", "R-alias-call: mx-dynamic-static-promise- [async-loop,handler-async-finally,root]"],
   "outside": "no program of these families is a false clean: nightly audit 44353494239 on main 28fde14bf (every grid in full) shows none in them (R-near keeps 6 known-open false cleans, R-halted 2, both still listed); on 28fde14bf the 9,912 alias-binding mx-recall ids of R-alias-call give 0; the `then-named` context no longer exists."
+ },
+ {
+  "finding": "A secondary UNTRACKED_READ_AFTER_AWAIT certified false clean beside STORE_WRITE_OUTSIDE_SETTER: the read of `s1.a` in `s1.a.v = 7`, in a `for await` body of an async compute held by an object member (`cb1.cb`, the cb-bundle source), had no row. ADR 1038's `for await` dominance made `window_after_awaits` answer `Unreported`, silencing every read rule, and the tracked-computation path does not recognize an object member's compute",
+  "found": "the audit of main 28fde14bf (run 44353494239): 8 secondary false cleans",
+  "fixed": "ADR 1112 (`body_roles.rs` `window_after_awaits`: only a statement-level dominating await proves the window closed; a `for await` body is unplaced)",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-effect-async-for-await-nested-assign-direct-none-cb-bundle",
+   "mx-store-write-outside-setter-effect-async-for-await-nested-assign-alias-none-cb-bundle",
+   "mx-store-write-outside-setter-effect-async-for-await-nested-assign-tuple-none-cb-bundle",
+   "mx-store-write-outside-setter-effect-async-for-await-nested-assign-hook-none-cb-bundle",
+   "mx-store-write-outside-setter-memo-async-for-await-nested-assign-direct-none-cb-bundle",
+   "mx-store-write-outside-setter-memo-async-for-await-nested-assign-alias-none-cb-bundle",
+   "mx-store-write-outside-setter-memo-async-for-await-nested-assign-tuple-none-cb-bundle",
+   "mx-store-write-outside-setter-memo-async-for-await-nested-assign-hook-none-cb-bundle"
+  ],
+  "rediscovered": "main 28fde14bf (release): focus --runtime-diff all by id, 8 secondary-false-clean (exit 1); this fix: 8 agree, nothing needs a look (exit 0)"
  }
 ]

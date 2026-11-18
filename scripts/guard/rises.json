@@ -4845,6 +4845,15 @@
    "to": 5,
    "adr": "ADR 1104",
    "fact": "part 2: store-sub-value-flow gains two pattern-parameter rows (a carrier a project function destructures has a row at the read); additions only, all uncertifiable"
+  },
+  {
+   "fixture": "reactive-ir/after-await-exact-callbacks",
+   "key": "SC1001 function-run-unplaced",
+   "from": 2,
+   "to": 5,
+   "adr": "ADR 1112",
+   "fact": "window_after_awaits: a for-await body read is Unknown (implicit suspension), so its function-run-unplaced rows stand",
+   "why": "a compute held by an object slot reads in a for-await body: unplaced, not silent"
   }
  ]
 }

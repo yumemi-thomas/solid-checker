@@ -466,6 +466,19 @@ pub(crate) fn dominating_await_before(file: &solid_facts::FileFacts, span: Span)
         .or_else(|| for_await_body_suspension(file, span).filter(|suspension| own(*suspension)))
 }
 
+/// ADR 1112: [`dominating_await_before`] without its `for await` fallback: an `await` written in the function that
+/// dominates `span`.
+fn follows_dominating_await_statement(file: &solid_facts::FileFacts, span: Span) -> bool {
+    let Some(function) = continuation_function(file, span) else {
+        return false;
+    };
+    file.ast.dominating_awaits.iter().any(|(awaited, region)| {
+        region.contains(span)
+            && containing_ast_function(&file.ast, *awaited)
+                .is_some_and(|owner| owner.span == function.span)
+    })
+}
+
 /// ADR 1038: the suspension of the `for await` statement whose body holds `span`. The loop awaits the
 /// iterator's first `next()` before the body runs, so every body run follows that await. The facts record a `for await`'s suspension as an implicit one
 /// that starts where its loop statement starts and ends with the iterable (`AstFacts::implicit_suspensions`, `loop_statements`): the region is the rest
@@ -1413,9 +1426,13 @@ pub(super) fn window_after_awaits(
     lookup: &SemanticLookup<'_>,
     role: ExecutionRole,
 ) -> ExecutionRole {
+    // ADR 1112: an await written as a statement, not a `for await`'s implicit suspension (ADR 1038's fallback in
+    // `dominating_await_before`). `Unreported` silences every read rule, and the read after the loop's suspension
+    // still runs in an async computation's flight when one runs the function (UNTRACKED_READ_AFTER_AWAIT): placed by
+    // position alone, it is unplaced (`Unknown`), as the arm below says of an implicit suspension.
     if role.reports_untracked_read()
         && (follows_unconditional_await(file, span)
-            || follows_dominating_await(file, span)
+            || follows_dominating_await_statement(file, span)
             || follows_try_head_await(file, span, lookup))
     {
         return role_arm!(
