@@ -4541,6 +4541,15 @@
    "to": 17,
    "adr": "ADR 1052",
    "fact": "part 9: competing-check-sync-memo gains four components (a helper refused at mount with a handler or a tracked effect, and its timer and apply twins); measured against main 76477c121, which holds part 8"
+  },
+  {
+   "fixture": "reactive-ir/after-await-exact-callbacks",
+   "key": "SC1001 function-run-unplaced",
+   "from": 2,
+   "to": 5,
+   "adr": "ADR 1112",
+   "fact": "window_after_awaits: a for-await body read is Unknown (implicit suspension), so its function-run-unplaced rows stand",
+   "why": "a compute held by an object slot reads in a for-await body: unplaced, not silent"
   }
  ]
 }

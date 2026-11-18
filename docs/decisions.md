@@ -4285,3 +4285,17 @@ The 24 `wrapper` programs stay uncertifiable on SC5003 `async-options-opaque`, a
 - uncertifiable twins: the closure in an effect's apply, under `untrack`, also kept, or handed to the helper as a value.
 
 Chrome rc.21 is quiet on the four clean components, and reports PENDING_ASYNC_UNTRACKED_READ only at the apply twin. A first build without the leaf-owner condition lost `async-unsuspendable-call-attributed`'s `TrackedWrapper` violation; the regress gate caught it. Three fixtures lose only U rows, recorded as drops rows: `MemoClosure` in that fixture (claimed silent), five `read-after-await-reach` helpers each called in a memo's compute before any await, and the `value-walk-chain` caught cases (their SC5008 stands, as Chrome reports).
+
+<a id="adr-1112"></a>
+## ADR 1112 — A read in a `for await` body is unplaced, not silent, in the strict-read window arm
+**The gap.** The audit of main 28fde14bf (run 44353494239) found 8 secondary false cleans, all UNTRACKED_READ_AFTER_AWAIT: `mx-store-write-outside-setter-{effect,memo}-async-for-await-nested-assign-{direct,alias,tuple,hook}-none-cb-bundle`. The primary SC2003 violation fired, but the read of `s1.a` in `s1.a.v = 7`, in the body of a `for await` in a compute held by an object member (`cb1.cb`), had no row.
+- The read is part of a store-write chain, so no read site of its own reaches the after-await accounting. Its rows come from its execution role.
+- ADR 1038 taught `dominating_await_before` that a `for await` body follows the loop's suspension. `window_after_awaits` then gave the read `Unreported`, which silences every read rule, SC1002 included. That role is right for SC1001's strict-read window, but SC1002's question is a computation's flight, and nothing else asked it once the compute was an object member, which the tracked-computation path does not recognize.
+- The loop and `finally` forms stay `Unknown` and keep their rows.
+
+**Decision.** In `window_after_awaits` alone, only a statement-level dominating await (`follows_dominating_await_statement`) proves the window closed. A `for await` body falls to the arm that leaves an implicit suspension unplaced (`Unknown`), as that arm already says of one. A bundle compute's read now gets SC1001 `function-run-unplaced`, uncertifiable. `dominating_await_before` keeps ADR 1038's fallback for its other callers.
+*Evidence.* Release, VM, main 28fde14bf against this change:
+- the 8 programs: focus `--runtime-diff all` on main exit 1 (8 secondary-false-clean); on the fix exit 0, nothing needs a look;
+- scoped focus (STORE_WRITE_OUTSIDE_SETTER, UNTRACKED_READ_AFTER_AWAIT, STRICT_READ_UNTRACKED, six base grids, big codes sampled at 0.1): identical outcomes;
+- fixture `after-await-exact-callbacks`: its `ObjectSlotForAwait` cases, already uncertifiable, gain 3 SC1001 `function-run-unplaced` rows (a named rise).
+

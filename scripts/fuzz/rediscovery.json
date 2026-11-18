@@ -26263,5 +26263,23 @@
    "mx-sync-node-received-async-flw-settled-report-error-memo-direct-none"
   ],
   "rediscovered": "old harness (6be8e3e34), same checker: `focus.mjs --codes SYNC_NODE_RECEIVED_ASYNC --grids mx-census` on the ids fails (false-positive); this harness: 26 agree"
+ },
+ {
+  "finding": "A secondary UNTRACKED_READ_AFTER_AWAIT certified false clean beside STORE_WRITE_OUTSIDE_SETTER: the read of `s1.a` in `s1.a.v = 7`, in a `for await` body of an async compute held by an object member (`cb1.cb`, the cb-bundle source), had no row. ADR 1038's `for await` dominance made `window_after_awaits` answer `Unreported`, silencing every read rule, and the tracked-computation path does not recognize an object member's compute",
+  "found": "the audit of main 28fde14bf (run 44353494239): 8 secondary false cleans",
+  "fixed": "ADR 1112 (`body_roles.rs` `window_after_awaits`: only a statement-level dominating await proves the window closed; a `for await` body is unplaced)",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-effect-async-for-await-nested-assign-direct-none-cb-bundle",
+   "mx-store-write-outside-setter-effect-async-for-await-nested-assign-alias-none-cb-bundle",
+   "mx-store-write-outside-setter-effect-async-for-await-nested-assign-tuple-none-cb-bundle",
+   "mx-store-write-outside-setter-effect-async-for-await-nested-assign-hook-none-cb-bundle",
+   "mx-store-write-outside-setter-memo-async-for-await-nested-assign-direct-none-cb-bundle",
+   "mx-store-write-outside-setter-memo-async-for-await-nested-assign-alias-none-cb-bundle",
+   "mx-store-write-outside-setter-memo-async-for-await-nested-assign-tuple-none-cb-bundle",
+   "mx-store-write-outside-setter-memo-async-for-await-nested-assign-hook-none-cb-bundle"
+  ],
+  "rediscovered": "main 28fde14bf (release): focus --runtime-diff all by id, 8 secondary-false-clean (exit 1); this fix: 8 agree, nothing needs a look (exit 0)"
  }
 ]
