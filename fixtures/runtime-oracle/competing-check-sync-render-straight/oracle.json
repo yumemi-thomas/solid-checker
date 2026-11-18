@@ -1,0 +1,5 @@
+{
+  "note": "ADR 1052 part 5, negative: a sync memo straight in a render effect apply: the owned first run probes it, SYNC_NODE_RECEIVED_ASYNC; SC7002 stays a violation. Generated program `mx-sync-node-received-async-render-apply-memo-direct-none` (differential fuzzer, generator 2).",
+  "haltMarker": true,
+  "steps": []
+}

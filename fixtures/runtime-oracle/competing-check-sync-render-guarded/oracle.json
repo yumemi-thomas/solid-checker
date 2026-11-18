@@ -1,0 +1,10 @@
+{
+  "note": "ADR 1052 part 5: a sync memo in a render effect apply behind an early return: the owned first run skips it, the rerun meets PRIMITIVE_IN_EFFECT_CALLBACK; SC7002 uncertifiable. Generated program `mx-sync-node-received-async-render-apply-guarded-rerun-memo-direct-none` (differential fuzzer, generator 2).",
+  "haltMarker": true,
+  "steps": [
+    {
+      "action": "click",
+      "selector": "[data-act=\"b1\"], body:not(:has([data-act=\"b1\"])) > #sc-halted"
+    }
+  ]
+}
