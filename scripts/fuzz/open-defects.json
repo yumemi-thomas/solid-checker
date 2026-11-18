@@ -437,60 +437,6 @@
  ],
  "patterns": [
   {
-   "id": "api/r01-values-inline",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "api/r03-arrayfrom-inline",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "api/r05-entries-inline",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "census/a22-object-values",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "census/f10-getter-this-chain",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "returns/v11-for-of",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
    "id": "values/d2n-slice-element-write",
    "item": "R-carrier: census row at the carrier, none at the read or write",
    "outcome": "false-clean",
@@ -500,70 +446,7 @@
    "certified": false
   },
   {
-   "id": "values/d3-object-values",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
    "id": "values/d3-options-destructure",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "values/d3-sources-const",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "values/d5-json",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "values/d5-object-values",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "values/d5-view-then-json",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "values/d7-ambient-fn",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "values/d9-this-getter",
    "item": "R-carrier: census row at the carrier, none at the read or write",
    "outcome": "false-clean",
    "codes": [

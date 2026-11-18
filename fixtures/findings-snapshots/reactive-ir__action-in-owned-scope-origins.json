@@ -383,6 +383,17 @@
       "severity": "warning",
       "path": "fixtures/reactive-ir/action-in-owned-scope-origins/App.tsx",
       "start": 4958,
+      "end": 4966,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-origins/App.tsx",
+      "start": 4958,
       "end": 4964,
       "fixes": 0
     },
@@ -450,6 +461,17 @@
       "path": "fixtures/reactive-ir/action-in-owned-scope-origins/App.tsx",
       "start": 5104,
       "end": 5130,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-origins/App.tsx",
+      "start": 5194,
+      "end": 5220,
       "fixes": 0
     },
     {

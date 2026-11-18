@@ -4346,3 +4346,22 @@ Chrome (runtime-oracle case `after-await-class-value`, concurrency 2): main has 
 - `--program-boundary closed`: U 233,363 to 233,440, V 244 to 244.
 
 Both modes move the same rows, all SC1002: +76 `unresolved-invocation` in project code (a helper's call of a function value, the helper called from an object literal's methods: kui `csrf.ts` `release`, app-game `controller.ts`), +1 in a test, and +2 `function-run-unplaced`. Two `read-after-await-unaccounted` rows take `unresolved-invocation` at the same sites. No status moves, and no violation is lost or gained.
+
+<a id="adr-1104"></a>
+## ADR 1104 — A read through a carrier has a row at the read
+**The gap.** 17 known-open pattern programs (R-carrier, `scripts/fuzz/patterns`), all false cleans in Chrome on main 28fde14bf: the value-use census (ADR 0860's escaped walk) filed its SC9012 row where an accessor or root entered a carrier and stopped short of the read Chrome reports, so no row stood at the read.
+
+**Decision** (`value_use.rs`; every new row is SC9012 uncertifiable, the carrier's row stays):
+- (1) `for…of`: a holder a `for…of` iterates escapes, and past an escape a `for…of` that declares its own binding hands each element to it (`for (const f of Object.values(o)) f()`). Any other iteration is the use, as before.
+- (2) An element call past an escape (`Object.values(o)[0]()`) is a call of what the element may hold, whatever a standard type declares there.
+- (3) A holder literal whose methods or getters read `this` escapes each `this` member in it (`get v() { return this.s(); }`).
+- (4) A standard call handed an escaped root reads its members at the call (`JSON.stringify(props)`): a row at the call as well as at the argument.
+- (5) A global object's slot reaches a name whose only declaration is a bodiless function (`declare function ext2()`, which binds nothing at run time).
+- These walks run late: after every earlier escape walk, each on a step budget of its own, their rows kept apart until the end, and the withheld calls they meet not walked further (their row stands at the member). A first cut walked them in place and lost the only row at 142 corpus spans (a new use suppressed an earlier walk's "no use below" row, and the shared budget cut later walks); late, no span loses its row.
+
+**Measured** (release, main 28fde14bf against this):
+- Patterns (real Chrome): 13 of the 17 now pass; the 4 left are part 2 (`values/d2n-slice-element-write`, `values/d3-options-destructure`, `values/t5-helper-destructure-param`, `values/t5-store-helper-destructure`).
+- Smoke manifests of all 11 grids, checker-only (72k programs): no outcome moves.
+- Corpus (rc.21 frozen, 34 projects): development U 242,971 → 243,493 (+522; 529 rows new, 7 relabelled at their span), standard 230,303 → 230,876 (+573); V 244 and 236 unchanged; no span loses its last row. New rows are mostly `value-to-unresolved-callee` and `value-in-carrier` past carriers, and SC1001 `package-value-read`.
+
+**Evidence.** Fixture `carrier-read-rows`: rows at the element call, `this.s()`, `JSON.stringify(props)` and `ext()`; its twins (an element never called, a loop binding never called) keep only the carrier rows.

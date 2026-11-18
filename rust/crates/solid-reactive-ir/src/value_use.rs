@@ -61,6 +61,15 @@ struct Escape<'a> {
     blocker: &'static str,
 }
 
+/// ADR 1104: a walk past a carrier, run once every [`Escape`] walk of the reference has ended.
+enum Late<'a> {
+    Escape(Escape<'a>),
+    /// The uses of a declared name, in a mode past an escape.
+    Name(&'a FileFacts, Span, Mode),
+    /// A position, in a mode past an escape.
+    Position(&'a FileFacts, Span, Mode),
+}
+
 /// What a site past an escape does with the value.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Site {
@@ -419,6 +428,12 @@ pub(crate) struct Census<'l, 'a> {
     past_withheld: Vec<(&'a FileFacts, &'a solid_facts::ast::CallFact, Mode)>,
     /// ADR 0860: the open positions this reference's walk goes on from.
     escapes: Vec<Escape<'a>>,
+    /// ADR 1104: the walks past a carrier this ADR adds (an escape, a `for…of` binding's name, a position), run after every
+    /// [`Self::escapes`] walk on a budget of their own, so the rows those walks placed stay what they were.
+    late: Vec<Late<'a>>,
+    /// ADR 1104: the rows this ADR's sites place during the earlier walks, kept out of [`Self::uses`] so that no walk's "no use
+    /// below" answer moves; they join the escaped rows at the end.
+    late_rows: Vec<(Location, &'static str)>,
     /// ADR 0860: the rows the walks past an escape placed. They come after
     /// every other row: a row another producer, or a use before an escape,
     /// placed at the same start keeps its place.
@@ -501,6 +516,8 @@ impl<'l, 'a> Census<'l, 'a> {
             cut: false,
             past_withheld: Vec::new(),
             escapes: Vec::new(),
+            late: Vec::new(),
+            late_rows: Vec::new(),
             escaped_uses: Vec::new(),
             reached: Vec::new(),
             allowed: HashMap::default(),
@@ -737,9 +754,98 @@ impl<'l, 'a> Census<'l, 'a> {
             }
         }
         self.escapes.clear();
+        self.run_late();
         let escaped = self.uses.split_off(before);
         self.escaped_uses.extend(escaped);
+        let late_rows = std::mem::take(&mut self.late_rows);
+        self.escaped_uses.extend(late_rows);
         self.run_past_withheld();
+    }
+
+    /// ADR 1104: the late walks, on one budget of their own; one that runs past it leaves a row where it stopped, and the
+    /// reference's own cut is what the earlier walks made it.
+    fn run_late(&mut self) {
+        if self.late.is_empty() {
+            return;
+        }
+        let cut = self.cut;
+        // The withheld calls the earlier walks met, walked after this as before.
+        let earlier = std::mem::take(&mut self.past_withheld);
+        while !self.late.is_empty() {
+            let late = std::mem::take(&mut self.late);
+            for work in late {
+                // Each late walk has a budget of its own.
+                self.steps = 0;
+                self.parameter_hops = 0;
+                self.return_hops = 0;
+                match work {
+                    Late::Escape(escape) => {
+                        let mode = Mode::Escaped {
+                            root: escape.root,
+                            blocker: escape.blocker,
+                        };
+                        let recorded = self.uses.len();
+                        if let Position::Open(blocker) =
+                            self.escaped_through(escape.file, escape.at, escape.row, mode)
+                            && self.uses.len() == recorded
+                        {
+                            self.uses
+                                .push((escape.at.location(escape.file.path.as_str()), blocker));
+                        }
+                    }
+                    Late::Name(file, name, mode) => {
+                        self.name_uses(file, name, mode);
+                    }
+                    Late::Position(file, at, mode) => {
+                        let recorded = self.uses.len();
+                        if let Position::Open(blocker) = self.position(file, at, mode)
+                            && self.uses.len() == recorded
+                        {
+                            self.uses.push((at.location(file.path.as_str()), blocker));
+                        }
+                    }
+                }
+            }
+            // An escape a late walk met goes on late as well.
+            for escape in std::mem::take(&mut self.escapes) {
+                self.late.push(Late::Escape(escape));
+            }
+        }
+        self.cut = cut;
+        // A withheld call a late walk met keeps the row the walk placed at its member; the walks past it are not run, so the
+        // earlier walks' budget and cut are what they were.
+        self.past_withheld = earlier;
+    }
+
+    /// ADR 1104: [`Self::site`], its row kept apart from [`Self::uses`] (see [`Self::late_rows`]).
+    fn late_site(&mut self, file: &'a FileFacts, span: Span, site: Site, blocker: &'static str) {
+        let before = self.uses.len();
+        self.site(file, span, site, blocker);
+        let placed = self.uses.split_off(before);
+        self.late_rows.extend(placed);
+    }
+
+    /// ADR 1104: [`Self::escape`], for a walk run late.
+    fn late_escape(
+        &mut self,
+        file: &'a FileFacts,
+        at: Span,
+        row: Holder,
+        mode: Mode,
+        blocker: &'static str,
+    ) {
+        let root = match mode {
+            Mode::Value | Mode::Holder(_) => false,
+            Mode::Root | Mode::RootHolder(_) | Mode::RootParameter => true,
+            Mode::Escaped { .. } => return,
+        };
+        self.late.push(Late::Escape(Escape {
+            file,
+            at,
+            row,
+            root,
+            blocker,
+        }));
     }
 
     /// ADR 0876: what a withheld call may hand on, by a walk of its own that
@@ -1330,7 +1436,14 @@ impl<'l, 'a> Census<'l, 'a> {
             }
             Holder::Awaited => Position::Open(blockers::VALUE_THROUGH_AWAIT),
             Holder::Yielded => Position::Open(blockers::VALUE_THROUGH_GENERATOR),
-            Holder::Iterated => Position::Open(blockers::VALUE_IN_CARRIER),
+            Holder::Iterated => {
+                // ADR 1104: a carrier a `for…of` iterates hands what it holds to the loop's binding: its uses are walked as past an
+                // escape, each with a row.
+                if matches!(mode, Mode::Holder(_) | Mode::RootHolder(_)) {
+                    self.late_escape(file, at, row, mode, blockers::VALUE_IN_CARRIER);
+                }
+                Position::Open(blockers::VALUE_IN_CARRIER)
+            }
             // ADR 0923: the `catch` that binds it holds it where no row reads
             // it; its uses are walked as past an escape, each with a row.
             Holder::Thrown(_) => {
@@ -1567,7 +1680,14 @@ impl<'l, 'a> Census<'l, 'a> {
             }
             Holder::Awaited => Position::Open(blockers::VALUE_THROUGH_AWAIT),
             Holder::Yielded => Position::Open(blockers::VALUE_THROUGH_GENERATOR),
-            Holder::Iterated => Position::Open(blockers::VALUE_IN_CARRIER),
+            Holder::Iterated => {
+                // ADR 1104: a `for…of` declaring its own binding hands each element to it; the carrier's row stays. Any other
+                // iteration (a spread, `yield*`, an assignment target) is the use, as before.
+                for name in for_of_declared_names(file, at).unwrap_or_default() {
+                    self.late.push(Late::Name(file, name, mode));
+                }
+                Position::Open(blockers::VALUE_IN_CARRIER)
+            }
             Holder::Thrown(statement) => self.caught(file, statement, mode),
         }
     }
@@ -1613,6 +1733,10 @@ impl<'l, 'a> Census<'l, 'a> {
         let member = &ast.members[member];
         if let Some(call) = ast.calls_with_peeled_callee(member.span).next() {
             let property = member_key(file, member);
+            // ADR 1104: an element call (`held[0]()`) calls what the element may hold, whatever a standard type declares there.
+            if ast.computed_members.contains(&member.span) {
+                self.late_site(file, call_use_span(file, call.span), Site::Call, blocker);
+            }
             // `h.call(null)` calls `h`; `h.bind(null)` holds it.
             if matches!(property, Some("call" | "apply")) {
                 self.site(file, call.span, Site::Call, blocker);
@@ -1737,6 +1861,9 @@ impl<'l, 'a> Census<'l, 'a> {
             }
             if root {
                 self.site(file, at, Site::Read, blocker);
+                // ADR 1104: the standard call is where it reads the root's members (`JSON.stringify(props)` runs each getter): a row
+                // at the call too.
+                self.late_site(file, call_use_span(file, call.span), Site::Read, blocker);
             }
             self.handed_on(file, call, index, mode);
             return Position::Followed;
@@ -2073,11 +2200,22 @@ impl<'l, 'a> Census<'l, 'a> {
                 continue;
             };
             for identifier in &ast.identifiers {
-                if identifier.role == IdentifierRole::Reference
-                    && holder.source_text(identifier.span) == Some(key)
-                    && ast.reference_declaration(identifier.span).is_none()
+                // ADR 1104: a name whose only declaration is an ambient function (`declare function ext2(): number`) holds no
+                // binding at run time: it reads the global object's slot (walked late).
+                if identifier.role != IdentifierRole::Reference
+                    || holder.source_text(identifier.span) != Some(key)
                 {
-                    self.position(holder, identifier.span, mode);
+                    continue;
+                }
+                match ast.reference_declaration(identifier.span) {
+                    None => {
+                        self.position(holder, identifier.span, mode);
+                    }
+                    Some(declaration) if ambient_function(holder, declaration) => {
+                        self.late
+                            .push(Late::Position(holder, identifier.span, mode));
+                    }
+                    Some(_) => {}
                 }
             }
         }
@@ -2339,7 +2477,27 @@ impl<'l, 'a> Census<'l, 'a> {
             Some(literal) if !literal_reads_this(file, literal) => {
                 self.position(file, literal, held)
             }
-            _ => Position::Open(blockers::VALUE_IN_CARRIER),
+            Some(literal) => {
+                // ADR 1104: a method or getter of the literal reads its slots through `this` (`get v() { return this.s(); }`): each
+                // `this` member in it may be the value, and is walked as past an escape, with a row at each call, Get or write.
+                let members = file
+                    .ast
+                    .members
+                    .iter()
+                    .filter(|member| {
+                        literal.contains(member.span)
+                            && file.source_text(member.object) == Some("this")
+                    })
+                    .map(|member| member.span)
+                    .collect::<Vec<_>>();
+                for member in members {
+                    for holder in self.holders(file, member) {
+                        self.late_escape(file, member, holder, mode, blockers::VALUE_IN_CARRIER);
+                    }
+                }
+                Position::Open(blockers::VALUE_IN_CARRIER)
+            }
+            None => Position::Open(blockers::VALUE_IN_CARRIER),
         }
     }
 
@@ -3284,6 +3442,44 @@ fn object_spread_literal(file: &FileFacts, spread: Span) -> Option<Span> {
         .min();
     (array.is_none_or(|array| size(object) < array) && call.is_none_or(|call| size(object) < call))
         .then_some(object)
+}
+
+/// ADR 1104: the names a `for…of` declares, when `operand` is its iterated value: the binding written between the statement's
+/// start and the operand (its repeated left part), with no initializer.
+fn for_of_declared_names(file: &FileFacts, operand: Span) -> Option<Vec<Span>> {
+    let ast = &file.ast;
+    let (looped, left) = ast.loop_repeats.iter().find(|(looped, left)| {
+        left.end == operand.start
+            && left.start > looped.start
+            && ast.loop_statements.contains(looped)
+            && ast.iterated_operands.contains(&operand)
+    })?;
+    let names = ast
+        .bindings
+        .iter()
+        .filter(|binding| {
+            looped.contains(binding.pattern)
+                && left.contains(binding.pattern)
+                && binding.initializer.is_none()
+        })
+        .flat_map(|binding| binding.names.iter().map(|name| name.span))
+        .collect::<Vec<_>>();
+    (!names.is_empty()).then_some(names)
+}
+
+/// ADR 1104: `declaration` names a function declared with no body, and no declaration of that name in the file has one: an
+/// ambient declaration (`declare function f(): T`), which binds nothing at run time.
+fn ambient_function(file: &FileFacts, declaration: Span) -> bool {
+    let declarations = &file.ast.function_declarations;
+    let Some(name) = file.source_text(declaration) else {
+        return false;
+    };
+    declarations
+        .iter()
+        .any(|function| function.name.span == declaration && !function.has_body)
+        && !declarations
+            .iter()
+            .any(|function| function.has_body && file.source_text(function.name.span) == Some(name))
 }
 
 fn literal_reads_this(file: &FileFacts, literal: Span) -> bool {

@@ -1363,8 +1363,8 @@
         "why": "pending-review"
       },
       "name-only-match": {
-        "count": 4,
-        "why": "`this` is a reserved word: its source text identifies exactly the ThisExpression and no binding can shadow it, so the spelling is the syntax, not a name; `arguments` is a spelling used only to refuse a proof (the true branch returns None/false), so a miss or a shadowing declaration only makes the check more conservative"
+        "count": 5,
+        "why": "`this` is a reserved word (`literal_reads_this`, and ADR 1104's escape of a holder literal's `this` members): its source text identifies exactly the ThisExpression and no binding can shadow it, so the spelling is the syntax, not a name; `arguments` is a spelling used only to refuse a proof (the true branch returns None/false), so a miss or a shadowing declaration only makes the check more conservative"
       },
       "primitive-name-match": {
         "count": 3,

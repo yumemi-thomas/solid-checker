@@ -26318,5 +26318,29 @@
    "mx-untracked-read-after-await-pu-class-meth-x-direct-none"
   ],
   "rediscovered": "main 28fde14bf (release): `focus.mjs --codes UNTRACKED_READ_AFTER_AWAIT --grids mx-recall --ids` on the three fails (false-clean 3, the field form certified); the fix: recall-gap 3 (SC1002 function-run-unplaced at the read), exit 0"
+ },
+ {
+  "finding": "R-carrier: a reactive read through a value an accessor or root left in a carrier (an element call `Object.values(o)[0]()`, a `for…of` binding over a carrier, a holder literal's getter reading `this.s()`, a standard call reading a props or store root's getters such as `JSON.stringify(props)`, an ambient global function the program assigns): the census row stood at the carrier and none at the read",
+  "found": "open-defects patterns (R-carrier): api/r01-values-inline, api/r03-arrayfrom-inline, api/r05-entries-inline, census/a22-object-values, census/f10-getter-this-chain, returns/v11-for-of, values/d3-object-values, values/d3-sources-const, values/d5-json, values/d5-object-values, values/d5-view-then-json, values/d7-ambient-fn, values/d9-this-getter",
+  "fixed": "ADR 1104 (`value_use.rs`: for-of bindings past an escape, element calls, `this` members of a holder literal, a standard call's read of a root, ambient global functions)",
+  "grid": "patterns",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "api/r01-values-inline",
+   "api/r03-arrayfrom-inline",
+   "api/r05-entries-inline",
+   "census/a22-object-values",
+   "census/f10-getter-this-chain",
+   "returns/v11-for-of",
+   "values/d3-object-values",
+   "values/d3-sources-const",
+   "values/d5-json",
+   "values/d5-object-values",
+   "values/d5-view-then-json",
+   "values/d7-ambient-fn",
+   "values/d9-this-getter"
+  ],
+  "rediscovered": "make fuzz-patterns: false clean on main 28fde14bf; FIXED on the ADR 1104 tree (SC9012 uncertifiable at the read)",
+  "outside": "the pattern lane holds these programs (scripts/fuzz/patterns, make fuzz-patterns); no grid generator writes the carrier shapes yet"
  }
 ]
