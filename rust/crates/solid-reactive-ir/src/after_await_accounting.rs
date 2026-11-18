@@ -618,7 +618,22 @@ fn sites<'a>(
             };
             let (registration, host) = classify(file, call.span);
             // A construct is reported from its `new` token (the position a stack frame of `new K(…)` has), not from the callee after it.
-            let at = if call.construct && call.span.start <= callee.start {
+            // ADR 1097 (the review of fc71ff16a): a setter or library call whose argument coerces a value no fact proves primitive (`setW(`${host}`)`)
+            // runs that value's `toString` while the argument is evaluated: the read it makes has the argument's position on the stack, so the row
+            // stands there.
+            let coerced = matches!(via, "setter" | "library")
+                .then(|| {
+                    call.arguments.iter().find(|argument| {
+                        file.ast.coercing_operands.iter().any(|operand| {
+                            argument.span.contains(*operand)
+                                && !ctx.semantic_lookup.proven_primitive(file, *operand, 4)
+                        })
+                    })
+                })
+                .flatten();
+            let at = if let Some(argument) = coerced {
+                file.ast.peel_ts_sugar_span(argument.span)
+            } else if call.construct && call.span.start <= callee.start {
                 Span::new(call.span.start, callee.end)
             } else {
                 callee
