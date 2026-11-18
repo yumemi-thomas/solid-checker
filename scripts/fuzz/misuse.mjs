@@ -234,6 +234,8 @@ const DISPOSALS = { "dny-dispose-body": "body", "dny-dispose-memo": "memo", "dny
 /** The same triggers on an event of the measured list: nothing delivers it, and it keeps the proof. */
 const DENIED_LEGAL = ["dny-legal-keydown", "dny-legal-click", "dny-legal-pointer", "dny-legal-project-click", "dny-blur-lowercase"];
 const DENIED_OTHER = ["dny-blur-spread", "dny-typo-event", "dny-blur-dynamic", "dny-portal-dispose", "dny-load-append", "dny-load-for", "dny-load-show", "dny-unmount-flush-body", "dny-unmount-flush-root", "dny-insert-body", "dny-renamed-prop", "dny-shared-fn", "dny-chain-click"];
+/** ADR 1089 part E round 2: the Fable review's F1-F4, each breaking one premise of the handler-entry proof (see their cases). */
+const HANDLER_ENTRY_BREAKERS = ["evt-handler-shadow-load", "evt-handler-patched-listener", "evt-handler-escaped-key", "evt-handler-proto-setter"];
 const DENIED_CONTEXTS = [...Object.keys(DENIED), ...Object.keys(DISPOSALS), ...DENIED_OTHER];
 /** `flush()` in a denied handler, with no dispatch in the program (`a04`, `b03`, `b09`): SC2008. */
 const DENIED_FLUSH = ["dny-flush-unmount", "dny-flush-load", "dny-flush-popover"];
@@ -737,7 +739,7 @@ export const SPEC = {
   },
   // Defect codes no rule claims (codes.mjs `defect-unclaimed`): measured for "never quieter than Solid"; a silent checker is a false clean.
   // rc.17 dev-shared.js `assertNotInEffectCallback`: a memo, effect or root created with no owner in an effect callback belongs to nobody.
-  PRIMITIVE_IN_EFFECT_CALLBACK: { legal: ["body", "root"], recallContexts: ["effect-apply-rerun", "effect-apply-guard-open"],
+  PRIMITIVE_IN_EFFECT_CALLBACK: { legal: ["body", "root"], recallContexts: ["effect-apply-rerun", "effect-apply-guard-open", ...HANDLER_ENTRY_BREAKERS],
     // Effect apply only: in a render effect's apply rc.17 does not report it (the fast path fires it in every effect-apply cell).
     erVariants: ["jsx-insert", "jsx-attr", "jsx-spread", "jsx-fragment", "jsx-component"],
     recallVariants: ["signal-fn", "projection", "render", "jsx-insert", "jsx-attr", "jsx-spread", "jsx-fragment", "jsx-component"], recallLegalVariants: ["signal-fn", "projection", "jsx-insert", "jsx-attr", "jsx-spread", "jsx-fragment", "jsx-component", "jsx-static"],
@@ -1914,6 +1916,46 @@ function inContext(context, stmts, kit) {
       const attach = expr(domExpr(`document.createElement("div").attachShadow({ mode: "open" }).appendChild(${el} as HTMLElement)`));
       const fire = expr(domExpr(`(${el} as HTMLElement).dispatchEvent(new Event("scroll"))`));
       return { body: [made, attach, expr(prim("effect", fn([ret(num(1))]), { apply: fn([fire]) }))], view: [] };
+    }
+    // ADR 1089 part E round 2 (the Fable review's F1-F4, coord-land/review-1089e.md): an intrinsic element's anonymous `on*` handler
+    // run from an effect's apply other than by an event delivery that sets `window.event`, so the creation in it meets the
+    // effect-callback guard (Chrome rc.21: PRIMITIVE_IN_EFFECT_CALLBACK). Each breaks one premise of the handler-entry proof.
+    case "evt-handler-shadow-load": {
+      // F1: an iframe moved into a shadow root by the apply fires `load` before the call returns, with `window.event` unset.
+      const el = kit.name("el");
+      const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "iframe", on: "onLoad", undriven: true })));
+      const attach = expr(domExpr(`document.createElement("div").attachShadow({ mode: "open" }).appendChild(${el} as HTMLElement)`));
+      return { body: [made, expr(prim("effect", fn([ret(num(1))]), { apply: fn([attach]) }))], view: [] };
+    }
+    case "evt-handler-patched-listener": {
+      // F2: a replaced `EventTarget.prototype.addEventListener` keeps the listener Solid adds for an event it does not delegate.
+      const el = kit.name("el"), taken = kit.name("taken"), add = kit.name("add");
+      const patch = [
+        decl(taken, domExpr("[] as EventListener[]")),
+        decl(add, domExpr("EventTarget.prototype.addEventListener")),
+        expr(domExpr(`EventTarget.prototype.addEventListener = function (this: EventTarget, type: string, listener: EventListenerOrEventListenerObject | null, options?: boolean | AddEventListenerOptions) { if (typeof listener === "function") ${taken}.push(listener); return ${add}.call(this, type, listener, options); }`)),
+      ];
+      const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onScroll", undriven: true })));
+      const run = expr(domExpr(`for (const run of ${taken}) run(new Event("scroll"))`));
+      return { body: [...patch, made, expr(prim("effect", fn([ret(num(1))]), { apply: fn([run]) }))], view: [] };
+    }
+    case "evt-handler-escaped-key": {
+      // F3: the handler Solid stored on the element read under an escaped string key and called.
+      const el = kit.name("el");
+      const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { undriven: true })));
+      const run = expr(domExpr(`((${el} as unknown as Record<string, (() => void) | undefined>)["_\\x24\\x24click"])?.()`));
+      return { body: [made, expr(prim("effect", fn([ret(num(1))]), { apply: fn([run]) }))], view: [] };
+    }
+    case "evt-handler-proto-setter": {
+      // F4: a setter on `Element.prototype` under the key built as Solid builds it takes the handler.
+      const el = kit.name("el"), taken = kit.name("taken");
+      const patch = [
+        decl(taken, domExpr("[] as Array<() => void>")),
+        expr(domExpr(`Object.defineProperty(Element.prototype, "_$$" + "click", { configurable: true, set(this: Element, handler: () => void) { ${taken}.push(handler); } })`)),
+      ];
+      const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { undriven: true })));
+      const run = expr(domExpr(`for (const run of ${taken}) run()`));
+      return { body: [...patch, made, expr(prim("effect", fn([ret(num(1))]), { apply: fn([run]) }))], view: [] };
     }
     // ADR 0639: `flush()`'s guard takes no event, and the dispatch that reaches it may sit in a helper or on `window`.
     case "evt-apply-helper-dispatch": {

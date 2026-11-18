@@ -234,6 +234,26 @@ impl SemanticLookup<'_> {
         })
     }
 
+    /// ADR 1089 part E, round 2 (on ADR 1120's per-question API): the files whose realm may reach a handler Solid stored on an element,
+    /// with the first hazard found ([`crate::plain_premise::stored_handler_hazard`]), computed once per build.
+    pub(crate) fn stored_handler_reach(
+        &self,
+    ) -> &std::collections::BTreeMap<String, (String, &'static str)> {
+        crate::base::reads::note(crate::base::reads::Section::StoredHandlerReach);
+        self.stored_handler_reach.get_or_init(|| {
+            let realms = crate::plain_premise::realms(self);
+            crate::plain_premise::ask_by_realm(self, &realms, &|file| {
+                crate::plain_premise::stored_handler_hazard(self, file)
+            })
+        })
+    }
+
+    /// Whether code that may run in the realm of `path` may reach a stored handler: false is the premise that an anonymous `on*`
+    /// handler written in `path` is entered by event delivery alone.
+    pub(crate) fn stored_handler_reachable_from(&self, path: &str) -> bool {
+        self.stored_handler_reach().contains_key(path)
+    }
+
     /// ADR 1115: whether some listener of the program may sit in a shadow tree ([`scan_shadow_roots`]), scanned once per build.
     pub(crate) fn shadow_roots_possible(&self) -> bool {
         crate::base::reads::note(crate::base::reads::Section::ShadowRoots);

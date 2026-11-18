@@ -415,3 +415,260 @@ pub(crate) fn census(lookup: &SemanticLookup<'_>) -> Vec<CensusRow> {
     });
     rows
 }
+
+/// ADR 1120 part 4: the per-question API. A proof asks a narrow question of the code that may run in the same realm as a file (the
+/// union of the closures of every entry module whose closure holds it), instead of asking whether the whole program is plain: one
+/// undecided package elsewhere answers nothing about this file. Entries and closures are those of [`census`] (static value loads,
+/// the bundler's resolution or TypeScript's, a package by its analysed files).
+pub(crate) struct Realms {
+    files: Vec<String>,
+    /// Each entry's closure, as indexes into `files`.
+    closures: Vec<BTreeSet<usize>>,
+}
+
+/// The program's entries and their closures.
+pub(crate) fn realms(lookup: &SemanticLookup<'_>) -> Realms {
+    let all = lookup.files();
+    let program: BTreeSet<&str> = all.iter().map(|file| file.path.as_str()).collect();
+    let files: Vec<String> = all.iter().map(|file| file.path.to_string()).collect();
+    let index: BTreeMap<&str, usize> = files
+        .iter()
+        .enumerate()
+        .map(|(at, path)| (path.as_str(), at))
+        .collect();
+    let mut edges: Vec<Vec<usize>> = vec![Vec::new(); files.len()];
+    let mut loaded = vec![false; files.len()];
+    for (at, file) in all.iter().enumerate() {
+        for load in loads(lookup, file, &program) {
+            let targets = match load {
+                Load::Read(path) => vec![path],
+                Load::Package(paths) => paths,
+                // Not an analysed file: no edge (its hazard is the file's own, `stored_handler_hazard`).
+                Load::Style(_) | Load::Asset(_) | Load::Unread(_) => continue,
+            };
+            for target in targets {
+                if let Some(&to) = index.get(target.as_str())
+                    && to != at
+                {
+                    edges[at].push(to);
+                    loaded[to] = true;
+                }
+            }
+        }
+    }
+    let mut roots: Vec<usize> = (0..files.len())
+        .filter(|&at| !is_package(&files[at]) && !loaded[at])
+        .collect();
+    if roots.is_empty() {
+        roots = (0..files.len())
+            .filter(|&at| !is_package(&files[at]))
+            .collect();
+    }
+    let closures = roots
+        .into_iter()
+        .map(|root| {
+            let mut reach = BTreeSet::new();
+            let mut queue = VecDeque::from([root]);
+            while let Some(at) = queue.pop_front() {
+                if reach.insert(at) {
+                    queue.extend(edges[at].iter().copied());
+                }
+            }
+            reach
+        })
+        .collect();
+    Realms { files, closures }
+}
+
+/// For each analysed file, the first hazard `question` finds in the realm that may run it: `(file, why)`. A file in no entry's closure
+/// (code nothing loads) is answered as its own realm.
+pub(crate) fn ask_by_realm(
+    lookup: &SemanticLookup<'_>,
+    realms: &Realms,
+    question: &dyn Fn(&FileFacts) -> Option<&'static str>,
+) -> BTreeMap<String, (String, &'static str)> {
+    let all = lookup.files();
+    let found: Vec<Option<&'static str>> = all.iter().map(question).collect();
+    let mut answer: BTreeMap<String, (String, &'static str)> = BTreeMap::new();
+    let mut in_realm = vec![false; realms.files.len()];
+    for closure in &realms.closures {
+        let hazard = closure
+            .iter()
+            .find_map(|&at| found[at].map(|why| (realms.files[at].clone(), why)));
+        for &at in closure {
+            in_realm[at] = true;
+            if let Some(hazard) = &hazard {
+                answer
+                    .entry(realms.files[at].clone())
+                    .or_insert_with(|| hazard.clone());
+            }
+        }
+    }
+    for (at, seen) in in_realm.iter().enumerate() {
+        if !seen && let Some(why) = found[at] {
+            answer.insert(realms.files[at].clone(), (realms.files[at].clone(), why));
+        }
+    }
+    answer
+}
+
+/// The standard readers of own keys: a call of one may hand out the key Solid stores a handler under.
+const KEY_EXPOSING_CALLS: &[&str] = &[
+    "ObjectConstructor.keys",
+    "ObjectConstructor.values",
+    "ObjectConstructor.entries",
+    "ObjectConstructor.getOwnPropertyNames",
+    "ObjectConstructor.getOwnPropertyDescriptor",
+    "ObjectConstructor.getOwnPropertyDescriptors",
+    "ObjectConstructor.getOwnPropertySymbols",
+    "ObjectConstructor.assign",
+    "Reflect.ownKeys",
+    "Reflect.get",
+    "Reflect.getOwnPropertyDescriptor",
+];
+
+/// The listener API whose replacement keeps or runs a handler: a write under one of these names may be a patch of `EventTarget`.
+const LISTENER_API: [&str; 3] = ["addEventListener", "removeEventListener", "dispatchEvent"];
+
+/// ADR 1089 part E, round 2: why code of this file may reach a handler rc.21 `@solidjs/web` stored on an element
+/// (`node["_$$" + name]`, `node["_$$" + name + "Data"]`, `dist/web.dev.js:480, 790-799`), or run a non-delegated one other than by
+/// event delivery, or deliver it with `window.event` unset; `None` when it may do none. Every value may be an element here. Keys are
+/// compared by their cooked value (ADR 1120 K3), never by source text:
+/// - a premise site: Proxy or `Reflect`, a prototype route (`prototype`, `defineProperty`, `getPrototypeOf`, …), `Object.assign` onto
+///   a value not made in place, a key holding `$$` or starting `_$` (read or written), a shadow-root spelling, `with`, a write under a
+///   listener-API name or under a key no proof narrows, a global write of a listener-API name;
+/// - code built from a string (`code_sinks`);
+/// - a computed key nothing proves, or proven to be a text holding `$$` or starting `_$` (`"_$$" + "click"`);
+/// - an object pattern with a rest or a key that is no plain name, an assigned object pattern, a spread that copies own keys (an
+///   object's or a JSX spread attribute), a `for … in` (a text test, which only refuses more), a standard reader of own keys;
+/// - a module the build does not read (and an asset a plugin may make code).
+pub(crate) fn stored_handler_hazard(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+) -> Option<&'static str> {
+    use solid_facts::ast::PremiseClause as C;
+    let ast = &file.ast;
+    for site in &ast.premise_sites {
+        let hit = match site.clause {
+            C::ProxyOrReflect => Some("proxy"),
+            C::PrototypeRoute => Some("prototype-route"),
+            C::ObjectAssign => Some("object-assign"),
+            C::PrivateKey => Some("private-key"),
+            C::ShadowRoot => Some("shadow-root"),
+            C::With => Some("with"),
+            C::StandardKeyWrite | C::GlobalWrite
+                if site.key == "*" || LISTENER_API.contains(&site.key.as_str()) =>
+            {
+                Some("listener-api-write")
+            }
+            C::StandardKeyWrite | C::GlobalWrite | C::CoercionHook | C::Accessor => None,
+        };
+        if hit.is_some() {
+            return hit;
+        }
+    }
+    if !ast.code_sinks.is_empty() {
+        return Some("code-from-string");
+    }
+    if ast.computed_keys.iter().any(|key| {
+        !key.proven
+            || key
+                .texts
+                .iter()
+                .any(|text| text.contains("$$") || text.starts_with("_$"))
+    }) {
+        return Some("computed-key");
+    }
+    let patterns = ast
+        .bindings
+        .iter()
+        .chain(
+            ast.functions
+                .iter()
+                .flat_map(|function| function.parameters.iter()),
+        )
+        .any(|binding| {
+            binding.shape == solid_facts::ast::BindingShape::Object
+                && (binding.names.len() != binding.object_slots.len()
+                    || binding
+                        .object_slots
+                        .iter()
+                        .any(|slot| !slot.plain_identifier_key))
+        });
+    if patterns {
+        return Some("object-pattern");
+    }
+    if ast.assignments.iter().any(|assignment| {
+        file.source_text(ast.peel_ts_sugar_span(assignment.target))
+            .is_some_and(|target| target.trim_start_matches('(').trim_start().starts_with('{'))
+    }) {
+        return Some("assigned-pattern");
+    }
+    // An array element's or a call argument's spread iterates its operand (`[...xs]`, `f(...xs)`): it exposes no key. Any other
+    // spread copies own keys (an object literal's), and so does a JSX spread attribute.
+    let same_spread = |at: solid_facts::core::Span, spread: &solid_facts::ast::SpreadFact| {
+        at == spread.span || (spread.span.contains(at) && at.contains(spread.argument))
+    };
+    let iterated = |spread: &solid_facts::ast::SpreadFact| {
+        ast.array_literal_elements.iter().any(|literal| {
+            literal.elements.iter().any(|element| {
+                element.kind == solid_facts::ast::ArrayElementKind::Spread
+                    && same_spread(element.span, spread)
+            })
+        }) || ast.calls.iter().any(|call| {
+            call.arguments
+                .iter()
+                .any(|argument| argument.spread && same_spread(argument.span, spread))
+        })
+    };
+    if ast.spreads.iter().any(|spread| !iterated(spread))
+        || ast
+            .jsx_elements
+            .iter()
+            .any(|element| !element.spreads.is_empty())
+    {
+        return Some("spread");
+    }
+    if source_has_for_in(&file.source) {
+        return Some("for-in");
+    }
+    if ast.calls.iter().any(|call| {
+        lookup
+            .resolved_callee_call(file, call.callee)
+            .and_then(|resolved| resolved.declaration.as_ref())
+            .is_some_and(|declaration| {
+                declaration.standard_library
+                    && KEY_EXPOSING_CALLS.contains(&declaration.qualified_name.as_ref())
+            })
+    }) {
+        return Some("key-call");
+    }
+    let program: BTreeSet<&str> = lookup
+        .files()
+        .iter()
+        .map(|file| file.path.as_str())
+        .collect();
+    if loads(lookup, file, &program)
+        .iter()
+        .any(|load| matches!(load, Load::Unread(_) | Load::Asset(_)))
+    {
+        return Some("unread-module");
+    }
+    None
+}
+
+/// Whether `source` has a `for (` whose head, up to its first `;` or `)`, holds ` in ` (a superset of `for … in`).
+fn source_has_for_in(source: &str) -> bool {
+    source.match_indices("for").any(|(at, _)| {
+        let before = source[..at].chars().next_back();
+        let rest = source[at + 3..].trim_start();
+        if before.is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '$')
+            || !rest.starts_with('(')
+        {
+            return false;
+        }
+        let head = &rest[1..];
+        let end = head.find([';', ')']).unwrap_or(head.len());
+        head[..end].split_whitespace().any(|word| word == "in")
+    })
+}

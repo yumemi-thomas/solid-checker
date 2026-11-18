@@ -1,0 +1,16 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/event-handler-entry/variants/listener-patch/App.tsx",
+      "start": 997,
+      "end": 1004,
+      "fixes": 0
+    }
+  ]
+}

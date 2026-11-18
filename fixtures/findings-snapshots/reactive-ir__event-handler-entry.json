@@ -1,0 +1,26 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-owner-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/event-handler-entry/App.tsx",
+      "start": 506,
+      "end": 513,
+      "fixes": 0
+    },
+    {
+      "rule": "no-await-primitive-in-tracked-scope",
+      "code": "SC2004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/event-handler-entry/App.tsx",
+      "start": 754,
+      "end": 761,
+      "fixes": 0
+    }
+  ]
+}

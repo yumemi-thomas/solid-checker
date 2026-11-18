@@ -1,0 +1,262 @@
+type DistributeOverride<T, F> = T extends undefined ? F : T;
+type Override<T, U> = T extends any ? U extends any ? {
+    [K in keyof T]: K extends keyof U ? DistributeOverride<U[K], T[K]> : T[K];
+} & {
+    [K in keyof U]: K extends keyof T ? DistributeOverride<U[K], T[K]> : U[K];
+} : T & U : T & U;
+type OverrideSpread<T, U> = T extends any ? {
+    [K in keyof ({
+        [K in keyof T]: any;
+    } & {
+        [K in keyof U]?: any;
+    } & {
+        [K in U extends any ? keyof U : keyof U]?: any;
+    })]: K extends keyof T ? Exclude<U extends any ? U[K & keyof U] : never, undefined> | T[K] : U extends any ? U[K & keyof U] : never;
+} : T & U;
+type Simplify<T> = T extends any ? {
+    [K in keyof T]: T[K];
+} : T;
+type _Merge<T extends unknown[], Curr = {}> = T extends [
+    infer Next | (() => infer Next),
+    ...infer Rest
+] ? _Merge<Rest, Override<Curr, Next>> : T extends [...infer Rest, infer Next | (() => infer Next)] ? Override<_Merge<Rest, Curr>, Next> : T extends [] ? Curr : T extends (infer I | (() => infer I))[] ? OverrideSpread<Curr, I> : Curr;
+export type Merge<T extends unknown[]> = Simplify<_Merge<T>>;
+/** @internal What a source ENTRY is, decided once when the view is built
+ * (`merge()` learns it while flattening; `omit()` from its argument) and
+ * carried beside the entry — `MergeView.kinds[i]`, `OmitView.kind` — so no
+ * read has to ask. Asking is the cost: any brand check on a Proxy is a trap
+ * (`instanceof` is a `getPrototypeOf` trap, ~20 ns on a store — as much as
+ * the read itself), and a merge over a store did two per read. */
+export declare const SOURCE_PLAIN = 0;
+export declare const SOURCE_OMIT = 1;
+export declare const SOURCE_PROXY = 2;
+export declare const SOURCE_MEMO = 3;
+export declare const SOURCE_MERGE = 4;
+export type SourceKind = 0 | 1 | 2 | 3 | 4;
+/** @internal The record behind an `omit()` proxy: `source` with `hidden`
+ * keys removed. It is the proxy's TARGET, so the shared handler reads it as
+ * plain fields — no per-instance closures — and it is what props consumers
+ * walk directly (`merge`, `spread`, `ssrElement`): a view never materializes
+ * a copy, and a consumer that knows the record never goes through its traps
+ * (a `getOwnPropertyDescriptor` trap per key allocates a descriptor and a
+ * getter, so enumerating a proxy costs more than the copy it was avoiding).
+ * `hidden` is a key list or a predicate (`omit(props, k => k[0] === "$")`).
+ *
+ * An omit over a `merge()` holds the merge's RECORD (`MergeView`, kind
+ * `SOURCE_MERGE`) — never its proxy, so no read hops through a trap — and is
+ * one record however many leaves the merge has. A consumer walks it as ONE
+ * filtered entry (`sourceKeys` / `sourceGet` recurse into the merge's
+ * sources by function call), and a later `merge()` over it carries the
+ * record as one entry instead of copying its leaves: on a component chain of
+ * defaults + omit + spread (`merge(omit(merge(omit(props))))`) the layers
+ * nest as records, each a few fields, where a flatten to leaf views built a
+ * view and a combined key list per leaf per layer — the largest allocation
+ * of a Kobalte-shaped render. A merge leaf may be merge's memo for a
+ * function source; it is resolved on access. */
+export declare class OmitView {
+    source: any;
+    /** of `source` — PLAIN, PROXY (a store or a foreign proxy), MEMO, or
+     * MERGE (a `MergeView` record); never OMIT, a view over a view folds
+     * into one. */
+    kind: SourceKind;
+    hidden: Hidden;
+    /** see `MergeView.table` */
+    table: Map<PropertyKey, any> | null | number;
+    /** see `tableOwnKeys` / `tableDescriptor` */
+    keys: (string | symbol)[] | undefined;
+    descs: Map<PropertyKey, PropertyDescriptor> | undefined;
+    constructor(source: any, 
+    /** of `source` — PLAIN, PROXY (a store or a foreign proxy), MEMO, or
+     * MERGE (a `MergeView` record); never OMIT, a view over a view folds
+     * into one. */
+    kind: SourceKind, hidden: Hidden);
+}
+type Hidden = PropertyKey[] | ((key: PropertyKey) => boolean);
+/** @internal The `OmitView` behind an `omit()` proxy, or undefined. */
+export declare function omitView(o: any): OmitView | undefined;
+/** @internal Own string keys of a source entry — every consumer skips
+ * symbols itself. */
+export declare function sourceKeys(s: any, kind: SourceKind): (string | symbol)[];
+/** @internal `key in entry`. */
+export declare function sourceHas(s: any, kind: SourceKind, key: PropertyKey): boolean;
+/** @internal `entry[key]` — the source's getter runs once, here. */
+export declare function sourceGet(s: any, kind: SourceKind, key: PropertyKey): any;
+/** @internal Whether the own key set of a props object cannot change
+ * reactively: a plain object, or a merge/omit view over plain objects only.
+ * A consumer may then decide from `Object.getOwnPropertyDescriptor` once —
+ * "no `children` key" or "a data `children`" holds for the object's lifetime,
+ * so no tracking scope is needed for it (#3388). For a store, or a view with
+ * a store or memo leaf, keys can appear later and the reactive path is the
+ * only correct one. */
+export declare function hasStaticKeys(o: any): boolean;
+/**
+ * Whether `o[key]` can never change for the lifetime of `o`: the key is a
+ * data property of a plain object, or is absent from an object whose key set
+ * is fixed. A getter, a key on a store, a memo-backed `merge()` source, or
+ * any key of an object whose keys can appear later (a store) is not static.
+ *
+ * Looks through `merge()`/`omit()` views to the leaf that owns the key. Any
+ * object will do, but props are the case it exists for: the compiler encodes
+ * a literal at the call site (`as="button"`) as a data property and an
+ * expression (`as={isLink() ? "a" : "button"}`) as a getter, so a component
+ * library reads the caller's own static/dynamic classification of a prop at
+ * runtime — identically on server and client, the compiler emitting the same
+ * own DESCRIPTORS on both (the object behind them may differ: the server
+ * builds props as a plain-prototype instance with shared getters) — and can
+ * take a no-computation path for the literal:
+ *
+ * ```tsx
+ * const Tag = dynamic(() => props.as, { static: isStatic(props, "as") });
+ * ```
+ *
+ * One descriptor lookup; no read of the value, nothing tracked.
+ */
+export declare function isStatic(o: object, key: PropertyKey): boolean;
+/** @internal */
+export declare class MergeView {
+    sources: any[];
+    /** `kinds[i]` is what `sources[i]` is (see `SourceKind`). */
+    kinds: SourceKind[];
+    /** key → the plain leaf that owns it (later sources win), built by an
+     * enumeration or once the reads have paid for it (see `resolvedTable`)
+     * when every leaf has static keys; `null` when one doesn't. Until then
+     * the slot counts the per-key trap reads so far. One slot rather than a
+     * counter field of its own: a view is built per source per component
+     * layer, and each field initializer is a measurable share of a
+     * constructor that small in the lower JIT tiers. */
+    table: Map<PropertyKey, any> | null | number;
+    /** see `tableOwnKeys` / `tableDescriptor` */
+    keys: (string | symbol)[] | undefined;
+    descs: Map<PropertyKey, PropertyDescriptor> | undefined;
+    constructor(sources: any[], 
+    /** `kinds[i]` is what `sources[i]` is (see `SourceKind`). */
+    kinds: SourceKind[]);
+}
+/** @internal The `MergeView` behind a `merge()` proxy — its flattened
+ * `sources` with their `kinds` — or undefined. */
+export declare function mergeView(o: any): MergeView | undefined;
+/** @internal The record behind a merge() or omit() proxy — a `MergeView`
+ * (flattened `sources` with their `kinds`) or an `OmitView` — or undefined
+ * for anything else (a plain object, a store, a foreign proxy). Two fast
+ * traps on a proxy (`has`, then `$RECORD`), none on a plain object. */
+export declare function viewOf(o: any): MergeView | OmitView | undefined;
+/** @internal The resolved key table of a merge/omit view — every own key of
+ * the view mapped to the plain object that owns it, in merged order (a key
+ * at the position of the last source that carries it, see `tableSet`) — or
+ * undefined when it has none: a leaf is a store or a memo source, whose
+ * keys can change, or the object is not a view at all.
+ *
+ * This is the flat object the eager copy used to build, made lazily and
+ * without copying: one pass over the leaves' own keys, then every
+ * `get`/`has`/descriptor is one lookup plus one read of the owning leaf, and
+ * a consumer (`spread` rerunning its effect) walks the table instead of
+ * re-deriving shadowing from the leaves each time. Own keys only, as the
+ * copy's were: a plain source's key set is fixed once merged (keys added to
+ * it later are not seen — the copy didn't see them either).
+ *
+ * It is built by an ENUMERATION — the `ownKeys` trap, or a consumer asking
+ * for it here — or once per-key reads have paid for it (`READS_FOR_TABLE`),
+ * not on the first read. A per-key read has a direct answer (a walk of the
+ * sources, last to first, one `in` each) whose cost is the source count,
+ * while the table's is every key of every leaf, so the walk wins until a
+ * view has been read about as many times as it has keys. On the server it
+ * never is: a component reads its props a few times, the element enumerates
+ * them once through its own source walk, and the view is gone — building on
+ * first read there cost a component chain a table per layer (profiled on
+ * the Kobalte-shaped chain: a third of SSR time in the table code and its
+ * garbage). On the
+ * client a view read on every reactive rerun crosses the threshold in its
+ * first few updates and is one lookup per read from then on, as before.
+ * Once built — by a `spread`, `Object.keys`, `{...props}`, or the count —
+ * every trap uses it. */
+export declare function resolvedTable(o: any): Map<PropertyKey, any> | undefined;
+/** @internal Every own string key of a props SOURCE — a plain object, a
+ * store or foreign proxy, or a merge/omit view — appended to `keys` in
+ * merged order with the object that owns each at the same index of
+ * `owners`: a key already listed (by this source or an earlier one) moves
+ * to the end, so several sources collected in turn give the order and the
+ * winners a merge of them would. A consumer that reads each key once
+ * (`ssrElement`) then reads `owners[i][keys[i]]` — the owner's getter runs
+ * there, once — and asks nothing else of a view: no table, no `in` walk per
+ * key through the merge/omit layers, no key list per leaf. One pass,
+ * however deep the layers nest. Symbols are listed; the consumer skips
+ * them. */
+export declare function sourceOwners(s: any, keys: (string | symbol)[], owners: any[]): void;
+/** @internal The flattened sources behind a `merge()` proxy, or undefined.
+ * A merge's writes are no-ops, so its sources are the whole truth. A COPY of
+ * a merge (`{...merged}`, a descriptor copy) is a plain object that carries
+ * no sources — `ownKeys` never lists $RECORD — so what is on the copy is
+ * the truth there and every consumer reads it directly (#3384). */
+export declare function mergeSources(o: any): any[] | undefined;
+/**
+ * Merges multiple props-like objects into a single proxy that *preserves
+ * reactivity*. Reads are forwarded to the right-most source that defines the
+ * property, so later sources override earlier ones (like `Object.assign`).
+ *
+ * Function arguments are treated as memo-backed sources — useful for passing
+ * derived defaults whose computation should track reactively.
+ *
+ * The result is a live VIEW of its sources, never a copy: creating it costs
+ * nothing per key, every read goes to the source that owns the key (a getter
+ * runs there, a data property is read live), and writing to it is a no-op.
+ * A single non-function source is returned as is. To own a mutable object,
+ * copy it: `{ ...merged }` snapshots the current values.
+ *
+ * Use this in component bodies to merge defaults / overrides without losing
+ * Solid's per-property tracking.
+ *
+ * Reading props, here and anywhere: a prop's getter is defined only for a
+ * read through its own object (`props.x`, `{ ...props }`, `Reflect.get`,
+ * these views). Forwarding its descriptor onto another object and reading it
+ * there is not supported — the compiler's server-side props keep their state
+ * on the instance, so the getter needs its object as receiver. A copy that
+ * must stay live defines its own getter that reads through the source, as
+ * the no-Proxy paths of merge() and omit() do.
+ *
+ * @example
+ * ```tsx
+ * function Button(_props: { label: string; type?: string; disabled?: boolean }) {
+ *   const props = merge({ type: "button", disabled: false }, _props);
+ *
+ *   return <button type={props.type} disabled={props.disabled}>{props.label}</button>;
+ * }
+ * ```
+ */
+export declare function merge<T extends unknown[]>(...sources: T): Merge<T>;
+export type Omit<T, K extends readonly (keyof T)[]> = {
+    [P in keyof T as Exclude<P, K[number]>]: T[P];
+};
+/**
+ * Returns a reactive proxy of `props` with the listed keys hidden. Tracking
+ * on the remaining keys is preserved.
+ *
+ * Use it to forward "rest" props to a child element while pulling out the
+ * keys your component handles itself — the equivalent of `splitProps(p, ["a","b"])[1]`.
+ *
+ * The result is a live VIEW of `props`, not a copy: nothing is read or
+ * materialized until a key is used, and a spread (`{...rest}`) or a later
+ * `merge()` walks the underlying object directly. A predicate hides keys by
+ * rule instead of by name — `omit(props, k => k[0] === "$")` — without
+ * enumerating first.
+ *
+ * @example
+ * ```tsx
+ * function Input(props: { label: string; value: string; onInput: (v: string) => void } & JSX.HTMLAttributes<HTMLInputElement>) {
+ *   const rest = omit(props, "label", "value", "onInput");
+ *
+ *   return (
+ *     <label>
+ *       {props.label}
+ *       <input
+ *         {...rest}
+ *         value={props.value}
+ *         onInput={e => props.onInput(e.currentTarget.value)}
+ *       />
+ *     </label>
+ *   );
+ * }
+ * ```
+ */
+export declare function omit<T extends Record<any, any>, K extends readonly (keyof T)[]>(props: T, ...keys: K): Omit<T, K>;
+export declare function omit<T extends Record<any, any>>(props: T, hidden: (key: keyof T & (string | symbol)) => boolean): Partial<T>;
+export {};

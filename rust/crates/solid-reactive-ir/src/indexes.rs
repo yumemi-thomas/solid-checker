@@ -898,6 +898,9 @@ pub(super) struct SemanticLookup<'a> {
     reflective_prototype_write: crate::base::reads::Recorded<bool>,
     /// ADR 1115: whether a listener of the program may sit in a shadow tree (`event_delivery::scan_shadow_roots`).
     shadow_roots: crate::base::reads::Recorded<bool>,
+    /// ADR 1089 part E, round 2: for each file whose realm may reach a stored handler, the first hazard (`plain_premise::stored_handler_hazard`).
+    stored_handler_reach:
+        crate::base::reads::Recorded<std::collections::BTreeMap<String, (String, &'static str)>>,
     raw_store_values: crate::base::reads::Recorded<bool>,
     /// ADR 0320: whether some call may copy keys into an existing object.
     objects_assigned_into: crate::base::reads::Recorded<bool>,
@@ -1321,6 +1324,7 @@ impl<'a> SemanticLookup<'a> {
             callee_covers: crate::owners::CalleeCovers::default(),
             reflective_prototype_write: crate::base::reads::Recorded::new(),
             shadow_roots: crate::base::reads::Recorded::new(),
+            stored_handler_reach: crate::base::reads::Recorded::new(),
             raw_store_values: crate::base::reads::Recorded::new(),
             objects_assigned_into: crate::base::reads::Recorded::new(),
             router_params: crate::base::reads::Recorded::new(),
@@ -2116,6 +2120,13 @@ impl<'a> SemanticLookup<'a> {
             }
             Section::ShadowRoots => {
                 hasher.update([u8::from(self.shadow_roots_possible())]);
+            }
+            Section::StoredHandlerReach => {
+                for (path, (at, why)) in self.stored_handler_reach() {
+                    text(&mut hasher, path);
+                    text(&mut hasher, at);
+                    text(&mut hasher, why);
+                }
             }
             Section::RouteComponents => {
                 spans(

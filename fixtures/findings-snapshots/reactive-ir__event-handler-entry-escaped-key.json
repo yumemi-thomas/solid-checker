@@ -1,0 +1,16 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/event-handler-entry/variants/escaped-key/App.tsx",
+      "start": 683,
+      "end": 690,
+      "fixes": 0
+    }
+  ]
+}

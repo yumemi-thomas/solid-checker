@@ -78,6 +78,8 @@ pub(crate) enum Section {
     ReflectivePrototypeWrite,
     /// ADR 1115: whether a listener of the program may sit in a shadow tree.
     ShadowRoots,
+    /// ADR 1089 part E, round 2: the files whose realm may reach a handler Solid stored on an element (ADR 1120's per-question API).
+    StoredHandlerReach,
     /// Whether a value may be raw-marked: a `markRaw`, or a shallow store
     /// that marks what enters it (ADR 0634).
     RawStoreValues,
@@ -107,7 +109,7 @@ pub(crate) enum Section {
 }
 
 impl Section {
-    pub(crate) const ALL: [Self; 22] = [
+    pub(crate) const ALL: [Self; 23] = [
         Self::Components,
         Self::MemberTargets,
         Self::SpreadTargets,
@@ -122,6 +124,7 @@ impl Section {
         Self::ReflectiveDefinition,
         Self::ReflectivePrototypeWrite,
         Self::ShadowRoots,
+        Self::StoredHandlerReach,
         Self::RawStoreValues,
         Self::RouteComponents,
         Self::ContextSymbols,

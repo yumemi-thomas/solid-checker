@@ -1928,3 +1928,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/event-dispatch-shadow/node_modules/**
 !fixtures/reactive-ir/after-await-forin/node_modules/
 !fixtures/reactive-ir/after-await-forin/node_modules/**
+!fixtures/reactive-ir/event-handler-entry/node_modules/
+!fixtures/reactive-ir/event-handler-entry/node_modules/**
