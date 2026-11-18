@@ -630,6 +630,11 @@ fn sites<'a>(
                     file.ast.coercing_operands.iter().copied().find(|operand| {
                         let peeled = file.ast.peel_ts_sugar_span(*operand);
                         call.arguments.iter().any(|argument| argument.span.contains(*operand))
+                            // Evaluated with the argument, not inside a function it holds (a callback's body runs when the callback does).
+                            && !file.ast.functions.iter().any(|function| {
+                                function.span.contains(*operand)
+                                    && call.arguments.iter().any(|argument| argument.span.contains(function.span))
+                            })
                             && file.ast.call_at(peeled).is_none()
                             && file.ast.member_at(peeled).is_none()
                             && !ctx.semantic_lookup.proven_primitive(file, *operand, 4)
