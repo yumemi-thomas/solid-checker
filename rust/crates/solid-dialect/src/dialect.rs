@@ -2019,6 +2019,14 @@ pub trait Dialect: Sync {
         None
     }
 
+    /// ADR 1089: whether a call of `primitive` with a data value as its only argument creates a store and returns, at index 1,
+    /// a setter that calls the function it is given with the store's proxy on the caller's stack and runs no other project
+    /// code. The default answers no, which only withholds sites.
+    fn store_setter_calls_updater(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        false
+    }
+
     /// The member a context must be accessed through to act as a provider,
     /// if this dialect has one. Solid 1.x exposes `.Provider`, whose value
     /// getter runs untracked; Solid 2.0 makes the context itself the
