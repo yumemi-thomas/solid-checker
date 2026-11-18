@@ -26130,6 +26130,18 @@
   "rediscovered": "main 91eab81ac: false-positive (missing-owner stacked behind PRIMITIVE_IN_EFFECT_CALLBACK), `make fuzz-focus` fails; this build: not-fired"
  },
  {
+  "finding": "a false positive: SC4002 (missing-context-provider) at a handler's useContext when the program's only dispatches are a created anchor's click and remove (path holds no JSX element) or a created label clicked by a helper only an effect apply calls (an ownerless stack): Chrome throws NO_OWNER_CONTEXT first on every run",
+  "found": "mx-census ledger (owned false positives evt-created-anchor, evt-created-label; sc7002-split.md)",
+  "fixed": "ADR 1099 (`event_delivery.rs` `NoElementHandler`, `dispatch_in_effect_apply_helper`; `flush_census.rs` `flush_referenced`)",
+  "grid": "mx-census",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-evt-created-anchor-x-direct-none",
+   "mx-context-not-found-evt-created-label-x-direct-none"
+  ],
+  "rediscovered": "bundle p 5371502c4: false-positive (missing-context-provider stacked behind NO_OWNER_CONTEXT), `make fuzz-focus CODES=CONTEXT_NOT_FOUND` fails; this build: not-fired"
+ },
+ {
   "finding": "ADR 1092's phase record (`<output id=\"sc-phase\">`, runtime-oracle.mjs `phaseModule`) sat on the halt marker's corner at the same z-index with no `pointer-events:none`: written after `#sc-halted`, it intercepted the click a halted run's step makes on the marker, so Chrome timed out (`execution`, or an inconclusive oracle run) where the fast runners record the halt",
   "found": "the smoke of #284 (run 44277745619, seed 994887515): mx-combo `oracle differs ... failure happy halted chrome execution` and 3 inconclusive runs, all `<output id=\"sc-phase\">entered</output> intercepts pointer events`",
   "fixed": "ADR 1092 follow-up (runtime-oracle.mjs `phaseModule`: the phase record takes `pointer-events:none`, as `#sc-hits` does)",

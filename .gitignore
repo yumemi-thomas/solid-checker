@@ -1880,3 +1880,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-created-label-apply-and-owned/node_modules/**
 !fixtures/reactive-ir/rc21-created-label-apply-flush/node_modules/
 !fixtures/reactive-ir/rc21-created-label-apply-flush/node_modules/**
+!fixtures/reactive-ir/store-setter-after-await/node_modules/
+!fixtures/reactive-ir/store-setter-after-await/node_modules/**
