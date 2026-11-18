@@ -277,3 +277,55 @@ export function MemoInPropUnownedSettled() {
     />
   );
 }
+// Part 9: a helper an effect's apply (or a tracked effect) and a handler of the same component call. The apply's run at
+// mount throws first, and `render` disposes the root and its delegated events on that throw: the handler never runs.
+export function MemoSharedApplyAndHandler() {
+  const make = () => {
+    createMemo(async () => 1, { sync: true });
+  };
+  createEffect(
+    () => 1,
+    () => {
+      make();
+    },
+  );
+  return <button onClick={() => make()} />;
+}
+export function MemoSharedTrackedAndHandler() {
+  const make = () => {
+    createMemo(async () => 1, { sync: true });
+  };
+  createTrackedEffect(() => {
+    make();
+  });
+  return <button onClick={() => make()} />;
+}
+// Violation kept: a timer still runs the helper after the disposal, and the creation probes.
+export function MemoSharedApplyAndTimer() {
+  const make = () => {
+    createMemo(async () => 1, { sync: true });
+  };
+  createEffect(
+    () => 1,
+    () => {
+      make();
+    },
+  );
+  setTimeout(() => make(), 0);
+  return <i />;
+}
+// Violation kept: the effect is created only on one branch, so a mount may not throw and the handler runs.
+export function MemoSharedConditionalApply(props: { on: boolean }) {
+  const make = () => {
+    createMemo(async () => 1, { sync: true });
+  };
+  if (props.on) {
+    createEffect(
+      () => 1,
+      () => {
+        make();
+      },
+    );
+  }
+  return <button onClick={() => make()} />;
+}
