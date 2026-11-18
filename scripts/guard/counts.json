@@ -3713,6 +3713,52 @@
         "open": "reactive-ir/static-api"
       },
       "note": "an accessor handed to `refresh` (direct, aliased or a namespace member): rc.21 refresh reads only the node the runtime stored on it, never calls it or hands it on (value-use ends there)"
+    },
+    {
+      "fixture": "reactive-ir/accessor-provenance",
+      "key": "SC9012 parameter-call-argument-unproven",
+      "from": 1,
+      "to": 0,
+      "adr": "ADR 1093",
+      "kind": "relabel",
+      "relabeledTo": "SC1002 read-after-await-unaccounted",
+      "note": "the call is the read of the getter it was handed back; the site keeps the after-await accounting's own row"
+    },
+    {
+      "fixture": "reactive-ir/async-creation-pass-forms",
+      "key": "SC9012 parameter-call-argument-unproven",
+      "from": 2,
+      "to": 0,
+      "adr": "ADR 1093",
+      "kind": "relabel",
+      "relabeledTo": "SC9012 handed-member-read",
+      "note": "the call is the read of the transported getter; the handed-member obligation stands at the same site"
+    },
+    {
+      "fixture": "reactive-ir/context-member-identity",
+      "key": "SC9012 parameter-call-argument-unproven",
+      "from": 2,
+      "to": 0,
+      "adr": "ADR 1093",
+      "proof": "rust/crates/solid-reactive-ir/src/interproc/result_reads.rs::call_result_reads",
+      "fixtures": {
+        "proved": "reactive-ir/context-member-identity",
+        "open": "reactive-ir/closed-literal-dispatch"
+      },
+      "note": "a call of a getter a hook or context carries is the read of that getter, not a read through a value the call hands over (it hands over nothing): ADR 0771's obligation does not apply, and the read is the helper's, claimed where the helper runs"
+    },
+    {
+      "fixture": "reactive-ir/read-in-place-layers-summary",
+      "key": "SC9012 parameter-call-argument-unproven",
+      "from": 2,
+      "to": 0,
+      "adr": "ADR 1093",
+      "proof": "rust/crates/solid-reactive-ir/src/interproc/result_reads.rs::call_result_reads",
+      "fixtures": {
+        "proved": "reactive-ir/read-in-place-layers-summary",
+        "open": "reactive-ir/closed-literal-dispatch"
+      },
+      "note": "a call of a getter a hook or context carries is the read of that getter, not a read through a value the call hands over (it hands over nothing): ADR 0771's obligation does not apply, and the read is the helper's, claimed where the helper runs"
     }
   ],
   "renames": []
