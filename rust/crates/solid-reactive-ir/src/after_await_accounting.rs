@@ -766,7 +766,13 @@ pub(crate) fn account<'a>(
                         ),
                         "member-read" => site.root.map_or_else(
                             || "no-root".to_owned(),
-                            |root| format!("root:{}", root_kind(site.file, root)),
+                            |root| {
+                                format!(
+                                    "root:{}|plain:{}",
+                                    root_kind(site.file, root),
+                                    member_reads::plain_failure(ctx, site.file, root)
+                                )
+                            },
                         ),
                         "primitive" => "owner-not-captured".to_owned(),
                         _ => site
