@@ -1137,6 +1137,10 @@ packages/wasm/owned/
 !fixtures/reactive-ir/store-handed-root/node_modules/**
 !fixtures/reactive-ir/store-element-flow/node_modules/
 !fixtures/reactive-ir/store-element-flow/node_modules/**
+!fixtures/reactive-ir/store-copy-alias-write/node_modules/
+!fixtures/reactive-ir/store-copy-alias-write/node_modules/**
+!fixtures/reactive-ir/value-pattern-parameter/node_modules/
+!fixtures/reactive-ir/value-pattern-parameter/node_modules/**
 !fixtures/reactive-ir/store-sub-value-flow/node_modules/
 !fixtures/reactive-ir/store-sub-value-flow/node_modules/**
 !fixtures/reactive-ir/absent-guard-prop/node_modules/
