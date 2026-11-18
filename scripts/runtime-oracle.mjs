@@ -73,6 +73,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { NODE } from "./lib/node-runtime.mjs";
 import { placelessExcess, siteKey } from "./fuzz/site-judge.mjs";
+import { PHASE_SELECTOR, phaseAtFailure } from "./fuzz/hits.mjs";
 import { recommendedConcurrency } from "./lib/pool.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -259,6 +260,31 @@ function mark() {
 }
 `;
 const haltHtml = html.replace('<script type="module" src="/main.tsx">', '<script type="module" src="/sc-halt.ts"></script><script type="module" src="/main.tsx">');
+// ADR 1092: the page's phases, as the fuzzer's fast runners track them (scripts/fuzz/fast/runner.tsx, chrome-host/runner.tsx: `import`
+// while App.tsx's module graph evaluates, `render` while the entry mounts, then the run). A third page module of a halt-marker case,
+// loaded last and outside the case's tsconfig (the checker never reads it), waits for the entry's evaluation through the module map
+// (`import("/main.tsx")` returns the entry the page already evaluated, never a second one) and writes its outcome to
+// `<output id="sc-phase">`: `entered`, or the phase the entry's evaluation threw in: `import` when App.tsx's evaluation threw (the
+// same module-map lookup of App.tsx rejects), `render` when App.tsx evaluated and the entry's own body threw. App.tsx is looked up
+// only when the page loaded it (a resource entry of its URL): an App.tsx the page never fetched is not evaluated here, and the
+// outcome is `entry` (the entry threw before App.tsx was known to load). The scenario reads it first (`phaseStep`); a run that fails
+// at the settle step that follows failed in that phase (`exercise` once the entry evaluated), not in `execution` (pagePhase below).
+// Before, Chrome waited out the 12 s settle on an entry that had thrown and called it `execution`, while the fast runners recorded
+// `import`: four -mount-named programs differed on the phase name alone.
+const phaseModule = `const show = (phase: string) => {
+  const output = document.createElement("output");
+  output.id = "sc-phase";
+  output.textContent = phase;
+  output.setAttribute("style", "position:fixed;left:0;top:0;width:1px;height:1px;overflow:hidden;opacity:0;z-index:2147483647");
+  document.body.append(output);
+};
+const loaded = (path: string) => performance.getEntriesByName(new URL(path, location.href).href).length > 0;
+import("/main.tsx").then(() => show("entered"), () => {
+  if (!loaded("/App.tsx")) return show("entry");
+  return import("/App.tsx").then(() => show("render"), () => show("import"));
+});
+`;
+const phaseStep = { action: "wait-for-selector", selector: PHASE_SELECTOR };
 // The checker rules that claim each runtime diagnostic code. A code no rule
 // claims (REACTIVITY_HALTED, an uncaught error's consequence) is reported as
 // `no-rule`, never as a missing finding.
@@ -717,13 +743,15 @@ async function runCase(id, slot) {
   writeFileSync(join(dir, "main.tsx"), spec.main ?? mainSource(observations, spec.mount));
   assert(spec.haltMarker === undefined || typeof spec.haltMarker === "boolean", `${id}: haltMarker must be a boolean`);
   if (spec.haltMarker) writeFileSync(join(dir, "sc-halt.ts"), haltModule);
+  if (spec.haltMarker) writeFileSync(join(dir, "sc-phase.ts"), phaseModule);
   // `external` names case files the page loads by a script of its own after the entry's and the checker's program does not hold: an importer outside the program, the
   // caller an open boundary cannot see (ADR 0970, R3 of the re-review of #221). They are copied like the others; the tsconfig leaves them out and the entry never imports them.
   const external = spec.external ?? [];
   assert(Array.isArray(external) && external.every((name) => name !== "App.tsx" && files.includes(name)), `${id}: external must list case files other than App.tsx`);
-  const page = (spec.haltMarker ? haltHtml : html).replace('<script type="module" src="/main.tsx"></script>', (entry) => entry + external.map((name) => `<script type="module" src="/${name}"></script>`).join(""));
+  const page = (spec.haltMarker ? haltHtml : html).replace('<script type="module" src="/main.tsx"></script>', (entry) => entry + [...external, ...(spec.haltMarker ? ["sc-phase.ts"] : [])].map((name) => `<script type="module" src="/${name}"></script>`).join(""));
   writeFileSync(join(dir, "index.html"), page);
-  writeFileSync(join(dir, "scenario.json"), JSON.stringify({ schemaVersion: 1, steps: [settle, ...(observations.length ? [probeStep] : []), ...(spec.steps ?? [])] }));
+  const leading = spec.haltMarker ? [phaseStep] : [];
+  writeFileSync(join(dir, "scenario.json"), JSON.stringify({ schemaVersion: 1, steps: [...leading, settle, ...(observations.length ? [probeStep] : []), ...(spec.steps ?? [])] }));
   writeFileSync(join(dir, "tsconfig.json"), JSON.stringify({ compilerOptions, files: ["main.tsx", ...files.filter((name) => !external.includes(name))] }, null, 2));
   // The checker's program boundary follows the nearest manifest, which is the install's: it publishes
   // nothing, so the boundary is closed. `programBoundary` writes this case's own manifest: a publishing one
@@ -834,6 +862,10 @@ async function runCase(id, slot) {
       && ((wholeFile === finding.file && !outnumbered(finding))
         || positions.some((position) => position.file === finding.file && finding.line <= position.line && position.line <= finding.endLine))));
   const failure = report.failure?.message ?? report.execution?.failure?.message ?? null;
+  // ADR 1092: the page's phase where the run failed (`phaseModule`), for a halt-marker case whose execution failed: the entry's own
+  // outcome when the run failed at the settle step (`import`, `render`, `entry`, or `exercise` once the entry evaluated), `execution`
+  // at any other step. Null for a case with no phase step or no execution failure.
+  const pagePhase = phaseAtFailure(spec.haltMarker ? 1 : -1, report.execution);
   const typingErrors = report.typingErrorCount ?? null;
   // A known open site is listed in oracle.json with its reason; it is not a
   // pass, it is debt the gate keeps visible. A listed site that no longer
@@ -923,7 +955,7 @@ async function runCase(id, slot) {
     : behaviour.some((row) => row.verdict === "behaviour-confirmed") ? "behaviour-confirmed"
     : behaviour.length ? "behaviour-clean" : "quiet";
   return {
-    id, verdict, note: spec.note ?? null, wallMs, executionCache: report.execution?.executionCache?.outcome ?? null, typingErrors, failure, stale: [...stale, ...staleBehaviour, ...staleFalsePositives], diagnostics, behaviour, staticOnly, findings,
+    id, verdict, note: spec.note ?? null, wallMs, executionCache: report.execution?.executionCache?.outcome ?? null, typingErrors, failure, ...(pagePhase ? { pagePhase } : {}), stale: [...stale, ...staleBehaviour, ...staleFalsePositives], diagnostics, behaviour, staticOnly, findings,
     unattributed: (report.execution?.diagnostics ?? []).filter((row) => !caseFile(row.site?.location?.path)).map((row) => row.code),
     pageErrors: (report.execution?.pageErrors ?? []).map((error) => error.message.slice(0, 200)),
     // What the page logged as an error (R3e, Part 16): a user effect logs the throw of its compute or of a computation it read
