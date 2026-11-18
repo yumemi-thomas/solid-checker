@@ -7,10 +7,10 @@ const peek = () => count();
 // ADR 1090 (G1 residual): rc.21 raises UNTRACKED_READ_AFTER_AWAIT only for a read whose V8 async stack holds the frame that awaits an async computation's returned promise
 // (`attributedFlight`). The async stack is the chain of code awaiting the current promise, so a function whose promise nothing consumes cannot carry that frame.
 
-// Clean: a named async function every reference of which is a discarded direct call.
+// Clean: a named async function every reference of which is a discarded direct call, whose site is a direct read of an exact accessor.
 const fire = async () => {
   await pause();
-  peek();
+  count();
 };
 fire();
 
@@ -50,6 +50,29 @@ const classed = async () => {
   };
 };
 classed();
+
+// Uncertifiable (third review, H1): the site is a project call whose result is a class; the class's field reads wherever `new` runs.
+const makeClass = () =>
+  class {
+    x = peek();
+  };
+const built = async () => {
+  await pause();
+  classBox.K = makeClass();
+};
+built();
+
+// Uncertifiable (third review, H3): a read in a JSX attribute compiles to a getter, read wherever the prop is read.
+function Shown(props: { v: unknown }) {
+  return <p>{String(props.v)}</p>;
+}
+let keptView: unknown;
+const jsxed = async () => {
+  await pause();
+  keptView = <Shown v={count()} />;
+};
+jsxed();
+export const view = () => keptView;
 
 // Uncertifiable (fail closed): the promise is consumed by `void`, a unary whose operand is the promise.
 const voided = async () => {

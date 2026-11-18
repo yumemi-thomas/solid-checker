@@ -26026,7 +26026,19 @@
  {
   "finding": "G2 (ruling): `AfterAwaitSafe::PromiseUnconsumed` took a file whose only module syntax is type-only (`import type`, `export type`) for a module, but a stripping transpiler erases that syntax and the file may load as a classic script, its function a global that `setTimeout(\"f()\")` or `window[\"eval\"]` reaches",
   "found": "the second Fable review of 1090 G1 (aa617ea2a, 2026-11-18)",
-  "fixed": "ADR 1090 G1 (second review): the file must have module syntax a stripping transpiler keeps (`unconsumed.rs` `runtime_module_syntax`, unit test `only_module_syntax_a_stripping_transpiler_keeps_makes_a_module`)",
-  "outside": "not generated, and no fixture holds a site of it: a read site needs a reactive source, and a file gets one only through a value import a runtime reference uses (`createSignal`, a hook), which is runtime module syntax. The generator writes ES modules with such imports only. The unit test pins the module test on the type-only forms"
+  "fixed": "ADR 1090 G1 (second and third reviews): the file must have module syntax esbuild keeps (`unconsumed.rs` `runtime_module_syntax`: a value import a runtime call uses, `import \"x\"`, `export *`, an export of a runtime declaration, a default export that is no interface)",
+  "outside": "not generated: the generator writes every program with value imports a runtime call uses (`createSignal`, the primitives), which is module syntax esbuild keeps, so no generated file has only erased module syntax. A site can still be written in such a file (`export {}` with `declare function report(): void` and `report()` after the await is an SC1002 site, the third review, H2): fixture reactive-ir/after-await-promise-unconsumed `scripted.ts` holds it, and the unit test only_module_syntax_a_stripping_transpiler_keeps_makes_a_module pins the module test on every form the review named"
+ },
+ {
+  "finding": "H1: `AfterAwaitSafe::PromiseUnconsumed` ended a site that is a project call whose result is a class (`box.K = mk()` after the await, `const mk = () => class { x = peek(); }`, also a declared or nested `mk` or an IIFE): the class's field reads wherever `new` runs, here in a `toString` an async memo's template literal runs after its own await. Chrome rc.21 reports UNTRACKED_READ_AFTER_AWAIT; 229d00f0c certified the program",
+  "found": "the third Fable review of 1090 G1 (229d00f0c, 2026-11-18)",
+  "fixed": "ADR 1090 G1 (third review): the discharge holds only for a site that defers nothing: a direct read of an exact accessor (`read`) or a setter call whose arguments are all inert (`unconsumed.rs`)",
+  "outside": "not generated as a cell: generated, `pb.K = pm()` after the await with `const pm = () => class { x = ph(); }` is false-clean on 229d00f0c and on this fix alike. The fix's SC1002 row is at the `pm()` call, but Chrome's stack holds only the class field, the `new` and the memo, and the field's own read is the module-level hole the coordinator queued separately (a false clean on main too). Fixture reactive-ir/after-await-promise-unconsumed `built` holds the fix: no row at the call on 229d00f0c, SC1002 read-after-await-unaccounted on the fix"
+ },
+ {
+  "finding": "H3: `AfterAwaitSafe::PromiseUnconsumed` ended a read written in a JSX attribute after the await (`<Comp v={peek()} />`): the attribute compiles to a getter, read wherever the prop is read, possibly in an async memo's continuation",
+  "found": "the third Fable review of 1090 G1 (229d00f0c, 2026-11-18)",
+  "fixed": "ADR 1090 G1 (third review): no site in a JSX element or fragment is discharged (`unconsumed.rs`)",
+  "outside": "not generated: the generator writes JSX only in a component's view (its return), never in an async function's continuation. Fixture reactive-ir/after-await-promise-unconsumed holds it (`jsxed`, uncertifiable)"
  }
 ]

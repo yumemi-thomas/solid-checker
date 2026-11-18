@@ -145,9 +145,14 @@ impl AfterAwaitSafe {
         object_prototype_touched: &dyn Fn() -> bool,
     ) -> bool {
         match self {
-            Self::PromiseUnconsumed => {
-                unconsumed::holder_promise_unconsumed(ctx, site.file, site.at)
-            }
+            Self::PromiseUnconsumed => unconsumed::holder_promise_unconsumed(
+                ctx,
+                site.file,
+                site.at,
+                site.via,
+                site.call,
+                object_prototype_touched,
+            ),
             Self::NeverRuns => matches!(
                 reach.site(site.file, site.at),
                 crate::execution_role::Reach::Unreached(_)

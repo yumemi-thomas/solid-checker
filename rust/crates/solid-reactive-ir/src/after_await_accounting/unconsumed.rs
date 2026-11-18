@@ -7,9 +7,11 @@
 //! only, for a read in a named async function (a declaration or a `const` binding) when all of these hold:
 //!
 //! - the function is `async` in code, not a generator, a method or a named function expression, and its value is current;
-//! - it is written in a module with runtime module syntax: a value import a runtime reference uses, a side-effect import, or a value export.
-//!   A classic script's top-level function is a global another file may call as `window.f()`, and a file whose only module syntax is
-//!   type-only is one under a stripping transpiler (the second review of 1090 G1, G2);
+//! - the site defers nothing: a direct read of an exact accessor, or a setter call whose arguments are all inert. A project call may return a
+//!   class or a function whose code reads later, wherever it is run (the third review, H1); and the site is in no JSX expression, which
+//!   compiles to a getter read wherever the prop or child is read (H3);
+//! - it is written in a module with module syntax esbuild keeps (`runtime_module_syntax`). A classic script's top-level function is a global
+//!   another file may call as `window.f()`, and a file whose only module syntax esbuild erases is one (the second review, G2; the third, H2);
 //! - no class body lies between the function and the read: a field initializer, an accessor, a constructor or a static block is code of the
 //!   class, run wherever `new` (or `Reflect.construct`) runs, not the function's own straight-line code (the second review, G1);
 //! - it is not exported, unseen code does not enter it, and no other file references or calls it;
@@ -32,8 +34,40 @@ pub(super) fn holder_promise_unconsumed(
     ctx: &crate::pipeline::AnalysisContext<'_>,
     file: &FileFacts,
     at: Span,
+    via: &str,
+    call: Option<&solid_facts::ast::CallFact>,
+    object_prototype_touched: &dyn Fn() -> bool,
 ) -> bool {
     let lookup = ctx.semantic_lookup;
+    // The third review of 1090 G1 (H1): a site that may hand code on (a project call whose result is a class or a function, a construct, an
+    // unresolved call) defers its reads past the function's continuation. Only a site that can defer nothing is discharged: a direct read of an
+    // exact accessor (`read`), or a setter call every argument of which is inert (no function, no value that may hold one).
+    let defers_nothing = match via {
+        "read" => true,
+        "setter" => call.is_some_and(|call| {
+            call.arguments.iter().all(|argument| {
+                super::library_call::argument_is_inert(
+                    ctx,
+                    file,
+                    argument,
+                    None,
+                    object_prototype_touched,
+                )
+            })
+        }),
+        _ => false,
+    };
+    // H3: a site in a JSX expression compiles to a getter read wherever the prop or child is read.
+    if !defers_nothing
+        || file.ast.any_jsx_containing(at)
+        || file
+            .ast
+            .jsx_fragments
+            .iter()
+            .any(|fragment| fragment.contains(at))
+    {
+        return false;
+    }
     let Some(function) = crate::owners::owning_function(&file.ast, at) else {
         return false;
     };
@@ -91,28 +125,78 @@ pub(super) fn holder_promise_unconsumed(
     })
 }
 
-/// The file has module syntax a stripping transpiler keeps: a value import whose binding a runtime reference uses, a side-effect import, or a
-/// module-level export that is not type-only (`export {}` included: it is value syntax). `import type`, all-type specifiers, a value binding used
-/// only as a type and `export type`/`export interface` are erased, and the file may then be loaded as a classic script.
+/// The file has module syntax esbuild keeps (the third review of 1090 G1, H2), any one of:
+/// - a value import binding a runtime call uses: the callee of a call, or the object of a callee member (`createSignal(..)`, `S.createMemo(..)`);
+///   an ambient context holds no call, so a reference only in a `declare` does not count;
+/// - a side-effect import written `import "x"` (not `import {} from "x"`, which is erased);
+/// - `export * from "x"` (or `export * as n from "x"`), not type-only;
+/// - an export statement of a runtime declaration: `export const|let|var|function|async function|class|abstract class`;
+/// - an `export default` that is not an interface.
+///
+/// `export {}`, `export {} from "x"`, `export { a }`, `export type`, `export interface`, `export namespace`, `export declare` and
+/// type-only imports are not counted: each is erased, or may be, and the file may then load as a classic script.
 fn runtime_module_syntax(file: &FileFacts) -> bool {
     let ast = &file.ast;
-    ast.imports.iter().any(|import| {
-        !import.type_only
-            && (import.bindings.is_empty()
-                || import
-                    .bindings
-                    .iter()
-                    .any(|binding| !binding.type_only && binding.runtime_referenced))
-    }) || ast.module_level_exports().any(|export| {
-        !export.type_only
-            && (export.kind != solid_facts::ast::ExportKind::Named
-                || !export.declarations.is_empty()
-                || export.specifiers.is_empty()
-                || export
-                    .specifiers
-                    .iter()
-                    .any(|specifier| !specifier.type_only))
-    })
+    let source = |span: Span| file.source_text(span).unwrap_or_default();
+    let runtime_call = |binding: Span| {
+        ast.identifiers.iter().any(|identifier| {
+            identifier.role == solid_facts::ast::IdentifierRole::Reference
+                && ast.reference_declaration(identifier.span) == Some(binding)
+                && ast.calls.iter().any(|call| {
+                    let callee = ast.peel_ts_sugar_span(call.callee);
+                    callee == identifier.span
+                        || ast.member_at(callee).is_some_and(|member| {
+                            ast.peel_ts_sugar_span(member.object) == identifier.span
+                        })
+                })
+        })
+    };
+    let imported = ast.imports.iter().any(|import| {
+        if import.type_only {
+            return false;
+        }
+        import.bindings.iter().any(|binding| match binding.kind {
+            solid_facts::ast::ImportKind::SideEffect => {
+                import.specifier_span.is_some_and(|specifier| {
+                    file.source_text(Span::new(import.span.start, specifier.start))
+                        .is_some_and(|head| !head.contains('{'))
+                })
+            }
+            _ => {
+                !binding.type_only && binding.runtime_referenced && runtime_call(binding.local.span)
+            }
+        })
+    });
+    imported
+        || ast.module_level_exports().any(|export| {
+            if export.type_only {
+                return false;
+            }
+            let text = source(export.span).trim_start();
+            let rest = text.strip_prefix("export").unwrap_or_default().trim_start();
+            match export.kind {
+                solid_facts::ast::ExportKind::All => true,
+                solid_facts::ast::ExportKind::Default => !rest
+                    .strip_prefix("default")
+                    .unwrap_or_default()
+                    .trim_start()
+                    .starts_with("interface"),
+                solid_facts::ast::ExportKind::Named => {
+                    !export.declarations.is_empty()
+                        && [
+                            "const ",
+                            "let ",
+                            "var ",
+                            "function",
+                            "async function",
+                            "class ",
+                            "abstract class ",
+                        ]
+                        .iter()
+                        .any(|head| rest.starts_with(head))
+                }
+            }
+        })
 }
 
 /// An await of the function at `function` that runs on every run of it ends before `at`: the code at `at` runs only after the function suspended.
@@ -165,8 +249,7 @@ mod tests {
             "import * as n from \"m\"; n.f();",
             "export const x = 1;",
             "export function g() {}",
-            "export {};",
-            "const y = 1; export { y };",
+            "export class K {}",
             "export default 1;",
             "export * from \"m\";",
         ] {
@@ -177,8 +260,16 @@ mod tests {
             "import type { T } from \"m\"; let v: T;",
             "import { type T } from \"m\"; let v: T;",
             "import { T } from \"m\"; let v: T;",
+            "import { X } from \"m\"; declare const y: typeof X;",
+            "import {} from \"m\";",
+            "export {};",
+            "export {} from \"m\";",
+            "const y = 1; export { y };",
             "export type T = number;",
             "export interface I { a: number }",
+            "export default interface I { a: number }",
+            "export namespace N { export type T = 1; }",
+            "export declare const z: number;",
             "type U = 1; export type { U };",
             "export type * from \"m\";",
         ] {
