@@ -196,7 +196,7 @@ fn names_fake_timer_installer(
                 .flatten()
                 .any(|declaration| {
                     crate::runtime_semantics::fake_timer_installer_declaration(
-                        declaration.location.path.as_ref(),
+                        &lookup.installed_spelling(declaration.location.path.as_ref()),
                         declaration.name.as_ref(),
                     )
                 })

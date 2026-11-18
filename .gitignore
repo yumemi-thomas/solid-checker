@@ -1737,6 +1737,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/test-runner-vitest-store/node_modules/**
 !fixtures/reactive-ir/test-runner-vitest-store-renamed/node_modules/
 !fixtures/reactive-ir/test-runner-vitest-store-renamed/node_modules/**
+!fixtures/reactive-ir/flush-universe-fake-timers-store/node_modules/
+!fixtures/reactive-ir/flush-universe-fake-timers-store/node_modules/**
 
 !fixtures/reactive-ir/dead-literal-rows/node_modules/
 !fixtures/reactive-ir/dead-literal-rows/node_modules/**

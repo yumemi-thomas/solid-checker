@@ -87,7 +87,7 @@ pub(crate) fn call_always_throws(
             let path = declaration.location.path.as_ref();
             STYLEX_THROWING.contains(&declaration.name.as_ref())
                 && !path.starts_with("bundled:")
-                && path
+                && solid_facts::package_reach::installed_spelling(Some(index), path)
                     .split(['/', '\\'])
                     .collect::<Vec<_>>()
                     .windows(STYLEX_DECLARATIONS.len())
@@ -198,7 +198,7 @@ fn declared_by_reviewed(
             let path = declaration.location.path.as_ref();
             declaration.name.as_ref() == name
                 && !path.starts_with("bundled:")
-                && path
+                && solid_facts::package_reach::installed_spelling(Some(index), path)
                     .split(['/', '\\'])
                     .collect::<Vec<_>>()
                     .windows(run.len())
