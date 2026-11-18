@@ -1,0 +1,8 @@
+{
+  "note": "ADR 1052 part 7: a module object slot only an effect apply calls creates a render effect: Chrome throws PRIMITIVE_IN_EFFECT_CALLBACK and never NO_OWNER_EFFECT; SC4001 uncertifiable `creation-throws-first`. Generated program `mx-no-owner-effect-flw-apply-slot-module-render-direct-none` (differential fuzzer, generator 2), mounted as ADR 1089's entry.",
+  "haltMarker": true,
+  "mount": [
+    "C1"
+  ],
+  "steps": []
+}
