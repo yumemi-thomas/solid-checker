@@ -108,3 +108,5 @@ assignment, a `for…of`, a wrapped initializer such as `merge(…, props)`, a d
 pattern, and a hook's result, unless every return of a project hook is a closed object
 literal. A read of one member (`createSignal(props.a)`) is `strict-read-untracked`'s, not
 this rule's. A first parameter is a props pattern whatever follows it.
+
+A violation stands only where setup provably runs the destructure: at module scope or in a component's body, through layers that run in place there. A destructure in a helper the body calls, an effect's apply, an `untrack` callback, a ref's application, a function nested in a named callback, a listener or an object's method is uncertifiable ([ADR 1106](../decisions.md#adr-1106)).
