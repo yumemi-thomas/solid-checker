@@ -25989,5 +25989,25 @@
    "mx-sync-node-received-async-render-apply-guarded-rerun-effect-direct-none"
   ],
   "rediscovered": "main 34473465d: false-positive (ledgered, owner Mac 20); with the rows out of open-defects-rows.json `make fuzz-focus` on the 70 ledgered ids fails there and passes on this build (5 to not-fired). The tracked-sibling-async twins are not in the census smoke manifest (adding them needs a whole-census `smoke.mjs record`): fixture competing-check-sync-memo and runtime-oracle/competing-check-sync-sibling-helper hold the shape"
+ },
+ {
+  "finding": "a false positive: SC7002 at a sync memo in the cleanup an effect apply returns when the effect may rerun (the rerun calls it inside the effect callback), and in the generator of an action only a leaf owner's callback calls: Chrome reports only PRIMITIVE_IN_EFFECT_CALLBACK or PRIMITIVE_IN_FORBIDDEN_SCOPE",
+  "found": "ADR 1052 part 4's ledger (owned false positives effect-cleanup-rerun*, render-cleanup-rerun, action-from-settled/tracked)",
+  "fixed": "ADR 1052 part 6 (`competing_checks.rs` `in_rerun_cleanup`, `action_binding` in `every_run_refused`)",
+  "grid": "mx-census",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "mx-sync-node-received-async-effect-cleanup-rerun-effect-direct-none",
+   "mx-sync-node-received-async-effect-cleanup-rerun-memo-direct-none",
+   "mx-sync-node-received-async-render-cleanup-rerun-effect-direct-none",
+   "mx-sync-node-received-async-render-cleanup-rerun-memo-direct-none",
+   "mx-sync-node-received-async-effect-cleanup-rerun-named-effect-direct-none",
+   "mx-sync-node-received-async-effect-cleanup-rerun-named-memo-direct-none",
+   "mx-sync-node-received-async-action-from-settled-effect-direct-none",
+   "mx-sync-node-received-async-action-from-settled-memo-direct-none",
+   "mx-sync-node-received-async-action-from-tracked-effect-direct-none",
+   "mx-sync-node-received-async-action-from-tracked-memo-direct-none"
+  ],
+  "rediscovered": "main 34473465d: false-positive (ledgered, owner Mac 20); with the rows out of open-defects-rows.json `make fuzz-focus` on the ledgered ids fails there and passes on this build (10 to not-fired)"
  }
 ]
