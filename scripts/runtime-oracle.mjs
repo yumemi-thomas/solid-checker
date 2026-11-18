@@ -278,7 +278,10 @@ const phaseModule = `const show = (phase: string) => {
   const output = document.createElement("output");
   output.id = "sc-phase";
   output.textContent = phase;
-  output.setAttribute("style", "position:fixed;left:0;top:0;width:1px;height:1px;overflow:hidden;opacity:0;z-index:2147483647");
+  // Never a click target: it sits where the halt marker sits (the same corner and z-index), and a phase record written after the marker
+  // took the click a halted run's step makes on \`#sc-halted\` ("<output id=sc-phase> intercepts pointer events"), so Chrome timed out
+  // where the fast runners record the halt. \`#sc-hits\` is read the same way and is likewise out of the pointer's way.
+  output.setAttribute("style", "position:fixed;left:0;top:0;width:1px;height:1px;overflow:hidden;opacity:0;z-index:2147483647;pointer-events:none");
   document.body.append(output);
 };
 const loaded = (path: string) => performance.getEntriesByName(new URL(path, location.href).href).length > 0;
