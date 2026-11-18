@@ -2281,6 +2281,22 @@ impl<'l, 'a> Census<'l, 'a> {
                 if carried {
                     return Position::Open(blockers::VALUE_IN_CARRIER);
                 }
+                // ADR 1109: a root (a store, props) a standard method hands to an inline callback's parameter
+                // (`[store].map((s) => s.v)`, `[store].map(({ v }) => v)`): the handed net follows a value a caller
+                // supplied, not a root, so the callback's reads of it would have no row.
+                if matches!(mode, Mode::RootHolder(_))
+                    && ast.calls_with_peeled_callee(member.span).any(|call| {
+                        self.lookup
+                            .placing_standard_declaration(file, call)
+                            .is_some()
+                            && call.arguments.iter().any(|argument| {
+                                ast.function_at(ast.peel_ts_sugar_span(argument.span))
+                                    .is_some()
+                            })
+                    })
+                {
+                    return Position::Open(blockers::VALUE_IN_CARRIER);
+                }
                 // Another slot's Get holds nothing of this one.
                 let key = match ast
                     .literal_computed_members

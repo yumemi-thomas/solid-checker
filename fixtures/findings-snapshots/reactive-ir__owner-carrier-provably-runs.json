@@ -198,7 +198,7 @@
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-carrier-provably-runs/App.tsx",
       "start": 2903,

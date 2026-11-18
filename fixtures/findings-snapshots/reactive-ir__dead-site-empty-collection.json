@@ -124,7 +124,8 @@
     {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "function-unentered",
       "severity": "error",
       "path": "fixtures/reactive-ir/dead-site-empty-collection/App.tsx",
       "start": 2479,

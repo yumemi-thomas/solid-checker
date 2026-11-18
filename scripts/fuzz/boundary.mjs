@@ -102,6 +102,8 @@ const TWINS = {
   inline: [
     ["the call sits in a window or in a handler", "b", "h"],
     ["the receiver has an element (the carrier provably runs the callback) or is empty", "b", "zero"],
+    ["the receiver has an element or is a name holding `[]` that nothing fills (ADR 1109)", "b", "zeroname"],
+    ["the sort's receiver has two elements or one (ADR 1109: one is never compared)", "b", "one"],
     ["the call resolves to the standard method or to a project method of the same spelling that only keeps the function", "b", "norun"],
   ],
   fresh: [["the call resolves to the reviewed scheduler or to a project function of the same spelling that calls the callback at once", "shadow-b", "host-b"],

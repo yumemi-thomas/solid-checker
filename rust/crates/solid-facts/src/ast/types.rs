@@ -194,6 +194,11 @@ pub struct AstFacts {
     pub try_head_awaits: Vec<TryHeadAwaitFact>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub try_catches: Vec<TryCatchFact>,
+    /// ADR 1109: the blocks of the `try` statements a throw in which may end in a normal completion of the `try` (a `catch`
+    /// that does more than rethrow, or a `finally` that may jump), sorted. A call after anything that may throw in such a
+    /// block is skipped by a completing `try`; the completion sites still count the block (a reachability reading).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub swallowing_try_blocks: Vec<Span>,
     /// The `import.meta.glob(…)` and `import.meta.globEager(…)` calls that the
     /// bundler may turn into static imports run in place (facts schema 70):
     /// every call except `glob` with no options, or with an options object
@@ -2476,6 +2481,7 @@ impl AstFacts {
             dominating_awaits: Vec::new(),
             try_head_awaits: Vec::new(),
             try_catches: Vec::new(),
+            swallowing_try_blocks: Vec::new(),
             in_place_import_globs: Vec::new(),
             unmodeled_require_references: Vec::new(),
             straight_line_calls: Vec::new(),

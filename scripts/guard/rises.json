@@ -4541,6 +4541,22 @@
    "to": 17,
    "adr": "ADR 1052",
    "fact": "part 9: competing-check-sync-memo gains four components (a helper refused at mount with a handler or a tracked effect, and its timer and apply twins); measured against main 76477c121, which holds part 8"
+  },
+  {
+   "fixture": "reactive-ir/dead-site-empty-collection",
+   "key": "SC2001 function-unentered",
+   "from": 9,
+   "to": 10,
+   "adr": "ADR 1109",
+   "fact": "dead-site-empty-collection NamedEmpty: a const holding [] read only by forEach never runs its callback (function-unentered, was a violation)"
+  },
+  {
+   "fixture": "reactive-ir/owner-carrier-provably-runs",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 5,
+   "to": 6,
+   "adr": "ADR 1109",
+   "fact": "owner-carrier-provably-runs SortOne: [1].sort(hf) never runs hf, so its useContext row is relabeled from function-run-unplaced (still uncertifiable)"
   }
  ]
 }

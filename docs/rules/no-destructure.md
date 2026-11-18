@@ -108,3 +108,10 @@ assignment, a `for…of`, a wrapped initializer such as `merge(…, props)`, a d
 pattern, and a hook's result, unless every return of a project hook is a closed object
 literal. A read of one member (`createSignal(props.a)`) is `strict-read-untracked`'s, not
 this rule's. A first parameter is a props pattern whatever follows it.
+
+ADR 1109: a destructure in a callback a carrier provably never runs (a `const` holding `[]` that
+only iterations read, a one-element `sort`) is uncertifiable (`function-unentered`). A store
+destructured in a standard inline callback's parameter (`[store].map(({ v }) => v)`) is an SC9012
+`value-in-carrier` row. A callback a helper calls on some path only (`if (c) f()`, or after a
+statement that may throw in a `try` whose `catch` completes normally) stays a violation: the path
+counts as reachable.
