@@ -11,14 +11,14 @@
 //                  the memo's template literal runs (`new pb.K!()`). A read written in the initializer itself was already refused
 //                  (`field-initializer-unplaced`), so the helper is the hole
 //   pu-coerce-*    ADR 1097's review (fc71ff16a): an async memo's continuation calls a setter whose argument coerces an object, `setW(`${po}`)`; the
-//                  object's `toString` runs a helper holding the site. `direct`: the setter call in the continuation (ADR 0976's `LibraryRunsNothing`),
+//                  object's own `toString` holds the site. `direct`: the setter call in the continuation (ADR 0976's `LibraryRunsNothing`),
 //                  `wrapper`: a `const` wrapper of it, `iife`: an IIFE of it (ADR 1097's `SetterOnlyCallee`). fc71ff16a ended each; `proven_primitive`
 //                  proved the argument a string, not that computing it runs no code
 //
 // The third finding (F3, a direct `eval` calling the function where its promise is kept) cannot be generated: the code's variants read a signal tuple or a store, and a program
 // with direct `eval` withdraws their slots (SC9012 `tuple-iteration-written` on the site's line, a withholding that covers the code). Fixture after-await-promise-unconsumed-eval
 // holds it with a memo accessor (rediscovery.json). Recall contexts, the direct binding bare (`puShape`), one program per cell, not crossed by the census, out of api-fire's plan.
-import { awaitStmt, call, ctl, decl, domExpr, expr, fn, num, prim, ref, ret } from "./model.mjs";
+import { awaitStmt, call, ctl, decl, domExpr, expr, fn, num, obj, prim, ref, ret } from "./model.mjs";
 
 export const PU_CONTEXTS = { "pu-then-sub": "misuse", "pu-loop": "misuse", "pu-class": "misuse", "pu-coerce-direct": "misuse", "pu-coerce-wrapper": "misuse", "pu-coerce-iife": "misuse" };
 export const PU_CONTEXT_NAMES = Object.keys(PU_CONTEXTS);
@@ -73,12 +73,12 @@ export function puContext(context, stmts, kit) {
       };
     }
     case "pu-coerce-direct": case "pu-coerce-wrapper": case "pu-coerce-iife": {
-      const helper = kit.name("ph");
       const host = kit.name("po");
       const set = kit.name("pw");
       const wrap = kit.name("pv");
       const write = `${set}(\`\${${host}}\`)`;
-      const hoisted = [decl(helper, fn(stmts)), expr(domExpr(`const ${host} = { toString: () => { ${helper}(); return ""; } }`)), expr(domExpr(`const [, ${set}] = createSignal("")`, undefined, ["createSignal"]))];
+      // The site is written in the object's own `toString` (an object member no call names, as the review's `{ toString: () => String(count()) }`).
+      const hoisted = [decl(host, obj([["toString", fn([...stmts, ret(num(0))])]])), expr(domExpr(`const [, ${set}] = createSignal("")`, undefined, ["createSignal"]))];
       if (context === "pu-coerce-wrapper") hoisted.push(expr(domExpr(`const ${wrap} = () => { ${write}; }`)));
       const call = context === "pu-coerce-direct" ? write : context === "pu-coerce-wrapper" ? `${wrap}()` : `(() => { ${write}; })()`;
       return { hoisted, body: memoOf(kit, [awaitStmt(), expr(domExpr(call))]), view: [] };

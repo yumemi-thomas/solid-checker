@@ -62,10 +62,10 @@ describe("the pu contexts (a flight the proof took for unconsumed)", () => {
     expect(lines[fn + 2]).toMatch(/^pb\d+\.K = class \{ x = ph\d+\(\); \};$/);
     expect(lines.some((line) => /^const po\d+ = \{ toString\(\) \{ new pb\d+\.K!\(\); return ""; \} \};?$/.test(line))).toBe(true);
   });
-  it("pu-coerce-*: a setter call after the memo's await whose argument coerces an object whose toString runs the site's helper", () => {
+  it("pu-coerce-*: a setter call after the memo's await whose argument coerces an object whose own toString holds the site", () => {
     for (const [context, call] of [["pu-coerce-direct", /^pw\d+\(`\$\{po\d+\}`\);$/], ["pu-coerce-wrapper", /^pv\d+\(\);$/], ["pu-coerce-iife", /^\(\(\) => \{ pw\d+\(`\$\{po\d+\}`\); \}\)\(\);$/]]) {
       const lines = textOf(context);
-      expect(lines.some((line) => /^const po\d+ = \{ toString: \(\) => \{ ph\d+\(\); return ""; \} \};?$/.test(line)), context).toBe(true);
+      expect(lines.some((line) => /^const po\d+ = \{ toString: \(\) => \{$/.test(line)), context).toBe(true);
       expect(lines.some((line) => call.test(line)), context).toBe(true);
     }
   });
