@@ -589,16 +589,7 @@
    ],
    "certified": false
   },
-  {
-   "id": "flip/st-tracked-handled-sync-memo",
-   "item": "ADR 1052: a sync memo in a helper a tracked effect runs under <Errored>: Chrome reports PRIMITIVE_IN_FORBIDDEN_SCOPE at the site and never SYNC_NODE_RECEIVED_ASYNC; the V beside it is a false positive (its stacked pair is retired; the refusal reached through a helper is not counted, owner Mac 20)",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "sync-computation-received-async"
-   ],
-   "owner": "Mac 20"
-  },
+  
   {
    "id": "pkgaction/patch-f32-undeclared",
    "item": "ADR 0974 named miss: a builtin prototype a package extends without declaring it (`Float32Array.prototype.reverse = …`): no fact of the whole program says who writes the shared object",
