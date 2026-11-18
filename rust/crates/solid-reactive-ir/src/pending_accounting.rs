@@ -804,6 +804,19 @@ fn site_reasons(
         // readers are sites of their own (`over_async`, ADR 0802).
         reasons.push(PendingSafe::SuspendsInComputation);
         reasons.push(PendingSafe::NotRenderEffect);
+    } else if crate::local_access::computation_layer_call(
+        file,
+        callee,
+        ctx.entities,
+        ctx.symbol_names,
+        lookup,
+    )
+    .is_some()
+    {
+        // ADR 1096: the read's exact in-place layers end at such a read of a computation's own callback, and run on its stack before it
+        // returns: the read is that computation's, as above.
+        reasons.push(PendingSafe::SuspendsInComputation);
+        reasons.push(PendingSafe::NotRenderEffect);
     }
     // ADR 0892: never with `NotRenderEffect` (review D20): a flow component's
     // prop is read for the render it feeds, and the boundary claim stands.

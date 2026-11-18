@@ -3071,17 +3071,6 @@
       "fixes": 0
     },
     {
-      "rule": "async-outside-loading-boundary",
-      "code": "SC5003",
-      "kind": "uncertifiable",
-      "blocker": "pending-read-unresolved",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
-      "start": 16416,
-      "end": 16423,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -3332,17 +3321,6 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
       "start": 17745,
       "end": 17751,
-      "fixes": 0
-    },
-    {
-      "rule": "async-outside-loading-boundary",
-      "code": "SC5003",
-      "kind": "uncertifiable",
-      "blocker": "pending-read-unresolved",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
-      "start": 17955,
-      "end": 17962,
       "fixes": 0
     },
     {
@@ -5909,17 +5887,6 @@
       "fixes": 0
     },
     {
-      "rule": "async-outside-loading-boundary",
-      "code": "SC5003",
-      "kind": "uncertifiable",
-      "blocker": "pending-read-unresolved",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
-      "start": 32284,
-      "end": 32291,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -6778,17 +6745,6 @@
       "fixes": 0
     },
     {
-      "rule": "async-outside-loading-boundary",
-      "code": "SC5003",
-      "kind": "uncertifiable",
-      "blocker": "pending-read-unresolved",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
-      "start": 35731,
-      "end": 35739,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -7138,17 +7094,6 @@
       "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
       "start": 37503,
       "end": 37510,
-      "fixes": 0
-    },
-    {
-      "rule": "async-outside-loading-boundary",
-      "code": "SC5003",
-      "kind": "uncertifiable",
-      "blocker": "pending-read-unresolved",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/read-after-await-reach/App.tsx",
-      "start": 37550,
-      "end": 37557,
       "fixes": 0
     },
     {

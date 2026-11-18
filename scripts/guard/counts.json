@@ -9,14 +9,14 @@
   "SC1001 client-root-unproven": 1,
   "SC1001 compiler-refused-file": 1,
   "SC1001 component-identity-unproven": 136,
-  "SC1001 function-run-unplaced": 1513,
+  "SC1001 function-run-unplaced": 1515,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
   "SC1001 mount-form-window": 2,
   "SC1001 no-hydration-subtree": 2,
   "SC1001 package-finding-at-entry": 141,
   "SC1001 package-value-read": 158,
-  "SC1001 read-backing-unproven": 386,
+  "SC1001 read-backing-unproven": 387,
   "SC1001 store-handed-to-package": 1,
   "SC1001 strict-read-unaccounted": 18,
   "SC1001 summary-read-unplaced": 95,
@@ -156,24 +156,24 @@
   "SC5001 creation-pass-unproven": 18,
   "SC5001 declared-loading-value": 4,
   "SC5001 host-callback-timing": 1,
-  "SC5001 invocation-context-unproven": 168,
+  "SC5001 invocation-context-unproven": 169,
   "SC5001 mount-form-window": 1,
   "SC5001 mount-unresolved": 2,
   "SC5001 package-finding-at-entry": 44,
   "SC5001 source-module-unresolved": 1,
-  "SC5001 source-pending-unproven": 340,
+  "SC5001 source-pending-unproven": 341,
   "SC5003 async-options-opaque": 37,
   "SC5003 async-provenance-unproven": 146,
   "SC5003 async-read-caught": 4,
   "SC5003 async-read-unaccounted": 351,
-  "SC5003 call-attributed-read": 152,
+  "SC5003 call-attributed-read": 155,
   "SC5003 carrier-run-unproven": 2,
   "SC5003 component-identity-unproven": 1,
   "SC5003 mount-form-window": 2,
   "SC5003 mount-unresolved": 383,
   "SC5003 package-finding-at-entry": 113,
-  "SC5003 pending-read-unresolved": 772,
-  "SC5003 root-mount-pass-unproven": 56,
+  "SC5003 pending-read-unresolved": 767,
+  "SC5003 root-mount-pass-unproven": 54,
   "SC5003 server-rendering-unresolved": 1,
   "SC5003 source-module-unresolved": 1,
   "SC5003 source-pending-unproven": 1,
@@ -3492,6 +3492,71 @@
    "kind": "relabel",
    "relabeledTo": "SC2006 flush-in-action-unaccounted",
    "note": "the flush's function is now placed (its component's same-file tag hands it to no code nothing follows), so the row names the flush accounting's own blocker; still uncertifiable"
+  },
+  {
+   "fixture": "reactive-ir/async-unsuspendable-call-attributed",
+   "key": "SC5001 invocation-context-unproven",
+   "from": 6,
+   "to": 5,
+   "adr": "ADR 1096",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::computation_layer_call",
+   "fixtures": {
+    "proved": "reactive-ir/async-unsuspendable-call-attributed",
+    "open": "reactive-ir/pending-memo-layers"
+   },
+   "note": "a pending async memo read in exact in-place layers (a named closure called once, an IIFE, a helper's callback) whose outermost call is a tracked, suspending read of a computation's own callback (no leaf owner): the read is that computation's, as the direct read is (SuspendsInComputation, NotRenderEffect)"
+  },
+  {
+   "fixture": "reactive-ir/async-unsuspendable-call-attributed",
+   "key": "SC5003 call-attributed-read",
+   "from": 4,
+   "to": 3,
+   "adr": "ADR 1096",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::computation_layer_call",
+   "fixtures": {
+    "proved": "reactive-ir/async-unsuspendable-call-attributed",
+    "open": "reactive-ir/pending-memo-layers"
+   },
+   "note": "a pending async memo read in exact in-place layers (a named closure called once, an IIFE, a helper's callback) whose outermost call is a tracked, suspending read of a computation's own callback (no leaf owner): the read is that computation's, as the direct read is (SuspendsInComputation, NotRenderEffect)"
+  },
+  {
+   "fixture": "reactive-ir/read-after-await-reach",
+   "key": "SC5003 pending-read-unresolved",
+   "from": 82,
+   "to": 77,
+   "adr": "ADR 1096",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::computation_layer_call",
+   "fixtures": {
+    "proved": "reactive-ir/read-after-await-reach",
+    "open": "reactive-ir/read-after-await-reach"
+   },
+   "note": "a pending async memo read in exact in-place layers (a named closure called once, an IIFE, a helper's callback) whose outermost call is a tracked, suspending read of a computation's own callback (no leaf owner): the read is that computation's, as the direct read is (SuspendsInComputation, NotRenderEffect)"
+  },
+  {
+   "fixture": "reactive-ir/value-walk-chain",
+   "key": "SC5001 invocation-context-unproven",
+   "from": 3,
+   "to": 1,
+   "adr": "ADR 1096",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::computation_layer_call",
+   "fixtures": {
+    "proved": "reactive-ir/value-walk-chain",
+    "open": "reactive-ir/pending-memo-layers"
+   },
+   "note": "a pending async memo read in exact in-place layers (a named closure called once, an IIFE, a helper's callback) whose outermost call is a tracked, suspending read of a computation's own callback (no leaf owner): the read is that computation's, as the direct read is (SuspendsInComputation, NotRenderEffect)"
+  },
+  {
+   "fixture": "reactive-ir/value-walk-chain",
+   "key": "SC5003 root-mount-pass-unproven",
+   "from": 6,
+   "to": 4,
+   "adr": "ADR 1096",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::computation_layer_call",
+   "fixtures": {
+    "proved": "reactive-ir/value-walk-chain",
+    "open": "reactive-ir/value-walk-chain"
+   },
+   "note": "a pending async memo read in exact in-place layers (a named closure called once, an IIFE, a helper's callback) whose outermost call is a tracked, suspending read of a computation's own callback (no leaf owner): the read is that computation's, as the direct read is (SuspendsInComputation, NotRenderEffect)"
   }
  ],
  "renames": []
