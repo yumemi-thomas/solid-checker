@@ -428,6 +428,8 @@ function render(program, instrument) {
       case "try-finally": return `try {} finally ${body()}`;
       case "label": return `outer: ${body(["break outer;"])}`;
       case "generator": return `(function* () ${body(["yield 1;"])})().next();`;
+      // ADR 1090 G1 (pu-shapes.mjs `pu-loop`): the body runs on both passes, the first before the await (the function's synchronous prefix).
+      case "loop-await-pre": return `for (let i = 0; i < 2; i += 1) ${body(["await Promise.resolve();"])}`;
       // The body is written before the loop's `await` and runs on the second pass only, after it: the back edge is the only
       // suspension before it (a read on the first pass as well is not reported by rc.17, the source being tracked already).
       case "loop-await": return `for (let i = 0; i < 2; i += 1) {\n${ind(depth + 1)}if (i > 0) ${block(c.body, depth + 1)}\n${ind(depth + 1)}await Promise.resolve();\n${ind(depth)}}`;
@@ -570,7 +572,8 @@ function render(program, instrument) {
       case "settled": used.add("onSettled"); return `onSettled(${f})`;
       case "cleanup": used.add("onCleanup"); return `onCleanup(${f})`;
       case "timer": return `setTimeout(${f}, 0)`;
-      case "then": return `Promise.resolve().then(${f})`;
+      // `receiver` (pu-shapes.mjs `pu-then-sub`): the promise the handler is attached to, `Promise.resolve()` unless a cell names another.
+      case "then": return `${e.receiver ?? "Promise.resolve()"}.then(${f})`;
       case "render": used.add("createRenderEffect"); return `createRenderEffect(${f}, ${applyText(e.apply, depth)})`;
       case "tracked": used.add("createTrackedEffect"); return `createTrackedEffect(${f})`;
       case "action": {

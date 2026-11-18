@@ -4125,6 +4125,17 @@ ADR 1065 part 2 records, for an SC1002 `read-after-await-unaccounted` row listed
 
 Real Chrome: focus's oracle sample compared 84 moved lg-base programs, and every moved `-direct-none` target (31) was compared on its own. All showed 0 behaviour differences. The proved ledger only gains, so `changes.json` needs no row; no known entry stores a moved id. Still uncertifiable among the 50: the pending guarded reads, SC9012 `value-in-carrier` on `*-refresh`, SC1002 after-await setters, and the `resolve`/`until` handler forms.
 
+## ADR 1090 G1 — Not built: a read after an await in a function whose promise nothing consumes
+**The gap.** After ADR 1089, 246 lg-base programs were still uncertifiable on SC1002 `read-after-await-unaccounted`. Their blockers were an async helper called from a component (123) and a `Promise.resolve().then` handler (123). The proposal: rc.21 warns UNTRACKED_READ_AFTER_AWAIT only when the read's async stack holds an async computation's flight frame (`attributedFlight`, dev-shared.js), so a read in a function whose promise nothing consumes can carry none.
+**Decision: not built.** The reason `AfterAwaitSafe::PromiseUnconsumed` went through four Fable reviews, and each found false cleans:
+- be4990c64: a `Promise` subclass that keeps its instances (F1), a loop that reads before its await (F2), a direct `eval` call (F3), and classic-script globals.
+- aa617ea2a: a class field initializer (G1), and type-only module syntax (G2).
+- 229d00f0c: a helper that returns a class (H1), module syntax that esbuild erases (H2), and a JSX getter (H3).
+- efa177b5a: a project function named `__solidAsyncCompute_1`, which rc.21 attributes by name alone (I1); a direct read handing on a helper-built class (I2); and a store read that returns a function, or a spoofed `equals` (I3).
+
+rc.21 attributes a read to a flight by the frame's name and stack. So "nothing consumes the promise" does not bound where the function's reads run, and the discharge is removed: no site is ended by it.
+*What stays.* The ADR 1087 flight census (internal only). The fixtures `after-await-promise-unconsumed` and `-eval` keep every review case as uncertifiable, and the misuse twin stays a violation. The fuzz cells `pu-then-sub`, `pu-loop` and `pu-class` (`scripts/fuzz/pu-shapes.mjs`, with the `loop-await-pre` control form and the `then` receiver option) are recall-gap. Their rediscovery entries are marked superseded. Against main 91eab81ac, corpus and fuzz show no clean gained.
+
 <a id="adr-1091"></a>
 ## ADR 1091 — A JSX tag in the component's own file hands the component to no code nothing follows
 **The gap.** ADR 1088's second cause: SC1001 reads in a component's local helper, read only in a JSX child, placed nowhere by `runs_unplaced_exhaustive` (ADRs 0673/0674). The hidden-hand-off test (`function_escapes_unfollowed`) judges the component by the same-file references of its binding, and `hand_off_at` classed a JSX tag (`<Content />`) as `Unfollowed`, its default. A component a tag in another file renders has no same-file reference and was proved, so the same code was proved or not by which file held the tag. The smallest case: `function Content() { const [c] = createSignal(0); const shown = () => c() > 0; return <p>{shown() ? "yes" : "no"}</p>; }` rendered as `<Content />` by an exported parent `render` mounts.
