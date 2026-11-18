@@ -1,0 +1,10 @@
+// The rc.21 declarations this fixture uses, as `@solidjs/signals` 2.0.0-rc.21 publishes them (dist/types/signals.d.ts:55-57,
+// 355-358, 585; dist/types/core/constants.d.ts:268-270).
+declare module "solid-js" {
+  const $REFRESH: unique symbol;
+  export type Refreshable<T> = T & { readonly [$REFRESH]: any };
+  export type Accessor<T> = () => T;
+  export type SourceAccessor<T> = Refreshable<Accessor<T>>;
+  export function createMemo<T>(compute: (prev: T | undefined) => T): SourceAccessor<T>;
+  export function refresh<T>(target: Refreshable<T>): Promise<T extends (...args: any) => infer V ? V : T>;
+}

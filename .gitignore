@@ -1810,3 +1810,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/iteration-timer-handed-literal-script/node_modules/**
 !fixtures/reactive-ir/iteration-timer-handed-literal-function-stored/node_modules/
 !fixtures/reactive-ir/iteration-timer-handed-literal-function-stored/node_modules/**
+!fixtures/reactive-ir/refresh-target-untouched/node_modules/
+!fixtures/reactive-ir/refresh-target-untouched/node_modules/**

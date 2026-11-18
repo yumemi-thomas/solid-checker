@@ -2509,6 +2509,14 @@ impl Dialect for Solid2 {
             || (argument == 1 && primitive == Primitive::RepeatMap)
     }
 
+    /// rc.21 `refresh(target)` (`@solidjs/signals` `dist/dev.js:3636-3710`): `const node = target?.[$REFRESH]`, an own property
+    /// `accessor()` sets on every Solid accessor (`:3237-3240`), then `markRefresh(node)` and a waiter that reads `node`, never
+    /// `target`. Its promise resolves with the node's value (or the store passed), not with an accessor. A target with no node
+    /// throws `INVALID_REFRESH_TARGET` before anything else.
+    fn argument_is_untouched_target(&self, primitive: Primitive, argument: usize) -> bool {
+        argument == 0 && primitive == Primitive::Refresh
+    }
+
     /// `const track = createReaction(onInvalidate); track(() => read())` —
     /// the tracker argument is a tracked computation, the same two-stage
     /// shape as 1.x. Source: the 2.0 cheatsheet's "one-shot tracked

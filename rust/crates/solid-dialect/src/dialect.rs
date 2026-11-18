@@ -1639,6 +1639,14 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// ADR 1089: whether `primitive` takes the argument at `argument` as a target it neither calls nor hands on: what it does
+    /// with the value is read a property the runtime itself set on it, and nothing it returns or stores is that value. A
+    /// function value walked to such a slot is used up there (no read of it happens there or later through the call).
+    fn argument_is_untouched_target(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
     /// How a callback passed to the function returned by `primitive` runs.
     ///
     /// This is deliberately separate from [`Dialect::callback_execution_at`]:
