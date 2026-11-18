@@ -12,17 +12,6 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/loading-entry-cover/App.tsx",
-      "start": 1410,
-      "end": 1416,
-      "fixes": 0
-    },
-    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -74,17 +63,6 @@
       "path": "fixtures/reactive-ir/loading-entry-cover/App.tsx",
       "start": 1432,
       "end": 1439,
-      "fixes": 0
-    },
-    {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/loading-entry-cover/App.tsx",
-      "start": 1528,
-      "end": 1534,
       "fixes": 0
     },
     {
@@ -142,17 +120,6 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/loading-entry-cover/App.tsx",
-      "start": 1655,
-      "end": 1661,
-      "fixes": 0
-    },
-    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -204,17 +171,6 @@
       "path": "fixtures/reactive-ir/loading-entry-cover/App.tsx",
       "start": 1677,
       "end": 1684,
-      "fixes": 0
-    },
-    {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/loading-entry-cover/App.tsx",
-      "start": 1802,
-      "end": 1808,
       "fixes": 0
     },
     {
@@ -359,17 +315,6 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/loading-entry-cover/App.tsx",
-      "start": 2071,
-      "end": 2077,
-      "fixes": 0
-    },
-    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -456,17 +401,6 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/loading-entry-cover/App.tsx",
-      "start": 2722,
-      "end": 2729,
-      "fixes": 0
-    },
-    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -507,17 +441,6 @@
       "path": "fixtures/reactive-ir/loading-entry-cover/App.tsx",
       "start": 2722,
       "end": 2729,
-      "fixes": 0
-    },
-    {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/loading-entry-cover/App.tsx",
-      "start": 2767,
-      "end": 2773,
       "fixes": 0
     },
     {
@@ -631,17 +554,6 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/loading-entry-cover/App.tsx",
-      "start": 3271,
-      "end": 3277,
-      "fixes": 0
-    },
-    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -683,17 +595,6 @@
       "path": "fixtures/reactive-ir/loading-entry-cover/App.tsx",
       "start": 3271,
       "end": 3277,
-      "fixes": 0
-    },
-    {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/loading-entry-cover/App.tsx",
-      "start": 3382,
-      "end": 3388,
       "fixes": 0
     },
     {
@@ -978,17 +879,6 @@
       "path": "fixtures/reactive-ir/loading-entry-cover/App.tsx",
       "start": 3913,
       "end": 3918,
-      "fixes": 0
-    },
-    {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/loading-entry-cover/App.tsx",
-      "start": 4002,
-      "end": 4008,
       "fixes": 0
     },
     {

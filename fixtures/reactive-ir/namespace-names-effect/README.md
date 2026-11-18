@@ -1,0 +1,3 @@
+# namespace-names-effect
+
+**Claim (ADR 1095).** The twin of `namespace-names-static` that names a deferring primitive: `S.createEffect` is a static member, so the census keeps `createEffect` and the flush written in its apply keeps its SC2008 row (`flush-in-effect-unaccounted`; with the real package source, the fuzz grid's `mx-flush-in-effect-callback-effect-apply-x-namespace-none`, it is SC2008's violation on main and here). The namespace names no primitive that steps an action or opens a leaf scope, so SC2006 and SC3001 end on `NoSteppedAction` and `NoLeafScope`, which main withheld for every namespace import. `solid-js.d.ts` is `flush-universe-no-action`'s.
