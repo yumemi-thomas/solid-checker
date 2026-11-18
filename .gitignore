@@ -1495,6 +1495,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/flush-universe-package-hand-off/node_modules/**
 !fixtures/reactive-ir/action-in-owned-scope-unread-packages/node_modules/
 !fixtures/reactive-ir/action-in-owned-scope-unread-packages/node_modules/**
+!fixtures/reactive-ir/function-member-read/node_modules/
+!fixtures/reactive-ir/function-member-read/node_modules/**
 !fixtures/reactive-ir/action-in-owned-scope-linked-package/node_modules/
 !fixtures/reactive-ir/action-in-owned-scope-linked-package/node_modules/**
 !fixtures/reactive-ir/action-in-owned-scope-origins/node_modules/

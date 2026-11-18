@@ -25965,5 +25965,11 @@
   "found": "corpus investigation of standard-member-impostor; an rc.21 source probe also showed a user Proxy can forge value[$TARGET].px and forward updater writes to Number",
   "fixed": "ADR 1067",
   "outside": "precision improvement, no released defect to rediscover as a baseline failure. The storesetterproxy and storesettershadowed seam forms generate the forged private-target protocol and local tuple/setter lookalike, each with legal twins; the smoke manifests were not re-recorded for them. Scoped fuzz-focus and the runtime-oracle forged-proxy case check the refusals."
+ },
+ {
+  "finding": "ADR 1062: Function.toString.call/apply in dependency source was classified as code generation, making the package an arbitrary global writer and keeping inert package calls uncertifiable",
+  "found": "ADR 1061 blocker census: Babel _isNativeFunction helper in published package source",
+  "fixed": "ADR 1062 (module_reach.rs function_use_is_inert, to_string_applied)",
+  "outside": "The grids do not generate installed package source containing Function member reads. Scanner unit tests and fixture function-member-read (immediate call, held member, bind) retain the shape; the pre-fix release build gives package-may-call-action:code-generation at the immediate-call fixture, the fix certifies it. No runtime violation is claimed."
  }
 ]
