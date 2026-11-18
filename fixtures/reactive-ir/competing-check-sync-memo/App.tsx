@@ -329,3 +329,44 @@ export function MemoSharedConditionalApply(props: { on: boolean }) {
   }
   return <button onClick={() => make()} />;
 }
+// Part 10: a listener on a fresh element that only an owned onSettled fires (by removing the focused element): every run is on
+// the leaf owner's stack, and the element leaves the page there, so no later event reaches it.
+export function MemoInRemovedListener() {
+  const el = document.createElement("input");
+  document.body.append(el);
+  el.addEventListener("blur", () => {
+    createMemo(async () => 1, { sync: true });
+  });
+  el.focus();
+  onSettled(() => {
+    el.remove();
+  });
+  return <i />;
+}
+// Violation kept: the element stays attached, so a later blur runs the listener with no owner.
+export function MemoInAttachedListener() {
+  const el = document.createElement("input");
+  document.body.append(el);
+  el.addEventListener("blur", () => {
+    createMemo(async () => 1, { sync: true });
+  });
+  el.focus();
+  onSettled(() => {
+    el.blur();
+  });
+  return <i />;
+}
+// Violation kept: the body blurs the element first, under the component's owner, and the probe runs.
+export function MemoInRemovedListenerBlurredInBody() {
+  const el = document.createElement("input");
+  document.body.append(el);
+  el.addEventListener("blur", () => {
+    createMemo(async () => 1, { sync: true });
+  });
+  el.focus();
+  el.blur();
+  onSettled(() => {
+    el.remove();
+  });
+  return <i />;
+}

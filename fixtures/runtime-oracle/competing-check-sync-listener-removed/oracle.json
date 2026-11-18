@@ -1,0 +1,6 @@
+{
+  "note": "ADR 1052 part 10: a blur listener on a fresh element only an owned onSettled fires, by removing it: PRIMITIVE_IN_FORBIDDEN_SCOPE, and the detached element hears no later event (ADR 1101); SC7002 uncertifiable. Generated program `mx-sync-node-received-async-evt-settled-fire-remove-memo-direct-none` (differential fuzzer, generator 2).",
+  "haltMarker": true,
+  "mount": ["C1"],
+  "steps": []
+}

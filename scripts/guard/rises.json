@@ -4541,6 +4541,38 @@
    "to": 17,
    "adr": "ADR 1052",
    "fact": "part 9: competing-check-sync-memo gains four components (a helper refused at mount with a handler or a tracked effect, and its timer and apply twins); measured against main 76477c121, which holds part 8"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 20,
+   "to": 53,
+   "adr": "ADR 1052",
+   "fact": "part 10: competing-check-sync-memo gains three components (a listener detached in the settled callback that fires it, and its attached and body-blurred twins); the rises are their own rows"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 15,
+   "to": 39,
+   "adr": "ADR 1052",
+   "fact": "part 10: competing-check-sync-memo gains three components (a listener detached in the settled callback that fires it, and its attached and body-blurred twins); the rises are their own rows"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC7002 creation-throws-first",
+   "from": 9,
+   "to": 18,
+   "adr": "ADR 1052",
+   "fact": "part 10: competing-check-sync-memo gains three components (a listener detached in the settled callback that fires it, and its attached and body-blurred twins); the rises are their own rows"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC9012 leaf-callback-opaque",
+   "from": 0,
+   "to": 5,
+   "adr": "ADR 1052",
+   "fact": "part 10: competing-check-sync-memo gains three components (a listener detached in the settled callback that fires it, and its attached and body-blurred twins); the rises are their own rows"
   }
  ]
 }

@@ -185,6 +185,7 @@ pub(crate) fn mark(
             || in_slot_called_only_in_applies(&violation.location, false, lookup)
             || prop_runs_only_in_owned_leaf(&violation.location, settled_gates, lookup)
             || refused_at_mount_else_handlers(&violation.location, settled_gates, lookup)
+            || listener_detached_in_owned_leaf(&violation.location, settled_gates, lookup)
         {
             violation.uncertain = true;
             violation.analysis_context = crate::blockers::with_detail(
@@ -685,4 +686,239 @@ fn refused_at_mount_else_handlers(
                 .is_some_and(|holder| holder.span == mounted)
         })
     })
+}
+
+/// Whether `call` is written directly in the callback of a leaf owner (`CallbackOwner::Leaf`) whose own call the owner fixed
+/// point decided `Owned` where the dialect gates it: that callback's span.
+fn owned_leaf_callback(
+    file: &solid_facts::FileFacts,
+    call: solid_facts::core::Span,
+    settled_gates: &crate::owners::SettledGateDecisions,
+    lookup: &SemanticLookup<'_>,
+) -> Option<solid_facts::core::Span> {
+    let ast = &file.ast;
+    let callback = crate::owners::owning_function(ast, call)?;
+    ast.arguments_containing(callback.span)
+        .any(|(owner_call, index)| {
+            ast.peel_ts_sugar_span(owner_call.arguments[index].span) == callback.span
+                && owner_call.arguments[..=index]
+                    .iter()
+                    .all(|argument| !argument.spread)
+                && lookup
+                    .primitive_at_call(file, owner_call.span)
+                    .is_some_and(|primitive| {
+                        crate::owners::callback_owner_at_call(
+                            file, owner_call, primitive, index, lookup,
+                        ) == Some(solid_dialect::CallbackOwner::Leaf)
+                            && (!lookup
+                                .dialect
+                                .leaf_owner_requires_owned_call_site(primitive)
+                                || settled_gates.get(&(
+                                    file.path.to_string(),
+                                    u64::from(owner_call.span.start),
+                                    u64::from(owner_call.span.end),
+                                )) == Some(&crate::owners::LeafGateDecision::Owned))
+                    })
+        })
+        .then_some(callback.span)
+}
+
+/// ADR 1052 part 10: whether `site`, a creation the leaf owner refuses (`creates_forbidden_primitive`), is written directly in a
+/// synchronous function literal registered whole as a listener (a `lib.dom` `addEventListener(type, listener)`, `type` a string
+/// literal) on a fresh element: a `const` of a component `K` (unexported, unwritten) that `Document.createElement` initializes,
+/// whose every other reference is
+/// - written directly in one owned leaf callback (`owned_leaf_callback`) that also holds `el.remove()` (`ChildNode.remove`) as one
+///   of its completion sites: whatever that callback dispatches to the element runs on the leaf owner's stack, where the creation
+///   throws PRIMITIVE_IN_FORBIDDEN_SCOPE first, and on its every completion the element has left the page; or
+/// - written directly in `K`'s body (which runs before the settled callback) as the receiver of a standard-library call that
+///   delivers nothing synchronously, or only events that are not `type` to its receiver (`events_delivered_to_receiver`: a
+///   `focus()` before a `blur` listener), or as the whole argument of `ParentNode.append` or `Node.appendChild`.
+///
+/// No later event then reaches the listener: the element is detached and nothing else holds it (Chrome:
+/// `evt-settled-fire-remove`, only PRIMITIVE_IN_FORBIDDEN_SCOPE, also with ADR 1101's later events). `false` for anything else:
+/// an element that stays attached, another holder, a reference in a nested function, a dispatching call outside the callback.
+fn listener_detached_in_owned_leaf(
+    site: &Location,
+    settled_gates: &crate::owners::SettledGateDecisions,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some(file) = lookup.file_by_path(site.path.as_ref()) else {
+        return false;
+    };
+    let (Ok(start), Ok(end)) = (u32::try_from(site.start_byte), u32::try_from(site.end_byte))
+    else {
+        return false;
+    };
+    let ast = &file.ast;
+    let Some(creation) = ast.calls.iter().find(|call| call.span.start == start) else {
+        return false;
+    };
+    if !lookup
+        .primitive_at_call(file, creation.span)
+        .is_some_and(|primitive| {
+            crate::cleanup::creates_forbidden_primitive(lookup.dialect, file, creation, primitive)
+        })
+    {
+        return false;
+    }
+    let Some(listener) =
+        crate::owners::owning_function(ast, solid_facts::core::Span::new(start, end))
+    else {
+        return false;
+    };
+    if listener.r#async || listener.generator {
+        return false;
+    }
+    let standard = |call: &solid_facts::ast::CallFact| {
+        lookup
+            .resolved_callee_call(file, ast.peel_ts_sugar_span(call.callee))
+            .and_then(crate::runtime_semantics::standard_call_name)
+            .map(str::to_owned)
+    };
+    // The registration: `el.addEventListener("type", listener)`.
+    let Some(registration) = ast.calls.iter().find(|call| {
+        !call.construct
+            && call.arguments.len() >= 2
+            && call.arguments[..2].iter().all(|argument| !argument.spread)
+            && ast.peel_ts_sugar_span(call.arguments[1].span) == listener.span
+    }) else {
+        return false;
+    };
+    // lib.dom declares the element's own overload (`HTMLInputElement.addEventListener`), as `EventTarget`'s.
+    if !standard(registration).is_some_and(|name| name.ends_with(".addEventListener")) {
+        return false;
+    }
+    let Some(event_type) = file
+        .source_text(ast.peel_ts_sugar_span(registration.arguments[0].span))
+        .and_then(|text| {
+            text.strip_prefix('"')
+                .and_then(|rest| rest.strip_suffix('"'))
+                .or_else(|| {
+                    text.strip_prefix('\'')
+                        .and_then(|rest| rest.strip_suffix('\''))
+                })
+        })
+        .filter(|text| text.chars().all(|c| c.is_ascii_alphanumeric()))
+        .map(str::to_owned)
+    else {
+        return false;
+    };
+    let Some(member) = ast
+        .members
+        .iter()
+        .find(|member| ast.peel_ts_sugar_span(registration.callee) == member.span)
+    else {
+        return false;
+    };
+    let receiver = ast.peel_ts_sugar_span(member.object);
+    // The element: a `const` of the component a `Document.createElement` call initializes.
+    let Some(binding) = ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding.names.len() == 1
+            && lookup
+                .entities()
+                .at(file.path.as_str(), binding.names[0].span)
+                .is_some_and(|declared| {
+                    lookup
+                        .symbol_references(declared.as_str())
+                        .iter()
+                        .any(|reference| {
+                            reference.path.as_ref() == file.path.as_str()
+                                && reference.start_byte == u64::from(receiver.start)
+                        })
+                })
+    }) else {
+        return false;
+    };
+    let name = binding.names[0].span;
+    let Some(component) = crate::owners::owning_function(ast, binding.declaration) else {
+        return false;
+    };
+    let created = binding.initializer.is_some_and(|initializer| {
+        ast.calls.iter().any(|call| {
+            call.span == ast.peel_ts_sugar_span(initializer)
+                && standard(call).as_deref() == Some("Document.createElement")
+        })
+    });
+    if !created || crate::indexes::binding_written(file, name) {
+        return false;
+    }
+    let Some(symbol) = lookup.entities().at(file.path.as_str(), name) else {
+        return false;
+    };
+    let mut leaf: Option<solid_facts::core::Span> = None;
+    let mut removed = false;
+    for reference in lookup.symbol_references(symbol.as_str()) {
+        if reference.path.as_ref() != file.path.as_str() {
+            return false;
+        }
+        if reference.start_byte == u64::from(name.start) {
+            continue;
+        }
+        let Ok(at) = u32::try_from(reference.start_byte) else {
+            return false;
+        };
+        // The call the reference is the receiver of (`el.m(...)`), if any.
+        let received = ast
+            .members
+            .iter()
+            .find(|member| ast.peel_ts_sugar_span(member.object).start == at)
+            .and_then(|member| {
+                ast.calls.iter().find(|call| {
+                    !call.construct && ast.peel_ts_sugar_span(call.callee) == member.span
+                })
+            });
+        let Some(holder) =
+            crate::owners::owning_function(ast, solid_facts::core::Span::new(at, at))
+        else {
+            return false;
+        };
+        if let Some(call) = received
+            && let Some(callback) = owned_leaf_callback(file, call.span, settled_gates, lookup)
+        {
+            if leaf.is_some_and(|known| known != callback) {
+                return false;
+            }
+            leaf = Some(callback);
+            if standard(call).as_deref() == Some("ChildNode.remove")
+                && ast.completion_sites.contains(&call.span)
+            {
+                removed = true;
+            }
+            continue;
+        }
+        if holder.span != component.span {
+            return false;
+        }
+        if let Some(call) = received {
+            let Some(name) = standard(call) else {
+                return false;
+            };
+            let quiet = !crate::runtime_semantics::delivers_synchronously(&name)
+                || crate::runtime_semantics::events_delivered_to_receiver(&name)
+                    .is_some_and(|events| !events.contains(&event_type.as_str()));
+            if !quiet {
+                return false;
+            }
+            continue;
+        }
+        // `document.body.append(el)`: the whole argument of an attaching call, which runs no listener of a fresh element.
+        let attached = ast.calls.iter().any(|call| {
+            call.arguments.len() == 1
+                && !call.arguments[0].spread
+                && ast.peel_ts_sugar_span(call.arguments[0].span).start == at
+                && matches!(
+                    standard(call).as_deref(),
+                    Some("ParentNode.append" | "Node.appendChild")
+                )
+        });
+        if !attached {
+            return false;
+        }
+    }
+    // The settled callback runs after the component's body, so its leaf owner is the element's last holder.
+    removed
+        && leaf
+            .is_some_and(|callback| component.span.contains(callback) && callback != component.span)
 }
