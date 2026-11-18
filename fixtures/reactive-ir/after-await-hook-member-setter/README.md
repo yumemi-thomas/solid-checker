@@ -8,6 +8,9 @@
 | `Compared` (an `equals` function) | SC1002 uncertifiable |
 | `StoreDraft` (a store's setter, updater writing a literal) | proved: no SC1002 row |
 | `StoreCarried` (a store's setter given a value) | SC1002 uncertifiable |
+| `InSetterCarried` (part 2: `setS1(() => { thing.useIt.v = 7; })`, `thing.useIt` the hook's `s1`) | proved: no SC1002 row |
+| `InSetterOther` (the carried store is another one) | SC1002 uncertifiable |
+| `InSetterSpread` (the hook's literal spreads) | SC1002 uncertifiable |
 | `AsyncRead` (an async memo's read after its await) | SC1002 violation |
 
 `solid-js.d.ts` is `async-creation-pass`'s with `createStore`.

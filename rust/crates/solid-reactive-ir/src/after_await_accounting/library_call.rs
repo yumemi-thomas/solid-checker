@@ -450,6 +450,14 @@ fn updater_writes_literals_only(
                     Some(declaration) == parameter || Some(declaration) == root
                 })
     };
+    // ADR 1098 (part 2): a member that carries the root (`thing.useIt`, the store a hook's returned literal holds), by
+    // [`carried_root`].
+    let carried = |object: solid_facts::core::Span| {
+        let Some(root) = root else {
+            return false;
+        };
+        carried_root(file, ast.peel_ts_sugar_span(object), root)
+    };
     let mut targets = Vec::new();
     for assignment in ast
         .assignments
@@ -467,7 +475,7 @@ fn updater_writes_literals_only(
         if assignment.reads_target
             || ast.computed_members.binary_search(&member.span).is_ok()
             || matches!(key, "__proto__" | "constructor" | "prototype")
-            || !store_name(member.object)
+            || !(store_name(member.object) || carried(member.object))
             || !ctx
                 .semantic_lookup
                 .proven_primitive(file, assignment.value_span, PROOF_DEPTH)
@@ -476,14 +484,24 @@ fn updater_writes_literals_only(
         }
         targets.push(member);
     }
-    let objects = targets
+    let mut objects = targets
         .iter()
         .map(|member| ast.peel_ts_sugar_span(member.object))
         .collect::<Vec<_>>();
+    // A carried root's member, and the name it is read from.
+    let carriers = objects
+        .iter()
+        .filter_map(|object| ast.member_at(*object))
+        .map(|member| (member.span, ast.peel_ts_sugar_span(member.object)))
+        .collect::<Vec<_>>();
+    objects.extend(carriers.iter().map(|(_, name)| *name));
     ast.members
         .iter()
         .filter(|member| inside(member.span))
-        .all(|member| targets.iter().any(|target| target.span == member.span))
+        .all(|member| {
+            targets.iter().any(|target| target.span == member.span)
+                || carriers.iter().any(|(carrier, _)| *carrier == member.span)
+        })
         && ast
             .identifiers
             .iter()
@@ -492,6 +510,97 @@ fn updater_writes_literals_only(
                     && inside(identifier.span)
             })
             .all(|identifier| objects.contains(&identifier.span))
+}
+
+/// ADR 1098 (part 2): `object` is `holder.key` and, in this file, `holder` is a `const` bound to a call with no arguments of a `const`
+/// arrow whose expression body is a closed object literal (no spread, computed or duplicate key, setter or prototype member: the
+/// fact's `closed`) holding, at `key`, a plain property whose value is a name the creation's root slot `root` declares: the hook
+/// hands out the store itself.
+fn carried_root(
+    file: &FileFacts,
+    object: solid_facts::core::Span,
+    root: solid_facts::core::Span,
+) -> bool {
+    let ast = &file.ast;
+    let Some(member) = ast.member_at(object) else {
+        return false;
+    };
+    if ast.computed_members.binary_search(&member.span).is_ok() {
+        return false;
+    }
+    let Some(key) = file.source_text(member.property) else {
+        return false;
+    };
+    let const_initializer = |name: solid_facts::core::Span| {
+        let name = ast.peel_ts_sugar_span(name);
+        if !crate::owners::is_identifier_span(file, name) {
+            return None;
+        }
+        let declaration = ast.reference_declaration(name)?;
+        let binding = ast.bindings.iter().find(|binding| {
+            binding.immutable
+                && binding.shape == BindingShape::Identifier
+                && binding.names.iter().any(|named| named.span == declaration)
+        })?;
+        binding
+            .initializer
+            .map(|initializer| ast.peel_ts_sugar_span(initializer))
+    };
+    let Some(call) =
+        const_initializer(member.object).and_then(|initializer| ast.call_at(initializer))
+    else {
+        return false;
+    };
+    if call.construct || !call.arguments.is_empty() {
+        return false;
+    }
+    let Some(hook) =
+        const_initializer(call.callee).and_then(|initializer| ast.function_at(initializer))
+    else {
+        return false;
+    };
+    if !hook.expression_body || hook.r#async || hook.generator {
+        return false;
+    }
+    let Some(body) = file.peel_parentheses(hook.body) else {
+        return false;
+    };
+    let Some(shape) = ast
+        .object_get_shapes
+        .iter()
+        .find(|shape| shape.span == body && shape.closed)
+    else {
+        return false;
+    };
+    if shape
+        .properties
+        .iter()
+        .filter(|property| property.key.as_str() == key)
+        .count()
+        != 1
+        || shape
+            .properties
+            .iter()
+            .any(|property| property.key.as_str() == key && property.getter.is_some())
+    {
+        return false;
+    }
+    // The property written directly in the literal (none of a literal nested in it).
+    let nested = |span: solid_facts::core::Span| {
+        ast.object_get_shapes.iter().any(|inner| {
+            inner.span != shape.span && shape.span.contains(inner.span) && inner.span.contains(span)
+        })
+    };
+    ast.object_properties.iter().any(|property| {
+        shape.span.contains(property.span)
+            && !nested(property.span)
+            && !property.computed
+            && file
+                .source_text(property.key)
+                .is_some_and(|text| text.trim_matches(['"', '\'']) == key)
+            && crate::owners::is_identifier_span(file, ast.peel_ts_sugar_span(property.value))
+            && ast.reference_declaration(ast.peel_ts_sugar_span(property.value)) == Some(root)
+    })
 }
 
 /// Whether the receiver of `call` is the library's own value: no receiver (an identifier callee), a primitive proven from its own expression, or an unshadowed ECMAScript

@@ -58,3 +58,44 @@ export function AsyncRead() {
   });
   return <p>{shown()}</p>;
 }
+
+// Proved (ADR 1098 part 2): the updater writes through the store the hook's returned literal carries (`thing.useIt` is `s1`).
+export function InSetterCarried() {
+  const [s1, setS1] = createStore({ v: 0 });
+  const useThing = () => ({ useIt: s1 });
+  const thing = useThing();
+  Promise.resolve().then(() => {
+    setS1(() => {
+      thing.useIt.v = 7;
+    });
+  });
+  return <p>{s1.v}</p>;
+}
+
+// Kept: the carried store is another one than the setter's.
+export function InSetterOther() {
+  const [s1, setS1] = createStore({ v: 0 });
+  const [s2] = createStore({ v: 0 });
+  const useThing = () => ({ useIt: s2 });
+  const thing = useThing();
+  Promise.resolve().then(() => {
+    setS1(() => {
+      thing.useIt.v = 7;
+    });
+  });
+  return <p>{s1.v}</p>;
+}
+
+// Kept: the hook's literal spreads another object, so `useIt` may come from it.
+export function InSetterSpread() {
+  const [s1, setS1] = createStore({ v: 0 });
+  const base = { useIt: s1 };
+  const useThing = () => ({ ...base, useIt: s1 });
+  const thing = useThing();
+  Promise.resolve().then(() => {
+    setS1(() => {
+      thing.useIt.v = 7;
+    });
+  });
+  return <p>{s1.v}</p>;
+}
