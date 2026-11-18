@@ -1870,3 +1870,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/store-setter-after-await/node_modules/**
 !fixtures/reactive-ir/action-after-await/node_modules/
 !fixtures/reactive-ir/action-after-await/node_modules/**
+!fixtures/reactive-ir/event-handler-entry/node_modules/
+!fixtures/reactive-ir/event-handler-entry/node_modules/**

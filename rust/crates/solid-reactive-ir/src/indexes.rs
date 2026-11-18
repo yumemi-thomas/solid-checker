@@ -894,6 +894,8 @@ pub(super) struct SemanticLookup<'a> {
     /// ADR 0292: whether some file holds a reflective write through a
     /// `prototype`.
     reflective_prototype_write: crate::base::reads::Recorded<bool>,
+    /// ADR 1089 part E: whether some code may reach a handler Solid stored on an element (`event_delivery::scan_delegated_handler_reach`).
+    delegated_handler_reach: crate::base::reads::Recorded<bool>,
     raw_store_values: crate::base::reads::Recorded<bool>,
     /// ADR 0320: whether some call may copy keys into an existing object.
     objects_assigned_into: crate::base::reads::Recorded<bool>,
@@ -1315,6 +1317,7 @@ impl<'a> SemanticLookup<'a> {
             listener_project_reach: OnceLock::new(),
             callee_covers: crate::owners::CalleeCovers::default(),
             reflective_prototype_write: crate::base::reads::Recorded::new(),
+            delegated_handler_reach: crate::base::reads::Recorded::new(),
             raw_store_values: crate::base::reads::Recorded::new(),
             objects_assigned_into: crate::base::reads::Recorded::new(),
             router_params: crate::base::reads::Recorded::new(),
@@ -2107,6 +2110,9 @@ impl<'a> SemanticLookup<'a> {
             }
             Section::ReflectivePrototypeWrite => {
                 hasher.update([u8::from(self.reflective_prototype_write_present())]);
+            }
+            Section::DelegatedHandlerReach => {
+                hasher.update([u8::from(self.delegated_handler_reachable())]);
             }
             Section::RouteComponents => {
                 spans(

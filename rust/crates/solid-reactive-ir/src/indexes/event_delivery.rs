@@ -212,6 +212,16 @@ impl SemanticLookup<'_> {
         })
     }
 
+    /// ADR 1089 part E: whether some code of the program may reach a handler an intrinsic element's `on*` attribute hands to Solid
+    /// ([`scan_delegated_handler_reach`]), scanned once per build. False is the premise that such a handler is entered by event
+    /// delivery alone.
+    pub(crate) fn delegated_handler_reachable(&self) -> bool {
+        crate::base::reads::note(crate::base::reads::Section::DelegatedHandlerReach);
+        *self
+            .delegated_handler_reach
+            .get_or_init(|| scan_delegated_handler_reach(self))
+    }
+
     /// ADR 0634: some analyzed file names `markRaw` or writes a `shallow`
     /// option. A record that entered a shallow store is raw for every later
     /// store (`createStore(rec)` returns it as it is), so a store over a value
@@ -1121,4 +1131,205 @@ impl SemanticLookup<'_> {
                 == Some(solid_dialect::Primitive::RunWithOwner))
         .then_some(DispatchCaller::DetachedOwner)
     }
+}
+
+/// The standard declarations that expose an object's own keys or values by a key no read names (ADR 1089 part E).
+const KEY_EXPOSING_CALLS: &[&str] = &[
+    "ObjectConstructor.keys",
+    "ObjectConstructor.values",
+    "ObjectConstructor.entries",
+    "ObjectConstructor.getOwnPropertyNames",
+    "ObjectConstructor.getOwnPropertyDescriptor",
+    "ObjectConstructor.getOwnPropertyDescriptors",
+    "ObjectConstructor.getOwnPropertySymbols",
+    "ObjectConstructor.assign",
+    "Reflect.ownKeys",
+    "Reflect.get",
+    "Reflect.getOwnPropertyDescriptor",
+];
+
+/// ADR 1089 part E: whether some code of the program may read a handler rc.21 `@solidjs/web` stored on an element. Delegation
+/// keeps it at `node["_$$" + name]` and its data at `node["_$$" + name + "Data"]` (`dist/web.dev.js:480, 790-799`); a handler it
+/// does not delegate goes to `addEventListener`, which no code reads back. Every value may be an element here, so the answer is
+/// true when any analysed file:
+/// - spells `$$` before a name character (a member, a destructured key, a string or template that builds such a key);
+/// - reads a computed member under a key no constant names, or destructures a key that is no plain name, or an object pattern
+///   with a rest or a nested pattern, or assigns to an object pattern;
+/// - spreads an object, in a literal or as JSX attributes, or iterates keys (`for … in`, a `with` statement: a text match, which
+///   only refuses more), or calls a standard reader of own keys ([`KEY_EXPOSING_CALLS`]);
+/// - evaluates code from a string;
+/// - loads a module the program does not analyse (by its attested resolution) that is not one the dialect owns, or loads one by
+///   a computed specifier: such code may walk the document and read the property.
+pub(crate) fn scan_delegated_handler_reach(lookup: &super::SemanticLookup<'_>) -> bool {
+    delegated_handler_reach_reason(lookup).is_some()
+}
+
+/// The first reason [`scan_delegated_handler_reach`] finds: the file and the class of code.
+fn delegated_handler_reach_reason(
+    lookup: &super::SemanticLookup<'_>,
+) -> Option<(String, &'static str)> {
+    if lookup.hazard_present(crate::base::Hazard::Eval)
+        || lookup.hazard_present(crate::base::Hazard::CodeEvaluatingCall)
+    {
+        return Some((String::new(), "code-from-string"));
+    }
+    let program = lookup
+        .files()
+        .iter()
+        .map(|file| file.path.as_str())
+        .collect::<std::collections::HashSet<_>>();
+    let key_iteration = |source: &str| {
+        let bytes = source.as_bytes();
+        let dollar_name = bytes.windows(3).any(|window| {
+            window[0] == b'$'
+                && window[1] == b'$'
+                && (window[2].is_ascii_alphanumeric() || window[2] == b'_' || window[2] == b'$')
+        });
+        dollar_name || source_has_keyword_paren(source, "with") || source_has_for_in(source)
+    };
+    lookup.files().iter().find_map(|file| {
+        let ast = &file.ast;
+        let found = |why: &'static str| Some((file.path.to_string(), why));
+        if key_iteration(&file.source) {
+            return found("key-text");
+        }
+        let computed_unnamed = ast.computed_members.iter().any(|member_span| {
+            let Some(member) = ast.member_at(*member_span) else {
+                return true;
+            };
+            let constant = ast
+                .literal_computed_members
+                .iter()
+                .any(|literal| literal.span == *member_span)
+                || crate::indexes::constant_string_key(file, member.property).is_some();
+            !constant
+        });
+        let patterns = ast
+            .bindings
+            .iter()
+            .chain(
+                ast.functions
+                    .iter()
+                    .flat_map(|function| function.parameters.iter()),
+            )
+            .any(|binding| {
+                binding.shape == solid_facts::ast::BindingShape::Object
+                    && (binding.names.len() != binding.object_slots.len()
+                        || binding
+                            .object_slots
+                            .iter()
+                            .any(|slot| !slot.plain_identifier_key))
+            });
+        let assigned_pattern = ast.assignments.iter().any(|assignment| {
+            file.source_text(ast.peel_ts_sugar_span(assignment.target))
+                .is_some_and(|target| target.trim_start_matches('(').trim_start().starts_with('{'))
+        });
+        // An array element's or a call argument's spread iterates its operand (`[...xs]`, `f(...xs)`): it exposes no key. Any other
+        // spread copies own keys (an object literal's), and so does a JSX spread attribute.
+        let iterated = |spread: &solid_facts::ast::SpreadFact| {
+            ast.array_literal_elements.iter().any(|literal| {
+                literal.elements.iter().any(|element| {
+                    element.kind == solid_facts::ast::ArrayElementKind::Spread
+                        && same_spread(element.span, spread)
+                })
+            }) || ast.calls.iter().any(|call| {
+                call.arguments
+                    .iter()
+                    .any(|argument| argument.spread && same_spread(argument.span, spread))
+            })
+        };
+        let spreads = ast.spreads.iter().any(|spread| !iterated(spread))
+            || ast
+                .jsx_elements
+                .iter()
+                .any(|element| !element.spreads.is_empty());
+        let key_calls = ast.calls.iter().any(|call| {
+            lookup
+                .resolved_callee_call(file, call.callee)
+                .and_then(|resolved| resolved.declaration.as_ref())
+                .is_some_and(|declaration| {
+                    declaration.standard_library
+                        && KEY_EXPOSING_CALLS.contains(&declaration.qualified_name.as_ref())
+                })
+        });
+        for (hit, why) in [
+            (computed_unnamed, "computed-key"),
+            (patterns, "object-pattern"),
+            (assigned_pattern, "assigned-pattern"),
+            (spreads, "spread"),
+            (key_calls, "key-call"),
+        ] {
+            if hit {
+                return found(why);
+            }
+        }
+        let Some(imports) = lookup.resolved_imports() else {
+            return found("no-attestation");
+        };
+        let outside = |at: solid_facts::core::Span, specifier: &str| {
+            if lookup.dialect.owns_module(specifier) {
+                return false;
+            }
+            match imports.specifier(file.path.as_str(), at, specifier) {
+                solid_facts::SpecifierAttestation::Attested(row) => {
+                    row.resolution == solid_facts::ImportResolution::Unresolved
+                        || !program.contains(row.resolved_path.as_ref())
+                }
+                solid_facts::SpecifierAttestation::Unattested => true,
+            }
+        };
+        let loads_outside = ast
+            .imports
+            .iter()
+            .filter(|import| !import.type_only)
+            .any(|import| outside(import.span, import.module.as_str()))
+            || ast
+                .exports
+                .iter()
+                .filter(|export| !export.type_only)
+                .any(|export| {
+                    export
+                        .module
+                        .as_deref()
+                        .is_some_and(|module| outside(export.span, module))
+                })
+            || ast.module_loads.iter().any(|load| {
+                load.specifier
+                    .as_deref()
+                    .is_none_or(|specifier| outside(load.span, specifier))
+            });
+        loads_outside.then(|| (file.path.to_string(), "unread-module"))
+    })
+}
+
+/// Whether `source` has `keyword` followed by optional space and `(` at a word boundary (a superset of the statement).
+fn source_has_keyword_paren(source: &str, keyword: &str) -> bool {
+    source.match_indices(keyword).any(|(at, _)| {
+        let before = source[..at].chars().next_back();
+        let after = source[at + keyword.len()..].trim_start();
+        before.is_none_or(|c| !(c.is_alphanumeric() || c == '_' || c == '$'))
+            && after.starts_with('(')
+    })
+}
+
+/// Whether `source` has a `for (` whose head, up to its first `;` or `)`, holds ` in ` (a superset of `for … in`).
+fn source_has_for_in(source: &str) -> bool {
+    source.match_indices("for").any(|(at, _)| {
+        let before = source[..at].chars().next_back();
+        let rest = source[at + 3..].trim_start();
+        if before.is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '$')
+            || !rest.starts_with('(')
+        {
+            return false;
+        }
+        let head = &rest[1..];
+        let end = head.find([';', ')']).unwrap_or(head.len());
+        head[..end].split_whitespace().any(|word| word == "in")
+    })
+}
+
+/// Whether an array element or a call argument marked as a spread at `at` is `spread` itself: the same span, or the span between
+/// its `...` and its operand's end (whichever the facts record). An object spread nested inside the element is not.
+fn same_spread(at: solid_facts::core::Span, spread: &solid_facts::ast::SpreadFact) -> bool {
+    at == spread.span || (spread.span.contains(at) && at.contains(spread.argument))
 }

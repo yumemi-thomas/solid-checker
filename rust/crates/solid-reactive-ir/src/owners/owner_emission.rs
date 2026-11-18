@@ -1172,6 +1172,30 @@ pub(super) fn layer_entry_open_by_reference(
     )
 }
 
+/// ADR 1089 part E: whether `function` is, as written, the whole value of a plain `on<letter>…` attribute (no namespace) of an
+/// intrinsic element: a lowercase tag with no member object, the DOM element itself, to which Solid hands it as the event's
+/// handler.
+fn intrinsic_event_handler(file: &solid_facts::FileFacts, function: Span) -> bool {
+    file.ast.jsx_elements.iter().any(|element| {
+        element.member_object.is_none()
+            && file
+                .source_text(element.name.span)
+                .and_then(|tag| tag.chars().next())
+                .is_some_and(char::is_lowercase)
+            && element.attributes.iter().any(|attribute| {
+                attribute.namespace.is_none()
+                    && file.source_text(attribute.local_name).is_some_and(|name| {
+                        name.strip_prefix("on")
+                            .and_then(|rest| rest.chars().next())
+                            .is_some_and(char::is_alphabetic)
+                    })
+                    && attribute.expression.is_some_and(|expression| {
+                        file.ast.peel_ts_sugar_span(expression) == function
+                    })
+            })
+    })
+}
+
 /// Whether nothing references `function` but the position that enters it (N2): a callback with no binding (an arrow, an anonymous function) cannot be, and a
 /// named function expression can hand itself on (`createRoot(function f() { if (!saved) { saved = f; return; } … })`, then `saved()` from an effect's apply),
 /// after which a run the primitive does not make has no owner. A name whose references cannot be listed is referenced.
@@ -1387,6 +1411,14 @@ fn layer_entry_open(
         }
         if function.method_name.is_some() {
             return true;
+        }
+        // ADR 1089 part E: an anonymous function written as an intrinsic element's `on*` attribute is entered by event delivery
+        // alone, while no code of the program may read the handler Solid stores on the element.
+        if function_binding_name(file, function).is_none()
+            && intrinsic_event_handler(file, function.span)
+            && !lookup.delegated_handler_reachable()
+        {
+            continue;
         }
         if function_binding_name(file, function).is_none() {
             let in_place = file

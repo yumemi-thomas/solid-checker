@@ -555,8 +555,8 @@
     },
     "rust/crates/solid-reactive-ir/src/indexes/event_delivery.rs": {
       "default-on-missing": {
-        "count": 1,
-        "why": "pending-review"
+        "count": 3,
+        "why": "ADR 1089 part E (scan_delegated_handler_reach): a load with no literal specifier is taken as unread code (true: the premise is refused), and a keyword at the start of the source counts as at a word boundary (a text test that only refuses more): both answer the fail-closed side; one older hit pending-review"
       },
       "name-only-match": {
         "count": 3,

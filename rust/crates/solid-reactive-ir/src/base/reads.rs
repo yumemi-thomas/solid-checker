@@ -76,6 +76,8 @@ pub(crate) enum Section {
     ReflectiveDefinition,
     /// A reflective write through a `prototype` (ADR 0292).
     ReflectivePrototypeWrite,
+    /// ADR 1089 part E: whether code of the program may reach a handler Solid stored on an element.
+    DelegatedHandlerReach,
     /// Whether a value may be raw-marked: a `markRaw`, or a shallow store
     /// that marks what enters it (ADR 0634).
     RawStoreValues,
@@ -105,7 +107,7 @@ pub(crate) enum Section {
 }
 
 impl Section {
-    pub(crate) const ALL: [Self; 21] = [
+    pub(crate) const ALL: [Self; 22] = [
         Self::Components,
         Self::MemberTargets,
         Self::SpreadTargets,
@@ -119,6 +121,7 @@ impl Section {
         Self::DispatchVeto,
         Self::ReflectiveDefinition,
         Self::ReflectivePrototypeWrite,
+        Self::DelegatedHandlerReach,
         Self::RawStoreValues,
         Self::RouteComponents,
         Self::ContextSymbols,
