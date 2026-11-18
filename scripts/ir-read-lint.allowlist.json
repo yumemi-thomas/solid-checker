@@ -60,10 +60,11 @@
     "file_by_path": 4
   },
   "rust/crates/solid-reactive-ir/src/competing_checks.rs": {
-    "file_by_path": 3,
+    "file_by_path": 4,
     "pending-review": [
       "file_by_path rose 0 -> 2 (--allow-rise): unreviewed",
-      "file_by_path rose 2 -> 3 (--allow-rise): unreviewed"
+      "file_by_path rose 2 -> 3 (--allow-rise): unreviewed",
+      "file_by_path rose 3 -> 4 (--allow-rise): unreviewed"
     ]
   },
   "rust/crates/solid-reactive-ir/src/development_feedback.rs": {
