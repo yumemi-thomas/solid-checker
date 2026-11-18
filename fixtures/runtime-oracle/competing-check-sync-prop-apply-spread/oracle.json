@@ -1,0 +1,5 @@
+{
+  "note": "ADR 1052 part 8: a sync memo in a prop callback handed on as a spread props object to a child whose effect apply calls it: PRIMITIVE_IN_EFFECT_CALLBACK; SC7002 uncertifiable, SC6002 a violation. Generated program `mx-sync-node-received-async-cbp-apply-spread-memo-direct-none` (differential fuzzer, generator 2).",
+  "haltMarker": true,
+  "steps": []
+}

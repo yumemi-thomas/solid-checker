@@ -1,0 +1,49 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/store-setter-after-await/App.tsx",
+      "start": 859,
+      "end": 864,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/store-setter-after-await/App.tsx",
+      "start": 1105,
+      "end": 1110,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/store-setter-after-await/App.tsx",
+      "start": 1395,
+      "end": 1400,
+      "fixes": 0
+    },
+    {
+      "rule": "unaudited-solid-release",
+      "code": "SC9014",
+      "kind": "uncertifiable",
+      "blocker": "dialect-detection",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-setter-after-await/node_modules/solid-js/package.json",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
+    }
+  ]
+}
