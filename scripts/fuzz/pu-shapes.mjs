@@ -81,7 +81,8 @@ export function puContext(context, stmts, kit) {
       const hoisted = [decl(host, obj([["toString", fn([...stmts, ret(num(0))])]])), expr(domExpr(`const [, ${set}] = createSignal("")`, undefined, ["createSignal"]))];
       if (context === "pu-coerce-wrapper") hoisted.push(expr(domExpr(`const ${wrap} = () => { ${write}; }`)));
       const call = context === "pu-coerce-direct" ? write : context === "pu-coerce-wrapper" ? `${wrap}()` : `(() => { ${write}; })()`;
-      return { hoisted, body: memoOf(kit, [awaitStmt(), expr(domExpr(call))]), view: [] };
+      // In the component's body, as the review's program: an object member there no call names (at module scope its read had rows of its own on every build).
+      return { body: [...hoisted, ...memoOf(kit, [awaitStmt(), expr(domExpr(call))])], view: [] };
     }
     default: throw new Error(`no promise-unconsumed context ${context}`);
   }
