@@ -354,7 +354,8 @@ pub struct AstFacts {
     pub deleted_targets: Vec<Span>,
     /// Values nothing takes: an expression statement's value, the operand of
     /// `void` or `typeof`, either side of `===` or `!==` (facts schema 90, ADR
-    /// 0692). No coercion runs and no value leaves.
+    /// 0692), an `if` statement's test and the operand of `!` (schema 97, ADR
+    /// 1071: `ToBoolean` runs no code). No coercion runs and no value leaves.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub inert_operands: Vec<Span>,
     #[serde(default)]

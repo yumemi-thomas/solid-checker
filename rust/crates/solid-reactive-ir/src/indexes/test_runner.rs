@@ -167,7 +167,9 @@ impl SemanticLookup<'_> {
                 return None;
             }
             let name = declaration.name.as_ref();
-            let timing = crate::runtime_semantics::test_runner_function_declaration(path, name)?;
+            let spelled = self.installed_spelling(path);
+            let timing =
+                crate::runtime_semantics::test_runner_function_declaration(&spelled, name)?;
             let is_suite = crate::runtime_semantics::test_runner_suite_function(name);
             if *suite.get_or_insert(is_suite) != is_suite {
                 return None;
@@ -178,6 +180,11 @@ impl SemanticLookup<'_> {
             });
         }
         Some((suite?, bodies?))
+    }
+
+    /// ADR 1082/1086: [`solid_facts::package_reach::installed_spelling`] with this build's package index.
+    pub(crate) fn installed_spelling<'p>(&self, path: &'p str) -> std::borrow::Cow<'p, str> {
+        solid_facts::package_reach::installed_spelling(self.package_reach(), path)
     }
 
     /// Whether the identifier at `span` is an object a reviewed fake-timer library declares (`vi` of `import { vi } from "vitest"`, the global `jest` of `@types/jest`,
@@ -192,7 +199,7 @@ impl SemanticLookup<'_> {
         self.alias_root_at(file, span).is_some_and(|symbol| {
             symbol.declarations().iter().any(|declaration| {
                 crate::runtime_semantics::fake_timer_library_declaration(
-                    declaration.location.path.as_ref(),
+                    &self.installed_spelling(declaration.location.path.as_ref()),
                 )
             })
         })

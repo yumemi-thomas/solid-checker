@@ -641,6 +641,39 @@ fn sites<'a>(
     found
 }
 
+/// ADR 1065 part 2 (census only): what the root of a member read is, by its syntax and binding.
+fn root_kind(file: &FileFacts, root: Span) -> &'static str {
+    let ast = &file.ast;
+    let root = ast.peel_ts_sugar_span(root);
+    if ast.member_at(root).is_some() {
+        return "member";
+    }
+    if ast.call_at(root).is_some() {
+        return "call-result";
+    }
+    let Some(declaration) = ast.reference_declaration(root) else {
+        return "unbound-global-or-this";
+    };
+    if ast.functions.iter().any(|function| {
+        function
+            .parameters
+            .iter()
+            .any(|parameter| parameter.names.iter().any(|name| name.span == declaration))
+    }) {
+        return "parameter";
+    }
+    match ast
+        .bindings
+        .iter()
+        .find(|binding| binding.names.iter().any(|name| name.span == declaration))
+    {
+        Some(binding) if binding.call_initializer.is_some() => "local-call-result",
+        Some(binding) if binding.immutable => "const",
+        Some(_) => "let",
+        None => "import-or-other",
+    }
+}
+
 /// The uncertifiable row of SC1002 at a site no ending holds: a defect of the rule's own kind, `unaccounted` (the dialect words it), never a violation.
 fn unaccounted_row(site: &AwaitSite<'_>) -> StaticDefect {
     StaticDefect {
@@ -712,6 +745,52 @@ pub(crate) fn account<'a>(
             unaccounted && seen.insert((site.file.path.to_string(), site.at.start, site.at.end));
         if new_row {
             filed.push(unaccounted_row(site));
+            // ADR 1065 part 2 (B3): how the site is listed and the first sub-fact that failed, census only.
+            crate::blocker_census::cause_at(
+                site.file.path.as_str(),
+                site.at,
+                "read-after-await",
+                || {
+                    let failed = match site.via {
+                        "setter" | "library" | "construct" => site.call.map_or_else(
+                            || "no-call".to_owned(),
+                            |call| {
+                                library_call::runs_nothing_failure(
+                                    ctx,
+                                    site.file,
+                                    call,
+                                    site.via,
+                                    &object_prototype_touched,
+                                )
+                            },
+                        ),
+                        "member-read" => site.root.map_or_else(
+                            || "no-root".to_owned(),
+                            |root| format!("root:{}", root_kind(site.file, root)),
+                        ),
+                        "primitive" => "owner-not-captured".to_owned(),
+                        _ => site
+                            .call
+                            .and_then(|call| site.file.source_text(call.callee))
+                            .map_or_else(
+                                || "-".to_owned(),
+                                |callee| {
+                                    format!(
+                                        "callee:{}",
+                                        callee.chars().take(60).collect::<String>()
+                                    )
+                                },
+                            ),
+                    };
+                    format!(
+                        "cause|after-await|{}|{}|test={}|host={}",
+                        site.via,
+                        failed,
+                        yes(site.test),
+                        site.host.chars().take(60).collect::<String>()
+                    )
+                },
+            );
         }
         if candidates {
             let never = matches!(

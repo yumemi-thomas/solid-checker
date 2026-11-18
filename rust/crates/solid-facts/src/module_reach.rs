@@ -2240,13 +2240,21 @@ impl WriterFlow<'_, '_> {
     }
 }
 
-/// Whether a reference of the global `Function` constructs nothing: `Function.prototype…`, the right of `instanceof`, a strict comparison.
+/// Whether a reference of the global `Function` constructs nothing: `Function.prototype…`, a data member (`name`, `length`), `Function.toString` applied
+/// at once (`Function.toString.call(fn)`, `.apply(fn)`: `Function.prototype.toString` returns a string or throws, neither of which constructs code), the right of
+/// `instanceof`, a strict comparison. Not `Function.toString` handed on (its `.constructor` is `Function`), and not `Function.call`, `Function.apply` or
+/// `Function.bind`: applied to `Function` itself they reach the constructor (`Function.apply.call(Function, null, ["code"])`,
+/// `Function.bind.apply(Function, [null, "code"])`), and the receiver is a value the scan does not follow.
 fn function_use_is_inert(nodes: &AstNodes<'_>, id: NodeId) -> bool {
     let (child, parent) = parent_past_wrappers(nodes, id);
     let child_span = nodes.get_node(child).kind().span();
     match nodes.get_node(parent).kind() {
-        AstKind::StaticMemberExpression(member) => {
-            member.property.name == "prototype" && member.object.span() == child_span
+        AstKind::StaticMemberExpression(member) if member.object.span() == child_span => {
+            match member.property.name.as_str() {
+                "prototype" | "name" | "length" => true,
+                "toString" => to_string_applied(nodes, parent),
+                _ => false,
+            }
         }
         AstKind::BinaryExpression(binary) => {
             use oxc_syntax::operator::BinaryOperator;
@@ -2261,6 +2269,26 @@ fn function_use_is_inert(nodes: &AstNodes<'_>, id: NodeId) -> bool {
         }
         _ => false,
     }
+}
+
+/// ADR 1062: whether the member at `id` (`Function.toString`) is the object of a `.call` or `.apply` that is called right there.
+fn to_string_applied(nodes: &AstNodes<'_>, id: NodeId) -> bool {
+    let (child, parent) = parent_past_wrappers(nodes, id);
+    let child_span = nodes.get_node(child).kind().span();
+    let AstKind::StaticMemberExpression(applier) = nodes.get_node(parent).kind() else {
+        return false;
+    };
+    if applier.object.span() != child_span
+        || !matches!(applier.property.name.as_str(), "call" | "apply")
+    {
+        return false;
+    }
+    let (applier_child, call) = parent_past_wrappers(nodes, parent);
+    let applier_span = nodes.get_node(applier_child).kind().span();
+    matches!(
+        nodes.get_node(call).kind(),
+        AstKind::CallExpression(call) if call.callee.get_inner_expression().span() == applier_span
+    )
 }
 
 /// Whether the `.constructor` member at `id` can generate code: its object is itself a `.constructor` (`x.constructor.constructor`, the `Function`
@@ -3348,8 +3376,44 @@ mod tests {
             "window.setTimeout(() => {}, 0);",
             "use(x instanceof window.Function);",
             "use(window.Function.prototype);",
+            "use(window.Function.toString.call(fn));",
         ] {
             assert!(!has(source, ModuleHazardKind::CodeGeneration), "{source}");
+        }
+    }
+
+    /// ADR 1062: `Function.toString` (and a data member) read off the constructor generates nothing, however it is called; `call`, `apply` and
+    /// `bind` read off it may be applied to `Function` itself, which constructs code, so they stay code generation.
+    #[test]
+    fn function_to_string_is_no_code_generation_and_its_appliers_are() {
+        let has = |source: &str| {
+            kinds(&scan(source))
+                .iter()
+                .any(|(found, _)| *found == ModuleHazardKind::CodeGeneration)
+        };
+        for source in [
+            "use(Function.toString.call(fn).indexOf('[native code]'));",
+            "use(Function.toString.apply(fn));",
+            "use(Function.name, Function.length);",
+            "use(Function.prototype.toString.call(fn));",
+        ] {
+            assert!(!has(source), "{source}");
+            assert!(!scan(source).global_writes.any_name, "{source}");
+        }
+        for source in [
+            "var C = Function.bind.apply(Parent, a); new C();",
+            "Function.apply.call(Function, null, ['return this'])();",
+            "Function.call(null, 'return this')();",
+            "use(Function.toString.constructor);",
+            "use(Function.toString);",
+            "use(Function.toString.call);",
+            "use(Function.toString.bind(fn));",
+            "use(Function);",
+            "Function('return this')();",
+            "new Function('a', 'return a');",
+            "use(Function['toString']);",
+        ] {
+            assert!(has(source), "{source}");
         }
     }
 

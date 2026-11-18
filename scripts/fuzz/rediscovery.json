@@ -25959,5 +25959,23 @@
   "found": "Mac 23's twin for ADR 1056 (fixture iteration-timer-parameter-composite-stored: a violation on 5a5d1321f)",
   "fixed": "ADR 1056 (`mutation_sites.rs` `closed_parameter_seen`: a reference in an assignment's value fails the parameter; the handed-member proof likewise refuses stored members/literals, receiver escapes, rewritten/defaulted parameters and inherited reads)",
   "outside": "Not generated: the grids write a timer's callback inline or by name in the site's own function, and `assign-callee` (CALLEE_FORMS) is a form of calling the site function itself, never of the function that receives a timer callback as a parameter. They also do not put the scheduler in a handed literal whose callback parameter is rewritten/defaulted, whose member or literal is stored, or whose method leaks its receiver. Pinned by fixture reactive-ir/iteration-timer-parameter-composite-stored (a violation on 5a5d1321f, uncertifiable here; Chrome reports the write, covered-uncertifiable) beside its proved twin iteration-timer-parameter-composite, and the iteration-timer-handed-literal refusal twins."
+ },
+ {
+  "finding": "ADR 1067: a genuine store setter's inline updater can close an open write only with an independently proven fresh ordinary seed and tuple identity",
+  "found": "corpus investigation of standard-member-impostor; an rc.21 source probe also showed a user Proxy can forge value[$TARGET].px and forward updater writes to Number",
+  "fixed": "ADR 1067",
+  "outside": "precision improvement, no released defect to rediscover as a baseline failure. The storesetterproxy and storesettershadowed seam forms generate the forged private-target protocol and local tuple/setter lookalike, each with legal twins; the smoke manifests were not re-recorded for them. Scoped fuzz-focus and the runtime-oracle forged-proxy case check the refusals."
+ },
+ {
+  "finding": "ADR 1062: Function.toString.call/apply in dependency source was classified as code generation, making the package an arbitrary global writer and keeping inert package calls uncertifiable",
+  "found": "ADR 1061 blocker census: Babel _isNativeFunction helper in published package source",
+  "fixed": "ADR 1062 (module_reach.rs function_use_is_inert, to_string_applied)",
+  "outside": "The grids do not generate installed package source containing Function member reads. Scanner unit tests and fixture function-member-read (immediate call, held member, bind) retain the shape; the pre-fix release build gives package-may-call-action:code-generation at the immediate-call fixture, the fix certifies it. No runtime violation is claimed."
+ },
+ {
+  "finding": "A flush written in a callback a reviewed scheduler runs was certified on `FlushSafe::FreshStack` in a program that installs fake timers through vitest installed by a linker's store (`node_modules/.store/<slot>/package` behind a `node_modules/vitest` link): the fake-timer census matched the installer's declaration by the path segments `node_modules/vitest`, which the slot's real path lacks, so the program counted as installing none (ADR 0967 F1's false clean, by another install layout)",
+  "found": "ADR 1082's follow-up (Mac 23, 2026-11-18): the runner recognition missed the same layout in jandibat-web; fixture flush-universe-fake-timers-store on the 1082 head loses the nine rows flush-universe-fake-timers holds",
+  "fixed": "ADR 1086: every check that recognises a package by the path of a declaration or file reads it as the slot's manifest names it (`solid_facts::package_reach::installed_spelling`; the router's own files by the root its imports resolve to)",
+  "outside": "the grids' programs run in the Chrome oracle's page, where vitest cannot load, and the generator writes no install layout (no `node_modules` tree of its own), so no generated program installs a reviewed fake clock from a store slot; fixture flush-universe-fake-timers-store holds it (nine rows, equal to flush-universe-fake-timers)"
  }
 ]

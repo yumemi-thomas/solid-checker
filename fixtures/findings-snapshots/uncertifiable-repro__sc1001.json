@@ -57,17 +57,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "handed-member-dispatch",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc1001/src/callback-stored-in-object.tsx",
-      "start": 683,
-      "end": 706,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -98,17 +87,6 @@
       "path": "fixtures/uncertifiable-repro/sc1001/src/callback-stored-in-object.tsx",
       "start": 1048,
       "end": 1063,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "handed-member-dispatch",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc1001/src/callback-to-project-fn.tsx",
-      "start": 746,
-      "end": 769,
       "fixes": 0
     },
     {

@@ -937,6 +937,14 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// ADR 1067: whether the setter returned in tuple slot one calls its function-form
+    /// updater with the store returned in slot zero. This proves identity, not allocation:
+    /// consumers must separately prove the store cannot be a user-supplied proxy.
+    fn setter_updater_receives_store(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        false
+    }
+
     /// Whether this component renders its children through a callback the
     /// component itself invokes.
     ///

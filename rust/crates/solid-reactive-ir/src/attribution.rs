@@ -880,10 +880,27 @@ impl<'a> CallGraph<'a, '_> {
             if row.resolution == solid_facts::ImportResolution::Unresolved {
                 return None;
             }
-            if row.included_path.is_empty() {
+            let resolved = if row.included_path.is_empty() {
                 row.resolved_path.to_string()
             } else {
                 row.included_path.to_string()
+            };
+            // ADR 1071: the compiler resolved the types (`./m.js` to `m.d.ts`, a package's dist beside its declarations); a relative
+            // specifier with an explicit runtime extension loads exactly that file (`explicit_runtime_files`, ADR 0193), when exactly
+            // one of its candidates is a program file.
+            if self.file(&resolved).is_none()
+                && let Some(candidates) = explicit_runtime_files(from.path.as_str(), specifier)
+            {
+                let mut held = candidates
+                    .into_iter()
+                    .filter(|candidate| self.file(candidate).is_some());
+                // No candidate, or two: no one module.
+                let (Some(only), None) = (held.next(), held.next()) else {
+                    return None;
+                };
+                only
+            } else {
+                resolved
             }
         } else if specifier.starts_with('.') {
             self.lookup
@@ -902,15 +919,25 @@ impl<'a> CallGraph<'a, '_> {
     }
 
     /// The function a local export `name` of `file` names, resolved by symbol
-    /// (ADR 0347, amendment). `None` for a re-export or `export * as` of that name, for two
-    /// exports of it, for no export at all (a star export may supply it), and for
-    /// a binding that is not a function.
+    /// (ADR 0347, amendment). ADR 1071: a named re-export (`export { name } from "./m"`, or `{ x as name }`) is followed into the one project
+    /// module its specifier loads, a few hops at most. `None` for an `export * as` of that name, for two exports of it, for no export at all
+    /// (a star export may supply it), for a re-export whose module is no one project file, and for a binding that is not a function.
     fn exported_function(
         &self,
         file: &solid_facts::FileFacts,
         name: &str,
     ) -> Option<(String, Span)> {
+        self.exported_function_within(file, name, 0)
+    }
+
+    fn exported_function_within(
+        &self,
+        file: &solid_facts::FileFacts,
+        name: &str,
+        depth: usize,
+    ) -> Option<(String, Span)> {
         let mut local = None;
+        let mut reexport: Option<(Span, &str, &str)> = None;
         for export in &file.ast.exports {
             if export.namespace.as_deref() == Some(name) {
                 return None;
@@ -922,11 +949,28 @@ impl<'a> CallGraph<'a, '_> {
                 {
                     continue;
                 }
-                if export.module.is_some() || local.is_some() {
+                if local.is_some() || reexport.is_some() {
                     return None;
                 }
-                local = Some(declaration.local.span);
+                match export.module.as_deref() {
+                    Some(module) => {
+                        reexport = Some((
+                            export.span,
+                            module,
+                            file.source_text(declaration.local.span)?,
+                        ));
+                    }
+                    None => local = Some(declaration.local.span),
+                }
             }
+        }
+        if let Some((at, module, imported)) = reexport {
+            if depth >= 4 || imported == "default" {
+                return None;
+            }
+            let target = self.direct_specifier_target(file, Some(at), module)?;
+            let target_file = self.file(&target)?;
+            return self.exported_function_within(target_file, imported, depth + 1);
         }
         let symbol = self.lookup.entity_symbol(file, local?)?;
         let (target_file, target) = self.lookup.function_for_symbol(symbol)?;

@@ -3455,6 +3455,9 @@ mod tests {
             ("typeof HELD;\n", true),
             ("if (HELD === other) {}\n", true),
             ("if (other !== HELD) {}\n", true),
+            // ADR 1071: a test converts to a boolean, which runs no code.
+            ("if (HELD) {}\n", true),
+            ("!HELD;\n", true),
             ("if (HELD == other) {}\n", false),
             ("const a = () => HELD;\n", false),
             ("const a = HELD;\n", false),

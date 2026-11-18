@@ -49,6 +49,11 @@ const FORMS = {
   definepath: "const holder = { slot: {} as any }; holder.slot = target; Object.defineProperties(holder.slot, { [key]: { value: impl, configurable: true, writable: true } });",
   // ADR 1053: a callback's first parameter written as a projection draft is, but the callee is a local helper that hands it the parameter.
   draftcallee: "const run = (f: (d: any) => void) => f(target); run((draft: any) => { Object.assign(draft, { [key]: impl }); });",
+  // ADR 1067: a tuple and setter spelling confer no store identity on a local constructor.
+  storesettershadowed: "const createStore = (value: any) => [value, (f: (d: any) => void) => f(value)] as const; const [, setValue] = createStore(target); setValue((draft: any) => { Object.assign(draft, { [key]: impl }); });",
+  // A private-target lookalike is not a runtime-allocated seed. Keep its target non-callable:
+  // createStore treats function seeds as derives, even when they are proxies.
+  storesetterproxy: "let seed: object; seed = new Proxy({}, { get: (t, k, r) => typeof k === 'symbol' ? { px: seed, _fam: null, u: null } : Reflect.get(t, k, r), set: (_shell, k, v) => Reflect.set(target, k, v) }); const [, setValue] = createStore(seed); runWithOwner(null, () => { setValue((draft: any) => { Object.assign(draft, { [key]: impl }); }); });",
 };
 
 /**
@@ -109,7 +114,7 @@ export function seamContext(context, stmts, kit) {
   const orig = member.prelude.length ? kit.name("orig") : undefined;
   return {
     body: [
-      decl(helper, domExpr(`(target: any, key: string, impl: unknown) => { ${typeof FORMS[spec.form] === "function" ? FORMS[spec.form](key) : FORMS[spec.form]} }`)),
+      decl(helper, domExpr(`(target: any, key: string, impl: unknown) => { ${typeof FORMS[spec.form] === "function" ? FORMS[spec.form](key) : FORMS[spec.form]} }`, undefined, spec.form === "storesetterproxy" ? ["createStore", "runWithOwner"] : undefined)),
       ...member.prelude(orig, key),
       expr(domExpr(`${helper}(${member.root}, "${key}", ${member.impl(f, orig)})`)),
       decl(f, fn(stmts)),
