@@ -7853,8 +7853,11 @@ impl LocalAccessContext<'_, '_> {
                 // ADR 1103: the silence rests on the summaries claiming the read at the call edges into the function around it, or
                 // (ADR 0936) into the named function around an anonymous one. An anonymous function handed whole to a call that is no
                 // primitive's (`h1(() => props.m1)` in `const dir1 = () => …`) is entered by that call, and no summary carries its reads
-                // to `dir1()`: the read has no row anywhere, so it is unplaced, never placed elsewhere.
-                let handed_literal = handed_anonymous_literal(file, member.span, self.lookup);
+                // to `dir1()`: the read has no row anywhere, so it is unplaced, never placed elsewhere. A store's read there is
+                // carried (a violation at `dir1()`).
+                // Only a component prop's read: the summaries carry a store's or an accessor's read of such a literal to the call.
+                let handed_literal = self.prop_sources.contains_key(symbol)
+                    && handed_anonymous_literal(file, member.span, self.lookup);
                 if !(unplaced || handed_literal || placed_nowhere(file, member.span, self.lookup)) {
                     let ends_before = result.ends.len();
                     result.ends.end_with(
