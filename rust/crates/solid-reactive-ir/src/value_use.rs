@@ -22,6 +22,9 @@ use crate::blockers;
 use crate::indexes::SemanticLookup;
 use crate::runtime_semantics::RuntimeArgumentBehavior;
 
+/// ADR 1104 (1b): how deep a primitive proof of a call's result looks (the after-await accounting's bound).
+const PRIMITIVE_DEPTH: usize = 4;
+
 /// How many positions one reference's walk may visit. Past it the answer is open.
 const MAX_STEPS: usize = 512;
 
@@ -403,6 +406,8 @@ pub(crate) struct Census<'l, 'a> {
     decided_writes: HashMap<String, Vec<Span>>,
     /// What a call of the walked value does.
     carried: Carried,
+    /// ADR 1104 (1b): the walked root is a component's props, not a store: a value read out of it is a value, not a root.
+    props_root: bool,
     steps: usize,
     parameter_hops: usize,
     return_hops: usize,
@@ -518,6 +523,7 @@ impl<'l, 'a> Census<'l, 'a> {
             escapes: Vec::new(),
             late: Vec::new(),
             late_rows: Vec::new(),
+            props_root: false,
             escaped_uses: Vec::new(),
             reached: Vec::new(),
             allowed: HashMap::default(),
@@ -597,8 +603,15 @@ impl<'l, 'a> Census<'l, 'a> {
     }
 
     /// [`Self::root_use`] as a [`StartAnswer`].
-    pub(crate) fn root_start(&mut self, reference: &Location, async_source: bool) -> StartAnswer {
+    pub(crate) fn root_start(
+        &mut self,
+        reference: &Location,
+        async_source: bool,
+        props: bool,
+    ) -> StartAnswer {
+        self.props_root = props;
         let open = self.root_use(reference, async_source);
+        self.props_root = false;
         self.end_start(open)
     }
 
@@ -815,6 +828,90 @@ impl<'l, 'a> Census<'l, 'a> {
         // A withheld call a late walk met keeps the row the walk placed at its member; the walks past it are not run, so the
         // earlier walks' budget and cut are what they were.
         self.past_withheld = earlier;
+    }
+
+    /// ADR 1104: the names a `for…of` over `operand` puts its elements in, walked on past an escape. 1b: over a standard
+    /// enumeration, a key is a string (`Object.keys`, `Object.entries`) or an index (an array's `keys()`/`entries()`) and is not
+    /// walked, whatever the value; over one that enumerates a root, the root's getters ran at that call (its own row), so a props
+    /// root's value is what its getter answered (a value, maybe an accessor or a store, walked as such, not as the root) and a
+    /// store's value a nested root, still walked as one. A `Map`'s or `Set`'s keys may be anything and are walked.
+    fn iterated_names(
+        &mut self,
+        file: &'a FileFacts,
+        operand: Span,
+        mode: Mode,
+    ) -> Vec<(Span, Mode)> {
+        let Some(names) = for_of_declared_names(file, operand) else {
+            return Vec::new();
+        };
+        let all =
+            |names: Vec<Span>, mode: Mode| names.into_iter().map(|name| (name, mode)).collect();
+        let ast = &file.ast;
+        let Some(call) = ast.call_at(ast.peel_ts_sugar_span(operand)) else {
+            return all(names, mode);
+        };
+        let Some(name) = self
+            .lookup
+            .resolved_callee_call(file, call.callee)
+            .filter(|resolved| {
+                resolved
+                    .declaration
+                    .as_ref()
+                    .is_some_and(|declaration| declaration.standard_library)
+            })
+            .and_then(crate::runtime_semantics::standard_call_name)
+        else {
+            return all(names, mode);
+        };
+        if self.lookup.standard_call_withheld(file, call.callee) {
+            return all(names, mode);
+        }
+        let Some((owner, member)) = name.rsplit_once('.') else {
+            return all(names, mode);
+        };
+        let indexed = matches!(owner, "Array" | "ReadonlyArray") || owner.ends_with("Array");
+        let string_keys = owner == "ObjectConstructor";
+        let root = matches!(mode, Mode::Escaped { root: true, .. });
+        if !(string_keys || indexed || root) || !matches!(member, "keys" | "values" | "entries") {
+            return all(names, mode);
+        }
+        let value_mode = match mode {
+            Mode::Escaped {
+                root: true,
+                blocker,
+            } if self.props_root => Mode::Escaped {
+                root: false,
+                blocker,
+            },
+            _ => mode,
+        };
+        let keys_plain = string_keys || indexed;
+        match member {
+            "keys" if keys_plain => Vec::new(),
+            "keys" => all(names, mode),
+            "values" => all(names, value_mode),
+            _ => {
+                // `[key, value]`: a string or index key is no value of the walk; the value is as `values` says. An entry held whole
+                // is walked.
+                let pattern = ast.bindings.iter().find(|binding| {
+                    binding.shape == solid_facts::ast::BindingShape::Array
+                        && binding.names.iter().any(|name| names.contains(&name.span))
+                });
+                match pattern {
+                    Some(pattern) if keys_plain => all(
+                        pattern
+                            .array_slots
+                            .get(1)
+                            .and_then(Option::as_ref)
+                            .map(|slot| slot.span)
+                            .into_iter()
+                            .collect(),
+                        value_mode,
+                    ),
+                    _ => all(names, mode),
+                }
+            }
+        }
     }
 
     /// ADR 1104: [`Self::site`], its row kept apart from [`Self::uses`] (see [`Self::late_rows`]).
@@ -1591,7 +1688,19 @@ impl<'l, 'a> Census<'l, 'a> {
             Holder::ArrayElement(literal, _) => self.position(file, literal, mode),
             Holder::ObjectValue(property) => {
                 match enclosing_literal(file, ast.object_properties[property].span) {
-                    Some(literal) => self.position(file, literal, mode),
+                    Some(literal) => {
+                        // ADR 1104 (1b): a method of the enclosing literal may read this slot through `this`
+                        // (`{ inner: { s }, get v() { return this.inner.s(); } }`).
+                        let fact = &ast.object_properties[property];
+                        let key = file
+                            .source_text(fact.key)
+                            .filter(|_| !fact.computed)
+                            .map(|key| key.trim_matches(['"', '\'']).to_owned());
+                        for member in this_members(file, literal, key.as_deref()) {
+                            self.late.push(Late::Position(file, member, mode));
+                        }
+                        self.position(file, literal, mode)
+                    }
                     None => Position::Open(blockers::VALUE_IN_CARRIER),
                 }
             }
@@ -1683,7 +1792,7 @@ impl<'l, 'a> Census<'l, 'a> {
             Holder::Iterated => {
                 // ADR 1104: a `for…of` declaring its own binding hands each element to it; the carrier's row stays. Any other
                 // iteration (a spread, `yield*`, an assignment target) is the use, as before.
-                for name in for_of_declared_names(file, at).unwrap_or_default() {
+                for (name, mode) in self.iterated_names(file, at, mode) {
                     self.late.push(Late::Name(file, name, mode));
                 }
                 Position::Open(blockers::VALUE_IN_CARRIER)
@@ -1850,6 +1959,23 @@ impl<'l, 'a> Census<'l, 'a> {
             if crate::runtime_semantics::reads_keys_only(resolved) {
                 return Position::Followed;
             }
+            // ADR 1104 (1b): a property defined on the value runs its accessors with the value as `this`.
+            if index == 0
+                && matches!(
+                    crate::runtime_semantics::standard_call_name(resolved),
+                    Some(
+                        "ObjectConstructor.defineProperty"
+                            | "ObjectConstructor.defineProperties"
+                            | "Reflect.defineProperty"
+                    )
+                )
+            {
+                for argument in call.arguments.iter().skip(1) {
+                    for member in this_members(file, argument.span, None) {
+                        self.late.push(Late::Position(file, member, mode));
+                    }
+                }
+            }
             let callability = self
                 .lookup
                 .entity_at(file.path.as_str(), call.arguments[index].span)
@@ -1951,7 +2077,14 @@ impl<'l, 'a> Census<'l, 'a> {
         mode: Mode,
     ) {
         let ast = &file.ast;
-        self.position(file, call.span, mode);
+        // ADR 1104 (1b): a call proven to answer a primitive (`Math.abs(v)`, ADR 0320's audited results) hands nothing on through
+        // what it answers.
+        if !self
+            .lookup
+            .proven_primitive(file, call.span, PRIMITIVE_DEPTH)
+        {
+            self.position(file, call.span, mode);
+        }
         if let Some(member) = ast.member_at(ast.peel_ts_sugar_span(call.callee)) {
             self.escaped_object(file, member.object, None, mode, 0);
         }
@@ -2211,7 +2344,10 @@ impl<'l, 'a> Census<'l, 'a> {
                     None => {
                         self.position(holder, identifier.span, mode);
                     }
-                    Some(declaration) if ambient_function(holder, declaration) => {
+                    Some(declaration)
+                        if ambient_function(holder, declaration)
+                            || unbound_variable(holder, declaration) =>
+                    {
                         self.late
                             .push(Late::Position(holder, identifier.span, mode));
                     }
@@ -2461,6 +2597,17 @@ impl<'l, 'a> Census<'l, 'a> {
 
     /// A value in a literal's slot: the literal holds it there, unless a
     /// member of the literal may read it through `this`.
+    /// ADR 1104 (1b): the text of a static slot's key.
+    fn slot_text(&self, slot: Slot) -> Option<String> {
+        let Slot::Key(id) = slot else {
+            return None;
+        };
+        self.keys
+            .iter()
+            .find(|(_, value)| **value == id)
+            .map(|(key, _)| key.clone())
+    }
+
     fn held_in_literal(
         &mut self,
         file: &'a FileFacts,
@@ -2475,22 +2622,21 @@ impl<'l, 'a> Census<'l, 'a> {
         };
         match enclosing_literal(file, row) {
             Some(literal) if !literal_reads_this(file, literal) => {
+                // ADR 1104 (1b): `const self = this` in a method reads the slots through `self`.
+                let key = self.slot_text(slot);
+                for member in this_members(file, literal, key.as_deref()) {
+                    for holder in self.holders(file, member) {
+                        self.late_escape(file, member, holder, mode, blockers::VALUE_IN_CARRIER);
+                    }
+                }
                 self.position(file, literal, held)
             }
             Some(literal) => {
                 // ADR 1104: a method or getter of the literal reads its slots through `this` (`get v() { return this.s(); }`): each
-                // `this` member in it may be the value, and is walked as past an escape, with a row at each call, Get or write.
-                let members = file
-                    .ast
-                    .members
-                    .iter()
-                    .filter(|member| {
-                        literal.contains(member.span)
-                            && file.source_text(member.object) == Some("this")
-                    })
-                    .map(|member| member.span)
-                    .collect::<Vec<_>>();
-                for member in members {
+                // `this` member naming the value's slot (1b: any, for a computed key or after a spread) may be the value, and is walked
+                // as past an escape, with a row at each call, Get or write.
+                let key = self.slot_text(slot);
+                for member in this_members(file, literal, key.as_deref()) {
                     for holder in self.holders(file, member) {
                         self.late_escape(file, member, holder, mode, blockers::VALUE_IN_CARRIER);
                     }
@@ -3454,7 +3600,7 @@ fn for_of_declared_names(file: &FileFacts, operand: Span) -> Option<Vec<Span>> {
             && ast.loop_statements.contains(looped)
             && ast.iterated_operands.contains(&operand)
     })?;
-    let names = ast
+    let mut names = ast
         .bindings
         .iter()
         .filter(|binding| {
@@ -3464,7 +3610,51 @@ fn for_of_declared_names(file: &FileFacts, operand: Span) -> Option<Vec<Span>> {
         })
         .flat_map(|binding| binding.names.iter().map(|name| name.span))
         .collect::<Vec<_>>();
+    // 1b: `let f; for (f of xs)`: an assigned name holds each element; its declaration's uses are walked.
+    if names.is_empty() {
+        names = ast
+            .identifiers
+            .iter()
+            .filter(|identifier| left.contains(identifier.span))
+            .filter_map(|identifier| ast.reference_declaration(identifier.span))
+            .collect();
+    }
     (!names.is_empty()).then_some(names)
+}
+
+/// ADR 1104: the `this` members written in `within` (a literal's methods and getters, a descriptor): `this.k` and, 1b, `self.k`
+/// for a `const self = this` there, naming `key` (every key when `None`, and a computed member always).
+fn this_members(file: &FileFacts, within: Span, key: Option<&str>) -> Vec<Span> {
+    let ast = &file.ast;
+    let is_this = |span: Span| file.source_text(ast.peel_ts_sugar_span(span)) == Some("this");
+    let aliases = ast
+        .bindings
+        .iter()
+        .filter(|binding| {
+            within.contains(binding.pattern)
+                && binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.initializer.is_some_and(is_this)
+        })
+        .flat_map(|binding| binding.names.iter().map(|name| name.span))
+        .collect::<Vec<_>>();
+    ast.members
+        .iter()
+        .filter(|member| within.contains(member.span))
+        .filter(|member| {
+            let object = ast.peel_ts_sugar_span(member.object);
+            is_this(object)
+                || ast
+                    .reference_declaration(object)
+                    .is_some_and(|declaration| aliases.contains(&declaration))
+        })
+        .filter(|member| {
+            // No key (a computed slot): every member, as many rows as reads may be.
+            key.is_none()
+                || ast.computed_members.contains(&member.span)
+                || member_key(file, member) == key
+        })
+        .map(|member| member.span)
+        .collect()
 }
 
 /// ADR 1104: `declaration` names a function declared with no body, and no declaration of that name in the file has one: an
@@ -3480,6 +3670,23 @@ fn ambient_function(file: &FileFacts, declaration: Span) -> bool {
         && !declarations
             .iter()
             .any(|function| function.has_body && file.source_text(function.name.span) == Some(name))
+}
+
+/// ADR 1104 (1b): `declaration` names a `const` or `var` with no initializer and no parameter: `declare const f: T` or `declare
+/// var f: T`, which bind nothing at run time (a plain `var f;` holds `undefined`: a call of it reads nothing either way).
+fn unbound_variable(file: &FileFacts, declaration: Span) -> bool {
+    file.ast.bindings.iter().any(|binding| {
+        binding.shape == solid_facts::ast::BindingShape::Identifier
+            && !binding.runtime_let
+            && binding.initializer.is_none()
+            && binding.names.iter().any(|name| name.span == declaration)
+            && !file.ast.functions.iter().any(|function| {
+                function
+                    .parameters
+                    .iter()
+                    .any(|parameter| parameter.pattern == binding.pattern)
+            })
+    })
 }
 
 fn literal_reads_this(file: &FileFacts, literal: Span) -> bool {

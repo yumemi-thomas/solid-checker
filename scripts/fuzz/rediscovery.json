@@ -26287,5 +26287,31 @@
   ],
   "rediscovered": "make fuzz-patterns: false clean on main 28fde14bf; FIXED on the ADR 1104 tree (SC9012 uncertifiable at the read)",
   "outside": "the pattern lane holds these programs (scripts/fuzz/patterns, make fuzz-patterns); no grid generator writes the carrier shapes yet"
+ },
+ {
+  "finding": "R-carrier through the generator (ADR 1104 1b): an element call out of Object.values of a holder (`Object.values(box)[0]()`) and a `for…of` binding called in a helper (`for (const f of fns) return f()`): no row at the read",
+  "found": "the review of ADR 1104 slice 1 (coord-land/review-1104.md, item 5: the patterns lane alone held the shapes)",
+  "fixed": "ADR 1104 slice 1 (value_use.rs late walks) and 1b; generator bindings values-callee, this-method, loop-callee (misuse.mjs RECALL_VALUE_BINDINGS)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-signal-values-callee-none",
+   "mx-strict-read-untracked-body-signal-loop-callee-none",
+   "mx-strict-read-untracked-body-memo-values-callee-none",
+   "mx-strict-read-untracked-body-memo-loop-callee-none",
+   "mx-strict-read-untracked-effect-apply-signal-values-callee-none",
+   "mx-strict-read-untracked-effect-apply-signal-loop-callee-none",
+   "mx-strict-read-untracked-effect-apply-memo-values-callee-none",
+   "mx-strict-read-untracked-effect-apply-memo-loop-callee-none",
+   "mx-strict-read-untracked-root-signal-values-callee-none",
+   "mx-strict-read-untracked-root-signal-loop-callee-none",
+   "mx-strict-read-untracked-root-memo-values-callee-none",
+   "mx-strict-read-untracked-root-memo-loop-callee-none",
+   "mx-strict-read-untracked-render-apply-signal-values-callee-none",
+   "mx-strict-read-untracked-render-apply-signal-loop-callee-none",
+   "mx-strict-read-untracked-render-apply-memo-values-callee-none",
+   "mx-strict-read-untracked-render-apply-memo-loop-callee-none"
+  ],
+  "rediscovered": "focus --grids mx-recall --ids (24 programs): main 28fde14bf 16 false-clean; this build 24 recall-gap (SC9012 at the read). this-method already had its row on main (a recall gap)"
  }
 ]

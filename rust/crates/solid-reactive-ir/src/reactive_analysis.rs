@@ -518,11 +518,13 @@ pub(crate) fn collect_project<'facts>(
         },
         |census, start| match start {
             CensusStart::Reference(symbol, reference) => {
-                let root = ctx.prop_sources.contains_key(*symbol)
-                    || ctx.source_kinds.get(*symbol) == Some(&crate::ReactiveSourceKind::Store);
+                let store =
+                    ctx.source_kinds.get(*symbol) == Some(&crate::ReactiveSourceKind::Store);
+                let props = ctx.prop_sources.contains_key(*symbol);
+                let root = props || store;
                 let pending = ctx.async_sources.contains(*symbol);
                 if root {
-                    census.root_start(reference, pending)
+                    census.root_start(reference, pending, props && !store)
                 } else {
                     census.callable_start(reference, ctx.accessors.contains_key(*symbol), pending)
                 }
