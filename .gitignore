@@ -1139,6 +1139,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/store-sub-value-flow/node_modules/**
 !fixtures/reactive-ir/absent-guard-prop/node_modules/
 !fixtures/reactive-ir/absent-guard-prop/node_modules/**
+!fixtures/reactive-ir/merge-omit-view-props-call/node_modules/
+!fixtures/reactive-ir/merge-omit-view-props-call/node_modules/**
 !fixtures/reactive-ir/handed-call-results/node_modules/
 !fixtures/reactive-ir/handed-call-results/node_modules/**
 !fixtures/reactive-ir/handed-net-guards/node_modules/

@@ -271,6 +271,17 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   (ADR 0337, `fixtures/reactive-ir/omit-view-props-root`). A read through the
   view or alias (`rest.x`, `local.x`), a destructured binding, a `merge` that may
   return its only source, and a spread onto a component stay uncertifiable.
+- **A view's member call is the prop's call (ADR 1100).** `merged.r1()` and
+  `rest.r1()` are judged as `props.r1()` when the view is a `const` whose rc.21
+  Get is the parameter's own: `merge(literal…, props)` with the parameter last
+  and each earlier source a closed object literal without the key (the key no
+  member of `Object.prototype`), or `omit(props, "k"…)` with string-literal
+  keys other than it. That holds only where the prop's own call is placed (in
+  the body, or directly in a primitive's callback there); deeper (a closure, a
+  helper, an IIFE) the call stays uncertifiable, as `props.r1()` does there. A
+  parameter that is not last, an earlier source that is not such a literal,
+  a predicate, a computed member, a view of a view, an alias and a shadowed
+  `merge` stay uncertifiable (`fixtures/reactive-ir/merge-omit-view-props-call`).
 - **An exact `const` alias is its source (ADR 0463).** `const read = count` and
   `const { read } = { read: count }` (a literal of static data properties only)
   hold the module-local `const` `count`, so `read()` is reported where

@@ -1,0 +1,333 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-provenance-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 589,
+      "end": 593,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-provenance-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 810,
+      "end": 814,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 964,
+      "end": 973,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 964,
+      "end": 975,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 1064,
+      "end": 1071,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 1064,
+      "end": 1073,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 1274,
+      "end": 1283,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-provenance-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 1320,
+      "end": 1324,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 1566,
+      "end": 1575,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-provenance-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 1612,
+      "end": 1616,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 1800,
+      "end": 1808,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-provenance-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 1845,
+      "end": 1849,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "computed-call-target-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 2022,
+      "end": 2034,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-provenance-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 2071,
+      "end": 2075,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 2208,
+      "end": 2217,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-provenance-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 2254,
+      "end": 2258,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 2394,
+      "end": 2395,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 2437,
+      "end": 2442,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 2481,
+      "end": 2490,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-provenance-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 2527,
+      "end": 2531,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 2637,
+      "end": 2639,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 2664,
+      "end": 2666,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 2692,
+      "end": 2694,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 2719,
+      "end": 2721,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 2752,
+      "end": 2754,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 2784,
+      "end": 2786,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 2816,
+      "end": 2818,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 2843,
+      "end": 2845,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 2868,
+      "end": 2870,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-forwarded",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-props-call/App.tsx",
+      "start": 2895,
+      "end": 2897,
+      "fixes": 0
+    }
+  ]
+}
