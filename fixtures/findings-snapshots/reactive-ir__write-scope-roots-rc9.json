@@ -65,11 +65,11 @@
       "rule": "flush-in-action",
       "code": "SC2006",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-scope-roots-rc9/components.tsx",
       "start": 1167,
-      "end": 1172,
+      "end": 1231,
       "fixes": 0
     },
     {

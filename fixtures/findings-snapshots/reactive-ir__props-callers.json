@@ -227,17 +227,6 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/props-callers/App.tsx",
-      "start": 4053,
-      "end": 4062,
-      "fixes": 0
-    },
-    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
