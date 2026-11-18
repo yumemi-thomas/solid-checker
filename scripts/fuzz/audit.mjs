@@ -37,6 +37,7 @@ import { rowProblem } from "./codes.mjs";
 import { gridStanding, heldLine, manifestIds, readOpenDefects } from "./open-defects.mjs";
 import { applyKnown, auditProved, readAuditLedger, writeAuditLedger } from "./audit-proved.mjs";
 import { readChanges } from "./proved.mjs";
+import { ENTRY_VERSION } from "./checker.mjs";
 import { GENERATOR_VERSION } from "./generate.mjs";
 import { BEHAVIOUR_KINDS, parsePerStratum } from "./runtime-diff.mjs";
 import { NODE } from "../lib/node-runtime.mjs";
@@ -168,7 +169,7 @@ function pick(options) {
   for (const { grid, lists, ids } of picked) {
     const parts = split[grid];
     manifests.push({ grid, parts });
-    writeFileSync(join(out, `${grid}.json`), `${JSON.stringify({ grid, generator: GENERATOR_VERSION, seed: Number(SEED), recall, perStratum: ORACLE_PER_STRATUM, axes: ORACLE_AXES, parts, ids }, null, 2)}\n`);
+    writeFileSync(join(out, `${grid}.json`), `${JSON.stringify({ grid, generator: GENERATOR_VERSION, entry: ENTRY_VERSION, seed: Number(SEED), recall, perStratum: ORACLE_PER_STRATUM, axes: ORACLE_AXES, parts, ids }, null, 2)}\n`);
     console.log(`${grid}: ${ids.length} oracle programs in ${parts} part(s) from ${lists.reduce((sum, list) => sum + list.length, 0)} candidates of ${shards.length} shards`);
   }
   // The oracle matrix (the workflow reads it into its `oracle` job): beside the manifests, never one of them.

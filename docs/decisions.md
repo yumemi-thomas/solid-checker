@@ -3987,3 +3987,15 @@ The handed-member proof reuses `parameter_argument`: a callback parameter must b
 - Rows recorded after the draft are drained at the end of the build and at the snapshot.
 
 *Evidence.* rc.21 frozen corpus v2, dev mode: 34 of 34 projects identical off and on (U 251,897, V 244); 719,778 census rows. Pools with a cause: B4 12,531 of 12,557, B3 14,151 of 14,151, B5 12,311 of 12,315. `make coverage` with the gate cache off, census off and on: both pass. Ranked causes and levers: sc-scratch `mac23/cause-1065b/REPORT.md`.
+
+## ADR 1089 — The harness's entry leaves the namespace loop out when the mount names every entered export
+**The gap.** In audit 44148527547 (main f544561a8), 50 of the 85 lg-base `-direct-none` programs were uncertifiable while all 201 misuse ones were proved. In 40 of them the rows rest on the census's `handoff|open-world-export` (ADR 1065). The cause is the harness, not the program: `main.tsx` mounts `C1` by name and then still runs `for (const [name, value] of Object.entries(mod))`, which hands App's namespace to code the checker cannot read. A closed boundary changes nothing: the install's private manifest already closes the program.
+**Decision.** `mainSource` (scripts/runtime-oracle.mjs) takes the exports the loop would enter (scripts/fuzz/checker.mjs `enteredExports`, ADR 0990). When the mount names all of them, the entry has no `import * as mod` and no loop. The oracle writes that text from the case's App.tsx, and the checker's entry (`mainSourceFor`) is read from the same template. The Chrome hosts mount through the namespace at run time in the same sorted order, so what runs is unchanged. A program with another entered export, or with exports the text cannot classify (`null`), keeps the loop. `ENTRY_VERSION = 2` is recorded beside `GENERATOR_VERSION` in matrix.json and in the audit's manifests. Program ids and seeds are unchanged.
+*Evidence.* Every grid program has a mount, so the entry changed for all of them. Per-program outcomes of the release build of e2d9d4a8f, old entry against new:
+- lg-base: 3,516 uncertifiable → clean, no other move. Clean went from 5,800 to 9,316; the `-direct-none` programs from 35 to 66 clean of 85.
+- lg-src: no moves.
+- mx-base: no moves (27,816 agree).
+- mx-src: no moves (22,161 agree).
+- Recall samples (about 2,500 each): lg-recall 125 uncertifiable → clean, mx-recall no moves (its 2 `unplaced` are ADR 1076's pk-lazy class on both entries).
+
+Real Chrome: focus's oracle sample compared 84 moved lg-base programs, and every moved `-direct-none` target (31) was compared on its own. All showed 0 behaviour differences. The proved ledger only gains, so `changes.json` needs no row; no known entry stores a moved id. Still uncertifiable among the 50: the pending guarded reads, SC9012 `value-in-carrier` on `*-refresh`, SC1002 after-await setters, and the `resolve`/`until` handler forms.
