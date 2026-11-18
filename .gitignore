@@ -1661,6 +1661,10 @@ packages/wasm/owned/
 !fixtures/reactive-ir/after-await-universe-none/node_modules/**
 !fixtures/reactive-ir/after-await-universe-census/node_modules/
 !fixtures/reactive-ir/after-await-universe-census/node_modules/**
+!fixtures/reactive-ir/after-await-promise-unconsumed/node_modules/
+!fixtures/reactive-ir/after-await-promise-unconsumed/node_modules/**
+!fixtures/reactive-ir/after-await-promise-unconsumed-eval/node_modules/
+!fixtures/reactive-ir/after-await-promise-unconsumed-eval/node_modules/**
 !fixtures/reactive-ir/after-await-library/node_modules/
 !fixtures/reactive-ir/after-await-library/node_modules/**
 !fixtures/reactive-ir/after-await-timer-handle/node_modules/
@@ -1864,3 +1868,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/refresh-target-untouched/node_modules/**
 !fixtures/reactive-ir/store-setter-after-await/node_modules/
 !fixtures/reactive-ir/store-setter-after-await/node_modules/**
+!fixtures/reactive-ir/action-after-await/node_modules/
+!fixtures/reactive-ir/action-after-await/node_modules/**

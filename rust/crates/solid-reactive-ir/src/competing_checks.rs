@@ -184,6 +184,7 @@ pub(crate) fn mark(
             // ADR 1052 part 8: a render effect's apply is no such run here, since its first run is owned and reaches the probe.
             || in_slot_called_only_in_applies(&violation.location, false, lookup)
             || prop_runs_only_in_owned_leaf(&violation.location, settled_gates, lookup)
+            || refused_at_mount_else_handlers(&violation.location, settled_gates, lookup)
         {
             violation.uncertain = true;
             violation.analysis_context = crate::blockers::with_detail(
@@ -544,4 +545,144 @@ fn prop_runs_only_in_owned_leaf(
                             })
                 })
         })
+}
+
+/// ADR 1052 part 9: whether `site`, a creation the leaf owner and the effect-callback guard refuse
+/// (`creates_forbidden_primitive`), is written directly in a synchronous function bound to a local name (unexported, its value
+/// current) whose every reference is the callee of a call of one of two kinds, with at least one of the first:
+/// - refused at mount: written directly in an effect's apply (`callback_runs_in_effect_phase`) or in a leaf owner's callback
+///   (`CallbackOwner::Leaf`, its call decided `Owned` where the dialect gates it), the primitive's call a completion site of the
+///   component `K` around it (it runs on every mount, `completion_sites`): that run throws PRIMITIVE_IN_EFFECT_CALLBACK or
+///   PRIMITIVE_IN_FORBIDDEN_SCOPE before the result probe;
+/// - an event handler of the same mount: written directly in the value of an `on*` attribute of an intrinsic element in `K`'s
+///   JSX. `render` runs the mount and its first flush synchronously and, on a throw, disposes the root and unregisters its
+///   delegated events (`@solidjs/web` `render`, rc.21): no event reaches the handler before the refusal, and none after it.
+///   Chrome: the handler never runs (`NO_OWNER_CLEANUP` written first in it is never reported).
+///
+/// `false` for anything else (another caller, a conditional or nested primitive call, two components).
+fn refused_at_mount_else_handlers(
+    site: &Location,
+    settled_gates: &crate::owners::SettledGateDecisions,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some(file) = lookup.file_by_path(site.path.as_ref()) else {
+        return false;
+    };
+    let (Ok(start), Ok(end)) = (u32::try_from(site.start_byte), u32::try_from(site.end_byte))
+    else {
+        return false;
+    };
+    let ast = &file.ast;
+    let Some(creation) = ast.calls.iter().find(|call| call.span.start == start) else {
+        return false;
+    };
+    if !lookup
+        .primitive_at_call(file, creation.span)
+        .is_some_and(|primitive| {
+            crate::cleanup::creates_forbidden_primitive(lookup.dialect, file, creation, primitive)
+        })
+    {
+        return false;
+    }
+    let Some(function) =
+        crate::owners::owning_function(ast, solid_facts::core::Span::new(start, end))
+    else {
+        return false;
+    };
+    if function.r#async
+        || function.generator
+        || crate::execution_role::module_exports(file, function, lookup)
+        || !lookup.function_value_is_current(file, function)
+    {
+        return false;
+    }
+    let Some(name) = crate::owners::function_binding_name(file, function).map(|name| name.span)
+    else {
+        return false;
+    };
+    let Some(symbol) = lookup.entities().at(file.path.as_str(), name) else {
+        return false;
+    };
+    // The component whose mount runs a refusing call, and whether one was seen.
+    let mut component: Option<solid_facts::core::Span> = None;
+    let mut handlers = Vec::new();
+    for reference in lookup.symbol_references(symbol.as_str()) {
+        if reference.path.as_ref() != file.path.as_str() {
+            return false;
+        }
+        if reference.start_byte == u64::from(name.start) {
+            continue;
+        }
+        let Some(call) = ast.calls.iter().find(|call| {
+            !call.construct
+                && u64::from(ast.peel_ts_sugar_span(call.callee).start) == reference.start_byte
+        }) else {
+            return false;
+        };
+        let Some(callback) = crate::owners::owning_function(ast, call.span) else {
+            return false;
+        };
+        let refusing = ast
+            .arguments_containing(callback.span)
+            .find(|(owner_call, index)| {
+                ast.peel_ts_sugar_span(owner_call.arguments[*index].span) == callback.span
+                    && owner_call.arguments[..=*index]
+                        .iter()
+                        .all(|argument| !argument.spread)
+                    && lookup
+                        .primitive_at_call(file, owner_call.span)
+                        .is_some_and(|primitive| {
+                            lookup
+                                .dialect
+                                .callback_runs_in_effect_phase(primitive, *index)
+                                || crate::owners::callback_owner_at_call(
+                                    file, owner_call, primitive, *index, lookup,
+                                ) == Some(solid_dialect::CallbackOwner::Leaf)
+                                    && (!lookup
+                                        .dialect
+                                        .leaf_owner_requires_owned_call_site(primitive)
+                                        || settled_gates.get(&(
+                                            file.path.to_string(),
+                                            u64::from(owner_call.span.start),
+                                            u64::from(owner_call.span.end),
+                                        )) == Some(&crate::owners::LeafGateDecision::Owned))
+                        })
+            })
+            .map(|(owner_call, _)| owner_call.span);
+        if let Some(owner_call) = refusing {
+            let Some(mounted) = crate::owners::owning_function(ast, owner_call) else {
+                return false;
+            };
+            if !ast.completion_sites.contains(&owner_call)
+                || component.is_some_and(|known| known != mounted.span)
+            {
+                return false;
+            }
+            component = Some(mounted.span);
+            continue;
+        }
+        // An event handler: the whole value of an `on*` attribute of an intrinsic element.
+        let handler = ast.jsx_elements.iter().find(|element| {
+            crate::execution_role::intrinsic_element(file, element)
+                && element.attributes.iter().any(|attribute| {
+                    attribute.namespace.is_none()
+                        && file
+                            .source_text(attribute.name)
+                            .is_some_and(|attribute_name| attribute_name.starts_with("on"))
+                        && attribute.expression.is_some_and(|expression| {
+                            ast.peel_ts_sugar_span(expression) == callback.span
+                        })
+                })
+        });
+        let Some(element) = handler else {
+            return false;
+        };
+        handlers.push(element.span);
+    }
+    component.is_some_and(|mounted| {
+        handlers.iter().all(|element| {
+            crate::owners::owning_function(ast, *element)
+                .is_some_and(|holder| holder.span == mounted)
+        })
+    })
 }

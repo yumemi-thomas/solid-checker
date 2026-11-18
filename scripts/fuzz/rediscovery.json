@@ -25961,6 +25961,36 @@
   "outside": "Not generated: the grids write a timer's callback inline or by name in the site's own function, and `assign-callee` (CALLEE_FORMS) is a form of calling the site function itself, never of the function that receives a timer callback as a parameter. They also do not put the scheduler in a handed literal whose callback parameter is rewritten/defaulted, whose member or literal is stored, or whose method leaks its receiver. Pinned by fixture reactive-ir/iteration-timer-parameter-composite-stored (a violation on 5a5d1321f, uncertifiable here; Chrome reports the write, covered-uncertifiable) beside its proved twin iteration-timer-parameter-composite, and the iteration-timer-handed-literal refusal twins."
  },
  {
+  "finding": "F1: `AfterAwaitSafe::PromiseUnconsumed` ended a read after an await in the handler of a discarded `.then` whose receiver was a `Promise` subclass that keeps its instances (`Kp.resolve().then(async () => { await ..; read(); })`, the constructor storing `this`): be4990c64 took any receiver whose callee the default library declares for a native promise, and an async memo awaiting the kept derived promise carries the handler's flight. Chrome rc.21 reports UNTRACKED_READ_AFTER_AWAIT at the read; be4990c64 certified the program",
+  "found": "the Fable soundness review of be4990c64 (ADR 1090 G1, 2026-11-18), probe programs in Chrome rc.21",
+  "fixed": "ADR 1090 G1 (review fixes): the `.then` handler case is dropped (`after_await_accounting/unconsumed.rs`); no exact fact says a receiver is a native promise; superseded: ADR 1090 G1 not built, the PromiseUnconsumed discharge was removed (fourth review), so no site is ended by it",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": ["mx-untracked-read-after-await-pu-then-sub-x-direct-none"],
+  "rediscovered": "be4990c64 (release): false-clean, certified (focus exit 1); the fix: recall-gap (SC1002 read-after-await-unaccounted at the read)"
+ },
+ {
+  "finding": "F2: `AfterAwaitSafe::PromiseUnconsumed` ended a read in a loop that awaits after it (`for (..) { read(); await ..; }`) in a function called only by discarded calls. The loop's first pass reads before the first await, on the caller's stack: a `toString` method that an async memo's template literal runs after its own await. Chrome rc.21 reports UNTRACKED_READ_AFTER_AWAIT at the read; be4990c64 kept only SC1001's row there, which covers nothing for this code",
+  "found": "the Fable soundness review of be4990c64 (ADR 1090 G1, 2026-11-18), probe programs in Chrome rc.21",
+  "fixed": "ADR 1090 G1 (review fixes): the read must be past an await the function runs on every run (`AstFacts::unconditional_awaits` ending before it, `unconsumed.rs` `past_prefix`); superseded: ADR 1090 G1 not built, the PromiseUnconsumed discharge was removed (fourth review), so no site is ended by it",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": ["mx-untracked-read-after-await-pu-loop-x-direct-none"],
+  "rediscovered": "be4990c64 (release): false-clean (only SC1001 function-run-unplaced at the read, focus exit 1); the fix: recall-gap (SC1002 read-after-await-unaccounted at the read)"
+ },
+ {
+  "finding": "F3: `AfterAwaitSafe::PromiseUnconsumed` ended a read after an await in a function every written reference of which is a discarded call, in a program whose memo calls it through direct `eval(\"f()\")`, which keeps the promise (the memo's compute returns it). Chrome rc.21 reports UNTRACKED_READ_AFTER_AWAIT at the read; be4990c64 kept only SC1001's row",
+  "found": "the Fable soundness review of be4990c64 (ADR 1090 G1, 2026-11-18), probe programs in Chrome rc.21",
+  "fixed": "ADR 1090 G1 (review fixes): no site is ended in a program with a direct `eval` or a code-evaluating call (`Hazard::Eval`, `Hazard::CodeEvaluatingCall`, as library_call.rs asks); superseded: ADR 1090 G1 not built, the PromiseUnconsumed discharge was removed (fourth review), so no site is ended by it",
+  "outside": "not generated: UNTRACKED_READ_AFTER_AWAIT's variants read a signal tuple or a store, and a program with direct `eval` withdraws their slots (SC9012 `tuple-iteration-written` at the read, a withholding that covers the code), so a generated eval program is recall-gap on every build. Fixture reactive-ir/after-await-promise-unconsumed-eval holds the hole with a memo accessor (be4990c64: only SC1001 at the read; the fix: SC1002 uncertifiable)"
+ },
+ {
+  "finding": "Review of be4990c64: `AfterAwaitSafe::PromiseUnconsumed` did not refuse a classic script's top-level function, a global another file may call as `window.f()` where its promise is kept",
+  "found": "the Fable soundness review of be4990c64 (ADR 1090 G1, 2026-11-18), probe programs in Chrome rc.21",
+  "fixed": "ADR 1090 G1 (review fixes): the function must be written in a module (`execution_role::file_is_module`); superseded: ADR 1090 G1 not built, the PromiseUnconsumed discharge was removed (fourth review), so no site is ended by it",
+  "outside": "not generated: the generator writes ES modules only (`App.tsx` with imports), never a classic script; the reason is pinned in unconsumed.rs's module documentation"
+ },
+ {
   "finding": "ADR 1067: a genuine store setter's inline updater can close an open write only with an independently proven fresh ordinary seed and tuple identity",
   "found": "corpus investigation of standard-member-impostor; an rc.21 source probe also showed a user Proxy can forge value[$TARGET].px and forward updater writes to Number",
   "fixed": "ADR 1067",
@@ -26132,5 +26162,46 @@
    "mx-sync-node-received-async-flw-apply-slot-module-memo-direct-none"
   ],
   "rediscovered": "base 2607cbf0a (main e4712a977 + parts 6/7): with the rows out of open-defects-rows.json `focus.mjs --codes SYNC_NODE_RECEIVED_ASYNC --grids mx-census` on the 18 ids fails (18 false-positive); this build: 18 not-fired"
+ },
+ {
+  "finding": "a false positive: SC7002 at a sync memo or effect in a helper that an effect's apply or a tracked effect calls at mount and a click handler of the same component calls: the mount throws PRIMITIVE_IN_EFFECT_CALLBACK or PRIMITIVE_IN_FORBIDDEN_SCOPE first and render disposes the root and its delegated events, so the handler never runs",
+  "found": "ADR 1052 part 4's ledger (owned false positives tracked-shared, effect-apply-shared; coord-land/sc7002-split.md)",
+  "fixed": "ADR 1052 part 9 (`competing_checks.rs` `refused_at_mount_else_handlers`)",
+  "grid": "mx-census",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "mx-sync-node-received-async-tracked-shared-memo-direct-none",
+   "mx-sync-node-received-async-tracked-shared-effect-direct-none",
+   "mx-sync-node-received-async-effect-apply-shared-memo-direct-none",
+   "mx-sync-node-received-async-effect-apply-shared-effect-direct-none"
+  ],
+  "rediscovered": "base 09f1a8f2f (main 2b4adb9c6 + part 8): with the rows out of open-defects-rows.json `focus.mjs --codes SYNC_NODE_RECEIVED_ASYNC --grids mx-census` on the 4 ids fails (4 false-positive); this build: 4 not-fired"
+ },
+ {
+  "finding": "G1: `AfterAwaitSafe::PromiseUnconsumed` ended a read written as a class's instance field initializer inside the async function, after its await (`box.K = class { x = read(); }`): a field initializer is no function fact, so the read was attributed to the function, but it runs wherever `new` runs, here in a `toString` an async memo's template literal runs after its own await. Chrome rc.21 reports UNTRACKED_READ_AFTER_AWAIT at the read; aa617ea2a certified the program",
+  "found": "the second Fable review of 1090 G1 (aa617ea2a, 2026-11-18)",
+  "fixed": "ADR 1090 G1 (second review): no read is ended when a class body lies between the function and the read (`unconsumed.rs`, `ast.classes`); superseded: ADR 1090 G1 not built, the PromiseUnconsumed discharge was removed (fourth review), so no site is ended by it",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": ["mx-untracked-read-after-await-pu-class-x-direct-none"],
+  "rediscovered": "aa617ea2a (release): false-clean, Chrome firing (focus exit 1); the fix: recall-gap (SC1002 read-after-await-unaccounted at the helper call). The read written in the initializer itself was already refused on aa617ea2a (SC1002 field-initializer-unplaced), so the generated cell reads through a helper"
+ },
+ {
+  "finding": "G2 (ruling): `AfterAwaitSafe::PromiseUnconsumed` took a file whose only module syntax is type-only (`import type`, `export type`) for a module, but a stripping transpiler erases that syntax and the file may load as a classic script, its function a global that `setTimeout(\"f()\")` or `window[\"eval\"]` reaches",
+  "found": "the second Fable review of 1090 G1 (aa617ea2a, 2026-11-18)",
+  "fixed": "ADR 1090 G1 (second and third reviews): the file must have module syntax esbuild keeps (`unconsumed.rs` `runtime_module_syntax`: a value import a runtime call uses, `import \"x\"`, `export *`, an export of a runtime declaration, a default export that is no interface); superseded: ADR 1090 G1 not built, the PromiseUnconsumed discharge was removed (fourth review), so no site is ended by it",
+  "outside": "not generated: the generator writes every program with value imports a runtime call uses (`createSignal`, the primitives), which is module syntax esbuild keeps, so no generated file has only erased module syntax. A site can still be written in such a file (`export {}` with `declare function report(): void` and `report()` after the await is an SC1002 site, the third review, H2): fixture reactive-ir/after-await-promise-unconsumed `scripted.ts` holds it, and the unit test only_module_syntax_a_stripping_transpiler_keeps_makes_a_module pins the module test on every form the review named"
+ },
+ {
+  "finding": "H1: `AfterAwaitSafe::PromiseUnconsumed` ended a site that is a project call whose result is a class (`box.K = mk()` after the await, `const mk = () => class { x = peek(); }`, also a declared or nested `mk` or an IIFE): the class's field reads wherever `new` runs, here in a `toString` an async memo's template literal runs after its own await. Chrome rc.21 reports UNTRACKED_READ_AFTER_AWAIT; 229d00f0c certified the program",
+  "found": "the third Fable review of 1090 G1 (229d00f0c, 2026-11-18)",
+  "fixed": "ADR 1090 G1 (third review): the discharge holds only for a site that defers nothing: a direct read of an exact accessor (`read`) or a setter call whose arguments are all inert (`unconsumed.rs`); superseded: ADR 1090 G1 not built, the PromiseUnconsumed discharge was removed (fourth review), so no site is ended by it",
+  "outside": "not generated as a cell: generated, `pb.K = pm()` after the await with `const pm = () => class { x = ph(); }` is false-clean on 229d00f0c and on this fix alike. The fix's SC1002 row is at the `pm()` call, but Chrome's stack holds only the class field, the `new` and the memo, and the field's own read is the module-level hole the coordinator queued separately (a false clean on main too). Fixture reactive-ir/after-await-promise-unconsumed `built` holds the fix: no row at the call on 229d00f0c, SC1002 read-after-await-unaccounted on the fix"
+ },
+ {
+  "finding": "H3: `AfterAwaitSafe::PromiseUnconsumed` ended a read written in a JSX attribute after the await (`<Comp v={peek()} />`): the attribute compiles to a getter, read wherever the prop is read, possibly in an async memo's continuation",
+  "found": "the third Fable review of 1090 G1 (229d00f0c, 2026-11-18)",
+  "fixed": "ADR 1090 G1 (third review): no site in a JSX element or fragment is discharged (`unconsumed.rs`); superseded: ADR 1090 G1 not built, the PromiseUnconsumed discharge was removed (fourth review), so no site is ended by it",
+  "outside": "not generated: the generator writes JSX only in a component's view (its return), never in an async function's continuation. Fixture reactive-ir/after-await-promise-unconsumed holds it (`jsxed`, uncertifiable)"
  }
 ]

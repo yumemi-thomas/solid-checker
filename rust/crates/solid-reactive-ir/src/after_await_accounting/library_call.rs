@@ -67,8 +67,11 @@ pub(super) fn runs_nothing(
     via: &str,
     object_prototype_touched: &dyn Fn() -> bool,
 ) -> bool {
-    if !matches!(via, "setter" | "library" | "construct") || !builtins_untouched(ctx) {
+    if !matches!(via, "setter" | "library" | "construct" | "inexact") || !builtins_untouched(ctx) {
         return false;
+    }
+    if via == "inexact" {
+        return action_body_runs_nothing(ctx, file, call, object_prototype_touched);
     }
     if via == "setter" {
         setter_runs_nothing(ctx, file, call, object_prototype_touched)
@@ -278,6 +281,78 @@ fn setter_runs_nothing(
                 .is_some())
         && !updater.spread
         && updater_writes_literals_only(ctx, file, updater.span, root)
+}
+
+/// ADR 1089: whether `call`, with no argument, calls a `const` action (`crate::owners::named_action_generator`: no alias withheld, no write) whose
+/// generator body runs no project code: the action's wrapper runs the body's first step on this stack, and this body has no `yield`, `await`, nested
+/// function, class, JSX, load, member, assignment, `delete` or returned value, and every call in it is a setter [`setter_runs_nothing`] ends, called by
+/// its name. Every name the body references is one of those callees.
+fn action_body_runs_nothing(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    call: &CallFact,
+    object_prototype_touched: &dyn Fn() -> bool,
+) -> bool {
+    let ast = &file.ast;
+    if call.construct || !call.arguments.is_empty() {
+        return false;
+    }
+    let Some(generator) =
+        crate::owners::named_action_generator(file, call.callee, ctx.semantic_lookup)
+    else {
+        return false;
+    };
+    let Some(function) = ast
+        .functions
+        .iter()
+        .find(|function| function.span == generator)
+    else {
+        return false;
+    };
+    let body = function.body;
+    let inside = |inner: solid_facts::core::Span| body.contains(inner);
+    if function.r#async
+        || ast.yields.iter().any(|yielded| inside(yielded.span))
+        || ast.awaits.iter().any(|awaited| inside(*awaited))
+        || ast
+            .functions
+            .iter()
+            .any(|inner| inner.span != function.span && inside(inner.span))
+        || ast.classes.iter().any(|class| inside(class.span))
+        || ast.jsx_elements.iter().any(|element| inside(element.span))
+        || ast.module_loads.iter().any(|load| inside(load.span))
+        || ast.members.iter().any(|member| inside(member.span))
+        || ast
+            .assignments
+            .iter()
+            .any(|assignment| inside(assignment.target))
+        || ast.deleted_targets.iter().any(|target| inside(*target))
+        || ast
+            .returns
+            .iter()
+            .any(|returned| inside(returned.span) && returned.argument.is_some())
+    {
+        return false;
+    }
+    let calls = ast
+        .calls
+        .iter()
+        .filter(|inner| inside(inner.span))
+        .collect::<Vec<_>>();
+    let callees = calls
+        .iter()
+        .map(|inner| ast.peel_ts_sugar_span(inner.callee))
+        .collect::<Vec<_>>();
+    calls.iter().all(|inner| {
+        !inner.construct && setter_runs_nothing(ctx, file, inner, object_prototype_touched)
+    }) && ast
+        .identifiers
+        .iter()
+        .filter(|identifier| {
+            identifier.role == solid_facts::ast::IdentifierRole::Reference
+                && inside(identifier.span)
+        })
+        .all(|identifier| callees.contains(&identifier.span))
 }
 
 /// ADR 1089: whether `span` is a function written there whose whole body writes primitive literals under static keys of its
