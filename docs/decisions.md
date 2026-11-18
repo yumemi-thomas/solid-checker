@@ -4285,3 +4285,15 @@ The 24 `wrapper` programs stay uncertifiable on SC5003 `async-options-opaque`, a
 - uncertifiable twins: the closure in an effect's apply, under `untrack`, also kept, or handed to the helper as a value.
 
 Chrome rc.21 is quiet on the four clean components, and reports PENDING_ASYNC_UNTRACKED_READ only at the apply twin. A first build without the leaf-owner condition lost `async-unsuspendable-call-attributed`'s `TrackedWrapper` violation; the regress gate caught it. Three fixtures lose only U rows, recorded as drops rows: `MemoClosure` in that fixture (claimed silent), five `read-after-await-reach` helpers each called in a memo's compute before any await, and the `value-walk-chain` caught cases (their SC5008 stands, as Chrome reports).
+
+<a id="adr-1104-part-2"></a>
+## ADR 1104 part 2 — A carrier's later read or write through a pattern parameter or a copy alias
+**The gap.** Four R-carrier false cleans in the pattern lane, each with its row at the carrier and none where Chrome rc.21 warns:
+- `values/d3-options-destructure` (`use({ get: a })`, `({ get }) => get()`), `values/t5-helper-destructure-param` (`pick(props)`), `values/t5-store-helper-destructure` (`pick(st)`, `function pick({ a })`): the value-use walk past the argument's escape (ADR 0860) followed a project callee only through a plain parameter, so a destructuring one was a dead end. Chrome warns STRICT_READ_UNTRACKED at `get()` or at the pattern.
+- `values/d2n-slice-element-write` (`const c = st.items.slice(); c[0].v = 5`): the zero-argument `slice()` has no call fact, so SC2003's flow (ADRs 0720, 0790) read the `const` alias of a call no row describes as nothing. Chrome warns STORE_WRITE_OUTSIDE_SETTER at the write; the method-write row at `st.items.slice()` was the only one.
+
+**Decision.**
+- `value_use.rs` `escaped_argument`: an exact project callee's destructuring parameter (not reading `arguments`, within the hop limit) takes the value: a store or props root's pattern is a Get of it, a site (as a binding's pattern is); any other mode walks the names the pattern declares. The row at the argument and the hand-off past the call stay.
+- `shared_reactivity.rs` `ParameterFlow::value`: a `const` alias whose initializer is a call `call_value` does not describe is read as that call written at the sink is (`sub_values`: the callee's returns, or what it was handed), after `handed_container`. The inline `st.items.slice()[0].v = 5` was already uncertifiable.
+
+Every new row is uncertifiable; no violation is added or removed.

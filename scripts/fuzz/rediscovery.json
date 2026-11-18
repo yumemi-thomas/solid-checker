@@ -26263,5 +26263,31 @@
    "mx-sync-node-received-async-flw-settled-report-error-memo-direct-none"
   ],
   "rediscovered": "old harness (6be8e3e34), same checker: `focus.mjs --codes SYNC_NODE_RECEIVED_ASYNC --grids mx-census` on the ids fails (false-positive); this harness: 26 agree"
+ },
+ {
+  "finding": "a store write through an element of a `const` alias of a call no row describes (`const c = st.items.slice(); c[0].v = 5`: the zero-argument `slice()` has no call fact) certified at the write; Chrome rc.21 warns STORE_WRITE_OUTSIDE_SETTER there, the only row was SC2003's method-write row at `st.items.slice()`",
+  "found": "open-defects values/d2n-slice-element-write (R-carrier, ADR 1104)",
+  "fixed": "ADR 1104 part 2 (`shared_reactivity.rs` `ParameterFlow::value`: the alias reads the call as `sub_values` does)",
+  "grid": "patterns",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "values/d2n-slice-element-write"
+  ],
+  "rediscovered": "`patterns.mjs --only` the id: main 28fde14bf false-clean, this build fine (SC2003 U at `c[0].v`); fixture store-copy-alias-write",
+  "outside": "no grid program aliases a copy before writing an element: misuse.mjs writes a copy inline (`slice-push`, `st.items.slice().push(7)`) and flip-read's `sw-*` text variants write the store's links, not an alias of a zero-argument copy; `make fuzz-focus` on the six touched codes moves 0 of 125,368 base-grid programs. A variant `const c = ${o}.items.slice(); c[0].v = 7` is deferred (it changes grid ids and smoke manifests)"
+ },
+ {
+  "finding": "a reactive value handed to a project function's destructuring parameter certified at the read inside it: `({ get }) => get()` handed `{ get: a }`, `function pick({ a })` handed a props object or a store; the census filed its row at the argument and stopped, Chrome rc.21 warns STRICT_READ_UNTRACKED at `get()` or at the pattern",
+  "found": "open-defects values/d3-options-destructure, values/t5-helper-destructure-param, values/t5-store-helper-destructure (R-carrier, ADR 1104)",
+  "fixed": "ADR 1104 part 2 (`value_use.rs` `escaped_argument`: an exact callee's pattern parameter is a Get of a root, or its names are walked)",
+  "grid": "patterns",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "values/d3-options-destructure",
+   "values/t5-helper-destructure-param",
+   "values/t5-store-helper-destructure"
+  ],
+  "rediscovered": "`patterns.mjs --only` the three ids: main 28fde14bf false-clean on 3 of 3, this build fine on 3 of 3 (SC9012 U at `get()` or `{ a }`); fixture value-pattern-parameter",
+  "outside": "the base grids' layers hand a source to a helper only through a plain parameter (`helper`, `closure`, `wrapper`); no layer passes it in a literal, or a props or store root, to a destructuring parameter; `make fuzz-focus` on the six touched codes moves 0 of 125,368 base-grid programs. A destructuring-helper layer is deferred (it changes grid ids and smoke manifests)"
  }
 ]

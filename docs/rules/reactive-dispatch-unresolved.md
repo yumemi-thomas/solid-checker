@@ -220,6 +220,8 @@ Every reference of a proven source is followed, or it is this rule's uncertifiab
 
 A primitive's slot that takes a target it never calls nor hands on (`Dialect::argument_is_untouched_target`; in Solid 2 `refresh(m)`, which reads only the node the runtime stored on `m`, ADR 1089) ends an accessor's walk with no row.
 
+Past an escape (ADR 0860) a value handed to an exact project function whose parameter is a destructuring pattern is followed into it (ADR 1104 part 2): a store or props root's pattern is a Get of the root (`function pick({ a })` handed `props` or a store: a row at `{ a }`), and the names any other pattern declares are walked on (`({ get }) => get()` handed `{ get: a }`: a row at `get()`), where Chrome rc.21 warns. The row at the argument stays. A helper's role is rarely known, so the pattern's row stands even where every caller runs it tracked.
+
 A call reached by walking must have a read, write or action row, or, for an accessor, a tracked position. The row stands at the reference and, too, at each use the walk ends at, in any file: an IIFE's result, a `let` and a class field are walked on to their uses (ADR 0831). Links are not this census: `const t = s.a; t.x = 1` is SC2003's forward flow.
 
 ## What keeps a leaf callback open

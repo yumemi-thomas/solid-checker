@@ -73,7 +73,12 @@ handed setter's draft: silent. Else U.
 1`) or a `createMemo(() => store)` accessor returns the store: a violation. An
 element (`find`, `at`, `for…of`, a `For` row, a `filter`, `slice` or
 `Object.values` copy, a `map` not returning a fresh literal) is a link:
-uncertifiable. A copy written itself is a plain array.
+uncertifiable. A copy written itself is a plain array. A `const` alias of a
+call no row describes is read as the call written at the write is (ADR 1104
+part 2): `const c = st.items.slice(); c[0].v = 5` (a zero-argument `slice()`
+has no call fact) and `const y = x.self(); y.k = 1` are uncertifiable, as
+`st.items.slice()[0].v = 5` was; a write to such an alias itself
+(`c.push(…)`) is uncertifiable too when the callee is unresolved.
 
 **Any other root (ADR 0790).** A destructured or rest parameter, a pattern
 binding, a `let` and its assignments, a callee's returns (with the call as the
