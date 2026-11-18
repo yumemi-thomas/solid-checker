@@ -737,6 +737,17 @@
       "blocker": "value-through-new",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-strict-read-keys/hook.ts",
+      "start": 387,
+      "end": 473,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-through-new",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-strict-read-keys/hook.ts",
       "start": 393,
       "end": 398,
       "fixes": 0
