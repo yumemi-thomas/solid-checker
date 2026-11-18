@@ -3316,6 +3316,97 @@
         "open": "reactive-ir/handed-call-results"
       },
       "note": "the handed-value walk answered `handed` here only because it ran past six steps; at twelve the same exact steps reach a value no caller supplied (an event parameter, a standard iterator, a closed local literal); the rows the fixture pins stand"
+    },
+    {
+      "fixture": "reactive-ir/after-await-runner-callback",
+      "key": "SC1002 function-run-unplaced",
+      "from": 3,
+      "to": 1,
+      "adr": "ADR 1073",
+      "proof": "rust/crates/solid-reactive-ir/src/static_rules/handed_compute.rs::handed_compute",
+      "fixtures": {
+        "proved": "reactive-ir/after-await-runner-callback",
+        "open": "reactive-ir/after-await-net"
+      },
+      "note": "the after-await walk started a member for a callback literal a reviewed runner schedules (via `it`); the runner calls it from its own loop (ADR 0438/1004's premise), so it is handed to no computation and the walk's rows for it leave"
+    },
+    {
+      "fixture": "reactive-ir/after-await-runner-callback",
+      "key": "SC9012 function-run-unplaced",
+      "from": 2,
+      "to": 1,
+      "adr": "ADR 1073",
+      "proof": "rust/crates/solid-reactive-ir/src/static_rules/handed_compute.rs::handed_compute",
+      "fixtures": {
+        "proved": "reactive-ir/after-await-runner-callback",
+        "open": "reactive-ir/after-await-runner-callback"
+      },
+      "note": "the after-await walk started a member for a callback literal a reviewed runner schedules (via `it`); the runner calls it from its own loop (ADR 0438/1004's premise), so it is handed to no computation and the walk's rows for it leave"
+    },
+    {
+      "fixture": "reactive-ir/after-await-runner-callback",
+      "key": "SC9012 function-call-target-unresolved",
+      "from": 1,
+      "to": 0,
+      "adr": "ADR 1073",
+      "proof": "rust/crates/solid-reactive-ir/src/static_rules/handed_compute.rs::handed_compute",
+      "fixtures": {
+        "proved": "reactive-ir/after-await-runner-callback",
+        "open": "reactive-ir/read-after-await-reach"
+      },
+      "note": "the after-await walk started a member for a callback literal a reviewed runner schedules (via `it`); the runner calls it from its own loop (ADR 0438/1004's premise), so it is handed to no computation and the walk's rows for it leave"
+    },
+    {
+      "fixture": "reactive-ir/test-runner-vitest-async-dispatch",
+      "key": "SC1002 function-run-unplaced",
+      "from": 1,
+      "to": 0,
+      "adr": "ADR 1073",
+      "proof": "rust/crates/solid-reactive-ir/src/static_rules/handed_compute.rs::handed_compute",
+      "fixtures": {
+        "proved": "reactive-ir/test-runner-vitest-async-dispatch",
+        "open": "reactive-ir/after-await-net"
+      },
+      "note": "the after-await walk started a member for a callback literal a reviewed runner schedules (via `it`); the runner calls it from its own loop (ADR 0438/1004's premise), so it is handed to no computation and the walk's rows for it leave"
+    },
+    {
+      "fixture": "reactive-ir/test-runner-vitest-helper-literal-async-component",
+      "key": "SC1002 function-run-unplaced",
+      "from": 1,
+      "to": 0,
+      "adr": "ADR 1073",
+      "proof": "rust/crates/solid-reactive-ir/src/static_rules/handed_compute.rs::handed_compute",
+      "fixtures": {
+        "proved": "reactive-ir/test-runner-vitest-helper-literal-async-component",
+        "open": "reactive-ir/after-await-net"
+      },
+      "note": "the after-await walk started a member for a callback literal a reviewed runner schedules (via `it`); the runner calls it from its own loop (ADR 0438/1004's premise), so it is handed to no computation and the walk's rows for it leave"
+    },
+    {
+      "fixture": "reactive-ir/test-runner-vitest-helper-literal-async-destructured",
+      "key": "SC1002 function-run-unplaced",
+      "from": 1,
+      "to": 0,
+      "adr": "ADR 1073",
+      "proof": "rust/crates/solid-reactive-ir/src/static_rules/handed_compute.rs::handed_compute",
+      "fixtures": {
+        "proved": "reactive-ir/test-runner-vitest-helper-literal-async-destructured",
+        "open": "reactive-ir/after-await-net"
+      },
+      "note": "the after-await walk started a member for a callback literal a reviewed runner schedules (via `it`); the runner calls it from its own loop (ADR 0438/1004's premise), so it is handed to no computation and the walk's rows for it leave"
+    },
+    {
+      "fixture": "reactive-ir/test-runner-vitest-helper-test-only",
+      "key": "SC1002 function-run-unplaced",
+      "from": 1,
+      "to": 0,
+      "adr": "ADR 1073",
+      "proof": "rust/crates/solid-reactive-ir/src/static_rules/handed_compute.rs::handed_compute",
+      "fixtures": {
+        "proved": "reactive-ir/test-runner-vitest-helper-test-only",
+        "open": "reactive-ir/after-await-net"
+      },
+      "note": "the after-await walk started a member for a callback literal a reviewed runner schedules (via `it`); the runner calls it from its own loop (ADR 0438/1004's premise), so it is handed to no computation and the walk's rows for it leave"
     }
   ],
   "renames": []

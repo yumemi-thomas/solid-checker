@@ -4010,3 +4010,17 @@ Twelve keeps 96% of sixteen's gain. The rows that leave are mostly SC9012 `hande
 **Evidence.** Fixture `bounds-value-depth-twelve`: eight `const` aliases of a local literal lose the handed obligation (its next blocker, SC1002 `unresolved-invocation`, stands). Fourteen aliases, and eight aliases of a prop, keep it. Seventeen fixture snapshots lose a handed row the bound held, each read:
 - in the `iteration-written-slots-handed-*` variants and `sloppy-this-dependency`, the walk now reaches an event parameter or a standard iterator, and every `tuple-iteration-written` row those fixtures pin stands;
 - in `accessor-provenance` `Scope.tsx` `MemoArray`, the compute calls members of two closed local literals, so its async provenance is proved.
+
+<a id="adr-1073"></a>
+## ADR 1073 — A callback literal a reviewed runner schedules is handed to no computation
+**The gap.** ADR 0873's `handed_compute` answers `Unplaced { via }` for an async function handed to a call that is no project wrapper. For `it("…", async () => …)` that call is the runner's registration, so the after-await walk started a member for every test callback and filed its reads `function-run-unplaced`. ADR 1065 part 2's census counted about 3,500 such rows (`after-await-member|handed-compute|via=it/test`), all in test files.
+**Decision.** `handed_compute` skips a call where all of these hold:
+- the function is the literal written directly as its argument;
+- the call is a registration `test_runner_callback` answers `Scheduled` for;
+- the runner's published JavaScript was read (`test_runner_schedules_by_read_bytes`);
+- the literal is no generator, and its own name, if it has one, is used nowhere (`flush_accounting::reentered_by_name`).
+
+This is ADR 1004's premise for the same literal: the runner calls it from its own loop, outside any computation. A callback handed by name or through a helper, a project function named `it`, and `bun:test` (its bytes unread) are unchanged.
+**Measured** (rc.21 frozen corpus v2, release, main 84cc06485 against this): development build U 250,089 → 246,813 (−3,276), standard 237,335 → 234,051 (−3,284), V unchanged in both (244, 236). The rows that leave are SC9012 (2,729 dev) and SC1002 (578). Up to 24 SC9012, 7 SC1002 and 1 SC5003 rows stand where a walk row left (the site's next blocker).
+**Not covered, measured.** 1,767 B3 test-file rows (compass-ui, expenses-app, inferay) are `bun:test`, whose bytes are unread: they stay. 4,651 more in vitest files (kui, jandibat-web, solid-groove, compass-ui) are registrations `test_runner_callback` does not recognise (`test=no` in the census); that is a separate question (`docs/open-work.md`).
+**Evidence.** `after-await-runner-callback`: the `count()` reads in "a read" end; a named callback that stores its own name keeps its row; the existing twins (a wrapper, a binding handed by name, a shadowed `it`, a named callback handed to `createMemo`) keep theirs. Four `test-runner-vitest` variants lose a walk row their own README calls scheduled-callback work. Every row each fixture pins stands.

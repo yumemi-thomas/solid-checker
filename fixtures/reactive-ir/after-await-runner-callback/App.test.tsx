@@ -119,3 +119,13 @@ it("a helper", async () => {
   await helper();
 });
 export const memo = () => createMemo(helper);
+
+// ADR 1073: the callback literal of a scheduled registration is handed to no computation, so the after-await walk starts no member for it (the `count()` reads in
+// "a read" lose the walk's `function-run-unplaced` row). Kept: a named function expression that stores its own name may be handed on by that store.
+export let stored: (() => Promise<void>) | undefined;
+it("a stored name", async function self(): Promise<void> {
+  await pause();
+  count();
+  void pause().then(() => count());
+  stored = self;
+});
