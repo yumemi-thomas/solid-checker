@@ -10048,11 +10048,25 @@ fn function_handed_unfollowed(
     // retaining standard-library call, a slot of a literal argument) hands it
     // to code nothing places. A `const` copy is followed into its own
     // references; an object slot handed on through a `const` holder as before.
+    //
+    // ADR 1091: a reference that is the tag of a JSX element (`<Content />`, its closing tag too) is no hand-off here: Solid's
+    // `createComponent` runs the component during the render that holds the tag, which the render roles place, as they place a
+    // component a tag in another file renders (this test reads same-file references only). Every other reference keeps its class.
     let mut hand_offs = Vec::new();
-    binding_hand_offs(file, name.span, lookup, &mut hand_offs);
-    hand_offs.contains(&HandOff::Unfollowed)
-        || hand_offs.contains(&HandOff::Retained)
-        || references(name.span).into_iter().any(slot_handed)
+    binding_reference_hand_offs(file, name.span, lookup, &mut hand_offs);
+    hand_offs.iter().any(|(at, hand_off)| {
+        matches!(hand_off, HandOff::Unfollowed | HandOff::Retained) && !rendering_tag(file, *at)
+    }) || references(name.span).into_iter().any(slot_handed)
+}
+
+/// ADR 1091: whether `at` is the tag name of a JSX element that is no intrinsic element, written as a plain identifier (not a
+/// dotted `<Ns.Tag>`), opening or closing.
+fn rendering_tag(file: &solid_facts::FileFacts, at: solid_facts::core::Span) -> bool {
+    file.ast.jsx_elements.iter().any(|element| {
+        element.member_property.is_none()
+            && !crate::execution_role::intrinsic_element(file, element)
+            && (element.name.span == at || element.closing_name == Some(at))
+    })
 }
 
 /// ADR 0531: how one reference of a function's binding hands the function
