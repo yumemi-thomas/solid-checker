@@ -43,16 +43,6 @@ function events() {
   ];
 }
 
-// ADR 1101, as the oracle's later module (scripts/runtime-oracle.mjs `laterModule`): once the settled phase is over, the program's own nodes
-// outside #root get the entry's events and a form's reset and formdata, a control's invalid, a toggle's beforetoggle; the window gets an error.
-const harnessIds = new Set(['root', 'ready', 'sc-halted', 'sc-hits', 'sc-phase', 'oracle-behaviour']);
-const outside = () => Array.from(document.body.children)
-  .filter(element => !harnessIds.has(element.id) && element.tagName !== 'SCRIPT')
-  .flatMap(element => [element, ...Array.from(element.querySelectorAll('*'))]);
-/** ADR 1101: the message of the later error the harness sends the window; the harness's own error listeners skip it. */
-const LATER_ERROR = 'sc-later-error';
-const LATER_TYPES = ['reset', 'formdata', 'invalid', 'beforetoggle'];
-
 // The hit ledger (scripts/fuzz/hits.mjs): the instrumented twin counts on globalThis and mirrors the counts into #sc-hits.
 // Polls until the counters stay unchanged over two 50 ms ticks (2 s at most): the page is still, or it is not.
 async function settleHits(): Promise<boolean | null> {
@@ -95,7 +85,6 @@ export async function runCase(id: string, caseDir: string, load: () => Promise<a
   Error.stackTraceLimit = 80;
 
   const onError = (event: ErrorEvent) => {
-    if (event.message === LATER_ERROR) return;
     errors.push({ phase, kind: 'window-error', message: String(event.message), stack: String(event.error?.stack ?? '') });
     event.preventDefault();
   };
@@ -147,13 +136,6 @@ export async function runCase(id: string, caseDir: string, load: () => Promise<a
         await pause(settings.pauseMs);
       }
       await pause(settings.finalMs);
-      for (const element of outside()) {
-        for (const [type, make] of [...events(), ...LATER_TYPES.map(type => [type, () => new Event(type, { bubbles: true, cancelable: true })] as const)]) {
-          try { element.dispatchEvent(make()); } catch (e) { errors.push({ phase, kind: 'handler', event: type, ...describeError(e) }); }
-        }
-      }
-      try { window.dispatchEvent(new ErrorEvent('error', { message: LATER_ERROR, cancelable: true })); }
-      catch (e) { errors.push({ phase, kind: 'handler', event: 'error', ...describeError(e) }); }
       phase = 'plan';
       // The user's edits first (Chrome's `fill`: the value set, then an input event), then the clicks.
       for (const edit of plan.plan.edits ?? []) {

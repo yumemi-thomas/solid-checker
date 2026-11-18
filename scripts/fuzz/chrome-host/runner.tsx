@@ -68,16 +68,6 @@ function events() {
   ];
 }
 
-// ADR 1101, as the oracle's later module (scripts/runtime-oracle.mjs `laterModule`): once the settled phase is over, the program's own nodes
-// outside #root get the entry's events and a form's reset and formdata, a control's invalid, a toggle's beforetoggle; the window gets an error.
-const harnessIds = new Set(['root', 'ready', 'sc-halted', 'sc-hits', 'sc-phase', 'oracle-behaviour']);
-const outside = () => Array.from(document.body.children)
-  .filter(element => !harnessIds.has(element.id) && element.tagName !== 'SCRIPT')
-  .flatMap(element => [element, ...Array.from(element.querySelectorAll('*'))]);
-/** ADR 1101: the message of the later error the harness sends the window; the harness's own error listeners skip it. */
-const LATER_ERROR = 'sc-later-error';
-const LATER_TYPES = ['reset', 'formdata', 'invalid', 'beforetoggle'];
-
 async function settleHits(): Promise<boolean | null> {
   const g = globalThis as any;
   if (!g.__scHits) return null;
@@ -118,7 +108,6 @@ async function runCase() {
   // (packages/cli/scripts/feedback-read-runtime.mjs `maxFrames` + 1), so both place an event at the same application frame.
   Error.stackTraceLimit = 41;
   const onError = (event: ErrorEvent) => {
-    if (event.message === LATER_ERROR) return;
     // Chrome's ErrorEvent.message reads "Uncaught Error: <message>"; the error's own message is what Happy DOM and the oracle record.
     // Its `cause` too (Part 16, B1): rc.21 wraps a compute's throw in a StatusError made at the read, and the throw's own frame (the
     // `resolve` line) is only in `cause.stack`.
@@ -193,13 +182,6 @@ async function runCase() {
         await pause(settings.pauseMs);
       }
       await pause(settings.finalMs);
-      for (const element of outside()) {
-        for (const [type, make] of [...events(), ...LATER_TYPES.map(type => [type, () => new Event(type, { bubbles: true, cancelable: true })] as const)]) {
-          try { element.dispatchEvent(make()); } catch (e) { logged(`handler threw ${type} ${String((e as any)?.message ?? e)}`); }
-        }
-      }
-      try { window.dispatchEvent(new ErrorEvent('error', { message: LATER_ERROR, cancelable: true })); }
-      catch (e) { logged(`handler threw error ${String((e as any)?.message ?? e)}`); }
       phase = 'plan';
       for (const edit of plan.plan.edits ?? []) {
         const target = document.querySelector(edit.selector);

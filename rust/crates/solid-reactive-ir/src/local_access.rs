@@ -3578,22 +3578,7 @@ impl LocalAccessContext<'_, '_> {
             && named_callback_execution_role(file, call.callee, self.lookup).is_none()
             && !pending_accessor_probe(file, call.callee, self.lookup)
         {
-            // ADR 1096: a function whose exact in-place layers end at a tracked computation's own read runs there: the read's own row,
-            // which `push_async_read` places at that call, stands for it instead of the callers' walk.
-            if computation_layer_call(
-                file,
-                call.callee,
-                self.entities,
-                self.symbol_names,
-                self.lookup,
-            )
-            .is_some()
-                && let Some(accessor) = self.accessors.get(symbol)
-            {
-                self.push_async_read(file, call, symbol, accessor, execution, None, result);
-            } else {
-                self.push_call_attributed_async_reads(file, call, symbol, allowed, result);
-            }
+            self.push_call_attributed_async_reads(file, call, symbol, allowed, result);
         }
         // ADR 0628: a function a hand-off runs, written inside an `untrack` in a
         // strict window: the read may meet the pending throw there, or run later.
@@ -7415,28 +7400,6 @@ impl LocalAccessContext<'_, '_> {
         if result.async_reads.iter().any(|read| read.location == here) {
             return;
         }
-        // ADR 1096: a read in exact in-place layers (an IIFE, a named function called once, a helper's callback it calls in its body) whose outermost
-        // layer is called in a tracked computation's own callback runs on that call's stack, tracked: it is placed at the call, as a carrier's read is.
-        let layer_call = if placed_at.is_none()
-            && !(async_read_placement(file, call.callee, execution) == ExecutionRole::TrackedJsx
-                && crate::execution_role::computation_read_suspends(
-                    file,
-                    call.callee,
-                    self.entities,
-                    self.symbol_names,
-                    self.lookup,
-                )) {
-            computation_layer_call(
-                file,
-                call.callee,
-                self.entities,
-                self.symbol_names,
-                self.lookup,
-            )
-        } else {
-            None
-        };
-        let placed_at = placed_at.or(layer_call);
         // ADR 0531: the timing of a read a carrier places is the carrier's.
         let timing_at = placed_at.unwrap_or(call.callee);
         let async_provenance = self.async_sources.contains(symbol);
@@ -7458,25 +7421,16 @@ impl LocalAccessContext<'_, '_> {
             || async_options.server_rendering_unresolved)
             && !pending_accessor_probe(file, call.callee, self.lookup)
         {
-            let async_execution = if layer_call.is_some() {
-                // ADR 1096: the layers' outermost call is a tracked, suspending read of a computation's own callback (`computation_layer_call`).
-                crate::role_log::role_arm!(
-                    "local_access.push_async_read.computation-layer-call",
-                    ExecutionRole::TrackedJsx
-                )
-            } else {
-                async_read_placement(file, call.callee, execution)
-            };
-            // ADR 0623: tracked, in a computation's own callback: it suspends. ADR 1096: so does a read its layers place there.
-            let computation_read = layer_call.is_some()
-                || async_execution == ExecutionRole::TrackedJsx
-                    && crate::execution_role::computation_read_suspends(
-                        file,
-                        call.callee,
-                        self.entities,
-                        self.symbol_names,
-                        self.lookup,
-                    );
+            let async_execution = async_read_placement(file, call.callee, execution);
+            // ADR 0623: tracked, in a computation's own callback: it suspends.
+            let computation_read = async_execution == ExecutionRole::TrackedJsx
+                && crate::execution_role::computation_read_suspends(
+                    file,
+                    call.callee,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                );
             let async_execution =
                 if async_options.ssr_client_bare || async_options.server_rendering_unresolved {
                     async_execution
@@ -11719,63 +11673,4 @@ fn withdrawn_slot_obligation(
         fixes: vec![],
         uncertain: true,
     }
-}
-
-/// ADR 1096: the call of the outermost layer of the exact in-place layers around the read at `span`, when that call is itself a read a tracked
-/// computation's own callback makes and suspends on (`computation_read_suspends`): the layers run on its stack, before it returns, tracked. The climb
-/// must cross at least one layer and be exact: no layer holds the read in a parameter list, no helper on the way also hands its callback on or keeps it,
-/// nothing on the way follows an await, no call crossed is withheld or an unmodelled slot, and the bound was not reached. `layer_run` crosses no
-/// primitive's callback (an `untrack` stops the climb), so the read keeps the computation's tracking.
-pub(crate) fn computation_layer_call(
-    file: &solid_facts::FileFacts,
-    span: solid_facts::core::Span,
-    entities: &EntitySymbols,
-    symbol_names: &HashMap<SymbolId, SymbolId>,
-    lookup: &SemanticLookup<'_>,
-) -> Option<solid_facts::core::Span> {
-    if crate::execution_role::may_follow_suspension(file, span) {
-        return None;
-    }
-    let climb = crate::execution_role::climb_in_place_layers(file, span, lookup)?;
-    if climb.bound()
-        || climb.in_list.is_some()
-        || climb.among_others
-        || climb.suspended.is_some()
-        || climb.withheld
-        || climb.unmodelled
-    {
-        return None;
-    }
-    // The call is tracked as a direct read there is (ADR 0623's two conditions): its role is a tracked one, and it is a computation's read that
-    // suspends. `tracked_computation_read` alone also holds in an effect's apply, which is untracked.
-    let allowed = crate::execution_role::allowed_callback_spans(file, lookup);
-    let role = crate::execution_role::read_execution_role(
-        file,
-        climb.at,
-        &allowed,
-        entities,
-        symbol_names,
-        lookup,
-    );
-    // A leaf owner (`createTrackedEffect`, `onSettled`) forbids the pending read whatever tracks it: a direct read there is a violation, and so
-    // is this one (the review's twin `TrackedWrapper`).
-    let (leaf_owner, leaf_carrier_unproven) = carried_leaf_owner(
-        file,
-        climb.at,
-        entities,
-        symbol_names,
-        lookup,
-        CARRIED_LEAF_DEPTH,
-    );
-    (leaf_owner.is_none()
-        && !leaf_carrier_unproven
-        && async_read_placement(file, climb.at, role) == ExecutionRole::TrackedJsx
-        && crate::execution_role::computation_read_suspends(
-            file,
-            climb.at,
-            entities,
-            symbol_names,
-            lookup,
-        ))
-    .then_some(climb.at)
 }

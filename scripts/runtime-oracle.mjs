@@ -252,8 +252,7 @@ const html = `<!doctype html><html><head><meta charset="utf-8"></head><body><div
 const haltModule = `Error.stackTraceLimit = 41;
 import { OBSERVE } from "solid-js";
 OBSERVE?.diagnostics.subscribe((event) => { if (event.code === "REACTIVITY_HALTED" || event.severity === "error") mark(); });
-// ADR 1101: the later error the entry sends the window (message "sc-later-error") is the harness's, no uncaught error.
-window.addEventListener("error", (event) => { if (event.message !== "sc-later-error") mark(); });
+window.addEventListener("error", () => mark());
 function mark() {
   if (document.getElementById("sc-halted")) return;
   const marker = document.createElement("output");
@@ -292,41 +291,6 @@ import("/main.tsx").then(() => show("entered"), () => {
 });
 `;
 const phaseStep = { action: "wait-for-selector", selector: PHASE_SELECTOR };
-
-// ADR 1101: the later events a user or the page sends after the settled phase, to the program's own nodes outside #root (an element
-// it appends to document.body, a portal's mount) and to the window's error listeners. A listener a settled callback fires once (the
-// fuzzer's evt-settled-fire and flw-settled shapes) otherwise never hears another event in a harness that drives #root only, and a
-// violation that holds for that later run reads as a false positive. A page module of its own, loaded after the entry and not in the
-// case's tsconfig, so the checker never reads it: these events come from outside the program (ADR 0435's dispatch premise is about
-// the program's own dispatches). It runs once, when the entry marks #ready settled (a microtask of that write, before the scenario's
-// next step), with the entry's event set plus a form's reset and formdata, a control's invalid and a toggle's beforetoggle. The
-// window's error carries the message "sc-later-error", which the halt module and the hosts' error capture skip. The fuzzer's hosts
-// (scripts/fuzz/chrome-host/runner.tsx, scripts/fuzz/fast/runner.tsx) send the same events at the same moment.
-const laterModule = `const harness = new Set(["root", "ready", "sc-halted", "sc-hits", "sc-phase", "oracle-behaviour"]);
-const make = (type: string): Event => ["click", "dblclick", "mousedown", "mouseup", "mouseover", "mouseout", "pointerdown", "pointerup", "contextmenu"].includes(type)
-  ? new MouseEvent(type, { bubbles: true, cancelable: true })
-  : ["keydown", "keyup"].includes(type) ? new KeyboardEvent(type, { bubbles: true, key: "a" })
-  : ["focus", "blur", "focusin", "focusout"].includes(type) ? new FocusEvent(type, { bubbles: true })
-  : new Event(type, { bubbles: true, cancelable: true });
-const types = ["click", "dblclick", "mousedown", "mouseup", "mouseover", "mouseout", "pointerdown", "pointerup", "contextmenu", "keydown", "keyup",
-  "focus", "blur", "focusin", "focusout", "input", "change", "submit", "scroll", "wheel", "reset", "formdata", "invalid", "beforetoggle"];
-let sent = false;
-function later() {
-  if (sent) return;
-  sent = true;
-  const nodes = Array.from(document.body.children)
-    .filter((element) => !harness.has(element.id) && element.tagName !== "SCRIPT")
-    .flatMap((element) => [element, ...Array.from(element.querySelectorAll("*"))]);
-  for (const element of nodes) {
-    for (const type of types) {
-      try { element.dispatchEvent(make(type)); } catch (error) { console.error("handler threw", type, error); }
-    }
-  }
-  try { window.dispatchEvent(new ErrorEvent("error", { message: "sc-later-error", cancelable: true })); } catch (error) { console.error("handler threw", "error", error); }
-}
-const ready = document.getElementById("ready");
-if (ready) new MutationObserver(() => { if (ready.textContent === "settled") later(); }).observe(ready, { childList: true, characterData: true, subtree: true });
-`;
 // The checker rules that claim each runtime diagnostic code. A code no rule
 // claims (REACTIVITY_HALTED, an uncaught error's consequence) is reported as
 // `no-rule`, never as a missing finding.
@@ -787,12 +751,11 @@ async function runCase(id, slot) {
   assert(spec.haltMarker === undefined || typeof spec.haltMarker === "boolean", `${id}: haltMarker must be a boolean`);
   if (spec.haltMarker) writeFileSync(join(dir, "sc-halt.ts"), haltModule);
   if (spec.haltMarker) writeFileSync(join(dir, "sc-phase.ts"), phaseModule);
-  if (spec.haltMarker) writeFileSync(join(dir, "sc-later.ts"), laterModule);
   // `external` names case files the page loads by a script of its own after the entry's and the checker's program does not hold: an importer outside the program, the
   // caller an open boundary cannot see (ADR 0970, R3 of the re-review of #221). They are copied like the others; the tsconfig leaves them out and the entry never imports them.
   const external = spec.external ?? [];
   assert(Array.isArray(external) && external.every((name) => name !== "App.tsx" && files.includes(name)), `${id}: external must list case files other than App.tsx`);
-  const page = (spec.haltMarker ? haltHtml : html).replace('<script type="module" src="/main.tsx"></script>', (entry) => entry + [...external, ...(spec.haltMarker ? ["sc-phase.ts", "sc-later.ts"] : [])].map((name) => `<script type="module" src="/${name}"></script>`).join(""));
+  const page = (spec.haltMarker ? haltHtml : html).replace('<script type="module" src="/main.tsx"></script>', (entry) => entry + [...external, ...(spec.haltMarker ? ["sc-phase.ts"] : [])].map((name) => `<script type="module" src="/${name}"></script>`).join(""));
   writeFileSync(join(dir, "index.html"), page);
   const leading = spec.haltMarker ? [phaseStep] : [];
   writeFileSync(join(dir, "scenario.json"), JSON.stringify({ schemaVersion: 1, steps: [...leading, settle, ...(observations.length ? [probeStep] : []), ...(spec.steps ?? [])] }));

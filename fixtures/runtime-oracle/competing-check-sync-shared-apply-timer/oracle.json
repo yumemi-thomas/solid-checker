@@ -1,5 +1,0 @@
-{
-  "note": "ADR 1052 part 9: a timer also calls the helper and still runs after the disposal: SYNC_NODE_RECEIVED_ASYNC; SC7002 stays a violation.",
-  "haltMarker": true,
-  "steps": []
-}

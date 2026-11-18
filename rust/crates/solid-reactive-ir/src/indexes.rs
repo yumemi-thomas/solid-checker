@@ -887,8 +887,6 @@ pub(super) struct SemanticLookup<'a> {
     synchronous_event_dispatch: OnceLock<Vec<event_delivery::DispatchSite>>,
     /// ADR 0613: every reference to the flush primitive, classified.
     synchronous_flush: OnceLock<Vec<flush_census::FlushSite>>,
-    /// ADR 1099: whether project code references a primitive that drains the queue on its caller's stack.
-    flush_referenced: OnceLock<bool>,
     /// Whether any analyzed registration or method read reaches project code.
     listener_project_reach: OnceLock<bool>,
     /// ADR 1011: what each callee's body says of the closure handed as one parameter, one answer per callee parameter of the build.
@@ -1314,7 +1312,6 @@ impl<'a> SemanticLookup<'a> {
             placed_event_dispatch: OnceLock::new(),
             synchronous_event_dispatch: OnceLock::new(),
             synchronous_flush: OnceLock::new(),
-            flush_referenced: OnceLock::new(),
             listener_project_reach: OnceLock::new(),
             callee_covers: crate::owners::CalleeCovers::default(),
             reflective_prototype_write: crate::base::reads::Recorded::new(),
