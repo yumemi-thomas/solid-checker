@@ -1728,6 +1728,22 @@ impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
         };
         for mut row in rows {
             if let Some(blocker) = member.blocker.filter(|_| row.uncertain) {
+                // ADR 1065 part 2 (B4): a row of an async function handed where the walk does not follow it takes the member's blocker; census only.
+                if !row.location.path.contains("/node_modules/") {
+                    crate::blocker_census::record(|| {
+                        let via = match &member.conditional {
+                            Some(AfterAwaitObligation::HandOffNotFollowed { via }) => {
+                                via.clone().unwrap_or_else(|| "-".to_owned())
+                            }
+                            _ => "-".to_owned(),
+                        };
+                        crate::blocker_census::CensusRow::at(
+                            &row.location,
+                            "after-await-member",
+                            vec![format!("cause|after-await-member|handed-compute|via={via}")],
+                        )
+                    });
+                }
                 row.analysis_context = blocker.into();
             }
             draft.push_defect_or_strengthen(row);
