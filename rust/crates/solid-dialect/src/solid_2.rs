@@ -2492,6 +2492,14 @@ impl Dialect for Solid2 {
             .flatten()
     }
 
+    /// rc.21 `createStore(value)` (`@solidjs/signals` `dist/dev.js:9742-9744`, `6885-6920`): a value that is no function makes a
+    /// plain store, and its setter is `fn => storeSetter(proxy, fn)`. `storeSetter` (`:6819-6870`) calls `fn(proxy)` on this
+    /// stack, then notifies the written targets (`notifyWrites`, `:5575`: the engine's own hooks only) and adopts a returned
+    /// object. `createStore(fn, …)` is the derived form (`createStoreDerived`): not this one.
+    fn store_setter_calls_updater(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::CreateStore
+    }
+
     /// The callbacks nothing runs until the returned value is used:
     /// `createReaction`'s invalidation callback arms only once the returned
     /// tracker is called, `lazy`'s loader waits for the wrapper component to

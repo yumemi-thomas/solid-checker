@@ -214,13 +214,6 @@ fn setter_runs_nothing(
     object_prototype_touched: &dyn Fn() -> bool,
 ) -> bool {
     use solid_dialect::OptionLiteral;
-    if !call
-        .arguments
-        .iter()
-        .all(|argument| argument_is_inert(ctx, file, argument, None, object_prototype_touched))
-    {
-        return false;
-    }
     let lookup = ctx.semantic_lookup;
     let callee = file.ast.peel_ts_sugar_span(call.callee);
     if !crate::owners::is_identifier_span(file, callee) {
@@ -247,18 +240,146 @@ fn setter_runs_nothing(
     else {
         return false;
     };
-    // The call is the dialect's signal creation, and its options argument is the dialect's.
-    let Some(options) = lookup
-        .primitive_at_call(file, created.span)
-        .and_then(|primitive| ctx.dialect.signal_creation_options(primitive))
-    else {
+    if created.construct {
+        return false;
+    }
+    let Some(primitive) = lookup.primitive_at_call(file, created.span) else {
         return false;
     };
-    !created.construct
-        && matches!(
+    // The call is the dialect's signal creation, and its options argument is the dialect's.
+    if let Some(options) = ctx.dialect.signal_creation_options(primitive) {
+        return call.arguments.iter().all(|argument| {
+            argument_is_inert(ctx, file, argument, None, object_prototype_touched)
+        }) && matches!(
             crate::call_option_literal(file, created, options, "equals"),
             OptionLiteral::Absent | OptionLiteral::False
-        )
+        );
+    }
+    // ADR 1089: a plain store's setter runs the one function it is given, on this stack, and nothing else of the project's
+    // (`Dialect::store_setter_calls_updater`). The store is made from a data literal written there (not the derived form a
+    // function makes), and the function only writes literals under static keys of the store.
+    let root = binding
+        .array_slots
+        .first()
+        .and_then(Option::as_ref)
+        .map(|slot| slot.span);
+    let [initial] = created.arguments.as_slice() else {
+        return false;
+    };
+    let [updater] = call.arguments.as_slice() else {
+        return false;
+    };
+    ctx.dialect.store_setter_calls_updater(primitive)
+        && !initial.spread
+        && (initial.exact_object_literal
+            || file
+                .ast
+                .array_literal_at(file.ast.peel_ts_sugar_span(initial.span))
+                .is_some())
+        && !updater.spread
+        && updater_writes_literals_only(ctx, file, updater.span, root)
+}
+
+/// ADR 1089: whether `span` is a function written there whose whole body writes primitive literals under static keys of its
+/// one parameter or of the store root `root`, and does nothing else: no call or construct, no nested function, class, JSX
+/// or load, no `return`, every member expression one of those assignment targets (a plain `=`), and every name it
+/// references the object of one. Not async, not a generator, its parameter a plain name whose list runs no code.
+fn updater_writes_literals_only(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    span: solid_facts::core::Span,
+    root: Option<solid_facts::core::Span>,
+) -> bool {
+    let ast = &file.ast;
+    let span = ast.peel_ts_sugar_span(span);
+    let Some(function) = ast.functions.iter().find(|function| function.span == span) else {
+        return false;
+    };
+    if function.kind == solid_facts::ast::FunctionKind::Declaration
+        || function.r#async
+        || function.generator
+        || function.expression_body
+        || function.rest_parameter
+        || !function.parameters_inert
+        || function.parameters.len() > 1
+        || function
+            .parameters
+            .iter()
+            .any(|parameter| parameter.shape != BindingShape::Identifier)
+    {
+        return false;
+    }
+    let parameter = function
+        .parameters
+        .first()
+        .map(|parameter| parameter.declaration);
+    let body = function.body;
+    let inside = |inner: solid_facts::core::Span| body.contains(inner);
+    if ast.calls.iter().any(|call| inside(call.span))
+        || ast
+            .functions
+            .iter()
+            .any(|inner| inner.span != function.span && inside(inner.span))
+        || ast.classes.iter().any(|class| inside(class.span))
+        || ast.jsx_elements.iter().any(|element| inside(element.span))
+        || ast.module_loads.iter().any(|load| inside(load.span))
+        || ast.returns.iter().any(|returned| inside(returned.span))
+        || ast.deleted_targets.iter().any(|target| inside(*target))
+    {
+        return false;
+    }
+    // The store the write lands in: the parameter (the setter passes the store's proxy) or the root the creation bound.
+    let store_name = |object: solid_facts::core::Span| {
+        let object = ast.peel_ts_sugar_span(object);
+        crate::owners::is_identifier_span(file, object)
+            && ast
+                .reference_declaration(object)
+                .is_some_and(|declaration| {
+                    Some(declaration) == parameter || Some(declaration) == root
+                })
+    };
+    let mut targets = Vec::new();
+    for assignment in ast
+        .assignments
+        .iter()
+        .filter(|assignment| inside(assignment.target))
+    {
+        let target = ast.peel_ts_sugar_span(assignment.target);
+        let Some(member) = ast.member_at(target) else {
+            return false;
+        };
+        // A key with no text is no static key: the updater is not proven.
+        let Some(key) = file.source_text(member.property) else {
+            return false;
+        };
+        if assignment.reads_target
+            || ast.computed_members.binary_search(&member.span).is_ok()
+            || matches!(key, "__proto__" | "constructor" | "prototype")
+            || !store_name(member.object)
+            || !ctx
+                .semantic_lookup
+                .proven_primitive(file, assignment.value_span, PROOF_DEPTH)
+        {
+            return false;
+        }
+        targets.push(member);
+    }
+    let objects = targets
+        .iter()
+        .map(|member| ast.peel_ts_sugar_span(member.object))
+        .collect::<Vec<_>>();
+    ast.members
+        .iter()
+        .filter(|member| inside(member.span))
+        .all(|member| targets.iter().any(|target| target.span == member.span))
+        && ast
+            .identifiers
+            .iter()
+            .filter(|identifier| {
+                identifier.role == solid_facts::ast::IdentifierRole::Reference
+                    && inside(identifier.span)
+            })
+            .all(|identifier| objects.contains(&identifier.span))
 }
 
 /// Whether the receiver of `call` is the library's own value: no receiver (an identifier callee), a primitive proven from its own expression, or an unshadowed ECMAScript
