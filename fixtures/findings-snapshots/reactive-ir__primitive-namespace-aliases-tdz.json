@@ -88,17 +88,6 @@
       "start": 438,
       "end": 452,
       "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/primitive-namespace-aliases/variants/tdz/App.tsx",
-      "start": 450,
-      "end": 452,
-      "fixes": 0
     }
   ]
 }

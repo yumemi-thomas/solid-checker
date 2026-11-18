@@ -112,17 +112,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
-      "start": 1110,
-      "end": 1112,
-      "fixes": 0
-    },
-    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -233,17 +222,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
-      "start": 1517,
-      "end": 1519,
-      "fixes": 0
-    },
-    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -327,17 +305,6 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
       "start": 2160,
-      "end": 2170,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
-      "start": 2168,
       "end": 2170,
       "fixes": 0
     },
@@ -428,17 +395,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
-      "start": 2794,
-      "end": 2796,
-      "fixes": 0
-    },
-    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -489,17 +445,6 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
       "start": 3080,
-      "end": 3091,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/write-render-apply-row-layers/App.tsx",
-      "start": 3089,
       "end": 3091,
       "fixes": 0
     },

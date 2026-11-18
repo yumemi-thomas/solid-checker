@@ -39,8 +39,9 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         // ADR 0646: two more, `owned-scope-valid.tsx:28`, a tuple's function
         // slots from a local hook: its transport does not resolve.
         // ADR 0692: eight more, the census's internal uncertifiables, pinned
-        // exactly below (`census_rows`).
-        ("reactive-dispatch-unresolved", 13),
+        // exactly below (`census_rows`). ADR 1089: three fewer, the accessor handed to `refresh(value)` in
+        // `owned-leaf-extended-{invalid,valid}.tsx`: `refresh` never calls or hands on its target.
+        ("reactive-dispatch-unresolved", 10),
         ("no-destructure", 1),
         ("components-return-once", 3),
         // ADR 0966 (batch 11, slice 5): two more, the uncertifiable
@@ -145,7 +146,6 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
                 ("no-write-in-pure-computation", 3),
                 ("action-called-in-owned-scope", 1),
                 ("leaf-owner-forbidden-call", 2),
-                ("reactive-dispatch-unresolved", 1),
             ]
             .as_slice(),
         ),
@@ -196,9 +196,6 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ("leaf-invalid.tsx", 12, "value-from-primitive-callback"),
         ("leaf-invalid.tsx", 14, "value-from-primitive-callback"),
         ("leaf-valid.tsx", 9, "value-to-unresolved-callee"),
-        ("owned-leaf-extended-invalid.tsx", 14, "value-in-carrier"),
-        ("owned-leaf-extended-valid.tsx", 19, "value-in-carrier"),
-        ("owned-leaf-extended-valid.tsx", 31, "value-in-carrier"),
     ]
     .map(|(file, line, context)| (file.to_owned(), line, context.to_owned()));
     assert_eq!(census_rows, pinned, "census rows: {findings:#?}");
@@ -318,8 +315,8 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
                 // One unowned settled cleanup plus the module-scope
                 // createTrackedEffect that pins leaf-scope write legality.
                 ("missing-owner", 2),
-                // ADR 0692: `refresh(value)` twice, census rows.
-                ("reactive-dispatch-unresolved", 2),
+                // ADR 0692: `refresh(value)` twice were census rows; ADR 1089: `refresh` never calls or hands on its target.
+                ("reactive-dispatch-unresolved", 0),
             ]
             .as_slice(),
         ),

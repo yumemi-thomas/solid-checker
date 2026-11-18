@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createTrackedEffect, onSettled } from "solid-js";
+import { createEffect, createMemo, createRenderEffect, createTrackedEffect, onSettled } from "solid-js";
 import * as S from "solid-js";
 
 // ADR 1052, part 2: `createMemo(async, { sync: true })` throws SYNC_NODE_RECEIVED_ASYNC (SC7002) only at its result probe; a
@@ -37,8 +37,8 @@ export function MemoInSettled() {
   });
   return <i />;
 }
-// Kept (open): through a helper the tracked effect calls. A refusal reached through a helper refuses that caller's run
-// only, and another caller (a render) may reach the probe first, so it is not counted; Chrome reports PRIMITIVE_IN_FORBIDDEN_SCOPE.
+// Through a helper the tracked effect calls: every reference to the helper is that refused call (part 5), so every run is
+// refused; Chrome reports PRIMITIVE_IN_FORBIDDEN_SCOPE.
 export function MemoInTrackedHelper() {
   const make = () => {
     createMemo(async () => 1, { sync: true });
@@ -49,6 +49,51 @@ export function MemoInTrackedHelper() {
   return <i />;
 }
 
+// Part 5: a helper only the tracked effect calls (every reference is that refused call).
+export function MemoInTrackedOnlyHelper() {
+  const make = () => {
+    createMemo(async () => 1, { sync: true });
+  };
+  createTrackedEffect(() => {
+    make();
+  });
+  createTrackedEffect(() => {
+    make();
+  });
+  return <i />;
+}
+// Part 5: in a render effect's apply behind an early return: the owned first run may skip it, every later run is refused.
+export function MemoInGuardedRenderApply(props: { on: number }) {
+  createRenderEffect(
+    () => props.on,
+    (v) => {
+      if (v === 1) return;
+      createMemo(async () => 1, { sync: true });
+    },
+  );
+  return <i />;
+}
+
+// Violations kept: the render effect's owned first run creates it (straight line), and a helper the render also calls.
+export function MemoInRenderApply() {
+  createRenderEffect(
+    () => 1,
+    () => {
+      createMemo(async () => 1, { sync: true });
+    },
+  );
+  return <i />;
+}
+export function MemoInTrackedAndBodyHelper() {
+  const make = () => {
+    createMemo(async () => 1, { sync: true });
+  };
+  make();
+  createTrackedEffect(() => {
+    make();
+  });
+  return <i />;
+}
 // Violation kept: created in the component body, no earlier check throws.
 export function MemoInBody() {
   createMemo(async () => 1, { sync: true });

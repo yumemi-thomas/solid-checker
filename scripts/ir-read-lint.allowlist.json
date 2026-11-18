@@ -59,6 +59,12 @@
   "rust/crates/solid-reactive-ir/src/cleanup.rs": {
     "file_by_path": 4
   },
+  "rust/crates/solid-reactive-ir/src/competing_checks.rs": {
+    "file_by_path": 2,
+    "pending-review": [
+      "file_by_path rose 0 -> 2 (--allow-rise): unreviewed"
+    ]
+  },
   "rust/crates/solid-reactive-ir/src/development_feedback.rs": {
     "file_slots": 1
   },

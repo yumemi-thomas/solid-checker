@@ -1503,6 +1503,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/flush-universe-test-runner/node_modules/**
 !fixtures/reactive-ir/flush-universe-class/node_modules/
 !fixtures/reactive-ir/flush-universe-class/node_modules/**
+!fixtures/reactive-ir/flush-in-place-layers/node_modules/
+!fixtures/reactive-ir/flush-in-place-layers/node_modules/**
 !fixtures/reactive-ir/flush-universe-inline-suite/node_modules/
 !fixtures/reactive-ir/flush-universe-inline-suite/node_modules/**
 !fixtures/reactive-ir/flush-universe-package-hand-off/node_modules/
@@ -1858,3 +1860,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/iteration-timer-handed-literal-script/node_modules/**
 !fixtures/reactive-ir/iteration-timer-handed-literal-function-stored/node_modules/
 !fixtures/reactive-ir/iteration-timer-handed-literal-function-stored/node_modules/**
+!fixtures/reactive-ir/refresh-target-untouched/node_modules/
+!fixtures/reactive-ir/refresh-target-untouched/node_modules/**

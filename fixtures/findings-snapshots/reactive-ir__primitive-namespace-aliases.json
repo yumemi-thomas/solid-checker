@@ -145,17 +145,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/primitive-namespace-aliases/App.tsx",
-      "start": 1496,
-      "end": 1498,
-      "fixes": 0
-    },
-    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -163,17 +152,6 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/primitive-namespace-aliases/App.tsx",
       "start": 1505,
-      "end": 1522,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/primitive-namespace-aliases/App.tsx",
-      "start": 1520,
       "end": 1522,
       "fixes": 0
     },
@@ -189,17 +167,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/primitive-namespace-aliases/App.tsx",
-      "start": 1542,
-      "end": 1544,
-      "fixes": 0
-    },
-    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -207,17 +174,6 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/primitive-namespace-aliases/App.tsx",
       "start": 1551,
-      "end": 1566,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/primitive-namespace-aliases/App.tsx",
-      "start": 1564,
       "end": 1566,
       "fixes": 0
     },
@@ -299,17 +255,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/primitive-namespace-aliases/App.tsx",
-      "start": 1914,
-      "end": 1916,
-      "fixes": 0
-    },
-    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -317,17 +262,6 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/primitive-namespace-aliases/App.tsx",
       "start": 1923,
-      "end": 1940,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/primitive-namespace-aliases/App.tsx",
-      "start": 1938,
       "end": 1940,
       "fixes": 0
     },
@@ -343,17 +277,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/primitive-namespace-aliases/App.tsx",
-      "start": 1960,
-      "end": 1962,
-      "fixes": 0
-    },
-    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -365,17 +288,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/primitive-namespace-aliases/App.tsx",
-      "start": 1982,
-      "end": 1984,
-      "fixes": 0
-    },
-    {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "uncertifiable",
@@ -383,17 +295,6 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/primitive-namespace-aliases/App.tsx",
       "start": 1991,
-      "end": 2001,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/primitive-namespace-aliases/App.tsx",
-      "start": 1999,
       "end": 2001,
       "fixes": 0
     },
@@ -482,17 +383,6 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/primitive-namespace-aliases/App.tsx",
       "start": 2341,
-      "end": 2351,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/primitive-namespace-aliases/App.tsx",
-      "start": 2349,
       "end": 2351,
       "fixes": 0
     },

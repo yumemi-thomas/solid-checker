@@ -1,0 +1,5 @@
+{
+  "note": "ADR 1052 part 5: a helper only a tracked effect calls creates a sync memo: every run is refused (PRIMITIVE_IN_FORBIDDEN_SCOPE), SYNC_NODE_RECEIVED_ASYNC never; SC7002 uncertifiable. Generated program `mx-sync-node-received-async-tracked-sibling-async-memo-direct-none` (differential fuzzer, generator 2).",
+  "haltMarker": true,
+  "steps": []
+}

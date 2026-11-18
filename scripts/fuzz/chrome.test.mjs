@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EntryCache } from "./cache.mjs";
 import { CLEAN_ID, cacheableChrome, chromeChecker, chromeDiagnostics, chromeRuntime, chromeStatus, findingsOnClean, isCloseTimeout, runChrome, runtimeOnClean } from "./chrome.mjs";
-import { HALT_TEXT, INSTRUMENT_PRELUDE, cleanPositions, haltable } from "./hits.mjs";
+import { HALT_TEXT, INSTRUMENT_PRELUDE, PHASE_SELECTOR, cleanPositions, haltable, phaseAtFailure } from "./hits.mjs";
 import { classify } from "./classify.mjs";
 
 // A row as scripts/runtime-oracle.mjs writes it (the fields the fuzzer reads).
@@ -330,6 +330,31 @@ describe("chromeRuntime: the halt marker", () => {
     expect(plain.witnesses.map((w) => w.reached)).toEqual([true, true]);
     // A failure the oracle recorded stays the failure.
     expect(chromeRuntime({ ...row, failure: { message: "locator.click: Timeout" } }, [{ selector: haltable("#w2"), text: HALT_TEXT }], sites).failure.phase).toBe("execution");
+  });
+});
+
+describe("the page's phase at a failure (ADR 1092)", () => {
+  const read = (text) => ({ selector: PHASE_SELECTOR, text });
+  it("names the entry's outcome for a failure at the settle step, and execution at any other step", () => {
+    // The phase step is 0, the settle step 1.
+    expect(phaseAtFailure(1, { failure: { step: 1 }, checkpoints: [read("import")] })).toBe("import");
+    expect(phaseAtFailure(1, { failure: { step: 1 }, checkpoints: [read("render")] })).toBe("render");
+    expect(phaseAtFailure(1, { failure: { step: 1 }, checkpoints: [read("entry")] })).toBe("entry");
+    expect(phaseAtFailure(1, { failure: { step: 1 }, checkpoints: [read("entered")] })).toBe("exercise");
+    // No phase read (the phase step itself failed), or a text the page never writes: nothing is assumed.
+    expect(phaseAtFailure(1, { failure: { step: 0 }, checkpoints: [] })).toBe("execution");
+    expect(phaseAtFailure(1, { failure: { step: 1 }, checkpoints: [] })).toBe("execution");
+    expect(phaseAtFailure(1, { failure: { step: 1 }, checkpoints: [read("other")] })).toBe("execution");
+    // A scenario step after the settle step is the scenario's execution, whatever the entry did.
+    expect(phaseAtFailure(1, { failure: { step: 3 }, checkpoints: [read("entered")] })).toBe("execution");
+    // No failure, or a case with no phase step: no page phase.
+    expect(phaseAtFailure(1, { failure: null, checkpoints: [read("import")] })).toBeNull();
+    expect(phaseAtFailure(-1, { failure: { step: 0 }, checkpoints: [] })).toBeNull();
+  });
+  it("chromeRuntime takes the row's page phase as the failure's phase", () => {
+    const row = { id: "fuzz-1", verdict: "static-only", diagnostics: [], pageErrors: [] };
+    expect(chromeRuntime({ ...row, failure: "page.waitForFunction: Timeout 12000ms exceeded.", pagePhase: "import" }, [], []).failure.phase).toBe("import");
+    expect(chromeRuntime({ ...row, failure: "page.waitForFunction: Timeout 12000ms exceeded." }, [], []).failure.phase).toBe("execution");
   });
 });
 

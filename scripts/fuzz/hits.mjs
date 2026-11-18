@@ -17,6 +17,8 @@ export const HITS_SELECTOR = "#sc-hits";
 /** The oracle's halt marker (scripts/runtime-oracle.mjs `haltMarker`): appended outside #root once Solid reports REACTIVITY_HALTED or an error-severity diagnostic (thrown; an Errored boundary may catch it and never render its children again), or the page has an uncaught error. */
 export const HALT_SELECTOR = "#sc-halted";
 export const HALT_TEXT = "sc-halted";
+/** The page's phase record of a halt-marker case (scripts/runtime-oracle.mjs `phaseModule`, ADR 1092). */
+export const PHASE_SELECTOR = "#sc-phase";
 /**
  * A step selector that matches `selector`, or, when nothing matches it, the halt marker: a wait for an element that can no longer
  * appear (nothing renders after a halt) ends at once. Native CSS (the scenario's selector rule); with no halt it is `selector`.
@@ -246,4 +248,19 @@ export function compareVerdictRuns(base, instrumented) {
     else failures.push({ id, from: was, to: now });
   }
   return { total: same.length + resolved.length + failures.length, same: same.length, resolved, failures, missing, equal: failures.length === 0 && missing.length === 0 };
+}
+
+/**
+ * ADR 1092: the phase a halt-marker case's run failed in, from the page's own record (scripts/runtime-oracle.mjs `phaseModule`). `settleIndex` is the settle
+ * step's index (after the phase step), or -1 for a case with no phase step (null). A failure at the settle step is the entry's
+ * phase: the outcome the page wrote (`import`, `render`, `entry`), or `exercise` when the entry evaluated and its driver never
+ * settled; a failure at any other step, or a settle failure with no phase read, is `execution`, as before.
+ */
+export function phaseAtFailure(settleIndex, execution) {
+  const failed = execution?.failure;
+  if (settleIndex < 0 || !failed) return null;
+  if (failed.step !== settleIndex) return "execution";
+  const read = (execution.checkpoints ?? []).find((row) => row.selector === PHASE_SELECTOR)?.text ?? null;
+  if (read === "entered") return "exercise";
+  return ["import", "render", "entry"].includes(read) ? read : "execution";
 }

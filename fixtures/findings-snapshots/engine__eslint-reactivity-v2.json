@@ -1152,17 +1152,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/engine/eslint-reactivity-v2/owned-reexport-refresh.tsx",
-      "start": 109,
-      "end": 114,
-      "fixes": 0
-    },
-    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",

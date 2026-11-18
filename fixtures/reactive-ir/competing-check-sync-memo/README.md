@@ -5,6 +5,6 @@
 - `MemoInApply`, `NamespaceMemoInApply`: PRIMITIVE_IN_EFFECT_CALLBACK first.
 - `MemoInTracked`, `MemoInSettled`: PRIMITIVE_IN_FORBIDDEN_SCOPE first (a call written in the leaf callback, every run of which is refused).
 
-Violation kept: `MemoInBody`. Kept and open: `MemoInTrackedHelper` (a refusal through a helper refuses that caller's run only; a render that calls the helper first reports SC7002, the census's `settled-chain-placed`). The earlier checks keep their own rows.
+Part 5: `MemoInTrackedHelper`, `MemoInTrackedOnlyHelper` (a helper every reference to which is a refused call) and `MemoInGuardedRenderApply` (a render effect's apply the owned first run may leave before the creation) are uncertifiable. Violation kept: `MemoInBody`, `MemoInRenderApply` (straight line: the owned first run probes), `MemoInTrackedAndBodyHelper` (the body calls the helper first). The earlier checks keep their own rows.
 
 Chrome: `fixtures/runtime-oracle/competing-check-sync-memo-*`. Stubs: `competing-check-first`'s layout, plus `createMemo` and `onSettled`.

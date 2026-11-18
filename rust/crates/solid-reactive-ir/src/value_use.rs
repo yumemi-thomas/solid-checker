@@ -2988,6 +2988,11 @@ impl<'l, 'a> Census<'l, 'a> {
                 }
                 return Position::Open(blockers::VALUE_IN_CARRIER);
             }
+            // ADR 1089: `refresh(m)` reads the property the runtime set on `m` and never calls `m` or hands it on. Only a
+            // function value: a holder (a store root) is a proxy whose property read is the store's.
+            if mode == Mode::Value && dialect.argument_is_untouched_target(primitive, index) {
+                return Position::Followed;
+            }
             let callback = mode == Mode::Value
                 && (dialect.callback_positions(primitive).contains(&index)
                     || dialect
