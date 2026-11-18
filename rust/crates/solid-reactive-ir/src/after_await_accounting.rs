@@ -625,8 +625,13 @@ fn sites<'a>(
             // `pw1(`${po1}`)`).
             let coerced = matches!(via, "setter" | "library")
                 .then(|| {
+                    // A call or a member operand is a read site of its own, whose row already stands there: only another operand (an identifier, `this`)
+                    // moves the call's row.
                     file.ast.coercing_operands.iter().copied().find(|operand| {
+                        let peeled = file.ast.peel_ts_sugar_span(*operand);
                         call.arguments.iter().any(|argument| argument.span.contains(*operand))
+                            && file.ast.call_at(peeled).is_none()
+                            && file.ast.member_at(peeled).is_none()
                             && !ctx.semantic_lookup.proven_primitive(file, *operand, 4)
                     })
                 })
