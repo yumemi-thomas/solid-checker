@@ -29,9 +29,9 @@ use solid_facts::FileFacts;
 use solid_facts::core::Span;
 use solid_facts::module_reach::is_global_object_name;
 use solid_facts::package_reach::{
-    AMBIENT_PREFIX, AccessorFacts, COMPUTED_LOAD_PREFIX, LIMIT_PREFIX, PackageReach,
-    READ_ANY_PREFIX, ReachBlocker, WRITE_ANY_PREFIX, WRITE_PREFIX, is_declaration_file,
-    package_label, package_root_of,
+    AMBIENT_PREFIX, AccessorFacts, COMPUTED_LOAD_PREFIX, LIMIT_PREFIX, PROTOTYPE_WRITE_ANY_PREFIX,
+    PROTOTYPE_WRITE_PREFIX, PackageReach, READ_ANY_PREFIX, ReachBlocker, WRITE_ANY_PREFIX,
+    WRITE_PREFIX, is_declaration_file, package_label, package_root_of,
 };
 
 mod value_reads;
@@ -107,6 +107,11 @@ pub(crate) enum Provider {
     /// A member of the global object read by a key the program does not spell ([`READ_ANY_PREFIX`]): any global may be the one, so the code is that of a package that
     /// writes one.
     Unspelled,
+    /// ADR 1108: a method the standard library declares that an installed package writes on a built-in's prototype at run time ([`PROTOTYPE_WRITE_PREFIX`]).
+    PrototypeWritten,
+    /// ADR 1108: a method the standard library declares, where an installed package may write a built-in's prototype under a key the scan does not decide
+    /// ([`PROTOTYPE_WRITE_ANY_PREFIX`]).
+    PrototypeWrittenAny,
 }
 
 /// How a site's callee is resolved to the code it enters.
@@ -234,6 +239,8 @@ fn file_sites(
             .path
             .strip_prefix(WRITE_PREFIX)
             .or_else(|| declaration.path.strip_prefix(WRITE_ANY_PREFIX))
+            .or_else(|| declaration.path.strip_prefix(PROTOTYPE_WRITE_PREFIX))
+            .or_else(|| declaration.path.strip_prefix(PROTOTYPE_WRITE_ANY_PREFIX))
         {
             // `global-read-any:<writer root>`: a member of the global object under a key the program does not spell.
             _ if declaration.path.starts_with(READ_ANY_PREFIX) => {
@@ -284,6 +291,10 @@ fn file_sites(
                 Provider::WrittenAny
             } else if declaration.path.starts_with(READ_ANY_PREFIX) {
                 Provider::Unspelled
+            } else if declaration.path.starts_with(PROTOTYPE_WRITE_PREFIX) {
+                Provider::PrototypeWritten
+            } else if declaration.path.starts_with(PROTOTYPE_WRITE_ANY_PREFIX) {
+                Provider::PrototypeWrittenAny
             } else if ctx.semantic_lookup.in_dependency_source(&declaration.path) {
                 Provider::Selected
             } else {
@@ -892,6 +903,8 @@ fn is_pseudo(path: &str) -> bool {
         || path.starts_with(WRITE_PREFIX)
         || path.starts_with(WRITE_ANY_PREFIX)
         || path.starts_with(READ_ANY_PREFIX)
+        || path.starts_with(PROTOTYPE_WRITE_PREFIX)
+        || path.starts_with(PROTOTYPE_WRITE_ANY_PREFIX)
 }
 
 /// Where the value an expression names came from.
@@ -2547,7 +2560,7 @@ fn package_declaration(
         // `new Float32Array("fz", cb)`) and replaces it where it loads.
         Origin::Host => {
             if !resolved_declaration().is_some_and(|declaration| !declaration.standard_library) {
-                return None;
+                return prototype_written(ctx, file, callee, resolve);
             }
         }
         Origin::Runtime => return None,
@@ -2630,17 +2643,22 @@ fn package_declaration(
     if resolved_declaration().is_some_and(|declaration| declaration.standard_library)
         && paths.iter().any(|path| path.starts_with("bundled:"))
     {
-        return None;
+        return prototype_written(ctx, file, callee, resolve);
     }
     // Installed code only (`installed_path`): not a file the program analyzes itself, and no declaration a script provides (a global, a `declare module`
     // shim: the import's file stands for the shim's package).
     let installed = paths
         .into_iter()
         .find_map(|path| installed_path(ctx, analyzed, &path));
-    let path = match installed {
+    let path = match installed.or(unattested) {
+        // An import the compiler's attestation does not cover (its answer is unknown, not "unresolved") is undecided, so a site.
         Some(path) => path,
-        // An import the compiler's attestation does not cover (its answer is unknown, not "unresolved"): undecided, so a site.
-        None => unattested?,
+        // ADR 1108: a method the standard library declares, which an installed package may have written on a built-in's prototype; otherwise no installed code.
+        None => {
+            return resolved_declaration()
+                .filter(|declaration| declaration.standard_library)
+                .and_then(|_| prototype_written(ctx, file, callee, resolve));
+        }
     };
     if let Some(root) = package_root_of(&path)
         && runtime.contains(&installed_name(ctx, root).as_str())
@@ -2648,6 +2666,41 @@ fn package_declaration(
         return None;
     }
     Some(DeclarationAt { path })
+}
+
+/// ADR 1108: the code a call of a method the standard library declares runs where an installed package the program loads writes a member of that name on a built-in's
+/// prototype (`Float32Array.prototype.reverse = …`) and may reach a Solid action: every object of the built-in inherits it, whatever type the library declares it with.
+/// Only a member callee is a method (a bare global is [`written_global`]'s); a key the program does not spell may be any method a package writes. `None` where no such
+/// package is loaded.
+fn prototype_written(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    callee: Span,
+    resolve: Resolve,
+) -> Option<DeclarationAt> {
+    if resolve != Resolve::Call {
+        return None;
+    }
+    let index = ctx.package_reach?;
+    let member = file.ast.member_at(file.ast.peel_ts_sugar_span(callee))?;
+    let (name, root, named) = match member_key(file, member) {
+        Key::Name(name) => {
+            let (root, named) = index.prototype_writers_of(&name).next()?;
+            (name, root, named)
+        }
+        Key::Unspelled => {
+            let root = index.prototype_writers_of_unspelled().next()?;
+            ("[…]".to_owned(), root, false)
+        }
+    };
+    let prefix = if named {
+        PROTOTYPE_WRITE_PREFIX
+    } else {
+        PROTOTYPE_WRITE_ANY_PREFIX
+    };
+    Some(DeclarationAt {
+        path: format!("{prefix}{name}:{root}"),
+    })
 }
 
 /// The import binding a value's root names: the identifier `span` is, or the object of the member chain it is (`Pkg` of `Pkg.a.b`).
@@ -2863,6 +2916,14 @@ fn reach_census(path: &str, entry: Entry, reach: &PackageReach, project_js: bool
         let name = written.split_once(':').map_or(written, |(name, _)| name);
         return vec![format!("global|{how}:{name}")];
     }
+    // ADR 1108: a method a package writes on a built-in's prototype.
+    if let Some(written) = path
+        .strip_prefix(PROTOTYPE_WRITE_PREFIX)
+        .or_else(|| path.strip_prefix(PROTOTYPE_WRITE_ANY_PREFIX))
+    {
+        let name = written.split_once(':').map_or(written, |(name, _)| name);
+        return vec![format!("global|prototype:{name}")];
+    }
     if path.starts_with(READ_ANY_PREFIX) {
         return vec![format!("global|{how}:*")];
     }
@@ -2904,6 +2965,14 @@ fn global_writers(
             .collect(),
         ("accessor", name) => index
             .global_accessor_writers_of(name)
+            .map(|(root, named)| (root.to_owned(), if named { "named" } else { "any" }))
+            .collect(),
+        ("prototype", "[…]") => index
+            .prototype_writers_of_unspelled()
+            .map(|root| (root.to_owned(), "unspelled"))
+            .collect(),
+        ("prototype", name) => index
+            .prototype_writers_of(name)
             .map(|(root, named)| (root.to_owned(), if named { "named" } else { "any" }))
             .collect(),
         (_, name) => index
@@ -3007,6 +3076,8 @@ fn row(file: &FileFacts, site: &PackageSite) -> crate::StaticViolation {
                 Provider::Written => "a global the standard library declares, which an installed package this build does not read as source writes at run time",
                 Provider::WrittenAny => "a global the standard library declares, which an installed package this build does not read as source may write at run time (it writes globals under a key the scan does not decide)",
                 Provider::Unspelled => "a member of the global object that this build cannot name (the key is computed), which an installed package this build does not read as source may have written at run time",
+                Provider::PrototypeWritten => "a method the standard library declares, which an installed package this build does not read as source writes on a built-in's prototype at run time",
+                Provider::PrototypeWrittenAny => "a method the standard library declares, which an installed package this build does not read as source may write on a built-in's prototype at run time (it writes prototypes under a key the scan does not decide)",
                 Provider::Package => "a package this build does not read as source",
                 Provider::Selected => "a package this build reads as source, whose code no analysis follows from this site",
             },

@@ -26263,5 +26263,31 @@
    "mx-sync-node-received-async-flw-settled-report-error-memo-direct-none"
   ],
   "rediscovered": "old harness (6be8e3e34), same checker: `focus.mjs --codes SYNC_NODE_RECEIVED_ASYNC --grids mx-census` on the ids fails (false-positive); this harness: 26 agree"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent at a call of a global the library declares (`btoa(\"x\")`) that an installed package replaced through an event's `view` (`document.addEventListener(\"click\", (event) => { event.view.btoa = … }); document.documentElement.click()`): the scan took only `defaultView` of any object for the global object, so the package was no writer of `btoa` (ADR 0974's named premise)",
+  "found": "open-defects.json pattern `pkgaction/global-route-event-view` (ADR 0974's named premise, Chrome-confirmed false clean)",
+  "fixed": "ADR 1108 (`module_reach.rs` `WINDOW_MEMBERS`: `view` and `source` of any object are routes to the global object, as `defaultView` is)",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pa-gview-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gview-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gview-root-x-direct-none"
+  ],
+  "rediscovered": "new context pa-gview (pa-shapes.mjs): `focus.mjs --grids mx-recall --ids` on the three, release builds, `--boundary both`: main 28fde14bf exits 1, false-clean 3 (closed and open), the fix exits 0, recall-gap 3; the lg-recall twins pa-gview-timer/micro uncertifiable on both. Pattern lane: `pkgaction/global-route-event-view` false clean on main, fine on the fix. A message's `source` (the other member) is pinned by fixture action-in-owned-scope-window-members and its oracle case: a sync message with a spelled `source: window` is an escape already, and a posted one lands after the render the grid's hosts check"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent at a call of a method the standard library declares (`new Float32Array(1).reverse()`) that an installed package replaced on the built-in's prototype (`Float32Array.prototype.reverse = function () { action(…)(); … }`): no fact said which package writes a shared prototype (ADR 0974's named miss)",
+  "found": "open-defects.json pattern `pkgaction/patch-f32-undeclared` (ADR 0974's named miss, Chrome-confirmed false clean)",
+  "fixed": "ADR 1108 (`module_reach.rs` `prototype_writes`, `GlobalWrites::prototype_names`/`prototype_any_name`; `package_reach.rs` `prototype_writers_of`; `package_action_calls.rs` `prototype_written`)",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pa-gproto-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gproto-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gproto-root-x-direct-none"
+  ],
+  "rediscovered": "new context pa-gproto (pa-shapes.mjs): the fix gives the SC2002 row at the call (`action-called-in-owned-scope/uncertifiable`, claiming), main gives none of the rule's. `focus.mjs --grids mx-recall --ids`, release builds, `--boundary both`: both builds exit 0 with recall-gap 3, because the grid's program also gets SC9012 `standard-member-impostor` at the call on main (the package file's prototype write is an open write of `reverse`), which the judge counts as a withholding; the generator expresses the shape, the base build does not fail on it. The base failure is the pattern lane's: `pkgaction/patch-f32-undeclared` false clean on main (no row at the call), fine on the fix; and the runtime oracle case package-prototype-writes: main 3 unproven-clean, the fix 3 covered-uncertifiable"
  }
 ]

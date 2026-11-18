@@ -263,6 +263,17 @@ pub fn package_reach_index(
             if closure.global_writes.accessors_any_name {
                 index.global_accessor_writers_any.insert(root.clone());
             }
+            // ADR 1108: the members its closure writes on a built-in's prototype.
+            for written in &closure.global_writes.prototype_names {
+                index
+                    .prototype_writers
+                    .entry(written.clone())
+                    .or_default()
+                    .insert(root.clone());
+            }
+            if closure.global_writes.prototype_any_name {
+                index.prototype_writers_any.insert(root.clone());
+            }
         }
         if let Some(name) = manifest(Path::new(&root))
             .ok()
@@ -851,6 +862,8 @@ fn package_reach(
         written_any_files: Vec::new(),
         accessors_written: BTreeSet::new(),
         accessors_written_any: false,
+        prototypes_written: BTreeSet::new(),
+        prototypes_written_any: false,
         unread: false,
         unseen: None,
         reads_receiver: false,
@@ -884,6 +897,9 @@ fn package_reach(
             any_name: walk.written_any || unread,
             accessor_names: walk.accessors_written.into_iter().collect(),
             accessors_any_name: walk.accessors_written_any || unread,
+            // ADR 1108: code nobody read may write a built-in's prototype too.
+            prototype_names: walk.prototypes_written.into_iter().collect(),
+            prototype_any_name: walk.prototypes_written_any || unread,
         },
         write_any_files: walk
             .written_any_files
@@ -1476,6 +1492,9 @@ struct Walk<'s, 'd, 'm> {
     /// The globals the files read may define an accessor for on the global object, and whether one may be defined under a name the syntax does not fix.
     accessors_written: BTreeSet<String>,
     accessors_written_any: bool,
+    /// ADR 1108: the members the files read write on a built-in's prototype, and whether one may be written under a name the syntax does not fix.
+    prototypes_written: BTreeSet<String>,
+    prototypes_written_any: bool,
     /// Whether the closure holds code nobody read (ADR 1002): a load by a computed name, a load no installed file answers, a file the parser refuses, a native
     /// module, a manifest the walk does not read, or files past the closure limit. Kept apart from `problems`, which keeps only the first [`MAX_PROBLEMS`].
     unread: bool,
@@ -1623,6 +1642,11 @@ impl Walk<'_, '_, '_> {
                 &scan.global_writes.accessor_names,
             );
             self.accessors_written_any |= scan.global_writes.accessors_any_name;
+            extend(
+                &mut self.prototypes_written,
+                &scan.global_writes.prototype_names,
+            );
+            self.prototypes_written_any |= scan.global_writes.prototype_any_name;
         }
         for step in &visit.steps {
             match *step {

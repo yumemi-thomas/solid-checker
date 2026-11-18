@@ -4541,6 +4541,22 @@
    "to": 17,
    "adr": "ADR 1052",
    "fact": "part 9: competing-check-sync-memo gains four components (a helper refused at mount with a handler or a tracked effect, and its timer and apply twins); measured against main 76477c121, which holds part 8"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-unread-packages",
+   "key": "SC2002 package-may-call-action",
+   "from": 24,
+   "to": 25,
+   "adr": "ADR 1108",
+   "fact": "a call of a standard-library method (map, forEach) where a loaded package is undecided or hands window on, so it may write any built-in's prototype"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-walk",
+   "key": "SC2002 package-may-call-action",
+   "from": 35,
+   "to": 41,
+   "adr": "ADR 1108",
+   "fact": "a call of a standard-library method (map, forEach) where a loaded package is undecided or hands window on, so it may write any built-in's prototype"
   }
  ]
 }

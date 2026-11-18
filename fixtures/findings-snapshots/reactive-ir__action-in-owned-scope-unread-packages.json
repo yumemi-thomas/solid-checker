@@ -162,6 +162,17 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/action-in-owned-scope-unread-packages/App.tsx",
+      "start": 1302,
+      "end": 1322,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-unread-packages/App.tsx",
       "start": 1394,
       "end": 1401,
       "fixes": 0
