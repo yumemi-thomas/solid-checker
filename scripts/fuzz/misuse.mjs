@@ -91,7 +91,10 @@ export const SOURCE_AXES = {
   // `helpers.ts`'s default export. Not under `module`, so `--sources module` keeps its programs.
   // ADR 0934: a prop value read through a TypeScript wrapper on `props` (`(props as typeof props).w1`), which Type Facts keeps no
   // entity under (the binder resolves it).
-  files: ["module-barrel", "module-default-hook", "prop-value-cast"],
+  // ADR 1129: `prop-view-spread`, read through `merge({ extra: 1 }, props)` as `prop-merge` is, while the component also spreads
+  // `omit(props, <every key P1 passes>)` onto an intrinsic `<p>`: a view of its own props whose keys only its callers decide. The props type
+  // declares a content key and a listener (`innerHTML`, `onClick`), as `JSX.HTMLAttributes` does, so no declared key set closes the spread.
+  files: ["module-barrel", "module-default-hook", "prop-value-cast", "prop-view-spread"],
   // ADR 0940 (SC4002, CONTEXT_NOT_FOUND only: no other template has a context to bring): the context is an export of a dependency package, made with no default
   // (`fz-ctx`, package.mjs `contextPackageFiles`), read with no provider above. The checker reads the dependency's source to know it has no default.
   // ADR 0949: the same package's component a tag renders (`package-component`), its hook handed on by reference (`package-handed`) and its class (`package-holder`):
@@ -165,7 +168,7 @@ export function sourcedName(source, name) {
     case "prop": case "prop-spread": case "prop-value": case "async-prop": case "async-value": case "async-value-member": case "async-loading": return `props.${name}`;
     // ADR 0823: the read is a body destructure of the props object, written where the read is.
     case "async-value-dstr": return `(() => { const { ${name} } = props; return ${name}; })()`;
-    case "prop-merge": return `merged.${name}`;
+    case "prop-merge": case "prop-view-spread": return `merged.${name}`;
     case "prop-omit": return `rest.${name}`;
     case "context": case "async-context": return `ctx.${name}`;
     case "module-hook-member": return `vals.${name}`;
@@ -960,9 +963,11 @@ const FLOW_PLACEMENT = {
  * Not cells: an effect in an apply (PRIMITIVE_IN_EFFECT_CALLBACK, not NO_OWNER_EFFECT) or in onSettled, a boundary in onSettled,
  * a pending read in JSX or onSettled for PENDING_ASYNC_UNTRACKED_READ (another code fires there, so neither misuse nor legal).
  */
-export const CBP_CONTEXTS = CBP_CALLS.flatMap((call) => CBP_FORMS.map((form) => (form === "inline" ? `cbp-${call}` : `cbp-${call}-${form}`)));
-// `attached` (CBP_CALLS): the child's intrinsic runs `props.run` itself as its click handler, as `handler` does through an arrow.
-const cbp = (...calls) => CBP_CONTEXTS.filter((context) => calls.flatMap((call) => (call === "handler" ? ["handler", "attached"] : [call])).includes(/^cbp-([a-z]+)/.exec(context)[1]));
+// `view` (ADR 1129) takes no `destructured` form: a destructured child has no props object to view.
+export const CBP_CONTEXTS = CBP_CALLS.flatMap((call) => CBP_FORMS.filter((form) => !(call === "view" && form === "destructured")).map((form) => (form === "inline" ? `cbp-${call}` : `cbp-${call}-${form}`)));
+// `attached` (CBP_CALLS): the child's intrinsic runs `props.run` itself as its click handler, as `handler` does through an arrow; `view`
+// (ADR 1129) hands it to the button's spread through a `merge`/`omit` view, so it runs there the same way.
+const cbp = (...calls) => CBP_CONTEXTS.filter((context) => calls.flatMap((call) => (call === "handler" ? ["handler", "attached", "view"] : [call])).includes(/^cbp-([a-z]+)/.exec(context)[1]));
 const CBP_PLACEMENT = {
   REACTIVE_WRITE_IN_OWNED_SCOPE: { misuse: cbp("body", "jsx"), legal: cbp("handler", "apply", "settled", "never") },
   ACTION_CALLED_IN_OWNED_SCOPE: { misuse: cbp("body", "jsx"), legal: cbp("handler", "apply", "settled", "never") },

@@ -202,7 +202,9 @@ export const flowEl = (id, flow, body, extra = {}) => ({ k: "flow", id, flow, bo
  * (`<KidN run={props.run} />`), destructured by `KidN` (`({ run })`), or spread by `FwdN` (`<KidN {...props} />`).
  */
 // `attached`: the child hands `props.run` itself to an intrinsic's `onClick` (no arrow of its own), the member-handler form.
-export const CBP_CALLS = ["body", "jsx", "handler", "apply", "settled", "never", "attached"];
+// `view` (ADR 1129): the child spreads `omit(merge({ type: "button" }, props), "innerHTML")` onto its button, so the function C1 passes as
+// `onClick` (not `run`) is the button's click handler through a `merge`/`omit` view of the child's props.
+export const CBP_CALLS = ["body", "jsx", "handler", "apply", "settled", "never", "attached", "view"];
 export const CBP_FORMS = ["inline", "named", "forwarded", "destructured", "spread"];
 export const cbProp = (id, e, call, form = "inline") => ({ k: "cbprop", id, e, call, form });
 /**

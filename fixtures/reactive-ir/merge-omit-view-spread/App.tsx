@@ -60,6 +60,29 @@ function NamespaceOmit(props: Attrs) {
   return <span {...rest}>{props.label}</span>;
 }
 
+// Proved: Solid 2's split of the props, a `merge` view for the component's
+// own keys beside the `omit` view it spreads.
+function Split(props: Attrs) {
+  const local = merge({ tone: "info" }, props);
+  const others = omit(props, "label", "tone");
+  return (
+    <span {...others} data-tone={local.tone}>
+      {props.label}
+    </span>
+  );
+}
+
+// Refused: the other view of the props is handed to a function.
+function keep(value: unknown) {
+  return value;
+}
+function LeakedView(props: Attrs) {
+  const local = merge({ tone: "info" }, props);
+  keep(local);
+  const others = omit(props, "label", "tone");
+  return <span {...others}>{props.label}</span>;
+}
+
 // Misuse twin: a caller writes `innerHTML`, which reaches the spread beside
 // the children. Stays uncertifiable.
 function Html(props: Attrs) {
@@ -167,6 +190,8 @@ export function Page() {
       <InlineOmit label="a" title="b" />
       <MergedOnly title="c" />
       <NamespaceOmit label="d" />
+      <Split label="q" title="r" />
+      <LeakedView label="s" />
       <Html label="e" innerHTML="<i>e</i>" />
       <ChildrenThrough label="f">f</ChildrenThrough>
       <Shadowed title="g" />

@@ -643,7 +643,7 @@ function render(program, instrument) {
         const n = item.id.replace(/^\D+/, "");
         const via = item.form === "forwarded" || item.form === "spread";
         kids.push(...cbPropComponents(item, n));
-        return [`${ind(depth)}<${via ? "Fwd" : "Kid"}${n} run={${expr(item.e, depth)}} />`];
+        return [`${ind(depth)}<${via ? "Fwd" : "Kid"}${n} ${item.call === "view" ? "onClick" : "run"}={${expr(item.e, depth)}} />`];
       }
       case "show": {
         used.add("Show");
@@ -755,7 +755,8 @@ function render(program, instrument) {
    * it and C1. Neither is exported: the runtime renders every exported component on its own, with no props.
    */
   function cbPropComponents(item, n) {
-    const type = "{ run: () => void }";
+    const view = item.call === "view";
+    const type = view ? "{ onClick: () => void; innerHTML?: string }" : "{ run: () => void }";
     const run = item.form === "destructured" ? "run()" : "props.run()";
     const element = `<p data-view="k${n}">x</p>`;
     let body;
@@ -767,10 +768,12 @@ function render(program, instrument) {
       case "settled": used.add("onSettled"); body = [`onSettled(() => { ${run}; });`, `return ${element};`]; break;
       case "never": body = [`return ${element};`]; break;
       case "attached": body = [`return <button data-act="k${n}" onClick={${item.form === "destructured" ? "run" : "props.run"}}>go</button>;`]; break;
+      // ADR 1129: the click handler is what the view of the child's props hands its button's spread.
+      case "view": used.add("merge"); used.add("omit"); body = [`return <button data-act="k${n}" {...omit(merge({ type: "button" as const }, props), "innerHTML")}>go</button>;`]; break;
       default: throw new Error(`unknown callback prop call ${item.call}`);
     }
     const lines = [`function Kid${n}(${item.form === "destructured" ? `{ run }: ${type}` : `props: ${type}`}) {`, ...body.map((line) => `${INDENT}${line}`), "}", ""];
-    if (item.form === "forwarded") lines.push(`function Fwd${n}(props: ${type}) {`, `${INDENT}return <Kid${n} run={props.run} />;`, "}", "");
+    if (item.form === "forwarded") lines.push(`function Fwd${n}(props: ${type}) {`, `${INDENT}return <Kid${n} ${view ? "onClick={props.onClick}" : "run={props.run}"} />;`, "}", "");
     if (item.form === "spread") lines.push(`function Fwd${n}(props: ${type}) {`, `${INDENT}return <Kid${n} {...props} />;`, "}", "");
     return lines;
   }
@@ -820,6 +823,8 @@ function render(program, instrument) {
       for (const line of boundaryDeclarations(component.view)) out.push(`${INDENT}${line}`);
       for (const stmt of component.body) out.push(`${INDENT}${stmtText(stmt, 1)}`);
       out.push(`${INDENT}return (`, `${INDENT}${INDENT}<div>`);
+      // ADR 1129: the `prop-view-spread` source's element, holding what its callers pass that `rest` does not hide.
+      if (component.source === "prop-view-spread") out.push(`${INDENT}${INDENT}${INDENT}<p {...rest}>v</p>`);
       for (const item of component.view) out.push(...viewText(item, 3));
     });
     out.push(`${INDENT}${INDENT}</div>`, `${INDENT});`, "}", "");
@@ -1041,6 +1046,8 @@ function sourcePrelude(component, signals, used) {
   const keys = () => sourceKeys(component, signals).map(([key]) => key).join(", ");
   switch (component.source) {
     case "prop-merge": used.add("merge"); return ["const merged = merge({ extra: 1 }, props);"];
+    // ADR 1129: the spread's view (its element is `viewSpreadLine`).
+    case "prop-view-spread": used.add("merge"); used.add("omit"); return ["const merged = merge({ extra: 1 }, props);", `const rest = omit(props, ${sourceKeys(component, signals).map(([key]) => JSON.stringify(key)).join(", ")});`];
     case "prop-omit": used.add("omit"); return ['const rest = omit(props, "extra");'];
     case "context": case "async-context": used.add("useContext"); return ["const ctx = useContext(ValCtx);"];
     case "context-destructured": used.add("useContext"); return [`const { ${keys()} } = useContext(ValCtx);`];
@@ -1067,6 +1074,7 @@ function sourceDeclarations(component, signals, used) {
   if (!source || source.startsWith("module") || source.startsWith("package")) return [];
   const fields = sourceKeys(component, signals).map(([key, type]) => `${key}: ${type}`);
   if (source === "prop-omit") fields.push("extra: number");
+  if (source === "prop-view-spread") fields.push("innerHTML?: string", "onClick?: () => void");
   if (!source.includes("context")) return [`type ${component.name}Props = { ${fields.join("; ")} };`];
   used.add("createContext");
   return [`type ${component.name}Vals = { ${fields.join("; ")} };`, `const ValCtx = createContext<${component.name}Vals>();`];
@@ -1125,7 +1133,7 @@ export function drivingPlan(program) {
   for (const { node } of walk(program)) {
     if ((node.k === "button" || node.k === "hbutton") && !node.undriven) clicks.push(node.id);
     // A callback prop called from its child's handler (model.mjs `cbProp`), or attached as it (`attached`): the child's button.
-    if (node.k === "cbprop" && (node.call === "handler" || node.call === "attached")) clicks.push(`k${node.id.replace(/^\D+/, "")}`);
+    if (node.k === "cbprop" && (node.call === "handler" || node.call === "attached" || node.call === "view")) clicks.push(`k${node.id.replace(/^\D+/, "")}`);
   }
   return { clicks, settleMs: 400 };
 }

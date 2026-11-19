@@ -46,7 +46,9 @@
 //!   that spells `arguments`, a reference to the parameter or to a view binding
 //!   that is not an argument of the chain, a member read (not written, deleted,
 //!   iterated into or called: a call hands the receiver to the callee as
-//!   `this`), an intrinsic element's spread (views only) or a type query;
+//!   `this`), an intrinsic element's spread (views only), a type query, or (the
+//!   parameter only) an argument of another exact `merge`/`omit` call held by a
+//!   `const` whose references pass the same test;
 //! - a reference to the component that is not the tag of a JSX element (a
 //!   value use, a call, an export, a dotted tag), a TypeScript reference the
 //!   binder does not account for, a site with a spread, a namespaced
@@ -143,7 +145,7 @@ pub(super) fn view_spread(
     let Some(props) = chain.props else {
         return Ok(None);
     };
-    let Some(sites) = component_sites(cx, slot, file, props, &chain) else {
+    let Some(sites) = component_sites(cx, slot, (file, &primitives), props, &chain) else {
         return Ok(None);
     };
     Ok(spread_of_sites(cx, file, &chain, &sites))
@@ -307,7 +309,7 @@ type SiteKeys = BTreeMap<String, Vec<Value>>;
 fn component_sites(
     cx: &Ctx<'_, '_, BuildSchema>,
     slot: Slot,
-    file: &FileFacts,
+    (file, primitives): (&FileFacts, &BTreeMap<Span, solid_dialect::Primitive>),
     props: Span,
     chain: &Chain,
 ) -> Option<Vec<SiteKeys>> {
@@ -339,7 +341,7 @@ fn component_sites(
         return None;
     }
     // The props and the view bindings: every reference is accounted for.
-    if !references_accounted(file, props, chain, false) {
+    if !props_references_accounted(file, primitives, props, chain) {
         return None;
     }
     for binding in &chain.bindings {
@@ -433,6 +435,70 @@ fn exported(file: &FileFacts, name: &ast::NamedSpan) -> bool {
                 specifier.local.span == name.span
                     || file.source_text(specifier.local.span) == spelled
             })
+    })
+}
+
+/// Whether every reference to the props parameter is accounted for: as for a
+/// view binding below (but no spread of the bare props), or an argument of
+/// another exact `merge`/`omit` call (`const local = merge(defaults, props)`
+/// beside the spread's own view) whose result is a `const` binding with every
+/// reference accounted for the same way. Neither primitive writes its sources,
+/// and a view's `set`, `deleteProperty` and missing `defineProperty` traps
+/// never reach them; only a computed read of the view's record symbol
+/// (`$RECORD`, which `@solidjs/signals` exports) hands a source out, and a
+/// computed member is no accounted read.
+fn props_references_accounted(
+    file: &FileFacts,
+    primitives: &BTreeMap<Span, solid_dialect::Primitive>,
+    props: Span,
+    chain: &Chain,
+) -> bool {
+    file.ast
+        .reference_declarations
+        .iter()
+        .filter(|(_, bound)| *bound == props)
+        .all(|(reference, _)| {
+            chain.accounted.contains(reference)
+                || in_type_query(file, *reference)
+                || member_read(file, *reference)
+                || other_view_argument(file, primitives, *reference, chain)
+        })
+}
+
+/// Whether `reference` is a plain argument of an exact `merge`/`omit` call
+/// held by an immutable binding whose every reference is accounted for.
+fn other_view_argument(
+    file: &FileFacts,
+    primitives: &BTreeMap<Span, solid_dialect::Primitive>,
+    reference: Span,
+    chain: &Chain,
+) -> bool {
+    let Some(call) = file.ast.calls.iter().find(|call| {
+        call.arguments.iter().any(|argument| {
+            !argument.spread && file.ast.peel_ts_sugar_span(argument.span) == reference
+        })
+    }) else {
+        return false;
+    };
+    if call.construct
+        || call.arguments.iter().any(|argument| argument.spread)
+        || !matches!(
+            primitives.get(&call.span),
+            Some(solid_dialect::Primitive::Merge | solid_dialect::Primitive::Omit)
+        )
+    {
+        return false;
+    }
+    file.ast.bindings.iter().any(|binding| {
+        binding.immutable
+            && binding.shape == ast::BindingShape::Identifier
+            && binding.names.len() == 1
+            && !binding.in_switch_case
+            && binding
+                .initializer
+                .is_some_and(|initializer| file.ast.peel_ts_sugar_span(initializer) == call.span)
+            && !binding_written(file, binding.names[0].span)
+            && references_accounted(file, binding.names[0].span, chain, true)
     })
 }
 
