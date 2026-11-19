@@ -4878,6 +4878,22 @@
    "to": 17,
    "adr": "ADR 1111",
    "fact": "a function the body also calls by name where untracked reads are reported is unplaced: U at its own read, the V through it stays"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-unread-packages",
+   "key": "SC2002 package-may-call-action",
+   "from": 24,
+   "to": 25,
+   "adr": "ADR 1108",
+   "fact": "a call of a standard-library method (map, forEach) where a loaded package is undecided or hands window on, so it may write any built-in's prototype"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-walk",
+   "key": "SC2002 package-may-call-action",
+   "from": 35,
+   "to": 41,
+   "adr": "ADR 1108",
+   "fact": "a call of a standard-library method (map, forEach) where a loaded package is undecided or hands window on, so it may write any built-in's prototype"
   }
  ]
 }

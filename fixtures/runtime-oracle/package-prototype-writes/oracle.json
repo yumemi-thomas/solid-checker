@@ -1,0 +1,9 @@
+{
+  "note": "ADR 1108: packages replace methods on built-in prototypes (Float32Array.prototype.reverse by assignment, Uint8Array.prototype.fill through a const alias, Int16Array.prototype.join by Object.defineProperty) with functions that call an action, and fz-proto also writes atob by name (ADR 0974): Chrome throws ACTION_CALLED_IN_OWNED_SCOPE at each call in a component body, covered-uncertifiable. fz-protoclear names no Solid package (quiet); the handler's call is legal.",
+  "packages": [
+    "fz-proto",
+    "fz-protoalias",
+    "fz-protodefine",
+    "fz-protoclear"
+  ]
+}

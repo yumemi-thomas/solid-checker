@@ -42,6 +42,11 @@ use oxc_span::{GetSpan, SourceType};
 /// `apps/solid-typefacts/Cargo.toml` pins.
 const KNOWN_GLOBALS: &str = include_str!("module_reach/known_globals.txt");
 
+/// ADR 1108 (with ADRs 0974 and 1077): the members of any object the DOM types as this realm's window, which the scan takes for the global object: a document's
+/// `defaultView`, a `UIEvent`'s `view` and a `MessageEvent`'s `source` (`lib.dom.d.ts`: `view: Window | null`, `source: MessageEventSource | null`). A frame's
+/// `contentWindow` is another realm's window, whose globals are not this one's.
+const WINDOW_MEMBERS: &[&str] = &["defaultView", "view", "source"];
+
 /// The names the global object goes by. A static member of one is the global of that name; anything else done with it is undecidable.
 const GLOBAL_OBJECTS: &[&str] = &[
     "globalThis",
@@ -124,6 +129,13 @@ pub struct GlobalWrites {
     /// An accessor may be defined on the global object under a name nothing fixes: a key the syntax does not decide, a change of its prototype (`Object.setPrototypeOf`,
     /// `globalThis.__proto__ = p`: the members of `p` become globals), a writer that is not seen to be given a fresh object.
     pub accessors_any_name: bool,
+    /// ADR 1108: the members the file writes on the prototype of a built-in (`Float32Array.prototype.reverse = …`, `Object.defineProperty(Array.prototype, "at", …)`,
+    /// `X.__proto__.m = …`, `Object.getPrototypeOf(x).m = …`), sorted and distinct. Every object of that built-in inherits the member: a call of a method the standard
+    /// library declares under that name runs the file's code, whatever type the library declares it with.
+    pub prototype_names: Vec<String>,
+    /// ADR 1108: a built-in's prototype may be written under a name nothing fixes: a key the syntax does not decide, the prototype handed on (an argument, a binding that is
+    /// reassigned), the global object handed on, or code generated at run time.
+    pub prototype_any_name: bool,
 }
 
 impl GlobalWrites {
@@ -134,6 +146,8 @@ impl GlobalWrites {
             && !self.any_name
             && self.accessor_names.is_empty()
             && !self.accessors_any_name
+            && self.prototype_names.is_empty()
+            && !self.prototype_any_name
     }
 
     /// Adds what `other` writes (left unsorted: [`Self::normalize`] after).
@@ -143,6 +157,9 @@ impl GlobalWrites {
         self.accessor_names
             .extend(other.accessor_names.iter().cloned());
         self.accessors_any_name |= other.accessors_any_name;
+        self.prototype_names
+            .extend(other.prototype_names.iter().cloned());
+        self.prototype_any_name |= other.prototype_any_name;
     }
 
     /// Sorts the names and drops repeats.
@@ -151,6 +168,8 @@ impl GlobalWrites {
         self.names.dedup();
         self.accessor_names.sort();
         self.accessor_names.dedup();
+        self.prototype_names.sort();
+        self.prototype_names.dedup();
     }
 
     fn name(&mut self, name: &str) {
@@ -894,21 +913,28 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
     {
         for node in nodes.iter() {
             // ADR 0999: `x["defaultView"]` is the same read as `x.defaultView` (a string literal key, or one the file's constants decide to be that one name).
-            let reads_default_view = match node.kind() {
-                AstKind::StaticMemberExpression(member) => {
-                    member.property.name == "defaultView"
-                        && !rooted_in_global(scoping, &member.object)
+            // ADR 1108: so is a member the DOM types as this realm's window and no syntax names (`event.view`, `message.source`).
+            let route = match node.kind() {
+                AstKind::StaticMemberExpression(member) => WINDOW_MEMBERS
+                    .iter()
+                    .copied()
+                    .find(|name| member.property.name == *name)
+                    .filter(|_| !rooted_in_global(scoping, &member.object)),
+                AstKind::ComputedMemberExpression(member)
+                    if !rooted_in_global(scoping, &member.object) =>
+                {
+                    let key = literal_specifier(&member.expression).or_else(|| {
+                        match key_of(scoping, nodes, &member.expression, KEY_DEPTH) {
+                            Keys::Names(names) if names.len() == 1 => names.into_iter().next(),
+                            _ => None,
+                        }
+                    });
+                    key.and_then(|key| WINDOW_MEMBERS.iter().copied().find(|name| key == *name))
                 }
-                AstKind::ComputedMemberExpression(member) => {
-                    !rooted_in_global(scoping, &member.object)
-                        && (literal_specifier(&member.expression).as_deref() == Some("defaultView")
-                            || matches!(
-                                key_of(scoping, nodes, &member.expression, KEY_DEPTH),
-                                Keys::Names(names) if names.len() == 1 && names[0] == "defaultView"
-                            ))
-                }
-                _ => false,
+                _ => None,
             };
+            let reads_default_view = route.is_some();
+            let root = route.unwrap_or("defaultView");
             // ADR 1077: a static read is kept apart with what it adds, so a walk the program's types prove `x` no document for can leave it out.
             if reads_default_view && let AstKind::StaticMemberExpression(member) = node.kind() {
                 let mut route = DefaultViewRoute {
@@ -925,7 +951,7 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                     scoping,
                     nodes,
                     node.id(),
-                    "defaultView",
+                    root,
                     false,
                     &mut route_hazard,
                     &mut route.global_writes,
@@ -941,7 +967,7 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                     scoping,
                     nodes,
                     node.id(),
-                    "defaultView",
+                    root,
                     false,
                     &mut hazard,
                     &mut writes,
@@ -973,6 +999,8 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
     scan.accessors = scan_accessors(nodes);
     // The writer functions used where the global object they write is not named (ADR 0974).
     indirect_writers(scoping, nodes, &mut writes);
+    // ADR 1108: the members written on a built-in's prototype.
+    prototype_writes(scoping, nodes, !has_module_syntax(&program), &mut writes);
     writes.normalize();
     // ADR 1077: the scan counts every `defaultView` read as the global object; what it says without the static ones is kept beside, for the walk to fall back on
     // where the program's types prove a receiver no document.
@@ -1757,11 +1785,230 @@ fn rooted_in_global(scoping: &Scoping, expression: &Expression<'_>) -> bool {
 /// under any name (ADR 0974).
 fn escaped(writes: &mut GlobalWrites) {
     writes.undecided(true);
+    // ADR 1108: the code that has the global object can reach every built-in through it (`g.Array.prototype`).
+    writes.prototype_any_name = true;
+}
+
+/// How far a binding that holds a built-in's prototype (`var ArrayProto = Array.prototype`) is followed to the uses of its own bindings (ADR 1108).
+const PROTOTYPE_ALIAS_DEPTH: u8 = 4;
+
+/// ADR 1108: the members a file writes on the prototype of a built-in. A built-in is a global the libraries declare (`Float32Array`, `Array`, `EventTarget`), named by no
+/// binding of the file, also read off the global object (`window.Array`); its `prototype` is followed as the global object is ([`global_use`]): a member assigned (any
+/// operator) or given to a writer function (`Object.defineProperty(P, "m", d)`, `Object.assign(P, { m })`, `Reflect.set`, `__defineGetter__`) writes that name, a key the
+/// syntax does not decide writes any, and the prototype handed on (an argument, a return, a binding that is reassigned) may be written under any name; a member read
+/// (`Array.prototype.slice.call(a)`), an operand nothing takes and a binding nothing reassigns whose own uses are these write nothing. A prototype reached through a value
+/// (`x.__proto__`, `Object.getPrototypeOf(x)`, `Reflect.getPrototypeOf(x)`, `x.constructor.prototype`) may be any built-in's: a member written through it is written,
+/// and the value handed on is not followed (named in `docs/open-work.md`).
+fn prototype_writes(
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+    script: bool,
+    writes: &mut GlobalWrites,
+) {
+    for node in nodes.iter() {
+        let route = match node.kind() {
+            AstKind::StaticMemberExpression(member) if member.property.name == "prototype" => {
+                if builtin_constructor(scoping, &member.object) {
+                    Some(true)
+                } else {
+                    matches!(member.object.get_inner_expression(), Expression::StaticMemberExpression(inner) if inner.property.name == "constructor")
+                        .then_some(false)
+                }
+            }
+            AstKind::ComputedMemberExpression(member)
+                if literal_specifier(&member.expression).as_deref() == Some("prototype")
+                    && builtin_constructor(scoping, &member.object) =>
+            {
+                Some(true)
+            }
+            AstKind::StaticMemberExpression(member) if member.property.name == "__proto__" => {
+                Some(false)
+            }
+            AstKind::CallExpression(call) => {
+                matches!(call.callee.get_inner_expression(), Expression::StaticMemberExpression(callee)
+                    if callee.property.name == "getPrototypeOf"
+                        && matches!(callee.object.get_inner_expression(), Expression::Identifier(object)
+                            if names_global(scoping, object, "Object") || names_global(scoping, object, "Reflect")))
+                .then_some(false)
+            }
+            _ => None,
+        };
+        if let Some(whole) = route {
+            prototype_use(
+                scoping,
+                nodes,
+                node.id(),
+                whole,
+                script,
+                PROTOTYPE_ALIAS_DEPTH,
+                writes,
+            );
+        }
+    }
+}
+
+/// Whether `expression` names a built-in constructor: a global the libraries declare that no binding of the file holds, by its name or read off the global object
+/// (`window.Array`, `globalThis["Float32Array"]`). The names the global object and `document` go by are not one.
+fn builtin_constructor(scoping: &Scoping, expression: &Expression<'_>) -> bool {
+    let builtin =
+        |name: &str| is_known_global(name) && !GLOBAL_OBJECTS.contains(&name) && name != "document";
+    match expression.get_inner_expression() {
+        Expression::Identifier(identifier) => {
+            builtin(identifier.name.as_str())
+                && names_global(scoping, identifier, identifier.name.as_str())
+        }
+        Expression::StaticMemberExpression(member) => {
+            builtin(member.property.name.as_str()) && rooted_in_global(scoping, &member.object)
+        }
+        Expression::ComputedMemberExpression(member) => literal_specifier(&member.expression)
+            .is_some_and(|name| builtin(&name) && rooted_in_global(scoping, &member.object)),
+        _ => false,
+    }
+}
+
+/// What is done with a built-in's prototype at `id` (ADR 1108): its writes go to `writes.prototype_names`, or `prototype_any_name`. `whole` is whether the value is followed
+/// where it is handed on (a prototype named by its built-in); one reached through a value is followed only to the members written through it.
+fn prototype_use(
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+    id: NodeId,
+    whole: bool,
+    script: bool,
+    depth: u8,
+    writes: &mut GlobalWrites,
+) {
+    let mut found = GlobalWrites::default();
+    match global_use(scoping, nodes, id, "prototype", Holder::Global) {
+        // `P.__defineGetter__("m", get)` defines `m` on the prototype; the function read any other way (`.call(target, …)`) defines on the target it is given, where
+        // the prototype handed as that target is an escape of its own.
+        GlobalUse::Member { reads, at } => {
+            let (child, parent) = parent_past_wrappers(nodes, at);
+            if let AstKind::CallExpression(call) = nodes.get_node(parent).kind()
+                && call.callee.get_inner_expression().span() == nodes.get_node(child).kind().span()
+            {
+                for (name, _) in reads {
+                    defined_by_receiver(scoping, nodes, &name, at, &mut found);
+                }
+            }
+        }
+        GlobalUse::Written { keys, .. } => found.keys(keys),
+        GlobalUse::Escape { at, .. } if whole => {
+            if !call_writes(scoping, nodes, at, &mut found)
+                && !prototype_read_only(scoping, nodes, at)
+            {
+                match prototype_alias(scoping, nodes, at, script).filter(|_| depth > 0) {
+                    Some(symbol) => {
+                        for reference in scoping.get_resolved_references(symbol) {
+                            prototype_use(
+                                scoping,
+                                nodes,
+                                reference.node_id(),
+                                true,
+                                script,
+                                depth - 1,
+                                writes,
+                            );
+                        }
+                    }
+                    None => found.prototype_any_name = true,
+                }
+            }
+        }
+        GlobalUse::Escape { .. } | GlobalUse::Reassigned | GlobalUse::Inert => {}
+    }
+    writes.prototype_names.extend(found.names);
+    writes.prototype_names.extend(found.accessor_names);
+    writes.prototype_any_name |=
+        found.any_name || found.accessors_any_name || found.prototype_any_name;
+}
+
+/// Whether the prototype at `at` is handed to a standard function that only reads it or makes an object that inherits from it (`Object.create(P)`, `Object.keys(P)`,
+/// `Object.getOwnPropertyDescriptor(P, k)`, the second argument of `Object.setPrototypeOf(o, P)`): none writes a member of it (ADR 1108).
+fn prototype_read_only(scoping: &Scoping, nodes: &AstNodes<'_>, at: NodeId) -> bool {
+    let (child, parent) = parent_past_wrappers(nodes, at);
+    let AstKind::CallExpression(call) = nodes.get_node(parent).kind() else {
+        return false;
+    };
+    let span = nodes.get_node(child).kind().span();
+    let Some(index) = call.arguments.iter().position(|argument| {
+        argument
+            .as_expression()
+            .is_some_and(|argument| argument.span() == span)
+    }) else {
+        return false;
+    };
+    let Expression::StaticMemberExpression(callee) = call.callee.get_inner_expression() else {
+        return false;
+    };
+    let Expression::Identifier(object) = callee.object.get_inner_expression() else {
+        return false;
+    };
+    let method = callee.property.name.as_str();
+    if names_global(scoping, object, "Object") {
+        matches!(
+            method,
+            "create"
+                | "keys"
+                | "values"
+                | "entries"
+                | "getOwnPropertyNames"
+                | "getOwnPropertySymbols"
+                | "getOwnPropertyDescriptor"
+                | "getOwnPropertyDescriptors"
+                | "getPrototypeOf"
+                | "isFrozen"
+                | "isSealed"
+                | "isExtensible"
+        ) || (method == "setPrototypeOf" && index == 1)
+    } else if names_global(scoping, object, "Reflect") {
+        matches!(
+            method,
+            "ownKeys" | "getOwnPropertyDescriptor" | "getPrototypeOf" | "has" | "isExtensible"
+        ) || (method == "setPrototypeOf" && index == 1)
+    } else {
+        false
+    }
+}
+
+/// The binding a built-in's prototype at `at` initializes, where the file never assigns it again (`var ArrayProto = Array.prototype`): its uses are the prototype's. An
+/// exported binding, and a top-level `var` of a script (a property of the global object), are used where the file does not show.
+fn prototype_alias(
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+    at: NodeId,
+    script: bool,
+) -> Option<SymbolId> {
+    let (child, parent) = parent_past_wrappers(nodes, at);
+    let AstKind::VariableDeclarator(declarator) = nodes.get_node(parent).kind() else {
+        return None;
+    };
+    if declarator.init.as_ref().map(GetSpan::span) != Some(nodes.get_node(child).kind().span()) {
+        return None;
+    }
+    let BindingPattern::BindingIdentifier(binding) = &declarator.id else {
+        return None;
+    };
+    let symbol = binding.symbol_id.get()?;
+    let declaration = nodes.parent_id(parent);
+    let exported = matches!(
+        nodes.parent_kind(declaration),
+        AstKind::ExportNamedDeclaration(_)
+    );
+    let script_global = script
+        && scoping.symbol_scope_id(symbol) == scoping.root_scope_id()
+        && matches!(nodes.get_node(declaration).kind(), AstKind::VariableDeclaration(held) if held.kind == VariableDeclarationKind::Var);
+    (!exported
+        && !script_global
+        && !scoping.symbol_is_mutated(symbol)
+        && scoping.symbol_redeclarations(symbol).is_empty())
+    .then_some(symbol)
 }
 
 /// Code is generated at run time (`eval`, `Function(…)`, a string timer, `.constructor("…")`): it can reach the global object (`Function("return this")()`) and write it.
 fn code_generated(writes: &mut GlobalWrites) {
     writes.undecided(true);
+    // ADR 1108: generated code may write any built-in's prototype too.
+    writes.prototype_any_name = true;
 }
 
 /// Whether the file has module syntax (`import`, `export`): its top-level `this` is `undefined`. A file without is a script or CommonJS, where it may be the global object.
@@ -3498,10 +3745,121 @@ mod tests {
         for source in [
             "use(document[\"body\"]);",
             "use(el.ownerDocument[\"body\"]);",
-            "use(el[\"view\"]);",
+            "use(el[\"views\"]);",
         ] {
             let found = scan(source);
             assert!(!found.global_writes.any_name, "{source}");
+        }
+    }
+
+    /// ADR 1108: a member the DOM types as this realm's window (`UIEvent.view`, `MessageEvent.source`) is the global object, as `defaultView` is: a write through it
+    /// writes that global, the value handed on may write any, and a member read or an assignment of the member itself writes nothing.
+    #[test]
+    fn a_window_member_of_any_object_is_the_global_object() {
+        for source in [
+            "document.addEventListener(\"click\", (event) => { event.view.btoa = () => 1; });",
+            "addEventListener(\"message\", (m) => { m.source.btoa = () => 1; });",
+            "export const f = (e) => { e[\"view\"].btoa = () => 1; };",
+        ] {
+            let found = scan(source);
+            assert_eq!(found.global_writes.names, ["btoa"], "{source}");
+            assert!(!found.global_writes.any_name, "{source}");
+        }
+        for source in [
+            "export const f = (e) => use(e.view);",
+            "export const f = (e) => { const w = e.source; w[k] = 1; };",
+        ] {
+            let found = scan(source);
+            assert!(found.global_writes.any_name, "{source}");
+            assert!(found.global_writes.prototype_any_name, "{source}");
+        }
+        for source in [
+            "export const f = (e) => e.view.btoa(\"x\");",
+            "export class A { constructor(v) { this.view = v; } }",
+            "export const f = (e) => e.view === window;",
+            "export const f = (e) => window.view;",
+        ] {
+            let found = scan(source);
+            assert!(found.global_writes.is_empty(), "{source}: {found:?}");
+        }
+    }
+
+    /// ADR 1108: a member written on a built-in's prototype, by every form a global's write takes, and a prototype handed on, which may be written under any name.
+    #[test]
+    fn a_member_written_on_a_builtin_prototype_is_found() {
+        for (source, name) in [
+            (
+                "Float32Array.prototype.reverse = function () { return this; };",
+                "reverse",
+            ),
+            ("Array.prototype[\"at\"] ||= function () {};", "at"),
+            (
+                "const K = \"at\"; Array.prototype[K] = function () {};",
+                "at",
+            ),
+            ("window.Array.prototype.at = function () {};", "at"),
+            (
+                "globalThis[\"Array\"][\"prototype\"].at = function () {};",
+                "at",
+            ),
+            (
+                "Object.defineProperty(Float32Array.prototype, \"reverse\", { value() {} });",
+                "reverse",
+            ),
+            (
+                "Object.assign(Float32Array.prototype, { reverse() {} });",
+                "reverse",
+            ),
+            ("Reflect.set(Array.prototype, \"at\", () => 1);", "at"),
+            ("Array.prototype.__defineGetter__(\"at\", () => 1);", "at"),
+            (
+                "export {}; var AP = Array.prototype, slice = AP.slice; AP.at = function () {};",
+                "at",
+            ),
+            ("[].__proto__.at = function () {};", "at"),
+            ("Object.getPrototypeOf([]).at = function () {};", "at"),
+            ("[].constructor.prototype.at = function () {};", "at"),
+        ] {
+            let found = scan(source);
+            assert_eq!(found.global_writes.prototype_names, [name], "{source}");
+            assert!(!found.global_writes.prototype_any_name, "{source}");
+            assert!(found.global_writes.names.is_empty(), "{source}: {found:?}");
+        }
+        for source in [
+            "use(Array.prototype);",
+            "Object.setPrototypeOf(Array.prototype, p);",
+            "Array.prototype[key] = 1;",
+            "let AP = Array.prototype; AP = other; AP.at = 1;",
+            "export const p = Float32Array.prototype;",
+            "var AP = Array.prototype; AP.slice.call(a);",
+            "Object.defineProperty(Array.prototype, key, d);",
+        ] {
+            let found = scan(source);
+            assert!(found.global_writes.prototype_any_name, "{source}");
+        }
+        // Reads, inspection, a prototype of the file's own class, a standard function that only reads it, and a value's prototype read write nothing.
+        for source in [
+            "export const s = (a) => Array.prototype.slice.call(a);",
+            "export const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);",
+            "var AP = Array.prototype; export const s = (a) => AP.slice.call(a);",
+            "export const plain = (v) => Object.getPrototypeOf(v) === Object.prototype;",
+            "export const o = Object.create(Object.prototype);",
+            "export const n = Object.getOwnPropertyNames(Array.prototype);",
+            "class E extends Error {} Object.setPrototypeOf(e, Error.prototype);",
+            "function A() {} A.prototype.at = function () {};",
+            "export const isPlain = (v) => { const p = Object.getPrototypeOf(v); return p === null || p === Object.prototype; };",
+            "export class A { m() { this.__proto__ = null; } }",
+        ] {
+            let found = scan(source);
+            assert!(
+                found.global_writes.prototype_names.is_empty()
+                    && !found.global_writes.prototype_any_name,
+                "{source}: {found:?}"
+            );
+        }
+        // Generated code and the global object handed on may write a prototype too.
+        for source in ["eval(code);", "use(window);"] {
+            assert!(scan(source).global_writes.prototype_any_name, "{source}");
         }
     }
 

@@ -1894,3 +1894,11 @@ packages/wasm/owned/
 !fixtures/reactive-ir/store-copy-element-write/node_modules/**
 !fixtures/reactive-ir/competing-check-read-after-creation/node_modules/
 !fixtures/reactive-ir/competing-check-read-after-creation/node_modules/**
+!fixtures/reactive-ir/action-in-owned-scope-prototype-writes/node_modules/
+!fixtures/reactive-ir/action-in-owned-scope-prototype-writes/node_modules/**
+!fixtures/reactive-ir/action-in-owned-scope-window-members/node_modules/
+!fixtures/reactive-ir/action-in-owned-scope-window-members/node_modules/**
+!fixtures/runtime-oracle/package-prototype-writes/node_modules/
+!fixtures/runtime-oracle/package-prototype-writes/node_modules/**
+!fixtures/runtime-oracle/package-window-members/node_modules/
+!fixtures/runtime-oracle/package-window-members/node_modules/**
