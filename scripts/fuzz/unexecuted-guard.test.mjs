@@ -5,6 +5,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { UNEXECUTED_KNOWN, rowProblem, unexecutedEntry, unexecutedViolation } from "./codes.mjs";
+import { generateLegal, judgeLegal, legalCells, recallLegalShapes, undrivenHandlerSite } from "./legal.mjs";
+import { siteOf } from "./matrix.mjs";
 import { compare } from "./smoke.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -30,6 +32,36 @@ describe("an unexecuted violation", () => {
     const without = { entries: SYNTHETIC.entries.filter((entry) => entry.item !== "synthetic-dead") };
     expect(rowProblem(row, { unexecutedKnown: SYNTHETIC })).toBeNull();
     expect(rowProblem(row, { unexecutedKnown: without })).toBe("unexecuted-violation");
+  });
+
+  it("ADR 1132: one in a handler a user can reach passes only for the missing-owner rule, never the cell's own (review F1, F3, F6)", () => {
+    // Generated programs, judged with the checker's rows and a run that never reached the site (the page never drives the control).
+    const judged = (context, variant, findings) => {
+      const cell = legalCells({ recall: true }).find((candidate) => candidate.code === "STRICT_READ_UNTRACKED" && candidate.context === context);
+      const shape = recallLegalShapes(cell.code, cell.context).find((candidate) => candidate.variant === variant);
+      const { program, built } = generateLegal({ seed: 1 }, cell, { shape });
+      const site = siteOf(built);
+      const verdict = judgeLegal({ code: cell.code, site, typecheck: { ok: true }, checker: { ok: true, findings: findings.map((rule) => ({ rule, kind: "violation", line: site.line, endLine: site.line, id: "SC", file: "App.tsx" })) },
+        runtime: { diagnostics: [], errors: [], witnesses: [], hits: { [site.hit]: 0 } }, reachable: undrivenHandlerSite(program) && String(built.files?.["App.tsx"] ?? "").split("\n") });
+      return { reachable: undrivenHandlerSite(program), problem: rowProblem({ id: `lg-${cell.code}-${context}`, ...verdict }) };
+    };
+    for (const context of ["dny-legal-click", "dny-legal-keydown", "dny-legal-pointer"]) {
+      expect(judged(context, "store-effect-called", ["missing-owner"])).toEqual({ reachable: true, problem: null });
+      // The cell's own rule: legal there by construction, so its violation keeps the look.
+      expect(judged(context, "store-effect-called", ["strict-read-untracked"]).problem).toBe("unexecuted-violation");
+      expect(judged(context, "store-effect-called", ["missing-owner", "strict-read-untracked"]).problem).toBe("unexecuted-violation");
+    }
+    // Round 2 N1: only the creations a driven twin substantiates (createEffect, createRenderEffect); a memo's owner row keeps the look.
+    expect(judged("dny-legal-click", "store-render-effect-carried", ["missing-owner"]).problem).toBeNull();
+    expect(judged("dny-legal-click", "store-byname", ["missing-owner"]).problem).toBe("unexecuted-violation");
+    expect(judged("dny-legal-click", "store-settled-called", ["missing-owner"]).problem).toBe("unexecuted-violation");
+    // Disabled from its mount: no event ever reaches the handler, so nothing is reachable and a violation stays a look.
+    expect(judged("dny-legal-mount-disabled", "store-effect-called", ["missing-owner"])).toEqual({ reachable: false, problem: "unexecuted-violation" });
+    // Another TAKEN_AWAY context means its trigger to fire the handler: a counter of 0 there is a look.
+    // (Not a legal cell of this code: the same handler tree under its name.)
+    const tree = (context) => ({ components: [{ k: "component", misuse: { context }, view: [{ k: "button", tag: "button", on: "onClick", undriven: true, handler: [{ k: "expr", e: { k: "use", site: true } }] }] }] });
+    expect(undrivenHandlerSite(tree("dny-legal-click"))).toBe(true);
+    expect(undrivenHandlerSite(tree("dny-blur-disabled"))).toBe(false);
   });
 
   it("a misuse grid's `unexecuted` (the page halted before the site) is another outcome, and other outcomes are untouched", () => {
