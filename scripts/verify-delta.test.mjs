@@ -18,8 +18,11 @@ import {
   LANES,
   ROWS,
   UNIVERSAL,
+  checkOf,
   classify,
+  fixtureKeyOf,
   planFor,
+  processTestPins,
   baseOf,
   porcelainPaths,
   producerStampDrift,
@@ -608,3 +611,30 @@ test("each analysis crate whose changes skip WASM parity confines threads with t
     }
   }
 });
+
+// A process test that runs the checker on a fixture and asserts its rows moves with that fixture's snapshot: 1113 changed
+// after-await-net's SC1002 rows, verify-delta ran only `backend-process` (diagnostics_process), and CI's
+// after_await_accounting_process failed.
+test("a fixture's snapshot or source selects every process test that pins it", () => {
+  assert.equal(fixtureKeyOf("fixtures/findings-snapshots/reactive-ir__after-await-net.json"), "reactive-ir/after-await-net");
+  assert.equal(fixtureKeyOf("fixtures/reactive-ir/after-await-net/App.tsx"), "reactive-ir/after-await-net");
+  assert.equal(fixtureKeyOf("fixtures/tsc-oracle/rule-cases.json"), null);
+  assert.equal(fixtureKeyOf("rust/crates/solid-facts/src/lib.rs"), null);
+
+  const plan = planFor(["fixtures/findings-snapshots/reactive-ir__after-await-net.json"]);
+  const pinned = plan.checks.filter((check) => check.includes("after_await_accounting_process"));
+  assert.equal(pinned.length, 1);
+  assert.deepEqual(checkOf(pinned[0]).command.slice(-6), ["-p", "solid-facts-backend", "--test", "backend_process", "--", "after_await_accounting_process::"]);
+  assert.equal(scheduleFor(plan.checks).find((entry) => entry.check === pinned[0]).lane, "rust");
+  // A target that needs a feature is left to its own make target (ADR 0950); `diagnostics_process` is `backend-process` itself.
+  const pins = processTestPins();
+  assert.ok(!pins.some((pin) => pin.test === "what_if_process"));
+  assert.ok(pins.filter((pin) => pin.test === "diagnostics_process").every((pin) => pin.check === "backend-process"));
+  // A fixture no process test names selects none.
+  const synthetic = planFor(["fixtures/reactive-ir/unpinned-probe/App.tsx"], { pins: [{ check: "process-test:p|t|", fixtures: new Set(["reactive-ir/other"]) }] });
+  assert.ok(!synthetic.checks.some((check) => check.startsWith("process-test:")));
+  const named = planFor(["fixtures/reactive-ir/other/App.tsx"], { pins: [{ check: "process-test:p|t|", fixtures: new Set(["reactive-ir/other"]) }] });
+  assert.ok(named.checks.includes("process-test:p|t|"));
+  assert.deepEqual(checkOf("process-test:p|t|").command.slice(-4), ["-p", "p", "--test", "t"]);
+});
+

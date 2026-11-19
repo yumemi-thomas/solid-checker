@@ -47,7 +47,7 @@
 //      as a caveat on every run, because closing it means hashing the fixture
 //      trees, which is `coverage`'s own job.
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -611,15 +611,137 @@ export function classify(path) {
   );
 }
 
+/** The fixture key `<group>/<name>` a changed path belongs to: a file under `fixtures/<group>/<name>/`, or its findings snapshot
+ * `fixtures/findings-snapshots/<group>__<name>.json`; `null` for anything else. */
+export function fixtureKeyOf(path) {
+  const snapshot = /^fixtures\/findings-snapshots\/([^/_]+(?:-[^/_]+)*)__(.+)\.json$/.exec(path);
+  if (snapshot) return `${snapshot[1]}/${snapshot[2]}`;
+  const source = /^fixtures\/([^/]+)\/([^/]+)\//.exec(path);
+  return source && source[1] !== "findings-snapshots" ? `${source[1]}/${source[2]}` : null;
+}
+
+const PROCESS_TEST_PREFIX = "process-test:";
+
+/**
+ * The Rust process tests (every `tests/*.rs` under `rust/`) and the fixtures each pins: a fixture `<group>/<name>` (an existing
+ * `fixtures/<group>/<name>/` directory) is pinned when the test file names `fixtures/<group>` and holds a string literal that is
+ * `<name>`, starts with `<name>/`, or contains `<group>/<name>`. Over-selection is the safe direction: a test named by a fixture it
+ * does not assert on only costs its run time.
+ *
+ * @returns {{check: string, package: string, test: string, fixtures: Set<string>}[]}
+ */
+export function processTestPins(root = ROOT) {
+  const pins = [];
+  const groups = new Set(
+    readdirSync(join(root, "fixtures")).filter((name) => name !== "findings-snapshots" && statSync(join(root, "fixtures", name)).isDirectory()),
+  );
+  const exists = new Map();
+  const isFixture = (group, name) => {
+    const key = `${group}/${name}`;
+    if (!exists.has(key)) exists.set(key, /^[\w.-]+$/.test(name) && existsSync(join(root, "fixtures", group, name)));
+    return exists.get(key);
+  };
+  const walk = (dir, out) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === "target" || entry.name === "node_modules") continue;
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) walk(path, out);
+      else if (entry.name.endsWith(".rs") && dir.endsWith("/tests")) out.push(path);
+    }
+  };
+  const files = [];
+  walk(join(root, "rust"), files);
+  // A crate's test targets: its `[[test]]` rows (name, path, required features), or every `tests/*.rs` when it lets Cargo find them.
+  const targetsOf = new Map();
+  const targets = (crateDir) => {
+    if (targetsOf.has(crateDir)) return targetsOf.get(crateDir);
+    const manifest = readFileSync(join(crateDir, "Cargo.toml"), "utf8");
+    const pkg = /\[package\][^[]*?\bname\s*=\s*"([^"]+)"/.exec(manifest)?.[1] ?? null;
+    const declared = [...manifest.matchAll(/^\[\[test\]\]\n((?:(?!\[)[^\n]*\n?)*)/gm)].map(([, body]) => ({
+      name: /\bname\s*=\s*"([^"]+)"/.exec(body)?.[1],
+      path: /\bpath\s*=\s*"([^"]+)"/.exec(body)?.[1],
+      features: (/required-features\s*=\s*\[([^\]]*)\]/.exec(body)?.[1] ?? "").match(/"[^"]+"/g)?.map((f) => f.slice(1, -1)) ?? [],
+    }));
+    const auto = !/autotests\s*=\s*false/.test(manifest);
+    const value = { pkg, declared, auto };
+    targetsOf.set(crateDir, value);
+    return value;
+  };
+  // How a test file runs: as its own target, or as a `#[path]` module of a target (filtered to `<module>::`).
+  const runOf = (file) => {
+    const crateDir = dirname(dirname(file));
+    if (!existsSync(join(crateDir, "Cargo.toml"))) return null;
+    const { pkg, declared, auto } = targets(crateDir);
+    if (!pkg) return null;
+    const relative = `tests/${file.split("/").pop()}`;
+    const own = declared.find((target) => target.path === relative);
+    if (own) return { pkg, target: own.name, filter: "", features: own.features };
+    for (const target of declared) {
+      const host = join(crateDir, target.path ?? "");
+      if (!target.path || !existsSync(host)) continue;
+      const module = new RegExp(`#\\[path\\s*=\\s*"${file.split("/").pop().replace(".", "\\.")}"\\]\\s*mod\\s+(\\w+)`).exec(readFileSync(host, "utf8"))?.[1];
+      if (module) return { pkg, target: target.name, filter: `${module}::`, features: target.features };
+    }
+    return auto ? { pkg, target: file.split("/").pop().replace(/\.rs$/, ""), filter: "", features: [] } : null;
+  };
+  for (const file of files.sort()) {
+    const text = readFileSync(file, "utf8");
+    const named = [...groups].filter((group) => text.includes(`fixtures/${group}`));
+    if (!named.length) continue;
+    const run = runOf(file);
+    // A target that needs a feature (`what_if_process`: `what-if`) is built only by its own make target, never by a script (ADR 0950,
+    // scripts/what-if-gates.test.mjs): it is not selected here.
+    if (!run || run.features.length) continue;
+    const fixtures = new Set();
+    for (const [, literal] of text.matchAll(/"((?:[^"\\]|\\.)*)"/g)) {
+      for (const group of named) {
+        const head = literal.split("/")[0];
+        if (isFixture(group, head)) fixtures.add(`${group}/${head}`);
+        const inner = literal.indexOf(`${group}/`);
+        if (inner >= 0) {
+          const name = literal.slice(inner + group.length + 1).split("/")[0];
+          if (isFixture(group, name)) fixtures.add(`${group}/${name}`);
+        }
+      }
+    }
+    if (!fixtures.size) continue;
+    // `backend-process` runs the whole `diagnostics_process` target already.
+    const check =
+      run.pkg === "solid-facts-backend" && run.target === "diagnostics_process"
+        ? "backend-process"
+        : `${PROCESS_TEST_PREFIX}${[run.pkg, run.target, run.filter].join("|")}`;
+    pins.push({ check, package: run.pkg, test: run.target, filter: run.filter, fixtures });
+  }
+  return pins;
+}
+
+/** A check by id: a row of `CHECKS`, or a pinned process test (`process-test:<package>|<target>|<filter>`). */
+export function checkOf(id) {
+  if (CHECKS[id]) return CHECKS[id];
+  if (id.startsWith(PROCESS_TEST_PREFIX)) {
+    const [pkg, test, filter] = id.slice(PROCESS_TEST_PREFIX.length).split("|");
+    return {
+      why: `pins the findings of a changed fixture (${filter ? `${test} ${filter}` : test})`,
+      command: [
+        "cargo", TOOLCHAIN, "test", "--manifest-path", MANIFEST, "-p", pkg, "--test", test,
+        ...(filter ? ["--", filter] : []),
+      ],
+      env: { SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS) },
+    };
+  }
+  throw new Error(`verify-delta: no check ${id}`);
+}
+
 /**
  * The plan for a change set.
  *
  * @returns {{full: boolean, unmapped: string[], decisions: {path: string, row: string, checks: string[]}[], checks: string[]}}
  */
-export function planFor(paths) {
+export function planFor(paths, { pins = processTestPins() } = {}) {
   const decisions = [];
   const unmapped = [];
   const selected = new Set();
+  const pinned = new Set();
   for (const path of [...new Set(paths)].sort()) {
     const row = classify(path);
     if (!row) {
@@ -627,8 +749,14 @@ export function planFor(paths) {
       decisions.push({ path, row: "no row matches", checks: [] });
       continue;
     }
-    decisions.push({ path, row: row.owner, checks: row.checks });
+    // A process test that pins a fixture's findings (it runs the checker on that fixture and asserts rows) moves with the
+    // fixture's snapshot, which `backend-process` (one test file) does not cover: 1113's after-await-net rows passed here and
+    // failed CI's `after_await_accounting_process`. Each such test is selected by name.
+    const fixture = fixtureKeyOf(path);
+    const tests = fixture ? pins.filter((pin) => pin.fixtures.has(fixture)).map((pin) => pin.check) : [];
+    decisions.push({ path, row: row.owner, checks: [...row.checks, ...tests] });
     for (const check of row.checks) selected.add(check);
+    for (const check of tests) (check.startsWith(PROCESS_TEST_PREFIX) ? pinned : selected).add(check);
   }
   if (unmapped.length > 0) {
     return { full: true, unmapped, decisions, checks: ["verify"] };
@@ -649,6 +777,7 @@ export function planFor(paths) {
     ...["facts-lib", "ir-lib", "backend-process", "backend-staleness", "write-walk-strategies", "dialects-process"].filter((id) =>
       selected.has(id)
     ),
+    ...[...pinned].sort(),
     ...[...FINDING_GATES, "repro-budget"].filter((id) => selected.has(id)),
     ...["ir-read-lint", "proof-lint", "ir-tools-test", "proof-tools-test", "ir-edit-fuzz", "fuzz-tests"].filter((id) => selected.has(id)),
     // ADR 1120: the premise's table and the kernel's oracle.
@@ -830,7 +959,7 @@ export function changedPaths(base = "origin/main") {
   };
 }
 
-const commandsOf = (check) => CHECKS[check].commands ?? [CHECKS[check].command];
+const commandsOf = (check) => checkOf(check).commands ?? [checkOf(check).command];
 
 const render = (command) => command.join(" ");
 
@@ -906,7 +1035,7 @@ export const LANES = {
  *   for every other Cargo check.
  */
 export function scheduleFor(checks) {
-  const lane = (check) => LANES[check] ?? "verify";
+  const lane = (check) => LANES[check] ?? (check.startsWith(PROCESS_TEST_PREFIX) ? "rust" : "verify");
   const inLanes = (...names) => checks.filter((check) => names.includes(lane(check)));
   return checks.map((check) => {
     const after = new Set();
@@ -1120,7 +1249,7 @@ async function main() {
   }
   console.log(`\n=== verify-delta: plan (${plan.checks.length} check(s)) ===`);
   for (const check of plan.checks) {
-    const reason = CHECKS[check].why;
+    const reason = checkOf(check).why;
     console.log(`  ${check}${reason ? ` -- ${reason}` : ""}`);
     for (const command of commandsOf(check)) console.log(`      ${render(command)}`);
   }
@@ -1136,7 +1265,7 @@ async function main() {
   const environment = plannedCargo ? certificationEnvironment(ROOT) : process.env;
   const failure = await runSchedule(scheduleFor(plan.checks), {
     commandsOf,
-    environmentOf: (check) => ({ ...environment, ...(CHECKS[check].env ?? {}) }),
+    environmentOf: (check) => ({ ...environment, ...(checkOf(check).env ?? {}) }),
   });
   if (failure) {
     console.error(
