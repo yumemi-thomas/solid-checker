@@ -50,6 +50,7 @@ mod callback_return;
 mod carrier_runs;
 mod cleanup;
 mod competing_checks;
+mod disabled_handlers;
 mod development_feedback;
 mod directives;
 mod execution_paths;
@@ -1583,6 +1584,10 @@ pub struct OwnerRequirement {
     /// refusal at a creation, the owner check of a context read), so this row's code is not proven to be reached.
     #[serde(default, skip_serializing_if = "is_false")]
     pub earlier_check_throws: bool,
+    /// ADR 1134: the operation is written in a delegated event handler of a form control disabled from its mount, which
+    /// nothing in the program is seen to enable: the runtime's dispatcher passes over a disabled node, so no run is proven.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub handler_on_disabled_control: bool,
     /// ADR 0290: the operation is inside a package analyzed as source
     /// (ADR 0284), at this location, and this requirement stands at the
     /// project's call that runs it there, under the call's owner context.

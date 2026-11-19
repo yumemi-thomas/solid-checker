@@ -937,6 +937,13 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// ADR 1134: whether the runtime's delegated event dispatcher skips a handler installed on a node whose `disabled`
+    /// property is true when the event arrives (so a delegated handler on a control disabled for its whole life never runs,
+    /// whatever delivers the event). Default `false`: a delegated handler may run on any node.
+    fn delegated_handler_skips_disabled_node(&self) -> bool {
+        false
+    }
+
     /// ADR 1067: whether the setter returned in tuple slot one calls its function-form
     /// updater with the store returned in slot zero. This proves identity, not allocation:
     /// consumers must separately prove the store cannot be a user-supplied proxy.
