@@ -1,0 +1,80 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-signal-tuple-forms/App.tsx",
+      "start": 559,
+      "end": 564,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-signal-tuple-forms/App.tsx",
+      "start": 944,
+      "end": 949,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-signal-tuple-forms/App.tsx",
+      "start": 1390,
+      "end": 1395,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-signal-tuple-forms/App.tsx",
+      "start": 1390,
+      "end": 1393,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "type-only-source",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-signal-tuple-forms/App.tsx",
+      "start": 1854,
+      "end": 1857,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "type-only-source",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-signal-tuple-forms/App.tsx",
+      "start": 2272,
+      "end": 2275,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "type-only-source",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-signal-tuple-forms/App.tsx",
+      "start": 2621,
+      "end": 2624,
+      "fixes": 0
+    }
+  ]
+}
