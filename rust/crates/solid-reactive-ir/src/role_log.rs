@@ -309,6 +309,12 @@ pub(crate) fn arm(id: (&'static str, bool), role: ExecutionRole) -> ExecutionRol
     role
 }
 
+/// ADR 1118: whether the proof arm `id` (one that ends an obligation by a `continue` or a `return`, not by a role) is ablated by
+/// `SOLID_CHECKER_IR_ABLATE_ARM`: the monotone gate's M1 runs the head build with it off.
+pub(crate) fn proof_arm_ablated(id: &'static str) -> bool {
+    enabled() && ablated(id)
+}
+
 /// Whether the arm `id` is the one being ablated (see [`ABLATE`]).
 #[cold]
 fn ablated(id: &str) -> bool {

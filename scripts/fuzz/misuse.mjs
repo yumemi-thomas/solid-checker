@@ -1924,7 +1924,8 @@ function inContext(context, stmts, kit) {
       // F1: an iframe moved into a shadow root by the apply fires `load` before the call returns, with `window.event` unset.
       const el = kit.name("el");
       const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "iframe", on: "onLoad", undriven: true })));
-      const attach = expr(domExpr(`document.createElement("div").attachShadow({ mode: "open" }).appendChild(${el} as HTMLElement)`));
+      // The host is in the document: a frame in a detached tree never loads.
+      const attach = expr(domExpr(`document.body.appendChild(document.createElement("div")).attachShadow({ mode: "open" }).appendChild(${el} as HTMLElement)`));
       return { body: [made, expr(prim("effect", fn([ret(num(1))]), { apply: fn([attach]) }))], view: [] };
     }
     case "evt-handler-patched-listener": {
@@ -1943,8 +1944,11 @@ function inContext(context, stmts, kit) {
       // F3: the handler Solid stored on the element read under an escaped string key and called.
       const el = kit.name("el");
       const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { undriven: true })));
-      const run = expr(domExpr(`((${el} as unknown as Record<string, (() => void) | undefined>)["_\\x24\\x24click"])?.()`));
-      return { body: [made, expr(prim("effect", fn([ret(num(1))]), { apply: fn([run]) }))], view: [] };
+      // The review's form: the stored handler read into a local, then called.
+      const stored = kit.name("stored");
+      const read = decl(stored, domExpr(`(${el} as unknown as Record<string, (() => void) | undefined>)["_\\x24\\x24click"]`));
+      const run = expr(domExpr(`if (${stored}) ${stored}()`));
+      return { body: [made, expr(prim("effect", fn([ret(num(1))]), { apply: fn([read, run]) }))], view: [] };
     }
     case "evt-handler-proto-setter": {
       // F4: a setter on `Element.prototype` under the key built as Solid builds it takes the handler.

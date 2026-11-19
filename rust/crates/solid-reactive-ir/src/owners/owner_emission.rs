@@ -1418,6 +1418,7 @@ fn layer_entry_open(
         if function_binding_name(file, function).is_none()
             && intrinsic_event_handler(file, function.span)
             && !lookup.stored_handler_reachable_from(file.path.as_str())
+            && !crate::role_log::proof_arm_ablated("owner_emission.layer_entry_open.handler-entry")
         {
             continue;
         }
