@@ -4266,6 +4266,279 @@
     "open": "reactive-ir/helper-prop-read"
    },
    "note": "relabel, still uncertifiable: round 2 checks a named callback also called by name before every silent named-callback arm; this read is answered by the call-timing blocker (callee-callback-timing) instead"
+  },
+  {
+   "fixture": "reactive-ir/detached-callback-in-root",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1089",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::layer_entry_open",
+   "fixtures": {
+    "proved": "reactive-ir/detached-callback-in-root",
+    "open": "reactive-ir/absent-guard-prop"
+   },
+   "note": "ADR 1089 part E round 2: the creation sits in an intrinsic element's anonymous on* handler, entered by event delivery alone while no code of its realm may reach the stored handler (plain_premise::stored_handler_hazard)"
+  },
+  {
+   "fixture": "reactive-ir/event-dispatch-await-continuation",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1089",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::layer_entry_open",
+   "fixtures": {
+    "proved": "reactive-ir/event-dispatch-await-continuation",
+    "open": "reactive-ir/event-handler-entry-shadow"
+   },
+   "note": "ADR 1089 part E round 2: the creation sits in an intrinsic element's anonymous on* handler, entered by event delivery alone while no code of its realm may reach the stored handler (plain_premise::stored_handler_hazard)"
+  },
+  {
+   "fixture": "reactive-ir/event-dispatch-document",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1089",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::layer_entry_open",
+   "fixtures": {
+    "proved": "reactive-ir/event-dispatch-document",
+    "open": "reactive-ir/event-handler-entry-shadow"
+   },
+   "note": "ADR 1089 part E round 2: the creation sits in an intrinsic element's anonymous on* handler, entered by event delivery alone while no code of its realm may reach the stored handler (plain_premise::stored_handler_hazard)"
+  },
+  {
+   "fixture": "reactive-ir/event-dispatch-handler-children",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1089",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::layer_entry_open",
+   "fixtures": {
+    "proved": "reactive-ir/event-dispatch-handler-children",
+    "open": "reactive-ir/event-handler-entry-shadow"
+   },
+   "note": "ADR 1089 part E round 2: the creation sits in an intrinsic element's anonymous on* handler, entered by event delivery alone while no code of its realm may reach the stored handler (plain_premise::stored_handler_hazard)"
+  },
+  {
+   "fixture": "reactive-ir/event-dispatch-handler-helper",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1089",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::layer_entry_open",
+   "fixtures": {
+    "proved": "reactive-ir/event-dispatch-handler-helper",
+    "open": "reactive-ir/event-handler-entry-shadow"
+   },
+   "note": "ADR 1089 part E round 2: the creation sits in an intrinsic element's anonymous on* handler, entered by event delivery alone while no code of its realm may reach the stored handler (plain_premise::stored_handler_hazard)"
+  },
+  {
+   "fixture": "reactive-ir/event-dispatch-handler-inline",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1089",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::layer_entry_open",
+   "fixtures": {
+    "proved": "reactive-ir/event-dispatch-handler-inline",
+    "open": "reactive-ir/event-handler-entry-shadow"
+   },
+   "note": "ADR 1089 part E round 2: the creation sits in an intrinsic element's anonymous on* handler, entered by event delivery alone while no code of its realm may reach the stored handler (plain_premise::stored_handler_hazard)"
+  },
+  {
+   "fixture": "reactive-ir/event-dispatch-handler-literal",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1089",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::layer_entry_open",
+   "fixtures": {
+    "proved": "reactive-ir/event-dispatch-handler-literal",
+    "open": "reactive-ir/event-handler-entry-shadow"
+   },
+   "note": "ADR 1089 part E round 2: the creation sits in an intrinsic element's anonymous on* handler, entered by event delivery alone while no code of its realm may reach the stored handler (plain_premise::stored_handler_hazard)"
+  },
+  {
+   "fixture": "reactive-ir/event-dispatch-module-scope",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1089",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::layer_entry_open",
+   "fixtures": {
+    "proved": "reactive-ir/event-dispatch-module-scope",
+    "open": "reactive-ir/event-handler-entry-shadow"
+   },
+   "note": "ADR 1089 part E round 2: the creation sits in an intrinsic element's anonymous on* handler, entered by event delivery alone while no code of its realm may reach the stored handler (plain_premise::stored_handler_hazard)"
+  },
+  {
+   "fixture": "reactive-ir/event-dispatch-shadow",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1089",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::layer_entry_open",
+   "fixtures": {
+    "proved": "reactive-ir/event-dispatch-shadow",
+    "open": "reactive-ir/event-handler-entry-shadow"
+   },
+   "note": "ADR 1089 part E round 2: the creation sits in an intrinsic element's anonymous on* handler, entered by event delivery alone while no code of its realm may reach the stored handler (plain_premise::stored_handler_hazard)"
+  },
+  {
+   "fixture": "reactive-ir/event-dispatch-timeout",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1089",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::layer_entry_open",
+   "fixtures": {
+    "proved": "reactive-ir/event-dispatch-timeout",
+    "open": "reactive-ir/event-handler-entry-shadow"
+   },
+   "note": "ADR 1089 part E round 2: the creation sits in an intrinsic element's anonymous on* handler, entered by event delivery alone while no code of its realm may reach the stored handler (plain_premise::stored_handler_hazard)"
+  },
+  {
+   "fixture": "reactive-ir/event-dispatch-window",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1089",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::layer_entry_open",
+   "fixtures": {
+    "proved": "reactive-ir/event-dispatch-window",
+    "open": "reactive-ir/event-handler-entry-shadow"
+   },
+   "note": "ADR 1089 part E round 2: the creation sits in an intrinsic element's anonymous on* handler, entered by event delivery alone while no code of its realm may reach the stored handler (plain_premise::stored_handler_hazard)"
+  },
+  {
+   "fixture": "reactive-ir/exported-helper-in-apply",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1089",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::layer_entry_open",
+   "fixtures": {
+    "proved": "reactive-ir/exported-helper-in-apply",
+    "open": "reactive-ir/event-handler-entry-shadow"
+   },
+   "note": "ADR 1089 part E round 2: the creation sits in an intrinsic element's anonymous on* handler, entered by event delivery alone while no code of its realm may reach the stored handler (plain_premise::stored_handler_hazard)"
+  },
+  {
+   "fixture": "reactive-ir/owner-call-effect-creation-sync-dispatch",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1089",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::layer_entry_open",
+   "fixtures": {
+    "proved": "reactive-ir/owner-call-effect-creation-sync-dispatch",
+    "open": "reactive-ir/event-handler-entry-shadow"
+   },
+   "note": "ADR 1089 part E round 2: the creation sits in an intrinsic element's anonymous on* handler, entered by event delivery alone while no code of its realm may reach the stored handler (plain_premise::stored_handler_hazard)"
+  },
+  {
+   "fixture": "reactive-ir/owner-call-effect-creation",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 3,
+   "to": 2,
+   "adr": "ADR 1089",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::layer_entry_open",
+   "fixtures": {
+    "proved": "reactive-ir/owner-call-effect-creation",
+    "open": "reactive-ir/event-handler-entry-shadow"
+   },
+   "note": "ADR 1089 part E round 2: the creation sits in an intrinsic element's anonymous on* handler, entered by event delivery alone while no code of its realm may reach the stored handler (plain_premise::stored_handler_hazard)"
+  },
+  {
+   "fixture": "reactive-ir/root-window-reads",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 3,
+   "to": 1,
+   "adr": "ADR 1089",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::layer_entry_open",
+   "fixtures": {
+    "proved": "reactive-ir/root-window-reads",
+    "open": "reactive-ir/event-handler-entry-shadow"
+   },
+   "note": "ADR 1089 part E round 2: the creation sits in an intrinsic element's anonymous on* handler, entered by event delivery alone while no code of its realm may reach the stored handler (plain_premise::stored_handler_hazard)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-suites-jest-module",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 1089",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::layer_entry_open",
+   "fixtures": {
+    "proved": "reactive-ir/test-runner-suites-jest-module",
+    "open": "reactive-ir/event-handler-entry-shadow"
+   },
+   "note": "ADR 1089 part E round 2: the creation sits in an intrinsic element's anonymous on* handler, entered by event delivery alone while no code of its realm may reach the stored handler (plain_premise::stored_handler_hazard)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-suites-jest-test",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1089",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::layer_entry_open",
+   "fixtures": {
+    "proved": "reactive-ir/test-runner-suites-jest-test",
+    "open": "reactive-ir/event-handler-entry-shadow"
+   },
+   "note": "ADR 1089 part E round 2: the creation sits in an intrinsic element's anonymous on* handler, entered by event delivery alone while no code of its realm may reach the stored handler (plain_premise::stored_handler_hazard)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-suites-mocha-module",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 1089",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::layer_entry_open",
+   "fixtures": {
+    "proved": "reactive-ir/test-runner-suites-mocha-module",
+    "open": "reactive-ir/event-handler-entry-shadow"
+   },
+   "note": "ADR 1089 part E round 2: the creation sits in an intrinsic element's anonymous on* handler, entered by event delivery alone while no code of its realm may reach the stored handler (plain_premise::stored_handler_hazard)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-exported-barrel",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1089",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::layer_entry_open",
+   "fixtures": {
+    "proved": "reactive-ir/test-runner-vitest-helper-exported-barrel",
+    "open": "reactive-ir/event-handler-entry-shadow"
+   },
+   "note": "ADR 1089 part E round 2: the creation sits in an intrinsic element's anonymous on* handler, entered by event delivery alone while no code of its realm may reach the stored handler (plain_premise::stored_handler_hazard)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-exported",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1089",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::layer_entry_open",
+   "fixtures": {
+    "proved": "reactive-ir/test-runner-vitest-helper-exported",
+    "open": "reactive-ir/event-handler-entry-shadow"
+   },
+   "note": "ADR 1089 part E round 2: the creation sits in an intrinsic element's anonymous on* handler, entered by event delivery alone while no code of its realm may reach the stored handler (plain_premise::stored_handler_hazard)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-literal-async-destructured",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1089",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::layer_entry_open",
+   "fixtures": {
+    "proved": "reactive-ir/test-runner-vitest-helper-literal-async-destructured",
+    "open": "reactive-ir/event-handler-entry-shadow"
+   },
+   "note": "ADR 1089 part E round 2: the creation sits in an intrinsic element's anonymous on* handler, entered by event delivery alone while no code of its realm may reach the stored handler (plain_premise::stored_handler_hazard)"
   }
  ],
  "renames": []
