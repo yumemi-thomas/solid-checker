@@ -419,6 +419,10 @@ const WHOLE_STORE_READS = {
   "store-array-from": { reads: true, array: true, text: (o) => `Array.from(${o})` },
   "store-array-spread": { reads: true, array: true, text: (o) => `[...${o}]` },
   "store-for-of": { reads: true, array: true, text: (o) => `for (const x of ${o}) { void x; }` },
+  // ADR 1119: a member read in a function a primitive names by its binding and an array element a carrier runs in place; the
+  // position's silent role certified it though `forEach` runs it here.
+  "store-byname-carried": { reads: true, imports: ["createMemo"], text: (o) => `{ const f = () => ${o}.v; createMemo(f); [f].forEach((g) => g()); }` },
+  "store-settled-carried": { reads: true, imports: ["onSettled"], text: (o) => `{ const f = () => { void ${o}.v; }; onSettled(f); [f].forEach((g) => g()); }` },
   ...STORE_DESTRUCTURES,
   "store-keys": { text: (o) => `Object.keys(${o})` },
   "store-has": { text: (o) => `"v" in ${o}` },

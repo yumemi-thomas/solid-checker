@@ -3279,6 +3279,33 @@ pub(crate) fn entry_census_complete_except(
     lookup: &SemanticLookup<'_>,
     accounted_here: &[Span],
 ) -> bool {
+    entry_census(file, function, lookup, accounted_here, false)
+}
+
+/// ADR 1119: [`entry_census_complete`] for a role that rests on the
+/// function's positions: the same census, and a reference that is the whole
+/// initializer of a `const` alias (`const cb1 = cb`) counts when every
+/// reference of the alias is itself accounted for (a position, a resolved
+/// call, a type query), to a bounded depth. The named-callback index admits
+/// a position through such an alias, so the census follows it too.
+pub(crate) fn role_entries_complete(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    entry_census(file, function, lookup, &[], true)
+}
+
+/// How many `const` aliases deep [`role_entries_complete`] follows.
+const ALIAS_DEPTH: usize = 3;
+
+fn entry_census(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+    accounted_here: &[Span],
+    follow_aliases: bool,
+) -> bool {
     if function.method_name.is_some() {
         return false;
     }
@@ -3310,16 +3337,6 @@ pub(crate) fn entry_census_complete_except(
         };
         bindings.push(binding);
     }
-    let mut symbols = Vec::new();
-    for binding in &bindings {
-        let Some(symbol) = lookup.entities().at(path, binding.span) else {
-            return false;
-        };
-        let Some(references) = lookup.symbol_references_if_present(symbol.as_str()) else {
-            return false;
-        };
-        symbols.push(references);
-    }
     if entered_by_unseen_code(file, function, lookup) {
         return false;
     }
@@ -3329,32 +3346,108 @@ pub(crate) fn entry_census_complete_except(
         .map(|(caller, callee)| (caller.path.as_str(), callee.start, callee.end))
         .collect();
     let roles = lookup.named_callback_roles(file);
-    let positions = roles.positions(function.span);
-    symbols.iter().flatten().all(|reference| {
-        let (Ok(start), Ok(end)) = (
-            u32::try_from(reference.start_byte),
-            u32::try_from(reference.end_byte),
-        ) else {
+    let census = Census {
+        file,
+        lookup,
+        accounted: &accounted,
+        accounted_here,
+        positions: roles.positions(function.span),
+        follow_aliases,
+    };
+    bindings
+        .iter()
+        .all(|binding| census.binding_accounted(binding, &bindings, 0))
+}
+
+/// The entries [`entry_census`] counts as seen.
+struct Census<'c, 'a> {
+    file: &'c solid_facts::FileFacts,
+    lookup: &'c SemanticLookup<'a>,
+    accounted: &'c HashSet<(&'c str, u32, u32)>,
+    accounted_here: &'c [Span],
+    positions: &'c [Span],
+    follow_aliases: bool,
+}
+
+impl Census<'_, '_> {
+    /// Whether every compiler reference to `binding` is an entry the census sees: `declarations` are the bindings of the
+    /// function itself (or of the alias), whose own spans are no entry.
+    fn binding_accounted(
+        &self,
+        binding: &solid_facts::ast::NamedSpan,
+        declarations: &[&solid_facts::ast::NamedSpan],
+        depth: usize,
+    ) -> bool {
+        let path = self.file.path.as_str();
+        let Some(symbol) = self.lookup.entities().at(path, binding.span) else {
             return false;
         };
-        if accounted.contains(&(reference.path.as_ref(), start, end)) {
-            return true;
-        }
-        if reference.path.as_ref() != path {
+        let Some(references) = self.lookup.symbol_references_if_present(symbol.as_str()) else {
             return false;
-        }
-        let at = Span::new(start, end);
-        accounted_here.contains(&at)
-            || bindings.iter().any(|binding| at == binding.span)
-            || file.ast.type_queries.iter().any(|query| query.contains(at))
-            || positions.iter().any(|position| {
-                position.contains(at)
-                    && !file
-                        .ast
-                        .functions_within(*position)
-                        .any(|literal| literal.span.contains(at))
-            })
-    })
+        };
+        references.iter().all(|reference| {
+            let (Ok(start), Ok(end)) = (
+                u32::try_from(reference.start_byte),
+                u32::try_from(reference.end_byte),
+            ) else {
+                return false;
+            };
+            if self
+                .accounted
+                .contains(&(reference.path.as_ref(), start, end))
+            {
+                return true;
+            }
+            if reference.path.as_ref() != path {
+                return false;
+            }
+            let at = Span::new(start, end);
+            self.accounted_here.contains(&at)
+                || declarations.iter().any(|declared| at == declared.span)
+                || self
+                    .file
+                    .ast
+                    .type_queries
+                    .iter()
+                    .any(|query| query.contains(at))
+                || self.positions.iter().any(|position| {
+                    position.contains(at)
+                        && !self
+                            .file
+                            .ast
+                            .functions_within(*position)
+                            .any(|literal| literal.span.contains(at))
+                })
+                || (self.follow_aliases && depth < ALIAS_DEPTH && self.alias_accounted(at, depth))
+        })
+    }
+
+    /// Whether `at` is the whole initializer of a `const` alias (`const cb1 = cb`) every reference of which is accounted.
+    fn alias_accounted(&self, at: Span, depth: usize) -> bool {
+        self.file.ast.bindings.iter().any(|alias| {
+            alias.immutable
+                && alias.shape == solid_facts::ast::BindingShape::Identifier
+                && (alias
+                    .initializer
+                    .is_some_and(|initializer| self.file.ast.peel_ts_sugar_span(initializer) == at)
+                    || alias
+                        .initializer_identifier
+                        .as_ref()
+                        .is_some_and(|identifier| identifier.span == at))
+                // An exported alias is entered by modules the census does not hold (`export { cb1 }` is a reference it refuses).
+                && !self.file.ast.exports.iter().any(|export| {
+                    export.span.contains(alias.declaration)
+                        && !self.file.ast.functions.iter().any(|function| {
+                            export.span.contains(function.span)
+                                && function.body.contains(alias.declaration)
+                        })
+                })
+                && match alias.names.as_slice() {
+                    [name] => self.binding_accounted(name, &[name], depth + 1),
+                    _ => false,
+                }
+        })
+    }
 }
 
 /// Whether `inner`, nested in `outer`, runs only where `outer`'s role places

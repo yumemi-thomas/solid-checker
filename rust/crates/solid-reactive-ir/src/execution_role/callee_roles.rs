@@ -363,6 +363,20 @@ pub(super) fn semantic_role_before_awaits(
             return role_arm!("callee_roles.named-callback-write", role);
         }
     } else if let Some(role) = named_callback_execution_role(file, span, lookup) {
+        // ADR 1119: the callback's role is its positions' only when every way into the function is one of them (or a call,
+        // classified at the call): a reference no position records (`[cb].forEach((g) => g())`, a global store, an export)
+        // runs the read where no position says. Silent roles need that proof; a reporting role already reports.
+        if !role.reports_untracked_read()
+            && !role.reports_unplaced()
+            && super::named_callbacks::named_callback_containing(file, span, lookup).is_some_and(
+                |callback| !super::write_roles::role_entries_complete(file, callback, lookup),
+            )
+        {
+            return role_arm!(
+                "callee_roles.named-callback-entries-open",
+                ExecutionRole::Unknown
+            );
+        }
         // ADR 0585: a closure nested in a named tracked callback that is
         // handed on to a call not proven to invoke it there, stored, or
         // written as an attribute value runs when something calls it, which
