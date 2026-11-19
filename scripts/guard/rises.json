@@ -4845,6 +4845,38 @@
    "to": 5,
    "adr": "ADR 1104",
    "fact": "part 2: store-sub-value-flow gains two pattern-parameter rows (a carrier a project function destructures has a row at the read); additions only, all uncertifiable"
+  },
+  {
+   "fixture": "reactive-ir/directive-phases",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1119",
+   "fact": "a named callback's silent role needs a complete entry census (write_roles::role_entries_complete): directive-phases (directive also called and returned), rc21-listener-no-dispatch (shared also handed to window.addEventListener), resolve-until-slots (wait referenced beyond its positions) SC1001 function-run-unplaced; owner-call-saved-callback SC6002 relabel from effect-creation-unaccounted"
+  },
+  {
+   "fixture": "reactive-ir/owner-call-saved-callback",
+   "key": "SC6002 function-run-unplaced",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 1119",
+   "fact": "a named callback's silent role needs a complete entry census (write_roles::role_entries_complete): directive-phases (directive also called and returned), rc21-listener-no-dispatch (shared also handed to window.addEventListener), resolve-until-slots (wait referenced beyond its positions) SC1001 function-run-unplaced; owner-call-saved-callback SC6002 relabel from effect-creation-unaccounted"
+  },
+  {
+   "fixture": "reactive-ir/rc21-listener-no-dispatch",
+   "key": "SC1001 function-run-unplaced",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 1119",
+   "fact": "a named callback's silent role needs a complete entry census (write_roles::role_entries_complete): directive-phases (directive also called and returned), rc21-listener-no-dispatch (shared also handed to window.addEventListener), resolve-until-slots (wait referenced beyond its positions) SC1001 function-run-unplaced; owner-call-saved-callback SC6002 relabel from effect-creation-unaccounted"
+  },
+  {
+   "fixture": "reactive-ir/resolve-until-slots",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1119",
+   "fact": "a named callback's silent role needs a complete entry census (write_roles::role_entries_complete): directive-phases (directive also called and returned), rc21-listener-no-dispatch (shared also handed to window.addEventListener), resolve-until-slots (wait referenced beyond its positions) SC1001 function-run-unplaced; owner-call-saved-callback SC6002 relabel from effect-creation-unaccounted"
   }
  ]
 }

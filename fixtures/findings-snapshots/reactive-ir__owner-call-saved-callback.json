@@ -38,7 +38,7 @@
       "rule": "primitive-in-effect-callback",
       "code": "SC6002",
       "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-call-saved-callback/App.tsx",
       "start": 1759,

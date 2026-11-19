@@ -20,27 +20,21 @@ pub(crate) fn semantic_write_execution_role(
     lookup: &SemanticLookup<'_>,
     root_body: RootBodyGuard,
 ) -> ExecutionRole {
-    crate::role_log::decide_audited(
-        "write",
-        file.path.as_str(),
-        span,
-        || {
-            let allowed = write_allowed_spans(file, allowed, lookup);
-            super::write_components::bounded_walk(lookup, || {
-                semantic_write_execution_role_within(
-                    file,
-                    span,
-                    &allowed,
-                    entities,
-                    symbol_names,
-                    lookup,
-                    root_body,
-                    &mut HashSet::default(),
-                )
-            })
-        },
-        || super::layer_reference_audit(file, span, lookup),
-    )
+    crate::role_log::decide("write", file.path.as_str(), span, || {
+        let allowed = write_allowed_spans(file, allowed, lookup);
+        super::write_components::bounded_walk(lookup, || {
+            semantic_write_execution_role_within(
+                file,
+                span,
+                &allowed,
+                entities,
+                symbol_names,
+                lookup,
+                root_body,
+                &mut HashSet::default(),
+            )
+        })
+    })
 }
 
 /// The regions a write may treat as imperative.

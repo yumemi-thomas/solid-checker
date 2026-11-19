@@ -2774,6 +2774,15 @@
    "expect": {
     "findings": [
      {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": { "textRange": [212, 219] },
+      "fix": { "behavior": "none" },
+      "typescript": { "ownership": "checker-only", "diagnostics": [] }
+     },
+     {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
       "kind": "violation",

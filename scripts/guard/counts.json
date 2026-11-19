@@ -9,7 +9,7 @@
   "SC1001 client-root-unproven": 1,
   "SC1001 compiler-refused-file": 1,
   "SC1001 component-identity-unproven": 136,
-  "SC1001 function-run-unplaced": 1524,
+  "SC1001 function-run-unplaced": 1532,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
   "SC1001 mount-form-window": 2,
@@ -114,7 +114,7 @@
   "SC3001 function-run-unplaced": 34,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 7,
-  "SC3001 leaf-operation-unaccounted": 6862,
+  "SC3001 leaf-operation-unaccounted": 6874,
   "SC3001 leaf-owner-unproven": 67,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
@@ -128,7 +128,7 @@
   "SC4001 handler-member-unresolved": 39,
   "SC4001 handler-spread-unresolved": 59,
   "SC4001 owner-allocation-unproven": 23,
-  "SC4001 owner-callers-unenumerated": 3499,
+  "SC4001 owner-callers-unenumerated": 3505,
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 13,
@@ -163,7 +163,7 @@
   "SC5001 source-module-unresolved": 1,
   "SC5001 source-pending-unproven": 341,
   "SC5003 async-options-opaque": 37,
-  "SC5003 async-provenance-unproven": 154,
+  "SC5003 async-provenance-unproven": 156,
   "SC5003 async-read-caught": 4,
   "SC5003 async-read-unaccounted": 351,
   "SC5003 call-attributed-read": 155,
@@ -188,9 +188,9 @@
   "SC5008 pending-read-unresolved": 23,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5254,
+  "SC6002 effect-creation-unaccounted": 5265,
   "SC6002 effect-owner-unproven": 49,
-  "SC6002 function-run-unplaced": 58,
+  "SC6002 function-run-unplaced": 59,
   "SC6002 generator-step-unplaced": 1,
   "SC6002 package-finding-at-entry": 26,
   "SC6002 package-operation-in-effect-apply": 1,
@@ -4170,6 +4170,19 @@
    "kind": "relabel",
    "relabeledTo": "SC3001 leaf-operation-unaccounted",
    "note": "1b: `String(value())` is proven to answer a primitive (ADR 0320), so the census no longer follows the value through its result and files no carrier row at the call; the read `value()` keeps its own row, and the call keeps the leaf and effect-creation obligations (SC3001, SC6002) that stand where no census row does: still uncertifiable"
+  },
+  {
+   "fixture": "reactive-ir/owner-call-saved-callback",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 5,
+   "to": 4,
+   "adr": "ADR 1119",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs::role_entries_complete",
+   "fixtures": {
+    "proved": "reactive-ir/owner-call-saved-callback",
+    "open": "reactive-ir/owner-call-saved-callback"
+   },
+   "note": "relabel, still uncertifiable: a named callback whose binding has a reference no position or resolved call accounts for (a saved callback) takes no role from its positions, so the effect created in it is function-run-unplaced"
   }
  ],
  "renames": []
