@@ -8,14 +8,6 @@
    "idRegex": "^lg-[a-z-]+-tbl-nodelistof-foreach-zero-",
    "adr": "ADR 1033",
    "why": "`document.querySelectorAll(\"sc-no-such-tag\").forEach(f)`: the site may run, since a real page can hold such elements (its HTML, the project, a package may add them), so the violation is the conditional-render reading and right; only the fuzz page holds none, which is why Chrome never runs `f` there (5 rows: SC2001 x3, SC2002, SC3002)."
-  },
-  {
-   "grid": "lg-recall",
-   "kind": "pending-fix",
-   "item": "dny-legal-mount-disabled-effect",
-   "idRegex": "^lg-strict-read-untracked-dny-legal-mount-disabled-store-(effect-called|effect-named-called|effect-carried|render-effect-carried)-direct-none$",
-   "adr": "ADR 1134",
-   "why": "ADR 1132 review F6 twin: `createEffect` in the onClick of a button disabled by its own JSX from mount. No event reaches the handler (Chrome quiet, runtime-oracle handler-effect-driven `MountDisabled`), yet the checker reports SC4001 missing-owner as a violation: a false positive on main; ADR 1134 (Mac 22) makes it uncertifiable. The driven twin (`Driven`) reports NO_OWNER_EFFECT."
   }
  ]
 }
