@@ -130,6 +130,39 @@ impl<'a> Sinks<'_, 'a> {
             .and_then(|reference| self.semantic.scoping().get_reference(reference).symbol_id())
     }
 
+    /// Whether `object` is a `const` binding of an object literal that defines `name` itself (`const timers = { setTimeout() {} }`): the
+    /// member called is that literal's own, never a window's.
+    fn own_literal_member(&self, object: &'a Expression<'a>, name: &str) -> bool {
+        if !self.resolve {
+            return false;
+        }
+        let Expression::Identifier(identifier) = peel_ts_sugar(object) else {
+            return false;
+        };
+        let Some(symbol) = self.symbol_of(identifier) else {
+            return false;
+        };
+        let nodes = self.semantic.nodes();
+        let declaration = self.semantic.scoping().symbol_declaration(symbol);
+        let declarator = match nodes.kind(declaration) {
+            AstKind::VariableDeclarator(declarator) => declarator,
+            _ => match nodes.parent_kind(declaration) {
+                AstKind::VariableDeclarator(declarator) => declarator,
+                _ => return false,
+            },
+        };
+        declarator.kind == VariableDeclarationKind::Const
+            && declarator.id.is_binding_identifier()
+            && matches!(
+                declarator.init.as_ref().map(peel_ts_sugar),
+                Some(Expression::ObjectExpression(literal)) if literal.properties.iter().any(|property| matches!(
+                    property,
+                    oxc_ast::ast::ObjectPropertyKind::ObjectProperty(property)
+                        if !property.computed && property.key.static_name().is_some_and(|key| key == name)
+                ))
+            )
+    }
+
     /// Whether the expression is a global object (`window`, `globalThis`, …) that no binding of the file declares.
     fn is_global_object(&self, expression: &'a Expression<'a>) -> bool {
         matches!(
@@ -207,7 +240,9 @@ impl<'a> Sinks<'_, 'a> {
         match name.as_str() {
             // A timer given anything but a proven function runs a string. ADR 1125 (G5): on any receiver, not only a global object
             // spelled (`document.defaultView?.setTimeout("…")`): a member so named may be the window's.
-            "setTimeout" | "setInterval" | "setImmediate" | "execScript" => {
+            "setTimeout" | "setInterval" | "setImmediate" | "execScript"
+                if !object.is_some_and(|object| self.own_literal_member(object, &name)) =>
+            {
                 let proven = call
                     .arguments
                     .first()
