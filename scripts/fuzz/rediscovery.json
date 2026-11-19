@@ -34133,5 +34133,14 @@
    "mx-strict-read-untracked-root-store-render-effect-carried-wrapper-none"
   ],
   "rediscovered": "fuzz-focus mx-recall on the new variants store-effect-carried, store-render-effect-carried, store-settled-called (5,814 programs): the reviewed head f1c3f1f02 1454 false cleans; round 2 none"
+ },
+ {
+  "finding": "ADR 1117b: a coercion or `instanceof` hook (`toString`, `valueOf`, `Symbol.toPrimitive`, `Symbol.hasInstance`) an async computation runs after its `await` is SC1002 uncertifiable on the caller's line (ADR 1113), but the judge read Chrome's frame where the compiled program's source map puts it: a template inside `void` at the `void`, `\"a\" + o` at its left operand, `{} instanceof K` inside the `{}`; no frame stood for the row's start, so the smoke judged a false clean",
+  "found": "bundle u CI smoke and #289's smoke (js-toprim, js-hasinst, js-tostring), ADR 1117's JS-semantics axis",
+  "fixed": "ADR 1117b (`call-starts.mjs`: a template's outermost `void`/unary/parenthesized wrapper, a coercing binary's start and an `instanceof`'s left operand stand for the row's start, where the left operand frames nothing itself)",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": ["mx-untracked-read-after-await-js-tostring-x-direct-none", "mx-untracked-read-after-await-js-toprim-x-direct-none", "mx-untracked-read-after-await-js-hasinst-x-direct-none", "mx-untracked-read-after-await-js-tostring-plus-x-direct-none", "mx-untracked-read-after-await-js-hasinst-const-x-direct-none"],
+  "rediscovered": "`focus.mjs --codes UNTRACKED_READ_AFTER_AWAIT --grids mx-recall --ids` with the release checker of bundle u 6e26187f1 (same analysis): the judge before this change false-clean on all five, after it recall-gap; the other 15 js-* cells unchanged"
  }
 ]

@@ -16,6 +16,8 @@
 //   js-hasinst      `{} instanceof JK`, a static `Symbol.hasInstance`
 //   js-computed     `jt[jk]`, a computed key whose `toString` runs
 //   js-tagged       `` jg`x` ``, a tagged template (a call written without parentheses)
+//   js-tostring-*, js-toprim-const, js-hasinst-*: the same hooks in other expression positions (a `const`, an argument, a bare statement, `+`, an `if`): where
+//                   the compiled program's source map frames the hook's caller (ADR 1117b)
 //
 // Seeds still to write (ADR 1117 split): patched standard and DOM prototypes (a getPrototypeOf route, `EventTarget.prototype.addEventListener`), shadow DOM delivery, escaped
 // or concatenated keys, cross-module re-exports (default, star, namespace, barrel), and the review probes of ADRs 1097, 1102b, 1089 E, 1108 and 1098 D.
@@ -36,6 +38,14 @@ const ROUTES = {
   "js-toprim": ['""', (f, n) => [`const ${n} = { [Symbol.toPrimitive]: ${f} }`], (n) => "void `${" + n + "}`"],
   "js-hasinst": ["false", (f, n) => [`const ${n} = { [Symbol.hasInstance]: ${f} } as unknown as new () => object`], (n) => `void ({} instanceof ${n})`],
   "js-computed": ['"k"', (f, n) => [`const ${n} = { toString: ${f} }`, `const ${n}t: Record<string, number> = {}`], (n) => `void ${n}t[${n} as unknown as string]`],
+  "js-tostring-const": ['""', (f, n) => [`const ${n} = { toString: ${f} }`], (n) => "const s = `${" + n + "}`; void s"],
+  "js-tostring-arg": ['""', (f, n) => [`const ${n} = { toString: ${f} }`], (n) => "String(`${" + n + "}`)"],
+  "js-tostring-bare": ['""', (f, n) => [`const ${n} = { toString: ${f} }`], (n) => "`a${" + n + "}`"],
+  "js-tostring-plus": ['""', (f, n) => [`const ${n} = { toString: ${f} }`], (n) => `void ("a" + ${n})`],
+  "js-toprim-const": ['""', (f, n) => [`const ${n} = { [Symbol.toPrimitive]: ${f} }`], (n) => "const s = `${" + n + "}`; void s"],
+  "js-hasinst-const": ["false", (f, n) => [`const ${n} = { [Symbol.hasInstance]: ${f} } as unknown as new () => object`], (n) => `const b = {} instanceof ${n}; void b`],
+  "js-hasinst-if": ["false", (f, n) => [`const ${n} = { [Symbol.hasInstance]: ${f} } as unknown as new () => object`, `const ${n}v: unknown = {}`], (n) => `if (${n}v instanceof ${n}) void 0`],
+  "js-hasinst-bare": ["false", (f, n) => [`const ${n} = { [Symbol.hasInstance]: ${f} } as unknown as new () => object`, `const ${n}v: unknown = {}`], (n) => `${n}v instanceof ${n}`],
   "js-tagged": ['""', (f, n) => [`const ${n} = ${f}`], (n) => `void ${n}\`x\``],
 };
 
