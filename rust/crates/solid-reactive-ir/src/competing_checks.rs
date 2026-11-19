@@ -982,6 +982,7 @@ fn listener_detached_in_owned_leaf(
     removed
         && leaf
             .is_some_and(|callback| component.span.contains(callback) && callback != component.span)
+}
 
 /// ADR 1111: whether `at` (a read: a row's origin, else its location) runs after a call in `refused` (a creation the
 /// effect-callback guard refuses or may refuse) on a run of the function holding that call: written after it in that
