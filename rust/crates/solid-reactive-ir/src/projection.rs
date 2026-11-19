@@ -742,26 +742,64 @@ pub fn project_findings(
             );
         }
     }
+    // ADR 1107: a store destructure SC1003 hands over is read slot by slot as members. Each slot read's finding is SC1003's,
+    // tagged with the row it folds into (worded both ways here, by the catalog); the backend folds the tags after every gate
+    // (`fold_destructure_findings`), so a slot read the gates make an obligation is an obligation at the pattern too. A row
+    // placed through a summary stands at a call but names the slot as its origin.
+    let slot_of = |read: &crate::ReactiveRead| {
+        program
+            .destructure_slots
+            .iter()
+            .find(|slot| slot.slot == read.location || read.origin.as_ref() == Some(&slot.slot))
+    };
+    let fold_target = |slot: &crate::DestructureSlot| {
+        let defect = |uncertain: bool| crate::StaticDefect {
+            kind: crate::StaticDefectKind::ReactiveObjectDestructure {
+                source: slot.source.clone(),
+                component_props: false,
+            },
+            location: slot.pattern.clone(),
+            analysis_context: slot.label.clone(),
+            fixes: vec![],
+            uncertain,
+        };
+        crate::findings::DestructureFold {
+            pattern: slot.pattern.clone(),
+            read_id: String::new(),
+            as_violation: project_finding(FindingSeed::StaticDefect(&defect(false)), catalog),
+            as_obligation: project_finding(FindingSeed::StaticDefect(&defect(true)), catalog),
+        }
+    };
     findings.extend(
         program
             .reads
             .iter()
             .filter(|read| read_withheld(read).is_none())
             .map(|read| {
+                let slot = slot_of(read);
                 let read = if read.uncertain {
                     read
                 } else {
                     open_at.get(&read.location).copied().unwrap_or(read)
                 };
-                project_finding(
+                let mut finding = project_finding(
                     FindingSeed::StrictRead {
                         read,
                         compute_reads_source: program.apply_compute_reads.contains(&read.location),
                         apply_reads_async_source: async_apply_reads.contains(&read.location),
                     },
                     catalog,
-                )
-            }),
+                );
+                if let Some(slot) = slot {
+                    let mut target = fold_target(slot);
+                    target.read_id = std::mem::take(&mut finding.id);
+                    finding.id = target.as_violation.id.clone();
+                    finding.rule = target.as_violation.rule.clone();
+                    finding.fold_into = Some(Box::new(target));
+                }
+                finding
+            })
+            .collect::<Vec<_>>(),
     );
     findings.extend(
         distinct_runs(&program.writes, ReactiveWrite::same_row)
@@ -924,7 +962,12 @@ pub fn project_findings(
     let stage = crate::proof_log::ProofStage::begin(&findings);
     findings.retain_mut(|finding| {
         program.execution_paths.apply_deferred_mount(finding);
-        !catalog.claims_client_runtime(&finding.id) || program.execution_paths.apply(finding)
+        // ADR 1107: a slot read tagged for its destructure's row is claimed as the read it is (SC1001 claims the run).
+        let id = finding
+            .fold_into
+            .as_ref()
+            .map_or(finding.id.as_str(), |fold| fold.read_id.as_str());
+        !catalog.claims_client_runtime(id) || program.execution_paths.apply(finding)
     });
     if let Some(stage) = stage {
         stage.end(crate::DropPass::ExecutionPaths, &findings);

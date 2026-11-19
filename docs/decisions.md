@@ -4313,5 +4313,34 @@ Chrome rc.21 is quiet on the four clean components, and reports PENDING_ASYNC_UN
 <a id="adr-1106"></a>
 ## ADR 1106 — SC1003 is a violation only where setup provably runs the destructure
 **The defect** (a live false clean found checking ADR 1103's siblings; the fuzzer had no plain object destructure). `const { v } = store` in a named helper the component body calls: Chrome reports STRICT_READ_UNTRACKED at the destructure, and nothing reported it. SC1003 skipped any destructure in a body-defined helper ("reads fresh at call time") and in an effect's apply, an `untrack` callback or a directive's application, and took a deferred role from a named callback around a nested function. New variant `store-dstr-object` (`scripts/fuzz/flip-read.mjs`, `const { v } = ${o}; void v;`): on main 28fde14bf, mx-recall 1,938 programs, 530 false cleans; lg-recall 60 false positives (SC1003 violations in event-dispatch, synchronous-fire and listener contexts, where the role is the lexical fallback of the code around the destructure and Chrome reports nothing).
-**Decision** (coordinator, 2026-11-19: fail closed now, member-read placement as ADR 1107). In `component_props_destructure`: a destructure in a body-defined helper is skipped only where the helper provably does not run during setup; one in an effect's apply, an `untrack` callback or a directive's application, and one in a function nested inside a named callback (`nested_in_named_callback`), is uncertifiable; and a violation stands only where the destructure is written where setup runs it (`written_in_setup`: module scope or a component's body, climbing layers that run their function in place there: `layer_run`'s IIFE, standard-library inline callback and in-place project helper, a primitive's in-place slot, a function the compiler places in the render); anywhere else it is uncertifiable. A role from the destructure's own position after an await (`Unreported`) keeps the skip.
+**Decision** (coordinator, 2026-11-19: fail closed now, member-read placement as ADR 1107). In `component_props_destructure`: a destructure in a body-defined helper is skipped only where the helper provably does not run during setup; one in an effect's apply, an `untrack` callback or a directive's application, and one in a function nested inside a named callback (`nested_in_named_callback`), is uncertifiable; (correction from the review of 2026-11-19: in rc.21 an unlabelled `untrack(fn)` closes the strict-read window (`dev-shared.js` 5842-5853), so a destructure there is no read the strict check reports; `createRoot`, `runWithOwner` and `flush(fn)` keep the window; the rows `untrack` itself makes uncertifiable could be silent, which ADR 1107 settles by placement) and a violation stands only where the destructure is written where setup runs it (`written_in_setup`: module scope or a component's body, climbing layers that run their function in place there: `layer_run`'s IIFE, standard-library inline callback and in-place project helper, a primitive's in-place slot, a function the compiler places in the render); anywhere else it is uncertifiable. A role from the destructure's own position after an await (`Unreported`) keeps the skip.
 **Measured** (release, main 28fde14bf vs this; `store-dstr-object` programs). mx-recall 1,938: false-clean 530 to 0 (recall-gap 1,156 to 1,836; agree 246 to 96: 150 violations in flow children, named roots, reactions and a synchronous body dispatch are uncertifiable, as nothing here climbs those layers). lg-recall 6,795 destructure programs: false-positive 60 to 0 (to uncertifiable), clean 1,547 to 988 (559 legal programs of the new variant clean to uncertifiable). Base smoke grids (seed 777) and coverage: nothing moved beyond ADR 1103's. Chrome `runtime-oracle/destructure-store-named-helper`: unproven-clean to covered-uncertifiable. Fixture `destructure-store-placement`. The 559 and the 150 are ADR 1107's to win back (a destructured slot as a member read under SC1001's placement).
+
+<a id="adr-1107"></a>
+## ADR 1107 — A store destructure setup does not provably run takes SC1001's verdict for its slots
+**The gap.** ADR 1106 made SC1003 uncertifiable wherever setup does not provably run a store destructure. That was fail-closed, and it cost the violations SC1001 proves at the member twin (`store.v`) and the legal cleans it proves. The review of ADR 1106 asked for placement first, with these conditions:
+- the rest element reads the whole object;
+- an empty pattern is clean;
+- a computed key is uncertifiable;
+- a slot with a default is still read;
+- the row stays SC1003 at the pattern.
+
+**Decision.**
+- `static_rules.rs` `delegated_destructure_slots`: a store pattern from an identifier, every slot a static identifier key, and not written directly in setup, is handed over. `local_access.rs` and `interproc/reads.rs` read each slot as a synthetic member of the store, so SC1001's placement decides it.
+- `projection.rs` tags each slot's SC1001 finding with the pattern (`DestructureFold`). `diagnostics.rs` folds the tags after every backend gate (`fold_destructure_findings`), before comment suppression:
+  - a violation if any slot is still one;
+  - else an obligation with the first slot's context;
+  - else no row.
+- The execution-paths pass asks the slot read's own rule (`read_id`), so a slot in a server-only arm drops as SC1001's row does. Without it, the first build reported 10 lg-recall `arm-helper` violations at unexecuted sites.
+- An empty pattern is skipped.
+- A computed key, or a `[` in a pattern with a slot the facts leave out, is uncertifiable `store-key-undecided`.
+
+**Measured** (release, main 28fde14bf against this build on ADRs 1106 and 1111):
+- mx-recall `store-dstr-object`: FC 534 to 0, agree 246 to 404.
+- mx-recall `store-dstr-byname`: FC 697 to 0.
+- lg-recall `store-dstr-object`: FP 60 to 0, clean 1,089 to 623, U 163 to 693.
+- lg-recall `store-dstr-byname`: clean 492 to 360. These are the member twin's verdicts: placement, not new holes.
+- Smoke (seed 777) against the ADR 1111 build: lg-combo and lg-src +1 U each (ADR 1106's own move); the rest, mx-census included, identical.
+- Corpus (rc.21 frozen v2) against the ADR 1106 build: no SC1003 row moves; one SC1001 U (`probus-hk` Plan.tsx) beyond ADR 1111's.
+- Fixture `destructure-store-slots` (by name, default, rest, empty, computed). `destructure-store-placement`: `InApply` and `NestedInRef` go to V, as SC1001.
+- Chrome `runtime-oracle/destructure-store-slots`: covered at every site.

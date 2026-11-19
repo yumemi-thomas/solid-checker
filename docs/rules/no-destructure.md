@@ -110,3 +110,5 @@ literal. A read of one member (`createSignal(props.a)`) is `strict-read-untracke
 this rule's. A first parameter is a props pattern whatever follows it.
 
 A violation stands only where setup provably runs the destructure: at module scope or in a component's body, through layers that run in place there. A destructure in a helper the body calls, an effect's apply, an `untrack` callback, a ref's application, a function nested in a named callback, a listener or an object's method is uncertifiable ([ADR 1106](../decisions.md#adr-1106)).
+
+A store destructure written anywhere else takes the verdict [strict-read-untracked](strict-read-untracked.md) gives each slot read as a member (`const { v } = store` is `store.v`): a violation where SC1001 proves one, uncertifiable where it leaves an obligation, no row where it proves a silence ([ADR 1107](../decisions.md#adr-1107)). An empty pattern reads nothing. A computed key is uncertifiable (`store-key-undecided`), and so is any pattern whose text holds a `[` beside a slot the facts leave out.

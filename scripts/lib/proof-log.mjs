@@ -84,6 +84,13 @@ const PREMISE_CONFIRMED = {
     premise.in === undefined && (verdicts.get(`${premise.at[0]}:${premise.at[1]}`) ?? []).some((v) => v.code === "SC5001" && v.kind === "violation"),
   SetterGuardThrowsFirst: (premise, verdicts) =>
     premise.in === undefined && (verdicts.get(`${premise.at[0]}:${premise.at[1]}`) ?? []).some((v) => v.code === "SC2001" && v.kind === "violation"),
+  // ADR 1107: a destructured slot's read folded into its pattern's SC1003 row: that row stands in the final list, at a span containing the slot's.
+  DestructureFolded: (premise, verdicts) =>
+    premise.in === undefined &&
+    [...verdicts].some(([key, list]) => {
+      const [start, end] = key.split(":").map(Number);
+      return start <= premise.at[0] && premise.at[1] <= end && list.some((v) => v.rule === "no-destructure");
+    }),
 };
 
 /**
@@ -346,6 +353,10 @@ function endedByDroppedFinding(site, ruleName, spans, verdicts, drops, attribute
   const typed = (kind) => (last.premises ?? []).some((premise) => premise.kind === kind && Array.isArray(premise.at));
   if (last.pass === "OwnedByEnabledRule") {
     const confirmed = (last.premises ?? []).some((premise) => premise.kind === "PendingThrowsFirst" && Array.isArray(premise.at) && PREMISE_CONFIRMED.PendingThrowsFirst(premise, verdicts) === true);
+    return confirmed ? null : detail;
+  }
+  if (last.pass === "DestructureFold") {
+    const confirmed = (last.premises ?? []).some((premise) => premise.kind === "DestructureFolded" && Array.isArray(premise.at) && PREMISE_CONFIRMED.DestructureFolded(premise, verdicts) === true);
     return confirmed ? null : detail;
   }
   const premise = C4_DROPS[last.pass];
