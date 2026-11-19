@@ -32,6 +32,9 @@ use super::extract_helpers::{literal_property_key, peel_ts_sugar};
 use super::{CodeSinkFact, CodeSinkKind};
 use crate::core::Span;
 
+/// The timers that run a string as code.
+const TIMERS: [&str; 4] = ["setTimeout", "setInterval", "setImmediate", "execScript"];
+
 /// The names of the global objects: a member of one is the global of that name.
 const GLOBAL_OBJECTS: [&str; 7] = [
     "globalThis",
@@ -69,6 +72,13 @@ pub(super) fn code_sinks(semantic: &Semantic<'_>, resolve: bool) -> (Vec<CodeSin
                 {
                     sinks.add(assignment.span, CodeSinkKind::MarkupWrite);
                 }
+            }
+            // ADR 1125 (G5): a timer read as a member anywhere but as a call's callee (`const t = window.setTimeout`) may be handed a string.
+            AstKind::StaticMemberExpression(member)
+                if TIMERS.contains(&member.property.name.as_str())
+                    && !matches!(semantic.nodes().parent_kind(node.id()), AstKind::CallExpression(call) if call.callee.span() == member.span) =>
+            {
+                sinks.add(member.span, CodeSinkKind::StringTimer);
             }
             // `window.eval(..)`, `top.Function(..)`: the global read as a member, by its name.
             AstKind::StaticMemberExpression(member)
@@ -120,6 +130,39 @@ impl<'a> Sinks<'_, 'a> {
             .and_then(|reference| self.semantic.scoping().get_reference(reference).symbol_id())
     }
 
+    /// Whether `object` is a `const` binding of an object literal that defines `name` itself (`const timers = { setTimeout() {} }`): the
+    /// member called is that literal's own, never a window's.
+    fn own_literal_member(&self, object: &'a Expression<'a>, name: &str) -> bool {
+        if !self.resolve {
+            return false;
+        }
+        let Expression::Identifier(identifier) = peel_ts_sugar(object) else {
+            return false;
+        };
+        let Some(symbol) = self.symbol_of(identifier) else {
+            return false;
+        };
+        let nodes = self.semantic.nodes();
+        let declaration = self.semantic.scoping().symbol_declaration(symbol);
+        let declarator = match nodes.kind(declaration) {
+            AstKind::VariableDeclarator(declarator) => declarator,
+            _ => match nodes.parent_kind(declaration) {
+                AstKind::VariableDeclarator(declarator) => declarator,
+                _ => return false,
+            },
+        };
+        declarator.kind == VariableDeclarationKind::Const
+            && declarator.id.is_binding_identifier()
+            && matches!(
+                declarator.init.as_ref().map(peel_ts_sugar),
+                Some(Expression::ObjectExpression(literal)) if literal.properties.iter().any(|property| matches!(
+                    property,
+                    oxc_ast::ast::ObjectPropertyKind::ObjectProperty(property)
+                        if !property.computed && property.key.static_name().is_some_and(|key| key == name)
+                ))
+            )
+    }
+
     /// Whether the expression is a global object (`window`, `globalThis`, …) that no binding of the file declares.
     fn is_global_object(&self, expression: &'a Expression<'a>) -> bool {
         matches!(
@@ -131,6 +174,27 @@ impl<'a> Sinks<'_, 'a> {
 
     /// `eval` and `Function`, by the reference to the global.
     fn reference(&mut self, id: NodeId, identifier: &'a IdentifierReference<'a>) {
+        // ADR 1125 (G5): a global timer named anywhere but as the callee of a call (`const later = setTimeout`,
+        // `setTimeout.call(null, "code")`, `Reflect.apply(setTimeout, …)`) may be handed a string.
+        if TIMERS.contains(&identifier.name.as_str())
+            && (!self.resolve || self.symbol_of(identifier).is_none())
+            // A type position (`ReturnType<typeof setTimeout>`) and `typeof setTimeout` run nothing.
+            && !identifier
+                .reference_id
+                .get()
+                .is_some_and(|reference| self.semantic.scoping().get_reference(reference).is_type())
+            && !matches!(
+                self.semantic.nodes().parent_kind(id),
+                AstKind::CallExpression(call) if call.callee.span() == identifier.span
+            )
+            && !matches!(
+                self.semantic.nodes().parent_kind(id),
+                AstKind::UnaryExpression(unary) if unary.operator == UnaryOperator::Typeof
+            )
+            && !matches!(self.semantic.nodes().parent_kind(id), AstKind::TSTypeQuery(_))
+        {
+            self.add(identifier.span, CodeSinkKind::StringTimer);
+        }
         let kind = match identifier.name.as_str() {
             "eval" => CodeSinkKind::Eval,
             "Function" => CodeSinkKind::FunctionConstructor,
@@ -186,10 +250,12 @@ impl<'a> Sinks<'_, 'a> {
         let Some(name) = name else {
             return;
         };
-        let global_call = object.is_none_or(|object| self.is_global_object(object));
         match name.as_str() {
-            // A timer given anything but a proven function runs a string.
-            "setTimeout" | "setInterval" | "setImmediate" | "execScript" if global_call => {
+            // A timer given anything but a proven function runs a string. ADR 1125 (G5): on any receiver, not only a global object
+            // spelled (`document.defaultView?.setTimeout("…")`): a member so named may be the window's.
+            "setTimeout" | "setInterval" | "setImmediate" | "execScript"
+                if !object.is_some_and(|object| self.own_literal_member(object, &name)) =>
+            {
                 let proven = call
                     .arguments
                     .first()
@@ -349,11 +415,45 @@ impl<'a> Sinks<'_, 'a> {
                                 )
                             })
                     }
+                    // ADR 1125: the first or second parameter of an executor written as the first argument of `new Promise(..)`, the
+                    // global, is the resolving function the constructor hands it (a replaced global `Promise` is a delivery hazard).
+                    AstKind::FormalParameter(parameter) => {
+                        parameter.initializer.is_none()
+                            && matches!(parameter.pattern, BindingPattern::BindingIdentifier(_))
+                            && self.promise_executor_parameter(
+                                scoping.symbol_declaration(symbol),
+                                parameter.span,
+                            )
+                    }
                     _ => false,
                 }
             }
             _ => false,
         }
+    }
+
+    /// Whether the parameter at `id` (span `at`) is the first or second of a function written as the first argument of `new Promise(..)`, where
+    /// `Promise` is the global (no binding of the program's).
+    fn promise_executor_parameter(&self, id: NodeId, at: oxc_span::Span) -> bool {
+        let nodes = self.semantic.nodes();
+        let parameters = nodes.parent_id(id);
+        let function = nodes.parent_id(parameters);
+        let (span, params) = match nodes.kind(function) {
+            AstKind::ArrowFunctionExpression(arrow) => (arrow.span, &arrow.params),
+            AstKind::Function(function) if !function.is_declaration() => {
+                (function.span, &function.params)
+            }
+            _ => return false,
+        };
+        if !params.items.iter().take(2).any(|item| item.span == at) {
+            return false;
+        }
+        nodes.ancestor_kinds(function).take(4).any(|kind| {
+            matches!(kind, AstKind::NewExpression(new)
+                if new.arguments.first().is_some_and(|first| first.span() == span)
+                    && matches!(peel_ts_sugar(&new.callee), Expression::Identifier(callee)
+                        if callee.name == "Promise" && self.symbol_of(callee).is_none()))
+        })
     }
 
     /// Whether the expression is a literal whose markup holds no script, event attribute or `javascript:` URL.

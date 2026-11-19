@@ -6,6 +6,8 @@
 //!   build instead of passing. What syntax cannot settle comes back as operand obligations for the IR half
 //!   (`solid_reactive_ir::kernel`): an identifier must name a binding (a global may be an accessor of the global object), and an
 //!   operand a coercing operator converts must be proved primitive.
+//! - **K4** [`value_inert`]: is an expression's value provably neither called nor kept (it only meets operators, tests, keys or a
+//!   discarded statement)?
 //! - **K3** [`cooked_key`]: the exact property key a key's source text denotes, from the parser's cooked value (escapes decoded,
 //!   numbers canonical), never from trimmed text.
 //!
@@ -399,6 +401,56 @@ pub fn cooked_key(text: &str) -> Option<String> {
         return literal_key_value(property.key.as_expression()?);
     }
     property_key_value(&property.key)
+}
+
+/// K4 (ADR 1125): whether the value of the expression at `node` is provably neither called nor kept ([`crate::ast::ComputedKeyFact::value_inert`]).
+pub(crate) fn value_inert(
+    semantic: &oxc_semantic::Semantic<'_>,
+    node: oxc_semantic::NodeId,
+) -> bool {
+    use oxc_ast::AstKind;
+    let nodes = semantic.nodes();
+    let mut child = node;
+    loop {
+        let parent = nodes.parent_id(child);
+        if parent == child {
+            return false;
+        }
+        let child_span = nodes.kind(child).span();
+        match nodes.kind(parent) {
+            // The value passes through: judge the parent's own position.
+            AstKind::ParenthesizedExpression(_)
+            | AstKind::TSAsExpression(_)
+            | AstKind::TSSatisfiesExpression(_)
+            | AstKind::TSNonNullExpression(_)
+            | AstKind::TSTypeAssertion(_)
+            | AstKind::LogicalExpression(_) => child = parent,
+            AstKind::ConditionalExpression(conditional) => {
+                if conditional.test.span() == child_span {
+                    return true;
+                }
+                child = parent;
+            }
+            AstKind::UnaryExpression(unary) => return unary.operator != UnaryOperator::Delete,
+            AstKind::BinaryExpression(binary) => {
+                return binary.operator != BinaryOperator::Instanceof;
+            }
+            AstKind::IfStatement(statement) => return statement.test.span() == child_span,
+            AstKind::WhileStatement(statement) => return statement.test.span() == child_span,
+            AstKind::DoWhileStatement(statement) => return statement.test.span() == child_span,
+            AstKind::ForStatement(statement) => {
+                return statement
+                    .test
+                    .as_ref()
+                    .is_some_and(|test| test.span() == child_span);
+            }
+            AstKind::ComputedMemberExpression(member) => {
+                return member.expression.span() == child_span;
+            }
+            AstKind::ExpressionStatement(_) => return true,
+            _ => return false,
+        }
+    }
 }
 
 #[cfg(test)]

@@ -452,6 +452,7 @@ fn push_fact(
     site: ComputedKeySite,
     read: oxc_span::Span,
     proof: Option<Proof>,
+    value_inert: bool,
 ) {
     let (proven, texts) = match proof {
         Some(proof) if proof.texts.is_empty() => return,
@@ -470,6 +471,7 @@ fn push_fact(
         site,
         proven,
         texts,
+        value_inert,
     });
 }
 
@@ -489,18 +491,37 @@ pub(super) fn computed_keys(semantic: &Semantic<'_>, resolve: bool) -> Vec<Compu
                 if literal_property_key(&member.expression).is_none() =>
             {
                 let proof = prover.expression(&member.expression, 0);
-                push_fact(&mut facts, ComputedKeySite::Member, member.span, proof);
+                let inert = crate::kernel::value_inert(semantic, node.id());
+                push_fact(
+                    &mut facts,
+                    ComputedKeySite::Member,
+                    member.span,
+                    proof,
+                    inert,
+                );
             }
             AstKind::BindingProperty(property) if property.computed => {
                 if let Some(key) = property.key.as_expression() {
                     let proof = prover.expression(key, 0);
-                    push_fact(&mut facts, ComputedKeySite::Pattern, property.span, proof);
+                    push_fact(
+                        &mut facts,
+                        ComputedKeySite::Pattern,
+                        property.span,
+                        proof,
+                        false,
+                    );
                 }
             }
             AstKind::AssignmentTargetPropertyProperty(property) if property.computed => {
                 if let Some(key) = property.name.as_expression() {
                     let proof = prover.expression(key, 0);
-                    push_fact(&mut facts, ComputedKeySite::Pattern, property.span, proof);
+                    push_fact(
+                        &mut facts,
+                        ComputedKeySite::Pattern,
+                        property.span,
+                        proof,
+                        false,
+                    );
                 }
             }
             AstKind::CallExpression(call) if is_reflect_get(&prover, call) => {
@@ -517,7 +538,13 @@ pub(super) fn computed_keys(semantic: &Semantic<'_>, resolve: bool) -> Vec<Compu
                         .as_expression()
                         .and_then(|key| prover.expression(key, 0)),
                 };
-                push_fact(&mut facts, ComputedKeySite::ReflectGet, call.span, proof);
+                push_fact(
+                    &mut facts,
+                    ComputedKeySite::ReflectGet,
+                    call.span,
+                    proof,
+                    false,
+                );
             }
             _ => {}
         }

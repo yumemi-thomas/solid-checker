@@ -13,10 +13,22 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-object-member/App.tsx",
+      "start": 218,
+      "end": 247,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
+      "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
+      "severity": "error",
       "path": "fixtures/reactive-ir/dependency-source-object-member/App.tsx",
       "start": 218,
       "end": 247,
@@ -31,6 +43,17 @@
       "path": "fixtures/reactive-ir/dependency-source-object-member/App.tsx",
       "start": 253,
       "end": 272,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-source-object-member/App.tsx",
+      "start": 253,
+      "end": 282,
       "fixes": 0
     },
     {
@@ -114,7 +137,7 @@
       "code": "SC4001",
       "kind": "uncertifiable",
       "blocker": "package-finding-at-entry",
-      "severity": "warning",
+      "severity": "error",
       "path": "fixtures/reactive-ir/dependency-source-object-member/App.tsx",
       "start": 445,
       "end": 474,
@@ -134,8 +157,9 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
+      "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
+      "severity": "error",
       "path": "fixtures/reactive-ir/dependency-source-object-member/local.ts",
       "start": 91,
       "end": 100,

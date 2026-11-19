@@ -207,6 +207,39 @@
       "fixes": 0
     },
     {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dispatch-and-copies/App.tsx",
+      "start": 1315,
+      "end": 1333,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dispatch-and-copies/App.tsx",
+      "start": 1341,
+      "end": 1359,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dispatch-and-copies/App.tsx",
+      "start": 1367,
+      "end": 1382,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -353,11 +386,11 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "value-use-unclassified",
+      "blocker": "composite-callee-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dispatch-and-copies/App.tsx",
       "start": 1969,
-      "end": 1973,
+      "end": 1982,
       "fixes": 0
     },
     {
@@ -580,10 +613,32 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dispatch-and-copies/App.tsx",
+      "start": 3041,
+      "end": 3050,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "invocation-context-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dispatch-and-copies/App.tsx",
+      "start": 3041,
+      "end": 3050,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
-      "blocker": "mount-unresolved",
+      "blocker": "call-attributed-read",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dispatch-and-copies/App.tsx",
       "start": 3041,

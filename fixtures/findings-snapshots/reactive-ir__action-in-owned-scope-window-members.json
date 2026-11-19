@@ -33,6 +33,17 @@
       "start": 1005,
       "end": 1018,
       "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-window-members/App.tsx",
+      "start": 1496,
+      "end": 1505,
+      "fixes": 0
     }
   ]
 }

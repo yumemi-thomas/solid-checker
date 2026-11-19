@@ -119,12 +119,19 @@ export function checkLedger({ ledger, base, computed, decisions, read, snapshotO
     if (!open || !keyCount(open, key)) failures.push(`${why}: fixtures.open ${row.fixtures?.open ?? "(none)"} is no snapshot that keeps a ${key} row`);
   };
   for (const { fixture, key, was, now } of falls) {
-    const row = (ledger.drops ?? []).find((drop) => drop.fixture === fixture && drop.path === undefined && drop.key === key && drop.from === was && drop.to === now);
-    if (!row) {
+    // ADR 1125: the same transition can be recorded twice by two changes (drops is append-only, and a later change may move a count the
+    // base had again from the same value): the fall is explained when any of its rows checks out; with none, the first row's failures stand.
+    const rows = (ledger.drops ?? []).filter((drop) => drop.fixture === fixture && drop.path === undefined && drop.key === key && drop.from === was && drop.to === now);
+    if (!rows.length) {
       failures.push(`${fixture ? `${fixture} ` : ""}${key}: ${was} -> ${now}, no drops row: name the fixture, an ADR, a proof, and a fixture on each side`);
       continue;
     }
-    checkRow(row, { fixture, key, was, now });
+    const outcomes = rows.map((row) => {
+      const before = failures.length;
+      checkRow(row, { fixture, key, was, now });
+      return failures.splice(before);
+    });
+    if (!outcomes.some((found) => found.length === 0)) failures.push(...outcomes[0]);
   }
   // A site that lost rows (ADR 0995). When the fixture total fell by exactly what its paths lost, the fixture-level row above answers
   // them; otherwise (a path gained, or the total held) a row left a site and the fixture total hides it: each such path needs its own row.

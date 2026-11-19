@@ -36763,5 +36763,19 @@
    "mx-strict-read-untracked-dny-portal-dispose-store-effect-named-called-direct-none"
   ],
   "rediscovered": "fuzz-focus mx-recall on store-effect-called and store-effect-named-called: main c212ad5f5 (and ADR 1127 alone) 104 false cleans; ADR 1130 none"
+ },
+ {
+  "finding": "main's event-handler read proof (ADR 0639) certified a read in a light-DOM onScroll handler run from an effect's apply other than by a delivery that sets window.event: G1 globalThis.event replaced, round 1 F2 a patched addEventListener running the listener, G6 a replaced document.createElement handing Solid a fake node; G3 a shadow root under a concatenated key (covered on main only by an unrelated row); Chrome rc.21 warns STRICT_READ_UNTRACKED",
+  "found": "the Fable review of ADR 1089 E round 2 (coord-land/review-1089e-r2.md, G1, G3, G6), probed on main c212ad5f5 (sc-scratch mac21/f1125)",
+  "fixed": "ADR 1125 (`event_delivery::scan_delivery_hazard`: the dispatch veto withholds every event proof where delivery is not proven intact; ADR 1115's shadow scan reads decoded keys and code sinks; the owner bit withholds for an apply's delivery where a shadow root may exist)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-evt-apply-event-replaced-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-listener-patch-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-fake-node-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-shadow-concat-signal-direct-none"
+  ],
+  "rediscovered": "focus on the four contexts' mx-recall programs: main 4,386 false cleans (1,462 per context but shadow-concat) and 120 false positives (12 in shadow-concat: an apply's delivery to a shadow listener, a creation reported missing-owner where rc.21 throws PRIMITIVE_IN_EFFECT_CALLBACK); FIXED here (0 false cleans, 0 false positives over 8,600 programs)"
  }
 ]

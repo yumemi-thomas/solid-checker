@@ -24,6 +24,28 @@
       "fixes": 0
     },
     {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-callback-roles/App.tsx",
+      "start": 612,
+      "end": 628,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-callback-roles/App.tsx",
+      "start": 621,
+      "end": 627,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -43,6 +65,28 @@
       "path": "fixtures/reactive-ir/prop-callback-roles/App.tsx",
       "start": 726,
       "end": 772,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-callback-roles/App.tsx",
+      "start": 752,
+      "end": 768,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-callback-roles/App.tsx",
+      "start": 761,
+      "end": 767,
       "fixes": 0
     },
     {
@@ -68,6 +112,28 @@
       "fixes": 0
     },
     {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-callback-roles/App.tsx",
+      "start": 890,
+      "end": 906,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-callback-roles/App.tsx",
+      "start": 899,
+      "end": 905,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -87,6 +153,39 @@
       "path": "fixtures/reactive-ir/prop-callback-roles/App.tsx",
       "start": 1006,
       "end": 1054,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-callback-roles/App.tsx",
+      "start": 1034,
+      "end": 1050,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-callback-roles/App.tsx",
+      "start": 1043,
+      "end": 1049,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/prop-callback-roles/App.tsx",
+      "start": 1221,
+      "end": 1235,
       "fixes": 0
     },
     {
@@ -716,6 +815,17 @@
       "path": "fixtures/reactive-ir/prop-callback-roles/buttons.tsx",
       "start": 439,
       "end": 450,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-callback-roles/buttons.tsx",
+      "start": 583,
+      "end": 596,
       "fixes": 0
     },
     {
