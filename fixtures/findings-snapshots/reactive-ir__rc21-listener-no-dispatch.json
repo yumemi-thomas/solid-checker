@@ -11,6 +11,17 @@
       "start": 112,
       "end": 119,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-listener-no-dispatch/App.tsx",
+      "start": 164,
+      "end": 171,
+      "fixes": 0
     }
   ]
 }

@@ -76,6 +76,11 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   makes the store (a `createStore` slot, a projection a primitive or a hook returns
   whole) and whatever TypeScript wraps the receiver (`as`, `!`, `satisfies`;
   ADR 1121).
+  A function a primitive names by its binding (`createMemo(cb)`, `onClick={cb}`,
+  `onSettled(cb)`) takes that position's role only when every reference to it is
+  a position, a resolved call or a `const` alias accounted the same way; any other
+  (`[cb].forEach((g) => g())`, a global store, a returned object) leaves the read
+  uncertifiable (ADR 1119).
 - **Plain assignment targets are writes, not reads.** `store.name = next` is
   diagnosed by `no-store-mutation-outside-setter` without also reporting `store.name` here.
   Only the member that *is* the written target is exempt: read-modify-write
