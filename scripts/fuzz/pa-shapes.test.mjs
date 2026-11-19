@@ -20,9 +20,9 @@ const built = (context) => {
 };
 
 describe("the pa contexts (a package the build does not read may call an action)", () => {
-  it("are thirty package kinds on five hosts, misuse where the call throws, each name parsed back", () => {
-    expect(PA_PACKAGE_KINDS).toHaveLength(30);
-    expect(PA_CONTEXT_NAMES).toHaveLength(150);
+  it("are thirty-one package kinds on five hosts, misuse where the call throws, each name parsed back", () => {
+    expect(PA_PACKAGE_KINDS).toHaveLength(31);
+    expect(PA_CONTEXT_NAMES).toHaveLength(155);
     // Legal on every host: the package that calls nothing (`pure`), loads on a branch that never runs (`dyn`), and the symbol-keyed writer (`gwritesym`).
     const quiet = ["pure", "dyn", "gwritesym"];
     for (const name of PA_CONTEXT_NAMES) {
@@ -62,6 +62,8 @@ describe("the pa contexts (a package the build does not read may call an action)
     expect(paPackageFiles("gproto")["index.js"]).toContain("Float32Array.prototype.reverse = ");
     expect(paPackageFiles("gview")["index.js"]).toContain("event.view.btoa = ");
     for (const kind of ["gproto", "gview"]) expect(paPackageFiles(kind)["index.js"]).toContain('from "solid-js"');
+    // ADR 1108 part 2: `btoa` through a pattern's `view`.
+    expect(paPackageFiles("gviewpattern")["index.js"]).toContain("({ view }) => {");
     // ADR 0974: the writes the scan must see besides `=`: a logical assignment, `Reflect.apply`, a writer held by a name, a bound one; and a global redefined with a getter.
     expect(paPackageFiles("gwriteand")["index.js"]).toContain("globalThis.btoa &&= ");
     expect(paPackageFiles("gwritereflect")["index.js"]).toContain("Reflect.apply(Object.assign, null, [globalThis, {");

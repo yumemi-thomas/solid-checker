@@ -59,13 +59,20 @@ struct DemandSpans {
 }
 
 /// ADR 1077: the static `x.defaultView` members of a file (a computed key is
-/// not asked).
+/// not asked). ADR 1108 part 2: and the other members the package scan takes
+/// for the global object, `x.view` and `x.source`, with the property's name.
 pub(crate) fn default_view_members(
     file: &FileFacts,
-) -> impl Iterator<Item = &solid_facts::ast::MemberFact> {
-    file.ast.members.iter().filter(|member| {
-        !file.ast.computed_members.contains(&member.span)
-            && file.source_text(member.property) == Some("defaultView")
+) -> impl Iterator<Item = (&solid_facts::ast::MemberFact, &'static str)> {
+    file.ast.members.iter().filter_map(|member| {
+        if file.ast.computed_members.contains(&member.span) {
+            return None;
+        }
+        let name = file.source_text(member.property)?;
+        ["defaultView", "view", "source"]
+            .into_iter()
+            .find(|known| *known == name)
+            .map(|known| (member, known))
     })
 }
 
@@ -151,7 +158,7 @@ fn plan_file(
     }
     // ADR 1077: whether a static `x.defaultView` holds no global object, for the package walk: the value's primitive domain, and the receiver's types, as
     // written and with assertions peeled. No symbol is observed there.
-    for member in default_view_members(file) {
+    for (member, _) in default_view_members(file) {
         spans.default_view_value_spans.insert(member.span);
         spans.default_view_receiver_spans.insert(member.object);
         spans

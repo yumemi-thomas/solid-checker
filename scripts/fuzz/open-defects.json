@@ -101,7 +101,197 @@
    "note": "ADR 0815 smoke, seed 21400934: e.g. mx-until-in-reactive-scope-effect-compute-x-direct-none. Rows are held by id in open-defects-rows.json; this names the family"
   }
  ],
- "patterns": [],
+ "patterns": [
+  {
+   "id": "pkgaction/global-route-contentwindow-parent",
+   "item": "ADR 1108 part 2 named miss (Chrome-confirmed, rc.21): a frame's `contentWindow.parent` (the window that holds the frame)",
+   "outcome": "false-clean",
+   "codes": [
+    "ACTION_CALLED_IN_OWNED_SCOPE"
+   ],
+   "certified": false
+  },
+  {
+   "id": "pkgaction/global-route-event-target",
+   "item": "ADR 1108 part 2 named miss (Chrome-confirmed, rc.21): an event's `target` that is the window (`addEventListener(…, (e) => { e.target.btoa = … }); dispatchEvent(…)`)",
+   "outcome": "false-clean",
+   "codes": [
+    "ACTION_CALLED_IN_OWNED_SCOPE"
+   ],
+   "certified": false
+  },
+  {
+   "id": "pkgaction/global-route-listener-this",
+   "item": "ADR 1108 part 2 named miss (Chrome-confirmed, rc.21): `this` in a listener on the window (`addEventListener(…, function () { this.btoa = … })`)",
+   "outcome": "false-clean",
+   "codes": [
+    "ACTION_CALLED_IN_OWNED_SCOPE"
+   ],
+   "certified": false
+  },
+  {
+   "id": "pkgaction/proto-iter-forof",
+   "item": "ADR 1108 part 2 named miss (Chrome-confirmed, rc.21): a `for…of` after a package writes `Float32Array.prototype[Symbol.iterator]`",
+   "outcome": "false-clean",
+   "codes": [
+    "ACTION_CALLED_IN_OWNED_SCOPE"
+   ],
+   "certified": false
+  },
+  {
+   "id": "pkgaction/proto-iter-map",
+   "item": "ADR 1108 part 2 named miss (Chrome-confirmed, rc.21): the `Map` constructor after a package writes `Array.prototype[Symbol.iterator]`",
+   "outcome": "false-clean",
+   "codes": [
+    "ACTION_CALLED_IN_OWNED_SCOPE"
+   ],
+   "certified": false
+  },
+  {
+   "id": "pkgaction/proto-iter-pattern",
+   "item": "ADR 1108 part 2 named miss (Chrome-confirmed, rc.21): an array pattern after a package writes `Float32Array.prototype[Symbol.iterator]`",
+   "outcome": "false-clean",
+   "codes": [
+    "ACTION_CALLED_IN_OWNED_SCOPE"
+   ],
+   "certified": false
+  },
+  {
+   "id": "pkgaction/proto-iter-set",
+   "item": "ADR 1108 part 2 named miss (Chrome-confirmed, rc.21): the `Set` constructor after a package writes `Float32Array.prototype[Symbol.iterator]`",
+   "outcome": "false-clean",
+   "codes": [
+    "ACTION_CALLED_IN_OWNED_SCOPE"
+   ],
+   "certified": false
+  },
+  {
+   "id": "pkgaction/proto-iter-spread",
+   "item": "ADR 1108 part 2 named miss (Chrome-confirmed, rc.21): a spread after a package writes `Float32Array.prototype[Symbol.iterator]`",
+   "outcome": "false-clean",
+   "codes": [
+    "ACTION_CALLED_IN_OWNED_SCOPE"
+   ],
+   "certified": false
+  },
+  {
+   "id": "pkgaction/proto-site-accessor",
+   "item": "ADR 1108 part 2 named miss (Chrome-confirmed, rc.21): an accessor a package defines on a built-in's prototype, read for its value (`DataView.prototype.byteLength`)",
+   "outcome": "false-clean",
+   "codes": [
+    "ACTION_CALLED_IN_OWNED_SCOPE"
+   ],
+   "certified": false
+  },
+  {
+   "id": "pkgaction/proto-site-any",
+   "item": "ADR 1108 part 2 named miss (Chrome-confirmed, rc.21): a written method called on a receiver typed `any`",
+   "outcome": "false-clean",
+   "codes": [
+    "ACTION_CALLED_IN_OWNED_SCOPE"
+   ],
+   "certified": false
+  },
+  {
+   "id": "pkgaction/proto-site-apply",
+   "item": "ADR 1108 part 2 named miss (Chrome-confirmed, rc.21): `.apply` of a written method",
+   "outcome": "false-clean",
+   "codes": [
+    "ACTION_CALLED_IN_OWNED_SCOPE"
+   ],
+   "certified": false
+  },
+  {
+   "id": "pkgaction/proto-site-bare-eventtarget",
+   "item": "ADR 1108 part 2 named miss (Chrome-confirmed, rc.21): a bare global call (`dispatchEvent(…)`) after `EventTarget.prototype.dispatchEvent` is written: the window inherits it",
+   "outcome": "false-clean",
+   "codes": [
+    "ACTION_CALLED_IN_OWNED_SCOPE"
+   ],
+   "certified": false
+  },
+  {
+   "id": "pkgaction/proto-site-call",
+   "item": "ADR 1108 part 2 named miss (Chrome-confirmed, rc.21): `.call` of a written method (`a.reverse.call(a)`)",
+   "outcome": "false-clean",
+   "codes": [
+    "ACTION_CALLED_IN_OWNED_SCOPE"
+   ],
+   "certified": false
+  },
+  {
+   "id": "pkgaction/proto-site-destructured",
+   "item": "ADR 1108 part 2 named miss (Chrome-confirmed, rc.21): a written method destructured, then called (`const { reverse } = a; reverse()`)",
+   "outcome": "false-clean",
+   "codes": [
+    "ACTION_CALLED_IN_OWNED_SCOPE"
+   ],
+   "certified": false
+  },
+  {
+   "id": "pkgaction/proto-site-interface",
+   "item": "ADR 1108 part 2 named miss (Chrome-confirmed, rc.21): a written method called on a receiver typed by a project interface",
+   "outcome": "false-clean",
+   "codes": [
+    "ACTION_CALLED_IN_OWNED_SCOPE"
+   ],
+   "certified": false
+  },
+  {
+   "id": "pkgaction/proto-site-json-tojson",
+   "item": "ADR 1108 part 2 named miss (Chrome-confirmed, rc.21): the library's implicit call: `JSON.stringify` calls the written `Date.prototype.toJSON`",
+   "outcome": "false-clean",
+   "codes": [
+    "ACTION_CALLED_IN_OWNED_SCOPE"
+   ],
+   "certified": false
+  },
+  {
+   "id": "pkgaction/proto-site-map-set",
+   "item": "ADR 1108 part 2 named miss (Chrome-confirmed, rc.21): the library's implicit call: the `Map` constructor calls the written `set`",
+   "outcome": "false-clean",
+   "codes": [
+    "ACTION_CALLED_IN_OWNED_SCOPE"
+   ],
+   "certified": false
+  },
+  {
+   "id": "pkgaction/proto-site-reflect-apply",
+   "item": "ADR 1108 part 2 named miss (Chrome-confirmed, rc.21): `Reflect.apply` of a written method",
+   "outcome": "false-clean",
+   "codes": [
+    "ACTION_CALLED_IN_OWNED_SCOPE"
+   ],
+   "certified": false
+  },
+  {
+   "id": "pkgaction/proto-site-template-join",
+   "item": "ADR 1108 part 2 named miss (Chrome-confirmed, rc.21): the library's implicit call: an array in a template literal calls the written `join`",
+   "outcome": "false-clean",
+   "codes": [
+    "ACTION_CALLED_IN_OWNED_SCOPE"
+   ],
+   "certified": false
+  },
+  {
+   "id": "pkgaction/proto-site-test-exec",
+   "item": "ADR 1108 part 2 named miss (Chrome-confirmed, rc.21): the library's implicit call: `RegExp.prototype.test` calls the written `exec`",
+   "outcome": "false-clean",
+   "codes": [
+    "ACTION_CALLED_IN_OWNED_SCOPE"
+   ],
+   "certified": false
+  },
+  {
+   "id": "pkgaction/proto-site-tostring-join",
+   "item": "ADR 1108 part 2 named miss (Chrome-confirmed, rc.21): the library's implicit call: `Array.prototype.toString` calls the written `join`",
+   "outcome": "false-clean",
+   "codes": [
+    "ACTION_CALLED_IN_OWNED_SCOPE"
+   ],
+   "certified": false
+  }
+ ],
  "notGenerated": [
   {
    "item": "section 4 axes",

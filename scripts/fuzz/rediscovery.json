@@ -26746,5 +26746,24 @@
   "code": "UNTRACKED_READ_AFTER_AWAIT",
   "ids": ["mx-untracked-read-after-await-pu-bare-in-x-direct-none"],
   "rediscovered": "main 28fde14bf: false-clean (focus exit 1); this fix: recall-gap (an uncertifiable SC1002 row at the operator, focus exit 0)"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent at a call of a global the library declares that an installed package replaced through `view`, `source` or `defaultView` read by an object pattern (`({ view }) => { view.btoa = … }`)",
+  "found": "Fable review of ADR 1108 part 1 (1e441fa3e); pattern lane `pkgaction/global-route-pattern-{view,source,defaultview}` and runtime oracle probes, Chrome-confirmed false cleans",
+  "fixed": "ADR 1108 part 2, the split (`module_reach.rs`: a `BindingProperty` keyed by a `WINDOW_MEMBERS` name is the global object at each use of its binding)",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pa-gviewpattern-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gviewpattern-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gviewpattern-root-x-direct-none"
+  ],
+  "rediscovered": "new context pa-gviewpattern (pa-shapes.mjs): `focus.mjs --codes ACTION_CALLED_IN_OWNED_SCOPE --grids mx-recall --boundary both --ids`, release builds: part 1 (1e441fa3e) exits 1, false-clean 3 in both boundaries; the split exits 0, recall-gap 3 (the SC2002 row at the call, uncertifiable); the lg-recall twins (timer, micro) clean on both. `({ source })` needs a message the browser posts after the hosts run (part 1's reason for gsource) and `({ defaultView })` is the same scan rule: both held by the pattern lane (false clean on part 1, fine here), the runtime oracle case package-window-patterns (3 unproven-clean on part 1, all covered here) and fixture action-in-owned-scope-window-patterns"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent at a call of a library method an installed package wrote on a built-in's prototype reached by a writer shape part 1 did not follow: `Object.getPrototypeOf(Int8Array).prototype`, `globalThis[K]` and `X[P]` by a constant key, `const { prototype } = X`, a list of built-ins given to `forEach`, `event.view.X.prototype`, a built-in bound to a name, a prototype reached through a value and given to `Object.assign`",
+  "found": "Fable review of ADR 1108 part 1; pattern lane `pkgaction/proto-writer-*` (three lane false cleans; the other five have an SC9012 `standard-member-impostor` row the lane counts) and the runtime oracle (all eight unproven-clean on part 1)",
+  "fixed": "ADR 1108 part 2, the split (`module_reach.rs` `prototype_of`, `builtin_constructor`, the destructured `prototype`, a value-reached prototype followed to a writer)",
+  "outside": "a writer shape is the package file's, which the pa contexts fix per kind: they are held by the pattern lane (`proto-writer-globalthis-key`, `-ctor-key`, `-bound-name` false clean on 1e441fa3e, fine on the split), the runtime oracle probes (the eight `p2-proto-writer-*` covered-uncertifiable on the split) and case package-prototype-writer-shapes (8 unproven-clean on part 1, 9 sites all covered on the split), fixture action-in-owned-scope-prototype-writer-shapes and `module_reach` unit test `the_part_two_writer_shapes_write_the_member`"
  }
 ]

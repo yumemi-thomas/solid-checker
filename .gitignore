@@ -1906,6 +1906,14 @@ packages/wasm/owned/
 !fixtures/reactive-ir/action-in-owned-scope-window-members/node_modules/**
 !fixtures/runtime-oracle/package-prototype-writes/node_modules/
 !fixtures/runtime-oracle/package-prototype-writes/node_modules/**
+!fixtures/reactive-ir/action-in-owned-scope-prototype-writer-shapes/node_modules/
+!fixtures/reactive-ir/action-in-owned-scope-prototype-writer-shapes/node_modules/**
+!fixtures/runtime-oracle/package-prototype-writer-shapes/node_modules/
+!fixtures/runtime-oracle/package-prototype-writer-shapes/node_modules/**
+!fixtures/reactive-ir/action-in-owned-scope-window-patterns/node_modules/
+!fixtures/reactive-ir/action-in-owned-scope-window-patterns/node_modules/**
+!fixtures/runtime-oracle/package-window-patterns/node_modules/
+!fixtures/runtime-oracle/package-window-patterns/node_modules/**
 !fixtures/runtime-oracle/package-window-members/node_modules/
 !fixtures/runtime-oracle/package-window-members/node_modules/**
 !fixtures/reactive-ir/event-dispatch-shadow/variants/shadow/node_modules/
