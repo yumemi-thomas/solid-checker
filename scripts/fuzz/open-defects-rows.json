@@ -19,7 +19,9 @@
   },
   "mx-recall": {
    "mx-settled-cleanup-unowned-flw-flow-for-async-x-direct-none": {"outcome":"halted-claim","cause":"R-halted","rules":["missing-owner"]},
-   "mx-settled-cleanup-unowned-flw-flow-for-async-x-ns-exported-none": {"outcome":"halted-claim","cause":"R-halted","rules":["missing-owner"]}
+   "mx-settled-cleanup-unowned-flw-flow-for-async-x-ns-exported-none": {"outcome":"halted-claim","cause":"R-halted","rules":["missing-owner"]},
+   "mx-untracked-read-after-await-js-hasinst-x-direct-none": {"outcome":"false-clean","cause":"ADR 1117: js coercion hooks after await: no SC1002 site at the hook call","owner":"W4"},
+   "mx-untracked-read-after-await-js-toprim-x-direct-none": {"outcome":"false-clean","cause":"ADR 1117: js coercion hooks after await: no SC1002 site at the hook call","owner":"W4"}
   }
  }
 }
