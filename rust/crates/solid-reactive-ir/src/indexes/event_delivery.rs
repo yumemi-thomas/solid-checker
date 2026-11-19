@@ -1349,6 +1349,7 @@ const DELIVERY_KEYS: &[&str] = &[
     "appendChild",
     "insertBefore",
     "replaceChild",
+    "__proto__",
 ];
 
 /// The reflective routes by which code may define such a name under a key the facts do not decode.
@@ -1356,7 +1357,6 @@ const DELIVERY_ROUTES: &[&str] = &[
     "defineProperty",
     "defineProperties",
     "setPrototypeOf",
-    "__proto__",
     "__defineGetter__",
     "__defineSetter__",
 ];

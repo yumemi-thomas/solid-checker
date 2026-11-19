@@ -496,7 +496,9 @@ impl<'a> Sites<'_, 'a> {
 
     /// A member written under `key`.
     fn written(&mut self, at: oxc_span::Span, key: &str) {
-        if is_standard_member(key) {
+        // ADR 1125: a written `__proto__` swaps the receiver's prototype (an element's or a prototype's own), a write a consumer refuses by
+        // its key; a literal's `__proto__:` sets only the new object's.
+        if is_standard_member(key) || key == "__proto__" {
             self.add(at, PremiseClause::StandardKeyWrite, key);
         }
         if HOOK_KEYS.contains(&key) {
