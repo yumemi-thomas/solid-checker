@@ -237,7 +237,18 @@ impl SemanticLookup<'_> {
     /// ADR 1115: whether some listener of the program may sit in a shadow tree ([`scan_shadow_roots`]), scanned once per build.
     pub(crate) fn shadow_roots_possible(&self) -> bool {
         crate::base::reads::note(crate::base::reads::Section::ShadowRoots);
-        *self.shadow_roots.get_or_init(|| scan_shadow_roots(self))
+        self.shadow_roots_answer()
+    }
+
+    /// [`Self::shadow_roots_possible`] with no section noted: for [`Self::dispatch_veto`], whose readers note
+    /// `Section::DispatchVeto` (its memo and fingerprint are the whole veto, this answer included). A section no memo stands for
+    /// would make every reader of the veto read the whole program.
+    fn shadow_roots_answer(&self) -> bool {
+        // ADR 1125: per-build existential, as `event_delivery_intact`: the section's fingerprint recomputes the scan (its realm walk
+        // reads every file's loads), so the scan's raw reads are not each reader's.
+        *self
+            .shadow_roots
+            .get_or_init(|| crate::base::reads::suppress(|| scan_shadow_roots(self)))
     }
 
     /// ADR 0634: some analyzed file names `markRaw` or writes a `shallow`
@@ -358,6 +369,11 @@ impl SemanticLookup<'_> {
     /// ([`scan_delivery_hazard`]), scanned once per build.
     pub(crate) fn event_delivery_intact(&self) -> bool {
         crate::base::reads::note(crate::base::reads::Section::EventDeliveryIntact);
+        self.delivery_intact_answer()
+    }
+
+    /// [`Self::event_delivery_intact`] with no section noted, for [`Self::dispatch_veto`] (see [`Self::shadow_roots_answer`]).
+    pub(crate) fn delivery_intact_answer(&self) -> bool {
         // Per-build existential: the section's fingerprint recomputes the whole scan (`Section::EventDeliveryIntact`), so the scan's own
         // raw reads are not each reader's (every dispatch-veto reader asks this first).
         !*self
@@ -402,7 +418,7 @@ impl SemanticLookup<'_> {
         VetoComputation::assert_not_computing();
         // ADR 1125: every event proof rests on handlers running only as DOM deliveries that set `window.event`. Where code may replace
         // that global, the listener API or the nodes Solid creates, a handler may run anywhere, with no event: withhold them all.
-        if !self.event_delivery_intact() {
+        if !self.delivery_intact_answer() {
             return (true, true, true, true, true);
         }
         if !self.hazard_present(crate::base::Hazard::SynchronousDispatch) {
@@ -418,11 +434,11 @@ impl SemanticLookup<'_> {
             // effect-callback window (rc.21 throws PRIMITIVE_IN_EFFECT_CALLBACK at a creation there, not a missing owner).
             sites.iter().any(DispatchSite::withholds_owner_proofs)
                 || (delivers_in_effect_apply
-                    && (self.flush_referenced() || self.shadow_roots_possible())),
+                    && (self.flush_referenced() || self.shadow_roots_answer())),
             // ADR 1115: a delivery's read proof that rests on its event holds only where no listener sits in a shadow tree.
             sites.iter().any(DispatchSite::withholds_read_proofs)
                 || (sites.iter().any(DispatchSite::read_proof_rests_on_event)
-                    && self.shadow_roots_possible()),
+                    && self.shadow_roots_answer()),
             sites.iter().any(DispatchSite::withholds_flush_proofs),
             sites.iter().any(DispatchSite::withholds_listener_proofs),
             delivers_in_effect_apply,
@@ -453,7 +469,7 @@ impl SemanticLookup<'_> {
                     caller: site.caller.map(|caller| caller.word().to_owned()),
                     withholds_owner_proofs: site.withholds_owner_proofs()
                         || (site.delivers_in_effect_apply()
-                            && (self.flush_referenced() || self.shadow_roots_possible())),
+                            && (self.flush_referenced() || self.shadow_roots_answer())),
                     withholds_read_proofs: site.withholds_read_proofs(),
                 })
             })
