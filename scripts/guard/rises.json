@@ -4845,6 +4845,38 @@
    "to": 5,
    "adr": "ADR 1104",
    "fact": "part 2: store-sub-value-flow gains two pattern-parameter rows (a carrier a project function destructures has a row at the read); additions only, all uncertifiable"
+  },
+  {
+   "fixture": "reactive-ir/destructure-store-placement",
+   "key": "SC1003 callee-callback-timing",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1107",
+   "fact": "destructure-store-placement: a store destructure setup does not provably run takes SC1001's blocker for its slots (callee-callback-timing, host-callback-timing, summary-read-unplaced, relabels of ADR 1106's U); store-strict-read-keys DestructuredThen: a destructure whose every slot is `then` is store-key-undecided (the then Get does not warn; main's V was a false positive)"
+  },
+  {
+   "fixture": "reactive-ir/destructure-store-placement",
+   "key": "SC1003 host-callback-timing",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1107",
+   "fact": "destructure-store-placement: a store destructure setup does not provably run takes SC1001's blocker for its slots (callee-callback-timing, host-callback-timing, summary-read-unplaced, relabels of ADR 1106's U); store-strict-read-keys DestructuredThen: a destructure whose every slot is `then` is store-key-undecided (the then Get does not warn; main's V was a false positive)"
+  },
+  {
+   "fixture": "reactive-ir/destructure-store-placement",
+   "key": "SC1003 summary-read-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1107",
+   "fact": "destructure-store-placement: a store destructure setup does not provably run takes SC1001's blocker for its slots (callee-callback-timing, host-callback-timing, summary-read-unplaced, relabels of ADR 1106's U); store-strict-read-keys DestructuredThen: a destructure whose every slot is `then` is store-key-undecided (the then Get does not warn; main's V was a false positive)"
+  },
+  {
+   "fixture": "reactive-ir/store-strict-read-keys",
+   "key": "SC1003 store-key-undecided",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1107",
+   "fact": "destructure-store-placement: a store destructure setup does not provably run takes SC1001's blocker for its slots (callee-callback-timing, host-callback-timing, summary-read-unplaced, relabels of ADR 1106's U); store-strict-read-keys DestructuredThen: a destructure whose every slot is `then` is store-key-undecided (the then Get does not warn; main's V was a false positive)"
   }
  ]
 }

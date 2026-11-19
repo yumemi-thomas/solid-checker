@@ -1,4 +1,4 @@
-import { createMemo, createSignal, createStore } from "solid-js";
+import { createEffect, createMemo, createSignal, createStore } from "solid-js";
 
 // ADR 1107: SC1003's row at a store destructure takes the verdict SC1001 gives its slots read as members (`const { v } = s`
 // is `s.v`), so the row stands where SC1001's placement does.
@@ -44,6 +44,46 @@ function ComputedKey() {
   return <i>{v}</i>;
 }
 
+// Round 2 (Fable review, F1): a sub-pattern that binds no name still reads its property.
+function EmptySubPattern() {
+  const [store] = createStore({ a: { b: 1 }, items: [1] });
+  const { a: {} } = store;
+  const { items: [] } = store;
+  return <i />;
+}
+
+// Round 2 (F1): a sibling sub-pattern is not handed over with the named slot (the counts matched by coincidence).
+function SiblingEmptyInHelper() {
+  const [store] = createStore({ v: 0, a: { b: 1 } });
+  const read = () => {
+    const { v, a: {} } = store;
+    return v;
+  };
+  read();
+  return <i />;
+}
+
+// Round 2 (P1): a slot after an undecided `then` is read too.
+function ThenFirstInApply() {
+  const [store] = createStore({ then: 1, v: 0 });
+  createEffect(
+    () => 1,
+    () => {
+      const { then, v } = store;
+      void then;
+      void v;
+    },
+  );
+  return <i />;
+}
+
+// Round 2 (P2): a quoted key is a decided key.
+function QuotedKey() {
+  const [store] = createStore({ v: 0 });
+  const { "v": x } = store;
+  return <i>{x}</i>;
+}
+
 export function Page() {
   const [count] = createSignal(0);
   return (
@@ -54,6 +94,10 @@ export function Page() {
       <RestElement />
       <EmptyPattern />
       <ComputedKey />
+      <EmptySubPattern />
+      <SiblingEmptyInHelper />
+      <ThenFirstInApply />
+      <QuotedKey />
     </div>
   );
 }

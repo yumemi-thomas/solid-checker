@@ -64,6 +64,14 @@
    "removed": 5,
    "adr": "ADR 1068",
    "why": "SC2008 at a flush that provably never runs (after a return, under if (false), in the apply of an effect whose compute throws first, in an effect never registered, in a createRoot init refused in an apply) is uncertifiable under ADR 1018; Chrome reports nothing there (runtime-oracle/flush-in-effect-callback, patterns/deadflush)"
+  },
+  {
+   "fixture": "reactive-ir/store-strict-read-keys",
+   "path": "fixtures/reactive-ir/store-strict-read-keys/App.tsx",
+   "code": "SC1003",
+   "removed": 1,
+   "adr": "ADR 1107",
+   "why": "store-strict-read-keys DestructuredThen (`const { then } = q`): rc.21's store trap does not warn on a `then` Get, so main's SC1003 violation was a false positive; round 2 of the review makes a pattern of only `then` slots store-key-undecided"
   }
  ]
 }

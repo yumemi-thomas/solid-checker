@@ -62,6 +62,13 @@ export const STORE_DESTRUCTURES = {
   // ADR 1107 (review of ADR 1106, F1): the destructure in a named function handed by name to a tracked slot and also called here:
   // the call is a read in the window around it, which the by-name role kept SC1003 from seeing.
   "store-dstr-byname": { reads: true, imports: ["createMemo"], text: (o) => `{ const f = () => { const { v } = ${o}; return v; }; createMemo(f); f(); }` },
+  // ADR 1107 round 2 (Fable review): a sub-pattern that binds no name still reads its property (F1); a sibling slot after an
+  // undecided `then` is read too (P1); a quoted key is a decided key (P2).
+  "store-dstr-empty-sub": { reads: true, nested: true, text: (o) => `{ const { a: {} } = ${o}; }` },
+  "store-dstr-empty-items": { reads: true, nested: true, text: (o) => `{ const { items: [] } = ${o}; }` },
+  "store-dstr-empty-sibling": { reads: true, nested: true, text: (o) => `{ const { v, a: {} } = ${o}; void v; }` },
+  "store-dstr-then-first": { reads: true, then: true, text: (o) => `{ const { then, v } = ${o}; void then; void v; }` },
+  "store-dstr-quoted": { reads: true, text: (o) => `{ const { "v": x } = ${o}; void x; }` },
 };
 
 // ADR 0781: the type names a standard method, and the program runs its own. Each runs the site on the caller's stack, in a component body.

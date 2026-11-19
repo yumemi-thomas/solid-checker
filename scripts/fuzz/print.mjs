@@ -603,7 +603,7 @@ function render(program, instrument) {
   }
   function view(item, depth) {
     switch (item.k) {
-      case "probe": return [`${ind(depth)}<output data-probe="${item.sig}">{${["store", "store-array", "store-empty", "store-shallow", "store-nested", "store-list", "store-link", "store-link-leaf", "optimistic-store", "projection"].includes(signals.get(item.sig)?.kind) ? `${item.sig}.v` : `${item.sig}()`}}</output>`];
+      case "probe": return [`${ind(depth)}<output data-probe="${item.sig}">{${["store", "store-array", "store-empty", "store-shallow", "store-nested", "store-list", "store-link", "store-link-leaf", "optimistic-store", "projection", "store-then"].includes(signals.get(item.sig)?.kind) ? `${item.sig}.v` : `${item.sig}()`}}</output>`];
       case "button": {
         const tag = item.tag ?? "button";
         const open = `${ind(depth)}<${tag} data-act="${item.id}"${item.attrs ? ` ${item.attrs}` : ""} ${item.on ?? "onClick"}={() => ${block(item.handler, depth, entryFor(item, "handler"))}}`;
@@ -961,6 +961,8 @@ function signalText(sig, signals, used) {
     case "async-dep": used.add("createMemo"); return `const ${sig.name} = createMemo(async () => { ${sig.dep}(); await Promise.resolve(); return 1; });`;
     case "store-opt": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore<{ v?: number }>({ v: ${sig.init} });`;
     case "store-list": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore({ v: ${sig.init}, items: [1, 2] });`;
+    // ADR 1107 round 2: a store with a data `then` beside `v` (the `then` Get does not warn; a sibling read after it does).
+    case "store-then": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore({ then: ${sig.init}, v: ${sig.init} });`;
     case "store-nested": used.add("createStore"); return `const [${sig.name}, ${sig.setter}] = createStore({ v: ${sig.init}, a: { v: ${sig.init} }, items: [${sig.init}] });`;
     case "owned": used.add("createSignal"); return `const [${sig.name}, ${sig.setter}] = createSignal(${sig.init}, { ownedWrite: true });`;
     case "optimistic": used.add("createOptimistic"); return `const [${sig.name}, ${sig.setter}] = createOptimistic(${sig.init});`;
@@ -997,7 +999,7 @@ function signalText(sig, signals, used) {
 
 /** The published type of each name a signal declares, by kind (the typings `Accessor`, `Setter`, `StoreSetter`, `SourceAccessor`). */
 function signalKeys(sig) {
-  const store = { store: "{ v: number }", "store-async": "{ v: number }", "store-raw": "{ v: number }", "store-opt": "{ v?: number }", "store-array": "number[]", "store-empty": "{ v?: number }", "store-nested": "{ v: number; a: { v: number }; items: number[] }", "store-shallow": "{ v: number; a: { v: number }; items: number[] }", "store-list": "{ v: number; items: number[] }", "store-link": "{ v: number; a?: { v: number } }", "store-link-leaf": "{ v: number; a?: { b?: number } }", "optimistic-store": "{ v: number }" }[sig.kind];
+  const store = { store: "{ v: number }", "store-async": "{ v: number }", "store-raw": "{ v: number }", "store-opt": "{ v?: number }", "store-array": "number[]", "store-empty": "{ v?: number }", "store-nested": "{ v: number; a: { v: number }; items: number[] }", "store-shallow": "{ v: number; a: { v: number }; items: number[] }", "store-list": "{ v: number; items: number[] }", "store-link": "{ v: number; a?: { v: number } }", "store-link-leaf": "{ v: number; a?: { b?: number } }", "optimistic-store": "{ v: number }", "store-then": "{ then: number; v: number }" }[sig.kind];
   if (store) return [[sig.name, store], [sig.setter, `StoreSetter<${store}>`]];
   switch (sig.kind) {
     case "projection": return [[sig.name, "{ v: number }"]];

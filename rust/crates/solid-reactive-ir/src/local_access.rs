@@ -2582,7 +2582,10 @@ impl LocalAccessContext<'_, '_> {
                     object: identifier.span,
                     property: slot,
                 };
-                self.discover_member(file, &member, &allowed, &mut result, &mut seen);
+                // Round 2 (P1): every slot shares the store identifier as its receiver, which `seen` keys on; each slot is
+                // its own Get, so each gets its own set (`{ then, v }` read only `then`).
+                let mut slot_seen = HashSet::default();
+                self.discover_member(file, &member, &allowed, &mut result, &mut slot_seen);
             }
         }
         self.discover_spreads(file, &allowed, &mut result);

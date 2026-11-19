@@ -44,3 +44,43 @@ export function RestElement() {
   const { v, ...rest } = store;
   return <i>{v}{rest.w}</i>;
 }
+
+// Round 2 (Fable review, F1): a sub-pattern that binds no name still reads its property.
+export function EmptySubPattern() {
+  const [store] = createStore({ a: { b: 1 }, items: [1] });
+  const { a: {} } = store;
+  const { items: [] } = store;
+  return <i />;
+}
+
+// Round 2 (F1): a sibling sub-pattern is not handed over with the named slot (the counts matched by coincidence).
+export function SiblingEmptyInHelper() {
+  const [store] = createStore({ v: 0, a: { b: 1 } });
+  const read = () => {
+    const { v, a: {} } = store;
+    return v;
+  };
+  read();
+  return <i />;
+}
+
+// Round 2 (P1): a slot after an undecided `then` is read too.
+export function ThenFirstInApply() {
+  const [store] = createStore({ then: 1, v: 0 });
+  createEffect(
+    () => 1,
+    () => {
+      const { then, v } = store;
+      void then;
+      void v;
+    },
+  );
+  return <i />;
+}
+
+// Round 2 (P2): a quoted key is a decided key.
+export function QuotedKey() {
+  const [store] = createStore({ v: 0 });
+  const { "v": x } = store;
+  return <i>{x}</i>;
+}
