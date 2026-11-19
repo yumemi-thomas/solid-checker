@@ -286,6 +286,11 @@ export function proofHits(lines) {
         roles: [...new Set(decisions.map((decision) => decision.role))],
         arms: [...new Set(decisions.map((decision) => decision.arm))],
       };
+      // ADR 1114: the code's finding stood at the site and a pass C4 accepts dropped it (`OwnedByEnabledRule` with a confirmed
+      // `PendingThrowsFirst`, ...): the drop is the site's account, as it is for a site a finding ended. The classifier's decision may sit
+      // at the callee (`a1`) while the rows sit at the call (`a1()`): the site's `alt` spans hold both.
+      const droppedHere = t.drop.filter((drop) => spans.includes(spanKey(drop)) && site.code !== undefined && creditsCode(site.code, drop));
+      if (droppedHere.length > 0 && endedByDroppedFinding(site, droppedHere.at(-1).rule, spans, verdicts, t.drop, attributedAt) === null) continue;
       if (speaking.length > 0) {
         // The classifier said this site reports and nothing ends it (audit candidate S1). A props member read whose prop every
         // caller passes statically ends in a named `props-static` end; one with none is as unexplained as any other.
