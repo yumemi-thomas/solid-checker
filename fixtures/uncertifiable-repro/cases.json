@@ -32,6 +32,11 @@
      {
       "kind": "uncertifiable",
       "rule": "SC1002",
+      "context": "read-after-await-unaccounted"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1002",
       "context": "package-finding-at-entry"
      },
      {

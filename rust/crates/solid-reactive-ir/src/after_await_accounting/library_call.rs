@@ -540,9 +540,17 @@ fn argument_is_inert(
             // fact, an unread package included), a library that reads a member of the literal (`JSON.stringify` looks up `toJSON`) runs project code.
             && (!matches!(argument.literal_value, ArgumentLiteralFact::Object(_))
                 || !object_prototype_touched()))
-        || ctx
-            .semantic_lookup
-            .proven_primitive(file, argument.span, PROOF_DEPTH)
+        // ADR 1097 (the reviews of its widening): `proven_primitive` proves a value's kind, not that computing it runs no code (`"k" in px` reaches a
+        // Proxy's `has` trap, `x instanceof K` `Symbol.hasInstance`, `${host}` a `toString`). An argument is inert by it only when it is a name
+        // the program declares: reading one runs nothing.
+        || (crate::owners::is_identifier_span(file, file.ast.peel_ts_sugar_span(argument.span))
+            && file
+                .ast
+                .reference_declaration(file.ast.peel_ts_sugar_span(argument.span))
+                .is_some()
+            && ctx
+                .semantic_lookup
+                .proven_primitive(file, argument.span, PROOF_DEPTH))
         // ADR 0984: a `let` timer handle every reference of which is a proven write or a clear, in a browser.
         || super::timer_handle::is_timer_handle(ctx, file, argument.span)
 }

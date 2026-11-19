@@ -21,8 +21,8 @@ const textOf = (context) => {
 };
 
 describe("the pu contexts (a flight the proof took for unconsumed)", () => {
-  it("are three misuse recall contexts of UNTRACKED_READ_AFTER_AWAIT, base-only, out of the census and api-fire's plan", () => {
-    expect(PU_CONTEXT_NAMES).toEqual(["pu-then-sub", "pu-loop", "pu-class"]);
+  it("are fifteen misuse recall contexts of UNTRACKED_READ_AFTER_AWAIT, base-only, out of the census and api-fire's plan", () => {
+    expect(PU_CONTEXT_NAMES).toEqual(["pu-then-sub", "pu-loop", "pu-class", "pu-coerce-direct", "pu-coerce-wrapper", "pu-coerce-iife", "pu-in-direct", "pu-in-wrapper", "pu-in-iife", "pu-instanceof-direct", "pu-instanceof-wrapper", "pu-instanceof-iife", "pu-key-direct", "pu-key-wrapper", "pu-key-iife"]);
     expect(PU_CODES).toEqual(["UNTRACKED_READ_AFTER_AWAIT"]);
     for (const name of PU_CONTEXT_NAMES) {
       expect(PU_CONTEXTS[name]).toBe("misuse");
@@ -61,5 +61,12 @@ describe("the pu contexts (a flight the proof took for unconsumed)", () => {
     expect(lines[fn + 1]).toBe("await Promise.resolve();");
     expect(lines[fn + 2]).toMatch(/^pb\d+\.K = class \{ x = ph\d+\(\); \};$/);
     expect(lines.some((line) => /^const po\d+ = \{ toString\(\) \{ new pb\d+\.K!\(\); return ""; \} \};?$/.test(line))).toBe(true);
+  });
+  it("pu-{coerce,in,instanceof,key}-{direct,wrapper,iife}: a setter call after the memo's await whose argument runs the site's object member with no call", () => {
+    const argument = { coerce: /pw\d+\(`\$\{po\d+\}`\)/, in: /pw\d+\("k" in pt\d+\)/, instanceof: /pw\d+\(pt\d+ instanceof \(po\d+ as unknown as Function\)\)/, key: /pw\d+\(\{ \[po\d+ as unknown as string\]: 1 \}\)/ };
+    for (const probe of Object.keys(argument)) for (const form of ["direct", "wrapper", "iife"]) {
+      const text = textOf(`pu-${probe}-${form}`).join("\n");
+      expect(argument[probe].test(text), `${probe}-${form}`).toBe(true);
+    }
   });
 });

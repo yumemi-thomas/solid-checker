@@ -14,9 +14,9 @@
 // The third finding (F3, a direct `eval` calling the function where its promise is kept) cannot be generated: the code's variants read a signal tuple or a store, and a program
 // with direct `eval` withdraws their slots (SC9012 `tuple-iteration-written` on the site's line, a withholding that covers the code). Fixture after-await-promise-unconsumed-eval
 // holds it with a memo accessor (rediscovery.json). Recall contexts, the direct binding bare (`puShape`), one program per cell, not crossed by the census, out of api-fire's plan.
-import { awaitStmt, call, ctl, decl, domExpr, expr, fn, num, prim, ref, ret } from "./model.mjs";
+import { awaitStmt, call, ctl, decl, domExpr, expr, fn, num, obj, prim, ref, ret } from "./model.mjs";
 
-export const PU_CONTEXTS = { "pu-then-sub": "misuse", "pu-loop": "misuse", "pu-class": "misuse" };
+export const PU_CONTEXTS = { "pu-then-sub": "misuse", "pu-loop": "misuse", "pu-class": "misuse", "pu-coerce-direct": "misuse", "pu-coerce-wrapper": "misuse", "pu-coerce-iife": "misuse", "pu-in-direct": "misuse", "pu-in-wrapper": "misuse", "pu-in-iife": "misuse", "pu-instanceof-direct": "misuse", "pu-instanceof-wrapper": "misuse", "pu-instanceof-iife": "misuse", "pu-key-direct": "misuse", "pu-key-wrapper": "misuse", "pu-key-iife": "misuse" };
 export const PU_CONTEXT_NAMES = Object.keys(PU_CONTEXTS);
 export const PU_CODES = ["UNTRACKED_READ_AFTER_AWAIT"];
 
@@ -68,7 +68,33 @@ export function puContext(context, stmts, kit) {
         view: [],
       };
     }
-    default: throw new Error(`no promise-unconsumed context ${context}`);
+    default: {
+      // ADR 1097, the reviews of its widening: an async memo's continuation calls a setter whose argument runs project code with no call, which
+      // holds the site: a coercion (`${po}`), `in` (a Proxy's `has` trap), `instanceof` (`Symbol.hasInstance`) or a computed key (its value's
+      // `toString`). `direct`: the call in the continuation (ADR 0976's `LibraryRunsNothing`); `wrapper`: a `const` wrapper of it; `iife`: an IIFE.
+      const parts = /^pu-(coerce|in|instanceof|key)-(direct|wrapper|iife)$/.exec(context);
+      if (!parts) throw new Error(`no promise-unconsumed context ${context}`);
+      const [, probe, form] = parts;
+      const holder = kit.name("po");
+      const target = kit.name("pt");
+      const set = kit.name("pw");
+      const wrap = kit.name("pv");
+      // A trap returns what its protocol asks (`has` and `Symbol.hasInstance` a boolean, `toString` anything primitive).
+      const trap = fn([...stmts, ret(probe === "in" || probe === "instanceof" ? domExpr("true") : num(1))]);
+      const setup = {
+        coerce: [decl(holder, obj([["toString", trap]]))],
+        key: [decl(holder, obj([["toString", trap]]))],
+        in: [decl(holder, obj([["has", trap]])), expr(domExpr(`const ${target} = new Proxy({}, ${holder})`))],
+        instanceof: [decl(holder, obj([["[Symbol.hasInstance]", trap]])), expr(domExpr(`const ${target} = {}`))],
+      }[probe];
+      const argument = { coerce: `\`\${${holder}}\``, key: `{ [${holder} as unknown as string]: 1 }`, in: `"k" in ${target}`, instanceof: `${target} instanceof (${holder} as unknown as Function)` }[probe];
+      const write = `${set}(${argument})`;
+      const body = [...setup, expr(domExpr(`const [, ${set}] = createSignal<unknown>(0)`, undefined, ["createSignal"]))];
+      if (form === "wrapper") body.push(expr(domExpr(`const ${wrap} = () => { ${write}; }`)));
+      const call = form === "direct" ? write : form === "wrapper" ? `${wrap}()` : `(() => { ${write}; })()`;
+      // In the component's body: an object member there no call names holds the site (at module scope its read had rows of its own on every build).
+      return { body: [...body, ...memoOf(kit, [awaitStmt(), expr(domExpr(call))])], view: [] };
+    }
   }
 }
 
