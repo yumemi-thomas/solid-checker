@@ -157,6 +157,10 @@ pub(super) fn silences(
     let unread = crate::package_hand_off::UnreadPackageHandOff::new(lookup, &by_path);
     let no_leaf_opener = !lookup.project_opens_leaf_scope();
     let logging = crate::proof_log::enabled();
+    // ADR 1123: under the proof log, the same question with the context provider's children arm off, so a site the arm decided names it.
+    let unread_off = logging.then(|| {
+        crate::package_hand_off::UnreadPackageHandOff::without_provider_children(lookup, &by_path)
+    });
     // ADR 1031: the path id of each listed file, for a getter answered at reads written in another file.
     let pids: std::collections::HashMap<&str, PathId> = files
         .iter()
@@ -167,6 +171,7 @@ pub(super) fn silences(
         graph,
         reach: &reach,
         unread: &unread,
+        unread_off: unread_off.as_ref(),
         no_leaf_opener,
         lookup,
         entities,
@@ -315,6 +320,8 @@ struct Question<'q, 'l, 'a> {
     graph: &'q OwnerGraph,
     reach: &'q crate::execution_role::SiteReach<'l, 'a>,
     unread: &'q crate::package_hand_off::UnreadPackageHandOff<'q, 'a>,
+    /// ADR 1123: [`Self::unread`] with the context provider's children arm off, under the proof log only.
+    unread_off: Option<&'q crate::package_hand_off::UnreadPackageHandOff<'q, 'a>>,
     no_leaf_opener: bool,
     lookup: &'l SemanticLookup<'a>,
     entities: &'q crate::EntitySymbols,
@@ -355,6 +362,21 @@ impl<'a> Question<'_, '_, 'a> {
         // A package the build does not read may run the function (B3): no census and no entry the graph holds answers for it.
         if self.unread.may_run(file, span) {
             return both(Decline::UnreadPackageMayRun);
+        }
+        // ADR 1123: the arm decided this question; the proof log names it at the site (monotone.mjs M2b).
+        if let Some(off) = self.unread_off
+            && off.may_run(file, span)
+        {
+            let arm = crate::package_hand_off::CONTEXT_PROVIDER_CHILDREN;
+            crate::proof_log::decision(
+                "owner-call",
+                file.path.as_str(),
+                site,
+                crate::ExecutionRole::Unknown,
+                Some((arm, false)),
+                &[arm],
+                Some(false),
+            );
         }
         // The groups of codes still open: the census answers SC3001's pair for a program with no leaf opener.
         let mut leaf_answer = None;

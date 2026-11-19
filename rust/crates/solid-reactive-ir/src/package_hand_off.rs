@@ -251,6 +251,8 @@ pub(crate) struct UnreadPackageHandOff<'l, 'a> {
     packages_unseen: std::cell::OnceCell<bool>,
     /// Whether a file of the program can name `Object.prototype` or runs code it builds (`files_name_object_prototype`).
     files_name_prototype: std::cell::OnceCell<bool>,
+    /// ADR 1123: whether [`Self::provider_child`] answers (off only for the proof log's question of what the arm decided, [`Self::without_provider_children`]).
+    provider_children: bool,
 }
 
 /// The keys under which an object literal of the program holds another object literal directly (`{ sub: { … } }`), and whether one holds it under a key the program does not
@@ -292,6 +294,18 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             object_prototype_written: std::cell::OnceCell::new(),
             packages_unseen: std::cell::OnceCell::new(),
             files_name_prototype: std::cell::OnceCell::new(),
+            provider_children: true,
+        }
+    }
+
+    /// ADR 1123: the same question with [`Self::provider_child`] off, asked only where the proof log is on, so a silence the arm decided names it.
+    pub(crate) fn without_provider_children(
+        lookup: &'l SemanticLookup<'a>,
+        files: &'l HashMap<&'l str, &'a FileFacts>,
+    ) -> Self {
+        Self {
+            provider_children: false,
+            ..Self::new(lookup, files)
         }
     }
 
@@ -1978,7 +1992,8 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
     /// ADR 1123: whether `at` is in a child of `element`, a context provider of the dialect's own form (the context object as the tag, no member), whose tag
     /// resolves exactly to a binding the dialect's `createContext` initializes.
     fn provider_child(&self, file: &'a FileFacts, element: &JsxElementFact, at: Span) -> bool {
-        element.member_object.is_none()
+        self.provider_children
+            && element.member_object.is_none()
             && self.lookup.dialect.context_provider_member().is_none()
             && element.children.iter().any(|child| child.contains(at))
             && !crate::site_accounting::ablated_id(CONTEXT_PROVIDER_CHILDREN)

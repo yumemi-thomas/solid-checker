@@ -462,8 +462,27 @@ pub(super) fn context_provided_tuple<'a>(
                 .initializer
                 .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == call.span)
     })?;
+    let bindings = called_slots(lookup, file, outer, &returned, false)?;
+    // The proof log names the arm at each call of a slot, the reads and writes it decided (monotone.mjs M2b).
+    if crate::proof_log::enabled() {
+        for (declaration, _) in &bindings {
+            for reference in references(file, *declaration) {
+                for use_call in file.ast.calls_with_peeled_callee(reference) {
+                    crate::proof_log::decision(
+                        "context-tuple",
+                        file.path.as_str(),
+                        use_call.span,
+                        crate::ExecutionRole::Unknown,
+                        Some((CONTEXT_PROVIDED_TUPLE, false)),
+                        &[CONTEXT_PROVIDED_TUPLE],
+                        Some(false),
+                    );
+                }
+            }
+        }
+    }
     Some(CallbackReturn {
-        bindings: called_slots(lookup, file, outer, &returned, false)?,
+        bindings,
         created,
         primitive: Some(primitive),
     })
