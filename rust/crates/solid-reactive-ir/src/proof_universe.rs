@@ -184,6 +184,45 @@ impl FileTables {
     }
 }
 
+/// ADR 1114 families 2-4, step 2: a measurement line for one reference of a reactive source: its position by its parent node, the source's
+/// kind, and how many universe sites start at it (`scripts/fuzz/reference-census.mjs` joins it with the value-use census's line).
+fn reference_candidate(file: &FileFacts, kind: Kind, reference: Span, sites: usize) {
+    let positions = &file.ast.reference_positions;
+    let position = positions
+        .binary_search_by_key(&(reference.start, reference.end), |fact| {
+            (fact.span.start, fact.span.end)
+        })
+        .ok()
+        .map_or_else(
+            || "none".to_owned(),
+            |at| format!("{:?}", positions[at].position),
+        );
+    let source = if kind.root {
+        if kind.store { "store" } else { "props" }
+    } else if kind.accessor {
+        "accessor"
+    } else if kind.setter {
+        "setter"
+    } else if kind.action {
+        "action"
+    } else {
+        "other"
+    };
+    let count = sites.to_string();
+    proof_log::candidate(&proof_log::CandidateRecord {
+        rule: "universe",
+        table: "reference",
+        path: file.path.as_str(),
+        at: reference,
+        alternates: &[],
+        facts: &[
+            ("position", position.as_str()),
+            ("source", source),
+            ("sites", count.as_str()),
+        ],
+    });
+}
+
 /// What the chain of members that starts at a root's first Get ends in.
 enum ChainEnd {
     /// Nothing writes through it: the first Get is a read. The chain's link
@@ -1093,6 +1132,8 @@ impl<'p> Endings<'p> {
 /// calls of `onFlush`.
 pub(crate) fn sites<'a>(ctx: &AnalysisContext<'a>) -> Vec<(&'a FileFacts, Site)> {
     let lookup = ctx.semantic_lookup;
+    // ADR 1114 families 2-4, step 2 (measurement): one candidate line per reference with its position (`reference_positions`, facts schema 102).
+    let candidates = crate::proof_candidates::enabled();
     let mut symbols = ctx
         .accessors
         .keys()
@@ -1159,7 +1200,11 @@ pub(crate) fn sites<'a>(ctx: &AnalysisContext<'a>) -> Vec<(&'a FileFacts, Site)>
             let file_tables = tables
                 .entry(file.path.as_str())
                 .or_insert_with(|| FileTables::of(file));
-            for site in sites_at(file, file_tables, kind, reference) {
+            let at_reference = sites_at(file, file_tables, kind, reference);
+            if candidates {
+                reference_candidate(file, kind, reference, at_reference.len());
+            }
+            for site in at_reference {
                 let key = (
                     file.path.as_str().to_owned(),
                     u64::from(site.at.start),

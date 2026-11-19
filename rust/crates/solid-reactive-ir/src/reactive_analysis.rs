@@ -571,6 +571,7 @@ pub(crate) fn collect_project<'facts>(
     // open, for the pending accounting (a source that may be pending is read
     // there).
     let mut census_reach = Vec::new();
+    let census_candidates = crate::proof_candidates::enabled();
     for (start, answer) in starts.iter().zip(answers) {
         let crate::value_use::StartAnswer {
             open,
@@ -588,6 +589,30 @@ pub(crate) fn collect_project<'facts>(
         );
         match start {
             CensusStart::Reference(symbol, reference) => {
+                // ADR 1114 families 2-4, step 2 (measurement): the census's answer at the reference, for `reference-census.mjs` to join with
+                // the universe's line at the same span.
+                if census_candidates
+                    && let (Ok(start), Ok(end)) = (
+                        u32::try_from(reference.start_byte),
+                        u32::try_from(reference.end_byte),
+                    )
+                {
+                    let uses_count = uses.len().to_string();
+                    let escaped_count = escaped_uses.len().to_string();
+                    crate::proof_log::candidate(&crate::proof_log::CandidateRecord {
+                        rule: "census",
+                        table: "reference",
+                        path: reference.path.as_ref(),
+                        at: solid_facts::core::Span::new(start, end),
+                        alternates: &[],
+                        facts: &[
+                            ("answer", open.unwrap_or("followed")),
+                            ("uses", uses_count.as_str()),
+                            ("escaped", escaped_count.as_str()),
+                            ("cut", if cut { "yes" } else { "no" }),
+                        ],
+                    });
+                }
                 if open.is_some() {
                     reach.push(reference.clone());
                 }
