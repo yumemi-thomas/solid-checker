@@ -97,6 +97,12 @@ export const CHECKS = {
       "cargo", TOOLCHAIN, "test", "--manifest-path", MANIFEST, "-p", "solid-reactive-ir", "--lib",
     ],
   },
+  // ADR 0950: the what-if build's own tests (`make test-what-if`: the feature, its own target directory), the one place the feature may
+  // be built; selected when a changed fixture is pinned by a test target that needs the feature (`what_if_process`).
+  "test-what-if": {
+    why: "a changed fixture is pinned by what_if_process, which only `make test-what-if` builds (ADR 0950)",
+    command: ["make", "test-what-if"],
+  },
   "backend-process": {
     command: [
       "cargo", TOOLCHAIN, "test", "--manifest-path", MANIFEST, "-p", "solid-facts-backend",
@@ -622,6 +628,9 @@ export function fixtureKeyOf(path) {
 
 const PROCESS_TEST_PREFIX = "process-test:";
 
+/** The make target that runs a test target needing a cargo feature (ADR 0950: only that target builds with the feature). */
+const FEATURE_TARGETS = { "what-if": "test-what-if" };
+
 /**
  * The Rust process tests (every `tests/*.rs` under `rust/`) and the fixtures each pins: a fixture `<group>/<name>` (an existing
  * `fixtures/<group>/<name>/` directory) is pinned when the test file names `fixtures/<group>` and holds a string literal that is
@@ -689,9 +698,12 @@ export function processTestPins(root = ROOT) {
     const named = [...groups].filter((group) => text.includes(`fixtures/${group}`));
     if (!named.length) continue;
     const run = runOf(file);
-    // A target that needs a feature (`what_if_process`: `what-if`) is built only by its own make target, never by a script (ADR 0950,
-    // scripts/what-if-gates.test.mjs): it is not selected here.
-    if (!run || run.features.length) continue;
+    if (!run) continue;
+    // A target that needs a feature is built only by that feature's own make target, never with a `--features` flag from a script
+    // (ADR 0950, scripts/what-if-gates.test.mjs): `what-if` is `make test-what-if`, which runs `what_if_process`. A feature with no such
+    // target is not selected (none today).
+    const featureCheck = run.features.length ? FEATURE_TARGETS[run.features.join(",")] : null;
+    if (run.features.length && !featureCheck) continue;
     const fixtures = new Set();
     for (const [, literal] of text.matchAll(/"((?:[^"\\]|\\.)*)"/g)) {
       for (const group of named) {
@@ -706,10 +718,10 @@ export function processTestPins(root = ROOT) {
     }
     if (!fixtures.size) continue;
     // `backend-process` runs the whole `diagnostics_process` target already.
-    const check =
-      run.pkg === "solid-facts-backend" && run.target === "diagnostics_process"
+    const check = featureCheck ??
+      (run.pkg === "solid-facts-backend" && run.target === "diagnostics_process"
         ? "backend-process"
-        : `${PROCESS_TEST_PREFIX}${[run.pkg, run.target, run.filter].join("|")}`;
+        : `${PROCESS_TEST_PREFIX}${[run.pkg, run.target, run.filter].join("|")}`);
     pins.push({ check, package: run.pkg, test: run.target, filter: run.filter, fixtures });
   }
   return pins;
@@ -778,6 +790,7 @@ export function planFor(paths, { pins = processTestPins() } = {}) {
       selected.has(id)
     ),
     ...[...pinned].sort(),
+    ...["test-what-if"].filter((id) => selected.has(id)),
     ...[...FINDING_GATES, "repro-budget"].filter((id) => selected.has(id)),
     ...["ir-read-lint", "proof-lint", "ir-tools-test", "proof-tools-test", "ir-edit-fuzz", "fuzz-tests"].filter((id) => selected.has(id)),
     // ADR 1120: the premise's table and the kernel's oracle.
@@ -985,6 +998,8 @@ export const LANES = {
   "facts-lib": "rust",
   "ir-lib": "rust",
   "backend-process": "rust",
+  // Builds into rust/target-what-if, so it shares no target directory with the rust lane; it queues there for the CPU all the same.
+  "test-what-if": "rust",
   "backend-staleness": "rust",
   "write-walk-strategies": "rust",
   "dialects-process": "rust",

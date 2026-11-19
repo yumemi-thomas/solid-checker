@@ -626,9 +626,16 @@ test("a fixture's snapshot or source selects every process test that pins it", (
   assert.equal(pinned.length, 1);
   assert.deepEqual(checkOf(pinned[0]).command.slice(-6), ["-p", "solid-facts-backend", "--test", "backend_process", "--", "after_await_accounting_process::"]);
   assert.equal(scheduleFor(plan.checks).find((entry) => entry.check === pinned[0]).lane, "rust");
-  // A target that needs a feature is left to its own make target (ADR 0950); `diagnostics_process` is `backend-process` itself.
+  // A target that needs a feature runs through that feature's own make target, never a `--features` flag (ADR 0950): a fixture
+  // what_if_process pins selects `make test-what-if`; `diagnostics_process` is `backend-process` itself.
   const pins = processTestPins();
-  assert.ok(!pins.some((pin) => pin.test === "what_if_process"));
+  const whatIf = pins.find((pin) => pin.test === "what_if_process");
+  assert.equal(whatIf?.check, "test-what-if");
+  assert.ok(whatIf.fixtures.has("reactive-ir/stored-function-after-await"));
+  assert.ok(planFor(["fixtures/findings-snapshots/reactive-ir__stored-function-after-await.json"]).checks.includes("test-what-if"));
+  assert.deepEqual(checkOf("test-what-if").command, ["make", "test-what-if"]);
+  assert.equal(scheduleFor(["test-what-if"])[0].lane, "rust");
+  assert.ok(!pins.some((pin) => checkOf(pin.check).command.join(" ").includes("--features")));
   assert.ok(pins.filter((pin) => pin.test === "diagnostics_process").every((pin) => pin.check === "backend-process"));
   // A fixture no process test names selects none.
   const synthetic = planFor(["fixtures/reactive-ir/unpinned-probe/App.tsx"], { pins: [{ check: "process-test:p|t|", fixtures: new Set(["reactive-ir/other"]) }] });
