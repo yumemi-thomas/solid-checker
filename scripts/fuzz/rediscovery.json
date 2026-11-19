@@ -26289,5 +26289,78 @@
    "mx-action-called-in-owned-scope-pa-gproto-root-x-direct-none"
   ],
   "rediscovered": "new context pa-gproto (pa-shapes.mjs): the fix gives the SC2002 row at the call (`action-called-in-owned-scope/uncertifiable`, claiming), main gives none of the rule's. `focus.mjs --grids mx-recall --ids`, release builds, `--boundary both`: both builds exit 0 with recall-gap 3, because the grid's program also gets SC9012 `standard-member-impostor` at the call on main (the package file's prototype write is an open write of `reverse`), which the judge counts as a withholding; the generator expresses the shape, the base build does not fail on it. The base failure is the pattern lane's: `pkgaction/patch-f32-undeclared` false clean on main (no row at the call), fine on the fix; and the runtime oracle case package-prototype-writes: main 3 unproven-clean, the fix 3 covered-uncertifiable"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent at a call that runs a method an installed package wrote on a built-in's prototype by name, reached by `.call`, `.apply`, `Reflect.apply` or a destructured binding (`a.reverse.call(a)`, `const { reverse } = a; reverse()`): part 1 took only a direct member call whose declaration is the library's for a site",
+  "found": "Fable review of ADR 1108 part 1 (1e441fa3e); pattern lane `pkgaction/proto-site-{call,apply,reflect-apply,destructured}` and runtime oracle probes, Chrome-confirmed false cleans",
+  "fixed": "ADR 1108 part 2 (`package_action_calls.rs` `prototype_call`: the function of `.call`/`.apply`/`.bind` and `Reflect.apply`, the key of the pattern that binds a callee)",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pa-gprotocall-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotocall-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotocall-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoapply-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoapply-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoapply-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoreflect-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoreflect-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoreflect-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotodestr-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotodestr-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotodestr-root-x-direct-none"
+  ],
+  "rediscovered": "new contexts pa-gprotocall, pa-gprotoapply, pa-gprotoreflect, pa-gprotodestr (pa-shapes.mjs): `focus.mjs --codes ACTION_CALLED_IN_OWNED_SCOPE --grids mx-recall --boundary both --ids`, release builds: part 1 (1e441fa3e) exits 1, false-clean 3 per context in both boundaries; this change exits 0, recall-gap 3 (the SC2002 row at the call, uncertifiable); the lg-recall twins (timer, micro) clean on both. Pattern lane: the four programs false clean on part 1, fine here"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent where the standard library itself runs a method an installed package wrote on a built-in's prototype: `test` runs `exec`, the `Map` constructor runs `set`, an array's `toString` and a template literal run `join`, `JSON.stringify` runs `toJSON`",
+  "found": "Fable review of ADR 1108 part 1; pattern lane `pkgaction/proto-site-{test-exec,map-set,tostring-join,template-join,json-tojson}`, Chrome-confirmed",
+  "fixed": "ADR 1108 part 2 (`IMPLICIT_CALLS` and the template literal site in `package_action_calls.rs`)",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pa-gprotoimplicit-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoimplicit-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoimplicit-root-x-direct-none"
+  ],
+  "rediscovered": "new context pa-gprotoimplicit (`/fzprobe/.test(\"x\")` after `RegExp.prototype.exec` is written): `focus.mjs --codes ACTION_CALLED_IN_OWNED_SCOPE --grids mx-recall --boundary both --ids`, release builds: part 1 (1e441fa3e) exits 1, false-clean 3 per context in both boundaries; this change exits 0, recall-gap 3 (the SC2002 row at the call, uncertifiable); the lg-recall twins (timer, micro) clean on both. The other implicit calls are rows of the same table, held by the pattern lane (false clean on part 1, fine here) and fixture action-in-owned-scope-prototype-sites; the template probe is written as a binding (`const text = `${…}``): under `void` V8 reports the `void`'s column, which the lane's column judge does not take for the template's row"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent at an iteration (a spread, `for…of`, an array pattern, `new Set(it)`, `new Map(it)`) after an installed package writes `Symbol.iterator` on a built-in's prototype, a key the scan does not decide (an any-name writer)",
+  "found": "Fable review of ADR 1108 part 1; pattern lane `pkgaction/proto-iter-{spread,forof,pattern,set,map}`, Chrome-confirmed",
+  "fixed": "ADR 1108 part 2 (every iterated operand and an iterating constructor given a value is a site where a writer under any name is loaded)",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pa-gprotoiter-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoiter-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoiter-root-x-direct-none"
+  ],
+  "rediscovered": "new context pa-gprotoiter (`void [...new Float32Array(1)]`): `focus.mjs --codes ACTION_CALLED_IN_OWNED_SCOPE --grids mx-recall --boundary both --ids`, release builds: part 1 (1e441fa3e) exits 1, false-clean 3 per context in both boundaries; this change exits 0, recall-gap 3 (the SC2002 row at the call, uncertifiable); the lg-recall twins (timer, micro) clean on both. The other iterations are held by the pattern lane (false clean on part 1, fine here) and fixture action-in-owned-scope-prototype-iteration"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent at a call of a global the library declares that an installed package replaced through `view`, `source` or `defaultView` read by an object pattern (`({ view }) => { view.btoa = … }`)",
+  "found": "Fable review of ADR 1108 part 1; pattern lane `pkgaction/global-route-pattern-{view,source,defaultview}`, Chrome-confirmed",
+  "fixed": "ADR 1108 part 2 (`module_reach.rs`: a `BindingProperty` keyed by a `WINDOW_MEMBERS` name is the global object at each use of its binding)",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pa-gviewpattern-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gviewpattern-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gviewpattern-root-x-direct-none"
+  ],
+  "rediscovered": "new context pa-gviewpattern: `focus.mjs --codes ACTION_CALLED_IN_OWNED_SCOPE --grids mx-recall --boundary both --ids`, release builds: part 1 (1e441fa3e) exits 1, false-clean 3 per context in both boundaries; this change exits 0, recall-gap 3 (the SC2002 row at the call, uncertifiable); the lg-recall twins (timer, micro) clean on both. `({ source })` needs a message the browser posts after the hosts run (part 1's reason for gsource) and `({ defaultView })` is the same scan rule: both held by the pattern lane (false clean on part 1, fine here) and fixture action-in-owned-scope-window-patterns"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent at a call of a method an installed package wrote on a built-in's prototype where the receiver is typed by a project interface or `any`, a bare `dispatchEvent(…)` after `EventTarget.prototype.dispatchEvent` is written (the window inherits it), and a read of an accessor a package defined on a prototype (`void dv.byteLength`)",
+  "found": "Fable review of ADR 1108 part 1; pattern lane `pkgaction/proto-site-{interface,any,bare-eventtarget,accessor}`, Chrome-confirmed",
+  "fixed": "ADR 1108 part 2 (`prototype_call`: any member call of a written name; `INHERITED_BY_WINDOW`; `prototype_read` for an evaluated member or a pattern key of a written name)",
+  "outside": "the pa contexts write one site expression with no declaration outside the component's body (an interface), and their receivers are the library's: these four are held verbatim by the pattern lane (false clean on 1e441fa3e, fine here), the runtime oracle case package-prototype-sites (13 unproven-clean on part 1, all covered here) and fixture action-in-owned-scope-prototype-sites"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent at a call of a library method an installed package wrote on a built-in's prototype reached by a writer shape part 1 did not follow: `Object.getPrototypeOf(Int8Array).prototype`, `globalThis[K]` and `X[P]` by a constant key, `const { prototype } = X`, a list of built-ins given to `forEach`, `event.view.X.prototype`, a built-in bound to a name, a prototype reached through a value and given to `Object.assign`",
+  "found": "Fable review of ADR 1108 part 1; pattern lane `pkgaction/proto-writer-*` (three lane false cleans; the other five have an SC9012 `standard-member-impostor` row the lane counts) and the runtime oracle (all eight unproven-clean on part 1)",
+  "fixed": "ADR 1108 part 2 (`module_reach.rs` `prototype_of`, `builtin_constructor`, the destructured `prototype`, a value-reached prototype followed to a writer)",
+  "outside": "a writer shape is the package file's, which the pa contexts fix per kind: they are held by the pattern lane (`proto-writer-globalthis-key`, `-ctor-key`, `-bound-name` false clean on 1e441fa3e, fine here), the runtime oracle case package-prototype-writer-shapes (8 unproven-clean on part 1, all covered here), fixture action-in-owned-scope-prototype-writer-shapes and `module_reach` unit test `the_part_two_writer_shapes_write_the_member`"
  }
 ]

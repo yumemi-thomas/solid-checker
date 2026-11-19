@@ -4557,6 +4557,70 @@
    "to": 41,
    "adr": "ADR 1108",
    "fact": "a call of a standard-library method (map, forEach) where a loaded package is undecided or hands window on, so it may write any built-in's prototype"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-walk",
+   "key": "SC2002 package-may-call-action",
+   "from": 35,
+   "to": 43,
+   "adr": "ADR 1108",
+   "fact": "part 2: where a loaded package writes a built-in's prototype by name or may under any name (undecided, global object handed on), an iteration, a template literal, a member call with no resolved declaration, a call through .call/.apply/Reflect.apply or a destructured binding, and the library's implicit calls may run it"
+  },
+  {
+   "fixture": "reactive-ir/dependency-phantom-solid-undecided",
+   "key": "SC2002 package-may-call-action",
+   "from": 3,
+   "to": 4,
+   "adr": "ADR 1108",
+   "fact": "part 2: where a loaded package writes a built-in's prototype by name or may under any name (undecided, global object handed on), an iteration, a template literal, a member call with no resolved declaration, a call through .call/.apply/Reflect.apply or a destructured binding, and the library's implicit calls may run it"
+  },
+  {
+   "fixture": "reactive-ir/dependency-value-flow",
+   "key": "SC2002 package-may-call-action",
+   "from": 19,
+   "to": 20,
+   "adr": "ADR 1108",
+   "fact": "part 2: where a loaded package writes a built-in's prototype by name or may under any name (undecided, global object handed on), an iteration, a template literal, a member call with no resolved declaration, a call through .call/.apply/Reflect.apply or a destructured binding, and the library's implicit calls may run it"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper",
+   "key": "SC2002 package-may-call-action",
+   "from": 122,
+   "to": 180,
+   "adr": "ADR 1108",
+   "fact": "part 2: where a loaded package writes a built-in's prototype by name or may under any name (undecided, global object handed on), an iteration, a template literal, a member call with no resolved declaration, a call through .call/.apply/Reflect.apply or a destructured binding, and the library's implicit calls may run it"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper-eval",
+   "key": "SC2002 package-may-call-action",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 1108",
+   "fact": "part 2: where a loaded package writes a built-in's prototype by name or may under any name (undecided, global object handed on), an iteration, a template literal, a member call with no resolved declaration, a call through .call/.apply/Reflect.apply or a destructured binding, and the library's implicit calls may run it"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper-patched-bind",
+   "key": "SC2002 package-may-call-action",
+   "from": 5,
+   "to": 6,
+   "adr": "ADR 1108",
+   "fact": "part 2: where a loaded package writes a built-in's prototype by name or may under any name (undecided, global object handed on), an iteration, a template literal, a member call with no resolved declaration, a call through .call/.apply/Reflect.apply or a destructured binding, and the library's implicit calls may run it"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC2002 package-may-call-action",
+   "from": 38,
+   "to": 131,
+   "adr": "ADR 1108",
+   "fact": "part 2: where a loaded package writes a built-in's prototype by name or may under any name (undecided, global object handed on), an iteration, a template literal, a member call with no resolved declaration, a call through .call/.apply/Reflect.apply or a destructured binding, and the library's implicit calls may run it"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc4001",
+   "key": "SC2002 package-may-call-action",
+   "from": 43,
+   "to": 67,
+   "adr": "ADR 1108",
+   "fact": "part 2: where a loaded package writes a built-in's prototype by name or may under any name (undecided, global object handed on), an iteration, a template literal, a member call with no resolved declaration, a call through .call/.apply/Reflect.apply or a destructured binding, and the library's implicit calls may run it"
   }
  ]
 }

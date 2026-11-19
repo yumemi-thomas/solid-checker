@@ -90,6 +90,39 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/after-await.tsx",
+      "start": 366,
+      "end": 382,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/after-await.tsx",
+      "start": 414,
+      "end": 433,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/after-await.tsx",
+      "start": 463,
+      "end": 479,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -305,6 +338,17 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc2001/src/argument-of-package-listeners.ts",
+      "start": 405,
+      "end": 424,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/argument-of-package-listeners.ts",
       "start": 428,
       "end": 562,
       "fixes": 0
@@ -409,6 +453,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/argument-of-package.ts",
+      "start": 244,
+      "end": 277,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -461,6 +516,39 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/argument-of-package.ts",
       "start": 378,
       "end": 385,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/clean-action-optimistic.tsx",
+      "start": 423,
+      "end": 446,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/clean-action-optimistic.tsx",
+      "start": 476,
+      "end": 509,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/clean-action-optimistic.tsx",
+      "start": 543,
+      "end": 558,
       "fixes": 0
     },
     {
@@ -585,6 +673,28 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/clean-derived-signal-latest.tsx",
+      "start": 615,
+      "end": 634,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/clean-derived-signal-latest.tsx",
+      "start": 667,
+      "end": 686,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -615,6 +725,17 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/clean-derived-signal-latest.tsx",
       "start": 667,
       "end": 684,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/clean-derived-signal-latest.tsx",
+      "start": 768,
+      "end": 841,
       "fixes": 0
     },
     {
@@ -681,6 +802,28 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/clean-derived-signal-latest.tsx",
       "start": 1259,
       "end": 1262,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/clean-effect-interval-write.tsx",
+      "start": 345,
+      "end": 360,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/clean-effect-interval-write.tsx",
+      "start": 394,
+      "end": 412,
       "fixes": 0
     },
     {
@@ -822,6 +965,17 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc2001/src/clean-interval-hook.tsx",
+      "start": 319,
+      "end": 343,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/clean-interval-hook.tsx",
       "start": 332,
       "end": 342,
       "fixes": 0
@@ -893,6 +1047,28 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/clean-interval-hook.tsx",
+      "start": 547,
+      "end": 564,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/clean-interval-hook.tsx",
+      "start": 582,
+      "end": 601,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -945,6 +1121,28 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/clean-ref-let-settled.tsx",
       "start": 529,
       "end": 538,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/clean-run-unowned-store-write.tsx",
+      "start": 335,
+      "end": 383,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/clean-run-unowned-store-write.tsx",
+      "start": 413,
+      "end": 450,
       "fixes": 0
     },
     {
@@ -1036,6 +1234,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/factory-accessor-memo.tsx",
+      "start": 392,
+      "end": 407,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -1102,6 +1311,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/factory-accessor-memo.tsx",
+      "start": 650,
+      "end": 665,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -1124,6 +1344,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/factory-accessor-memo.tsx",
+      "start": 668,
+      "end": 685,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -1143,6 +1374,17 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/factory-accessor-memo.tsx",
       "start": 668,
       "end": 683,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/factory-assigned.ts",
+      "start": 341,
+      "end": 360,
       "fixes": 0
     },
     {
@@ -1190,6 +1432,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/factory-member.tsx",
+      "start": 268,
+      "end": 287,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -1209,6 +1462,17 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/factory-member.tsx",
       "start": 268,
       "end": 285,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/factory-merged.tsx",
+      "start": 311,
+      "end": 327,
       "fixes": 0
     },
     {
@@ -1234,6 +1498,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/factory-reexported.ts",
+      "start": 404,
+      "end": 419,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -1253,6 +1528,17 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/factory-reexported.ts",
       "start": 469,
       "end": 478,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/factory-sibling-mentions-this.tsx",
+      "start": 454,
+      "end": 470,
       "fixes": 0
     },
     {
@@ -1300,6 +1586,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/factory-sibling-mentions-this.tsx",
+      "start": 841,
+      "end": 856,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -1322,6 +1619,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/factory-sibling-mentions-this.tsx",
+      "start": 859,
+      "end": 873,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -1341,6 +1649,17 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/factory-sibling-mentions-this.tsx",
       "start": 859,
       "end": 871,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/factory-store.ts",
+      "start": 298,
+      "end": 317,
       "fixes": 0
     },
     {
@@ -1410,6 +1729,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/local-object-this-text.tsx",
+      "start": 550,
+      "end": 569,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -1440,6 +1770,28 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/local-object-this-text.tsx",
       "start": 751,
       "end": 758,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/local-object.tsx",
+      "start": 564,
+      "end": 583,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/local-object.tsx",
+      "start": 623,
+      "end": 642,
       "fixes": 0
     },
     {
@@ -1597,6 +1949,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/options-default-to-signature.tsx",
+      "start": 620,
+      "end": 642,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -1616,6 +1979,17 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/options-default-to-signature.tsx",
       "start": 709,
       "end": 737,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/options-default-to-signature.tsx",
+      "start": 809,
+      "end": 824,
       "fixes": 0
     },
     {
@@ -1718,6 +2092,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/options-sibling-called.tsx",
+      "start": 627,
+      "end": 666,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -1759,6 +2144,17 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/options-sibling-called.tsx",
       "start": 789,
       "end": 793,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/options-thunk-package.ts",
+      "start": 257,
+      "end": 272,
       "fixes": 0
     },
     {
@@ -1828,6 +2224,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/package-callback.ts",
+      "start": 262,
+      "end": 281,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -1872,6 +2279,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-also-handed-to-callback.tsx",
+      "start": 623,
+      "end": 642,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -1905,6 +2323,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-bound.tsx",
+      "start": 387,
+      "end": 418,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -1927,6 +2356,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-bound.tsx",
+      "start": 507,
+      "end": 533,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -1946,6 +2386,17 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-bound.tsx",
       "start": 588,
       "end": 598,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-bound.tsx",
+      "start": 588,
+      "end": 630,
       "fixes": 0
     },
     {
@@ -2092,6 +2543,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-called-after-await.tsx",
+      "start": 828,
+      "end": 846,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -2147,6 +2609,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-called-from-two-arrows.tsx",
+      "start": 948,
+      "end": 964,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -2177,6 +2650,17 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-called-from-two-arrows.tsx",
       "start": 1114,
       "end": 1119,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-forwarded-omit-rest.tsx",
+      "start": 829,
+      "end": 848,
       "fixes": 0
     },
     {
@@ -2265,6 +2749,17 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-forwarded-to-unresolved.tsx",
       "start": 611,
       "end": 617,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-forwarded-to-unresolved.tsx",
+      "start": 611,
+      "end": 629,
       "fixes": 0
     },
     {
@@ -2378,6 +2873,28 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-forwarded-to-unresolved.tsx",
+      "start": 1054,
+      "end": 1069,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-forwarded-to-unresolved.tsx",
+      "start": 1091,
+      "end": 1106,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -2466,6 +2983,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-handed-to-package-function.tsx",
+      "start": 508,
+      "end": 526,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -2496,6 +3024,17 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-handed-to-package-function.tsx",
       "start": 592,
       "end": 599,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-conditional-spread.tsx",
+      "start": 792,
+      "end": 808,
       "fixes": 0
     },
     {
@@ -2664,6 +3203,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-copied-dom-props.tsx",
+      "start": 1172,
+      "end": 1191,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -2672,6 +3222,17 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-copied-dom-props.tsx",
       "start": 1215,
       "end": 1222,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-copied-dom-props.tsx",
+      "start": 1257,
+      "end": 1272,
       "fixes": 0
     },
     {
@@ -2785,6 +3346,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-handler-registry.tsx",
+      "start": 829,
+      "end": 864,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -2851,6 +3423,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-in-listener-registration.tsx",
+      "start": 698,
+      "end": 731,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -2906,6 +3489,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-mixed-callers.tsx",
+      "start": 1221,
+      "end": 1237,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -2950,6 +3544,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-omit-view.tsx",
+      "start": 551,
+      "end": 570,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -2980,6 +3585,28 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-omit-view.tsx",
       "start": 657,
       "end": 662,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-presence-in-show.tsx",
+      "start": 1008,
+      "end": 1027,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-presence-in-show.tsx",
+      "start": 1055,
+      "end": 1073,
       "fixes": 0
     },
     {
@@ -3082,6 +3709,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-sibling-called.tsx",
+      "start": 709,
+      "end": 725,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -3115,6 +3753,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-spread-onto-intrinsic.tsx",
+      "start": 724,
+      "end": 739,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -3145,6 +3794,17 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-spread-onto-intrinsic.tsx",
       "start": 796,
       "end": 803,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-to-factory-component.tsx",
+      "start": 671,
+      "end": 690,
       "fixes": 0
     },
     {
@@ -3214,6 +3874,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-typeof-guard-spread.tsx",
+      "start": 704,
+      "end": 719,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -3266,6 +3937,28 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-untracked-alias.tsx",
       "start": 758,
       "end": 777,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-untracked-alias.tsx",
+      "start": 868,
+      "end": 884,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-untracked-alias.tsx",
+      "start": 914,
+      "end": 929,
       "fixes": 0
     },
     {
@@ -3335,6 +4028,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-via-tag-member.tsx",
+      "start": 967,
+      "end": 993,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -3351,6 +4055,17 @@
       "kind": "uncertifiable",
       "blocker": "function-run-unplaced",
       "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-via-tag-member.tsx",
+      "start": 1054,
+      "end": 1062,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-via-tag-member.tsx",
       "start": 1054,
       "end": 1062,
@@ -3409,6 +4124,17 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/prop-view-escapes.tsx",
       "start": 783,
       "end": 791,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/prop-view-escapes.tsx",
+      "start": 860,
+      "end": 875,
       "fixes": 0
     },
     {
@@ -3511,6 +4237,39 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/route-store-mixed-callers.ts",
+      "start": 254,
+      "end": 276,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/route-store-mixed-callers.ts",
+      "start": 314,
+      "end": 347,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/route-store-mixed-callers.ts",
+      "start": 375,
+      "end": 392,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -3541,6 +4300,28 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/route-store-mixed-callers.ts",
       "start": 658,
       "end": 670,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/route-store-mixed-callers.ts",
+      "start": 811,
+      "end": 840,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/route-store-mixed-callers.ts",
+      "start": 811,
+      "end": 824,
       "fixes": 0
     },
     {
@@ -3654,6 +4435,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-array-actions.tsx",
+      "start": 529,
+      "end": 548,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -3698,6 +4490,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-class-options.ts",
+      "start": 487,
+      "end": 520,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -3717,6 +4520,17 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/w-class-options.ts",
       "start": 626,
       "end": 639,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-context-value.tsx",
+      "start": 537,
+      "end": 553,
       "fixes": 0
     },
     {
@@ -3764,6 +4578,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-mixed-callers.tsx",
+      "start": 785,
+      "end": 804,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -3797,6 +4622,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-promise-executor.tsx",
+      "start": 301,
+      "end": 334,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -3827,6 +4663,39 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/w-promise-executor.tsx",
       "start": 585,
       "end": 591,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-push-actions.tsx",
+      "start": 541,
+      "end": 557,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-push-actions.tsx",
+      "start": 612,
+      "end": 622,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-push-actions.tsx",
+      "start": 630,
+      "end": 699,
       "fixes": 0
     },
     {
@@ -3871,6 +4740,17 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/w-push-actions.tsx",
       "start": 769,
       "end": 778,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-refresh-method.ts",
+      "start": 335,
+      "end": 350,
       "fixes": 0
     },
     {
@@ -3968,6 +4848,17 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc2001/src/w-returned-closure.ts",
+      "start": 351,
+      "end": 371,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-returned-closure.ts",
       "start": 382,
       "end": 571,
       "fixes": 0
@@ -4023,6 +4914,17 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc2001/src/w-returned-closure.ts",
+      "start": 498,
+      "end": 515,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-returned-closure.ts",
       "start": 534,
       "end": 558,
       "fixes": 0
@@ -4047,6 +4949,17 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/w-returned-closure.ts",
       "start": 534,
       "end": 545,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-socket-handler.ts",
+      "start": 268,
+      "end": 284,
       "fixes": 0
     },
     {
@@ -4091,6 +5004,17 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/w-socket-handler.ts",
       "start": 407,
       "end": 414,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-tuple-setter.ts",
+      "start": 252,
+      "end": 297,
       "fixes": 0
     },
     {
@@ -4204,6 +5128,61 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-unreferenced-writer.ts",
+      "start": 319,
+      "end": 381,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-unreferenced-writer.ts",
+      "start": 329,
+      "end": 367,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-unreferenced-writer.ts",
+      "start": 329,
+      "end": 367,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-view-transition.ts",
+      "start": 321,
+      "end": 340,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/w-view-transition.ts",
+      "start": 440,
+      "end": 486,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -4281,6 +5260,28 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/window-listener.tsx",
+      "start": 339,
+      "end": 358,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/window-listener.tsx",
+      "start": 448,
+      "end": 471,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -4289,6 +5290,17 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/window-listener.tsx",
       "start": 448,
       "end": 469,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/window-listener.tsx",
+      "start": 489,
+      "end": 511,
       "fixes": 0
     },
     {
@@ -4388,6 +5400,17 @@
       "path": "fixtures/uncertifiable-repro/sc2001/src/window-listener.tsx",
       "start": 666,
       "end": 670,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc2001/src/window-listener.tsx",
+      "start": 751,
+      "end": 764,
       "fixes": 0
     },
     {

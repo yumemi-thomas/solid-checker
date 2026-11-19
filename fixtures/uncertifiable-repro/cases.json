@@ -138,6 +138,21 @@
       "kind": "uncertifiable",
       "rule": "SC1002",
       "context": "read-after-await-unaccounted"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -265,6 +280,16 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -2541,6 +2566,26 @@
       "kind": "uncertifiable",
       "rule": "SC2002",
       "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -3196,6 +3241,16 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -5167,6 +5222,11 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -5295,6 +5355,11 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -5382,6 +5447,11 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      },
      {
       "kind": "uncertifiable",
@@ -6319,6 +6389,16 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "value-to-unresolved-callee"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -6537,6 +6617,11 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -7195,6 +7280,11 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -7290,6 +7380,11 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -7381,6 +7476,11 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -7459,6 +7559,21 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -7597,6 +7712,16 @@
       "kind": "uncertifiable",
       "rule": "SC2002",
       "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -7680,6 +7805,16 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      },
      {
       "kind": "uncertifiable",
@@ -7868,6 +8003,11 @@
       "kind": "uncertifiable",
       "rule": "SC2002",
       "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -7993,6 +8133,11 @@
       "kind": "uncertifiable",
       "rule": "SC2002",
       "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -8094,6 +8239,21 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -8158,6 +8318,11 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -8231,6 +8396,11 @@
       "kind": "uncertifiable",
       "rule": "SC1002",
       "context": "unresolved-invocation"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -10314,6 +10484,21 @@
       "kind": "uncertifiable",
       "rule": "SC2002",
       "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -10836,6 +11021,11 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -10948,6 +11138,21 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -11052,6 +11257,11 @@
       "kind": "uncertifiable",
       "rule": "SC2002",
       "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -11135,6 +11345,11 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -11352,6 +11567,21 @@
       "kind": "uncertifiable",
       "rule": "SC2002",
       "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -11425,6 +11655,11 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -11507,6 +11742,11 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -11576,6 +11816,11 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      },
      {
       "kind": "uncertifiable",
@@ -11674,6 +11919,11 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -11775,6 +12025,11 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -11881,6 +12136,16 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -11959,6 +12224,11 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -12039,6 +12309,11 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -12171,6 +12446,16 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -12267,6 +12552,16 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -12392,6 +12687,11 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      },
      {
       "kind": "uncertifiable",
@@ -13061,6 +13361,11 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -13158,6 +13463,11 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -13271,6 +13581,11 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -13389,6 +13704,11 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -13567,6 +13887,11 @@
       "kind": "uncertifiable",
       "rule": "SC2002",
       "context": "package-finding-at-entry"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -13683,6 +14008,11 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -13817,6 +14147,11 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -13898,6 +14233,11 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -14027,6 +14367,11 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -14607,6 +14952,16 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -14757,6 +15112,21 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -14893,6 +15263,21 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -16219,6 +16604,31 @@
       "kind": "uncertifiable",
       "rule": "SC2002",
       "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -16657,6 +17067,21 @@
       "kind": "uncertifiable",
       "rule": "SC1002",
       "context": "unresolved-invocation"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -16741,6 +17166,21 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -16824,6 +17264,16 @@
       "kind": "uncertifiable",
       "rule": "SC2002",
       "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -16882,6 +17332,21 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      },
      {
       "kind": "uncertifiable",
@@ -16993,6 +17458,16 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }

@@ -52,6 +52,17 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/dependency-value-flow/App.tsx",
+      "start": 870,
+      "end": 885,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-value-flow/App.tsx",
       "start": 871,
       "end": 884,
       "fixes": 0

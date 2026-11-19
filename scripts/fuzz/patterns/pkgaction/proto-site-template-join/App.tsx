@@ -1,6 +1,7 @@
 import "fz-proto-site-template-join";
 function Wrap() {
-  void `${["fzprobe"]}`;
+  const text = `${["fzprobe"]}`;
+  void text;
   return null;
 }
 export function App() {
