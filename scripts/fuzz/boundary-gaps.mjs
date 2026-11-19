@@ -242,9 +242,6 @@ export const ARM_GAPS = [
       "write_roles.generator-steps",
     ],
   },
-  {
-    reason: "ADR 1124 round 2: a marker, not an answer. The entry census records it in the decision that relies on a carried `forEach` entry, so the proof log names the proof (monotone M2b); the decision's own arm (`named-callback`, a tracked position) answers. Its pairs are the carried variants (mx-recall `store-*-carried`, `store-*-named-carried` against their lg-recall cells, ADR 1124's gates), not a registered boundary pair.",
-    arms: ["write_roles.role_entries_complete.foreach-carried"],
-  },
+
 ];
 // </arm-gaps>

@@ -81,6 +81,8 @@ export const PAIRS = {
   // ADR 0935 (arm-shapes.mjs): the arms no fixture and no other pair of the registry reached (the arm ablation of the fixture projects listed them as unwitnessed).
   "generator-steps": { fact: "the generator's steps run in the body's window (a spread in the body), or out of it (the same spread in a click handler), or nothing steps it", codes: TABLE_CODES, contexts: ["barm-gen-spread", "barm-gen-handler", "barm-gen-never"] },
   "generator-loop-awaits": { fact: "the async function that drains a sync generator awaits between the steps, or does not", codes: ["REACTIVE_WRITE_IN_OWNED_SCOPE", "ACTION_CALLED_IN_OWNED_SCOPE"], contexts: ["barm-gen-drain", "barm-gen-await"] },
+  // ADR 1124 round 2 (arm-shapes.mjs): a function named at an effect's compute and carried by the standard `forEach`, the carrier in a window or in a handler.
+  "foreach-carried-entry": { fact: "the `forEach` that carries the effect's named compute runs it in the body's window, or in a click handler", codes: ["STRICT_READ_UNTRACKED"], contexts: ["barm-carried-body", "barm-carried-handler"] },
   "flow-climb-after-await": { fact: "the layer that holds the read runs in a flow row's body window, or after an await of its outer layer", codes: ["STRICT_READ_UNTRACKED"], contexts: ["barm-climb-sync", "barm-climb-await"] },
   // ADR 0935 (seam-shapes.mjs): `Number.isFinite` is the declared member (a value-only row), or a helper that takes the intrinsic as a parameter replaced it under a computed key.
   "seam-isfinite": { fact: "`Number.isFinite` ignores a function argument (the declared member), or a helper handed `Number` replaced it with one that runs the function at once", codes: TABLE_CODES,
@@ -214,6 +216,11 @@ premise("flow-row-layer-after-an-await-leaves-the-window", {
   claim: "A layer that runs in place inside a flow row's body runs in the row's window only until the function that calls it suspends: past an await it runs on a later task, in no window.",
   source: "callee_roles.rs:741-790 `control-flow-climb-after-await`", adr: "0935",
   arms: ["callee_roles.control-flow-climb-after-await"], pairs: ["flow-climb-after-await"],
+});
+premise("foreach-carried-entry-is-a-call", {
+  claim: "The standard `Array.prototype.forEach` of an array literal calls each element once, synchronously, on its own stack: a function the literal holds is entered there and nowhere else by it, so the entry census counts that call as an entry, and a read in the function runs where the `forEach` runs.",
+  source: "execution_role/write_roles.rs `foreach_carried_call`, `Census::binding_accounted` (ADR 1124)", adr: "1124",
+  arms: ["write_roles.role_entries_complete.foreach-carried"], pairs: ["foreach-carried-entry"],
 });
 premise("ref-callback-layer-after-an-await-leaves-the-window", {
   claim: "A layer that runs in place inside an intrinsic `ref` callback runs in the element's creation window only until the callback suspends: past an await it runs on a later task, in no window.",

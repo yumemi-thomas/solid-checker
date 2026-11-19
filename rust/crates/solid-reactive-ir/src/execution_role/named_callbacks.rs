@@ -736,9 +736,16 @@ pub(crate) fn named_at_tracked_position(
         // ADR 1119 round 2 (H1): the tracked position says where the read runs only when it is every way into the function
         // (an effect's compute admits no role arm, so the census at the named-callback arm never asked for it):
         // `createEffect(cb, …); [cb].forEach((g) => g())` runs the read in the body too.
+        // ADR 1124 round 2: the census runs in a frame at the read, so an arm it rests on (a `forEach`-carried entry) is named in
+        // the proof log; the carried calls are classified after the frame closes, each its own decision.
         (role.tracked || role.effect_compute)
-            && super::write_roles::role_entries_complete(file, function, lookup)
-            && carried_calls_silent(file, function, lookup)
+            && crate::role_log::decide_if_armed(
+                "read",
+                file.path.as_str(),
+                span,
+                || super::write_roles::role_entries_complete(file, function, lookup),
+                || carried_calls_silent(file, function, lookup),
+            )
     })
 }
 

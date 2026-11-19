@@ -20,6 +20,7 @@
 //
 //   node scripts/fuzz/matrix.mjs --out <fresh dir> --seed 1 --per-cell 20 [--codes A,B] [--contexts a,b] [--confirm-with-chrome]
 //     [--chrome-sample 3] [--shrink] [--baseline matrix.json] [--checker-label <commit>] [--all-cores]
+import { ARM_VARIANTS } from "./arm-shapes.mjs";
 import { provedKey } from "./proved.mjs";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { STORED_ASYNC_CONTEXTS, STORED_CONTEXTS } from "./flip-read.mjs";
@@ -559,6 +560,9 @@ function recallShapesOf(code, context, base, variants, { legal = false, lean = t
   // Batch 11, B2 (the re-review of #220): an `er-*` cell also takes the plain shape of each of the code's `erVariants` the cell fits (a JSX creation, a site of the owner-call
   // universe as a creating call is): its question is how the function is entered, not the spelling of the site.
   if (ER_CONTEXT_NAMES.includes(context)) return recallCell ? [...shapes, ...(SPEC[code].erVariants ?? []).filter(variantFits(code, context)).filter(takes).map((variant) => ({ variant, binding: "direct", layer: "none" }))] : shapes;
+  // ADR 1124 round 2: an arm-shape cell (arm-shapes.mjs `ARM_VARIANTS`) also takes the plain shape of each read variant its arm's question needs.
+  const armVariants = ARM_VARIANTS[code]?.[context];
+  if (armVariants) return recallCell ? [...shapes, ...armVariants.filter((variant) => recallVariantsOf(code, { legal }).includes(variant)).filter(takes).map((variant) => ({ variant, binding: "direct", layer: "none" }))] : shapes;
   if (CBP_CONTEXTS.includes(context) || BASE_ONLY_CONTEXTS().includes(context)) return shapes;
   for (const variant of variants.filter(takes)) {
     // A variant one source carries (`variantSources`, the settled async memo) is crossed on that source by the base grid; the recall
