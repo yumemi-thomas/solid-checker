@@ -37,6 +37,9 @@
 //                        `[...new Float32Array(1)]` (ADR 1114 family 3: an iteration runs the iterator)
 //               gprotoany  `fz-gprotokey` replaces `Float32Array.prototype.reverse` under a key the scan does not decide (a call's result: any name); the site is
 //                        `(new Float32Array(1) as any).reverse()`, a member call no declaration resolves (ADR 1114 family 3, kind any-untyped-member)
+//               gprotocast, gprotoannot  `fz-gprotokey` again; the receiver is typed by a type literal, so the call resolves to the project's declaration:
+//                        `(new Float32Array(1) as unknown as { reverse(): unknown }).reverse()`, `const a: { reverse(): unknown } = new Float32Array(1); a.reverse()`
+//                        (ADR 1114 family 3 slice E)
 //               gviewpattern  `fz-gviewpattern` replaces `btoa` through a click event's `view` read by a pattern (`({ view }) => …`); the site is `btoa("x")` (ADR 1108 part 2)
 //               gaccmember, gaccbare, gacctypeof, gaccpattern  `fz-gaccessor` redefines `devicePixelRatio` with a getter that calls the action; the site is the value read, no
 //                        call: `void window.devicePixelRatio`, `void devicePixelRatio`, `void typeof window.devicePixelRatio`, `({ devicePixelRatio: ratio } = window)` (ADR 0974)
@@ -67,6 +70,8 @@ const PROTO_ROUTES = {
   gprotoimplicit: { text: '/fzprobe/.test("x")' },
   gprotoiter: { text: "void [...new Float32Array(1)]" },
   gprotoany: { text: "void (new Float32Array(1) as any).reverse()" },
+  gprotocast: { text: "void (new Float32Array(1) as unknown as { reverse(): unknown }).reverse()" },
+  gprotoannot: { prelude: ["const a: { reverse(): unknown } = new Float32Array(1);"], text: "void a.reverse()" },
   gviewpattern: { text: 'btoa("x")' },
 };
 const PROTO_KINDS = Object.keys(PROTO_ROUTES);
@@ -85,7 +90,7 @@ export const PA_PACKAGES = {
   ...Object.fromEntries(PATTERN_KINDS.map((kind) => [kind, ["fz-getter"]])),
   gproto: ["fz-gproto"], gview: ["fz-gview"],
   gprotocall: ["fz-gproto"], gprotoapply: ["fz-gproto"], gprotoreflect: ["fz-gproto"], gprotodestr: ["fz-gproto"],
-  gprotoimplicit: ["fz-gprotoexec"], gprotoiter: ["fz-gprotoiter"], gprotoany: ["fz-gprotokey"], gviewpattern: ["fz-gviewpattern"],
+  gprotoimplicit: ["fz-gprotoexec"], gprotoiter: ["fz-gprotoiter"], gprotoany: ["fz-gprotokey"], gprotocast: ["fz-gprotokey"], gprotoannot: ["fz-gprotokey"], gviewpattern: ["fz-gviewpattern"],
 };
 /** `{ [context]: "misuse" | "legal" }`. */
 export const PA_CONTEXTS = Object.fromEntries(

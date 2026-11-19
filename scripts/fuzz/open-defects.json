@@ -128,24 +128,6 @@
     "ACTION_CALLED_IN_OWNED_SCOPE"
    ],
    "certified": false
-  },
-  {
-   "id": "pkgaction/proto-anyname-interface",
-   "item": "ADR 1114 family 3 named miss (Chrome-confirmed, rc.21, pattern lane on main e637f50f2 and slice D): `x.at(0)` where `x` is typed by a project interface that declares `at`, after a package writes Array.prototype under a key the scan does not decide (an any-name writer). The call resolves to the project's declaration, not the library's, so no prototype-writer kind makes it a site; held until the measured cost of making every member call whose receiver may hold a built-in a site under an any-name writer is ruled on",
-   "outcome": "false-clean",
-   "codes": [
-    "ACTION_CALLED_IN_OWNED_SCOPE"
-   ],
-   "certified": false
-  },
-  {
-   "id": "pkgaction/proto-anyname-unknown-cast",
-   "item": "ADR 1114 family 3 named miss (Chrome-confirmed, rc.21, pattern lane on main e637f50f2 and slice D): `(x as { at(index: number): unknown }).at(0)`, a receiver cast to a type literal, after a package writes Array.prototype under a key the scan does not decide (an any-name writer). The call resolves to the project's declaration, not the library's, so no prototype-writer kind makes it a site; held until the measured cost of making every member call whose receiver may hold a built-in a site under an any-name writer is ruled on",
-   "outcome": "false-clean",
-   "codes": [
-    "ACTION_CALLED_IN_OWNED_SCOPE"
-   ],
-   "certified": false
   }
  ],
  "notGenerated": [

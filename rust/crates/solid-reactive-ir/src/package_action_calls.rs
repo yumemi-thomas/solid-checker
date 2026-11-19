@@ -2816,7 +2816,7 @@ fn prototype_call(
         return None;
     }
     let mut how = "member";
-    let mut any_kind = "any-library-member";
+    let mut any_kind = std::borrow::Cow::Borrowed("any-library-member");
     let ast = &file.ast;
     let callee = ast.peel_ts_sugar_span(call.callee);
     let resolved = ctx
@@ -2854,10 +2854,16 @@ fn prototype_call(
             }
             Key::Unspelled => unspelled = true,
         }
-        if resolved.is_none() {
-            any_kind = "any-untyped-member";
-        }
-        any = standard || resolved.is_none();
+        // ADR 1114 family 3 slice E: a call that resolves to the project's declaration (an interface, a type literal, a cast) may still run a built-in's
+        // member: the value is not proven a project object, and a type admits a built-in (`const x: Indexed = [1]`).
+        any_kind = match resolved {
+            None => "any-untyped-member".into(),
+            Some(declaration) if !standard => {
+                format!("any-project-{}", declaration.kind.to_ascii_lowercase()).into()
+            }
+            Some(_) => any_kind,
+        };
+        any = true;
     } else if let Some(declaration) = resolved.filter(|_| standard) {
         // The name the call spells (`new Map(…)`: the library declares the constructor's signature under another) and the one the library declares.
         let spelled = file
@@ -2872,7 +2878,8 @@ fn prototype_call(
             "any-iterating-ctor"
         } else {
             "any-bare-inherited"
-        };
+        }
+        .into();
         any = (!bound
             && call.construct
             && !call.arguments.is_empty()
