@@ -43,7 +43,7 @@
   "SC1003 host-callback-timing": 1,
   "SC1003 package-finding-at-entry": 14,
   "SC1003 props-callers-unenumerated": 19,
-  "SC1003 store-key-undecided": 2,
+  "SC1003 store-key-undecided": 9,
   "SC1003 summary-read-unplaced": 1,
   "SC1004 component-identity-unproven": 1,
   "SC1004 conditional-return-unproven": 8,

@@ -1,0 +1,112 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "blocker": "store-key-undecided",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/sc1003-then-keys/App.tsx",
+      "start": 408,
+      "end": 420,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "blocker": "store-key-undecided",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/sc1003-then-keys/App.tsx",
+      "start": 562,
+      "end": 577,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "blocker": "store-key-undecided",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/sc1003-then-keys/App.tsx",
+      "start": 713,
+      "end": 725,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "blocker": "store-key-undecided",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/sc1003-then-keys/App.tsx",
+      "start": 847,
+      "end": 855,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "blocker": "store-key-undecided",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/sc1003-then-keys/App.tsx",
+      "start": 990,
+      "end": 1001,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "blocker": "store-key-undecided",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/sc1003-then-keys/App.tsx",
+      "start": 1132,
+      "end": 1145,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "blocker": "store-key-undecided",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/sc1003-then-keys/App.tsx",
+      "start": 1285,
+      "end": 1303,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/sc1003-then-keys/App.tsx",
+      "start": 1760,
+      "end": 1771,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/sc1003-then-keys/App.tsx",
+      "start": 1916,
+      "end": 1929,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/sc1003-then-keys/App.tsx",
+      "start": 2066,
+      "end": 2078,
+      "fixes": 0
+    }
+  ]
+}

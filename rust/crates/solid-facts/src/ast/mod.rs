@@ -67,7 +67,9 @@ use thiserror::Error;
 /// 98 (ADR 1109): `swallowing_try_blocks`, the `try` blocks a throw in which may end in a normal completion of the `try` (a
 /// `catch` that does more than rethrow, or a `finally` that may jump).
 /// 99 (ADR 1113): every `in` and `instanceof` binary with its operands (`relation_operators`).
-pub const AST_FACTS_SCHEMA: u32 = 99;
+/// 100 (ADR 1122): every property of an object binding pattern with its key by value (`object_properties`: the parser's
+/// key, `computed`, `has_default`, `nested`, `local`), and whether a pattern ends in a rest element (`pattern_rest`).
+pub const AST_FACTS_SCHEMA: u32 = 100;
 
 mod argument_completion;
 mod code_sinks;
