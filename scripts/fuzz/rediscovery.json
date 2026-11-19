@@ -36653,7 +36653,7 @@
  {
   "finding": "Found by ADR 1127's twin variants (arrows too, live on main): a store read in a function named by its binding as an effect's compute and also called by name in an action step an apply or a reaction runs (or a dny-* dispatch) was silent at the tracked position (local_access discover_member.named-at-tracked-position): the census counted the call, but the summaries carry the read to no row there; rc.21 warns STRICT_READ_UNTRACKED",
   "found": "ADR 1127's scoped mx-recall gate (store-effect-called, store-effect-named-called)",
-  "fixed": "ADR 1128 (local_access named_calls_report: the member silence holds only when no direct call runs where an untracked read reports or nothing places it)",
+  "fixed": "ADR 1130 (local_access named_calls_report: the member silence holds only when no direct call runs where an untracked read reports or nothing places it)",
   "grid": "mx-recall",
   "code": "STRICT_READ_UNTRACKED",
   "ids": [
@@ -36762,6 +36762,6 @@
    "mx-strict-read-untracked-dny-portal-dispose-store-effect-called-direct-none",
    "mx-strict-read-untracked-dny-portal-dispose-store-effect-named-called-direct-none"
   ],
-  "rediscovered": "fuzz-focus mx-recall on store-effect-called and store-effect-named-called: main c212ad5f5 (and ADR 1127 alone) 104 false cleans; ADR 1128 none"
+  "rediscovered": "fuzz-focus mx-recall on store-effect-called and store-effect-named-called: main c212ad5f5 (and ADR 1127 alone) 104 false cleans; ADR 1130 none"
  }
 ]
