@@ -185,6 +185,11 @@ site_silences! {
     /// A store Get under a key the checker cannot spell, at a site whose role
     /// reports nothing.
     MemberRoleDoesNotReport => "local_access.discover_member.role-does-not-report",
+    /// ADR 1114 family 2: a root's destructure in a fresh-at-call-time role (a tracked scope, a handler, a deferred callback, no window):
+    /// SC1003's producer skips it, and the role reports no untracked read.
+    DestructureRoleDoesNotReport => "static_rules.component_props_destructure.role-does-not-report",
+    /// ADR 1114 family 2: every caller passes the destructured props static values (`PropUse::Static`).
+    DestructurePropsStatic => "static_rules.component_props_destructure.props-static",
     /// `onFlush` where the write role allows it (an effect's apply, a leaf, a
     /// handler): no owner rejects the call.
     OnFlushRoleAllows => "static_api.on_flush.role-allows",
@@ -307,7 +312,9 @@ impl SiteSilence {
             | Self::NoWindowModuleScope
             | Self::NoWindowAfterAwait
             | Self::NoWindowNothingEnters
-            | Self::MemberRoleDoesNotReport => &[StrictRead],
+            | Self::MemberRoleDoesNotReport
+            | Self::DestructureRoleDoesNotReport
+            | Self::DestructurePropsStatic => &[StrictRead],
             // A setter that meets no owned-scope write guard: the owned-scope write only. An optimistic setter of an async source takes the other
             // branch of `push_setter_write` (SC2009) before it reaches these.
             Self::SetterOptimisticSignalUnguarded
@@ -895,7 +902,7 @@ mod tests {
     }
 
     /// The sources that name silences, by the module a silence's id begins with.
-    const PRODUCERS: [(&str, &str); 8] = [
+    const PRODUCERS: [(&str, &str); 9] = [
         ("local_access", include_str!("local_access.rs")),
         (
             "shared_reactivity",
@@ -910,6 +917,7 @@ mod tests {
         ),
         ("leaf_universe", include_str!("owners/leaf_universe.rs")),
         ("loading_hold", include_str!("loading_hold.rs")),
+        ("static_rules", include_str!("static_rules.rs")),
     ];
 
     /// ADR 0886's test of its emission arms, for these: every silence is named

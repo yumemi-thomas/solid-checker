@@ -78,6 +78,17 @@ pub(super) fn discover_summary_nodes(
                         project_indexes.method_symbol(file.path.as_str(), name.span)
                     })
                 });
+            // ADR 1127: a named function expression is entered through the binding holding it too.
+            let holder_symbol = (function.kind == solid_facts::ast::FunctionKind::Expression
+                && function.name.is_some())
+            .then(|| crate::execution_role::entry_bindings(file, function))
+            .flatten()
+            .and_then(|bindings| bindings.get(1).copied())
+            .and_then(|holder| {
+                entities
+                    .get(&location(file.path.shared(), holder.span))
+                    .cloned()
+            });
             let runtime_identity = binding_name
                 .as_ref()
                 .and_then(|name| {
@@ -109,6 +120,7 @@ pub(super) fn discover_summary_nodes(
                     .as_ref()
                     .map(|name| file.source_text(name.span).unwrap_or_default().to_owned()),
                 symbol,
+                holder_symbol,
                 runtime_identity,
                 parameters,
                 exported: source_function.map_or_else(
