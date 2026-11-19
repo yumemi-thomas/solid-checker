@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { callStarts, frameStarts, statementAt } from "./call-starts.mjs";
+import { withheldAtStack, withStarts } from "./codes.mjs";
 
 // Review 4c: V8 puts a member call's frame at the property; a checker row starts at the call or its callee object.
 describe("callStarts", () => {
@@ -198,6 +199,61 @@ describe("callStarts", () => {
     expect(at(1, 12)).toEqual([{ line: 1, column: 12 }, { line: 1, column: 7 }]);
     expect(at(2, 10)).toEqual([{ line: 2, column: 10 }, { line: 2, column: 7 }]);
     expect(at(3, 7)).toEqual([{ line: 3, column: 7 }, { line: 3, column: 2 }]);
+  });
+  // ADR 1117c: Chrome's frames of the js-* coercion cells (W4, 43ddac349), each against the checker's row, on the cells' own lines.
+  describe("a lone coercion (ADR 1117c)", () => {
+    const hooks = "async function g() {\n  const jr1 = { toString: () => \"\" };\n  await 0;\n";
+    const lines = ["    void `${jr1}`;", '    void ("a" + jr1);', "    void ({} instanceof jr1);", "    const b = {} instanceof jr1; void b;", "    void ((jr1 as unknown as number) < 1);"];
+    const at = callStarts(`${hooks}${lines.join("\n")}\n}\n`);
+    it("takes a frame at a `void` to its lone coercion and that coercion's operand (js-tostring, js-toprim: frame 12:5, row 12:13)", () => {
+      expect(at(4, 5)).toEqual([{ line: 4, column: 5 }, { line: 4, column: 10 }, { line: 4, column: 13 }]);
+    });
+    it("takes a frame between a coercion's start and its operator's end to the coercion and its operand (js-tostring-plus 12:11 -> 12:17; js-hasinst 12:12 -> 12:11; js-hasinst-const 12:16 -> 12:15)", () => {
+      expect(at(5, 11)).toEqual([{ line: 5, column: 11 }, { line: 5, column: 17 }]);
+      expect(at(5, 15)).toEqual([{ line: 5, column: 15 }, { line: 5, column: 11 }, { line: 5, column: 17 }]);
+      expect(at(6, 12)).toEqual([{ line: 6, column: 12 }, { line: 6, column: 11 }, { line: 6, column: 25 }]);
+      expect(at(7, 16)).toEqual([{ line: 7, column: 16 }, { line: 7, column: 15 }, { line: 7, column: 29 }]);
+      expect(at(8, 12)).toEqual([{ line: 8, column: 12 }, { line: 8, column: 11 }]);
+    });
+    it("keeps a frame past the operator, or on the operand, where it is", () => {
+      expect(at(5, 17)).toEqual([{ line: 5, column: 17 }]);
+      expect(at(6, 25)).toEqual([{ line: 6, column: 25 }]);
+      expect(at(7, 34)).toEqual([{ line: 7, column: 34 }]);
+    });
+    it("claims no row of another site on the line: each frame stands for its own statement's coercion only", () => {
+      const two = callStarts(`${hooks}  const jr2 = { toString: () => \"\" };\n  void \`\${jr1}\`; void \`\${jr2}\`; void ("a" + jr1); void ("b" + jr2);\n}\n`);
+      expect(two(5, 3)).toEqual([{ line: 5, column: 3 }, { line: 5, column: 8 }, { line: 5, column: 11 }]);
+      expect(two(5, 18)).toEqual([{ line: 5, column: 18 }, { line: 5, column: 23 }, { line: 5, column: 26 }]);
+      expect(two(5, 39)).toEqual([{ line: 5, column: 39 }, { line: 5, column: 45 }]);
+      expect(two(5, 57)).toEqual([{ line: 5, column: 57 }, { line: 5, column: 63 }]);
+    });
+    it("maps nothing where another thing in the expression can run code: a second substitution or operand, a member, a call, a global, a coerced object literal", () => {
+      const other = callStarts(`${hooks}  const jr2 = 1;\n${[
+        "  void `${jr1}${jr2}`;", "  void (jr1 + jr2);", "  void `${st.x}`;", "  void (\"a\" + st.x);", "  void `${f()}`;", '  void ("a" + devicePixelRatio);',
+        "  void ({} + jr1);", "  void (jr2 instanceof jr1);", "  void (jr1 === \"a\");", "  void (`${jr1}` + f());", "  void (\"a\" + jr1 + jr2);"].join("\n")}\n}\n`);
+      for (let line = 6; line <= 16; line += 1) {
+        expect(other(line, 3), `line ${line} at void`).toEqual([{ line, column: 3 }]);
+      }
+      // In the operand too, but for the inner `"a" + jr1` of `"a" + jr1 + jr2`, a lone coercion of its own: its frame is not the outer `+`'s.
+      for (const line of [6, 7, 8, 9, 10, 11, 12, 13, 14, 15]) expect(other(line, 9), `line ${line} in the operand`).toEqual([{ line, column: 9 }]);
+      expect(other(16, 9)).toEqual([{ line: 16, column: 9 }, { line: 16, column: 15 }]);
+      expect(other(16, 19)).toEqual([{ line: 16, column: 19 }]);
+    });
+    it("needs the operand to be a binding declared around it: an unknown name may be a global's getter", () => {
+      const at2 = callStarts('function h(p: unknown) {\n  void `${p}`;\n  void `${q}`;\n  for (const r of [1]) void ("a" + r);\n  try {} catch (e) { void `${e}`; }\n}\n');
+      expect(at2(2, 3)).toContainEqual({ line: 2, column: 10 });
+      expect(at2(3, 3)).toEqual([{ line: 3, column: 3 }]);
+      expect(at2(4, 30)).toContainEqual({ line: 4, column: 36 });
+      expect(at2(5, 22)).toContainEqual({ line: 5, column: 29 });
+    });
+    it("covers the hook's frame by the coercion's row, and an unrelated row on the line by none", () => {
+      const source = `${hooks}  void \`\${jr1}\`; void st.x;\n}\n`;
+      const stack = withStarts([{ line: 2, column: 26 }, { line: 5, column: 3 }], frameStarts(source));
+      const row = (line, column) => ({ rule: "strict-read-untracked", kind: "uncertifiable", line, column });
+      expect(withheldAtStack(row(5, 11), stack, () => false)).toBe(true);
+      expect(withheldAtStack(row(5, 17), stack, () => false)).toBe(false);
+      expect(withheldAtStack(row(5, 22), stack, () => false)).toBe(false);
+    });
   });
   it("finds the statement of a position on a line of several", () => {
     const at = statementAt("const a = f(st); const b = g(c); log(a);", 1, 26);
