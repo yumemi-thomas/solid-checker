@@ -638,25 +638,45 @@ fn sites<'a>(
                 root: Some(chain.root),
             });
         }
-        // ADR 1113: an operator that may run project code with no call of its own, written after a suspension. A coercion (a template substitution, a `+`, a
-        // relational comparison) reaches a value's `toString` or `valueOf`; `in` reaches a Proxy's `has` trap; `instanceof` reaches `Symbol.hasInstance` or
-        // a `getPrototypeOf` trap. A bare `` `${host}`; `` or `"x" in px;` statement had no site at all. No fact tells these operators apart
-        // (`primitive_results` holds every operator whose value is a primitive), and none names `this`. So every such expression is a site unless the file
-        // holds no `this` or `super` (`uses_receiver`), and the expression holds no call, member, object property or computed key, and every name it
-        // references is proven primitive: then no operand is an object, and no operator reaches project code.
+        // ADR 1113: an operator that may run project code with no call of its own, written after a suspension. A bare `` `${host}`; `` or `"x" in px;`
+        // statement had no site at all. The narrowing (the coordinator's ruling on 889a755fa): a site is the operand an operator coerces (a template
+        // substitution, `+`, a relational comparison, `++`: `toString`, `valueOf`, `Symbol.toPrimitive`) unless Type Facts prove it a primitive; an
+        // `in` unless both operands are primitives (`ToPropertyKey`, a proxy's `has` trap); every `instanceof` (`Symbol.hasInstance`, and a proxy's
+        // `getPrototypeOf` trap on the left whatever the right is); and a `delete` (a proxy's `deleteProperty` trap). `===`, `!==`, `typeof` and `!` run nothing.
         let mut taken: HashSet<u32> = found
             .iter()
             .filter(|site: &&AwaitSite<'_>| std::ptr::eq(site.file, file))
             .map(|site| site.at.start)
             .collect();
-        for operator in file
+        let primitive = |operand: Span| operand_proven_primitive(ctx, file, operand);
+        let coerced = file
             .ast
-            .primitive_results
+            .coercing_operands
             .iter()
-            .chain(file.ast.coercing_operands.iter())
             .copied()
-        {
-            if !after(file, operator) || operator_runs_no_code(ctx, file, operator) {
+            .filter(|operand| !primitive(*operand));
+        let related = file
+            .ast
+            .relation_operators
+            .iter()
+            .filter(|relation| match relation.kind {
+                solid_facts::ast::RelationOperatorKind::In => {
+                    !(primitive(relation.left) && primitive(relation.right))
+                }
+                // An object on the left reaches a proxy's `getPrototypeOf` trap whatever the right is, and a primitive on the left still reads the
+                // right's `Symbol.hasInstance`, which only a proved standard constructor makes inert: no fact proves one, so every `instanceof` is a site.
+                solid_facts::ast::RelationOperatorKind::Instanceof => true,
+            })
+            .map(|relation| relation.span);
+        let deletes = file.ast.primitive_results.iter().copied().filter(|operator| {
+            file.ast
+                .deleted_targets
+                .iter()
+                .any(|target| operator.start < target.start && operator.end == target.end)
+        });
+        let operators = coerced.chain(related).chain(deletes).collect::<Vec<_>>();
+        for operator in operators {
+            if !after(file, operator) {
                 continue;
             }
             let at = file.ast.peel_ts_sugar_span(operator);
@@ -680,30 +700,15 @@ fn sites<'a>(
     found
 }
 
-/// ADR 1113: whether evaluating the operator expression at `span` reaches no project code: see the site loop above.
-fn operator_runs_no_code(ctx: &AnalysisContext<'_>, file: &FileFacts, span: Span) -> bool {
-    let ast = &file.ast;
-    let inside = |inner: Span| span.contains(inner);
-    !file.ast.uses_receiver
-        && !ast.calls.iter().any(|call| inside(call.span))
-        && !ast.members.iter().any(|member| inside(member.span))
-        && !ast
-            .object_properties
-            .iter()
-            .any(|property| inside(property.span))
-        && !ast.computed_keys.iter().any(|key| inside(key.read))
-        && !ast
-            .tagged_templates
-            .iter()
-            .any(|tagged| inside(tagged.span))
-        && ast.identifiers.iter().all(|identifier| {
-            identifier.role != solid_facts::ast::IdentifierRole::Reference
-                || !inside(identifier.span)
-                || (ast.reference_declaration(identifier.span).is_some()
-                    && ctx
-                        .semantic_lookup
-                        .proven_primitive(file, identifier.span, 4))
-        })
+/// ADR 1113: the operand at `operand` is a primitive: Type Facts give it a demanded primitive domain with no object in it, or the value-based proof
+/// (`proven_primitive`: a literal, a primitive-valued operator, a `const` holding one) does.
+fn operand_proven_primitive(ctx: &AnalysisContext<'_>, file: &FileFacts, operand: Span) -> bool {
+    let operand = file.ast.peel_ts_sugar_span(operand);
+    ctx.semantic_lookup
+        .entity_at(file.path.as_str(), operand)
+        .and_then(|entity| entity.primitive_value_domain.present())
+        .is_some_and(|domain| !domain.unknown() && !domain.may_be_object())
+        || ctx.semantic_lookup.proven_primitive(file, operand, 4)
 }
 
 /// ADR 1065 part 2 (census only): what the root of a member read is, by its syntax and binding.

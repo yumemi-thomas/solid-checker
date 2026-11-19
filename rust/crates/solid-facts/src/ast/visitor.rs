@@ -2946,6 +2946,19 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         use oxc_syntax::operator::BinaryOperator;
         // Every binary operator yields a number, bigint, string or boolean.
         self.primitive_results.push(span(expression.span));
+        let relation = match expression.operator {
+            BinaryOperator::In => Some(RelationOperatorKind::In),
+            BinaryOperator::Instanceof => Some(RelationOperatorKind::Instanceof),
+            _ => None,
+        };
+        if let Some(kind) = relation {
+            self.relation_operators.push(RelationOperatorFact {
+                span: span(expression.span),
+                kind,
+                left: span(expression.left.span()),
+                right: span(expression.right.span()),
+            });
+        }
         if matches!(
             expression.operator,
             BinaryOperator::StrictEquality | BinaryOperator::StrictInequality

@@ -342,6 +342,11 @@ pub struct AstFacts {
     /// operation that probes the value's keys without reading one.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub key_probed_operands: Vec<Span>,
+    /// Every `in` and `instanceof` binary, with its operands, sorted by span (facts schema 98, ADR 1113): the two operators of
+    /// [`AstFacts::primitive_results`] that run a value's own code without coercing it to a primitive (`ToPropertyKey` and a proxy's `has`
+    /// trap for `in`; `Symbol.hasInstance` and a proxy's `getPrototypeOf` trap for `instanceof`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relation_operators: Vec<RelationOperatorFact>,
     #[serde(default)]
     pub assignments: Vec<AssignmentFact>,
     /// Exact simple assignment targets, including destructuring leaves,
@@ -1899,6 +1904,23 @@ pub enum CoerciveOperandKind {
     LooseEquality,
 }
 
+/// An `in` or `instanceof` binary ([`AstFacts::relation_operators`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RelationOperatorFact {
+    pub span: Span,
+    pub kind: RelationOperatorKind,
+    pub left: Span,
+    pub right: Span,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RelationOperatorKind {
+    In,
+    Instanceof,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CoerciveOperandFact {
@@ -2504,6 +2526,7 @@ impl AstFacts {
             primitive_results: Vec::new(),
             iterated_operands: Vec::new(),
             key_probed_operands: Vec::new(),
+            relation_operators: Vec::new(),
             assignments: Vec::new(),
             write_targets: Vec::new(),
             deleted_targets: Vec::new(),
