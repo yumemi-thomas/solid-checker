@@ -81,7 +81,7 @@ async function main(argv) {
     if (command === "record" && !falsePositives.length && !unnamed.length) ledger.programs[name] = { hash, certified: entry.certified || now.certified, u: entry.u.filter((key) => now.sites.has(key)) };
   }
   if (command === "record") writeFileSync(TEXTBOOK, textbookText(ledger));
-  console.log(`textbook: ${programs.length} programs, ${certified} certified, ${uKeys} uncertifiable (site, code), ${gainedTotal} newly proved; ${problems.length} problem(s)`);
+  console.log(`textbook: ${programs.length} programs, ${certified} certified (${Math.round((100 * certified) / programs.length)}%), ${uKeys} uncertifiable (site, code), ${gainedTotal} newly proved; ${problems.length} problem(s)`);
   for (const line of problems) console.log(`  ${line}`);
   process.exitCode = problems.length ? 1 : 0;
 }

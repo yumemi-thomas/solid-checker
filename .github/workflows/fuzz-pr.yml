@@ -137,6 +137,13 @@ jobs:
           [ "$seed" = day ] && seed=$(date -u +%Y%j)
           node scripts/fuzz/focus.mjs --smoke --smoke-leg "$LEG" --cover "$COVER" --cover-seed "$seed" --sample 0 --out "$RUNNER_TEMP/out" \
             --checker-bin "$PWD/rust/target/release/solid-checker-rust" --typefacts "$PWD/bin/solid-typefacts" -- --cache-dir "$HOME/fuzz-cache"
+      # ADR 1118: the textbook tier (fixtures/textbook against scripts/fuzz/proved/textbook.json), its rate in every PR's summary; checker only,
+      # 21 programs, once (the census leg). A violation, a lost proved (site, code) or a lost certification fails.
+      - name: Textbook tier
+        if: matrix.leg == 'census' && !cancelled()
+        run: |
+          set -o pipefail
+          node scripts/fuzz/textbook.mjs check --checker "$PWD/rust/target/release/solid-checker-rust" --typefacts "$PWD/bin/solid-typefacts" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Keep the runtime cache entries this leg used
         if: github.event_name == 'push' && !cancelled()
         run: |
