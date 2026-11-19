@@ -767,8 +767,10 @@ pub(crate) fn receiver_spelled(file: &FileFacts, span: Span, lexical: bool) -> b
     } else {
         &["this", "arguments", "eval", "super", "\\"]
     };
-    file.source_text(span)
-        .is_none_or(|text| spellings.iter().any(|spelling| text.contains(spelling)))
+    // Spelled unless the text is read and holds none of them.
+    !file
+        .source_text(span)
+        .is_some_and(|text| !spellings.iter().any(|spelling| text.contains(spelling)))
 }
 
 #[cfg(test)]
