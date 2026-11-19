@@ -439,6 +439,18 @@ const WHOLE_STORE_READS = {
   // deferred arm answered before ADR 1111's check).
   "store-effect-carried": { reads: true, imports: ["createEffect"], text: (o) => `{ const f = () => ${o}.v; createEffect(f, () => {}); [f].forEach((g) => g()); }` },
   "store-render-effect-carried": { reads: true, imports: ["createRenderEffect"], text: (o) => `{ const f = () => ${o}.v; createRenderEffect(f, () => {}); [f].forEach((g) => g()); }` },
+  // ADR 1124 round 2 (review U1): the callback a named function expression, carried through the `const` holding it (or its same name).
+  "store-byname-named-carried": { reads: true, imports: ["createMemo"], text: (o) => `{ const f = function inner() { return ${o}.v; }; createMemo(f); [f].forEach((g) => g()); }` },
+  "store-settled-named-carried": { reads: true, imports: ["onSettled"], text: (o) => `{ const f = function inner() { void ${o}.v; }; onSettled(f); [f].forEach((g) => g()); }` },
+  "store-effect-named-carried": { reads: true, imports: ["createEffect"], text: (o) => `{ const f = function inner() { return ${o}.v; }; createEffect(f, () => {}); [f].forEach((g) => g()); }` },
+  "store-render-effect-named-carried": { reads: true, imports: ["createRenderEffect"], text: (o) => `{ const f = function inner() { return ${o}.v; }; createRenderEffect(f, () => {}); [f].forEach((g) => g()); }` },
+  "store-byname-same-carried": { reads: true, imports: ["createMemo"], text: (o) => `{ const f = function f() { return ${o}.v; }; createMemo(f); [f].forEach((g) => g()); }` },
+  // ADR 1124: the twins of the forEach-carried entry, which stay no call of the callback: `map`, a non-literal receiver, a parameter
+  // passed on, a parameter reassigned.
+  "store-byname-mapped": { reads: true, imports: ["createMemo"], text: (o) => `{ const f = () => ${o}.v; createMemo(f); [f].map((g) => g()); }` },
+  "store-byname-list": { reads: true, imports: ["createMemo"], text: (o) => `{ const f = () => ${o}.v; createMemo(f); const l = [f]; l.forEach((g) => g()); }` },
+  "store-byname-passed": { reads: true, imports: ["createMemo"], text: (o) => `{ const f = () => ${o}.v; createMemo(f); [f].forEach((g) => { queueMicrotask(g); }); }` },
+  "store-byname-reassigned": { reads: true, imports: ["createMemo"], text: (o) => `{ const f = () => ${o}.v; createMemo(f); [f].forEach((g) => { g = () => 0; g(); }); }` },
   "store-settled-called": { reads: true, imports: ["onSettled"], text: (o) => `{ const f = () => { void ${o}.v; }; onSettled(f); f(); }` },
   // ADR 1127: a named function expression called through the `const` holding it; the call graph keyed it by its own name only,
   // so the call reached no summary and the read was clean (also through ADR 1111's direct-call check).
