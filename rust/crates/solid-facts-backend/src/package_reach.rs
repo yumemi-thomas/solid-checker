@@ -1064,6 +1064,36 @@ const DOCUMENT_TYPES: &[&str] = &[
     "Object",
 ];
 
+/// ADR 1108 part 2: the library types a receiver may be typed as where its `view` is a `UIEvent`'s (`view: Window | null`): the event types that have one, and
+/// their `lib.dom` supertypes.
+const UI_EVENT_TYPES: &[&str] = &[
+    "UIEvent",
+    "MouseEvent",
+    "PointerEvent",
+    "WheelEvent",
+    "DragEvent",
+    "KeyboardEvent",
+    "FocusEvent",
+    "InputEvent",
+    "CompositionEvent",
+    "TouchEvent",
+    "Event",
+    "Object",
+];
+
+/// ADR 1108 part 2: the library types a receiver may be typed as where its `source` is a `MessageEvent`'s (`source: MessageEventSource | null`), and its supertypes.
+const MESSAGE_EVENT_TYPES: &[&str] = &["MessageEvent", "Event", "Object"];
+
+/// ADR 1077 and ADR 1108 part 2: the library types a receiver of each member the package scan takes for the global object may be the window's holder as: a document
+/// for `defaultView`, a `UIEvent` for `view`, a `MessageEvent` for `source`.
+fn window_holder_types(member: &str) -> &'static [&'static str] {
+    match member {
+        "view" => UI_EVENT_TYPES,
+        "source" => MESSAGE_EVENT_TYPES,
+        _ => DOCUMENT_TYPES,
+    }
+}
+
 /// ADR 1077: for each file of the program, the static `x.defaultView` reads whose value the program's types prove holds no global object: the read is of a type
 /// with no object in it (its primitive domain: `"pages" | "infinite" | undefined`), and the receiver, as written and with assertions peeled, has a closed runtime
 /// domain and no library type a document may be. Any missing, `any` or `unknown` fact keeps the read.
@@ -1072,7 +1102,8 @@ fn inert_default_views(facts: &solid_facts::ProjectFacts) -> InertDefaultViews {
     for file in &facts.files {
         let mut members = HashSet::new();
         let entities = facts.typescript.entities_for_path(file.path.as_str());
-        for member in crate::demand_plan::default_view_members(file) {
+        for (member, name) in crate::demand_plan::default_view_members(file) {
+            let holder_types = window_holder_types(name);
             let at = |span: solid_facts::core::Span| {
                 let found = entities
                     .iter()
@@ -1100,7 +1131,7 @@ fn inert_default_views(facts: &solid_facts::ProjectFacts) -> InertDefaultViews {
                             && entity.library_types.as_deref().is_none_or(|types| {
                                 types
                                     .iter()
-                                    .all(|name| !DOCUMENT_TYPES.contains(&name.as_ref()))
+                                    .all(|name| !holder_types.contains(&name.as_ref()))
                             })
                     })
                 })
