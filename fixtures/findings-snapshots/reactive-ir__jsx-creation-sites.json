@@ -913,7 +913,7 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
       "start": 2029,
-      "end": 2040,
+      "end": 2030,
       "fixes": 0
     },
     {

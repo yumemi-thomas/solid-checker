@@ -2696,9 +2696,7 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
             &[51_u64, 56, 62, 70, 77, 84, 106, 112, 125, 134][..],
             // ADR 0976 (R6): two more of `beside`, uncertifiable SC1002 `unresolved-invocation` rows of the read-after-await net in generator bodies a stepped route
             // runs: `yield* inner()` (line 69, a parameter called in an async generator) and `flush()` (line 119, a parameter called in a generator an action runs).
-            // ADR 1113: two more, uncertifiable SC1002 `read-after-await-unaccounted` rows at line 76's `i < 2` and `i++`, operators a loop that awaits runs
-            // again after its await, on a `let` the checker does not prove primitive.
-            38,
+            36,
             1,
         ),
         // ADR 0966: rc.8's `asyncAfterAwait` flush (23, a generator body the census's continuation class excludes) is one uncertifiable

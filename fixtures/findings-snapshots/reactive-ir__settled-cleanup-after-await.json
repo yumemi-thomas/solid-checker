@@ -23,28 +23,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "read-after-await-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/settled-cleanup-after-await/App.tsx",
-      "start": 1193,
-      "end": 1198,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "read-after-await-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/settled-cleanup-after-await/App.tsx",
-      "start": 1200,
-      "end": 1201,
-      "fixes": 0
-    },
-    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -84,63 +62,8 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/settled-cleanup-after-await/App.tsx",
-      "start": 1694,
-      "end": 1699,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "read-after-await-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/settled-cleanup-after-await/App.tsx",
-      "start": 1701,
-      "end": 1702,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "read-after-await-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/settled-cleanup-after-await/App.tsx",
       "start": 1750,
       "end": 1755,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "read-after-await-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/settled-cleanup-after-await/App.tsx",
-      "start": 2025,
-      "end": 2030,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "read-after-await-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/settled-cleanup-after-await/App.tsx",
-      "start": 2032,
-      "end": 2033,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "read-after-await-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/settled-cleanup-after-await/App.tsx",
-      "start": 2052,
-      "end": 2057,
       "fixes": 0
     },
     {
