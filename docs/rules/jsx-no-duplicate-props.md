@@ -77,8 +77,11 @@ empty one drops nothing. A source whose value is not proven is uncertifiable,
 blocker `content-source-value-unproven`. A spread whose keys are not closed against
 the content props is uncertifiable too, blocker `spread-content-unproven`; a complete
 declared key set closes it, under ADR 0436's premise. So does a `merge`/`omit` view
-of a component's own props whose every caller is a JSX site with literal attribute
-keys and no spread (ADR 1129): the spread then holds the callers' keys (`children`
-where they write children) and the view's literal keys, minus the `omit` keys. A
-caller that writes a content key keeps the spread uncertifiable. Upstream reads neither: both
+of a component's own props whose every caller, through any name the function is
+entered by (a named function expression's own name too, ADR 1127), is a JSX site
+with literal attribute keys and no spread (ADR 1129): the spread then holds the
+callers' keys (`children` where they write children) and the view's literal keys,
+minus the `omit` keys. A caller that writes a content key keeps the spread
+uncertifiable, and so does an `omit` view in a program where a file or a loaded
+package may replace `Array.prototype.includes`, by which rc.21's `omit` hides keys. Upstream reads neither: both
 divergences are pinned in `fixtures/ownership-cases/cases.json`.
