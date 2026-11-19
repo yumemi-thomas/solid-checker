@@ -2707,7 +2707,10 @@ pub(crate) fn standard_member_replaced(lookup: &SemanticLookup<'_>, qualified_na
     };
     match lookup.package_reach() {
         Some(index) => index.prototype_member_writers(member).any(|root| {
-            !(index.name_of(root).is_some_and(|name| solid.contains(&name)) || dialect_root(root))
+            !(index
+                .name_of(root)
+                .is_some_and(|name| solid.contains(&name))
+                || dialect_root(root))
         }),
         None => lookup.resolved_imports().is_some_and(|imports| {
             imports.iter().any(|(_, import)| {
