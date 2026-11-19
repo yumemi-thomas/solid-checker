@@ -1,0 +1,3 @@
+# Context signal tuple (ADR 1123)
+
+`const [get, set] = useContext(Ctx)` takes the slots of the one `createSignal` tuple the sole provider `<Ctx value={…}>` stores, when `Ctx` is an unexported, unwritten `const` of a no-argument `createContext` in the same file and every reference of it is that provider's tag or a `useContext` argument an array pattern destructures. The value is the creation (`InlineApp`) or a `const` whose one reference is the value (`ThemeApp`); the read may be a namespace member (`S.useContext`). `ThemeButton` certifies (its `theme()` render child is also placed by the provider's children arm); `ThemeLabel`'s and `Count`'s body reads are SC1001 (were SC9012). Twins: `context-signal-tuple-twins`. Stub: `context-member-identity`'s.

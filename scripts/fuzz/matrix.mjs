@@ -586,6 +586,8 @@ function recallShapesOf(code, context, base, variants, { legal = false, lean = t
   for (const mount of legal ? [] : SPEC[code].wrapMounts?.[context] ?? []) for (const shape of local.filter(wrapShape)) shapes.push({ ...shape, mount });
   // ADR 0940: CONTEXT_NOT_FOUND's `package` source is a recall source too, so it crosses the base shapes of the code's cells here and moves no default grid.
   for (const source of [...SOURCE_AXES.files, ...SOURCE_AXES.package]) for (const shape of local) if (sourcesOf(code, shape.variant, shape.binding, context).includes(source)) shapes.push({ ...shape, source });
+  // ADR 1123: the tuple sources ask where the value comes from, not how the site spells it: the direct binding, no layer.
+  for (const source of SOURCE_AXES.tuple) for (const shape of local) if (shape.binding === "direct" && shape.layer === "none" && sourcesOf(code, shape.variant, shape.binding, context).includes(source)) shapes.push({ ...shape, source });
   return shapes;
 }
 

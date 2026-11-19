@@ -1,0 +1,1 @@
+{"note": "ADR 1123 twins: each premise broken once (two providers, an escaped context, a held tuple, a default, an export, a shared signal binding, a shadowing useContext, children given as a prop); every body read stays SC9012 where Chrome warns (covered-uncertifiable)"}

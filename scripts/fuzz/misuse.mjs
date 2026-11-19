@@ -97,6 +97,10 @@ export const SOURCE_AXES = {
   // ADR 0949: the same package's component a tag renders (`package-component`), its hook handed on by reference (`package-handed`) and its class (`package-holder`):
   // entries into the dependency's source that no call names.
   package: ["package-export", "package-hook", "package-component", "package-handed", "package-holder"],
+  // ADR 1123 (recall, grid-only): each plain signal's tuple whole as the value of its own context (`const w1t = createSignal(0)`, `<Tw1Ctx value={w1t}>`), the
+  // component destructuring `const [w1, setW1] = useContext(Tw1Ctx)`. `context-tuple-two`, the misuse twin: a second provider of the same context around it
+  // (the nearer one answers, so Chrome is the same), which leaves the checker no one provider to name.
+  tuple: ["context-tuple", "context-tuple-two"],
 };
 /** The `package` source's forms (ADRs 0940, 0943, 0949). */
 const PACKAGE_SOURCES = SOURCE_AXES.package;
@@ -104,7 +108,7 @@ const PACKAGE_SOURCES = SOURCE_AXES.package;
 const PACKAGE_ENTRY_SOURCES = PACKAGE_SOURCES.filter((source) => source !== "package-export");
 export const SOURCES = ["local", ...Object.values(SOURCE_AXES).flat()];
 /** Sources the grids enumerate and a random draw never takes (as `gridVariants`): random programs and combinations keep theirs. */
-export const GRID_ONLY_SOURCES = ["module-hook-shared", "module-hook-direct", ...PACKAGE_SOURCES];
+export const GRID_ONLY_SOURCES = ["module-hook-shared", "module-hook-direct", ...PACKAGE_SOURCES, ...SOURCE_AXES.tuple];
 /** A source whose values a parent component creates (the component is then rendered by `P1`, not exported). */
 export const parentSource = (source) => source !== "local" && !source.startsWith("module") && !source.startsWith("package");
 /** A source whose values `helpers.ts` creates at its own scope (print.mjs `moduleFiles`), before App.tsx runs a statement of its own. */
@@ -141,6 +145,8 @@ export function sourcesOf(code, variant, binding, context, { draw = false } = {}
     if (source === "module-hook-direct" && !(sigs.length === 1 && ["async", "memo"].includes(sigs[0].kind))) return false;
     if (source === "local") return true;
     if (excluded.includes(source)) return false;
+    // ADR 1123: a tuple source hands plain `createSignal` tuples only.
+    if (SOURCE_AXES.tuple.includes(source) && !sigs.every((sig) => sig.kind === undefined)) return false;
     if (source.startsWith("async-") ? !isAsync : (!source.startsWith("module") && isAsync)) return false;
     if (valueSource(source)) return bareRead && ["direct", "wrapper"].includes(binding);
     return true;
