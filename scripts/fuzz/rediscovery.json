@@ -36796,5 +36796,48 @@
    "lg-strict-read-untracked-dny-legal-pointer-store-render-effect-carried-direct-none"
   ],
   "rediscovered": "focus lg-recall on the 12 dny-legal programs with a handler createEffect (bundle y f3d2c5769 release): before, 12 unexecuted-violation rows; after, the same rows unexecuted with reachable=undriven-handler and nothing needs a look"
+ },
+ {
+  "finding": "ADR 1123 review round 1, F1 (in-branch, never on main): the tuple arm took any `createSignal` tuple, the function form too, so `createSignal(() => slow())` over an async memo provided as the tuple and read in consumer JSX with no Loading certified clean where Chrome reports ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "found": "the Fable review of ADR 1123, round 1 (Chrome-confirmed)",
+  "fixed": "ADR 1123 round 1 (`callback_return::plain_value_creation`: no argument or a non-function literal, no options)",
+  "grid": "mx-recall",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-jsx-x-direct-none-s-context-tuple-fn",
+   "mx-async-outside-loading-boundary-show-x-direct-none-s-context-tuple-fn",
+   "mx-async-outside-loading-boundary-for-x-direct-none-s-context-tuple-fn",
+   "mx-async-outside-loading-boundary-dyn-jsx-body-x-direct-none-s-context-tuple-fn",
+   "mx-async-outside-loading-boundary-portal-jsx-x-direct-none-s-context-tuple-fn",
+   "mx-async-outside-loading-boundary-portal-dyn-x-direct-none-s-context-tuple-fn",
+   "mx-async-outside-loading-boundary-handed-flush-each-x-direct-none-s-context-tuple-fn",
+   "mx-async-outside-loading-boundary-handed-flush-call-x-direct-none-s-context-tuple-fn",
+   "mx-async-outside-loading-boundary-named-flush-call-x-direct-none-s-context-tuple-fn",
+   "mx-async-outside-loading-boundary-flush-iife-x-direct-none-s-context-tuple-fn"
+  ],
+  "rediscovered": "`focus.mjs --grids mx-recall` on the new `context-tuple-fn` source: the ae0287e34 analysis (baff1c8e8 release) false-clean on all 10; 3e747448f recall-gap on all 10 (SC5003 + SC9012 uncertifiable), nothing needs a look"
+ },
+ {
+  "finding": "ADR 1123 review round 1, F2 (in-branch, never on main): the provider children arm took any binding `createContext` initializes, a written `let` and a pattern's name (`const { defaultValue: Direct = Pkg } = createContext(Pkg)`) too, so the children of an element that is no provider (a package's component) were read in place and their rows ended",
+  "found": "the Fable review of ADR 1123, round 1 (Chrome-confirmed)",
+  "fixed": "ADR 1123 round 1 (`package_hand_off::local_created_context`: an unwritten, unexported `const` of one identifier the dialect's `createContext` initializes)",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
+  "ids": [
+   "mx-flush-in-tracked-queue-callback-cp-pattern-x-direct-none",
+   "mx-flush-in-tracked-queue-callback-cp-let-x-direct-none"
+  ],
+  "outside": "the false clean needs the tag's element to be a component of a package the build does not read, whose hand-off question is the arm's: in the fixtures that is the stubbed solid-js (no source), and in the generated and oracle world (rc.21 read as source, or a package that names no Solid package, `context-provider-children-package`) the same shapes keep an SC3001 row on the old build too, for the reader's own tracked effect. The cells `cp-pattern` and `cp-let` generate the shape (Chrome: FLUSH_IN_TRACKED_QUEUE_CALLBACK; the old build drops their SC2006 and SC2008 rows, the fix keeps them uncertifiable, recall-gap both). Pinned instead: fixture reactive-ir/context-provider-children-refusals (`Written`, `Pattern`, `Imported`: silent on the old arm, SC3001 + SC6002 on the fix) and the Chrome cases context-provider-children-handed and context-provider-children-package (covered-uncertifiable)"
+ },
+ {
+  "finding": "ADR 1123 review round 1, F3 (in-branch, never on main): the provider children arm read a provider's children where the provider element is created, but rc.21's provider returns `children(() => props.children)`, a memo its reader runs, so a provider element stored and handed to code that reads it in a tracked effect ran a flushing child there (FLUSH_IN_TRACKED_QUEUE_CALLBACK) with its SC3001 row ended",
+  "found": "the Fable review of ADR 1123, round 1 (Chrome-confirmed)",
+  "fixed": "ADR 1123 round 1 (`package_hand_off::provider_placed`: the provider's value a child of another element or the whole returned value of a component only tags render)",
+  "grid": "mx-recall",
+  "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
+  "ids": [
+   "mx-flush-in-tracked-queue-callback-cp-stored-x-direct-none"
+  ],
+  "outside": "as F2's: the false clean needs the provider to be an unread package's component (the fixtures' stubbed solid-js); with rc.21 read as source the generated cell `cp-stored` (Chrome: FLUSH_IN_TRACKED_QUEUE_CALLBACK) keeps SC3001 on the old build too, and the fix adds back its SC2006 and SC2008 rows (uncertifiable). Pinned instead: fixture reactive-ir/context-provider-children-refusals (`Stored`, `Passed`, `Helped`: silent on the old arm, SC3001 + SC6002 on the fix), context-provider-proof's `ReadMaybe`, and the Chrome cases context-provider-children-handed (StoredApp) and context-provider-children-package (StoredApp), covered-uncertifiable"
  }
 ]

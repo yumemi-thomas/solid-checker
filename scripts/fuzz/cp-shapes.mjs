@@ -1,7 +1,9 @@
 // The context-provider children axis (ADR 1123, the Fable review of round 1, F2 and F3): the `context-provider-children` arm reads a dialect provider's written children
 // in place, where the provider is created. rc.21's provider returns `children(() => props.children)`, a memo its READER runs, and its tag is only a provider when the
 // binding is the context object. Each cell holds the code's own site in an immediately invoked arrow written as a provider-like element's child expression, and the
-// element's children are read in a tracked effect, where rc.21 reports the flush (FLUSH_IN_TRACKED_QUEUE_CALLBACK). The build before the fix certified each one.
+// element's children are read in a tracked effect, where rc.21 reports the flush (FLUSH_IN_TRACKED_QUEUE_CALLBACK). With rc.21 read as source the build before
+// the fix kept SC3001 here too (the reader's own tracked effect) and ended only the SC2006 and SC2008 rows; the arm's false clean needs an unread package's
+// provider, which the generated world has none of (rediscovery.json says so; fixture reactive-ir/context-provider-children-refusals pins it).
 //
 //   cp-stored   the provider element of a local `const` context stored in a `const` of a component, then called in `createTrackedEffect` (F3)
 //   cp-pattern  `const { defaultValue: CpP = CpR } = createContext(CpR)`: the tag is a pattern's name, here the reader component CpR, no provider (F2)

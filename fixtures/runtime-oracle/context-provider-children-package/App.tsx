@@ -3,8 +3,8 @@ import { makeReader, track } from "dep-track";
 
 // ADR 1123, the review's F2 and F3, through a package the build does not read (dep-track names and imports no Solid package): its
 // functions run what they are given in the `createTrackedEffect` the caller passes. A flushing child expression then runs inside the
-// tracked effect: Chrome reports FLUSH_IN_TRACKED_QUEUE_CALLBACK. The build before the fix certified each (the children arm read the
-// children in place); the fix keeps the flush's SC3001 row.
+// tracked effect: Chrome reports FLUSH_IN_TRACKED_QUEUE_CALLBACK, covered by the flush's SC3001 row (the reader's own tracked effect keeps it,
+// before round 1 too).
 
 const C = createContext<number>();
 
