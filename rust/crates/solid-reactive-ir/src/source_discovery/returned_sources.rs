@@ -87,6 +87,78 @@ pub(super) fn push_callback_return_sources(
     }
 }
 
+/// ADR 1123: a context read's slots ([`crate::callback_return::context_provided_tuple`]) are recorded as a direct creation's array pattern is
+/// (`const [a, setA] = createSignal(0)`, `discover_file_sources`): both slots are array-pattern slots (ADR 0803), and the accessor is a
+/// returned and summary source of phase 0, so a read in a helper the body calls is the read of whatever calls it. The first build recorded
+/// them as a callback's result (phase 1, no summary), and a read in `const dir = () => { get(); }; <p ref={dir()} />` certified where
+/// Chrome warns (mx-recall `ref-factory-body`, the tuple source).
+pub(super) fn push_context_tuple_sources(
+    result: &mut SourceDiscoveryContribution,
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    entities: &EntitySymbols,
+    returned: crate::callback_return::CallbackReturn<'_>,
+) {
+    let Some(primitive) = returned.primitive else {
+        return;
+    };
+    let owned_write =
+        crate::owned_write_option(file, returned.created, Some(primitive), lookup.dialect);
+    for (name, value) in returned.bindings {
+        let Some(symbol) = entities.at(file.path.as_str(), name) else {
+            continue;
+        };
+        let declaration = crate::location(file.path.shared(), name);
+        let display = symbol_id(file.source_text(name).unwrap_or_default());
+        result.array_slot_sources.push(symbol.clone());
+        if let Some(spelling) = lookup.dialect.name_of(primitive) {
+            result
+                .source_primitives
+                .push((symbol.clone(), spelling.into()));
+        }
+        if value.kind == "accessor" {
+            result
+                .accessors
+                .push((symbol.clone(), (display, declaration)));
+            result
+                .source_kinds
+                .push((symbol.clone(), ReactiveSourceKind::Accessor));
+            result.source_phases.push((symbol.clone(), 0));
+            result.returned_source_symbols.push(symbol.clone());
+            result.summary_source_symbols.push(symbol.clone());
+            result
+                .source_owned_write
+                .push((symbol.clone(), owned_write));
+            let options = first_answer_options(lookup, file, returned.created, Some(primitive));
+            if options != AsyncSourceOptions::default() {
+                result.source_async_options.push((symbol.clone(), options));
+            }
+            if returned
+                .created
+                .arguments
+                .first()
+                .is_some_and(|argument| super::source_may_be_async(lookup, file, argument))
+            {
+                result.async_sources.push(symbol.clone());
+            }
+        } else if value.kind == "setter" {
+            result.setters.push((
+                symbol.clone(),
+                (
+                    display,
+                    declaration,
+                    owned_write,
+                    ReactiveSourceKind::Accessor,
+                ),
+            ));
+            if super::optimistic_setter_is_async(lookup, file, returned.created, returned.primitive)
+            {
+                result.async_sources.push(symbol.clone());
+            }
+        }
+    }
+}
+
 pub(super) struct EffectiveReturnContext<'a> {
     pub(super) tuple_iteration_veto: bool,
     pub(super) file: &'a FileFacts,

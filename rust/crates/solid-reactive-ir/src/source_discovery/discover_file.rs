@@ -105,7 +105,7 @@ pub(crate) fn discover_file_sources(
         };
         // ADR 1123: a context read whose one value is a provider's signal tuple.
         if let Some(returned) = crate::callback_return::context_provided_tuple(lookup, file, call) {
-            push_callback_return_sources(&mut result, lookup, file, entities, returned);
+            push_context_tuple_sources(&mut result, lookup, file, entities, returned);
             continue;
         }
         if crate::callback_return::callback_slot(lookup, file, call).is_some() {
