@@ -7502,6 +7502,62 @@
    "to": 501,
    "adr": "ADR 1114",
    "fact": "family 3 (fail closed under a package prototype writer) joined with ADR 1125 in bundle z: the calls 1125's delivery proofs now place are SC2002 package-may-call-action uncertifiable too; 38 rows, additions only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-origins",
+   "key": "SC2002 package-may-call-action",
+   "from": 47,
+   "to": 50,
+   "adr": "ADR 1125",
+   "fact": "measured against main with ADR 1114 family 3: the calls 1125's delivery proofs place fall under family 3's fail-closed rule (SC2002 package-may-call-action uncertifiable); additions only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-prototype-iteration",
+   "key": "SC2002 package-may-call-action",
+   "from": 14,
+   "to": 16,
+   "adr": "ADR 1125",
+   "fact": "measured against main with ADR 1114 family 3: the calls 1125's delivery proofs place fall under family 3's fail-closed rule (SC2002 package-may-call-action uncertifiable); additions only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-prototype-sites",
+   "key": "SC2002 package-may-call-action",
+   "from": 35,
+   "to": 37,
+   "adr": "ADR 1125",
+   "fact": "measured against main with ADR 1114 family 3: the calls 1125's delivery proofs place fall under family 3's fail-closed rule (SC2002 package-may-call-action uncertifiable); additions only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-prototype-writer-shapes",
+   "key": "SC2002 package-may-call-action",
+   "from": 23,
+   "to": 25,
+   "adr": "ADR 1125",
+   "fact": "measured against main with ADR 1114 family 3: the calls 1125's delivery proofs place fall under family 3's fail-closed rule (SC2002 package-may-call-action uncertifiable); additions only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-prototype-writes",
+   "key": "SC2002 package-may-call-action",
+   "from": 14,
+   "to": 16,
+   "adr": "ADR 1125",
+   "fact": "measured against main with ADR 1114 family 3: the calls 1125's delivery proofs place fall under family 3's fail-closed rule (SC2002 package-may-call-action uncertifiable); additions only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-unread-packages",
+   "key": "SC2002 package-may-call-action",
+   "from": 41,
+   "to": 43,
+   "adr": "ADR 1125",
+   "fact": "measured against main with ADR 1114 family 3: the calls 1125's delivery proofs place fall under family 3's fail-closed rule (SC2002 package-may-call-action uncertifiable); additions only, no violation or clean moved"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC2002 package-may-call-action",
+   "from": 467,
+   "to": 501,
+   "adr": "ADR 1125",
+   "fact": "measured against main with ADR 1114 family 3: the calls 1125's delivery proofs place fall under family 3's fail-closed rule (SC2002 package-may-call-action uncertifiable); additions only, no violation or clean moved"
   }
  ]
 }
