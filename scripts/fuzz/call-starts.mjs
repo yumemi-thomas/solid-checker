@@ -131,64 +131,6 @@ export function callStarts(source, fileName = "App.tsx") {
     if ((ts.isIfStatement(parent) || ts.isWhileStatement(parent) || ts.isReturnStatement(parent) || ts.isThrowStatement(parent)) && parent.expression === operand) return parent;
     return null;
   };
-  /** Whether an identifier names a binding declared in a scope around it (a parameter, a `const`/`let`/`function`/`class`/import): reading it runs no code. A global, or a hoisted `var` of a nested block, is not known here. */
-  const bindingNames = (name) => (ts.isIdentifier(name) ? [name.text] : ts.isObjectBindingPattern(name) || ts.isArrayBindingPattern(name) ? name.elements.flatMap((element) => (ts.isBindingElement(element) ? bindingNames(element.name) : [])) : []);
-  const declaredIn = (scope, name) => {
-    const statements = ts.isSourceFile(scope) || ts.isBlock(scope) || ts.isModuleBlock(scope) || ts.isCaseClause(scope) || ts.isDefaultClause(scope) ? scope.statements : [];
-    for (const statement of statements) {
-      if (ts.isVariableStatement(statement) && statement.declarationList.declarations.some((declaration) => bindingNames(declaration.name).includes(name))) return true;
-      if ((ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement) || ts.isEnumDeclaration(statement)) && statement.name?.text === name) return true;
-      const clause = ts.isImportDeclaration(statement) ? statement.importClause : null;
-      if (clause && (clause.name?.text === name || (clause.namedBindings && (ts.isNamespaceImport(clause.namedBindings) ? [clause.namedBindings] : clause.namedBindings.elements).some((element) => element.name.text === name)))) return true;
-    }
-    if (ts.isFunctionLike(scope) && scope.parameters?.some((parameter) => bindingNames(parameter.name).includes(name))) return true;
-    if ((ts.isForStatement(scope) || ts.isForOfStatement(scope) || ts.isForInStatement(scope)) && scope.initializer && ts.isVariableDeclarationList(scope.initializer) && scope.initializer.declarations.some((declaration) => bindingNames(declaration.name).includes(name))) return true;
-    return ts.isCatchClause(scope) && !!scope.variableDeclaration && bindingNames(scope.variableDeclaration.name).includes(name);
-  };
-  const isLocal = (expression) => {
-    const identifier = unwrap(expression);
-    if (!ts.isIdentifier(identifier)) return false;
-    for (let scope = identifier.parent; scope; scope = scope.parent) if (declaredIn(scope, identifier.text)) return true;
-    return false;
-  };
-  /** A primitive literal: coercing it calls nothing. */
-  const isPrimitiveLiteral = (expression) => {
-    const value = unwrap(expression);
-    return ts.isStringLiteral(value) || ts.isNumericLiteral(value) || ts.isBigIntLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value)
-      || [ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.FalseKeyword, ts.SyntaxKind.NullKeyword].includes(value.kind);
-  };
-  /** What `instanceof` is handed on its left: never coerced, so an empty object or array literal runs nothing either. */
-  const isInertInstance = (expression) => {
-    const value = unwrap(expression);
-    return isPrimitiveLiteral(value) || (ts.isObjectLiteralExpression(value) && !value.properties.length) || (ts.isArrayLiteralExpression(value) && !value.elements.length);
-  };
-  const COERCING = new Set([ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.AsteriskToken, ts.SyntaxKind.SlashToken, ts.SyntaxKind.PercentToken, ts.SyntaxKind.AsteriskAsteriskToken,
-    ts.SyntaxKind.LessThanToken, ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.LessThanEqualsToken, ts.SyntaxKind.GreaterThanEqualsToken, ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsToken,
-    ts.SyntaxKind.AmpersandToken, ts.SyntaxKind.BarToken, ts.SyntaxKind.CaretToken, ts.SyntaxKind.LessThanLessThanToken, ts.SyntaxKind.GreaterThanGreaterThanToken, ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken]);
-  /**
-   * ADR 1117c: `{ starts, until }` for a coercion that is the only thing in its expression that can run code, or null: a template of one
-   * substitution, a local binding; a coercing operator between a local binding and a primitive literal; `instanceof` from an inert left to a
-   * local binding. `starts` are the coercion's and its operand's starts (the rows), `until` the end of its operator (or of the template's head).
-   */
-  /** Whether an expression is the whole of its statement (`x;`), of a `void` or of a declaration's initializer, through parentheses and casts. */
-  const isWhole = (expression) => {
-    let outer = expression;
-    while (ts.isParenthesizedExpression(outer.parent) || ts.isAsExpression(outer.parent) || ts.isSatisfiesExpression(outer.parent) || ts.isNonNullExpression(outer.parent)) outer = outer.parent;
-    return ts.isExpressionStatement(outer.parent) || ts.isVoidExpression(outer.parent) || (ts.isVariableDeclaration(outer.parent) && outer.parent.initializer === outer);
-  };
-  const loneCoercion = (expression) => {
-    if (ts.isTemplateExpression(expression)) {
-      if (expression.templateSpans.length !== 1 || !isLocal(expression.templateSpans[0].expression)) return null;
-      return { starts: [expression.getStart(file), unwrap(expression.templateSpans[0].expression).getStart(file)], until: expression.head.getEnd() };
-    }
-    if (!ts.isBinaryExpression(expression)) return null;
-    const kind = expression.operatorToken.kind;
-    const hook = kind === ts.SyntaxKind.InstanceOfKeyword ? (isInertInstance(expression.left) && isLocal(expression.right) ? expression.right : null)
-      : !COERCING.has(kind) ? null
-        : isLocal(expression.left) && isPrimitiveLiteral(expression.right) ? expression.left
-          : isPrimitiveLiteral(expression.left) && isLocal(expression.right) ? expression.right : null;
-    return hook ? { starts: [expression.getStart(file), unwrap(hook).getStart(file)], until: expression.operatorToken.getEnd() } : null;
-  };
   // Tags a project binding holds as `dynamic(loader)` or `lazy(loader)` (ADR 0981): the component is whatever the loader names, read as a dependency's.
   const loaded = new Set();
   const collect = (node) => {
@@ -306,18 +248,6 @@ export function callStarts(source, fileName = "App.tsx") {
     else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken && (ts.isObjectLiteralExpression(unwrap(node.left)) || ts.isArrayLiteralExpression(unwrap(node.left)))) {
       const left = unwrap(node.left);
       for (const part of ts.isObjectLiteralExpression(left) ? left.properties : left.elements) calls.push([part.getStart(file), part.getEnd(), left.getStart(file), left.getStart(file)]);
-    }
-    // ADR 1117c: a lone coercion. V8 frames the hook a coercion calls (`toString`, `Symbol.toPrimitive`, `Symbol.hasInstance`) at its operator,
-    // which the source map has no segment for (`{} instanceof jr1` comes back on the `}`, `"a" + jr1` on the `"a"`), or, under a `void`, at the
-    // `void` (`void \`${jr1}\``); the row is on the coercion or its operand. Only where the coercion is the one thing there that can run code:
-    // its operand a local binding (reading it runs nothing) and the rest a literal, so no other read, call or hook can have that frame; and the
-    // whole of its statement, `void` or initializer, so nothing after it in the expression (another operator) can come back on it either.
-    const lone = ts.isBinaryExpression(node) && isWhole(node) ? loneCoercion(node) : null;
-    if (lone) for (const at of lone.starts) calls.push([node.getStart(file), lone.until, at, at]);
-    if (ts.isVoidExpression(node) && isWhole(node)) {
-      const operand = unwrap(node.expression);
-      const inner = loneCoercion(operand);
-      if (inner) for (const at of inner.starts) calls.push([node.getStart(file), operand.getStart(file), at, at]);
     }
     ts.forEachChild(node, visit);
   };

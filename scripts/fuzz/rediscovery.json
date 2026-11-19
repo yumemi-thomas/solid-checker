@@ -31095,18 +31095,5 @@
    "mx-store-write-outside-setter-memo-async-for-await-nested-assign-hook-none-cb-bundle"
   ],
   "rediscovered": "bundle u 0a897aa9d (release): focus --runtime-diff all by id, secondary UNTRACKED_READ_AFTER_AWAIT false-clean 8; this fix: 0 (8 recall-gap, uncertifiable at the read). Oracle on the probe: unproven-clean -> covered-uncertifiable"
- },
- {
-  "finding": "ADR 1117c: a coercion hook (`toString`, `Symbol.toPrimitive`, `Symbol.hasInstance`) run after an async memo's await, framed by Chrome at the `void` (`void `${jr1}``: 12:5) or at the last source-map segment before the operator (`{} instanceof jr1`: 12:12, `\"a\" + jr1`: 12:11), while the checker's uncertifiable row stands at the coercion or its operand (12:13, 12:11, 12:17): the judge's exact-frame rule found no claim. A false clean of the judge, not of the checker (held as known-open by #290 as \"no SC1002 site at the hook call\")",
-  "found": "ADR 1117's js-* cells (W4, 6e8079f8b and 43ddac349 on claude/js-semantics-axis-1117); smoke of #289, run 44472445718",
-  "fixed": "ADR 1117c (`call-starts.mjs` `loneCoercion`: a frame at a `void` whose whole operand is a lone coercion, or between a lone coercion's start and its operator's end, stands for the coercion's start and its operand's)",
-  "grid": "mx-recall",
-  "code": "UNTRACKED_READ_AFTER_AWAIT",
-  "ids": [
-   "mx-untracked-read-after-await-js-tostring-x-direct-none",
-   "mx-untracked-read-after-await-js-toprim-x-direct-none",
-   "mx-untracked-read-after-await-js-hasinst-x-direct-none"
-  ],
-  "rediscovered": "focus mx-recall --runtime-diff all on the 42 js-* cells (main 01516bc92's release build; generator of claude/js-semantics-axis-1117 5c0d23046): the judge at 01516bc92 5 false cleans (js-tostring, js-toprim, js-hasinst, and the branch's js-tostring-plus, js-hasinst-const); this judge none (recall-gap, reactive-read-after-await/uncertifiable@12); the 37 other cells identical"
  }
 ]
