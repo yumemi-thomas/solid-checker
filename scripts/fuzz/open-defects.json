@@ -348,8 +348,7 @@
   "causes": {
    "R-unplaced": 8,
    "R-halted": 2,
-   "false-positive": 3,
-   "ADR 1117: js coercion hooks after await: no SC1002 site at the hook call": 2
+   "false-positive": 3
   }
  }
 }
