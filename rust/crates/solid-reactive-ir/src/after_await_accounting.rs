@@ -639,6 +639,41 @@ fn sites<'a>(
             });
         }
     }
+    // ADR 1117 (the JS-semantics axis, `js-forin`): a `for…in` walks its object's keys with no call written: a Proxy's `ownKeys` and
+    // `getOwnPropertyDescriptor` traps, and a getter-free object's prototype chain through `getPrototypeOf`, run project code there. Its object is a site
+    // unless proven primitive (`proven_primitive`: a primitive's keys run nothing). The object is the `key_probed_operands` entry the loop's repeat spans
+    // border (`Span(left.start, right.start)` and `Span(right.end, loop.end)`, the visitor's `push_iterated_loop_repeats`), where Chrome places the frame.
+    for file in lookup.files() {
+        if lookup.in_dependency_source(file.path.as_str()) || !holds_suspension(file) {
+            continue;
+        }
+        let ast = &file.ast;
+        for &object in &ast.key_probed_operands {
+            let for_in = ast.loop_repeats.iter().any(|(looped, head)| {
+                head.end == object.start
+                    && ast
+                        .loop_repeats
+                        .iter()
+                        .any(|(other, tail)| other == looped && tail.start == object.end)
+            });
+            if !for_in || !after(file, object) || lookup.proven_primitive(file, object, 4) {
+                continue;
+            }
+            let at = ast.peel_ts_sugar_span(object);
+            let (registration, host) = classify(file, at);
+            found.push(AwaitSite {
+                file,
+                at,
+                alternates: Vec::new(),
+                via: "for-in",
+                test: registration.is_some(),
+                registration,
+                host,
+                call: None,
+                root: None,
+            });
+        }
+    }
     found
 }
 
