@@ -269,9 +269,11 @@ export function judge({ shards: shardsDir, oracle: oracleDir, against }) {
   const grids = {};
   const rows = new Map();
   const codes = new Map();
+  const keys = new Map();
   for (const grid of AUDIT_GRIDS) {
     const held = [];
     const codeOf = new Map();
+    const keyOf = new Map(); // ADR 1118: the proved key of each row (proved.mjs `provedKey`), when the row carries one
     const knownOpen = readOpenDefects();
     const outcomes = new Map();
     const tally = {};
@@ -289,6 +291,7 @@ export function judge({ shards: shardsDir, oracle: oracleDir, against }) {
         if (outcomes.has(row.id)) attention.push(`${grid}: ${row.id} in two shards`);
         outcomes.set(row.id, row.outcome);
         codeOf.set(row.id, row.code ?? "-");
+        if (row.key) keyOf.set(row.id, row.key);
         tally[row.outcome] = (tally[row.outcome] ?? 0) + 1;
         const problem = rowProblem(row);
         const standing = gridStanding(knownOpen, row, problem, { grid, strict: knownOpen.rows?.complete === true || manifest.has(row.id) });
@@ -322,6 +325,7 @@ export function judge({ shards: shardsDir, oracle: oracleDir, against }) {
     grids[grid] = { programs: outcomes.size, planned, outcomes: tally, oracle };
     rows.set(grid, outcomes);
     codes.set(grid, codeOf);
+    keys.set(grid, keyOf);
   }
   const moves = { against: against ?? null, moved: 0, kinds: {}, examples: [] };
   if (against) {
@@ -345,7 +349,7 @@ export function judge({ shards: shardsDir, oracle: oracleDir, against }) {
       for (const id of before.keys()) if (!outcomes.has(id)) { moves.moved += 1; moves.kinds[`${grid}: gone`] = (moves.kinds[`${grid}: gone`] ?? 0) + 1; }
     }
   }
-  return { count, recall, attention, grids, moves, rows, codes };
+  return { count, recall, attention, grids, moves, rows, codes, keys };
 }
 
 /** The report as Markdown (the workflow's step summary). */
@@ -360,7 +364,7 @@ export function markdown({ count, recall, attention, grids, moves, known, proved
     lines.push("", "## Known items (scripts/fuzz/audit-known.json)");
     for (const entry of known) lines.push(`- ${entry.grid} ${entry.kind} ${entry.item}: ${entry.known} of ${entry.cap ? "at most " : ""}${entry.count}`);
   }
-  if (proved) lines.push("", `## Proved verdicts: baseline ${proved.baseline ?? "none"}, lost ${proved.losses}, newly proved ${proved.gained}, ${proved.accepted ? "accepted: this run is the next baseline" : "NOT accepted: the baseline stays the earlier one"}${proved.note ? ` (${proved.note})` : ""}`);
+  if (proved) lines.push("", `## Proved verdicts: baseline ${proved.baseline ?? "none"}, lost ${proved.losses}, newly proved ${proved.gained}, ${proved.churn ? `${proved.churn} churned (another program under the id, ADR 1118), ` : ""}${proved.accepted ? "accepted: this run is the next baseline" : "NOT accepted: the baseline stays the earlier one"}${proved.note ? ` (${proved.note})` : ""}`);
   if (moves.against) {
     lines.push("", `## Moved from the earlier run: ${moves.moved}`);
     for (const [kind, n] of Object.entries(moves.kinds).sort((a, b) => b[1] - a[1]).slice(0, 40)) lines.push(`- ${kind}: ${n}`);
@@ -383,16 +387,16 @@ function report(options) {
   // The proved verdicts (ADR 1012): against the ledger of the last accepted audit; this run's ledger is written only when nothing went unnamed.
   if (options.proved !== undefined || options.provedBootstrap === "true" || options.provedExpected === "true") {
     const ledger = readAuditLedger(options.proved ? resolve(options.proved) : null);
-    const check = auditProved({ rows: result.rows, codes: result.codes, ledger, changes: readChanges(), bootstrap: options.provedBootstrap === "true", expected: options.provedExpected === "true" });
+    const check = auditProved({ rows: result.rows, codes: result.codes, keys: result.keys, ledger, changes: readChanges(), bootstrap: options.provedBootstrap === "true", expected: options.provedExpected === "true" });
     result.attention.push(...check.attention);
-    result.proved = { baseline: ledger ? [...ledger.grids.values()].reduce((sum, ids) => sum + ids.size, 0) : null, losses: check.losses, gained: check.gained, accepted: check.accepted, ...(check.note ? { note: check.note } : {}) };
-    if (check.accepted && options.provedOut) writeAuditLedger(resolve(options.provedOut), result.rows, result.codes, check.consumed);
+    result.proved = { baseline: ledger ? [...ledger.grids.values()].reduce((sum, ids) => sum + ids.size, 0) : null, losses: check.losses, gained: check.gained, churn: check.churn, accepted: check.accepted, ...(check.note ? { note: check.note } : {}) };
+    if (check.accepted && options.provedOut) writeAuditLedger(resolve(options.provedOut), result.rows, result.codes, check.consumed, result.keys);
   }
   for (const [grid, outcomes] of result.rows) {
     const text = [...outcomes].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([id, outcome]) => JSON.stringify({ id, outcome })).join("\n");
     writeFileSync(join(out, "rows", `${grid}.jsonl.gz`), gzipSync(`${text}\n`));
   }
-  const { rows, codes: _codes, ...summary } = result;
+  const { rows, codes: _codes, keys: _keys, ...summary } = result;
   writeFileSync(join(out, "audit.json"), `${JSON.stringify(summary, null, 2)}\n`);
   const md = markdown(result);
   writeFileSync(join(out, "audit.md"), md);

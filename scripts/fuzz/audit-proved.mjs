@@ -14,6 +14,10 @@
 // start `consumed`): a row written before the baseline cannot name a loss after it. A ledger that should exist (`--proved-expected true`: main has one)
 // and cannot be read is attention, never "no ledger".
 //
+// KEYS (ADR 1118). A line may carry the program's proved key as a third column (`id<TAB>code<TAB>key`, proved.mjs `provedKey`): such an entry is judged
+// by the run's row with that key (whatever its id); the same id under another key is the generator's churn, counted and not a loss; a line with no key
+// is judged by id, as before. The next accepted audit writes every proved row with its key, so the baseline is keyed from then on.
+//
 // KNOWN ITEMS. The audit's "needs a look" held the harness's and the judge's recorded classes next to what is new, so 872 lines were always red and a
 // new line could not stand out. scripts/fuzz/audit-known.json lists a class with an exact count (`count`; `cap: true` for a class that varies with the
 // runner's load, which may be lower, never higher): `{ grid, kind, item, idRegex, count, adr, why, work }`. The items an entry matches leave the
@@ -27,31 +31,37 @@ import { isProved, provedOutcome } from "./proved.mjs";
 
 const digest = (row) => createHash("sha256").update(JSON.stringify(row)).digest("hex").slice(0, 16);
 
-/** The ledger of a directory: `{ grids: Map(grid -> Map(id -> code)), consumed: Set(digests) }`, or null when there is none. */
+/** The ledger of a directory: `{ grids: Map(grid -> Map(id -> code)), keys: Map(grid -> Map(id -> key)), consumed: Set(digests) }`, or null when there is none. */
 export function readAuditLedger(dir) {
   if (!dir || !existsSync(dir)) return null;
   const files = readdirSync(dir).filter((name) => name.endsWith(".tsv.gz"));
   if (!files.length) return null;
-  const grids = new Map();
+  const grids = new Map(), keys = new Map();
   for (const name of files) {
-    const ids = new Map();
+    const ids = new Map(), keyed = new Map();
     for (const line of gunzipSync(readFileSync(join(dir, name))).toString("utf8").split("\n")) {
       if (!line) continue;
-      const tab = line.indexOf("\t");
-      ids.set(tab < 0 ? line : line.slice(0, tab), tab < 0 ? "-" : line.slice(tab + 1));
+      const [id, code = "-", key] = line.split("\t");
+      ids.set(id, code);
+      if (key) keyed.set(id, key);
     }
     grids.set(name.replace(/\.tsv\.gz$/, ""), ids);
+    keys.set(name.replace(/\.tsv\.gz$/, ""), keyed);
   }
   const consumed = existsSync(join(dir, "consumed.json")) ? new Set(JSON.parse(readFileSync(join(dir, "consumed.json"), "utf8"))) : new Set();
-  return { grids, consumed };
+  return { grids, keys, consumed };
 }
 
 /** Write the ledger of the proved programs of `rows` (`Map(grid -> Map(id -> outcome))`, codes `Map(grid -> Map(id -> code))`) and the consumed digests. */
-export function writeAuditLedger(dir, rows, codes, consumed) {
+export function writeAuditLedger(dir, rows, codes, consumed, keys = new Map()) {
   mkdirSync(dir, { recursive: true });
   for (const [grid, outcomes] of rows) {
     const lines = [];
-    for (const [id, outcome] of outcomes) if (isProved(grid, outcome)) lines.push(`${id}\t${codes.get(grid)?.get(id) ?? "-"}`);
+    for (const [id, outcome] of outcomes) {
+      if (!isProved(grid, outcome)) continue;
+      const key = keys.get(grid)?.get(id);
+      lines.push(`${id}\t${codes.get(grid)?.get(id) ?? "-"}${key ? `\t${key}` : ""}`);
+    }
     lines.sort();
     writeFileSync(join(dir, `${grid}.tsv.gz`), gzipSync(`${lines.join("\n")}\n`));
   }
@@ -63,7 +73,7 @@ export function writeAuditLedger(dir, rows, codes, consumed) {
  * `changes`: changes.json's `{ rows }`. `{ attention, accepted, losses, consumed, gained }`: `accepted` when every loss was named; `consumed` the
  * digests the earlier ledger kept plus the rows this check used.
  */
-export function auditProved({ rows, codes, ledger, changes = { rows: [] }, bootstrap = false, expected = false }) {
+export function auditProved({ rows, codes, keys = new Map(), ledger, changes = { rows: [] }, bootstrap = false, expected = false }) {
   if (!ledger) {
     if (expected) return { attention: ["proved ledger: main has one (the workflow found its artifact) and it could not be read: the run is not held to it and does not replace it"], accepted: false, losses: 0, consumed: new Set(), gained: 0 };
     // A bootstrap is a baseline from nothing: every row that exists is spent, so none names a later loss.
@@ -80,22 +90,30 @@ export function auditProved({ rows, codes, ledger, changes = { rows: [] }, boots
     const key = `${row.grid}\0${row.code}\0${row.to}`;
     available.set(key, [...(available.get(key) ?? []), { digest: d, left: row.count }]);
   }
-  const named = new Map(); // grid -> Set(ids) of the exact-id rows
-  for (const { row, digest: d } of usable) if (Array.isArray(row.ids)) { named.set(row.grid, new Set([...(named.get(row.grid) ?? []), ...row.ids])); used.add(d); }
-  let total = 0, gained = 0, unnamedTotal = 0;
+  const named = new Map(); // grid -> Set(ids and keys) of the exact rows
+  for (const { row, digest: d } of usable) if (Array.isArray(row.ids) || Array.isArray(row.keys)) { named.set(row.grid, new Set([...(named.get(row.grid) ?? []), ...(row.ids ?? []), ...(row.keys ?? [])])); used.add(d); }
+  let total = 0, gained = 0, unnamedTotal = 0, churn = 0;
   for (const [grid, before] of ledger.grids) {
     const now = rows.get(grid);
     const groups = new Map(); // `${code}\0${to}` -> [ids]
     if (!now) { attention.push(`proved ledger: ${grid} is in the baseline but this run judged no program of it`); unnamedTotal += before.size; continue; }
+    const keyedBefore = ledger.keys?.get(grid) ?? new Map();
+    const keyNow = keys.get(grid) ?? new Map();
+    const idByKey = new Map([...keyNow].map(([id, key]) => [key, id]));
     for (const [id, code] of before) {
-      const outcome = now.get(id);
+      const key = keyedBefore.get(id);
+      let outcome;
+      if (key && idByKey.has(key)) outcome = now.get(idByKey.get(key));
+      else if (key && keyNow.has(id)) { churn += 1; continue; } // the id is another program now: the generator's churn, not a loss
+      else outcome = now.get(id);
       if (outcome !== undefined && isProved(grid, outcome)) continue;
       total += 1;
-      if (named.get(grid)?.has(id)) continue;
-      const key = `${code}\0${outcome ?? "gone"}`;
-      groups.set(key, [...(groups.get(key) ?? []), id]);
+      if (named.get(grid)?.has(id) || (key && named.get(grid)?.has(key))) continue;
+      const group = `${code}\0${outcome ?? "gone"}`;
+      groups.set(group, [...(groups.get(group) ?? []), id]);
     }
-    for (const [id, outcome] of now) if (isProved(grid, outcome) && !before.has(id)) gained += 1;
+    const keysBefore = new Set(keyedBefore.values());
+    for (const [id, outcome] of now) if (isProved(grid, outcome) && !before.has(id) && !keysBefore.has(keyNow.get(id))) gained += 1;
     for (const [key, ids] of [...groups].sort(([a], [b]) => (a < b ? -1 : 1))) {
       const [code, to] = key.split("\0");
       let missing = ids.length;
@@ -111,7 +129,7 @@ export function auditProved({ rows, codes, ledger, changes = { rows: [] }, boots
     }
   }
   for (const d of used) consumed.add(d);
-  return { attention, accepted: unnamedTotal === 0, losses: total, consumed, gained };
+  return { attention, accepted: unnamedTotal === 0, losses: total, consumed, gained, churn };
 }
 
 /** The attention line kinds an audit item has: `{ grid, kind, id }` or null. */

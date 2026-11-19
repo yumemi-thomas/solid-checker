@@ -20,6 +20,7 @@
 //
 //   node scripts/fuzz/matrix.mjs --out <fresh dir> --seed 1 --per-cell 20 [--codes A,B] [--contexts a,b] [--confirm-with-chrome]
 //     [--chrome-sample 3] [--shrink] [--baseline matrix.json] [--checker-label <commit>] [--all-cores]
+import { provedKey } from "./proved.mjs";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { STORED_ASYNC_CONTEXTS, STORED_CONTEXTS } from "./flip-read.mjs";
 import { guardGridExit, partialRows } from "./partial.mjs";
@@ -1205,7 +1206,7 @@ async function sweep(options, config, out) {
       const verdict = verdicts[position];
       const misuse = program.components[0].misuse;
       const others = otherRegions(built);
-      rows.push({ id: built.id, seed: program.seed, index, code: cell.code, context: cell.context, variant: misuse.variant, binding: misuse.binding, layer: misuse.layer, ...(misuse.mount && misuse.mount !== "root" ? { mount: misuse.mount } : {}), ...(misuse.source ? { source: misuse.source } : {}), ...(misuse.combo ? { combo: misuse.combo, others } : {}), site, outcome: verdict.outcome, detail: verdict.detail, lines: built.text.split("\n").length });
+      rows.push({ id: built.id, seed: program.seed, index, code: cell.code, context: cell.context, variant: misuse.variant, binding: misuse.binding, layer: misuse.layer, ...(misuse.mount && misuse.mount !== "root" ? { mount: misuse.mount } : {}), ...(misuse.source ? { source: misuse.source } : {}), ...(misuse.combo ? { combo: misuse.combo, others } : {}), site, key: provedKey(built, cell.code, site.line), outcome: verdict.outcome, detail: verdict.detail, lines: built.text.split("\n").length });
       values.set(built.id, value);
     }
     partial.append(rows.slice(at));

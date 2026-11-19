@@ -417,6 +417,11 @@ main that lost nothing unnamed (artifact `audit-proved-<mode>`, group rows `{ gr
 known items of `scripts/fuzz/audit-known.json` (exact counts by recall mode) leave its needs-a-look list. The corpus has its own check, `make
 corpus-guard` (`scripts/guard/corpus.mjs`: a lost violation or a proved-clean place that became uncertifiable, against a baseline of this machine).
 
+**Keys (ADR 1118).** A ledger entry is `[key, id]`, the key `<programHash>:<code>:<site line>` of the program that was proved (every grid row carries
+its `key`): a row with the key judges it under any id, and the same id with another key is the generator's churn (`churned` in the smoke's line,
+`retired` by `record`), never a loss. A new `changes.json` row is a fix's: `kind: "fix"`, a Chrome `witness`, its `collateral`, which
+`scripts/fuzz/proved/owed.json` holds as owed work that only falls. `node scripts/fuzz/proved-rekey.mjs` keys ids a ledger still holds unkeyed.
+
 ## The census
 
 `mx-census` (`matrix.mjs --census`, `censusCells`, ADR 0615) is the plain shapes of every (code, context) pair no misuse or legal cell lists, judged by the same `judge`: 25,865 programs at a62c14ae1, in a default grid, whole in the nightly tier and its pairs in the pull request's (every (code, context) pair is one). The tables say what a slice measured; the census asks the rest, so a context added for one code meets every other code the run it lands. No table entry is needed and no manifest applies: the runtime says what each pair is, and a pair that earns a cell leaves. Left out, each with its reason in `censusCells`: a code the runtime only throws where a promise swallows it (`PROMISE_SWALLOWS`: silence is no measure there), `handler-mixed` for an async read (it halts the mount before the driven button exists). A shape no template can place throws and stops the run, as on any grid: `planned` holds every shape, and the audit fails on a program it did not judge, so a new such pair gets its reason in `censusCells` or a template that places it.

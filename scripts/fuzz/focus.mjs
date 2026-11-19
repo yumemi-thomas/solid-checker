@@ -59,7 +59,7 @@ import { gridCount } from "./grid-ids.mjs";
 import { legalCells, pairLegalCells } from "./legal.mjs";
 import { cellList, censusCells } from "./matrix.mjs";
 import { FIXED_SEED, wholeGrid, writeSample } from "./cover.mjs";
-import { provedLines, provedMoves, readChanges, readLedger } from "./proved.mjs";
+import { provedLines, provedMoves, readChanges, readLedgerFiles } from "./proved.mjs";
 import { SMOKE_DIR, movedVerdicts, readRows } from "./smoke.mjs";
 import { BEHAVIOUR_KINDS } from "./runtime-diff.mjs";
 import { mergeGridReports, summaryLine } from "./roles.mjs";
@@ -402,7 +402,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     // What the run will judge, before it starts: each grid's programs for these codes (the ids, no program generated), and the sample's share.
     if (!options.smoke) console.log(plannedLines({ grids: options.grids.split(","), codes, full: Boolean(options.recallFull), sample: options.gridSampleAll, sampleBig: options.sampleBig }).join("\n"));
     // One grid process: its output streamed to `<dir>.log`, a deadline, then its rows judged.
-    const provedLedger = readLedger(), provedChanges = readChanges();
+    const provedLedger = readLedgerFiles(), provedChanges = readChanges();
     const covered = options.cover ? writeSample({ perCode: options.cover === "per-code", seed: Number(options.coverSeed ?? FIXED_SEED), grids: (options.coverGrids ?? options.grids).split(",").filter((grid) => !wholeGrid(grid, options.cover)), runSeed: options.seed, dir: join(out, "cover") }) : null;
     const runUnit = (grid, script, shape, unit, manifest) => {
       // Room for the grid before it starts: a run that fills the disk midway fails late, with ENOSPC rows (ADR 0519's preflight runs at
@@ -465,10 +465,12 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       // A proved verdict (agree on a misuse grid, clean on a legal one) never goes unnamed (ADR 1012): the smoke's cover holds every program of the
       // ledger, so one that is now another outcome, or has no row, fails unless a row of proved/changes.json names it.
       if (options.smoke && options.cover && existsSync(join(unit.dir, "programs.jsonl"))) {
-        const ids = provedLedger.get(grid);
-        if (ids?.size) {
-          const moves = provedMoves({ grid, ids, rows: readRows(unit.dir), changes: provedChanges, expectAll: options.cover === "all" });
-          if (moves.lost.length || moves.gained) console.log(`           proved verdicts: ${ids.size} in the ledger, ${moves.lost.length} lost (${moves.named} named), ${moves.gained} newly proved`);
+        const file = provedLedger.get(grid);
+        const held = file ? file.ids.size + file.entries.size : 0;
+        if (held) {
+          const moves = provedMoves({ grid, ids: file.ids, entries: file.entries, rows: readRows(unit.dir), changes: provedChanges, expectAll: options.cover === "all" });
+          // Churn (ADR 1118): an entry whose id the generator now builds as another program is not judged here and is no loss; `proved.mjs record` retires it.
+          if (moves.lost.length || moves.gained || moves.churn.length) console.log(`           proved verdicts: ${held} in the ledger, ${moves.lost.length} lost (${moves.named} named), ${moves.gained} newly proved, ${moves.churn.length} churned (another program under the id)`);
           attention.push(...provedLines(unit.label, moves));
         }
       }
