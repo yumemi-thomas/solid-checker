@@ -3343,32 +3343,42 @@ pub(crate) fn function_called_by_name(
     function: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
 ) -> Vec<Span> {
-    let Some(name) = crate::owners::function_binding_name(file, function).map(|name| name.span)
-    else {
-        return Vec::new();
-    };
-    let Some(symbol) = lookup.entities().at(file.path.as_str(), name) else {
-        return Vec::new();
-    };
-    lookup
-        .symbol_references(symbol.as_str())
-        .iter()
-        .filter(|reference| {
-            reference.path.as_ref() == file.path.as_str()
-                && reference.start_byte != u64::from(name.start)
-        })
-        .filter_map(|reference| {
-            file.ast
-                .calls
+    // ADR 1127: every binding the entry census counts (a named function expression has two, its own name and the `const`
+    // holding it), else the one name a method or an unheld expression has.
+    let names = super::write_roles::entry_bindings(file, function).unwrap_or_else(|| {
+        crate::owners::function_binding_name(file, function)
+            .into_iter()
+            .collect()
+    });
+    let mut calls = Vec::new();
+    for name in names.iter().map(|name| name.span) {
+        let Some(symbol) = lookup.entities().at(file.path.as_str(), name) else {
+            continue;
+        };
+        calls.extend(
+            lookup
+                .symbol_references(symbol.as_str())
                 .iter()
-                .find(|call| {
-                    !call.construct
-                        && u64::from(file.ast.peel_ts_sugar_span(call.callee).start)
-                            == reference.start_byte
+                .filter(|reference| {
+                    reference.path.as_ref() == file.path.as_str()
+                        && reference.start_byte != u64::from(name.start)
                 })
-                .map(|call| call.span)
-        })
-        .collect()
+                .filter_map(|reference| {
+                    file.ast
+                        .calls
+                        .iter()
+                        .find(|call| {
+                            !call.construct
+                                && u64::from(file.ast.peel_ts_sugar_span(call.callee).start)
+                                    == reference.start_byte
+                        })
+                        .map(|call| call.span)
+                }),
+        );
+    }
+    calls.sort_unstable_by_key(|span| (span.start, span.end));
+    calls.dedup();
+    calls
 }
 
 #[cfg(test)]

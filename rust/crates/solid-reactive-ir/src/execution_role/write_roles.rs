@@ -3290,6 +3290,35 @@ pub(crate) fn role_entries_complete(
     entry_census(file, function, lookup, &[], true)
 }
 
+/// ADR 1127: the bindings a function is entered through, as the entry census counts them; every walk over a function's
+/// references by name reads this one list (ADR 1124 round 2: two lists diverged). A named function expression is entered
+/// through the binding holding it as well as through its own name (`const cb = function inner() {}`: `cb` and `inner`);
+/// with no such binding it is a value handed wherever it is written: `None`, as for a method or a function with no binding.
+pub(crate) fn entry_bindings<'f>(
+    file: &'f solid_facts::FileFacts,
+    function: &'f solid_facts::ast::FunctionFact,
+) -> Option<Vec<&'f solid_facts::ast::NamedSpan>> {
+    if function.method_name.is_some() {
+        return None;
+    }
+    if function.kind == solid_facts::ast::FunctionKind::Expression
+        && let Some(own) = function.name.as_ref()
+    {
+        let outer = file
+            .ast
+            .bindings_initializer_containing(function.span)
+            .find(|binding| {
+                binding.shape == solid_facts::ast::BindingShape::Identifier
+                    && binding.initializer.is_some_and(|initializer| {
+                        file.ast.peel_ts_sugar_span(initializer) == function.span
+                    })
+            })
+            .and_then(|binding| binding.names.first())?;
+        return Some(vec![own, outer]);
+    }
+    function_binding_name(file, function).map(|binding| vec![binding])
+}
+
 /// How many `const` aliases deep [`role_entries_complete`] follows.
 const ALIAS_DEPTH: usize = 3;
 
@@ -3304,33 +3333,9 @@ fn entry_census(
         return false;
     }
     let path = file.path.as_str();
-    // A named function expression is entered through the binding holding it
-    // as well as through its own name; with no such binding it is a value
-    // handed wherever it is written.
-    let mut bindings = Vec::new();
-    if function.kind == solid_facts::ast::FunctionKind::Expression
-        && let Some(own) = function.name.as_ref()
-    {
-        let Some(outer) = file
-            .ast
-            .bindings_initializer_containing(function.span)
-            .find(|binding| {
-                binding.shape == solid_facts::ast::BindingShape::Identifier
-                    && binding.initializer.is_some_and(|initializer| {
-                        file.ast.peel_ts_sugar_span(initializer) == function.span
-                    })
-            })
-            .and_then(|binding| binding.names.first())
-        else {
-            return false;
-        };
-        bindings.extend([own, outer]);
-    } else {
-        let Some(binding) = function_binding_name(file, function) else {
-            return false;
-        };
-        bindings.push(binding);
-    }
+    let Some(bindings) = entry_bindings(file, function) else {
+        return false;
+    };
     if entered_by_unseen_code(file, function, lookup) {
         return false;
     }
