@@ -21,8 +21,8 @@ const textOf = (context) => {
 };
 
 describe("the pu contexts (a flight the proof took for unconsumed)", () => {
-  it("are eighteen misuse recall contexts of UNTRACKED_READ_AFTER_AWAIT, base-only, out of the census and api-fire's plan", () => {
-    expect(PU_CONTEXT_NAMES).toEqual(["pu-then-sub", "pu-loop", "pu-class", "pu-class-made", "pu-class-ctor", "pu-class-meth", "pu-coerce-direct", "pu-coerce-wrapper", "pu-coerce-iife", "pu-in-direct", "pu-in-wrapper", "pu-in-iife", "pu-instanceof-direct", "pu-instanceof-wrapper", "pu-instanceof-iife", "pu-key-direct", "pu-key-wrapper", "pu-key-iife"]);
+  it("are twenty misuse recall contexts of UNTRACKED_READ_AFTER_AWAIT, base-only, out of the census and api-fire's plan", () => {
+    expect(PU_CONTEXT_NAMES).toEqual(["pu-then-sub", "pu-loop", "pu-class", "pu-class-made", "pu-class-ctor", "pu-class-meth", "pu-coerce-direct", "pu-coerce-wrapper", "pu-coerce-iife", "pu-in-direct", "pu-in-wrapper", "pu-in-iife", "pu-instanceof-direct", "pu-instanceof-wrapper", "pu-instanceof-iife", "pu-key-direct", "pu-key-wrapper", "pu-key-iife", "pu-bare-coerce", "pu-bare-in"]);
     expect(PU_CODES).toEqual(["UNTRACKED_READ_AFTER_AWAIT"]);
     for (const name of PU_CONTEXT_NAMES) {
       expect(PU_CONTEXTS[name]).toBe("misuse");
@@ -82,5 +82,10 @@ describe("the pu contexts (a flight the proof took for unconsumed)", () => {
       const text = textOf(`pu-${probe}-${form}`).join("\n");
       expect(argument[probe].test(text), `${probe}-${form}`).toBe(true);
     }
+  });
+
+  it("pu-bare-*: a bare operator statement after the memo's await that runs the site's object member", () => {
+    expect(textOf("pu-bare-coerce").some((line) => /^`\$\{po\d+\}`;$/.test(line))).toBe(true);
+    expect(textOf("pu-bare-in").some((line) => /^"k" in pt\d+;$/.test(line))).toBe(true);
   });
 });

@@ -206,6 +206,17 @@
       "blocker": "read-after-await-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/after-await-net/App.tsx",
+      "start": 2134,
+      "end": 2141,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-net/App.tsx",
       "start": 2231,
       "end": 2239,
       "fixes": 0
@@ -241,6 +252,17 @@
       "path": "fixtures/reactive-ir/after-await-net/App.tsx",
       "start": 2460,
       "end": 2467,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/after-await-net/App.tsx",
+      "start": 2522,
+      "end": 2535,
       "fixes": 0
     },
     {

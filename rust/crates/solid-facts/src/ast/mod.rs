@@ -66,7 +66,8 @@ use thiserror::Error;
 /// statement's test and the operand of `!` are inert operands (`ToBoolean` runs no code).
 /// 98 (ADR 1109): `swallowing_try_blocks`, the `try` blocks a throw in which may end in a normal completion of the `try` (a
 /// `catch` that does more than rethrow, or a `finally` that may jump).
-pub const AST_FACTS_SCHEMA: u32 = 98;
+/// 99 (ADR 1113): every `in` and `instanceof` binary with its operands (`relation_operators`).
+pub const AST_FACTS_SCHEMA: u32 = 99;
 
 mod argument_completion;
 mod code_sinks;

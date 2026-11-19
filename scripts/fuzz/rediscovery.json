@@ -26728,5 +26728,23 @@
    "mx-strict-read-untracked-evt-apply-dispatch-shadow-signal-direct-none"
   ],
   "rediscovered": "focus on the context's 1,826 mx-recall programs: 1,282 false cleans on the build with the scan off (main's answer); FIXED here (0 false cleans, 1,808 recall-gap, 18 typed-away)"
+ },
+ {
+  "finding": "A bare operator statement after an async memo's await runs project code with no call: `` `${po}`; `` (a template that coerces an object whose `toString` reads a signal; Chrome rc.21 reports UNTRACKED_READ_AFTER_AWAIT). Main 28fde14bf listed no after-await site for it, so the read had no SC1002 row",
+  "found": "the Fable review of ADR 1097's widening, round 2 (0ede74566): a probe on main",
+  "fixed": "ADR 1113 (`after_await_accounting.rs`: an operator site for every `primitive_results` operator and coercing operand after a suspension, unless `operator_runs_no_code`)",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": ["mx-untracked-read-after-await-pu-bare-coerce-x-direct-none"],
+  "rediscovered": "main 28fde14bf: false-clean (focus exit 1); this fix: recall-gap (an uncertifiable SC1002 row at the operator, focus exit 0)"
+ },
+ {
+  "finding": "A bare operator statement after an async memo's await runs project code with no call: `\"k\" in pt;` (a Proxy whose `has` trap reads a signal; Chrome rc.21 reports UNTRACKED_READ_AFTER_AWAIT). Main 28fde14bf listed no after-await site for it, so the read had no SC1002 row",
+  "found": "the Fable review of ADR 1097's widening, round 2 (0ede74566): a probe on main",
+  "fixed": "ADR 1113 (`after_await_accounting.rs`: an operator site for every `primitive_results` operator and coercing operand after a suspension, unless `operator_runs_no_code`)",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": ["mx-untracked-read-after-await-pu-bare-in-x-direct-none"],
+  "rediscovered": "main 28fde14bf: false-clean (focus exit 1); this fix: recall-gap (an uncertifiable SC1002 row at the operator, focus exit 0)"
  }
 ]

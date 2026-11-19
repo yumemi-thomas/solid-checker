@@ -1727,6 +1727,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/loading-member-callee/node_modules/**
 !fixtures/reactive-ir/after-await-net/node_modules/
 !fixtures/reactive-ir/after-await-net/node_modules/**
+!fixtures/reactive-ir/after-await-operators/node_modules/
+!fixtures/reactive-ir/after-await-operators/node_modules/**
 !fixtures/reactive-ir/after-await-then-handler/node_modules/
 !fixtures/reactive-ir/after-await-then-handler/node_modules/**
 !fixtures/reactive-ir/after-await-store-alias/node_modules/

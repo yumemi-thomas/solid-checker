@@ -4912,6 +4912,60 @@
    "adr": "ADR 1097",
    "fact": "argument_is_inert: proven_primitive only for a declared name (an operator, coercion or negated literal argument is not inert)",
    "why": "the reviews of ADR 1097's widening: in, instanceof, coercion and computed keys run project code with no call"
+  },
+  {
+   "fixture": "reactive-ir/after-await-class-value",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 1,
+   "to": 5,
+   "adr": "ADR 1113",
+   "fact": "operator-after-suspension: an operand coerced or probed (template, +, relational, ++/--, in) with no Type Facts primitive domain, or any instanceof/delete, after an await or in a promise handler",
+   "why": "the operator may reach toString/valueOf/Symbol.toPrimitive or a Proxy trap; no fact proves it runs no project code"
+  },
+  {
+   "fixture": "reactive-ir/after-await-net",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 11,
+   "to": 13,
+   "adr": "ADR 1113",
+   "fact": "operator-after-suspension: an operand coerced or probed (template, +, relational, ++/--, in) with no Type Facts primitive domain, or any instanceof/delete, after an await or in a promise handler",
+   "why": "the operator may reach toString/valueOf/Symbol.toPrimitive or a Proxy trap; no fact proves it runs no project code"
+  },
+  {
+   "fixture": "reactive-ir/after-await-store-paths",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 3,
+   "to": 5,
+   "adr": "ADR 1113",
+   "fact": "operator-after-suspension: an operand coerced or probed (template, +, relational, ++/--, in) with no Type Facts primitive domain, or any instanceof/delete, after an await or in a promise handler",
+   "why": "the operator may reach toString/valueOf/Symbol.toPrimitive or a Proxy trap; no fact proves it runs no project code"
+  },
+  {
+   "fixture": "reactive-ir/jsx-creation-sites",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1113",
+   "fact": "operator-after-suspension: an operand coerced or probed (template, +, relational, ++/--, in) with no Type Facts primitive domain, or any instanceof/delete, after an await or in a promise handler",
+   "why": "the operator may reach toString/valueOf/Symbol.toPrimitive or a Proxy trap; no fact proves it runs no project code"
+  },
+  {
+   "fixture": "reactive-ir/member-routes-after-await",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 12,
+   "to": 17,
+   "adr": "ADR 1113",
+   "fact": "operator-after-suspension: an operand coerced or probed (template, +, relational, ++/--, in) with no Type Facts primitive domain, or any instanceof/delete, after an await or in a promise handler",
+   "why": "the operator may reach toString/valueOf/Symbol.toPrimitive or a Proxy trap; no fact proves it runs no project code"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 1113",
+   "fact": "operator-after-suspension: an operand coerced or probed (template, +, relational, ++/--, in) with no Type Facts primitive domain, or any instanceof/delete, after an await or in a promise handler",
+   "why": "the operator may reach toString/valueOf/Symbol.toPrimitive or a Proxy trap; no fact proves it runs no project code"
   }
  ]
 }

@@ -803,6 +803,38 @@ fn collect_argument_spans(dialect: &'static Dialect, file: &FileFacts, spans: &m
             primitive_value_domain_spans.insert(initializer);
         }
     }
+    // ADR 1113: an operator after a suspension is no site when every operand it coerces or probes is a primitive: each such operand's
+    // primitive domain, asked in a file that suspends at all (an `await`, a `for await`, an async function) or hands a promise a handler (`.then`,
+    // `.catch`, `.finally`, ADR 0976). A handler another file defines gets no domain and keeps its row.
+    let hands_promise_handler = || {
+        file.ast.calls.iter().any(|call| {
+            file.ast
+                .member_at(file.ast.peel_ts_sugar_span(call.callee))
+                .is_some_and(|member| {
+                    matches!(
+                        file.source_text(member.property),
+                        Some("then" | "catch" | "finally")
+                    )
+                })
+        })
+    };
+    if !file.ast.awaits.is_empty()
+        || !file.ast.implicit_suspensions.is_empty()
+        || file.ast.functions.iter().any(|function| function.r#async)
+        || hands_promise_handler()
+    {
+        let operands = file.ast.coercing_operands.iter().copied().chain(
+            file.ast
+                .relation_operators
+                .iter()
+                .flat_map(|relation| [relation.left, relation.right]),
+        );
+        for operand in operands {
+            let operand = file.ast.peel_ts_sugar_span(operand);
+            add_symbol(operand, false);
+            primitive_value_domain_spans.insert(operand);
+        }
+    }
     // ADR 0781: which key a computed write to a standard object names.
     for assignment in &file.ast.assignments {
         let target = file.ast.peel_ts_sugar_span(assignment.target);
