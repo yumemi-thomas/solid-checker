@@ -67,8 +67,9 @@ use thiserror::Error;
 /// 98 (ADR 1109): `swallowing_try_blocks`, the `try` blocks a throw in which may end in a normal completion of the `try` (a
 /// `catch` that does more than rethrow, or a `finally` that may jump).
 /// 99 (ADR 1113): every `in` and `instanceof` binary with its operands (`relation_operators`).
-/// 100 (ADR 1114 families 2-4): every identifier reference's position by its parent node (`reference_positions`).
-pub const AST_FACTS_SCHEMA: u32 = 100;
+/// 100: ADR 1122's (bundle v).
+/// 101 (ADR 1114 families 2-4): every identifier reference's position by its parent node (`reference_positions`).
+pub const AST_FACTS_SCHEMA: u32 = 101;
 
 mod argument_completion;
 mod code_sinks;
