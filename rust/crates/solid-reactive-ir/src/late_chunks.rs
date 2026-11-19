@@ -55,7 +55,7 @@ impl<T> Default for FileChunks<T> {
 /// ([`crate::cache::CachedLateStages`]).
 #[derive(Default)]
 pub(crate) struct LateChunks {
-    pub(crate) props_destructure: FileChunks<Vec<crate::StaticDefect>>,
+    pub(crate) props_destructure: FileChunks<crate::static_rules::DestructureFileResult>,
     pub(crate) value_references: FileChunks<Vec<crate::StaticDefect>>,
     pub(crate) result_methods: FileChunks<Vec<crate::StaticDefect>>,
     /// The leaf-owner operations of each file (`cleanup`).
