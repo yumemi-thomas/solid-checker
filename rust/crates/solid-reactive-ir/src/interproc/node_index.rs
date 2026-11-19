@@ -51,6 +51,9 @@ impl NodeIndex {
             if let Some(symbol) = &node.symbol {
                 index.by_symbol.insert(symbol.clone(), position);
             }
+            if let Some(holder) = &node.holder_symbol {
+                index.by_symbol.insert(holder.clone(), position);
+            }
         }
         index.functions = Arc::new(
             index
