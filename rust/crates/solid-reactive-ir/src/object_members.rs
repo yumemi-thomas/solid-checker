@@ -46,15 +46,19 @@ pub(crate) fn index(lookup: &SemanticLookup<'_>) -> Targets {
 }
 
 /// What every intrinsic element's spread argument supplies, assembled from
-/// the per-slot [`SpreadTargetsAt`] answers (ADR 0358).
-pub(crate) fn spread_index(lookup: &SemanticLookup<'_>) -> SpreadTargets {
+/// the per-slot [`SpreadTargetsAt`] answers (ADR 0358), with the keys ADR
+/// 1129's `merge`/`omit` view proof gives a spread (a later slot of a path
+/// overwrites an earlier one in both).
+pub(crate) fn spread_index(lookup: &SemanticLookup<'_>) -> (SpreadTargets, SpreadViews) {
     let world = lookup.memo_world();
     let mut spreads = HashMap::default();
+    let mut views = HashMap::default();
     for (slot, file) in lookup.file_slots().iter().enumerate() {
         let key = lookup.memo_slot_of(slot);
-        for (argument, targets, _) in world.answer::<SpreadTargetsAt>(&key) {
+        for (argument, targets, view) in world.answer::<SpreadTargetsAt>(&key) {
+            let at = location(file.path.shared(), argument);
             spreads.insert(
-                location(file.path.shared(), argument),
+                at.clone(),
                 targets.map(|targets| {
                     targets
                         .into_iter()
@@ -62,36 +66,22 @@ pub(crate) fn spread_index(lookup: &SemanticLookup<'_>) -> SpreadTargets {
                         .collect()
                 }),
             );
+            match view {
+                Some(view) => {
+                    views.insert(at, view);
+                }
+                None => {
+                    views.remove(&at);
+                }
+            }
         }
     }
-    spreads
+    (spreads, views)
 }
 
 /// ADR 1129: per intrinsic element's spread argument, the keys a `merge`/`omit`
 /// view proof gives it and whether its handlers came from that proof.
 pub(crate) type SpreadViews = HashMap<Location, (Vec<std::sync::Arc<str>>, bool)>;
-
-/// The view proof's answers, assembled like [`spread_index`].
-pub(crate) fn spread_view_index(lookup: &SemanticLookup<'_>) -> SpreadViews {
-    let world = lookup.memo_world();
-    let mut views = HashMap::default();
-    for (slot, file) in lookup.file_slots().iter().enumerate() {
-        let key = lookup.memo_slot_of(slot);
-        for (argument, _, view) in world.answer::<SpreadTargetsAt>(&key) {
-            let location = location(file.path.shared(), argument);
-            match view {
-                Some(view) => {
-                    views.insert(location, view);
-                }
-                // A later slot of a path overwrites an earlier one.
-                None => {
-                    views.remove(&location);
-                }
-            }
-        }
-    }
-    views
-}
 
 fn references(file: &FileFacts) -> HashSet<Span> {
     file.ast
