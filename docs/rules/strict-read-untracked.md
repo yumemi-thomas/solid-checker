@@ -114,7 +114,13 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   A dispatch on the global `window` (or `document` on web rc.17), or written in
   a scheduler callback or at module top level, does not withhold it (ADR 0435);
   one in a `runWithOwner(null, …)` callback does, because that leaves the
-  enclosing strict-read window open. A navigation delivers only the event types the host
+  enclosing strict-read window open. A dispatch in an effect apply (ADR 0639) or in a
+  function only events invoke (ADR 0437) keeps the proof only while no listener of the
+  program may sit in a shadow tree ([ADR 1115](../decisions.md#adr-1115)): a listener
+  there runs with `window.event` unset, inside the window. Any `attachShadow`,
+  `shadowRoot`, declarative shadow markup, `getRootNode`, `composedPath` or custom
+  element, code evaluated from a string, or a load of a module the program does not
+  analyse withholds it. A navigation delivers only the event types the host
   fact names ([ADR 1080](../decisions.md#adr-1080): `history.go` and `location.reload`
   at most `beforeunload`, `location.assign`/`replace` also `popstate` for a fragment):
   with no listener for them anywhere the program is read (an `on<type>` property, a

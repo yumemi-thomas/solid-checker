@@ -26412,5 +26412,16 @@
   ],
   "rediscovered": "make fuzz-patterns: false clean on main 28fde14bf and on 4eea43735; FIXED here (SC2003 uncertifiable at the write)",
   "outside": "the pattern lane holds the program (scripts/fuzz/patterns); no grid generator writes a write through a copy's element yet"
+ },
+ {
+  "finding": "a read in a JSX `onScroll` handler (a listener on the element itself) of an element moved into a shadow root, delivered by `dispatchEvent` from an effect apply: rc.21 runs a shadow-tree listener with `window.event` unset, so the apply's strict-read window holds and Chrome warns STRICT_READ_UNTRACKED, while ADR 0639's apply-delivery read proof certified it",
+  "found": "the Fable review of ADR 1089 part E (coord-land/review-1089e.md, F1), probed on main 28fde14bf (sc-scratch mac21/f1115, f1115-dispatch)",
+  "fixed": "ADR 1115 (`event_delivery::scan_shadow_roots`, `DispatchSite::read_proof_rests_on_event`: the dispatch veto withholds the read proof wherever a listener may sit in a shadow tree)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-evt-apply-dispatch-shadow-signal-direct-none"
+  ],
+  "rediscovered": "focus on the context's 1,826 mx-recall programs: 1,282 false cleans on the build with the scan off (main's answer); FIXED here (0 false cleans, 1,808 recall-gap, 18 typed-away)"
  }
 ]

@@ -561,8 +561,8 @@
     },
     "rust/crates/solid-reactive-ir/src/indexes/event_delivery.rs": {
       "default-on-missing": {
-        "count": 1,
-        "why": "pending-review"
+        "count": 2,
+        "why": "ADR 1115 (scan_shadow_roots): no attested resolutions, or a load by a computed specifier, answers true (a listener may sit in a shadow tree: the read proof is withheld), the fail-closed side; one older hit pending-review"
       },
       "name-only-match": {
         "count": 3,

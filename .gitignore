@@ -1890,3 +1890,9 @@ packages/wasm/owned/
 !fixtures/reactive-ir/store-setter-after-await/node_modules/**
 !fixtures/reactive-ir/store-copy-element-write/node_modules/
 !fixtures/reactive-ir/store-copy-element-write/node_modules/**
+!fixtures/reactive-ir/event-dispatch-shadow/variants/shadow/node_modules/
+!fixtures/reactive-ir/event-dispatch-shadow/variants/shadow/node_modules/**
+!fixtures/reactive-ir/event-dispatch-shadow/variants/custom-element/node_modules/
+!fixtures/reactive-ir/event-dispatch-shadow/variants/custom-element/node_modules/**
+!fixtures/reactive-ir/event-dispatch-shadow/node_modules/
+!fixtures/reactive-ir/event-dispatch-shadow/node_modules/**

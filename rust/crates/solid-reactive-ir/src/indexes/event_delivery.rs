@@ -118,6 +118,18 @@ impl DispatchSite {
             )
     }
 
+    /// ADR 1115: a site whose read proof rests on the delivery setting `window.event`: a dispatch from an effect's apply (ADR 0639:
+    /// the apply's strict-read window takes only its queue's event) or from an event handler (ADR 0437: that delivery's own window is
+    /// closed by its event). A listener in a shadow tree runs with `window.event` unset (rc.21 `dist/dev-shared.js:5796, 5803`), so the
+    /// window holds for it. A listener on the window or the document is in no shadow tree.
+    pub(crate) const fn read_proof_rests_on_event(&self) -> bool {
+        !self.receiver.excluded()
+            && matches!(
+                self.caller,
+                Some(DispatchCaller::EffectApply | DispatchCaller::EventHandler)
+            )
+    }
+
     /// A delivery in an effect's apply that reaches a handler. Its read proof
     /// holds only while no flush drains under an owner.
     pub(crate) const fn delivers_in_effect_apply(&self) -> bool {
@@ -220,6 +232,12 @@ impl SemanticLookup<'_> {
         *self.reflective_prototype_write.get_or_init(|| {
             crate::interproc::accessor_provenance::scan_reflective_prototype_write(self)
         })
+    }
+
+    /// ADR 1115: whether some listener of the program may sit in a shadow tree ([`scan_shadow_roots`]), scanned once per build.
+    pub(crate) fn shadow_roots_possible(&self) -> bool {
+        crate::base::reads::note(crate::base::reads::Section::ShadowRoots);
+        *self.shadow_roots.get_or_init(|| scan_shadow_roots(self))
     }
 
     /// ADR 0634: some analyzed file names `markRaw` or writes a `shallow`
@@ -374,7 +392,10 @@ impl SemanticLookup<'_> {
             // (`SemanticLookup::flush_referenced`), inside this memo.
             sites.iter().any(DispatchSite::withholds_owner_proofs)
                 || (delivers_in_effect_apply && self.flush_referenced()),
-            sites.iter().any(DispatchSite::withholds_read_proofs),
+            // ADR 1115: a delivery's read proof that rests on its event holds only where no listener sits in a shadow tree.
+            sites.iter().any(DispatchSite::withholds_read_proofs)
+                || (sites.iter().any(DispatchSite::read_proof_rests_on_event)
+                    && self.shadow_roots_possible()),
             sites.iter().any(DispatchSite::withholds_flush_proofs),
             sites.iter().any(DispatchSite::withholds_listener_proofs),
             delivers_in_effect_apply,
@@ -1198,4 +1219,82 @@ impl SemanticLookup<'_> {
                 == Some(solid_dialect::Primitive::RunWithOwner))
         .then_some(DispatchCaller::DetachedOwner)
     }
+}
+
+/// The names through which code makes or reaches a shadow tree (ADR 1115): attaching one, reading one, declaring one in parsed
+/// markup, a custom element (whose class commonly attaches one), and the calls that hand out a node inside one.
+const SHADOW_SPELLINGS: &[&str] = &[
+    "attachShadow",
+    "shadowRoot",
+    "ShadowRoot",
+    "shadowrootmode",
+    "setHTMLUnsafe",
+    "parseHTMLUnsafe",
+    "getRootNode",
+    "composedPath",
+    "customElements",
+];
+
+/// ADR 1115: whether some listener of the program may sit in a shadow tree, where rc.21 runs it with `window.event` unset. True
+/// (fail closed) when any analysed file (the project's, and the dependency source the build reads) spells a name of
+/// [`SHADOW_SPELLINGS`] (a text test, which only refuses more), evaluates code from a string, or loads a module the program does not
+/// analyse that the dialect does not own, or one by a computed specifier: code nothing here reads may attach a shadow. rc.21's own
+/// `@solidjs/web` attaches none.
+pub(crate) fn scan_shadow_roots(lookup: &super::SemanticLookup<'_>) -> bool {
+    if lookup.hazard_present(crate::base::Hazard::Eval)
+        || lookup.hazard_present(crate::base::Hazard::CodeEvaluatingCall)
+    {
+        return true;
+    }
+    let Some(imports) = lookup.resolved_imports() else {
+        return true;
+    };
+    let program = lookup
+        .files()
+        .iter()
+        .map(|file| file.path.as_str())
+        .collect::<std::collections::HashSet<_>>();
+    lookup.files().iter().any(|file| {
+        if SHADOW_SPELLINGS
+            .iter()
+            .any(|name| file.source.contains(name))
+        {
+            return true;
+        }
+        let ast = &file.ast;
+        let unread = |at: solid_facts::core::Span, specifier: &str| {
+            if lookup.dialect.owns_module(specifier) {
+                return false;
+            }
+            match imports.specifier(file.path.as_str(), at, specifier) {
+                solid_facts::SpecifierAttestation::Attested(row) => {
+                    row.resolution == solid_facts::ImportResolution::Unresolved
+                        || !program.contains(row.resolved_path.as_ref())
+                }
+                solid_facts::SpecifierAttestation::Unattested => true,
+            }
+        };
+        ast.imports
+            .iter()
+            .filter(|import| !import.type_only)
+            .any(|import| unread(import.span, import.module.as_str()))
+            || ast
+                .exports
+                .iter()
+                .filter(|export| !export.type_only)
+                .any(|export| {
+                    export
+                        .module
+                        .as_deref()
+                        .is_some_and(|module| unread(export.span, module))
+                })
+            || ast
+                .module_loads
+                .iter()
+                .any(|load| match load.specifier.as_deref() {
+                    Some(specifier) => unread(load.span, specifier),
+                    // A load by a computed specifier may load anything.
+                    None => true,
+                })
+    })
 }
