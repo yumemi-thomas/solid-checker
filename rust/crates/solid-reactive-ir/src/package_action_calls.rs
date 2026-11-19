@@ -191,20 +191,9 @@ pub(crate) fn sites<'c>(ctx: &'c AnalysisContext<'_>) -> &'c [Vec<PackageSite>] 
             .iter()
             .map(|file| file.path.as_str())
             .collect::<HashSet<_>>();
-        // ADR 1114 family 3 (measurement): the writers each file's entry realms load.
-        let scopes = (Family3::new(None).any_on()
-            && std::env::var("SOLID_CHECKER_F3_SCOPE").is_ok_and(|scope| scope == "realm"))
-        .then(|| {
-            ctx.package_reach
-                .map(|index| crate::plain_premise::writer_scopes(ctx.semantic_lookup, index))
-        })
-        .flatten();
         files
             .iter()
-            .map(|file| {
-                let scope = scopes.as_ref().map(|scopes| scopes.of(file.path.as_str()));
-                file_sites(ctx, &analyzed, file, scope)
-            })
+            .map(|file| file_sites(ctx, &analyzed, file))
             .collect()
     })
 }
@@ -214,9 +203,7 @@ fn file_sites(
     ctx: &AnalysisContext<'_>,
     analyzed: &HashSet<&str>,
     file: &FileFacts,
-    scope: Option<&crate::plain_premise::FileWriterScope>,
 ) -> Vec<PackageSite> {
-    let f3 = Family3::new(scope);
     let lookup = ctx.semantic_lookup;
     let bound = import_bindings(ctx, file);
     let mut sites = Vec::new();
@@ -325,7 +312,7 @@ fn file_sites(
         // ADR 1108 part 2: a call no route gives a package's declaration may still run a method a package writes on a built-in's prototype.
         let Some(declaration) =
             package_declaration(ctx, analyzed, file, &bound, call.callee, Resolve::Call)
-                .or_else(|| prototype_call(ctx, file, call, &f3))
+                .or_else(|| prototype_call(ctx, file, call))
         else {
             continue;
         };
@@ -625,11 +612,9 @@ fn file_sites(
     }
     // ADR 1108 part 2: what runs a method a package writes on a built-in's prototype without a call of it: a member of that name read for its value or handed on, an
     // object pattern that reads it, an iteration (a writer under any name may have written `Symbol.iterator` or `next`), a template literal (`toString`, `join`).
-    if f3.any_on()
-        && ctx.package_reach.is_some_and(|index| {
-            !index.prototype_writers.is_empty() || !index.prototype_writers_any.is_empty()
-        })
-    {
+    if ctx.package_reach.is_some_and(|index| {
+        !index.prototype_writers.is_empty() || !index.prototype_writers_any.is_empty()
+    }) {
         for member in &file.ast.members {
             if !evaluated_member(file, member.span) {
                 continue;
@@ -639,7 +624,7 @@ fn file_sites(
                     member.span,
                     member.span,
                     Entry::Read,
-                    prototype_read(ctx, &[name.as_str()], false, "read-member", &f3),
+                    prototype_read(ctx, &[name.as_str()], false, "read-member"),
                 );
             }
         }
@@ -649,7 +634,7 @@ fn file_sites(
                     element.pattern,
                     element.pattern,
                     Entry::Read,
-                    prototype_read(ctx, &[name.as_str()], false, "read-pattern", &f3),
+                    prototype_read(ctx, &[name.as_str()], false, "read-pattern"),
                 );
             }
         }
@@ -658,7 +643,7 @@ fn file_sites(
                 operand,
                 operand,
                 Entry::Read,
-                prototype_read(ctx, &["next"], true, "iteration", &f3),
+                prototype_read(ctx, &["next"], true, "iteration"),
             );
         }
         for template in &file.ast.template_literals {
@@ -675,13 +660,7 @@ fn file_sites(
                     expression,
                     expression,
                     Entry::Read,
-                    prototype_read(
-                        ctx,
-                        &["toString", "valueOf", "join"],
-                        false,
-                        "template",
-                        &f3,
-                    ),
+                    prototype_read(ctx, &["toString", "valueOf", "join"], false, "template"),
                 );
             }
         }
@@ -2831,11 +2810,7 @@ fn prototype_call(
     ctx: &AnalysisContext<'_>,
     file: &FileFacts,
     call: &solid_facts::ast::CallFact,
-    f3: &Family3<'_>,
 ) -> Option<DeclarationAt> {
-    if !f3.any_on() {
-        return None;
-    }
     let index = ctx.package_reach?;
     if index.prototype_writers.is_empty() && index.prototype_writers_any.is_empty() {
         return None;
@@ -2929,12 +2904,12 @@ fn prototype_call(
     names.extend(implicit);
     if let Some((at, name, root)) = names.iter().enumerate().find_map(|(at, name)| {
         let kind = if at >= spelled_count { "implicit" } else { how };
-        if !f3.kind_on(kind) {
+        if !prototype_kind_on(kind) {
             return None;
         }
         index
             .prototype_writers_by_name(name)
-            .find(|root| f3.reaches(root))
+            .next()
             .map(|root| (at, name, root))
     }) {
         let kind = if at >= spelled_count { "implicit" } else { how };
@@ -2943,21 +2918,17 @@ fn prototype_call(
         });
     }
     if unspelled
-        && f3.kind_on("unspelled")
-        && let Some(root) = index
-            .prototype_writers_of_unspelled()
-            .find(|root| f3.reaches(root))
+        && prototype_kind_on("unspelled")
+        && let Some(root) = index.prototype_writers_of_unspelled().next()
     {
         return Some(DeclarationAt {
             path: format!("{PROTOTYPE_WRITE_ANY_PREFIX}[…]#unspelled:{root}"),
         });
     }
-    if !any || !f3.kind_on(any_kind) {
+    if !any || !prototype_kind_on(any_kind) {
         return None;
     }
-    let root = index
-        .prototype_writers_any_name()
-        .find(|root| f3.reaches(root))?;
+    let root = index.prototype_writers_any_name().next()?;
     Some(DeclarationAt {
         path: format!(
             "{PROTOTYPE_WRITE_ANY_PREFIX}{}#{any_kind}:{root}",
@@ -2966,50 +2937,13 @@ fn prototype_call(
     })
 }
 
-/// ADR 1114 family 3, measurement only: which kinds of site the change makes (`SOLID_CHECKER_F3_KINDS`: `all` or a comma list; unset, none, so no verdict
-/// moves), and with `SOLID_CHECKER_F3_SCOPE=realm` only the writers an entry realm of the file loads (ADR 1120's dependency reach).
-pub(crate) struct Family3<'s> {
-    kinds: Option<&'static std::collections::BTreeSet<String>>,
-    all: bool,
-    scope: Option<&'s crate::plain_premise::FileWriterScope>,
-}
+/// ADR 1114 family 3: the kinds of prototype-writer site not yet made, each a named cost (`docs/open-work.md`): a member call with no resolved declaration under
+/// an any-name writer, and an iteration under one. Their writers are cut first (ADR 1114 family 3, slice B), then they are made.
+const HELD_PROTOTYPE_KINDS: &[&str] = &["any-untyped-member", "iteration"];
 
-fn family3_kinds() -> &'static (bool, std::collections::BTreeSet<String>) {
-    static KINDS: std::sync::OnceLock<(bool, std::collections::BTreeSet<String>)> =
-        std::sync::OnceLock::new();
-    KINDS.get_or_init(|| {
-        let text = std::env::var("SOLID_CHECKER_F3_KINDS").unwrap_or_default();
-        let set: std::collections::BTreeSet<String> = text
-            .split(',')
-            .map(str::trim)
-            .filter(|kind| !kind.is_empty())
-            .map(str::to_owned)
-            .collect();
-        (set.contains("all"), set)
-    })
-}
-
-impl<'s> Family3<'s> {
-    fn new(scope: Option<&'s crate::plain_premise::FileWriterScope>) -> Self {
-        let (all, kinds) = family3_kinds();
-        Self {
-            kinds: (!kinds.is_empty()).then_some(kinds),
-            all: *all,
-            scope,
-        }
-    }
-
-    fn any_on(&self) -> bool {
-        self.kinds.is_some()
-    }
-
-    fn kind_on(&self, kind: &str) -> bool {
-        self.all || self.kinds.is_some_and(|kinds| kinds.contains(kind))
-    }
-
-    fn reaches(&self, root: &str) -> bool {
-        self.scope.is_none_or(|scope| scope.may_load(root))
-    }
+/// ADR 1114 family 3: whether a site of this kind is made (every kind but [`HELD_PROTOTYPE_KINDS`]).
+fn prototype_kind_on(kind: &str) -> bool {
+    !HELD_PROTOTYPE_KINDS.contains(&kind)
 }
 
 /// ADR 1108 part 2: the key of the object pattern that binds the identifier at `callee` (`reverse` of `const { reverse } = a`, `r` of `const { reverse: r } = a`).
@@ -3034,16 +2968,15 @@ fn prototype_read(
     names: &[&str],
     iteration: bool,
     kind: &str,
-    f3: &Family3<'_>,
 ) -> Option<DeclarationAt> {
     let index = ctx.package_reach?;
-    if !f3.kind_on(kind) {
+    if !prototype_kind_on(kind) {
         return None;
     }
     if let Some((name, root)) = names.iter().find_map(|name| {
         index
             .prototype_writers_by_name(name)
-            .find(|root| f3.reaches(root))
+            .next()
             .map(|root| (*name, root))
     }) {
         return Some(DeclarationAt {
@@ -3053,9 +2986,7 @@ fn prototype_read(
     if !iteration {
         return None;
     }
-    let root = index
-        .prototype_writers_any_name()
-        .find(|root| f3.reaches(root))?;
+    let root = index.prototype_writers_any_name().next()?;
     Some(DeclarationAt {
         path: format!("{PROTOTYPE_WRITE_ANY_PREFIX}[Symbol.iterator]#{kind}:{root}"),
     })
@@ -3280,6 +3211,7 @@ fn reach_census(path: &str, entry: Entry, reach: &PackageReach, project_js: bool
         .or_else(|| path.strip_prefix(PROTOTYPE_WRITE_ANY_PREFIX))
     {
         let name = written.split_once(':').map_or(written, |(name, _)| name);
+        let name = name.split_once('#').map_or(name, |(name, _)| name);
         return vec![format!("global|prototype:{name}")];
     }
     if path.starts_with(READ_ANY_PREFIX) {
@@ -3436,7 +3368,7 @@ fn row(file: &FileFacts, site: &PackageSite) -> crate::StaticViolation {
         message: format!(
             "{entered} `{}`, {}, where an owner may be active; {}, so whether it calls a Solid \
              action (which throws `ACTION_CALLED_IN_OWNED_SCOPE` in the dev build) is not proven",
-            site.package,
+            site.package.split_once('#').map_or(site.package.as_str(), |(name, _)| name),
             match site.provider {
                 Provider::Ambient => "a declaration file whose global the host, a script or a package this build does not read as source may provide",
                 Provider::Limit => "a value whose origin this build's walk could not follow to its end",
@@ -3458,9 +3390,9 @@ fn row(file: &FileFacts, site: &PackageSite) -> crate::StaticViolation {
         }
         .into(),
         location: crate::location(file.path.shared(), site.at),
-        // ADR 1114 family 3 (measurement build only): the site's kind in the blocker head.
+        // ADR 1114 family 3: a prototype-writer site names its kind after the reach (`package-may-call-action:reaches-solid:prototype-template`).
         analysis_context: match site.package.split_once('#') {
-            Some((_, kind)) => format!("{}-f3-{kind}:{}", crate::blockers::PACKAGE_MAY_CALL_ACTION, site.reach.word()),
+            Some((_, kind)) => format!("{}:{}:prototype-{kind}", crate::blockers::PACKAGE_MAY_CALL_ACTION, site.reach.word()),
             None => format!("{}:{}", crate::blockers::PACKAGE_MAY_CALL_ACTION, site.reach.word()),
         },
         fixes: Vec::new(),

@@ -30,8 +30,10 @@
 //               gview    `fz-gview` replaces `btoa` through a click event's `view`, dispatched where the module loads; the site is `btoa("x")` (ADR 1108: a member
 //                        the DOM types as this realm's window is the global object, as `defaultView` is; a message's `source` needs a message the browser
 //                        delivers later or a `source` the program spells, an escape already, so it is the fixture's, not a kind here)
-//               gviewpattern  `fz-gviewpattern` replaces `btoa` through a click event's `view` read by a pattern (`({ view }) => …`); the site is `btoa("x")` (ADR 1108 part 2;
-//                        the calls that run a written prototype member another way, `.call`, `Reflect.apply`, `test` for `exec`, an iteration, wait for ADR 1120)
+//               gprotocall, gprotoapply, gprotoreflect, gprotodestr  `fz-gproto` again, the replaced `reverse` run another way: `a.reverse.call(a)`, `a.reverse.apply(a, [])`,
+//                        `Reflect.apply(a.reverse, a, [])`, `const { reverse } = a; reverse()` (ADR 1108 part 2: every call that may run a written name)
+//               gprotoimplicit  `fz-gprotoexec` replaces `RegExp.prototype.exec`; the site is `/fzprobe/.test("x")`, which the library runs `exec` for (ADR 1108 part 2)
+//               gviewpattern  `fz-gviewpattern` replaces `btoa` through a click event's `view` read by a pattern (`({ view }) => …`); the site is `btoa("x")` (ADR 1108 part 2)
 //               gaccmember, gaccbare, gacctypeof, gaccpattern  `fz-gaccessor` redefines `devicePixelRatio` with a getter that calls the action; the site is the value read, no
 //                        call: `void window.devicePixelRatio`, `void devicePixelRatio`, `void typeof window.devicePixelRatio`, `({ devicePixelRatio: ratio } = window)` (ADR 0974)
 //     hosts     body     the component's body                         owned
@@ -52,8 +54,13 @@ const ACCESSOR_KINDS = ["gaccmember", "gaccbare", "gacctypeof", "gaccpattern"];
 const PATTERN_KINDS = ["getterrename", "getterdefault"];
 /** ADR 1108: a built-in's prototype written, and a global written through a member the DOM types as the window. */
 const ROUTE_KINDS = ["gproto", "gview"];
-/** ADR 1108 part 2: `view` read by a pattern. */
+/** ADR 1108 part 2: the written method run by `.call`, `.apply`, `Reflect.apply`, a destructured binding, the library's own `exec`; `view` read by a pattern. */
 const PROTO_ROUTES = {
+  gprotocall: { prelude: ["const a = new Float32Array(1);"], text: "a.reverse.call(a)" },
+  gprotoapply: { prelude: ["const a = new Float32Array(1);"], text: "a.reverse.apply(a, [])" },
+  gprotoreflect: { prelude: ["const a = new Float32Array(1);"], text: "Reflect.apply(a.reverse, a, [])" },
+  gprotodestr: { prelude: ["const { reverse } = new Float32Array(1);"], text: "reverse()" },
+  gprotoimplicit: { text: '/fzprobe/.test("x")' },
   gviewpattern: { text: 'btoa("x")' },
 };
 const PROTO_KINDS = Object.keys(PROTO_ROUTES);
@@ -71,7 +78,8 @@ export const PA_PACKAGES = {
   ...Object.fromEntries(ACCESSOR_KINDS.map((kind) => [kind, ["fz-gaccessor"]])),
   ...Object.fromEntries(PATTERN_KINDS.map((kind) => [kind, ["fz-getter"]])),
   gproto: ["fz-gproto"], gview: ["fz-gview"],
-  gviewpattern: ["fz-gviewpattern"],
+  gprotocall: ["fz-gproto"], gprotoapply: ["fz-gproto"], gprotoreflect: ["fz-gproto"], gprotodestr: ["fz-gproto"],
+  gprotoimplicit: ["fz-gprotoexec"], gviewpattern: ["fz-gviewpattern"],
 };
 /** `{ [context]: "misuse" | "legal" }`. */
 export const PA_CONTEXTS = Object.fromEntries(
@@ -117,7 +125,8 @@ export function paPackageFiles(kind, name = PA_PACKAGES[kind].at(-1)) {
     // ADR 1108: a method replaced on a built-in's prototype, and `btoa` replaced through an event's `view`.
     "fz-gproto": { js: ['import { action } from "solid-js";', "", "const real = Float32Array.prototype.reverse;", "Float32Array.prototype.reverse = function () {", "  void action(function* () {})();", "  return real.call(this);", "};"], dts: ["export {};"] },
     "fz-gview": { js: ['import { action } from "solid-js";', "", "const real = globalThis.btoa;", 'document.addEventListener("click", (event) => {', "  event.view.btoa = (text) => {", "    void action(function* () {})();", "    return real(text);", "  };", "}, { once: true });", "document.documentElement.click();"], dts: ["export {};"] },
-    // ADR 1108 part 2: `btoa` replaced through `view` read by a pattern.
+    // ADR 1108 part 2: `exec` replaced (the library runs it for `test`), and `btoa` replaced through `view` read by a pattern.
+    "fz-gprotoexec": { js: ['import { action } from "solid-js";', "", "const real = RegExp.prototype.exec;", "RegExp.prototype.exec = function (text) {", '  if (this.source === "fzprobe") void action(function* () {})();', "  return real.call(this, text);", "};"], dts: ["export {};"] },
     "fz-gviewpattern": { js: ['import { action } from "solid-js";', "", "const real = globalThis.btoa;", 'document.addEventListener("click", ({ view }) => {', "  view.btoa = (text) => {", "    void action(function* () {})();", "    return real(text);", "  };", "}, { once: true });", "document.documentElement.click();"], dts: ["export {};"] },
     "fz-gwritesym": { js: ['import { action } from "solid-js";', "", 'var MARK = /* @__PURE__ */ Symbol.for("fz-gwritesym");', "globalThis[MARK] = () => {", "  void action(function* () {})();", "};"], dts: ["export {};"] },
   }[name];

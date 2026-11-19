@@ -1,0 +1,7 @@
+{
+ "note": "ADR 1108 part 2: the calls that may run a method a package writes on a built-in's prototype by name, beyond a direct call of a library method: `.call`, `.apply`, `Reflect.apply`, a destructured method, a receiver typed by a project interface or `any`, a bare `dispatchEvent` (the window inherits EventTarget.prototype), the library's implicit calls (`test` runs `exec`, `new Map` runs `set`, `toString` and a template literal run `join`, `JSON.stringify` runs `toJSON`) and an accessor on a prototype read. Chrome throws ACTION_CALLED_IN_OWNED_SCOPE at each site, covered-uncertifiable; the clear writer, the unwritten names and the handler are quiet.",
+ "packages": [
+  "fz-psites",
+  "fz-psitesclear"
+ ]
+}

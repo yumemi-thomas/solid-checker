@@ -20,9 +20,9 @@ const built = (context) => {
 };
 
 describe("the pa contexts (a package the build does not read may call an action)", () => {
-  it("are thirty-one package kinds on five hosts, misuse where the call throws, each name parsed back", () => {
-    expect(PA_PACKAGE_KINDS).toHaveLength(31);
-    expect(PA_CONTEXT_NAMES).toHaveLength(155);
+  it("are thirty-six package kinds on five hosts, misuse where the call throws, each name parsed back", () => {
+    expect(PA_PACKAGE_KINDS).toHaveLength(36);
+    expect(PA_CONTEXT_NAMES).toHaveLength(180);
     // Legal on every host: the package that calls nothing (`pure`), loads on a branch that never runs (`dyn`), and the symbol-keyed writer (`gwritesym`).
     const quiet = ["pure", "dyn", "gwritesym"];
     for (const name of PA_CONTEXT_NAMES) {
@@ -62,8 +62,10 @@ describe("the pa contexts (a package the build does not read may call an action)
     expect(paPackageFiles("gproto")["index.js"]).toContain("Float32Array.prototype.reverse = ");
     expect(paPackageFiles("gview")["index.js"]).toContain("event.view.btoa = ");
     for (const kind of ["gproto", "gview"]) expect(paPackageFiles(kind)["index.js"]).toContain('from "solid-js"');
-    // ADR 1108 part 2: `btoa` through a pattern's `view`.
+    // ADR 1108 part 2: `exec` and `btoa` through a pattern's `view`; the routes of `reverse` read the package `gproto` ships.
+    expect(paPackageFiles("gprotoimplicit")["index.js"]).toContain("RegExp.prototype.exec = ");
     expect(paPackageFiles("gviewpattern")["index.js"]).toContain("({ view }) => {");
+    for (const kind of ["gprotocall", "gprotoapply", "gprotoreflect", "gprotodestr"]) expect(PA_PACKAGES[kind]).toEqual(["fz-gproto"]);
     // ADR 0974: the writes the scan must see besides `=`: a logical assignment, `Reflect.apply`, a writer held by a name, a bound one; and a global redefined with a getter.
     expect(paPackageFiles("gwriteand")["index.js"]).toContain("globalThis.btoa &&= ");
     expect(paPackageFiles("gwritereflect")["index.js"]).toContain("Reflect.apply(Object.assign, null, [globalThis, {");

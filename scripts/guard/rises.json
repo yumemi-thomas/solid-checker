@@ -5046,6 +5046,14 @@
    "to": 6,
    "adr": "ADR 1119",
    "fact": "round 2 (H2): a named callback also called by name is checked at every silent named-callback arm; helper-prop-read's read relabels from function-run-unplaced to callee-callback-timing"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-walk",
+   "key": "SC2002 package-may-call-action",
+   "from": 41,
+   "to": 42,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice A: under the fixture's any-name prototype writer (fz-ctor hands Float32Array to a Proxy), localIdentity() is a binding whose resolved declaration is the library's VoidFunction (a project arrow handed through id(f: VoidFunction)), which the any-bound-library arm takes for a library method: fail-closed, Chrome silent; the arm should ask the binding's value origin, not its type"
   }
  ]
 }

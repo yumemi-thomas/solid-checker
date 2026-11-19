@@ -34142,5 +34142,46 @@
   "code": "UNTRACKED_READ_AFTER_AWAIT",
   "ids": ["mx-untracked-read-after-await-js-tostring-x-direct-none", "mx-untracked-read-after-await-js-toprim-x-direct-none", "mx-untracked-read-after-await-js-hasinst-x-direct-none", "mx-untracked-read-after-await-js-tostring-plus-x-direct-none", "mx-untracked-read-after-await-js-hasinst-const-x-direct-none"],
   "rediscovered": "`focus.mjs --codes UNTRACKED_READ_AFTER_AWAIT --grids mx-recall --ids` with the release checker of bundle u 6e26187f1 (same analysis): the judge before this change false-clean on all five, after it recall-gap; the other 15 js-* cells unchanged"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent at a call that runs a method an installed package wrote on a built-in's prototype by name, reached by `.call`, `.apply`, `Reflect.apply` or a destructured binding (`a.reverse.call(a)`, `const { reverse } = a; reverse()`): ADR 1108 part 1 took only a direct member call whose declaration is the library's for a site",
+  "found": "Fable review of ADR 1108 part 1 (1e441fa3e); pattern lane `pkgaction/proto-site-{call,apply,reflect-apply,destructured}`, Chrome-confirmed false cleans (held by ADR 1108 part 2)",
+  "fixed": "ADR 1114 family 3 slice A (`package_action_calls.rs` `prototype_call`: the function of `.call`/`.apply`/`.bind` and `Reflect.apply`, the key of the pattern that binds a callee; ported from 19953739e)",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pa-gprotocall-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotocall-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotocall-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoapply-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoapply-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoapply-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoreflect-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoreflect-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoreflect-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotodestr-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotodestr-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotodestr-root-x-direct-none"
+  ],
+  "rediscovered": "new contexts pa-gprotocall, pa-gprotoapply, pa-gprotoreflect, pa-gprotodestr (pa-shapes.mjs): `focus.mjs --codes ACTION_CALLED_IN_OWNED_SCOPE --grids mx-recall --boundary both --ids`, release builds: main e637f50f2 exits 1, false-clean 3 per context in both boundaries; ADR 1114 family 3 slice A exits 0, recall-gap 3 (the SC2002 row at the call, uncertifiable). Pattern lane: the four programs false clean on main, fine here"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent where the standard library itself runs a method an installed package wrote on a built-in's prototype: `test` runs `exec`, the `Map` constructor runs `set`, an array's `toString` and a template's substitution run `join`, `JSON.stringify` runs `toJSON`",
+  "found": "Fable review of ADR 1108 part 1; pattern lane `pkgaction/proto-site-{test-exec,map-set,tostring-join,template-join,json-tojson}`, Chrome-confirmed",
+  "fixed": "ADR 1114 family 3 slice A (`IMPLICIT_CALLS`; a template's site is each substitution, where V8 places the conversion)",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pa-gprotoimplicit-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoimplicit-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoimplicit-root-x-direct-none"
+  ],
+  "rediscovered": "new context pa-gprotoimplicit (`/fzprobe/.test(\"x\")` after `RegExp.prototype.exec` is written): `focus.mjs --codes ACTION_CALLED_IN_OWNED_SCOPE --grids mx-recall --boundary both --ids`, release builds: main e637f50f2 exits 1, false-clean 3 per context in both boundaries; ADR 1114 family 3 slice A exits 0, recall-gap 3 (the SC2002 row at the call, uncertifiable). The other implicit calls are rows of the same table, held by the pattern lane (false clean on main, fine here, the template probe unchanged: `void `${…}`` is judged at the substitution V8 reports) and fixture action-in-owned-scope-prototype-sites"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent at a call of a method an installed package wrote on a built-in's prototype where the receiver is typed by a project interface or `any`, a bare `dispatchEvent(…)` after `EventTarget.prototype.dispatchEvent` is written (the window inherits it), a read of an accessor a package defined on a prototype (`void dv.byteLength`), and `new Set(it)` or `new Map(it)` after an any-name writer writes the iterator",
+  "found": "Fable review of ADR 1108 part 1; pattern lane `pkgaction/proto-site-{interface,any,bare-eventtarget,accessor}` and `pkgaction/proto-iter-{set,map}`, Chrome-confirmed",
+  "fixed": "ADR 1114 family 3 slice A (`prototype_call`: any member call of a written name, `INHERITED_BY_WINDOW`, `ITERATING_CONSTRUCTORS`; `prototype_read` for an evaluated member or a pattern key of a written name)",
+  "outside": "the pa contexts write one site expression with no declaration outside the component's body (an interface), and their receivers are the library's: these six are held verbatim by the pattern lane (false clean on main e637f50f2, fine here), the runtime oracle cases package-prototype-sites and package-prototype-iteration, and fixtures action-in-owned-scope-prototype-sites and action-in-owned-scope-prototype-iteration"
  }
 ]

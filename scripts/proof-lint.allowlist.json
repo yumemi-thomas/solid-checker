@@ -1195,8 +1195,8 @@
         "why": "polarity: yes means the value may be a function, which keeps the site (an uncertifiable SC2002 row, never a silence); a symbol with no declaration the compiler resolved, or a list of none, is a value nothing says is a type, so it stays a site"
       },
       "private-judgment": {
-        "count": 3,
-        "why": "pending-review"
+        "count": 4,
+        "why": "pending-review for the 3 of the ADR 1120 census; the 4th, pattern_key_of (ADR 1114 family 3), reads the facts' PatternSlot::Key (the parser's cooked key) of the pattern that binds a callee, compares no text, and only adds a site (an uncertifiable SC2002 row), never a silence"
       }
     },
     "rust/crates/solid-reactive-ir/src/package_boundary.rs": {
