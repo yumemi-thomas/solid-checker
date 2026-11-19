@@ -162,7 +162,7 @@ pub(super) fn premise_sites<'a>(semantic: &Semantic<'a>, resolve: bool) -> Vec<P
                     sites.add(
                         property.span,
                         PremiseClause::Accessor,
-                        &property_key_text(&property.key).unwrap_or_else(|| "*".into()),
+                        &kernel_key(&property.key).unwrap_or_else(|| "*".into()),
                     );
                 }
                 sites.contain(from, semantic.nodes().parent_id(node.id()));
@@ -178,7 +178,7 @@ pub(super) fn premise_sites<'a>(semantic: &Semantic<'a>, resolve: bool) -> Vec<P
                     sites.add(
                         method.span,
                         PremiseClause::Accessor,
-                        &property_key_text(&method.key).unwrap_or_else(|| "*".into()),
+                        &kernel_key(&method.key).unwrap_or_else(|| "*".into()),
                     );
                 }
                 sites.contain(from, class_of(semantic, node.id()));
@@ -198,17 +198,17 @@ pub(super) fn premise_sites<'a>(semantic: &Semantic<'a>, resolve: bool) -> Vec<P
                 sites.add(
                     property.span,
                     PremiseClause::Accessor,
-                    &property_key_text(&property.key).unwrap_or_else(|| "*".into()),
+                    &kernel_key(&property.key).unwrap_or_else(|| "*".into()),
                 );
                 sites.contain(from, class_of(semantic, node.id()));
             }
             AstKind::BindingProperty(property) => {
-                if let Some(key) = property_key_text(&property.key) {
+                if let Some(key) = kernel_key(&property.key) {
                     sites.key(property.span, &key);
                 }
             }
             AstKind::AssignmentTargetPropertyProperty(property) => {
-                if let Some(key) = property_key_text(&property.name) {
+                if let Some(key) = kernel_key(&property.name) {
                     sites.key(property.span, &key);
                 }
             }
@@ -266,13 +266,9 @@ fn class_of(semantic: &Semantic<'_>, element: NodeId) -> NodeId {
     nodes.parent_id(nodes.parent_id(element))
 }
 
-/// A property key's cooked text: a name, a string, a canonical integer, a template with no substitution; `None` for anything else.
-fn property_key_text(key: &PropertyKey<'_>) -> Option<CompactString> {
-    match key {
-        PropertyKey::StaticIdentifier(identifier) => Some(identifier.name.as_str().into()),
-        PropertyKey::PrivateIdentifier(_) => None,
-        key => literal_property_key(key.as_expression()?),
-    }
+/// A property key's cooked text, from the kernel (K3): a name, a string, a canonical integer, a template with no substitution.
+fn kernel_key(key: &PropertyKey<'_>) -> Option<CompactString> {
+    crate::kernel::property_key_value(key).map(CompactString::from)
 }
 
 impl<'a> Sites<'_, 'a> {
@@ -454,7 +450,7 @@ impl<'a> Sites<'_, 'a> {
         computed: bool,
         code: bool,
     ) {
-        match property_key_text(key) {
+        match kernel_key(key) {
             Some(text) => {
                 self.key(at, &text);
                 if HOOK_KEYS.contains(&text.as_str()) {

@@ -338,7 +338,7 @@ impl Walk {
 }
 
 /// A property key's value when syntax settles it: a name, a string, a canonical integer, a template with no substitution.
-fn property_key_value(key: &PropertyKey<'_>) -> Option<String> {
+pub(crate) fn property_key_value(key: &PropertyKey<'_>) -> Option<String> {
     match key {
         PropertyKey::StaticIdentifier(identifier) => Some(identifier.name.to_string()),
         PropertyKey::PrivateIdentifier(_) => None,
