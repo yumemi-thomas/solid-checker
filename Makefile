@@ -17,7 +17,7 @@ CARGO_TEST_RUNNER ?= test
 PROBE_NODE ?= $(shell node -e 'process.stdout.write(require("fs").realpathSync(process.execPath))')
 export SOLID_CHECKER_PROBE_NODE = $(PROBE_NODE)
 
-.PHONY: flip-final fuzz-patterns build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-what-if test-what-if build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update repro-causes repro-budget repro-registry tsc-oracle tsc-oracle-provision runtime-oracle-install tsc-ownership ownership-gate proof-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify ir-read-lint proof-lint ir-edit-fuzz ir-edit-fuzz-corpus corpus-delta fuzz-focus fuzz-smoke fuzz-premerge fuzz-twins fuzz-test
+.PHONY: flip-final fuzz-patterns textbook-check build build-typefacts test-typefacts build-typefacts-transcript typefacts-differential typefacts-e2e build-rust build-checker-debug build-checker-release build-what-if test-what-if build-wasm-package build-wasm-parity-guests package test test-rust test-cli verify verify-delta verify-performance compiler-facts-identity coverage coverage-update repro-causes repro-budget repro-registry tsc-oracle tsc-oracle-provision runtime-oracle-install tsc-ownership ownership-gate proof-gate obligation-audit wasm-parity wasm-parity-gate clean clean-verify ir-read-lint proof-lint ir-edit-fuzz ir-edit-fuzz-corpus corpus-delta fuzz-focus fuzz-smoke fuzz-premerge fuzz-twins fuzz-test
 
 build: build-rust
 
@@ -235,6 +235,11 @@ fuzz-test:
 # programs covering every behaviour and axis pair of the full grids; after any checker change. Exits 1 on anything to look at.
 # The audits' programs, verbatim, in Chrome and the checker (scripts/fuzz/patterns.mjs): prints the known open defects (open-defects.json), and
 # fails on a new failure or a listed program that passes. `make fuzz-patterns ARGS=--update` rewrites the list, for reading the diff.
+# The textbook tier of the proved ledger (ADR 1118, scripts/fuzz/textbook.mjs): fixtures/textbook against scripts/fuzz/proved/textbook.json, release
+# checker only; a violation, a lost proved (site, code) or a certified program that is not certified fails.
+textbook-check: build-checker-release
+	node scripts/fuzz/textbook.mjs check --checker "$(CURDIR)/rust/target/release/solid-checker-rust" --typefacts "$(CURDIR)/bin/solid-typefacts"
+
 fuzz-patterns: build-checker-release
 	node scripts/fuzz/patterns.mjs --checker "$(CURDIR)/rust/target/release/solid-checker-rust" --typefacts "$(CURDIR)/bin/solid-typefacts" $(ARGS)
 

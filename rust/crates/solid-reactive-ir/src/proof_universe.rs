@@ -17,6 +17,9 @@
 //! - a member chain on a root that ends in an assignment, update, destructuring
 //!   or iteration target (a store write), in a `delete` operand, or in the
 //!   receiver of an in-place array method (`push`, `splice`, ...);
+//! - the Gets of such a write chain before its terminal Set (`s.a` of
+//!   `s.a.b = x`, `s.items` of `s.items.push(x)`): a read, as any member Get of
+//!   the root is (ADR 1114, family 1);
 //! - every call of `onFlush` (SC3002), found from the calls' resolved
 //!   primitives, not from a source;
 //! - every call of `onCleanup` and of a creation (`createMemo`, `createEffect`, `createRoot`, ...) the dialect refuses under a leaf owner or on an
@@ -187,12 +190,18 @@ enum ChainEnd {
     /// spans are the places a row for the read may sit.
     Read(Vec<Span>),
     /// A member of the chain is an assignment, update, destructuring or
-    /// iteration target.
-    Assignment(Span),
-    /// A member of the chain is the operand of a `delete`.
-    Delete(Span),
-    /// A member of the chain is the callee of an in-place array method call.
-    Mutator { call: Span, callee: Span },
+    /// iteration target. `prefix`: the links before it, each an evaluated
+    /// Get of the root (ADR 1114, family 1: `s.a.b = x` reads `s.a`).
+    Assignment { at: Span, prefix: Vec<Span> },
+    /// A member of the chain is the operand of a `delete`; `prefix` as above.
+    Delete { at: Span, prefix: Vec<Span> },
+    /// A member of the chain is the callee of an in-place array method call;
+    /// `prefix`: the receiver's links, each a Get (`s.items.push(x)` reads `s.items`).
+    Mutator {
+        call: Span,
+        callee: Span,
+        prefix: Vec<Span>,
+    },
 }
 
 fn chain_end(file: &FileFacts, tables: &FileTables, first: &MemberFact) -> ChainEnd {
@@ -204,11 +213,19 @@ fn chain_end(file: &FileFacts, tables: &FileTables, first: &MemberFact) -> Chain
     for _ in 0..=ast.members.len() {
         links.push(link.span);
         let peeled = ast.peel_ts_sugar_span(link.span);
+        // The links before the current one were evaluated as Gets to reach it.
+        let prefix = || links[..links.len() - 1].to_vec();
         if tables.written.contains(&peeled) {
-            return ChainEnd::Assignment(link.span);
+            return ChainEnd::Assignment {
+                at: link.span,
+                prefix: prefix(),
+            };
         }
         if tables.deleted.contains(&peeled) {
-            return ChainEnd::Delete(link.span);
+            return ChainEnd::Delete {
+                at: link.span,
+                prefix: prefix(),
+            };
         }
         let method = file.source_text(link.property).unwrap_or("");
         if IN_PLACE_ARRAY_METHODS.contains(&method)
@@ -219,6 +236,7 @@ fn chain_end(file: &FileFacts, tables: &FileTables, first: &MemberFact) -> Chain
             return ChainEnd::Mutator {
                 call: call.span,
                 callee: call.callee,
+                prefix: prefix(),
             };
         }
         match ast.members_with_peeled_object(peeled).next() {
@@ -463,7 +481,7 @@ pub(crate) struct Site {
     /// What the source is: `accessor`, `store`, `props`, `setter`, `action` or
     /// `primitive`.
     pub(crate) source: &'static str,
-    /// The syntactic form: `call`, `member`, `assignment`, `delete`, `mutator`.
+    /// The syntactic form: `call`, `member`, `assignment`, `delete`, `mutator`, `write-prefix` (a write chain's Gets, ADR 1114).
     pub(crate) via: &'static str,
     pub(crate) at: Span,
     pub(crate) alternates: Vec<Span>,
@@ -518,7 +536,7 @@ fn sites_at(file: &FileFacts, tables: &FileTables, kind: Kind, reference: Span) 
     }
     let source = if kind.store { "store" } else { "props" };
     for first in ast.members_with_peeled_object(reference) {
-        sites.push(match chain_end(file, tables, first) {
+        let (site, prefix) = match chain_end(file, tables, first) {
             ChainEnd::Read(links) => {
                 // A row for the read sits at any link of the chain, or at a
                 // call that has a link as its callee (`props.onClick()`).
@@ -534,40 +552,77 @@ fn sites_at(file: &FileFacts, tables: &FileTables, kind: Kind, reference: Span) 
                         alternates.push(call.callee);
                     }
                 }
-                Site {
+                let site = Site {
                     table: "read",
                     source,
                     via: "member",
                     at: first.span,
                     alternates,
                     codes: READ_CODES,
-                }
+                };
+                (site, Vec::new())
             }
-            ChainEnd::Assignment(at) => Site {
-                table: "store-write",
+            ChainEnd::Assignment { at, prefix } => (
+                Site {
+                    table: "store-write",
+                    source,
+                    via: "assignment",
+                    at,
+                    alternates: Vec::new(),
+                    codes: STORE_WRITE_CODES,
+                },
+                prefix,
+            ),
+            ChainEnd::Delete { at, prefix } => (
+                Site {
+                    table: "store-write",
+                    source,
+                    via: "delete",
+                    at,
+                    alternates: Vec::new(),
+                    codes: STORE_WRITE_CODES,
+                },
+                prefix,
+            ),
+            ChainEnd::Mutator {
+                call,
+                callee,
+                prefix,
+            } => (
+                Site {
+                    table: "store-write",
+                    source,
+                    via: "mutator",
+                    at: call,
+                    alternates: vec![callee],
+                    codes: STORE_WRITE_CODES,
+                },
+                prefix,
+            ),
+        };
+        // A row for the prefix's reads may sit at any link of the chain, as a
+        // read chain's does: the terminal link and, for a mutator, its call
+        // and callee (`s.items.push` is where the read of `s.items` is reported).
+        let mut prefix = prefix;
+        if !prefix.is_empty() {
+            prefix.push(site.at);
+            prefix.extend(site.alternates.iter().copied());
+        }
+        sites.push(site);
+        // ADR 1114, family 1: a write chain's links before its terminal Set are
+        // Gets of the root, evaluated before the write: one read site, with the
+        // read's codes, at the first Get (a row for it may sit at any of them).
+        // `s.a = x` has none; `s.a.b = x` reads `s.a`; `s.items.push(x)` reads `s.items`.
+        if !prefix.is_empty() {
+            sites.push(Site {
+                table: "read",
                 source,
-                via: "assignment",
-                at,
-                alternates: Vec::new(),
-                codes: STORE_WRITE_CODES,
-            },
-            ChainEnd::Delete(at) => Site {
-                table: "store-write",
-                source,
-                via: "delete",
-                at,
-                alternates: Vec::new(),
-                codes: STORE_WRITE_CODES,
-            },
-            ChainEnd::Mutator { call, callee } => Site {
-                table: "store-write",
-                source,
-                via: "mutator",
-                at: call,
-                alternates: vec![callee],
-                codes: STORE_WRITE_CODES,
-            },
-        });
+                via: "write-prefix",
+                at: first.span,
+                alternates: prefix,
+                codes: READ_CODES,
+            });
+        }
     }
     sites
 }

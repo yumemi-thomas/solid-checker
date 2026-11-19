@@ -146,8 +146,9 @@ const compilerOptions = {
   jsxImportSource: "@solidjs/web", lib: ["ES2022", "DOM", "DOM.Iterable"], types: [],
   skipLibCheck: true, strict: true, noEmit: true,
 };
+// A mounted `default` is imported as `DefaultExport` (the checker's named entry, scripts/fuzz/checker.mjs `namedEntry`, does the same).
 const mainSource = (observations, mount, entered) => `${observations.length ? 'import { flush } from "solid-js";\n' : ""}import { render } from "@solidjs/web";
-${mount && entered && entered.every((name) => mount.includes(name)) ? "" : 'import * as mod from "./App";\n'}${mount ? `import { ${[...mount].sort().join(", ")} } from "./App";
+${mount && entered && entered.every((name) => mount.includes(name)) ? "" : 'import * as mod from "./App";\n'}${mount ? `import { ${[...mount].sort().map((name) => (name === "default" ? "default as DefaultExport" : name)).join(", ")} } from "./App";
 
 // Each exported component is rendered as a component, so Solid creates it the
 // way an application does, with the component's strict-read window open, and
@@ -163,7 +164,7 @@ const host = (name: string) => {
   return section;
 };
 ${[...mount].sort().map((name) => `try {
-  render(() => <${name} />, host("${name}"));
+  render(() => <${name === "default" ? "DefaultExport" : name} />, host("${name}"));
 } catch (error) {
   console.error("render failed", "${name}", error);
   setTimeout(() => { throw error; });
@@ -779,7 +780,7 @@ async function runCase(id, slot) {
     && dependencySources.every((name) => (spec.packages ?? []).includes(name)),
   `${id}: dependencySources must be a non-empty list of distinct names, each listed in packages`);
   // `mount` lists the exported components to render by name (ADR 0501): the differential fuzzer's cases.
-  assert(spec.mount === undefined || (Array.isArray(spec.mount) && spec.mount.length > 0 && spec.mount.every((name) => /^[A-Z][A-Za-z0-9_]*$/.test(name))), `${id}: mount must be a non-empty list of component names`);
+  assert(spec.mount === undefined || (Array.isArray(spec.mount) && spec.mount.length > 0 && spec.mount.every((name) => name === "default" || /^[A-Z][A-Za-z0-9_]*$/.test(name))), `${id}: mount must be a non-empty list of component names (or "default")`);
   // `main` is the entry's own text, for a case that asks for an entry other than the namespace loop's (the fuzzer's named entry, scripts/fuzz/checker.mjs `namedEntry`, ADR 0990).
   assert(spec.main === undefined || typeof spec.main === "string", `${id}: main must be the entry's text`);
   // ADR 1089: a mount that names every export the namespace loop would enter leaves the loop out (the checker's entry is the same text, scripts/fuzz/checker.mjs `mainSourceFor`).

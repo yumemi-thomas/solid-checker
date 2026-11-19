@@ -7,5 +7,6 @@ before the await they stay violations. A compute's region owns its synchronous r
 past the await are proven `missing-owner` (`Owner`; the region used to answer for them, a certified false clean), and
 past a `try` head that may throw they are uncertifiable. The object of a written member (`s.a` in `s.a.v = 1`) is read
 past the await (`reactive-read-after-await`, as ADR 0498 has it in a strict-read window) unless a read before the await
-tracks it (`Link`), and a member read in a function run in place past the await is read there (`LayeredRead`). All measured on rc.17's fast runtime. The stub is copied from `after-await-helper-callback` with
+tracks it (`Link`: Chrome silent; since ADR 1114 family 1 the prefix `t.a` is a read site of its own, and the after-await accounting has no
+typed reason for a path read before the first suspension, so it is uncertifiable there, owed), and a member read in a function run in place past the await is read there (`LayeredRead`). All measured on rc.17's fast runtime. The stub is copied from `after-await-helper-callback` with
 `resolve` and `until` from the published `@solidjs/signals@2.0.0-rc.17` typings.

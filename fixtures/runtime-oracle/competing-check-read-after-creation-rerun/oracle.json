@@ -1,0 +1,10 @@
+{
+  "note": "ADR 1111: a render effect's apply the first run leaves early runs createMemo(f) then f() on the rerun the click causes; Chrome reports PRIMITIVE_IN_EFFECT_CALLBACK and never STRICT_READ_UNTRACKED; SC6002 and SC1001 are uncertifiable. Generated program `mx-strict-read-untracked-render-apply-guarded-rerun-store-byname-direct-none` (differential fuzzer, generator 2).",
+  "haltMarker": true,
+  "steps": [
+    {
+      "action": "click",
+      "selector": "[data-act=\"b1\"], body:not(:has([data-act=\"b1\"])) > #sc-halted"
+    }
+  ]
+}

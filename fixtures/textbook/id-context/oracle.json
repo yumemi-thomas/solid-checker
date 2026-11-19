@@ -1,0 +1,7 @@
+{
+  "note": "Our idiom: a store created in a provider component and read through context by two children.",
+  "steps": [],
+  "mount": [
+    "Shop"
+  ]
+}

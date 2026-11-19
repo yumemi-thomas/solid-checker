@@ -214,3 +214,28 @@ describe("the audit workflow's proved ledger", () => {
     expect(upload.slice(0, 600)).toMatch(/oracle\/\$\{\{ matrix\.grid \}\}\/rerun\/\*\.json\n.*oracle\/\$\{\{ matrix\.grid \}\}\/rerun\/\*\.jsonl/);
   });
 });
+
+describe("the audit's ledger by key (ADR 1118)", () => {
+  const grid = "lg-base";
+  const ledger = (lines) => ({ grids: new Map([[grid, new Map(lines.map(([id]) => [id, "C"]))]]), keys: new Map([[grid, new Map(lines.filter(([, key]) => key).map(([id, key]) => [id, key]))]]), consumed: new Set() });
+  const run = (rows) => ({ rows: new Map([[grid, new Map(rows.map(([id, outcome]) => [id, outcome]))]]), codes: new Map([[grid, new Map(rows.map(([id]) => [id, "C"]))]]), keys: new Map([[grid, new Map(rows.filter(([, , key]) => key).map(([id, , key]) => [id, key]))]]) });
+  it("judges a keyed entry by its key, counts the same id under another key as churn, and still loses a keyed program that is not proved", () => {
+    const base = ledger([["lg-a", "k1"], ["lg-b", "k2"], ["lg-c", "k3"], ["lg-old"]]);
+    const now = run([["lg-a", "uncertifiable", "k1"], ["lg-b", "uncertifiable", "k9"], ["lg-renamed", "clean", "k3"], ["lg-old", "clean", "k4"]]);
+    const check = auditProved({ ...now, ledger: base });
+    expect(check.losses).toBe(1); // lg-a: same program, now uncertifiable
+    expect(check.churn).toBe(1); // lg-b: another program under the id
+    expect(check.attention[0]).toMatch(/lg-base: 1 proved verdict\(s\) of C lost \(clean -> uncertifiable\)/);
+    expect(check.gained).toBe(0); // lg-renamed is lg-c's program (k3): no gain
+    const named = auditProved({ ...now, ledger: base, changes: { rows: [{ grid, keys: ["k1"], adr: "ADR 1118", why: "x" }] } });
+    expect(named.accepted).toBe(true);
+  });
+  it("writes the key as the third column and reads it back", () => {
+    const dir = mkdtempSync(join(tmpdir(), "audit-keyed-"));
+    const now = run([["lg-a", "clean", "k1"], ["lg-b", "clean"]]);
+    writeAuditLedger(dir, now.rows, now.codes, new Set(), now.keys);
+    const back = readAuditLedger(dir);
+    expect(back.keys.get(grid)).toEqual(new Map([["lg-a", "k1"]]));
+    expect(back.grids.get(grid)).toEqual(new Map([["lg-a", "C"], ["lg-b", "C"]]));
+  });
+});

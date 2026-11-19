@@ -17,6 +17,7 @@
 //
 //   node scripts/fuzz/legal.mjs --out <fresh dir> [--seed N] [--per-cell N | --grid] [--codes A,B] [--contexts a,b] [--confirm-with-chrome]
 //     [--checker-bin …] [--typefacts …] [--tsc …] [--cache-dir <dir>] [--no-cache]
+import { provedKey } from "./proved.mjs";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { guardGridExit, partialRows } from "./partial.mjs";
 import { join, resolve } from "node:path";
@@ -304,7 +305,7 @@ export async function runLegal(options) {
         const site = siteOf(built);
         const verdict = value?.error ? { outcome: "harness", detail: { why: value.error } } : profile.time("judge", () => judgeLegalProgram({ code: cell.code, built, program, typecheck: value.typecheck, checker: value.checker, runtime: value.runtime, plan: built.plan }));
         const misuse = program.components[0].misuse;
-        rows.push({ id: built.id, seed: program.seed, code: cell.code, context: cell.context, variant: misuse.variant, binding: misuse.binding, layer: misuse.layer, ...(misuse.mount && misuse.mount !== "root" ? { mount: misuse.mount } : {}), ...(misuse.source ? { source: misuse.source } : {}), ...(misuse.combo ? { combo: misuse.combo } : {}), outcome: verdict.outcome, detail: verdict.detail, site: { line: site.line, hit: site.hit, aux: site.aux } });
+        rows.push({ id: built.id, seed: program.seed, code: cell.code, context: cell.context, variant: misuse.variant, binding: misuse.binding, layer: misuse.layer, ...(misuse.mount && misuse.mount !== "root" ? { mount: misuse.mount } : {}), ...(misuse.source ? { source: misuse.source } : {}), ...(misuse.combo ? { combo: misuse.combo } : {}), key: provedKey(built, cell.code, site.line), outcome: verdict.outcome, detail: verdict.detail, site: { line: site.line, hit: site.hit, aux: site.aux } });
         values.set(built.id, value);
       }
       partial.append(rows.slice(at));

@@ -20,6 +20,7 @@
 //
 //   node scripts/fuzz/matrix.mjs --out <fresh dir> --seed 1 --per-cell 20 [--codes A,B] [--contexts a,b] [--confirm-with-chrome]
 //     [--chrome-sample 3] [--shrink] [--baseline matrix.json] [--checker-label <commit>] [--all-cores]
+import { provedKey } from "./proved.mjs";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { STORED_ASYNC_CONTEXTS, STORED_CONTEXTS } from "./flip-read.mjs";
 import { guardGridExit, partialRows } from "./partial.mjs";
@@ -53,6 +54,7 @@ import { RV_CONTEXT_NAMES, rvShape } from "./rv-shapes.mjs";
 import { NM_CONTEXT_NAMES, nmShape } from "./nm-shapes.mjs";
 import { FR_CONTEXT_NAMES, frShape } from "./fr-shapes.mjs";
 import { PU_CONTEXT_NAMES, puShape } from "./pu-shapes.mjs";
+import { JS_CONTEXT_NAMES, jsShape } from "./js-shapes.mjs";
 import { LA_CONTEXT_NAMES, laShape } from "./la-shapes.mjs";
 import { ER_CONTEXT_NAMES, erShape } from "./er-shapes.mjs";
 import { EM_CONTEXT_NAMES, emShape } from "./em-shapes.mjs";
@@ -417,7 +419,7 @@ const ASYNC_READ_CODES = ["PENDING_ASYNC_UNTRACKED_READ", "PENDING_ASYNC_FORBIDD
 // await); `no-owner-context-aw-shared-*` keeps the shape.
 // ADR 0940: the `pl-*` contexts are the ten codes' cells, each measured (primitive-layer-shapes.mjs `PL_MEASURED`); a pair left out of them reports another code first,
 // never runs its site, or has a throw hidden by a later one, which the generic judge cannot score, so the census leaves them out for every code.
-const CENSUS_SKIPS = (code) => new Set([...STORED_CONTEXTS, ...STORED_ASYNC_CONTEXTS, ...PL_CONTEXT_NAMES, ...ENTRY_CONTEXT_NAMES, ...OB_CONTEXT_NAMES, ...SF_CONTEXT_NAMES, ...RV_CONTEXT_NAMES, ...NM_CONTEXT_NAMES, ...LA_CONTEXT_NAMES, ...ER_CONTEXT_NAMES, ...EM_CONTEXT_NAMES, ...FC_CONTEXT_NAMES, ...PH_CONTEXT_NAMES, ...CS_CONTEXT_NAMES, ...PA_CONTEXT_NAMES, ...LF_CONTEXT_NAMES, ...FR_CONTEXT_NAMES, ...PU_CONTEXT_NAMES, ...(code === "CONTEXT_NOT_FOUND" ? ["aw-shared-after", "aw-shared-before"] : [])]);
+const CENSUS_SKIPS = (code) => new Set([...STORED_CONTEXTS, ...STORED_ASYNC_CONTEXTS, ...PL_CONTEXT_NAMES, ...ENTRY_CONTEXT_NAMES, ...OB_CONTEXT_NAMES, ...SF_CONTEXT_NAMES, ...RV_CONTEXT_NAMES, ...NM_CONTEXT_NAMES, ...LA_CONTEXT_NAMES, ...ER_CONTEXT_NAMES, ...EM_CONTEXT_NAMES, ...FC_CONTEXT_NAMES, ...PH_CONTEXT_NAMES, ...CS_CONTEXT_NAMES, ...PA_CONTEXT_NAMES, ...LF_CONTEXT_NAMES, ...FR_CONTEXT_NAMES, ...PU_CONTEXT_NAMES, ...JS_CONTEXT_NAMES, ...(code === "CONTEXT_NOT_FOUND" ? ["aw-shared-after", "aw-shared-before"] : [])]);
 export function censusCells({ codes, contexts } = {}) {
   const cellsOf = (spec) => [...spec.contexts, ...(spec.recallContexts ?? []), ...(spec.legal ?? []), ...(spec.recallLegal ?? [])];
   const templates = [...TEMPLATE_CODES, ...RECALL_TEMPLATE_CODES];
@@ -511,6 +513,8 @@ function recallAxesOf(code, context, base, variants, options = {}) {
   if (FR_CONTEXT_NAMES.includes(context)) return shapes.filter((shape) => frShape(context, shape));
   // ADR 1090 G1: a `pu-*` cell takes one base shape (pu-shapes.mjs `puShape`): its question is who consumes the function's promise.
   if (PU_CONTEXT_NAMES.includes(context)) return shapes.filter((shape) => puShape(context, shape));
+  // ADR 1117: a `js-*` cell takes one base shape (js-shapes.mjs `jsShape`): its question is the route, not the spelling at the site.
+  if (JS_CONTEXT_NAMES.includes(context)) return shapes.filter((shape) => jsShape(context, shape));
   // An `nm-*` cell takes one base shape (nm-shapes.mjs `nmShape`): its question is the named callback, not the spelling of the site.
   if (NM_CONTEXT_NAMES.includes(context)) return shapes.filter((shape) => nmShape(context, shape));
   // Batch 11: an `la-*` cell takes one base shape (la-shapes.mjs `laShape`): its question is the function assigned later, not the spelling of the site.
@@ -1205,7 +1209,7 @@ async function sweep(options, config, out) {
       const verdict = verdicts[position];
       const misuse = program.components[0].misuse;
       const others = otherRegions(built);
-      rows.push({ id: built.id, seed: program.seed, index, code: cell.code, context: cell.context, variant: misuse.variant, binding: misuse.binding, layer: misuse.layer, ...(misuse.mount && misuse.mount !== "root" ? { mount: misuse.mount } : {}), ...(misuse.source ? { source: misuse.source } : {}), ...(misuse.combo ? { combo: misuse.combo, others } : {}), site, outcome: verdict.outcome, detail: verdict.detail, lines: built.text.split("\n").length });
+      rows.push({ id: built.id, seed: program.seed, index, code: cell.code, context: cell.context, variant: misuse.variant, binding: misuse.binding, layer: misuse.layer, ...(misuse.mount && misuse.mount !== "root" ? { mount: misuse.mount } : {}), ...(misuse.source ? { source: misuse.source } : {}), ...(misuse.combo ? { combo: misuse.combo, others } : {}), site, key: provedKey(built, cell.code, site.line), outcome: verdict.outcome, detail: verdict.detail, lines: built.text.split("\n").length });
       values.set(built.id, value);
     }
     partial.append(rows.slice(at));

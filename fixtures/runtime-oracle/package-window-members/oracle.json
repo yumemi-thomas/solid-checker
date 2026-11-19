@@ -1,0 +1,9 @@
+{
+  "note": "ADR 1108: packages replace globals through a member the DOM types as this realm's window: btoa through a click event's view, atob through a message's source (both dispatched synchronously where the module loads), unescape through defaultView of a DOM object (ADR 0974): Chrome throws ACTION_CALLED_IN_OWNED_SCOPE at each call in a component body, covered-uncertifiable. fz-wviewclear names no Solid package (quiet); the handler's call is legal.",
+  "packages": [
+    "fz-wview",
+    "fz-wsource",
+    "fz-wviewclear",
+    "fz-wdocview"
+  ]
+}

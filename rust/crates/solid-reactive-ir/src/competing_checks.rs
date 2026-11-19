@@ -62,6 +62,44 @@ pub(crate) fn mark(
         .filter(|violation| violation.id == "SC6002" && !violation.uncertain)
         .map(|violation| violation.location.clone())
         .collect();
+    // ADR 1111: a read written after a creation the effect-callback guard refuses or may refuse (an SC6002 violation, or its
+    // `effect-owner-unproven` obligation: an apply runs the creation, its owner unproven; not a creation no row places, which
+    // proves no throw: unknown counts as reachable) in the same function, or in a function that function calls by name after the creation, may never run on
+    // that run: the guard throws first (`const f = () => s.v; createMemo(f); f();` in an effect's apply; the row stands at
+    // the call into the helper, the read at its origin). The row is an obligation. A read the pending rule holds open
+    // (ADR 0509) is one already, and its pending row hangs on the open read: it is left as it is.
+    let may_refuse: Vec<Location> = program
+        .static_violations
+        .iter()
+        .filter(|violation| {
+            violation.id == "SC6002"
+                && (!violation.uncertain
+                    || violation_blocker(violation) == crate::blockers::EFFECT_OWNER_UNPROVEN)
+        })
+        .map(|violation| violation.location.clone())
+        .collect();
+    let pending_open: std::collections::HashSet<Location> = program
+        .async_reads
+        .iter()
+        .filter(|read| read.async_provenance && !read.apply_first_run_pending && !read.unaccounted)
+        .map(|read| read.location.clone())
+        .collect();
+    for read in &mut program.reads {
+        if read.uncertain
+            || pending_open.contains(&read.location)
+            || !read_after_refused_creation(
+                read.origin.as_ref().unwrap_or(&read.location),
+                &may_refuse,
+                lookup,
+            )
+        {
+            continue;
+        }
+        read.uncertain = true;
+        read.context =
+            crate::blockers::with_detail(crate::blockers::CREATION_THROWS_FIRST, &read.context)
+                .into();
+    }
     // ADR 1052, part 3: SC6002's `effect-owner-unproven` obligation names a caller that runs the creation in an effect's
     // apply (a helper the apply and a handler or a render both call). On that run the guard throws first and halts; the
     // run the owner row proves unowned may be that one, and no fact orders the others' runs against the halt: the owner
@@ -120,7 +158,9 @@ pub(crate) fn mark(
                     && (effect_may_guard
                         .iter()
                         .any(|guarded| same_call(guarded, &requirement.location))
-                        || in_slot_called_only_in_applies(&requirement.location, true, lookup)))
+                        || in_slot_called_only_in_applies(&requirement.location, true, lookup)
+                        // ADR 1115 part 2: the apply's delivery to a shadow-tree listener runs the creation in the effect-callback window.
+                        || in_handler_an_apply_may_deliver_in_shadow(&requirement.location, lookup)))
                     || leaf_refused
                         .iter()
                         .any(|refused| same_call(refused, &requirement.location))
@@ -186,6 +226,7 @@ pub(crate) fn mark(
             || prop_runs_only_in_owned_leaf(&violation.location, settled_gates, lookup)
             || refused_at_mount_else_handlers(&violation.location, settled_gates, lookup)
             || listener_detached_in_owned_leaf(&violation.location, settled_gates, lookup)
+            || in_handler_an_apply_may_deliver_in_shadow(&violation.location, lookup)
         {
             violation.uncertain = true;
             violation.analysis_context = crate::blockers::with_detail(
@@ -276,6 +317,33 @@ fn every_run_refused(site: &Location, anchors: &[&Location], lookup: &SemanticLo
 /// `createRenderEffect`'s), and it is no completion site of that apply (`completion_sites`: an earlier `return`, `throw`,
 /// `break` or `continue`, or a branch, may skip it). The owned first run may never reach it; every later run meets the
 /// effect-callback guard (a creation) or the owner check (a context read) first. `false` for anything else.
+/// ADR 1115 part 2: the creation is written in an intrinsic element's `on*` handler (any function inside the attribute's value), and an
+/// effect's apply may deliver an event to a listener in a shadow tree. That delivery runs the handler inside the apply's effect-callback
+/// window, where the guard throws PRIMITIVE_IN_EFFECT_CALLBACK first, and nothing orders another delivery's run before it.
+fn in_handler_an_apply_may_deliver_in_shadow(site: &Location, lookup: &SemanticLookup<'_>) -> bool {
+    if !lookup.apply_delivery_in_shadow_possible() {
+        return false;
+    }
+    let Some(file) = lookup.file_by_path(site.path.as_ref()) else {
+        return false;
+    };
+    let (Ok(start), Ok(end)) = (u32::try_from(site.start_byte), u32::try_from(site.end_byte))
+    else {
+        return false;
+    };
+    let span = solid_facts::core::Span::new(start, end);
+    file.ast.jsx_elements.iter().any(|element| {
+        element.attributes.iter().any(|attribute| {
+            // `onScroll`, `onclick`, and `on:scroll` (a namespaced listener); a name that is no handler only widens the answer.
+            attribute.value.is_some_and(|value| value.contains(span))
+                && (attribute.namespace.is_some()
+                    || file
+                        .source_text(attribute.local_name)
+                        .is_some_and(|name| name.len() > 2 && name.starts_with("on")))
+        })
+    })
+}
+
 fn later_render_apply_run_only(site: &Location, lookup: &SemanticLookup<'_>) -> bool {
     let Some(file) = lookup.file_by_path(site.path.as_ref()) else {
         return false;
@@ -944,4 +1012,45 @@ fn listener_detached_in_owned_leaf(
     removed
         && leaf
             .is_some_and(|callback| component.span.contains(callback) && callback != component.span)
+}
+
+/// ADR 1111: whether `at` (a read: a row's origin, else its location) runs after a call in `refused` (a creation the
+/// effect-callback guard refuses or may refuse) on a run of the function holding that call: written after it in that
+/// function, or in a function that function calls by name after it. A read in the creation's own arguments is not one.
+fn read_after_refused_creation(
+    at: &Location,
+    refused: &[Location],
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some(file) = lookup.file_by_path(at.path.as_ref()) else {
+        return false;
+    };
+    let (Ok(start), Ok(end)) = (u32::try_from(at.start_byte), u32::try_from(at.end_byte)) else {
+        return false;
+    };
+    let ast = &file.ast;
+    let read = solid_facts::core::Span::new(start, end);
+    let read_function = crate::owners::owning_function(ast, read);
+    let holder_of = |span: solid_facts::core::Span| {
+        crate::owners::owning_function(ast, span).map(|function| function.span)
+    };
+    refused.iter().any(|creation| {
+        creation.path == at.path
+            && ast.calls.iter().any(|call| {
+                if u64::from(call.span.start) != creation.start_byte || call.span.contains(read) {
+                    return false;
+                }
+                let Some(holder) = holder_of(call.span) else {
+                    return false;
+                };
+                if read_function.map(|function| function.span) == Some(holder) {
+                    return call.span.end <= read.start;
+                }
+                read_function.is_some_and(|function| {
+                    crate::execution_role::function_called_by_name(file, function, lookup)
+                        .into_iter()
+                        .any(|run| call.span.end <= run.start && holder_of(run) == Some(holder))
+                })
+            })
+    })
 }

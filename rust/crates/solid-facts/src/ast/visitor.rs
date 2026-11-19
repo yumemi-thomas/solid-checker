@@ -2278,6 +2278,12 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         // The `try` block runs to its end under the normal-completion premise:
         // discount it for completion sites only (straight-line calls and
         // unconditional awaits keep the whole statement conditional).
+        // ADR 1109: a block a throw in which may end in a normal completion of
+        // the `try` is recorded apart, for the proofs that a call runs on
+        // every completion; the discount stays (a reachability reading).
+        if !try_block_runs_to_its_end(statement) {
+            self.swallowing_try_blocks.push(span(statement.block.span));
+        }
         if let Some(blocks) = self.function_try_blocks.last_mut() {
             *blocks += 1;
         }
@@ -2946,6 +2952,19 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         use oxc_syntax::operator::BinaryOperator;
         // Every binary operator yields a number, bigint, string or boolean.
         self.primitive_results.push(span(expression.span));
+        let relation = match expression.operator {
+            BinaryOperator::In => Some(RelationOperatorKind::In),
+            BinaryOperator::Instanceof => Some(RelationOperatorKind::Instanceof),
+            _ => None,
+        };
+        if let Some(kind) = relation {
+            self.relation_operators.push(RelationOperatorFact {
+                span: span(expression.span),
+                kind,
+                left: span(expression.left.span()),
+                right: span(expression.right.span()),
+            });
+        }
         if matches!(
             expression.operator,
             BinaryOperator::StrictEquality | BinaryOperator::StrictInequality
@@ -3099,4 +3118,43 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         }
         walk::walk_unary_expression(self, expression);
     }
+}
+
+/// ADR 1109: whether every completion of `statement` that is normal ran its
+/// block to its end: a throw in the block either leaves the `try` (no `catch`,
+/// or a `catch` whose body is a single `throw`) and no `finally` may turn it
+/// into a normal completion (a `return`, `break` or `continue` written in the
+/// finalizer, outside nested functions, discards the throw).
+fn try_block_runs_to_its_end(statement: &oxc_ast::ast::TryStatement<'_>) -> bool {
+    let rethrows = statement.handler.as_ref().is_none_or(|handler| {
+        matches!(
+            handler.body.body.as_slice(),
+            [oxc_ast::ast::Statement::ThrowStatement(_)]
+        )
+    });
+    rethrows
+        && statement.finalizer.as_ref().is_none_or(|finalizer| {
+            let mut jumps = FinalizerJumps(false);
+            jumps.visit_block_statement(finalizer);
+            !jumps.0
+        })
+}
+
+/// Whether a `return`, `break` or `continue` is written in the visited code,
+/// outside nested functions and classes.
+struct FinalizerJumps(bool);
+
+impl<'a> oxc_ast_visit::Visit<'a> for FinalizerJumps {
+    fn visit_return_statement(&mut self, _: &oxc_ast::ast::ReturnStatement<'a>) {
+        self.0 = true;
+    }
+    fn visit_break_statement(&mut self, _: &oxc_ast::ast::BreakStatement<'a>) {
+        self.0 = true;
+    }
+    fn visit_continue_statement(&mut self, _: &oxc_ast::ast::ContinueStatement<'a>) {
+        self.0 = true;
+    }
+    fn visit_function(&mut self, _: &oxc_ast::ast::Function<'a>, _: ScopeFlags) {}
+    fn visit_arrow_function_expression(&mut self, _: &oxc_ast::ast::ArrowFunctionExpression<'a>) {}
+    fn visit_class(&mut self, _: &oxc_ast::ast::Class<'a>) {}
 }

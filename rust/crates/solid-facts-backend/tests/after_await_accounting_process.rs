@@ -580,6 +580,9 @@ fn code_a_continuation_runs_with_no_call_written_there_is_a_row() {
             ("[...stored][0]", "[..."),
             ("of storedLoop) return", "of "),
             ("const [value] = storedPattern;", "const "),
+            // ADR 1113: a bare coercion and an `in` on a Proxy in the continuation run the object's `toString` and the `has` trap with no call.
+            ("return `${coerced}`;", "return `${"),
+            ("return \"x\" in probed;", "return "),
         ],
     );
 }

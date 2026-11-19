@@ -84,6 +84,13 @@ const PREMISE_CONFIRMED = {
     premise.in === undefined && (verdicts.get(`${premise.at[0]}:${premise.at[1]}`) ?? []).some((v) => v.code === "SC5001" && v.kind === "violation"),
   SetterGuardThrowsFirst: (premise, verdicts) =>
     premise.in === undefined && (verdicts.get(`${premise.at[0]}:${premise.at[1]}`) ?? []).some((v) => v.code === "SC2001" && v.kind === "violation"),
+  // ADR 1107: a destructured slot's read folded into its pattern's SC1003 row: that row stands in the final list, at a span containing the slot's.
+  DestructureFolded: (premise, verdicts) =>
+    premise.in === undefined &&
+    [...verdicts].some(([key, list]) => {
+      const [start, end] = key.split(":").map(Number);
+      return start <= premise.at[0] && premise.at[1] <= end && list.some((v) => v.rule === "no-destructure");
+    }),
 };
 
 /**
@@ -286,6 +293,11 @@ export function proofHits(lines) {
         roles: [...new Set(decisions.map((decision) => decision.role))],
         arms: [...new Set(decisions.map((decision) => decision.arm))],
       };
+      // ADR 1114: the code's finding stood at the site and a pass C4 accepts dropped it (`OwnedByEnabledRule` with a confirmed
+      // `PendingThrowsFirst`, ...): the drop is the site's account, as it is for a site a finding ended. The classifier's decision may sit
+      // at the callee (`a1`) while the rows sit at the call (`a1()`): the site's `alt` spans hold both.
+      const droppedHere = t.drop.filter((drop) => spans.includes(spanKey(drop)) && site.code !== undefined && creditsCode(site.code, drop));
+      if (droppedHere.length > 0 && endedByDroppedFinding(site, droppedHere.at(-1).rule, spans, verdicts, t.drop, attributedAt) === null) continue;
       if (speaking.length > 0) {
         // The classifier said this site reports and nothing ends it (audit candidate S1). A props member read whose prop every
         // caller passes statically ends in a named `props-static` end; one with none is as unexplained as any other.
@@ -346,6 +358,10 @@ function endedByDroppedFinding(site, ruleName, spans, verdicts, drops, attribute
   const typed = (kind) => (last.premises ?? []).some((premise) => premise.kind === kind && Array.isArray(premise.at));
   if (last.pass === "OwnedByEnabledRule") {
     const confirmed = (last.premises ?? []).some((premise) => premise.kind === "PendingThrowsFirst" && Array.isArray(premise.at) && PREMISE_CONFIRMED.PendingThrowsFirst(premise, verdicts) === true);
+    return confirmed ? null : detail;
+  }
+  if (last.pass === "DestructureFold") {
+    const confirmed = (last.premises ?? []).some((premise) => premise.kind === "DestructureFolded" && Array.isArray(premise.at) && PREMISE_CONFIRMED.DestructureFolded(premise, verdicts) === true);
     return confirmed ? null : detail;
   }
   const premise = C4_DROPS[last.pass];

@@ -102,6 +102,8 @@ const TWINS = {
   inline: [
     ["the call sits in a window or in a handler", "b", "h"],
     ["the receiver has an element (the carrier provably runs the callback) or is empty", "b", "zero"],
+    ["the receiver has an element or is a name holding `[]` that nothing fills (ADR 1109)", "b", "zeroname"],
+    ["the sort's receiver has two elements or one (ADR 1109: one is never compared)", "b", "one"],
     ["the call resolves to the standard method or to a project method of the same spelling that only keeps the function", "b", "norun"],
   ],
   fresh: [["the call resolves to the reviewed scheduler or to a project function of the same spelling that calls the callback at once", "shadow-b", "host-b"],
@@ -347,6 +349,9 @@ premise("kind-setter-guard-throws-first", { claim: "A resolved setter call whose
 premise("kind-pending-throws-first", { claim: "The strict read an SC5001 violation owns is a pending async read: the run throws before it would warn, so the strict-read finding at the same span is redundant (ADR 0511); the proof log writes it only for a violation owner and the proof gate confirms it from the final list (ADR 0982).", kinds: ["PendingThrowsFirst"],
   fixtures: fixtures("pending-read-accounted", "show-child-pending-read", "rc21-declared-first-pass"), quality: "fixture",
   note: "The twin is the open SC5001 (both stay, ADR 0511), which names no such fact. The gate's C4 accepts the OwnedByEnabledRule drop only with this premise and an SC5001 violation at its span (scripts/lib/proof-log.mjs)." });
+premise("kind-destructure-folded", { claim: "A destructured slot's read is tagged for its pattern's SC1003 row, and that row stands in the final list over the slot: the slots' verdict folded into it (ADR 1107); the proof gate confirms it from the final list.", kinds: ["DestructureFolded"],
+  fixtures: fixtures("destructure-store-slots", "destructure-store-placement"), quality: "fixture",
+  note: "The twin is the member read (`store.v`), whose SC1001 row stands at its own span; the fold moves the slot's verdict to the pattern, where the gate looks for it." });
 premise("kind-option-literal", { claim: "A boundary's `on` is a literal that names nothing (no identifier, no call), so it has no dependency to change: the boundary never re-arms, and no frame reader outside it can hold a source it waits on (ADR 0517, 0987).", kinds: ["OptionLiteral"],
   fixtures: fixtures("total-decision-silences", "loading-on-outside-hold"), ends: ["loading_hold.loading_on_outside_hold_obligations.on-names-nothing"], quality: "fixture",
   note: "The twin is an `on` that names a call (`on={count()}`): it is asked the hold question (`unproven_hold`) and ends in the next premise or in an SC5006 obligation. The silence is recorded only for an `on` that is a literal and no spread may carry another." });

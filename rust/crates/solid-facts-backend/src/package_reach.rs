@@ -263,6 +263,17 @@ pub fn package_reach_index(
             if closure.global_writes.accessors_any_name {
                 index.global_accessor_writers_any.insert(root.clone());
             }
+            // ADR 1108: the members its closure writes on a built-in's prototype.
+            for written in &closure.global_writes.prototype_names {
+                index
+                    .prototype_writers
+                    .entry(written.clone())
+                    .or_default()
+                    .insert(root.clone());
+            }
+            if closure.global_writes.prototype_any_name {
+                index.prototype_writers_any.insert(root.clone());
+            }
         }
         if let Some(name) = manifest(Path::new(&root))
             .ok()
@@ -851,6 +862,8 @@ fn package_reach(
         written_any_files: Vec::new(),
         accessors_written: BTreeSet::new(),
         accessors_written_any: false,
+        prototypes_written: BTreeSet::new(),
+        prototypes_written_any: false,
         unread: false,
         unseen: None,
         reads_receiver: false,
@@ -884,6 +897,9 @@ fn package_reach(
             any_name: walk.written_any || unread,
             accessor_names: walk.accessors_written.into_iter().collect(),
             accessors_any_name: walk.accessors_written_any || unread,
+            // ADR 1108: code nobody read may write a built-in's prototype too.
+            prototype_names: walk.prototypes_written.into_iter().collect(),
+            prototype_any_name: walk.prototypes_written_any || unread,
         },
         write_any_files: walk
             .written_any_files
@@ -1048,6 +1064,36 @@ const DOCUMENT_TYPES: &[&str] = &[
     "Object",
 ];
 
+/// ADR 1108 part 2: the library types a receiver may be typed as where its `view` is a `UIEvent`'s (`view: Window | null`): the event types that have one, and
+/// their `lib.dom` supertypes.
+const UI_EVENT_TYPES: &[&str] = &[
+    "UIEvent",
+    "MouseEvent",
+    "PointerEvent",
+    "WheelEvent",
+    "DragEvent",
+    "KeyboardEvent",
+    "FocusEvent",
+    "InputEvent",
+    "CompositionEvent",
+    "TouchEvent",
+    "Event",
+    "Object",
+];
+
+/// ADR 1108 part 2: the library types a receiver may be typed as where its `source` is a `MessageEvent`'s (`source: MessageEventSource | null`), and its supertypes.
+const MESSAGE_EVENT_TYPES: &[&str] = &["MessageEvent", "Event", "Object"];
+
+/// ADR 1077 and ADR 1108 part 2: the library types a receiver of each member the package scan takes for the global object may be the window's holder as: a document
+/// for `defaultView`, a `UIEvent` for `view`, a `MessageEvent` for `source`.
+fn window_holder_types(member: &str) -> &'static [&'static str] {
+    match member {
+        "view" => UI_EVENT_TYPES,
+        "source" => MESSAGE_EVENT_TYPES,
+        _ => DOCUMENT_TYPES,
+    }
+}
+
 /// ADR 1077: for each file of the program, the static `x.defaultView` reads whose value the program's types prove holds no global object: the read is of a type
 /// with no object in it (its primitive domain: `"pages" | "infinite" | undefined`), and the receiver, as written and with assertions peeled, has a closed runtime
 /// domain and no library type a document may be. Any missing, `any` or `unknown` fact keeps the read.
@@ -1056,7 +1102,8 @@ fn inert_default_views(facts: &solid_facts::ProjectFacts) -> InertDefaultViews {
     for file in &facts.files {
         let mut members = HashSet::new();
         let entities = facts.typescript.entities_for_path(file.path.as_str());
-        for member in crate::demand_plan::default_view_members(file) {
+        for (member, name) in crate::demand_plan::default_view_members(file) {
+            let holder_types = window_holder_types(name);
             let at = |span: solid_facts::core::Span| {
                 let found = entities
                     .iter()
@@ -1084,7 +1131,7 @@ fn inert_default_views(facts: &solid_facts::ProjectFacts) -> InertDefaultViews {
                             && entity.library_types.as_deref().is_none_or(|types| {
                                 types
                                     .iter()
-                                    .all(|name| !DOCUMENT_TYPES.contains(&name.as_ref()))
+                                    .all(|name| !holder_types.contains(&name.as_ref()))
                             })
                     })
                 })
@@ -1476,6 +1523,9 @@ struct Walk<'s, 'd, 'm> {
     /// The globals the files read may define an accessor for on the global object, and whether one may be defined under a name the syntax does not fix.
     accessors_written: BTreeSet<String>,
     accessors_written_any: bool,
+    /// ADR 1108: the members the files read write on a built-in's prototype, and whether one may be written under a name the syntax does not fix.
+    prototypes_written: BTreeSet<String>,
+    prototypes_written_any: bool,
     /// Whether the closure holds code nobody read (ADR 1002): a load by a computed name, a load no installed file answers, a file the parser refuses, a native
     /// module, a manifest the walk does not read, or files past the closure limit. Kept apart from `problems`, which keeps only the first [`MAX_PROBLEMS`].
     unread: bool,
@@ -1623,6 +1673,11 @@ impl Walk<'_, '_, '_> {
                 &scan.global_writes.accessor_names,
             );
             self.accessors_written_any |= scan.global_writes.accessors_any_name;
+            extend(
+                &mut self.prototypes_written,
+                &scan.global_writes.prototype_names,
+            );
+            self.prototypes_written_any |= scan.global_writes.prototype_any_name;
         }
         for step in &visit.steps {
             match *step {

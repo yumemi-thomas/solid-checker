@@ -166,6 +166,7 @@ pub(super) struct Collector<'s, 'semantic> {
     pub(super) dominating_awaits: Vec<(Span, Span)>,
     pub(super) try_head_awaits: Vec<TryHeadAwaitFact>,
     pub(super) try_catches: Vec<TryCatchFact>,
+    pub(super) swallowing_try_blocks: Vec<Span>,
     pub(super) in_place_import_globs: Vec<Span>,
     pub(super) unmodeled_require_references: Vec<Span>,
     /// The `require` identifiers that are the (peeled) callee of a call.
@@ -201,6 +202,7 @@ pub(super) struct Collector<'s, 'semantic> {
     pub(super) primitive_results: Vec<Span>,
     pub(super) iterated_operands: Vec<Span>,
     pub(super) key_probed_operands: Vec<Span>,
+    pub(super) relation_operators: Vec<RelationOperatorFact>,
     pub(super) assignments: Vec<AssignmentFact>,
     pub(super) write_targets: Vec<Span>,
     pub(super) deleted_targets: Vec<Span>,
@@ -425,6 +427,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             dominating_awaits: Vec::new(),
             try_head_awaits: Vec::new(),
             try_catches: Vec::new(),
+            swallowing_try_blocks: Vec::new(),
             in_place_import_globs: Vec::new(),
             unmodeled_require_references: Vec::new(),
             direct_require_callees: Vec::new(),
@@ -456,6 +459,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             primitive_results: Vec::new(),
             iterated_operands: Vec::new(),
             key_probed_operands: Vec::new(),
+            relation_operators: Vec::new(),
             assignments: Vec::new(),
             write_targets: Vec::new(),
             deleted_targets: Vec::new(),
@@ -531,6 +535,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.straight_line_calls.sort_unstable();
         self.straight_line_constructs.sort_unstable();
         self.completion_sites.sort_unstable();
+        self.swallowing_try_blocks.sort_unstable();
         self.completion_sites.dedup();
         self.returns.sort_by_key(|fact| fact.span);
         self.jsx_elements.sort_by_key(|fact| fact.span);
@@ -558,6 +563,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.iterated_operands.dedup();
         self.key_probed_operands.sort_unstable();
         self.key_probed_operands.dedup();
+        self.relation_operators.sort_by_key(|fact| fact.span);
+        self.relation_operators.dedup();
         self.assignments.sort_by_key(|fact| fact.target);
         self.write_targets.sort_unstable();
         self.write_targets.dedup();
@@ -774,6 +781,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             dominating_awaits: self.dominating_awaits,
             try_head_awaits: self.try_head_awaits,
             try_catches: self.try_catches,
+            swallowing_try_blocks: self.swallowing_try_blocks,
             in_place_import_globs: self.in_place_import_globs,
             unmodeled_require_references: self.unmodeled_require_references,
             straight_line_calls: self.straight_line_calls,
@@ -802,6 +810,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             primitive_results: self.primitive_results,
             iterated_operands: self.iterated_operands,
             key_probed_operands: self.key_probed_operands,
+            relation_operators: self.relation_operators,
             assignments: self.assignments,
             write_targets: self.write_targets,
             deleted_targets: self.deleted_targets,

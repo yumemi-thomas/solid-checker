@@ -72,6 +72,10 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   accessor's call takes at the same place: an intrinsic `ref` the body applies
   (ADR 0520), a carrier that runs a named function (ADR 0531), a hand-off nothing
   follows (an obligation), a layer a summary climbs (ADR 0522; all ADR 0614).
+  A store's member read in a helper the body calls is the body's read whatever
+  makes the store (a `createStore` slot, a projection a primitive or a hook returns
+  whole) and whatever TypeScript wraps the receiver (`as`, `!`, `satisfies`;
+  ADR 1121).
 - **Plain assignment targets are writes, not reads.** `store.name = next` is
   diagnosed by `no-store-mutation-outside-setter` without also reporting `store.name` here.
   Only the member that *is* the written target is exempt: read-modify-write
@@ -114,7 +118,13 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   A dispatch on the global `window` (or `document` on web rc.17), or written in
   a scheduler callback or at module top level, does not withhold it (ADR 0435);
   one in a `runWithOwner(null, …)` callback does, because that leaves the
-  enclosing strict-read window open. A navigation delivers only the event types the host
+  enclosing strict-read window open. A dispatch in an effect apply (ADR 0639) or in a
+  function only events invoke (ADR 0437) keeps the proof only while no listener of the
+  program may sit in a shadow tree ([ADR 1115](../decisions.md#adr-1115)): a listener
+  there runs with `window.event` unset, inside the window. Any `attachShadow`,
+  `shadowRoot`, declarative shadow markup, `getRootNode`, `composedPath` or custom
+  element, code evaluated from a string, or a load of a module the program does not
+  analyse withholds it. A navigation delivers only the event types the host
   fact names ([ADR 1080](../decisions.md#adr-1080): `history.go` and `location.reload`
   at most `beforeunload`, `location.assign`/`replace` also `popstate` for a fragment):
   with no listener for them anywhere the program is read (an `on<type>` property, a
@@ -337,6 +347,17 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   followed, or that is also called where nothing proves the run, leaves its
   body's reads obligations (ADR 0547).
 
+- **A creation the effect-callback guard refuses first (ADR 1111).** A read
+  written after a creation SC6002 proves refused, or holds as its
+  `effect-owner-unproven` obligation, in the same function or in a function
+  that function calls by name after the creation (`const f = () => s.v;
+  createMemo(f); f();` in an apply), is uncertifiable
+  `creation-throws-first`: PRIMITIVE_IN_EFFECT_CALLBACK throws before the
+  read. A function handed by name to a primitive and also called by name
+  where untracked reads are reported, or where nothing places the call, is
+  unplaced (`function-run-unplaced`)
+  (`fixtures/reactive-ir/competing-check-read-after-creation`).
+
 A read that no row, discard or named silence ends is uncertifiable: `strict-read-unaccounted` (ADR 0936).
 
 ## Why is this bad?
@@ -400,6 +421,7 @@ explicit one-time snapshot; it does not make the prop reactive.
 - **Props views.** `omit(props, …)` always builds a view: `omitTraps` in `@solidjs/signals@2.0.0-rc.13` (`dist/dev.js`) returns true from `set` and `deleteProperty`. `merge(...)` returns its one non-falsy source, so it is a view only with no spread argument and an argument that is syntactically never falsy (an object or function literal, or a call that is itself a view). `@solidjs/web`'s `spread` and `ssrElement` only read the object. An element that spreads the props among several sources is a view only when another source is provably never falsy: a non-`ref` attribute, a rendering child, or a member spread (a bare identifier may be `undefined`). A `children` attribute beside a raw child, and a member spread carrying `/*@static*/`, count as no such source, in the native lowering and in `@solidjs/babel-plugin` alike. The view premise needs `Proxy`, since without it `merge` can return its last source.
 - **Getter arity.** The rc.13 accessor is `read.bind(null, node)` over `function read(el)` (`dist/dev.js` `accessor`, `dist/prod/signals.js` `accessor`). `solid-js`'s client wrappers return it unchanged, and its server builds return arrows with no parameter. Probed on the dev and prod client builds: `length` 0 and `typeof` `"function"`. The walk folds `p.length` against a numeric literal (`===`, `!==`, `==`, `!=`, `<`, `<=`, `>`, `>=`), and `typeof p`, or a `p.length` that only feeds a test, is no escape, so a branch that cannot run for the arguments is proven absent. A hoisted function declaration's body runs whenever it is called, so an earlier `return` leaves it possible rather than unreachable. A binding declared in a file with a direct `eval` is refused, and a binding the module exports proves no length.
 - **Not decided.** A read through another helper hop, an array of accessors (`accessArray`), and a read after an `await` (always an obligation).
+- **A helper's call in a `try`** ([ADR 1109](../decisions.md#adr-1109)). A helper's call of its parameter after a statement that may throw, in a `try` whose `catch` completes normally, is not on every completion of the helper: the callback's read is uncertifiable. A store handed through a standard inline callback's parameter (`[store].map((s) => s.v)`) is an SC9012 `value-in-carrier` row, and a callback a carrier provably never runs (a `const` holding `[]` only iterations read, a one-element `sort`) is uncertifiable.
 
 This rule is a member of the `reactivity` group key ([ADR 0428](../decisions.md#adr-0428)): `reactivity` in `rule-options.json` or a disable comment reaches it, and `strict-read-untracked` alone overrides the group.
 

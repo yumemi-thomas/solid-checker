@@ -70,6 +70,7 @@ mod flight_census;
 mod handlers;
 mod library_call;
 mod member_reads;
+mod setter_callee;
 mod timer_handle;
 
 use solid_facts::FileFacts;
@@ -106,16 +107,21 @@ enum AfterAwaitSafe {
     /// The facts asked are the flush accounting's for the same class ([`crate::flush_accounting::runs_when_the_call_runs`]): the site is in the callback's body and nothing
     /// written between runs it elsewhere, the callback is no generator, and its own name (a named function expression) is used nowhere.
     RunnerScheduled,
+    /// ADR 1097 (reopened narrowly): an argument-less call whose callee is an exact same-file, unexported, never-written `const` (or a `const x = y` chain of them)
+    /// holding a function literal, or an action's generator, whose body is nothing but exact setter calls that run nothing ([`setter_callee`]). The only callee
+    /// reason: it asks no question of what a body reads, only whether the body is, by its facts, setter calls and nothing else.
+    SetterOnlyCallee,
 }
 
 impl AfterAwaitSafe {
     /// In the order they are asked, the cheapest first.
-    const ALL: [Self; 5] = [
+    const ALL: [Self; 6] = [
         Self::NeverRuns,
         Self::RunnerScheduled,
         Self::LibraryRunsNothing,
         Self::OwnerCaptured,
         Self::PlainReceiver,
+        Self::SetterOnlyCallee,
     ];
 
     /// The id the proof log writes, and `SOLID_CHECKER_IR_ABLATE_SILENCE` names (`<module>.<function>.<end>`).
@@ -126,6 +132,7 @@ impl AfterAwaitSafe {
             Self::OwnerCaptured => "after_await_accounting.account.owner-captured",
             Self::PlainReceiver => "after_await_accounting.account.plain-receiver",
             Self::RunnerScheduled => "after_await_accounting.account.runner-scheduled",
+            Self::SetterOnlyCallee => "after_await_accounting.account.setter-only-callee",
         }
     }
 
@@ -138,6 +145,18 @@ impl AfterAwaitSafe {
         object_prototype_touched: &dyn Fn() -> bool,
     ) -> bool {
         match self {
+            // The wrapper (`call`), an action alias (`action`) and an action whose call the census takes for replaced (`inexact`): the callee proof decides.
+            Self::SetterOnlyCallee => {
+                matches!(site.via, "call" | "action" | "inexact")
+                    && site.call.is_some_and(|call| {
+                        setter_callee::only_calls_setters(
+                            ctx,
+                            site.file,
+                            call,
+                            object_prototype_touched,
+                        )
+                    })
+            }
             Self::NeverRuns => matches!(
                 reach.site(site.file, site.at),
                 crate::execution_role::Reach::Unreached(_)
@@ -251,6 +270,68 @@ struct AwaitSite<'a> {
     call: Option<&'a solid_facts::ast::CallFact>,
     /// The root expression of a member read (`via: member-read`): the object whose plainness a typed reason asks.
     root: Option<Span>,
+}
+
+/// ADR 1097 (the reviews of its widening): the position a setter or library call's argument runs project code from, with no call of its own, when an
+/// operand evaluated with the argument (not inside a function it holds) does: a coerced identifier or `this` (its `toString`), a computed key (its
+/// value's `toString`), or an `in` or `instanceof` operator (a Proxy trap, `Symbol.hasInstance`). V8's frame for the implicit call stands there (Chrome
+/// rc.21: the coerced operand's or the key's start, an operator's left operand: `primitive_results` holds `in` and `instanceof` among the operators no
+/// fact tells apart), so the site's row does too. A call or a member operand is a read site
+/// of its own and keeps the call's position.
+fn code_running_operand(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> Option<Span> {
+    let ast = &file.ast;
+    let evaluated = |span: Span| {
+        call.arguments
+            .iter()
+            .any(|argument| argument.span.contains(span))
+            && !ast.functions.iter().any(|function| {
+                function.span.contains(span)
+                    && call
+                        .arguments
+                        .iter()
+                        .any(|argument| argument.span.contains(function.span))
+            })
+    };
+    let plain = |span: Span| {
+        let peeled = ast.peel_ts_sugar_span(span);
+        ast.call_at(peeled).is_none() && ast.member_at(peeled).is_none()
+    };
+    let coerced = ast.coercing_operands.iter().copied().find(|operand| {
+        evaluated(*operand)
+            && plain(*operand)
+            && !ctx.semantic_lookup.proven_primitive(file, *operand, 4)
+    });
+    let key = ast
+        .object_properties
+        .iter()
+        .find(|property| property.computed && evaluated(property.key) && plain(property.key))
+        .map(|property| property.key);
+    let operator = ast
+        .primitive_results
+        .iter()
+        .copied()
+        .find(|operator| {
+            // A call or a member read starting there is a read site whose row already stands at that position.
+            evaluated(*operator)
+                && !ast
+                    .calls
+                    .iter()
+                    .any(|inner| inner.span.start == operator.start)
+                && !ast
+                    .members
+                    .iter()
+                    .any(|member| member.span.start == operator.start)
+        })
+        .map(|operator| Span::new(operator.start, operator.start));
+    [coerced, key, operator]
+        .into_iter()
+        .flatten()
+        .min_by_key(|span| span.start)
+        .map(|span| ast.peel_ts_sugar_span(span))
 }
 
 /// The rows of the final program by file, as `(start, end, label)`: an SC1002-family row as `row`, an SC9012 as `sc9012`.
@@ -598,7 +679,12 @@ fn sites<'a>(
             };
             let (registration, host) = classify(file, call.span);
             // A construct is reported from its `new` token (the position a stack frame of `new K(…)` has), not from the callee after it.
-            let at = if call.construct && call.span.start <= callee.start {
+            let at = if let Some(operand) = matches!(via, "setter" | "library")
+                .then(|| code_running_operand(ctx, file, call))
+                .flatten()
+            {
+                operand
+            } else if call.construct && call.span.start <= callee.start {
                 Span::new(call.span.start, callee.end)
             } else {
                 callee
@@ -638,8 +724,117 @@ fn sites<'a>(
                 root: Some(chain.root),
             });
         }
+        // ADR 1113: an operator that may run project code with no call of its own, written after a suspension. A bare `` `${host}`; `` or `"x" in px;`
+        // statement had no site at all. The narrowing (the coordinator's ruling on 889a755fa): a site is the operand an operator coerces (a template
+        // substitution, `+`, a relational comparison, `++`: `toString`, `valueOf`, `Symbol.toPrimitive`) unless Type Facts prove it a primitive; an
+        // `in` unless both operands are primitives (`ToPropertyKey`, a proxy's `has` trap); every `instanceof` (`Symbol.hasInstance`, and a proxy's
+        // `getPrototypeOf` trap on the left whatever the right is); and a `delete` (a proxy's `deleteProperty` trap). `===`, `!==`, `typeof` and `!` run nothing.
+        let mut taken: HashSet<u32> = found
+            .iter()
+            .filter(|site: &&AwaitSite<'_>| std::ptr::eq(site.file, file))
+            .map(|site| site.at.start)
+            .collect();
+        let primitive = |operand: Span| operand_proven_primitive(ctx, file, operand);
+        let coerced = file
+            .ast
+            .coercing_operands
+            .iter()
+            .copied()
+            .filter(|operand| !primitive(*operand));
+        let related = file
+            .ast
+            .relation_operators
+            .iter()
+            .filter(|relation| match relation.kind {
+                solid_facts::ast::RelationOperatorKind::In => {
+                    !(primitive(relation.left) && primitive(relation.right))
+                }
+                // An object on the left reaches a proxy's `getPrototypeOf` trap whatever the right is, and a primitive on the left still reads the
+                // right's `Symbol.hasInstance`, which only a proved standard constructor makes inert: no fact proves one, so every `instanceof` is a site.
+                solid_facts::ast::RelationOperatorKind::Instanceof => true,
+            })
+            .map(|relation| relation.span);
+        let deletes = file
+            .ast
+            .primitive_results
+            .iter()
+            .copied()
+            .filter(|operator| {
+                file.ast
+                    .deleted_targets
+                    .iter()
+                    .any(|target| operator.start < target.start && operator.end == target.end)
+            });
+        let operators = coerced.chain(related).chain(deletes).collect::<Vec<_>>();
+        for operator in operators {
+            if !after(file, operator) {
+                continue;
+            }
+            let at = file.ast.peel_ts_sugar_span(operator);
+            if !taken.insert(at.start) {
+                continue;
+            }
+            let (registration, host) = classify(file, at);
+            found.push(AwaitSite {
+                file,
+                at,
+                alternates: Vec::new(),
+                via: "operator",
+                test: registration.is_some(),
+                registration,
+                host,
+                call: None,
+                root: None,
+            });
+        }
+    }
+    // ADR 1117 (the JS-semantics axis, `js-forin`): a `for…in` walks its object's keys with no call written: a Proxy's `ownKeys` and
+    // `getOwnPropertyDescriptor` traps, and a getter-free object's prototype chain through `getPrototypeOf`, run project code there. Its object is a site
+    // unless proven primitive (`proven_primitive`: a primitive's keys run nothing). The object is the `key_probed_operands` entry the loop's repeat spans
+    // border (`Span(left.start, right.start)` and `Span(right.end, loop.end)`, the visitor's `push_iterated_loop_repeats`), where Chrome places the frame.
+    for file in lookup.files() {
+        if lookup.in_dependency_source(file.path.as_str()) || !holds_suspension(file) {
+            continue;
+        }
+        let ast = &file.ast;
+        for &object in &ast.key_probed_operands {
+            let for_in = ast.loop_repeats.iter().any(|(looped, head)| {
+                head.end == object.start
+                    && ast
+                        .loop_repeats
+                        .iter()
+                        .any(|(other, tail)| other == looped && tail.start == object.end)
+            });
+            if !for_in || !after(file, object) || lookup.proven_primitive(file, object, 4) {
+                continue;
+            }
+            let at = ast.peel_ts_sugar_span(object);
+            let (registration, host) = classify(file, at);
+            found.push(AwaitSite {
+                file,
+                at,
+                alternates: Vec::new(),
+                via: "for-in",
+                test: registration.is_some(),
+                registration,
+                host,
+                call: None,
+                root: None,
+            });
+        }
     }
     found
+}
+
+/// ADR 1113: the operand at `operand` is a primitive: Type Facts give it a demanded primitive domain with no object in it, or the value-based proof
+/// (`proven_primitive`: a literal, a primitive-valued operator, a `const` holding one) does.
+fn operand_proven_primitive(ctx: &AnalysisContext<'_>, file: &FileFacts, operand: Span) -> bool {
+    let operand = file.ast.peel_ts_sugar_span(operand);
+    ctx.semantic_lookup
+        .entity_at(file.path.as_str(), operand)
+        .and_then(|entity| entity.primitive_value_domain.present())
+        .is_some_and(|domain| !domain.unknown() && !domain.may_be_object())
+        || ctx.semantic_lookup.proven_primitive(file, operand, 4)
 }
 
 /// ADR 1065 part 2 (census only): what the root of a member read is, by its syntax and binding.
@@ -857,7 +1052,7 @@ mod tests {
     }
 
     #[test]
-    fn the_reasons_are_never_runs_library_runs_nothing_and_owner_captured_and_there_is_no_callee_or_census_reason()
+    fn the_reasons_are_never_runs_library_runs_nothing_and_owner_captured_and_the_only_callee_reason_is_setter_only()
      {
         assert_eq!(
             AfterAwaitSafe::ALL.map(AfterAwaitSafe::id),
@@ -866,15 +1061,26 @@ mod tests {
                 "after_await_accounting.account.runner-scheduled",
                 "after_await_accounting.account.library-runs-nothing",
                 "after_await_accounting.account.owner-captured",
-                "after_await_accounting.account.plain-receiver"
+                "after_await_accounting.account.plain-receiver",
+                "after_await_accounting.account.setter-only-callee"
             ]
         );
         // ADR 0973: a closure that reads nothing the universe lists (the review of #233: a store read through an alias, a stored generator stepped by a spread, a trap or a
-        // getter installed by reference) and the absence of a recognized computation (the oracle cases `after-await-universe-census-*`) are no endings.
-        assert!(AfterAwaitSafe::ALL.iter().all(|reason| {
-            let id = reason.id();
-            !id.contains("callee") && !id.contains("tracked-async-computation")
-        }));
+        // getter installed by reference) and the absence of a recognized computation (the oracle cases `after-await-universe-census-*`) are no endings. ADR 1097 (reopened
+        // narrowly): the one callee reason asks no question of what a body reads, only whether it is exact setter calls and nothing else (`setter_callee`).
+        assert_eq!(
+            AfterAwaitSafe::ALL
+                .iter()
+                .filter(|reason| reason.id().contains("callee"))
+                .map(|reason| reason.id())
+                .collect::<Vec<_>>(),
+            ["after_await_accounting.account.setter-only-callee"]
+        );
+        assert!(
+            AfterAwaitSafe::ALL
+                .iter()
+                .all(|reason| !reason.id().contains("tracked-async-computation"))
+        );
     }
 
     #[test]

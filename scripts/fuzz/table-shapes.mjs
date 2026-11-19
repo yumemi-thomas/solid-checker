@@ -30,6 +30,8 @@ const slugOf = (name) => name.toLowerCase().replaceAll(".", "-");
  *   recvDecl                  the initializer of `$r` when the row needs the receiver in a variable (a collection the body iterates)
  *   ret                       what the function returns when the callback type asks for a value (`0`, `""`)
  *   zero                      a receiver on which the callback never runs (an inline row), when there is one
+ *   zeroName                  the initializer of a `const` the receiver is read from that holds `[]` and nothing fills (ADR 1109)
+ *   one                       a receiver with one element on which the callback never runs (a one-element sort, ADR 1109)
  *   sync / run                a host row's synchronous path / a kept row's project run (text, `$r` the receiver)
  *   after                     statements that make a host run the callback at all (`$r.observe(...)`)
  */
@@ -46,10 +48,11 @@ for (const [kind, receiver] of [["Array", "[1]"], ["ReadonlyArray", "([1] as rea
   for (const [m, extra, spec] of ARRAYISH) {
     // `reduce` with one element and no initial value returns it uncalled; the others skip an empty receiver.
     const zero = m.startsWith("reduce") ? `${receiver}` : kind === "Array" ? "([] as number[])" : "([] as readonly number[])";
-    row(`${kind}.${m}`, "inline", { recv: receiver, m, args: ["$f", ...extra], zero, zeroArgs: m.startsWith("reduce") ? ["$f"] : undefined, ...spec });
+    const zeroName = kind === "Array" ? "([] as number[])" : "([] as readonly number[])";
+    row(`${kind}.${m}`, "inline", { recv: receiver, m, args: ["$f", ...extra], zero, zeroArgs: m.startsWith("reduce") ? ["$f"] : undefined, zeroName, ...spec });
   }
 }
-row("Array.sort", "inline", { recv: "[2, 1]", m: "sort", args: ["$f"], ret: "0", zero: "([] as number[])" });
+row("Array.sort", "inline", { recv: "[2, 1]", m: "sort", args: ["$f"], ret: "0", zero: "([] as number[])", zeroName: "([] as number[])", one: "[1]" });
 row("Set.forEach", "inline", { recv: "new Set([1])", m: "forEach", args: ["$f"], zero: "new Set<number>()" });
 row("Map.forEach", "inline", { recv: "new Map([[1, 1]])", m: "forEach", args: ["$f"], zero: "new Map<number, number>()" });
 row("NodeList.forEach", "inline", { recv: "(document.body.childNodes as NodeList)", m: "forEach", args: ["$f"], zero: '(document.createElement("i").childNodes as NodeList)' });
@@ -171,6 +174,8 @@ const VARIANTS = {
   inline: {
     b: SAME("b"), u: SAME("u"), h: SAME("h"),
     zero: { hand: "b", run: null, impl: "real", zero: true },
+    zeroname: { hand: "b", run: null, impl: "real", zeroName: true },
+    one: { hand: "b", run: null, impl: "real", one: true },
     norun: { hand: "b", run: null, impl: "norun" },
   },
   fresh: {
@@ -215,6 +220,7 @@ export function tableContexts() {
       if (spec.sync && (candidate.noSync || candidate.noRun)) continue;
       if (spec.impl !== "real" && candidate.noShadow) continue;
       if (spec.zero && !candidate.zero && !candidate.zeroArgs) continue;
+      if ((spec.zeroName && !candidate.zeroName) || (spec.one && !candidate.one)) continue;
       contexts.push({ context: `tbl-${candidate.slug}-${variant}`, row: candidate.name, kind: candidate.kind, variant, hand: spec.hand, run: spec.run, base: spec.run ? baseOf[spec.run] : null, impl: spec.impl });
     }
   }
@@ -294,7 +300,12 @@ export function tableContext(context, stmts, kit) {
   } else {
     if (candidate.recvDecl) setup.push(node(`const ${vars.r} = ${candidate.recvDecl}`));
     const args = spec.zero && candidate.zeroArgs ? candidate.zeroArgs : candidate.args;
-    const recv = spec.zero && candidate.zero ? candidate.zero : candidate.recv;
+    let recv = spec.zero && candidate.zero ? candidate.zero : spec.one ? candidate.one : candidate.recv;
+    // ADR 1109: the receiver is a name holding `[]` that only this call reads.
+    if (spec.zeroName) {
+      setup.push(node(`const ${vars.r} = ${candidate.zeroName}`));
+      recv = "$r";
+    }
     handStatements = [func, node(keep(callText(candidate, vars, { args, recv })))];
     for (const text of candidate.cancel ?? candidate.after ?? []) handStatements.push(node(text));
     if (spec.sync && candidate.sync) runStatements = [node(candidate.sync)];

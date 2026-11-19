@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 
-import { changesProblems, ledgerProblems, ledgersOf, knownProblems } from "./guard/proved.mjs";
+import { changesProblems, ledgerProblems, ledgersOf, knownProblems, owedProblems, textbookProblems } from "./guard/proved.mjs";
 
 // ADR 1012: the proved-verdict ledger and its naming file are held against the base, on in-memory files.
 const decisions = '<a id="adr-1012"></a>\n## ADR 1012 — x\n<a id="adr-0803"></a>\n## ADR 0803 — y\n';
 const ids = Array.from({ length: 24 }, (_, i) => `mx-lost-${i}`);
-const ledgers = new Map([["mx-recall", new Set(ids)]]);
-const row = (over = {}) => ({ grid: "mx-recall", ids, adr: "ADR 1012", why: "the merge's twenty-four", ...over });
+const ledgers = ledgersOf([["mx-recall.json", JSON.stringify({ grid: "mx-recall", ids: [...ids].sort(), entries: [["k1:C:3", "mx-keyed"]] })]]);
+// ADR 1118: a new row is a fix's, with its Chrome witness and its collateral.
+const row = (over = {}) => ({ grid: "mx-recall", ids, adr: "ADR 1012", why: "the merge's twenty-four", kind: "fix", witness: "mx-lost-0", collateral: 0, ...over });
 
 test("changes.json: a row of the base that is edited or removed fails (the naming file only grows)", () => {
   // The laundering: a loss is named once; a later change edits the old row to name more ids, or deletes it so the audit trail disappears.
@@ -25,14 +26,14 @@ test("changes.json: a new row needs an ADR in docs/decisions.md, a why, and exac
   assert.match(changesProblems({ head: { rows: [row({ adr: undefined })] }, base: empty, decisions, ledgers })[0], /no adr is not an ADR/);
   assert.match(changesProblems({ head: { rows: [row({ why: " " })] }, base: empty, decisions, ledgers })[0], /says no why/);
   const [unknown] = changesProblems({ head: { rows: [row({ ids: ["mx-never-proved"] })] }, base: empty, decisions, ledgers });
-  assert.match(unknown, /names 1 id\(s\) the ledger does not hold/);
-  assert.match(changesProblems({ head: { rows: [row({ ids: [] })] }, base: empty, decisions, ledgers })[0], /non-empty list of distinct ids/);
-  assert.match(changesProblems({ head: { rows: [row({ ids: [ids[0], ids[0]] })] }, base: empty, decisions, ledgers })[0], /distinct ids/);
+  assert.match(unknown, /names 1 id\(s\) or key\(s\) the ledger does not hold/);
+  assert.match(changesProblems({ head: { rows: [row({ ids: [] })] }, base: empty, decisions, ledgers })[0], /non-empty list of distinct names/);
+  assert.match(changesProblems({ head: { rows: [row({ ids: [ids[0], ids[0]] })] }, base: empty, decisions, ledgers })[0], /distinct names/);
 });
 
 test("changes.json: a group row (the audit's) names a code, a proved from, an unproved to and a positive count, and not ids as well", () => {
   const empty = { rows: [] };
-  const group = (over = {}) => ({ grid: "mx-recall", code: "STORE_WRITE_OUTSIDE_SETTER", from: "agree", to: "recall-gap", count: 24, adr: "ADR 1012", why: "x", ...over });
+  const group = (over = {}) => ({ grid: "mx-recall", code: "STORE_WRITE_OUTSIDE_SETTER", from: "agree", to: "recall-gap", count: 24, adr: "ADR 1012", why: "x", kind: "fix", witness: "mx-lost-0", collateral: 0, ...over });
   assert.deepEqual(changesProblems({ head: { rows: [group()] }, base: empty, decisions, ledgers }), []);
   assert.match(changesProblems({ head: { rows: [group({ to: "agree" })] }, base: empty, decisions, ledgers })[0], /to must be an outcome that is not proved/);
   assert.match(changesProblems({ head: { rows: [group({ from: "recall-gap" })] }, base: empty, decisions, ledgers })[0], /from must be the grid's proved outcome \(agree\)/);
@@ -46,14 +47,55 @@ test("changes.json: a group row (the audit's) names a code, a proved from, an un
 
 test("ledgers: an id the base held and the head lost fails, whatever else the file gained", () => {
   // The laundering: a regenerated ledger drops the 24 ids a change lost, so the smoke compares nothing about them.
-  const base = ledgersOf([["mx-recall.json", JSON.stringify({ grid: "mx-recall", ids })]]);
-  const head = ledgersOf([["mx-recall.json", JSON.stringify({ grid: "mx-recall", ids: [...ids.slice(0, 20), "mx-new"] })]]);
+  const sorted = [...ids].sort();
+  const base = ledgersOf([["mx-recall.json", JSON.stringify({ grid: "mx-recall", ids: sorted })]]);
+  const head = ledgersOf([["mx-recall.json", JSON.stringify({ grid: "mx-recall", ids: [...sorted.slice(0, 20), "mx-new"] })]]);
   const [problem] = ledgerProblems({ head, base });
   assert.match(problem, /mx-recall lost 4 id\(s\)/);
-  assert.deepEqual(ledgerProblems({ head: ledgersOf([["mx-recall.json", JSON.stringify({ grid: "mx-recall", ids: [...ids, "mx-new"] })]]), base }), []);
+  assert.deepEqual(ledgerProblems({ head: ledgersOf([["mx-recall.json", JSON.stringify({ grid: "mx-recall", ids: [...sorted, "mx-new"] })]]), base }), []);
   assert.match(ledgerProblems({ head: new Map(), base })[0], /is gone/);
   assert.deepEqual(ledgerProblems({ head, base: new Map() }), []);
   assert.deepEqual([...ledgersOf([["changes.json", "{}"], ["README.md", "x"]]).keys()], []);
+});
+
+test("changes.json (ADR 1118): a proof change appends no row; a fix's row names its witness and its collateral, and a key names an entry", () => {
+  const empty = { rows: [] };
+  assert.match(changesProblems({ head: { rows: [row({ kind: undefined })] }, base: empty, decisions, ledgers })[0], /is not a fix's \(kind: "fix"\): a proof change appends no row/);
+  assert.match(changesProblems({ head: { rows: [row({ kind: "proof" })] }, base: empty, decisions, ledgers })[0], /a proof change appends no row/);
+  assert.match(changesProblems({ head: { rows: [row({ witness: "" })] }, base: empty, decisions, ledgers })[0], /names no witness/);
+  assert.match(changesProblems({ head: { rows: [row({ collateral: -1 })] }, base: empty, decisions, ledgers })[0], /collateral must be the count/);
+  assert.match(changesProblems({ head: { rows: [row({ collateral: undefined })] }, base: empty, decisions, ledgers })[0], /collateral must be the count/);
+  assert.deepEqual(changesProblems({ head: { rows: [row({ ids: undefined, keys: ["k1:C:3"] })] }, base: empty, decisions, ledgers }), []);
+  assert.match(changesProblems({ head: { rows: [row({ ids: undefined, keys: ["k9:C:3"] })] }, base: empty, decisions, ledgers })[0], /names 1 id\(s\) or key\(s\) the ledger does not hold/);
+  // a base row written before ADR 1118 stays valid as it is (append-only, never re-judged)
+  const old = { grid: "mx-recall", ids, adr: "ADR 1012", why: "before 1118" };
+  assert.deepEqual(changesProblems({ head: { rows: [old] }, base: { rows: [old] }, decisions, ledgers }), []);
+});
+
+test("owed.json (ADR 1118): a fix's collateral is owed work that only falls, and open-work names it", () => {
+  const fix = row({ collateral: 5 });
+  const work = "- ADR 1012: 5 true proofs owed after the fix\n";
+  const check = (head, base, { changes = { rows: [fix] }, baseChanges = { rows: [] }, openWork = work } = {}) => owedProblems({ head: { rows: head }, base: { rows: base }, changes, baseChanges, decisions, openWork });
+  const owed = (n, over = {}) => ({ adr: "ADR 1012", owed: n, why: "1012's collateral", ...over });
+  assert.deepEqual(check([owed(5)], []), []);
+  assert.match(check([owed(5)], [], { changes: { rows: [] } })[0], /a new entry for ADR 1012 with no new fix row/);
+  assert.deepEqual(check([owed(3)], [owed(5)], { changes: { rows: [] } }), []);
+  assert.match(check([owed(6)], [owed(5)], { changes: { rows: [] } })[0], /more than the base's 5: owed collateral only falls/);
+  assert.match(check([], [owed(5)], { changes: { rows: [] } })[0], /is gone/);
+  assert.match(check([owed(5)], [], { openWork: "nothing" })[0], /no line of docs\/open-work.md names it/);
+  assert.deepEqual(check([owed(0)], [owed(5)], { changes: { rows: [] }, openWork: "" }), []);
+  assert.match(check([owed(5, { adr: "ADR 9999" })], [])[0], /not an ADR/);
+});
+
+test("ledgers (ADR 1118): a key the base held stays an entry or retires; an unkeyed id may become an entry", () => {
+  const file = (value) => ledgersOf([["mx-recall.json", JSON.stringify({ grid: "mx-recall", ...value })]]);
+  const base = file({ entries: [["k1:C:3", "a"], ["k2:C:3", "b"]], ids: ["c"] });
+  assert.deepEqual(ledgerProblems({ head: file({ entries: [["k1:C:3", "a"], ["k3:C:3", "c"]], retired: [["k2:C:3", "b"]] }), base }), []);
+  assert.match(ledgerProblems({ head: file({ entries: [["k1:C:3", "a"]], ids: ["c"] }), base })[0], /lost 1 key\(s\) \(k2:C:3\)/);
+  assert.match(ledgerProblems({ head: file({ entries: [["k1:C:3", "a"], ["k2:C:3", "b"]] }), base })[0], /lost 1 id\(s\) \(c\)/);
+  const unsorted = [];
+  ledgersOf([["mx-recall.json", JSON.stringify({ grid: "mx-recall", entries: [["k2:C:3", "b"], ["k1:C:3", "a"]] })]], unsorted);
+  assert.match(unsorted[0], /not sorted by key/);
 });
 
 test("audit-known.json: only removing ids is free; a new entry, an added id, a changed idRegex or cap needs a new ADR and a why", () => {
@@ -86,7 +128,7 @@ test("ledger files: a file names its own grid and lists its ids sorted and disti
   const problems = [];
   const good = ledgersOf([["mx-recall.json", JSON.stringify({ grid: "mx-recall", ids: ["a", "b"] })]], problems);
   assert.deepEqual(problems, []);
-  assert.deepEqual([...good.get("mx-recall")], ["a", "b"]);
+  assert.deepEqual([...good.get("mx-recall").ids], ["a", "b"]);
   const bad = [];
   ledgersOf([["mx-recall.json", JSON.stringify({ grid: "mx-census", ids: ["a"] })]], bad);
   assert.match(bad[0], /its grid is "mx-census", the file's is mx-recall/);
@@ -96,4 +138,14 @@ test("ledger files: a file names its own grid and lists its ids sorted and disti
   const unsorted = [];
   ledgersOf([["mx-recall.json", JSON.stringify({ grid: "mx-recall", ids: ["b", "a"] })]], unsorted);
   assert.match(unsorted[0], /ids are not sorted/);
+});
+
+test("textbook.json (ADR 1118): a program stays; with the same bytes it stays certified and its uncertifiable keys only shrink", () => {
+  const base = { programs: { a: { hash: "h1", certified: true, u: [] }, b: { hash: "h2", certified: false, u: ["k1", "k2"] } } };
+  assert.deepEqual(textbookProblems({ head: { programs: { a: base.programs.a, b: { hash: "h2", certified: false, u: ["k1"] } } }, base }), []);
+  assert.match(textbookProblems({ head: { programs: { a: base.programs.a } }, base })[0], /b is gone/);
+  assert.match(textbookProblems({ head: { programs: { a: { hash: "h1", certified: false, u: [] }, b: base.programs.b } }, base })[0], /was certified and is not/);
+  assert.match(textbookProblems({ head: { programs: { a: base.programs.a, b: { hash: "h2", certified: false, u: ["k1", "k2", "k3"] } } }, base })[0], /gained 1 uncertifiable key/);
+  // new bytes are a re-admission, which textbook.mjs checks with the checker
+  assert.deepEqual(textbookProblems({ head: { programs: { a: base.programs.a, b: { hash: "h3", certified: false, u: ["k9"] } } }, base }), []);
 });

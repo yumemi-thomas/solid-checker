@@ -248,7 +248,11 @@ fn defined_literal_elements(file: &solid_facts::FileFacts, span: Span) -> usize 
 /// receiver or source must be written as a literal no execution can fill:
 ///
 /// - an `Array`/`ReadonlyArray` iteration method (`forEach`, `map`, `filter`,
-///   `some`, `every`, `find`, ..., `sort`) on an empty array literal `[]`;
+///   `some`, `every`, `find`, ..., `sort`) on an empty array literal `[]`,
+///   or (ADR 1109) on a `const` name holding `[]` that nothing can fill
+///   ([`empty_array_name`]);
+/// - (ADR 1109) `sort`/`toSorted` on a one-element literal with no spread or
+///   hole: one element is never compared;
 /// - `reduce`/`reduceRight` on `[]`, or on a one-element literal with no
 ///   spread or hole and no initial value (it returns the element uncalled);
 /// - `Array.from` (and the typed-array `from`s) with `[]` as its source;
@@ -264,7 +268,7 @@ fn defined_literal_elements(file: &solid_facts::FileFacts, span: Span) -> usize 
 ///   second argument (no custom element constructor or customized built-in
 ///   runs), `document` the library's global ([`fresh_empty_node`]).
 ///
-/// Anything else (a name, a property, a literal with an element, a
+/// Anything else (another name, a property, a literal with an element, a
 /// `NodeList` of a node that is not fresh, `document.querySelectorAll`)
 /// answers `false`: the callback may run.
 pub(crate) fn carrier_provably_never_runs(
@@ -292,6 +296,7 @@ pub(crate) fn carrier_provably_never_runs(
     let empty = |span: Span| {
         ast.array_literal_at(ast.peel_ts_sugar_span(span))
             .is_some_and(|array| array.elements.is_empty())
+            || empty_array_name(file, span, lookup)
     };
     match declaration.qualified_name.as_ref() {
         "Array.forEach"
@@ -313,8 +318,10 @@ pub(crate) fn carrier_provably_never_runs(
         | "Array.findLast"
         | "ReadonlyArray.findLast"
         | "Array.findLastIndex"
-        | "ReadonlyArray.findLastIndex"
-        | "Array.sort" => receiver().is_some_and(empty),
+        | "ReadonlyArray.findLastIndex" => receiver().is_some_and(empty),
+        // ADR 1109: a sort compares two elements; one or none is never compared.
+        "Array.sort" | "Array.toSorted" | "ReadonlyArray.toSorted" => receiver()
+            .is_some_and(|receiver| empty(receiver) || literal_elements(file, receiver) == 1),
         "Array.reduce"
         | "ReadonlyArray.reduce"
         | "Array.reduceRight"
@@ -360,6 +367,87 @@ pub(crate) fn carrier_provably_never_runs(
         }
         _ => false,
     }
+}
+
+/// The standard-library methods that call nothing and add nothing when their receiver is empty, and never write it: an
+/// array a name holds that only these read stays empty.
+const KEEPS_EMPTY: &[&str] = &[
+    "Array.forEach",
+    "ReadonlyArray.forEach",
+    "Array.map",
+    "ReadonlyArray.map",
+    "Array.flatMap",
+    "ReadonlyArray.flatMap",
+    "Array.filter",
+    "ReadonlyArray.filter",
+    "Array.some",
+    "ReadonlyArray.some",
+    "Array.every",
+    "ReadonlyArray.every",
+    "Array.find",
+    "ReadonlyArray.find",
+    "Array.findIndex",
+    "ReadonlyArray.findIndex",
+    "Array.findLast",
+    "ReadonlyArray.findLast",
+    "Array.findLastIndex",
+    "ReadonlyArray.findLastIndex",
+    "Array.reduce",
+    "ReadonlyArray.reduce",
+    "Array.reduceRight",
+    "ReadonlyArray.reduceRight",
+    "Array.sort",
+    "Array.toSorted",
+    "ReadonlyArray.toSorted",
+];
+
+/// ADR 1109: whether `span` (through parentheses and type assertions) is a reference to a `const` name (one identifier)
+/// whose initializer is `[]`, that no module exports and no direct `eval` can reach, every reference to which is a type
+/// query or the receiver of a call of a [`KEEPS_EMPTY`] method the compiler selected: nothing can fill the array, so it
+/// holds no element wherever the name is read.
+fn empty_array_name(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    let Some(declaration) = ast.reference_declaration(ast.peel_ts_sugar_span(span)) else {
+        return false;
+    };
+    let holds_empty = ast.bindings.iter().any(|binding| {
+        binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding.immutable
+            && binding.names.iter().any(|name| name.span == declaration)
+            && binding.initializer.is_some_and(|initializer| {
+                ast.array_literal_at(ast.peel_ts_sugar_span(initializer))
+                    .is_some_and(|array| array.elements.is_empty())
+            })
+    });
+    if !holds_empty
+        || lookup.program_has_eval()
+        || crate::execution_role::flow_binding_exported(file, declaration)
+    {
+        return false;
+    }
+    ast.reference_identifiers_to(declaration).all(|reference| {
+        ast.type_queries
+            .iter()
+            .any(|query| query.contains(reference.span))
+            || ast.members.iter().any(|member| {
+                member.object == reference.span
+                    && ast.calls.iter().any(|call| {
+                        !call.construct
+                            && ast.peel_ts_sugar_span(call.callee) == member.span
+                            && crate::indexes::standard_library_declaration_of(
+                                lookup.resolved_callee_call(file, call.callee),
+                                typefacts::CallKind::Call,
+                            )
+                            .is_some_and(|declaration| {
+                                KEEPS_EMPTY.contains(&declaration.qualified_name.as_ref())
+                            })
+                    })
+            })
+    })
 }
 
 /// ADR 1019: whether `span` (a reference to a function's name, or a function

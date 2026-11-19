@@ -59,13 +59,20 @@ struct DemandSpans {
 }
 
 /// ADR 1077: the static `x.defaultView` members of a file (a computed key is
-/// not asked).
+/// not asked). ADR 1108 part 2: and the other members the package scan takes
+/// for the global object, `x.view` and `x.source`, with the property's name.
 pub(crate) fn default_view_members(
     file: &FileFacts,
-) -> impl Iterator<Item = &solid_facts::ast::MemberFact> {
-    file.ast.members.iter().filter(|member| {
-        !file.ast.computed_members.contains(&member.span)
-            && file.source_text(member.property) == Some("defaultView")
+) -> impl Iterator<Item = (&solid_facts::ast::MemberFact, &'static str)> {
+    file.ast.members.iter().filter_map(|member| {
+        if file.ast.computed_members.contains(&member.span) {
+            return None;
+        }
+        let name = file.source_text(member.property)?;
+        ["defaultView", "view", "source"]
+            .into_iter()
+            .find(|known| *known == name)
+            .map(|known| (member, known))
     })
 }
 
@@ -151,7 +158,7 @@ fn plan_file(
     }
     // ADR 1077: whether a static `x.defaultView` holds no global object, for the package walk: the value's primitive domain, and the receiver's types, as
     // written and with assertions peeled. No symbol is observed there.
-    for member in default_view_members(file) {
+    for (member, _) in default_view_members(file) {
         spans.default_view_value_spans.insert(member.span);
         spans.default_view_receiver_spans.insert(member.object);
         spans
@@ -801,6 +808,38 @@ fn collect_argument_spans(dialect: &'static Dialect, file: &FileFacts, spans: &m
         }) {
             add_symbol(initializer, false);
             primitive_value_domain_spans.insert(initializer);
+        }
+    }
+    // ADR 1113: an operator after a suspension is no site when every operand it coerces or probes is a primitive: each such operand's
+    // primitive domain, asked in a file that suspends at all (an `await`, a `for await`, an async function) or hands a promise a handler (`.then`,
+    // `.catch`, `.finally`, ADR 0976). A handler another file defines gets no domain and keeps its row.
+    let hands_promise_handler = || {
+        file.ast.calls.iter().any(|call| {
+            file.ast
+                .member_at(file.ast.peel_ts_sugar_span(call.callee))
+                .is_some_and(|member| {
+                    matches!(
+                        file.source_text(member.property),
+                        Some("then" | "catch" | "finally")
+                    )
+                })
+        })
+    };
+    if !file.ast.awaits.is_empty()
+        || !file.ast.implicit_suspensions.is_empty()
+        || file.ast.functions.iter().any(|function| function.r#async)
+        || hands_promise_handler()
+    {
+        let operands = file.ast.coercing_operands.iter().copied().chain(
+            file.ast
+                .relation_operators
+                .iter()
+                .flat_map(|relation| [relation.left, relation.right]),
+        );
+        for operand in operands {
+            let operand = file.ast.peel_ts_sugar_span(operand);
+            add_symbol(operand, false);
+            primitive_value_domain_spans.insert(operand);
         }
     }
     // ADR 0781: which key a computed write to a standard object names.

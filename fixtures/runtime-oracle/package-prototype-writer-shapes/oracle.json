@@ -1,0 +1,16 @@
+{
+ "note": "ADR 1108 part 2: the writer shapes part 1 did not follow, each writing its own method on a built-in's prototype: `Object.getPrototypeOf(Int8Array).prototype`, `globalThis[K]`, `X[P]`, `const { prototype } = X`, a list of built-ins given to `forEach`, `event.view.X.prototype`, a built-in bound to a name, a prototype reached through a value given to `Object.assign`. Chrome throws ACTION_CALLED_IN_OWNED_SCOPE at each site, covered-uncertifiable; the clear writer, the unwritten names and the handler are quiet.",
+ "packages": [
+  "fz-wgetproto",
+  "fz-wglobalkey",
+  "fz-wprotokey",
+  "fz-wprotopattern",
+  "fz-wctorlist",
+  "fz-weventview",
+  "fz-wbound",
+  "fz-wvalue",
+  "fz-wdirect",
+  "fz-wown",
+  "fz-wclear"
+ ]
+}

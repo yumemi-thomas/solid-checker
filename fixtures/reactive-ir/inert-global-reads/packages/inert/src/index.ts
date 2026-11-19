@@ -17,3 +17,11 @@ export function stop(): void {
 
 // (c) `defaultView` of a value whose type is no document, read as a string (kui `MessagesTab.tsx`).
 export const viewOf = (props: ViewProps): "pages" | "infinite" => props.defaultView ?? "pages";
+
+// ADR 1108 part 2: `source` of a value typed as no `MessageEvent`, `view` of one typed as no `UIEvent`, each read as a string (highlight.js's `re.source`, kui's
+// `props.source`): no window there.
+export const patternOf = (re: RegExp): string => re.source;
+export interface LayoutProps {
+  readonly view?: "list" | "grid" | undefined;
+}
+export const layoutOf = (props: LayoutProps): "list" | "grid" => props.view ?? "list";

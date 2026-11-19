@@ -58,7 +58,22 @@ export const STORE_DESTRUCTURES = {
   "store-dstr-for-of": { reads: true, text: (o) => `for (const { v } of [${o}]) void v;` },
   "store-dstr-merge": { reads: true, imports: ["merge"], text: (o) => `const { v } = merge(${o}, { w: 1 }); void v;` },
   // ADR 1106: the plain object destructure. In a named helper the body calls (the `closure` layer) it was a clean nothing explained.
-  "store-dstr-object": { reads: true, text: (o) => `const { v } = ${o}; void v;` },
+  "store-dstr-object": { reads: true, text: (o) => `{ const { v } = ${o}; void v; }` },
+  // ADR 1109: the store handed through a standard inline callback's parameter, destructured or read by member.
+  "store-map-dstr": { reads: true, text: (o) => `[${o}].map(({ v }) => v);` },
+  "store-map-member": { reads: true, text: (o) => `[${o}].map((s) => s.v);` },
+  // The twin: the callback takes the store but reads nothing of it.
+  "store-map-unread": { text: (o) => `[${o}].map((s) => typeof s);` },
+  // ADR 1107 (review of ADR 1106, F1): the destructure in a named function handed by name to a tracked slot and also called here:
+  // the call is a read in the window around it, which the by-name role kept SC1003 from seeing.
+  "store-dstr-byname": { reads: true, imports: ["createMemo"], text: (o) => `{ const f = () => { const { v } = ${o}; return v; }; createMemo(f); f(); }` },
+  // ADR 1107 round 2 (Fable review): a sub-pattern that binds no name still reads its property (F1); a sibling slot after an
+  // undecided `then` is read too (P1); a quoted key is a decided key (P2).
+  "store-dstr-empty-sub": { reads: true, nested: true, text: (o) => `{ const { a: {} } = ${o}; }` },
+  "store-dstr-empty-items": { reads: true, nested: true, text: (o) => `{ const { items: [] } = ${o}; }` },
+  "store-dstr-empty-sibling": { reads: true, nested: true, text: (o) => `{ const { v, a: {} } = ${o}; void v; }` },
+  "store-dstr-then-first": { reads: true, then: true, text: (o) => `{ const { then, v } = ${o}; void then; void v; }` },
+  "store-dstr-quoted": { reads: true, text: (o) => `{ const { "v": x } = ${o}; void x; }` },
 };
 
 // ADR 0781: the type names a standard method, and the program runs its own. Each runs the site on the caller's stack, in a component body.
@@ -540,7 +555,9 @@ export const FLIP_READ_LEGAL = {
   DYNAMIC_STATIC_PROMISE: [FLUSH_READ_STORED],
   // Scout A.6: `Function.prototype.call` patched to defer, then `h.call(null)`: the read leaves the body (Chrome quiet). The proof read
   // `CallableFunction.call`, whose patch keys a `Function.prototype.call` write never raised.
-  STRICT_READ_UNTRACKED: ["wh-helper-late", "mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach", ...FLUSH_READ_LEGAL, ...Object.keys(LATE_RECEIVERS), ...Object.keys(PROTO_LEGAL), "patch-call-late"],
+  // ADR 1109: handed to a helper whose call of it follows `JSON.parse("x")` in a `try` whose `catch` swallows the throw: the read never runs.
+  // A read rule only: the write and action rules take a call on some path of a helper as reachable (no fact says `JSON.parse("x")` throws).
+  STRICT_READ_UNTRACKED: ["try-helper-never", "wh-helper-late", "mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach", ...FLUSH_READ_LEGAL, ...Object.keys(LATE_RECEIVERS), ...Object.keys(PROTO_LEGAL), "patch-call-late"],
   // ADR 0782: `cleanup-mount`'s only mount is in a cleanup, where the guard stands down.
   // ADR 0349 with ADR 0282: the patched iteration hands back a no-op setter, so the write never runs.
   REACTIVE_WRITE_IN_OWNED_SCOPE: ["wh-root-cleanup", "arm-helper", "arm-helper-chain", "arm-tag", "cast-late-foreach", "cleanup-mount", ...Object.keys(LATE_RECEIVERS), ...Object.keys(PROTO_LEGAL), ...Object.keys(ITER_PATCHES)],
@@ -1019,6 +1036,7 @@ function freshCopy(stmts, kit) {
 }
 
 export function flipReadContext(context, stmts, kit) {
+  if (context === "try-helper-never") return { body: [expr(call(ref(kit.ensureHelper("tryThrowCall")), [fn(stmts)]))], view: [] };
   if (context === "aw-pre-pick" || context === "aw-pre-or") {
     // ADR 0898: the site's source, through a composite before the computation's first await.
     let source = null;

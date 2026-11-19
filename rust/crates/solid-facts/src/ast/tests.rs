@@ -238,7 +238,9 @@ fn unconditional_awaits_exclude_every_skippable_construct() {
 /// it. A jump in a nested function does not count.
 /// A `try` block runs to its end under the normal-completion premise; its
 /// `catch` and `finally` stay conditional, and a `try` inside a branch is
-/// still conditional.
+/// still conditional. ADR 1109: the blocks a throw in which may end in a
+/// normal completion (a `catch` that does more than rethrow, a `finally` that
+/// may jump) are listed apart, and keep their completion sites.
 #[test]
 fn a_try_block_is_on_every_completion() {
     let source = concat!(
@@ -254,6 +256,15 @@ fn a_try_block_is_on_every_completion() {
         "  }\n",
         "  if (c) { try { s(); } catch {} }\n",
         "  s();\n",
+        "  try { JSON.parse('x'); s(); } finally { void 0; }\n",
+        "  try { JSON.parse('x'); s(); } finally { () => { return; }; }\n",
+        "  try { JSON.parse('x'); s(); } catch (e) { throw e; }\n",
+        "}\n",
+        "function h() {\n",
+        "  try { JSON.parse('x'); s(); } catch (e) { void e; throw e; }\n",
+        "}\n",
+        "function k() {\n",
+        "  try { JSON.parse('x'); s(); } finally { if (c) return; }\n",
         "}\n",
     );
     let facts = super::extract("try.ts", source).unwrap();
@@ -263,7 +274,13 @@ fn a_try_block_is_on_every_completion() {
         .filter(|span| &source[span.start as usize..span.end as usize] == "s()")
         .map(|span| source[..span.start as usize].matches('\n').count() + 1)
         .collect::<Vec<_>>();
-    assert_eq!(lines, [5, 12], "{lines:?}");
+    assert_eq!(lines, [5, 12, 13, 14, 15, 18, 21], "{lines:?}");
+    let swallowing = facts
+        .swallowing_try_blocks
+        .iter()
+        .map(|span| source[..span.start as usize].matches('\n').count() + 1)
+        .collect::<Vec<_>>();
+    assert_eq!(swallowing, [3, 11, 18, 21], "{swallowing:?}");
 }
 
 #[test]

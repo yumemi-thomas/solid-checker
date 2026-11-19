@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { isProved, ledgerText, namedIds, provedLines, provedMoves, provedOutcome, readLedger, record } from "./proved.mjs";
+import { isProved, ledgerText, namedIds, programHash, provedKey, provedLines, provedMoves, provedOutcome, readLedger, readLedgerFiles, record } from "./proved.mjs";
 import { gridRows, sample } from "./cover.mjs";
 
 // ADR 1012: a proved verdict never goes unnamed.
@@ -67,13 +67,50 @@ describe("the ledger files", () => {
     const write = (grid, rows) => { mkdirSync(join(run, grid), { recursive: true }); writeFileSync(join(run, grid, "programs.jsonl"), rows.map((row) => JSON.stringify(row)).join("\n")); };
     write("mx-recall", [{ id: "b", outcome: "agree" }, { id: "a", outcome: "agree" }, { id: "c", outcome: "recall-gap" }]);
     write("lg-recall", [{ id: "l1", outcome: "clean" }, { id: "l2", outcome: "uncertifiable" }]);
-    expect(record(run, dir)).toEqual({ "lg-recall": { before: 0, after: 1 }, "mx-recall": { before: 0, after: 2 } });
+    expect(record(run, dir)).toEqual({ "lg-recall": { before: 0, after: 1, retired: 0 }, "mx-recall": { before: 0, after: 2, retired: 0 } });
     expect(readFileSync(join(dir, "mx-recall.json"), "utf8")).toBe('{"grid":"mx-recall","ids":[\n"a",\n"b"\n]}\n');
     // a later run in which "a" is lost and "z" proved: the ledger keeps "a" (a loss is named in changes.json, never forgotten) and adds "z"
     write("mx-recall", [{ id: "a", outcome: "recall-gap" }, { id: "z", outcome: "agree" }]);
-    expect(record(run, dir)["mx-recall"]).toEqual({ before: 2, after: 3 });
+    expect(record(run, dir)["mx-recall"]).toEqual({ before: 2, after: 3, retired: 0 });
     expect(readLedger(dir).get("mx-recall")).toEqual(new Set(["a", "b", "z"]));
     expect(ledgerText("g", ["b", "a", "b"])).toBe('{"grid":"g","ids":[\n"a",\n"b"\n]}\n');
+  });
+});
+
+// ADR 1118: an entry is keyed by the program's content and the (code, site line) it proves, so the generator's churn is no loss.
+describe("keyed entries", () => {
+  const built = (text) => ({ id: "x", files: { "App.tsx": text, "oracle.json": "{}" }, packages: { dep: { "index.js": "1" } } });
+  it("hash the program's bytes, not its id or the order of its files", () => {
+    const a = built("one");
+    expect(programHash(a)).toBe(programHash({ ...a, id: "y", files: { "oracle.json": "{}", "App.tsx": "one" } }));
+    expect(programHash(a)).not.toBe(programHash(built("two")));
+    expect(programHash(a)).not.toBe(programHash({ ...a, packages: { dep: { "index.js": "2" } } }));
+    expect(provedKey(a, "NO_OWNER_EFFECT", 7)).toBe(`${programHash(a)}:NO_OWNER_EFFECT:7`);
+  });
+  const entries = new Map([["k1:C:3", "lg-a"], ["k2:C:3", "lg-b"], ["k3:C:3", "lg-c"]]);
+  it("judge an entry by its key: a row with the key decides it, the same id with another key is churn, none is lost only when asked for all", () => {
+    const rows = [{ id: "lg-a", key: "k1:C:3", outcome: "uncertifiable" }, { id: "lg-b", key: "k9:C:3", outcome: "uncertifiable" }];
+    const moves = provedMoves({ grid: "lg-base", entries, rows });
+    expect(moves.lost).toEqual([{ id: "lg-a", key: "k1:C:3", to: "uncertifiable" }]);
+    expect(moves.churn).toEqual([{ id: "lg-b", key: "k2:C:3", now: "k9:C:3" }]);
+    expect(provedMoves({ grid: "lg-base", entries, rows, expectAll: true }).lost.map((move) => move.id)).toEqual(["lg-a", "lg-c"]);
+    // the same program under another id still judges the entry
+    expect(provedMoves({ grid: "lg-base", entries, rows: [{ id: "lg-renamed", key: "k3:C:3", outcome: "clean" }] }).lost).toEqual([]);
+    // a key names the loss in changes.json as an id does
+    expect(provedMoves({ grid: "lg-base", entries, rows, changes: { rows: [{ grid: "lg-base", keys: ["k1:C:3"] }] } }).unnamed).toEqual([]);
+  });
+  it("record keys an unkeyed id the run proved, retires a churned entry, and drops nothing", () => {
+    const run = mkdtempSync(join(tmpdir(), "proved-run-"));
+    const dir = mkdtempSync(join(tmpdir(), "proved-ledger-"));
+    const write = (rows) => { mkdirSync(join(run, "lg-base"), { recursive: true }); writeFileSync(join(run, "lg-base", "programs.jsonl"), rows.map((row) => JSON.stringify(row)).join("\n")); };
+    writeFileSync(join(dir, "lg-base.json"), ledgerText("lg-base", ["lg-old", "lg-u"], new Map([["k2:C:3", "lg-b"]])));
+    write([{ id: "lg-old", key: "k1:C:3", outcome: "clean" }, { id: "lg-u", key: "k5:C:3", outcome: "uncertifiable" }, { id: "lg-b", key: "k9:C:3", outcome: "clean" }]);
+    expect(record(run, dir)["lg-base"]).toEqual({ before: 3, after: 3, retired: 1 });
+    const file = readLedgerFiles(dir).get("lg-base");
+    expect(file.entries).toEqual(new Map([["k1:C:3", "lg-old"], ["k9:C:3", "lg-b"]]));
+    expect(file.ids).toEqual(new Set(["lg-u"])); // not proved under a key: stays unkeyed, judged by id
+    expect(file.retired).toEqual(new Map([["k2:C:3", "lg-b"]]));
+    expect(readLedger(dir).get("lg-base")).toEqual(new Set(["lg-old", "lg-b", "lg-u"]));
   });
 });
 

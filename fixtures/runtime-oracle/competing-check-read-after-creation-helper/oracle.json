@@ -1,0 +1,5 @@
+{
+  "note": "ADR 1111: a helper an effect's apply calls runs createMemo(f) then f(); Chrome reports PRIMITIVE_IN_EFFECT_CALLBACK and never STRICT_READ_UNTRACKED; SC6002 is the violation, SC1001 uncertifiable `creation-throws-first`. Generated program `mx-strict-read-untracked-effect-apply-store-byname-wrapper-none` (differential fuzzer, generator 2).",
+  "haltMarker": true,
+  "steps": []
+}

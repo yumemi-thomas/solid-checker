@@ -9,6 +9,7 @@
 //     [--grids mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo] [--seed 1] [--out <dir>] [--runtime-diff <per stratum>]
 //     [--oracle-axes code,context,outcome] [--smoke [--sample 0.015] [--sample-seed <n>]] [-- <grid args>]
 //     [--split-codes] [--prune-cases] [--grid-timeout <minutes>] [--heap-mb <MiB>] [--role-log [--roles-against <roles.json>]] [--recall-full]
+//     [--proof-log]   (ADR 1114: the proof gate over each grid's programs, folded to <grid>/proof-hits.jsonl)
 //     [--scratch <dir>] [--sample-big <fraction> [--sample-codes A,B] [--sample-big-seed N] [--sample-big-min K]] [--warm-checker]
 //     [--boundary open|closed|both] [--entry namespace|named]
 //     [--budget-ms 1000] [--budget-mb 500] [--idle-stretch-s 10] [--perf-against <earlier run dir> [--perf-threshold 0.2]]
@@ -46,6 +47,7 @@
 // `--perf-threshold` worse, or runs that are not comparable, need a look. SOLID_CHECKER_FUZZ_PERF=0 records none of it.
 // The loop's oracle sample is stratified by code, context and outcome (every outcome of every context in real Chrome); the full run's
 // by code, context, source, mount and outcome (runtime-diff.mjs DEFAULT_DIFF_AXES), many more programs. `--oracle-axes` picks.
+import { foldProofDir, hitCounts } from "./proof-fold.mjs";
 import { spawnSync } from "node:child_process";
 import { Worker } from "node:worker_threads";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statfsSync, writeFileSync } from "node:fs";
@@ -59,7 +61,7 @@ import { gridCount } from "./grid-ids.mjs";
 import { legalCells, pairLegalCells } from "./legal.mjs";
 import { cellList, censusCells } from "./matrix.mjs";
 import { FIXED_SEED, wholeGrid, writeSample } from "./cover.mjs";
-import { provedLines, provedMoves, readChanges, readLedger } from "./proved.mjs";
+import { provedLines, provedMoves, readChanges, readLedgerFiles } from "./proved.mjs";
 import { SMOKE_DIR, movedVerdicts, readRows } from "./smoke.mjs";
 import { BEHAVIOUR_KINDS } from "./runtime-diff.mjs";
 import { mergeGridReports, summaryLine } from "./roles.mjs";
@@ -251,7 +253,8 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     const limit = String(Math.min(HOST_LIMIT, cores));
     return ["--concurrency", limit, "--workers", limit, "--chrome-concurrency", limit];
   };
-  export const hostArgs = (options = {}) => [...hostLimits(options), "--fast-host", "chrome", "--chrome-pages", "reuse", "--chrome-clock", "virtual-time", "--executor", "rust", ...(options.noWarmChecker ? ["--no-warm-checker"] : options.warmChecker ? ["--warm-checker"] : [])];
+  // ADR 1114: the proof log is exact for a one-shot check only (proof_log.rs), so `--proof-log` runs every check one-shot.
+export const hostArgs = (options = {}) => [...hostLimits(options), "--fast-host", "chrome", "--chrome-pages", "reuse", "--chrome-clock", "virtual-time", "--executor", "rust", ...(options.noWarmChecker || options.proofLog ? ["--no-warm-checker"] : options.warmChecker ? ["--warm-checker"] : [])];
 
   /** The lines focus prints before it starts: each grid's program count for the run's codes, and what a sample keeps of it. */
   export function plannedLines({ grids, codes, full = false, sample, sampleBig }) {
@@ -272,7 +275,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     for (let index = 0; index < own.length; index += 2) {
       const key = own[index].replace(/^--/, "").replace(/-([a-z])/g, (_, c) => c.toUpperCase());
       if (key === "smoke") { options.smoke = true; options.codes ??= "all"; index -= 1; continue; }
-      if (key === "allCores" || key === "splitCodes" || key === "pruneCases" || key === "roleLog" || key === "recallFull" || key === "recallLean" || key === "warmChecker" || key === "noWarmChecker") { options[key] = true; index -= 1; continue; }
+      if (key === "allCores" || key === "splitCodes" || key === "pruneCases" || key === "roleLog" || key === "proofLog" || key === "recallFull" || key === "recallLean" || key === "warmChecker" || key === "noWarmChecker") { options[key] = true; index -= 1; continue; }
       if (!["cover", "coverSeed", "coverGrids", "smokeLeg", "oracleCap", "codes", "grids", "seed", "out", "runtimeDiff", "oracleAxes", "sample", "sampleSeed", "checkerBin", "typefacts", "gridTimeout", "heapMb", "rolesAgainst", "scratch", "sampleBig", "sampleCodes", "sampleBigSeed", "sampleBigMin", "budgetMs", "budgetMb", "idleStretchS", "perfAgainst", "perfThreshold", "shard", "boundary", "entry"].includes(key) || own[index + 1] === undefined) throw new Error(`focus.mjs: unknown or empty option ${own[index]}`);
       options[key] = own[index + 1];
     }
@@ -402,7 +405,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     // What the run will judge, before it starts: each grid's programs for these codes (the ids, no program generated), and the sample's share.
     if (!options.smoke) console.log(plannedLines({ grids: options.grids.split(","), codes, full: Boolean(options.recallFull), sample: options.gridSampleAll, sampleBig: options.sampleBig }).join("\n"));
     // One grid process: its output streamed to `<dir>.log`, a deadline, then its rows judged.
-    const provedLedger = readLedger(), provedChanges = readChanges();
+    const provedLedger = readLedgerFiles(), provedChanges = readChanges();
     const covered = options.cover ? writeSample({ perCode: options.cover === "per-code", seed: Number(options.coverSeed ?? FIXED_SEED), grids: (options.coverGrids ?? options.grids).split(",").filter((grid) => !wholeGrid(grid, options.cover)), runSeed: options.seed, dir: join(out, "cover") }) : null;
     const runUnit = (grid, script, shape, unit, manifest) => {
       // Room for the grid before it starts: a run that fills the disk midway fails late, with ENOSPC rows (ADR 0519's preflight runs at
@@ -424,7 +427,15 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       // On the output's disk even with a scratch directory: it grows to gigabytes and would fill the scratch's tmpfs.
       const roles = options.roleLog ? roleLogPath(unit.dir) : null;
       if (roles) { mkdirSync(dirname(roles), { recursive: true }); rmSync(roles, { force: true }); }
-      const env = roles ? { ...process.env, SOLID_CHECKER_IR_ROLE_LOG: roles } : process.env;
+      // ADR 1114: the proof gate over the unit's programs: a directory of one log per one-shot checker process, folded once the grid
+      // ran (proof-fold.mjs) into `<unit>/proof-hits.jsonl`, the logs removed as they are read.
+      const proofs = options.proofLog ? `${unit.dir}.proof` : null;
+      if (proofs) { rmSync(proofs, { recursive: true, force: true }); mkdirSync(proofs, { recursive: true }); }
+      const env = {
+        ...process.env,
+        ...(roles ? { SOLID_CHECKER_IR_ROLE_LOG: roles } : {}),
+        ...(proofs ? { SOLID_CHECKER_IR_PROOF_LOG: proofs } : {}),
+      };
       // A unit with none of the sampled codes runs whole without the flag (its report then says nothing of a sample).
       const unitSampled = sampled.length && (options.gridSampleAll !== undefined || !unit.codes || unit.codes.some((code) => sampleCodes.includes(code))) ? sampled : [];
       const run = runGridProcess(join(here, script), ["--seed", options.seed, "--grid", ...shape, ...select, ...unitSampled, ...shardArgs, ...budgetArgs, ...recallArgs, "--out", unit.dir, ...(unitScratch ? ["--scratch", unitScratch] : []), ...tools, ...unitHost, ...options.extra], { logPath, timeoutMs: Number(options.gridTimeout ?? 120) * 60_000, heapMb: heap, env });
@@ -437,6 +448,12 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       const counted = read.partial !== undefined ? `STOPPED, ${total} programs judged before` : `${total} programs`;
       console.log(`  ${unit.label.padEnd(8)} ${String(seconds).padStart(4)}s  ${counted} ${JSON.stringify(outcomes)}  ${summary}`);
       if (gridSample) { console.log(`           ${sampleLine(gridSample)}`); sampledUnits.push(unit.label); }
+      if (proofs) {
+        const folded = foldProofDir(proofs);
+        mkdirSync(unit.dir, { recursive: true });
+        writeFileSync(join(unit.dir, "proof-hits.jsonl"), folded.hits.map((hit) => JSON.stringify(hit)).join("\n") + (folded.hits.length ? "\n" : ""));
+        console.log(`           proof gate: ${folded.logs} logs, ${folded.programs} programs, ${folded.hits.length} hits ${JSON.stringify(hitCounts(folded.hits))}`);
+      }
       const log = existsSync(logPath) ? readFileSync(logPath, "utf8") : "";
       attention.push(...unitProblems(unit.label, { run, grid: read, total, log, logPath, timeoutMinutes: options.gridTimeout ?? 120 }));
       if (emptyByDesign({ run, grid: read, total })) console.log(`           no programs: the grid has none for ${unit.codes ? unit.codes.join(",") : "these codes"}${gridShard ? ` in shard ${gridShard.index}/${gridShard.count}` : ""}`);
@@ -465,10 +482,12 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       // A proved verdict (agree on a misuse grid, clean on a legal one) never goes unnamed (ADR 1012): the smoke's cover holds every program of the
       // ledger, so one that is now another outcome, or has no row, fails unless a row of proved/changes.json names it.
       if (options.smoke && options.cover && existsSync(join(unit.dir, "programs.jsonl"))) {
-        const ids = provedLedger.get(grid);
-        if (ids?.size) {
-          const moves = provedMoves({ grid, ids, rows: readRows(unit.dir), changes: provedChanges, expectAll: options.cover === "all" });
-          if (moves.lost.length || moves.gained) console.log(`           proved verdicts: ${ids.size} in the ledger, ${moves.lost.length} lost (${moves.named} named), ${moves.gained} newly proved`);
+        const file = provedLedger.get(grid);
+        const held = file ? file.ids.size + file.entries.size : 0;
+        if (held) {
+          const moves = provedMoves({ grid, ids: file.ids, entries: file.entries, rows: readRows(unit.dir), changes: provedChanges, expectAll: options.cover === "all" });
+          // Churn (ADR 1118): an entry whose id the generator now builds as another program is not judged here and is no loss; `proved.mjs record` retires it.
+          if (moves.lost.length || moves.gained || moves.churn.length) console.log(`           proved verdicts: ${held} in the ledger, ${moves.lost.length} lost (${moves.named} named), ${moves.gained} newly proved, ${moves.churn.length} churned (another program under the id)`);
           attention.push(...provedLines(unit.label, moves));
         }
       }

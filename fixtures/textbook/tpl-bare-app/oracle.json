@@ -1,0 +1,7 @@
+{
+  "note": "solidjs/templates solid-v2/bare/src/App.tsx at e8524a7fb2c2b9ab2da3c68b7829c0632f627dbc (solid-js ^2.0.0): the logo.svg and App.css imports are dropped (the oracle page loads no assets), the <img> keeps no src; the code is otherwise verbatim, mounted as the default export.",
+  "steps": [],
+  "mount": [
+    "default"
+  ]
+}

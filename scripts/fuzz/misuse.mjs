@@ -42,6 +42,7 @@ import { CS_CONTEXT_NAMES, csContext, csPlacement } from "./cs-shapes.mjs";
 import { LF_CONTEXT_NAMES, lfContext, lfPlacement } from "./lf-shapes.mjs";
 import { FR_CONTEXT_NAMES, frContext, frPlacement } from "./fr-shapes.mjs";
 import { PU_CONTEXT_NAMES, puContext, puPlacement } from "./pu-shapes.mjs";
+import { JS_CONTEXT_NAMES, jsContext, jsPlacement } from "./js-shapes.mjs";
 import { PA_CONTEXT_NAMES, paContext, paPlacement, paUse } from "./pa-shapes.mjs";
 import { CONTEXT_PACKAGE } from "./package.mjs";
 import { PKG_ENTRIES, PROJECT_ENTRIES, packageSite, parsePkg } from "./package-site.mjs";
@@ -419,6 +420,15 @@ const WHOLE_STORE_READS = {
   "store-array-from": { reads: true, array: true, text: (o) => `Array.from(${o})` },
   "store-array-spread": { reads: true, array: true, text: (o) => `[...${o}]` },
   "store-for-of": { reads: true, array: true, text: (o) => `for (const x of ${o}) { void x; }` },
+  // ADR 1111: a member read in a function handed by name to `createMemo` and also called here; the by-name role certified it
+  // where no summary claims the call (an action step, a late-mounted handler).
+  "store-byname": { reads: true, imports: ["createMemo"], text: (o) => `{ const f = () => ${o}.v; createMemo(f); f(); }` },
+  // ADR 1121: a TypeScript-wrapped receiver is the same Get (the JavaScript is `s.v`); a projection is a store a primitive returns
+  // whole. Through a helper the body calls (the `helper` layer) both were certified clean.
+  "store-as-cast": { reads: true, text: (o) => `(${o} as typeof ${o}).v` },
+  "store-non-null": { reads: true, text: (o) => `${o}!.v` },
+  "store-satisfies": { reads: true, text: (o) => `(${o} satisfies typeof ${o}).v` },
+  "store-projection": { reads: true, projection: true, text: (o) => `${o}.v` },
   ...STORE_DESTRUCTURES,
   "store-keys": { text: (o) => `Object.keys(${o})` },
   "store-has": { text: (o) => `"v" in ${o}` },
@@ -574,7 +584,7 @@ export const SPEC = {
   },
   // `settled`: an async memo read after it settled (ADR 0511 review: probe pending-async/hook-shared-instance, rc.17 warns this code in an
   // apply, no pending throw), through the module-scope hook result beside the body's own call.
-  STRICT_READ_UNTRACKED: { legal: ["memo", "effect-compute", "render-compute", "jsx", "jsx-helper", "untrack"], recallContexts: ["evt-body-dispatch", ...firesAt("body"), ...listenersAt("body"), ...DENIED_CONTEXTS.filter((context) => !context.startsWith("dny-unmount-flush") && !["dny-dispose-memo", "dny-dispose-compute", "dny-dispose-untrack"].includes(context))], recallLegal: [...EVENT_LEGAL, ...ZERO_READS, "handed-flush"],
+  STRICT_READ_UNTRACKED: { legal: ["memo", "effect-compute", "render-compute", "jsx", "jsx-helper", "untrack"], recallContexts: ["evt-body-dispatch", "evt-apply-dispatch-shadow", ...firesAt("body"), ...listenersAt("body"), ...DENIED_CONTEXTS.filter((context) => !context.startsWith("dny-unmount-flush") && !["dny-dispose-memo", "dny-dispose-compute", "dny-dispose-untrack"].includes(context))], recallLegal: [...EVENT_LEGAL, ...ZERO_READS, "handed-flush"],
     // `settled` is a grid variant (never drawn at random, so random programs and combinations' extras keep theirs) and a legal one.
     variants: ["signal", "memo"], gridVariants: ["settled"], legalVariants: ["signal", "memo", "settled"],
     contexts: ["body", "effect-apply", "root", "render-apply"], bindings: ["direct", "alias", "destructured", "wrapper"],
@@ -600,7 +610,7 @@ export const SPEC = {
     // effect's compute no JSX boundary covers it, so `latest`/`is-pending` take no `render-compute` cell (SRU_PENDING_READS).
     legalLoading: { memo: ["latest", "is-pending"], jsx: ["latest", "is-pending"] },
     variantSources: { settled: ["module-hook-shared"] },
-    setup: (variant, name) => [variant === "memo" ? memoSignal(name("m")) : ["settled", "latest", "is-pending"].includes(variant) ? asyncSignal(name("a")) : variant === "store-link" || variant?.startsWith("store-escaped") ? storeNestedSignal(name("s"), 0) : variant === "store-deep" || variant === "store-snapshot" || variant === "merge-plain" ? storeSignal(name("s"), 0) : variant === "store-raw-root" ? storeRawSignal(name("s"), 0) : variant === "latest-store" || variant === "is-pending-store" ? storeAsyncSignal(name("s"), 0) : variant === "declared" ? asyncDeclaredSignal(name("a")) : variant === "maybe-sync" ? asyncMaybeSignal(name("a")) : WHOLE_STORE_READS[variant] ? (WHOLE_STORE_READS[variant].array ? storeArraySignal : WHOLE_STORE_READS[variant].empty ? storeEmptySignal : storeSignal)(name("s"), 0) : signal(name("r"), 3, "src")],
+    setup: (variant, name) => [variant === "memo" ? memoSignal(name("m")) : ["settled", "latest", "is-pending"].includes(variant) ? asyncSignal(name("a")) : variant === "store-link" || variant?.startsWith("store-escaped") ? storeNestedSignal(name("s"), 0) : variant === "store-deep" || variant === "store-snapshot" || variant === "merge-plain" ? storeSignal(name("s"), 0) : variant === "store-raw-root" ? storeRawSignal(name("s"), 0) : variant === "latest-store" || variant === "is-pending-store" ? storeAsyncSignal(name("s"), 0) : variant === "declared" ? asyncDeclaredSignal(name("a")) : variant === "maybe-sync" ? asyncMaybeSignal(name("a")) : WHOLE_STORE_READS[variant] ? (WHOLE_STORE_READS[variant].projection ? (n, i) => apiSignal(n, i, "projection") : WHOLE_STORE_READS[variant].then ? (n, i) => apiSignal(n, i, "store-then") : WHOLE_STORE_READS[variant].nested ? storeNestedSignal : WHOLE_STORE_READS[variant].array ? storeArraySignal : WHOLE_STORE_READS[variant].empty ? storeEmptySignal : storeSignal)(name("s"), 0) : signal(name("r"), 3, "src")],
     call: (node, sigs) => (WHOLE_STORE_READS[node.variant] ? member(sigs[0].name, WHOLE_STORE_READS[node.variant].text, WHOLE_STORE_READS[node.variant].imports) : INSTALLED_GETS[node.variant] ? member(sigs[0].name, INSTALLED_GETS[node.variant]) : node.variant === "merge-plain" ? member(sigs[0].name, (o) => `merge(${o}, { b: 2 }).b`, ["merge"]) : node.variant === "store-raw-root" ? member(sigs[0].name, (o) => `${o}.v`) : node.variant === "latest-name" ? api("latest", sigs[0].name, { locals: true }) : node.variant === "is-pending-name" ? api("isPending", sigs[0].name, { locals: true }) : node.variant === "latest-store" ? api("latest", `() => ${sigs[0].name}.v`, { locals: true }) : node.variant === "is-pending-store" ? api("isPending", `() => ${sigs[0].name}.v`, { locals: true }) : node.variant === "store-escaped" ? member(sigs[0].name, (o) => `untrack(() => ${o}.a).v`, ["untrack"]) : node.variant === "store-escaped-leaf" ? member(sigs[0].name, (o) => `untrack(() => ${o}.v)`, ["untrack"]) : node.variant === "labelled" ? member(sigs[0].name, (o) => `untrack(() => ${o}(), "scope")`, ["untrack"]) : node.variant === "store-deep" ? api("deep", sigs[0].name, { locals: true }) : node.variant === "store-snapshot" ? api("snapshot", sigs[0].name, { locals: true }) : node.variant === "uncalled-arith" ? member(sigs[0].name, (o) => `${o} - 1`) : node.variant === "uncalled-index" ? member(sigs[0].name, (o) => `[1, 2][${o}]`) : node.variant === "store-link" ? member(sigs[0].name, (o) => `${o}.a`) : pendingRead(node, sigs)),
   },
   NO_OWNER_CLEANUP: { legal: ["body", "memo", "effect-compute", "render-compute", "root"], recallLegal: [...RENDER_DRAINS, "zero-await-empty", "zero-await-var"], recallContexts: ASYNC_CONTROL, contexts: UNOWNED, bindings: BINDINGS, setup: () => [], call: () => api("onCleanup", "() => {}") },
@@ -1145,6 +1155,8 @@ const NM_PLACEMENT = nmPlacement();
 const FR_PLACEMENT = frPlacement();
 /** ADR 1090 G1 (pu-shapes.mjs, the review of be4990c64): a read after an await in a function whose promise looks unconsumed, which an async memo still awaits; recall contexts, one base shape. */
 const PU_PLACEMENT = puPlacement();
+/** ADR 1117 (js-shapes.mjs): the JS-semantics axis, the site in a helper a Proxy trap, getter, coercion hook, `Symbol.hasInstance`, computed key or tagged template runs after an async memo's await; recall contexts, one base shape. */
+const JS_PLACEMENT = jsPlacement();
 /** Batch 11 (la-shapes.mjs): a function assigned to a variable, a member or an element after its declaration and called through the name (`let h = () => {}; h = () => { <site> }; h();`), with its twins; recall contexts, one base shape. */
 const LA_PLACEMENT = laPlacement();
 /** Batch 11, slice 6 (er-shapes.mjs, the review of #220): the site in a function the host's callback reaches by a reference (a JSX-returning function held by a variable, a handler or a timer callback also saved or in an array, a generator root's callback stepped), with the twins that never run it; recall contexts, one base shape. */
@@ -1186,7 +1198,7 @@ const UNSEEN_ENTRY_PLACEMENT = Object.fromEntries(Object.keys(SPEC).filter((code
 export const HELPER_HANDED_CONTEXTS = { "helper-handed-call": "misuse", "helper-handed-handler": "legal" };
 const HELPER_HANDED_PLACEMENT = { STRICT_READ_UNTRACKED: { misuse: ["helper-handed-call"], legal: ["helper-handed-handler"] } };
 /** Contexts that take their base shapes only (matrix.mjs `recallAxes`): their question is the host's run, not the spelling at the site. */
-export const BASE_ONLY_CONTEXTS = () => [...TABLE_CONTEXT_NAMES, ...WRAP_CONTEXT_NAMES, ...ARM_CONTEXT_NAMES, ...SEAM_CONTEXT_NAMES, ...REF_LAYER_CONTEXT_NAMES, ...PL_CONTEXT_NAMES, ...ENTRY_CONTEXT_NAMES, ...OB_CONTEXT_NAMES, ...SF_CONTEXT_NAMES, ...RV_CONTEXT_NAMES, ...NM_CONTEXT_NAMES, ...LA_CONTEXT_NAMES, ...ER_CONTEXT_NAMES, ...EM_CONTEXT_NAMES, ...FC_CONTEXT_NAMES, ...PH_CONTEXT_NAMES, ...CS_CONTEXT_NAMES, ...PA_CONTEXT_NAMES, ...LF_CONTEXT_NAMES, ...FR_CONTEXT_NAMES, ...PU_CONTEXT_NAMES, ...API_CONTEXTS, ...Object.keys(FIRE_CONTEXTS), ...Object.keys(HANDLER_CONTEXTS), "handler-mixed", ...DEAD_CONTEXTS,
+export const BASE_ONLY_CONTEXTS = () => [...TABLE_CONTEXT_NAMES, ...WRAP_CONTEXT_NAMES, ...ARM_CONTEXT_NAMES, ...SEAM_CONTEXT_NAMES, ...REF_LAYER_CONTEXT_NAMES, ...PL_CONTEXT_NAMES, ...ENTRY_CONTEXT_NAMES, ...OB_CONTEXT_NAMES, ...SF_CONTEXT_NAMES, ...RV_CONTEXT_NAMES, ...NM_CONTEXT_NAMES, ...LA_CONTEXT_NAMES, ...ER_CONTEXT_NAMES, ...EM_CONTEXT_NAMES, ...FC_CONTEXT_NAMES, ...PH_CONTEXT_NAMES, ...CS_CONTEXT_NAMES, ...PA_CONTEXT_NAMES, ...LF_CONTEXT_NAMES, ...FR_CONTEXT_NAMES, ...PU_CONTEXT_NAMES, ...JS_CONTEXT_NAMES, ...API_CONTEXTS, ...Object.keys(FIRE_CONTEXTS), ...Object.keys(HANDLER_CONTEXTS), "handler-mixed", ...DEAD_CONTEXTS,
   ...Object.keys(KEPT_CONTEXTS), ...Object.keys(FLOW_UNTRACK_CONTEXTS), ...Object.keys(APPLY_VOID_CONTEXTS), ...APPLY_VOID_UNRUN,
   ...Object.keys(OWNED_UPDATER_CONTEXTS), ...ROW_DISPATCH_CONTEXTS, ...Object.keys(BODY_DISPATCH_CONTEXTS), ...Object.keys(UNSEEN_ENTRY_CONTEXTS)];
 
@@ -1298,13 +1310,13 @@ for (const context of ACTION_WINDOWED) SPEC.PRIMITIVE_IN_EFFECT_CALLBACK.recallV
 SPEC.NO_OWNER_CONTEXT.recallMountsNotIn = { "effect-error-arm": ["errored"], "reaction-error-arm": ["errored"] };
 // rc.21's `onFlush` and `action` test one guard (`owner && !CHILDREN_FORBIDDEN`, neither reads the disposal depth): every place
 // `action` is placed, `onFlush` is too, on both sides.
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT, TABLE_PLACEMENT, WRAP_PLACEMENT, ARM_PLACEMENT, SEAM_PLACEMENT, REF_LAYER_PLACEMENT, EM_PLACEMENT, PL_PLACEMENT, ENTRY_PLACEMENT, OB_PLACEMENT, SF_PLACEMENT, RV_PLACEMENT, NM_PLACEMENT, LA_PLACEMENT, ER_PLACEMENT, EM_PLACEMENT, FC_PLACEMENT, PH_PLACEMENT, CS_PLACEMENT, FR_PLACEMENT, PU_PLACEMENT]) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT, TABLE_PLACEMENT, WRAP_PLACEMENT, ARM_PLACEMENT, SEAM_PLACEMENT, REF_LAYER_PLACEMENT, EM_PLACEMENT, PL_PLACEMENT, ENTRY_PLACEMENT, OB_PLACEMENT, SF_PLACEMENT, RV_PLACEMENT, NM_PLACEMENT, LA_PLACEMENT, ER_PLACEMENT, EM_PLACEMENT, FC_PLACEMENT, PH_PLACEMENT, CS_PLACEMENT, FR_PLACEMENT, PU_PLACEMENT, JS_PLACEMENT]) {
   const action = placement.ACTION_CALLED_IN_OWNED_SCOPE;
   if (action) placement.ON_FLUSH_IN_OWNED_SCOPE = { misuse: [...(action.misuse ?? [])], legal: [...(action.legal ?? [])] };
 }
 SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts = [...new Set([...SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallContexts, ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.recallContexts])];
 SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal = [...new Set([...(SPEC.ON_FLUSH_IN_OWNED_SCOPE.recallLegal ?? []), ...SPEC.ACTION_CALLED_IN_OWNED_SCOPE.legal.filter((context) => !SPEC.ON_FLUSH_IN_OWNED_SCOPE.legal.includes(context))])];
-for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT, TABLE_PLACEMENT, WRAP_PLACEMENT, ARM_PLACEMENT, SEAM_PLACEMENT, REF_LAYER_PLACEMENT, EM_PLACEMENT, PL_PLACEMENT, ENTRY_PLACEMENT, OB_PLACEMENT, SF_PLACEMENT, RV_PLACEMENT, NM_PLACEMENT, LA_PLACEMENT, ER_PLACEMENT, EM_PLACEMENT, FC_PLACEMENT, PH_PLACEMENT, CS_PLACEMENT, PA_PLACEMENT, LF_PLACEMENT, FR_PLACEMENT, PU_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
+for (const placement of [REF_PLACEMENT, POS_PLACEMENT, FLOW_PLACEMENT, CBP_PLACEMENT, EFFECT_WINDOW_PLACEMENT, ACTION_STEP_PLACEMENT, THUNK_PLACEMENT, API_CONTEXT_PLACEMENT, EQUIVALENT_PLACEMENT, LATER_RUN_PLACEMENT, ASYNC_FAMILY_PLACEMENT, FLUSH_DRAIN_PLACEMENT, GATE_PLACEMENT, UPDATER_DISPATCH_PLACEMENT, UNSEEN_ENTRY_PLACEMENT, HELPER_HANDED_PLACEMENT, TABLE_PLACEMENT, WRAP_PLACEMENT, ARM_PLACEMENT, SEAM_PLACEMENT, REF_LAYER_PLACEMENT, EM_PLACEMENT, PL_PLACEMENT, ENTRY_PLACEMENT, OB_PLACEMENT, SF_PLACEMENT, RV_PLACEMENT, NM_PLACEMENT, LA_PLACEMENT, ER_PLACEMENT, EM_PLACEMENT, FC_PLACEMENT, PH_PLACEMENT, CS_PLACEMENT, PA_PLACEMENT, LF_PLACEMENT, FR_PLACEMENT, PU_PLACEMENT, JS_PLACEMENT]) for (const [code, { misuse = [], legal = [] }] of Object.entries(placement)) {
   const has = new Set([...SPEC[code].contexts, ...(SPEC[code].recallContexts ?? [])]);
   const hasLegal = new Set([...(SPEC[code].legal ?? []), ...(SPEC[code].recallLegal ?? [])]);
   SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...misuse.filter((context) => !has.has(context))];
@@ -1819,7 +1831,7 @@ function zeroRunContext(where, form, stmts, kit) {
 
 function inContext(context, stmts, kit) {
   if (context === "evt-apply-owned-flush") return ownedFlushContext(stmts, kit);
-  const flipped = flipReadContext(context, stmts, kit) ?? flipWriteContext(context, stmts, kit) ?? flipGenContext(context, stmts, kit) ?? tableContext(context, stmts, kit) ?? wrapContext(context, stmts, kit) ?? armContext(context, stmts, kit) ?? seamContext(context, stmts, kit) ?? refLayerContext(context, stmts, kit) ?? emContext(context, stmts, kit) ?? plContext(context, stmts, kit) ?? entryContext(context, stmts, kit) ?? obContext(context, stmts, kit, (host, inner) => inContext(host, inner, kit)) ?? sfContext(context, stmts, kit) ?? rsContext(context, stmts, kit) ?? rmContext(context, stmts, kit, (host, inner) => inContext(host, inner, kit)) ?? nmContext(context, stmts, kit, (host, inner) => inContext(host, inner, kit)) ?? laContext(context, stmts, kit) ?? erContext(context, stmts, kit) ?? emContext(context, stmts, kit) ?? fcContext(context, stmts, kit) ?? phContext(context, stmts, kit) ?? csContext(context, stmts, kit) ?? paContext(context, stmts, kit) ?? lfContext(context, stmts, kit) ?? frContext(context, stmts, kit, (host, inner) => inContext(host, inner, kit)) ?? puContext(context, stmts, kit);
+  const flipped = flipReadContext(context, stmts, kit) ?? flipWriteContext(context, stmts, kit) ?? flipGenContext(context, stmts, kit) ?? tableContext(context, stmts, kit) ?? wrapContext(context, stmts, kit) ?? armContext(context, stmts, kit) ?? seamContext(context, stmts, kit) ?? refLayerContext(context, stmts, kit) ?? emContext(context, stmts, kit) ?? plContext(context, stmts, kit) ?? entryContext(context, stmts, kit) ?? obContext(context, stmts, kit, (host, inner) => inContext(host, inner, kit)) ?? sfContext(context, stmts, kit) ?? rsContext(context, stmts, kit) ?? rmContext(context, stmts, kit, (host, inner) => inContext(host, inner, kit)) ?? nmContext(context, stmts, kit, (host, inner) => inContext(host, inner, kit)) ?? laContext(context, stmts, kit) ?? erContext(context, stmts, kit) ?? emContext(context, stmts, kit) ?? fcContext(context, stmts, kit) ?? phContext(context, stmts, kit) ?? csContext(context, stmts, kit) ?? paContext(context, stmts, kit) ?? lfContext(context, stmts, kit) ?? frContext(context, stmts, kit, (host, inner) => inContext(host, inner, kit)) ?? puContext(context, stmts, kit) ?? jsContext(context, stmts, kit);
   if (flipped) return flipped;
   if (context.startsWith("dny-")) return deniedContext(context, stmts, kit);
   const zero = /^zero-(body|settled|await)-(empty|var)$/.exec(context);
@@ -1880,6 +1892,17 @@ function inContext(context, stmts, kit) {
       if (context === "evt-body-dispatch") return { body: [...made, fire], view: [] };
       if (context === "evt-apply-dispatch") return { body: [...made, expr(prim("effect", fn([ret(num(1))]), { apply: fn([fire]) }))], view: [] };
       return { body: made, view: [button(kit.name("b"), [fire])] };
+    }
+    // ADR 1115: a detached element's `onScroll` (a listener on the element itself, not delegated) holds the site; the element is moved
+    // into a shadow tree and an effect's apply dispatches the event. A listener in a shadow tree runs with `window.event` unset (rc.21
+    // `dev-shared.js:5796, 5803`), so the apply's strict-read window, keyed on its queue's event, holds for the read: Chrome warns.
+    case "evt-apply-dispatch-shadow": {
+      const host = kit.name("host"), el = kit.name("el");
+      // Detached: nothing can click it (`undriven`); the dispatch is the driver.
+      const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onScroll", undriven: true })));
+      const attach = expr(domExpr(`document.createElement("div").attachShadow({ mode: "open" }).appendChild(${el} as HTMLElement)`));
+      const fire = expr(domExpr(`(${el} as HTMLElement).dispatchEvent(new Event("scroll"))`));
+      return { body: [made, attach, expr(prim("effect", fn([ret(num(1))]), { apply: fn([fire]) }))], view: [] };
     }
     // ADR 0639: `flush()`'s guard takes no event, and the dispatch that reaches it may sit in a helper or on `window`.
     case "evt-apply-helper-dispatch": {

@@ -171,7 +171,7 @@ fn standard_call_runs_nothing(
 }
 
 /// ADR 0999: whether some installed package the program loads writes the global a call goes through: the callee's own name (`fetch(…)`), or the global its receiver
-/// is (`JSON.parse(…)`, `window.fetch(…)`: the root of the member chain). Every writer counts, a package whose closure names no Solid package too: it runs no action,
+/// is (`JSON.parse(…)`, `window.fetch(…)`: the root of the member chain), or the method a package writes on a built-in's prototype (ADR 1108). Every writer counts, a package whose closure names no Solid package too: it runs no action,
 /// but it may run a function of the project it was handed. A name no unbound identifier spells answers by the any-name writers alone.
 fn package_writes_global(
     ctx: &AnalysisContext<'_>,
@@ -181,12 +181,28 @@ fn package_writes_global(
     let Some(reach) = ctx.package_reach else {
         return false;
     };
-    if reach.global_writers.is_empty() && reach.global_writers_any.is_empty() {
+    if reach.global_writers.is_empty()
+        && reach.global_writers_any.is_empty()
+        && reach.prototype_writers.is_empty()
+        && reach.prototype_writers_any.is_empty()
+    {
         return false;
     }
     let ast = &file.ast;
     let mut names = Vec::new();
     let mut at = ast.peel_ts_sugar_span(callee);
+    // ADR 1108: a method a package writes on a built-in's prototype is that package's function wherever the receiver inherits it (the callee's own member name).
+    if let Some(member) = ast.member_at(at)
+        && (!reach.prototype_writers_any.is_empty()
+            || if ast.computed_members.contains(&member.span) {
+                !reach.prototype_writers.is_empty()
+            } else {
+                file.source_text(member.property)
+                    .is_some_and(|name| reach.prototype_writers.contains_key(name))
+            })
+    {
+        return true;
+    }
     while let Some(member) = ast.member_at(at) {
         if !ast.computed_members.contains(&member.span)
             && let Some(name) = file.source_text(member.property)
@@ -577,9 +593,17 @@ fn argument_is_inert(
             // fact, an unread package included), a library that reads a member of the literal (`JSON.stringify` looks up `toJSON`) runs project code.
             && (!matches!(argument.literal_value, ArgumentLiteralFact::Object(_))
                 || !object_prototype_touched()))
-        || ctx
-            .semantic_lookup
-            .proven_primitive(file, argument.span, PROOF_DEPTH)
+        // ADR 1097 (the reviews of its widening): `proven_primitive` proves a value's kind, not that computing it runs no code (`"k" in px` reaches a
+        // Proxy's `has` trap, `x instanceof K` `Symbol.hasInstance`, `${host}` a `toString`). An argument is inert by it only when it is a name
+        // the program declares: reading one runs nothing.
+        || (crate::owners::is_identifier_span(file, file.ast.peel_ts_sugar_span(argument.span))
+            && file
+                .ast
+                .reference_declaration(file.ast.peel_ts_sugar_span(argument.span))
+                .is_some()
+            && ctx
+                .semantic_lookup
+                .proven_primitive(file, argument.span, PROOF_DEPTH))
         // ADR 0984: a `let` timer handle every reference of which is a proven write or a clear, in a browser.
         || super::timer_handle::is_timer_handle(ctx, file, argument.span)
 }

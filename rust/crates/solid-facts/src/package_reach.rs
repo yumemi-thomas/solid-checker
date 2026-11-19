@@ -66,6 +66,13 @@ pub const WRITE_PREFIX: &str = "global-write:";
 /// run, and the row says the package may write it, not that it does.
 pub const WRITE_ANY_PREFIX: &str = "global-write-any:";
 
+/// ADR 1108: the prefix of a site's pseudo-path for a call of a method the standard library declares that an installed package writes on a built-in's prototype at run
+/// time (`prototype-write:<name>:<writer root>`): the call runs the writer's code, whatever type the library declares the method with. Its verdict is the writer's.
+pub const PROTOTYPE_WRITE_PREFIX: &str = "prototype-write:";
+
+/// ADR 1108: [`PROTOTYPE_WRITE_PREFIX`] for a writer that may write a built-in's prototype under a key nothing decides (`prototype-write-any:<name>:<writer root>`).
+pub const PROTOTYPE_WRITE_ANY_PREFIX: &str = "prototype-write-any:";
+
 /// The prefix of a site's pseudo-path for a member of the global object read by a key the program does not spell (`window[key]`, `const { [key]: value } = window`, a rest
 /// element of a destructuring of it): any global may be the one read, so the code is that of a package that writes any (`global-read-any:<writer root>`). Its verdict is the
 /// writer's (ADR 0974).
@@ -187,6 +194,12 @@ pub struct PackageReachIndex {
     /// The packages whose closure may define an accessor on the global object under a name nothing in the file decides, or change its prototype: a read of any global
     /// may run their code (see [`PackageReachIndex::global_accessor_writers_of`]).
     pub global_accessor_writers_any: std::collections::BTreeSet<String>,
+    /// ADR 1108: the packages whose closure writes a member of each name on a built-in's prototype (`Float32Array.prototype.reverse = …`), by root: every object of that
+    /// built-in inherits it, so a call of a method the standard library declares under that name may run their code.
+    pub prototype_writers: BTreeMap<String, std::collections::BTreeSet<String>>,
+    /// ADR 1108: the packages whose closure may write a built-in's prototype under a name nothing decides (a key the syntax does not fix, the prototype or the global
+    /// object handed on, generated code, code nobody read): a call of any method the standard library declares may run their code.
+    pub prototype_writers_any: std::collections::BTreeSet<String>,
     /// Why the code a package's closure runs is not all seen, by installed package root (the second re-check of #232): a file of the closure the build reached names
     /// `Object.prototype` or builds code as a string (`names Object.prototype`, `generates code`), or the closure is not read to its end (a file or a load the walk cannot
     /// read: `undecided: <blocker>`). A package that gives a shared prototype an accessor reads any key through it, and nothing in the project shows the read; an
@@ -330,6 +343,46 @@ impl PackageReachIndex {
             .map(String::as_str)
     }
 
+    /// ADR 1108: the roots of the installed packages whose closure writes a member `name` on a built-in's prototype and may reach a Solid action, with whether each writes
+    /// it by that name or may write a prototype under a key nothing decides: a call of a method the standard library declares under `name` runs the code of the first, by name
+    /// then by root. Empty when no installed package the program loads writes one, or each that does is clear.
+    pub fn prototype_writers_of<'a>(
+        &'a self,
+        name: &str,
+    ) -> impl Iterator<Item = (&'a str, bool)> + 'a {
+        let by_name = self.prototype_writers.get(name);
+        let any = self
+            .prototype_writers_any
+            .iter()
+            .filter(move |root| !by_name.is_some_and(|roots| roots.contains(*root)));
+        by_name
+            .into_iter()
+            .flatten()
+            .map(|root| (root, true))
+            .chain(any.map(|root| (root, false)))
+            .filter(|(root, _)| {
+                self.by_root
+                    .get(root.as_str())
+                    .is_none_or(|reach| !reach.is_clear())
+            })
+            .map(|(root, named)| (root.as_str(), named))
+    }
+
+    /// ADR 1108: the roots of the installed packages whose closure writes any member on a built-in's prototype and may reach a Solid action: a call of a standard-library
+    /// method by a key the program does not spell may run their code.
+    pub fn prototype_writers_of_unspelled<'a>(&'a self) -> impl Iterator<Item = &'a str> + 'a {
+        self.prototype_writers
+            .values()
+            .flatten()
+            .chain(self.prototype_writers_any.iter())
+            .filter(|root| {
+                self.by_root
+                    .get(root.as_str())
+                    .is_none_or(|reach| !reach.is_clear())
+            })
+            .map(String::as_str)
+    }
+
     /// Whether any installed package the program loads defines, or may define, an accessor on the global object: where none does, no read of a global runs a package's code
     /// and the questions [`Self::global_accessor_writers_of`] and [`Self::global_accessor_writers_of_unspelled`] answer nothing.
     #[must_use]
@@ -364,6 +417,8 @@ impl PackageReachIndex {
             || path.starts_with(WRITE_PREFIX)
             || path.starts_with(WRITE_ANY_PREFIX)
             || path.starts_with(READ_ANY_PREFIX)
+            || path.starts_with(PROTOTYPE_WRITE_PREFIX)
+            || path.starts_with(PROTOTYPE_WRITE_ANY_PREFIX)
             || self.project_js.contains(path)
         {
             return AccessorFacts::open();
@@ -386,6 +441,8 @@ impl PackageReachIndex {
         if let Some(written) = path
             .strip_prefix(WRITE_PREFIX)
             .or_else(|| path.strip_prefix(WRITE_ANY_PREFIX))
+            .or_else(|| path.strip_prefix(PROTOTYPE_WRITE_PREFIX))
+            .or_else(|| path.strip_prefix(PROTOTYPE_WRITE_ANY_PREFIX))
         {
             // `global-write:<name>:<writer root>`: the writer's closure decides.
             let (name, root) = written.split_once(':').unwrap_or((written, ""));

@@ -25,7 +25,7 @@ import { EXPORT_FORMS, BEHAVIOURS, isPackageForm, behaviourOf, resultOf } from "
 export const VERSION = 1;
 
 /** Helper forms: a same-file function taking `cb: () => unknown`. */
-export const HELPER_FORMS = ["call", "defaultCall", "returnClosure", "returnCb", "storeCb", "timerCb", "microCb", "thenCb"];
+export const HELPER_FORMS = ["call", "defaultCall", "returnClosure", "returnCb", "storeCb", "timerCb", "microCb", "thenCb", "tryThrowCall"];
 /** `prim` names: the Solid primitive or host API a function expression is handed to. */
 export const PRIMS = ["memo", "effect", "untrack", "root", "owner", "settled", "cleanup", "timer", "then", "rootd", "micro", "render", "tracked", "action", "reaction", "resolve", "until",
   // ADR 0940 (primitive-layer-shapes.mjs): `latest(fn)` and `isPending(fn)` run `fn` in place, as `untrack` does, and hand its value back.
@@ -336,7 +336,7 @@ function helperResult(form, supplied, arg) {
     }
   }
   switch (form) {
-    case "call": case "timerCb": case "microCb": case "thenCb": return T.num;
+    case "call": case "timerCb": case "microCb": case "thenCb": case "tryThrowCall": return T.num;
     case "returnClosure": return T.fn(T.unknown);
     case "returnCb": return T.fn(T.unknown);
     case "storeCb": return T.obj({ cb: T.fn(T.unknown) });

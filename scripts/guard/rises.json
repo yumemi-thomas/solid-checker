@@ -4845,6 +4845,167 @@
    "to": 5,
    "adr": "ADR 1104",
    "fact": "part 2: store-sub-value-flow gains two pattern-parameter rows (a carrier a project function destructures has a row at the read); additions only, all uncertifiable"
+  },
+  {
+   "fixture": "reactive-ir/after-await-exact-callbacks",
+   "key": "SC1001 function-run-unplaced",
+   "from": 2,
+   "to": 5,
+   "adr": "ADR 1112",
+   "fact": "window_after_awaits: a for-await body read is Unknown (implicit suspension), so its function-run-unplaced rows stand",
+   "why": "a compute held by an object slot reads in a for-await body: unplaced, not silent"
+  },
+  {
+   "fixture": "reactive-ir/dead-site-empty-collection",
+   "key": "SC2001 function-unentered",
+   "from": 9,
+   "to": 10,
+   "adr": "ADR 1109",
+   "fact": "dead-site-empty-collection NamedEmpty: a const holding [] read only by forEach never runs its callback (function-unentered, was a violation)"
+  },
+  {
+   "fixture": "reactive-ir/owner-carrier-provably-runs",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 5,
+   "to": 6,
+   "adr": "ADR 1109",
+   "fact": "owner-carrier-provably-runs SortOne: [1].sort(hf) never runs hf, so its useContext row is relabeled from function-run-unplaced (still uncertifiable)"
+  },
+  {
+   "fixture": "reactive-ir/accessor-provenance",
+   "key": "SC1001 function-run-unplaced",
+   "from": 16,
+   "to": 17,
+   "adr": "ADR 1111",
+   "fact": "a function the body also calls by name where untracked reads are reported is unplaced: U at its own read, the V through it stays"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-unread-packages",
+   "key": "SC2002 package-may-call-action",
+   "from": 24,
+   "to": 25,
+   "adr": "ADR 1108",
+   "fact": "a call of a standard-library method (map, forEach) where a loaded package is undecided or hands window on, so it may write any built-in's prototype"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-walk",
+   "key": "SC2002 package-may-call-action",
+   "from": 35,
+   "to": 41,
+   "adr": "ADR 1108",
+   "fact": "a call of a standard-library method (map, forEach) where a loaded package is undecided or hands window on, so it may write any built-in's prototype"
+  },
+  {
+   "fixture": "reactive-ir/write-legality-proofs",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 12,
+   "to": 22,
+   "adr": "ADR 1097",
+   "fact": "argument_is_inert: proven_primitive only for a declared name (an operator, coercion or negated literal argument is not inert)",
+   "why": "the reviews of ADR 1097's widening: in, instanceof, coercion and computed keys run project code with no call"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 1097",
+   "fact": "argument_is_inert: proven_primitive only for a declared name (an operator, coercion or negated literal argument is not inert)",
+   "why": "the reviews of ADR 1097's widening: in, instanceof, coercion and computed keys run project code with no call"
+  },
+  {
+   "fixture": "reactive-ir/after-await-class-value",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 1,
+   "to": 5,
+   "adr": "ADR 1113",
+   "fact": "operator-after-suspension: an operand coerced or probed (template, +, relational, ++/--, in) with no Type Facts primitive domain, or any instanceof/delete, after an await or in a promise handler",
+   "why": "the operator may reach toString/valueOf/Symbol.toPrimitive or a Proxy trap; no fact proves it runs no project code"
+  },
+  {
+   "fixture": "reactive-ir/after-await-net",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 11,
+   "to": 13,
+   "adr": "ADR 1113",
+   "fact": "operator-after-suspension: an operand coerced or probed (template, +, relational, ++/--, in) with no Type Facts primitive domain, or any instanceof/delete, after an await or in a promise handler",
+   "why": "the operator may reach toString/valueOf/Symbol.toPrimitive or a Proxy trap; no fact proves it runs no project code"
+  },
+  {
+   "fixture": "reactive-ir/after-await-store-paths",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 3,
+   "to": 5,
+   "adr": "ADR 1113",
+   "fact": "operator-after-suspension: an operand coerced or probed (template, +, relational, ++/--, in) with no Type Facts primitive domain, or any instanceof/delete, after an await or in a promise handler",
+   "why": "the operator may reach toString/valueOf/Symbol.toPrimitive or a Proxy trap; no fact proves it runs no project code"
+  },
+  {
+   "fixture": "reactive-ir/jsx-creation-sites",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1113",
+   "fact": "operator-after-suspension: an operand coerced or probed (template, +, relational, ++/--, in) with no Type Facts primitive domain, or any instanceof/delete, after an await or in a promise handler",
+   "why": "the operator may reach toString/valueOf/Symbol.toPrimitive or a Proxy trap; no fact proves it runs no project code"
+  },
+  {
+   "fixture": "reactive-ir/member-routes-after-await",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 12,
+   "to": 17,
+   "adr": "ADR 1113",
+   "fact": "operator-after-suspension: an operand coerced or probed (template, +, relational, ++/--, in) with no Type Facts primitive domain, or any instanceof/delete, after an await or in a promise handler",
+   "why": "the operator may reach toString/valueOf/Symbol.toPrimitive or a Proxy trap; no fact proves it runs no project code"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 1113",
+   "fact": "operator-after-suspension: an operand coerced or probed (template, +, relational, ++/--, in) with no Type Facts primitive domain, or any instanceof/delete, after an await or in a promise handler",
+   "why": "the operator may reach toString/valueOf/Symbol.toPrimitive or a Proxy trap; no fact proves it runs no project code"
+  },
+  {
+   "fixture": "reactive-ir/destructure-store-placement",
+   "key": "SC1003 callee-callback-timing",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1107",
+   "fact": "destructure-store-placement: a store destructure setup does not provably run takes SC1001's blocker for its slots (callee-callback-timing, host-callback-timing, summary-read-unplaced, relabels of ADR 1106's U); store-strict-read-keys DestructuredThen: a destructure whose every slot is `then` is store-key-undecided (the then Get does not warn; main's V was a false positive)"
+  },
+  {
+   "fixture": "reactive-ir/destructure-store-placement",
+   "key": "SC1003 host-callback-timing",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1107",
+   "fact": "destructure-store-placement: a store destructure setup does not provably run takes SC1001's blocker for its slots (callee-callback-timing, host-callback-timing, summary-read-unplaced, relabels of ADR 1106's U); store-strict-read-keys DestructuredThen: a destructure whose every slot is `then` is store-key-undecided (the then Get does not warn; main's V was a false positive)"
+  },
+  {
+   "fixture": "reactive-ir/destructure-store-placement",
+   "key": "SC1003 summary-read-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1107",
+   "fact": "destructure-store-placement: a store destructure setup does not provably run takes SC1001's blocker for its slots (callee-callback-timing, host-callback-timing, summary-read-unplaced, relabels of ADR 1106's U); store-strict-read-keys DestructuredThen: a destructure whose every slot is `then` is store-key-undecided (the then Get does not warn; main's V was a false positive)"
+  },
+  {
+   "fixture": "reactive-ir/store-strict-read-keys",
+   "key": "SC1003 store-key-undecided",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1107",
+   "fact": "destructure-store-placement: a store destructure setup does not provably run takes SC1001's blocker for its slots (callee-callback-timing, host-callback-timing, summary-read-unplaced, relabels of ADR 1106's U); store-strict-read-keys DestructuredThen: a destructure whose every slot is `then` is store-key-undecided (the then Get does not warn; main's V was a false positive)"
+  },
+  {
+   "fixture": "reactive-ir/past-await-owner-observer",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 1114",
+   "fact": "family 1: a write chain's Gets before its terminal Set are read sites; past-await-owner-observer gains the chain's read prefix after the await (uncertifiable)"
   }
  ]
 }
