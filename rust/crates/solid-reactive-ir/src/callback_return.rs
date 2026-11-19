@@ -494,9 +494,10 @@ fn context_read(lookup: &SemanticLookup<'_>, file: &FileFacts, call: &CallFact) 
         && file.ast.straight_line_calls.contains(&call.span)
         && call.arguments.len() == 1
         && !call.arguments[0].spread
+        // The call must be resolved, and not by a recovery: a missing record is no evidence (fail closed).
         && lookup
             .resolved_callee_call(file, call.callee)
-            .is_none_or(|resolved| resolved.validity != typefacts::ResolvedCallValidity::Recovery)
+            .is_some_and(|resolved| resolved.validity != typefacts::ResolvedCallValidity::Recovery)
 }
 
 /// The `const` of one name, in `file`, that the identifier reference at `span`

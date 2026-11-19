@@ -337,6 +337,14 @@
       "default-on-missing": {
         "count": 1,
         "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "ADR 1123: the provider element's attribute key `value` is JSX syntax (the dialect provider form's one prop), read from the attribute fact, not a binding or callee identified by spelling"
+      },
+      "primitive-name-match": {
+        "count": 3,
+        "why": "ADR 1123: the primitive comes from the exact call resolution (`primitive_at_call`, a resolved Solid export); the enum names which of the dialect's primitives the context arm takes (createContext, useContext), no name is matched"
       }
     },
     "rust/crates/solid-reactive-ir/src/carrier_runs.rs": {
