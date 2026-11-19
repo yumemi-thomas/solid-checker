@@ -475,52 +475,6 @@ fn push_fact(
     });
 }
 
-/// ADR 1125: whether the value of the expression at `node` is provably neither called nor kept ([`ComputedKeyFact::value_inert`]).
-fn value_inert(semantic: &Semantic<'_>, node: NodeId) -> bool {
-    let nodes = semantic.nodes();
-    let mut child = node;
-    loop {
-        let parent = nodes.parent_id(child);
-        if parent == child {
-            return false;
-        }
-        let child_span = nodes.kind(child).span();
-        match nodes.kind(parent) {
-            // The value passes through: judge the parent's own position.
-            AstKind::ParenthesizedExpression(_)
-            | AstKind::TSAsExpression(_)
-            | AstKind::TSSatisfiesExpression(_)
-            | AstKind::TSNonNullExpression(_)
-            | AstKind::TSTypeAssertion(_)
-            | AstKind::LogicalExpression(_) => child = parent,
-            AstKind::ConditionalExpression(conditional) => {
-                if conditional.test.span() == child_span {
-                    return true;
-                }
-                child = parent;
-            }
-            AstKind::UnaryExpression(unary) => return unary.operator != UnaryOperator::Delete,
-            AstKind::BinaryExpression(binary) => {
-                return binary.operator != BinaryOperator::Instanceof;
-            }
-            AstKind::IfStatement(statement) => return statement.test.span() == child_span,
-            AstKind::WhileStatement(statement) => return statement.test.span() == child_span,
-            AstKind::DoWhileStatement(statement) => return statement.test.span() == child_span,
-            AstKind::ForStatement(statement) => {
-                return statement
-                    .test
-                    .as_ref()
-                    .is_some_and(|test| test.span() == child_span);
-            }
-            AstKind::ComputedMemberExpression(member) => {
-                return member.expression.span() == child_span;
-            }
-            AstKind::ExpressionStatement(_) => return true,
-            _ => return false,
-        }
-    }
-}
-
 /// Every read under a computed key that nothing proves is a number, a symbol or a plain non-text value, in source order of the read: see [`ComputedKeyFact`].
 pub(super) fn computed_keys(semantic: &Semantic<'_>, resolve: bool) -> Vec<ComputedKeyFact> {
     let mut prover = Prover {
@@ -537,7 +491,7 @@ pub(super) fn computed_keys(semantic: &Semantic<'_>, resolve: bool) -> Vec<Compu
                 if literal_property_key(&member.expression).is_none() =>
             {
                 let proof = prover.expression(&member.expression, 0);
-                let inert = value_inert(semantic, node.id());
+                let inert = crate::kernel::value_inert(semantic, node.id());
                 push_fact(
                     &mut facts,
                     ComputedKeySite::Member,
