@@ -11173,6 +11173,886 @@
      }
     }
    }
+  },
+  "table:Array.forEach:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:Array.map:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:Array.flatMap:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:Array.filter:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:Array.some:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:Array.every:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:Array.find:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:Array.findIndex:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:Array.reduce:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:Array.reduceRight:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:ReadonlyArray.forEach:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:ReadonlyArray.map:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:ReadonlyArray.flatMap:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:ReadonlyArray.filter:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:ReadonlyArray.some:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:ReadonlyArray.every:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:ReadonlyArray.find:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:ReadonlyArray.findIndex:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:ReadonlyArray.reduce:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:ReadonlyArray.reduceRight:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:Array.sort:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:Array.sort:b/one": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
   }
  },
  "arms": {

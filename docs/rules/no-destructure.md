@@ -110,3 +110,10 @@ literal. A read of one member (`createSignal(props.a)`) is `strict-read-untracke
 this rule's. A first parameter is a props pattern whatever follows it.
 
 A violation stands only where setup provably runs the destructure: at module scope or in a component's body, through layers that run in place there. A destructure in a helper the body calls, an effect's apply, an `untrack` callback, a ref's application, a function nested in a named callback, a listener or an object's method is uncertifiable ([ADR 1106](../decisions.md#adr-1106)).
+
+ADR 1109: a destructure in a callback a carrier provably never runs (a `const` holding `[]` that
+only iterations read, a one-element `sort`) is uncertifiable (`function-unentered`). A store
+destructured in a standard inline callback's parameter (`[store].map(({ v }) => v)`) is an SC9012
+`value-in-carrier` row. A callback a helper calls on some path only (`if (c) f()`, or after a
+statement that may throw in a `try` whose `catch` completes normally) stays a violation: the path
+counts as reachable.

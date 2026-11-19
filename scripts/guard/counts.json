@@ -4170,6 +4170,16 @@
       "kind": "relabel",
       "relabeledTo": "SC3001 leaf-operation-unaccounted",
       "note": "1b: `String(value())` is proven to answer a primitive (ADR 0320), so the census no longer follows the value through its result and files no carrier row at the call; the read `value()` keeps its own row, and the call keeps the leaf and effect-creation obligations (SC3001, SC6002) that stand where no census row does: still uncertifiable"
+    },
+    {
+      "fixture": "reactive-ir/owner-carrier-provably-runs",
+      "key": "SC4001 function-run-unplaced",
+      "from": 7,
+      "to": 6,
+      "adr": "ADR 1109",
+      "kind": "relabel",
+      "relabeledTo": "SC4001 owner-callers-unenumerated",
+      "note": "SortOne: `[1].sort(hf)` never runs `hf` (a one-element sort compares nothing), so the `useContext` in it is no longer placed through the carrier and keeps the owner's own blocker; still uncertifiable"
     }
   ],
   "renames": []

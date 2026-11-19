@@ -26440,5 +26440,41 @@
    "mx-store-write-outside-setter-memo-async-for-await-nested-assign-hook-none-cb-bundle"
   ],
   "rediscovered": "main 28fde14bf (release): focus --runtime-diff all by id, 8 secondary-false-clean (exit 1); this fix: 8 agree, nothing needs a look (exit 0)"
+ },
+ {
+  "finding": "ADR 1109 P1: a helper that calls its parameter after a statement that may throw, in a `try` whose `catch` completes normally (`function h(f) { try { JSON.parse(\"x\"); f(); } catch {} }`), was taken to call it on every completion: the callback's read was an SC1001 violation where Chrome never runs it",
+  "found": "the ADR 1106 review (coord-land/review-1106.md, section 2 P1/P2 and F2), Node probes; Chrome case fixtures/runtime-oracle/callback-runs-1109 on main 28fde14bf, 2026-11-19",
+  "fixed": "ADR 1109 (`swallowing_try_blocks`, facts schema 98: the `try` blocks a throw in which may end in a normal completion; ADR 0277's parameter proof, `parameter_completion_slot`, does not count a call in one)",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-try-helper-never-signal-direct-none",
+   "lg-strict-read-untracked-try-helper-never-memo-direct-none"
+  ],
+  "rediscovered": "main 28fde14bf (release) on the ADR 1109 selection (legal.mjs/matrix.mjs --grid --recall --recall-full --ids: every new context of lg-recall, the direct-none store-map programs of mx-recall): try-helper-never has 1,392 unexecuted violations and 40 false positives; the fix: 0 (uncertifiable or clean). SC1003 keeps a violation for a destructure there (a call on some path of a helper counts as reachable, docs/open-work.md); the grid has no store-destructure binding in this context"
+ },
+ {
+  "finding": "ADR 1109 P2: a standard inline callback that never runs, on a `const` holding `[]` whose only reference is the receiver (`const xs: number[] = []; xs.forEach(f)`) or a one-element `sort` (`[1].sort(cmp)`), was a violation (ADR 1019 covered only a literal receiver)",
+  "found": "the ADR 1106 review (coord-land/review-1106.md, section 2 P1/P2 and F2), Node probes; Chrome case fixtures/runtime-oracle/callback-runs-1109 on main 28fde14bf, 2026-11-19",
+  "fixed": "ADR 1109 (`carrier_runs.rs` `carrier_provably_never_runs`: `empty_array_name`, and `sort`/`toSorted` on one element; uncertifiable `function-unentered`)",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-tbl-array-foreach-zeroname-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-tbl-array-sort-one-signal-direct-none"
+  ],
+  "rediscovered": "main 28fde14bf (release) on the ADR 1109 selection (legal.mjs/matrix.mjs --grid --recall --recall-full --ids: every new context of lg-recall, the direct-none store-map programs of mx-recall): the new table variants `zeroname` and `one` have 84 and 4 unexecuted violations; the fix: 0"
+ },
+ {
+  "finding": "ADR 1109 F2: a store handed through a standard inline callback's parameter (`[store].map(({ v }) => v)`, `[store].map((s) => s.v)`) had no row of any rule while Chrome rc.21 warns STRICT_READ_UNTRACKED",
+  "found": "the ADR 1106 review (coord-land/review-1106.md, section 2 P1/P2 and F2), Node probes; Chrome case fixtures/runtime-oracle/callback-runs-1109 on main 28fde14bf, 2026-11-19",
+  "fixed": "ADR 1109 (`value_use.rs`: a root a standard method hands to an inline callback is SC9012 `value-in-carrier`)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-store-map-dstr-direct-none",
+   "mx-strict-read-untracked-body-store-map-member-direct-none"
+  ],
+  "rediscovered": "main 28fde14bf (release) on the ADR 1109 selection (legal.mjs/matrix.mjs --grid --recall --recall-full --ids: every new context of lg-recall, the direct-none store-map programs of mx-recall): 174 false cleans of 309; the fix: 0 (307 recall-gap, 2 harness: the class-field position records no runtime run)"
  }
 ]

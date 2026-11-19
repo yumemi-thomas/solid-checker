@@ -4854,6 +4854,22 @@
    "adr": "ADR 1112",
    "fact": "window_after_awaits: a for-await body read is Unknown (implicit suspension), so its function-run-unplaced rows stand",
    "why": "a compute held by an object slot reads in a for-await body: unplaced, not silent"
+  },
+  {
+   "fixture": "reactive-ir/dead-site-empty-collection",
+   "key": "SC2001 function-unentered",
+   "from": 9,
+   "to": 10,
+   "adr": "ADR 1109",
+   "fact": "dead-site-empty-collection NamedEmpty: a const holding [] read only by forEach never runs its callback (function-unentered, was a violation)"
+  },
+  {
+   "fixture": "reactive-ir/owner-carrier-provably-runs",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 5,
+   "to": 6,
+   "adr": "ADR 1109",
+   "fact": "owner-carrier-provably-runs SortOne: [1].sort(hf) never runs hf, so its useContext row is relabeled from function-run-unplaced (still uncertifiable)"
   }
  ]
 }

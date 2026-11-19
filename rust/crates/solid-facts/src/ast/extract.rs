@@ -166,6 +166,7 @@ pub(super) struct Collector<'s, 'semantic> {
     pub(super) dominating_awaits: Vec<(Span, Span)>,
     pub(super) try_head_awaits: Vec<TryHeadAwaitFact>,
     pub(super) try_catches: Vec<TryCatchFact>,
+    pub(super) swallowing_try_blocks: Vec<Span>,
     pub(super) in_place_import_globs: Vec<Span>,
     pub(super) unmodeled_require_references: Vec<Span>,
     /// The `require` identifiers that are the (peeled) callee of a call.
@@ -425,6 +426,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             dominating_awaits: Vec::new(),
             try_head_awaits: Vec::new(),
             try_catches: Vec::new(),
+            swallowing_try_blocks: Vec::new(),
             in_place_import_globs: Vec::new(),
             unmodeled_require_references: Vec::new(),
             direct_require_callees: Vec::new(),
@@ -531,6 +533,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.straight_line_calls.sort_unstable();
         self.straight_line_constructs.sort_unstable();
         self.completion_sites.sort_unstable();
+        self.swallowing_try_blocks.sort_unstable();
         self.completion_sites.dedup();
         self.returns.sort_by_key(|fact| fact.span);
         self.jsx_elements.sort_by_key(|fact| fact.span);
@@ -774,6 +777,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             dominating_awaits: self.dominating_awaits,
             try_head_awaits: self.try_head_awaits,
             try_catches: self.try_catches,
+            swallowing_try_blocks: self.swallowing_try_blocks,
             in_place_import_globs: self.in_place_import_globs,
             unmodeled_require_references: self.unmodeled_require_references,
             straight_line_calls: self.straight_line_calls,

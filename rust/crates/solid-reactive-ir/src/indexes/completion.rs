@@ -233,6 +233,7 @@ impl<'a> SemanticLookup<'a> {
             if crate::owners::containing_body_function(&file.ast, call.span)
                 .is_some_and(|owner| owner.span == function)
                 && crate::interproc::site_on_every_completion(self, file, function, call.span)
+                && !in_swallowing_try(file, function, call.span)
             {
                 calls.insert((function, index));
             }
@@ -259,6 +260,7 @@ impl<'a> SemanticLookup<'a> {
                 if crate::owners::containing_body_function(&file.ast, call.span)
                     .is_some_and(|owner| owner.span == function)
                     && crate::interproc::site_on_every_completion(self, file, function, call.span)
+                    && !in_swallowing_try(file, function, call.span)
                 {
                     // `g` must be a function declaration: a `const` callee
                     // may be in its temporal dead zone (ADR 0218), unless its
@@ -469,4 +471,15 @@ pub(super) fn parameter_completion_fixpoint<'s>(
         .collect::<Vec<_>>();
     answer.sort_unstable();
     answer
+}
+
+/// ADR 1109: whether `site` is in a `try` block of `function` (not one around it) a throw in which may end in a normal
+/// completion of the `try` ([`solid_facts::ast::AstFacts::swallowing_try_blocks`]): anything before the site in the block
+/// may throw, so a completion of `function` may skip it. The completion sites count it (a reachability reading); a proof
+/// that the site runs on every completion does not.
+fn in_swallowing_try(file: &FileFacts, function: Span, site: Span) -> bool {
+    file.ast
+        .swallowing_try_blocks
+        .iter()
+        .any(|block| block.contains(site) && function.contains(*block) && *block != function)
 }

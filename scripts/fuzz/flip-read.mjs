@@ -59,6 +59,11 @@ export const STORE_DESTRUCTURES = {
   "store-dstr-merge": { reads: true, imports: ["merge"], text: (o) => `const { v } = merge(${o}, { w: 1 }); void v;` },
   // ADR 1106: the plain object destructure. In a named helper the body calls (the `closure` layer) it was a clean nothing explained.
   "store-dstr-object": { reads: true, text: (o) => `const { v } = ${o}; void v;` },
+  // ADR 1109: the store handed through a standard inline callback's parameter, destructured or read by member.
+  "store-map-dstr": { reads: true, text: (o) => `[${o}].map(({ v }) => v);` },
+  "store-map-member": { reads: true, text: (o) => `[${o}].map((s) => s.v);` },
+  // The twin: the callback takes the store but reads nothing of it.
+  "store-map-unread": { text: (o) => `[${o}].map((s) => typeof s);` },
 };
 
 // ADR 0781: the type names a standard method, and the program runs its own. Each runs the site on the caller's stack, in a component body.
@@ -540,7 +545,9 @@ export const FLIP_READ_LEGAL = {
   DYNAMIC_STATIC_PROMISE: [FLUSH_READ_STORED],
   // Scout A.6: `Function.prototype.call` patched to defer, then `h.call(null)`: the read leaves the body (Chrome quiet). The proof read
   // `CallableFunction.call`, whose patch keys a `Function.prototype.call` write never raised.
-  STRICT_READ_UNTRACKED: ["wh-helper-late", "mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach", ...FLUSH_READ_LEGAL, ...Object.keys(LATE_RECEIVERS), ...Object.keys(PROTO_LEGAL), "patch-call-late"],
+  // ADR 1109: handed to a helper whose call of it follows `JSON.parse("x")` in a `try` whose `catch` swallows the throw: the read never runs.
+  // A read rule only: the write and action rules take a call on some path of a helper as reachable (no fact says `JSON.parse("x")` throws).
+  STRICT_READ_UNTRACKED: ["try-helper-never", "wh-helper-late", "mount-named", "arm-helper", "arm-helper-chain", "arm-tag", "root-named-timer", "root-named-then", "root-two-handlers", "apply-cleanup-mount", "subclass-late-foreach", "cast-late-foreach", ...FLUSH_READ_LEGAL, ...Object.keys(LATE_RECEIVERS), ...Object.keys(PROTO_LEGAL), "patch-call-late"],
   // ADR 0782: `cleanup-mount`'s only mount is in a cleanup, where the guard stands down.
   // ADR 0349 with ADR 0282: the patched iteration hands back a no-op setter, so the write never runs.
   REACTIVE_WRITE_IN_OWNED_SCOPE: ["wh-root-cleanup", "arm-helper", "arm-helper-chain", "arm-tag", "cast-late-foreach", "cleanup-mount", ...Object.keys(LATE_RECEIVERS), ...Object.keys(PROTO_LEGAL), ...Object.keys(ITER_PATCHES)],
@@ -1019,6 +1026,7 @@ function freshCopy(stmts, kit) {
 }
 
 export function flipReadContext(context, stmts, kit) {
+  if (context === "try-helper-never") return { body: [expr(call(ref(kit.ensureHelper("tryThrowCall")), [fn(stmts)]))], view: [] };
   if (context === "aw-pre-pick" || context === "aw-pre-or") {
     // ADR 0898: the site's source, through a composite before the computation's first await.
     let source = null;

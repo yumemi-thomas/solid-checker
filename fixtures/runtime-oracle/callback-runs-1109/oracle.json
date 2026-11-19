@@ -1,0 +1,4 @@
+{
+  "note": "ADR 1109: P1 a helper's call after a throwing statement in a try whose catch swallows never runs; P2 a standard inline callback on a name holding [] or a one-element sort never runs; F2 a store handed through [store].map's parameter is read (STRICT_READ_UNTRACKED). Twins: call first in the try, a plain helper, a two-element sort, a filled name, a plain-number parameter.",
+  "steps": []
+}

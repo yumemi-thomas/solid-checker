@@ -1109,6 +1109,8 @@ function helperText(helper) {
     case "timerCb": return [`function ${helper.name}(cb: () => unknown) {`, `${INDENT}setTimeout(cb, 0);`, `${INDENT}return 1;`, "}"];
     case "microCb": return [`function ${helper.name}(cb: () => unknown) {`, `${INDENT}queueMicrotask(() => { cb(); });`, `${INDENT}return 1;`, "}"];
     case "thenCb": return [`function ${helper.name}(cb: () => unknown) {`, `${INDENT}Promise.resolve().then(cb);`, `${INDENT}return 1;`, "}"];
+    // ADR 1109: the call follows a statement that throws, in a `try` whose `catch` swallows it: `cb` never runs.
+    case "tryThrowCall": return [`function ${helper.name}(cb: () => unknown) {`, `${INDENT}try {`, `${INDENT}${INDENT}JSON.parse("x");`, `${INDENT}${INDENT}cb();`, `${INDENT}} catch {}`, `${INDENT}return 1;`, "}"];
     default: throw new Error(`unknown helper form ${helper.form}`);
   }
 }
