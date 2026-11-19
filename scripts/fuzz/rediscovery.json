@@ -34169,5 +34169,18 @@
    "mx-strict-read-untracked-evt-apply-shadow-valueof-signal-direct-none"
   ],
   "rediscovered": "focus on the three contexts' mx-recall programs (6,450): the reviewed head 4,344 false cleans (1,448 per context) and 108 false positives; FIXED here (0 and 0). F2 (an import cycle holding the entry beside a root nothing loads) and F8 (a hazard in a file no analysed file loads, on the page by a second script or a test setup) are not generator-expressible: every fuzz program's entry is the harness `main.tsx`, which loads `App.tsx`, and Chrome runs only what the entry loads; both are closed by asking the program, not a realm (process tests and the review's probes p8, p11b)"
+ },
+ {
+  "finding": "ADR 1125 round-1 head 122120032 certified a read in a handler run with no event when the key reader taking Solid's stored delegated handler is not spelled `Object.<name>`: `Object[\"values\"](el)`, `Object?.[\"values\"](el)`, or `JSON.stringify` handed its replacer by a spread (the call test counted two written arguments)",
+  "found": "the Fable review of ADR 1125 round 2 (coord-land/review-1125-r2.md, N1; probes q1, q1h, q1d)",
+  "fixed": "ADR 1125 round 2: a computed member of the global `Object` or `JSON` is a key reader by its literal or proven texts, any reader where nothing proves the key; a spread argument counts as a replacer",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-evt-apply-stored-values-computed-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-stored-values-optional-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-stored-stringify-spread-signal-direct-none"
+  ],
+  "rediscovered": "focus on the three contexts' mx-recall programs (6,450): 122120032 4,254 false cleans (1,418 per context) and 108 false positives (36 per context); FIXED here (0 and 0)"
  }
 ]

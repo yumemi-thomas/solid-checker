@@ -153,6 +153,34 @@ pub(super) fn premise_sites<'a>(semantic: &Semantic<'a>, resolve: bool) -> Vec<P
                 }
             }
             AstKind::ComputedMemberExpression(member) => {
+                // ADR 1125 (Fable round 2, N1): a reader spelled by a computed key (`Object["values"]`, `Object?.["values"]`,
+                // `JSON["stringify"]`) is the reader; a key proven to be texts is checked against each, and a key nothing proves may be
+                // any reader.
+                if let Expression::Identifier(object) = peel_ts_sugar(&member.object)
+                    && matches!(object.name.as_str(), "Object" | "JSON")
+                    && sites.global(object)
+                {
+                    let readers: &[&str] = if object.name == "Object" {
+                        &KEY_READERS
+                    } else {
+                        &["stringify"]
+                    };
+                    let texts = match literal_property_key(&member.expression) {
+                        Some(key) => Some(vec![key.to_string()]),
+                        None => keys.key(&member.expression).map(|(texts, _)| {
+                            texts.into_iter().map(|text| text.to_string()).collect()
+                        }),
+                    };
+                    match texts {
+                        Some(texts) => {
+                            for text in texts.iter().filter(|text| readers.contains(&text.as_str()))
+                            {
+                                sites.add(member.span, PremiseClause::KeyReader, text);
+                            }
+                        }
+                        None => sites.add(member.span, PremiseClause::KeyReader, "*"),
+                    }
+                }
                 // An unproven key is the `computed_keys` fact's; a literal one is checked as a name.
                 if let Some(key) = literal_property_key(&member.expression) {
                     sites.key(member.span, &key);
@@ -270,7 +298,9 @@ pub(super) fn premise_sites<'a>(semantic: &Semantic<'a>, resolve: bool) -> Vec<P
                     && let Expression::Identifier(object) = peel_ts_sugar(&callee.object)
                     && object.name == "JSON"
                     && sites.global(object)
-                    && call.arguments.len() >= 2
+                    // N1: a spread may hand any number of arguments, a replacer among them.
+                    && (call.arguments.len() >= 2
+                        || call.arguments.iter().any(|argument| argument.is_spread()))
                 {
                     // ADR 1125 (G2): a replacer is handed every own enumerable value of every object it walks.
                     sites.add(call.span, PremiseClause::KeyReader, "JSON.stringify");
@@ -1063,6 +1093,25 @@ mod tests {
             PremiseClause::KeyReader,
             "for-in"
         ));
+        // Fable round 2, N1: a computed, optional or proven-text spelling, and a spread handing the replacer.
+        for (source, key) in [
+            ("Object[\"values\"](el);", "values"),
+            ("(Object as typeof Object)?.[\"values\"](el);", "values"),
+            ("Object[\"val\" + \"ues\"](el);", "values"),
+            ("declare const k: string; Object[k](el);", "*"),
+            ("JSON[\"stringify\"](el);", "stringify"),
+            (
+                "JSON.stringify(...([el, (k: string, v: unknown) => v] as const));",
+                "JSON.stringify",
+            ),
+        ] {
+            assert!(has(source, PremiseClause::KeyReader, key), "{source}");
+        }
+        assert!(
+            !sites("Object[\"freeze\"](el);")
+                .iter()
+                .any(|(clause, _)| *clause == PremiseClause::KeyReader)
+        );
     }
 
     #[test]

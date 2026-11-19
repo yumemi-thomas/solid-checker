@@ -244,8 +244,8 @@ impl SemanticLookup<'_> {
     /// `Section::DispatchVeto` (its memo and fingerprint are the whole veto, this answer included). A section no memo stands for
     /// would make every reader of the veto read the whole program.
     fn shadow_roots_answer(&self) -> bool {
-        // ADR 1125: per-build existential, as `event_delivery_intact`: the section's fingerprint recomputes the scan (its realm walk
-        // reads every file's loads), so the scan's raw reads are not each reader's.
+        // ADR 1125: per-build existential, as `event_delivery_intact`: the section's fingerprint recomputes the scan (it reads every
+        // file's sites and loads), so the scan's raw reads are not each reader's.
         *self
             .shadow_roots
             .get_or_init(|| crate::base::reads::suppress(|| scan_shadow_roots(self)))
@@ -1298,8 +1298,8 @@ pub(crate) fn scan_shadow_roots(lookup: &super::SemanticLookup<'_>) -> bool {
         .iter()
         .map(|file| file.path.as_str())
         .collect::<std::collections::HashSet<_>>();
-    // ADR 1125: a shadow root matters only to a listener that runs beside the code that attaches it: asked per realm, as the
-    // delivery hazard is.
+    // ADR 1125: a shadow root matters only to a listener on the same page as the code that attaches it; the page is the whole
+    // program (`realm_holds_both`), as for the delivery hazard.
     let shadow = |file: &solid_facts::FileFacts| -> bool {
         if SHADOW_SPELLINGS
             .iter()
@@ -1431,7 +1431,7 @@ fn writes_handler_property(source: &str) -> bool {
     })
 }
 
-/// [`scan_delivery_hazard`]'s reason: `(file, clause, key)` of the first hazard in a realm that may also hold a handler, for the census.
+/// [`scan_delivery_hazard`]'s reason: `(file, clause, key)` of the first hazard in a program that may also hold a handler, for the census.
 /// The code evaluators the type facts resolve and a missing attestation are the whole program's.
 pub(crate) fn delivery_hazard_reason(
     lookup: &super::SemanticLookup<'_>,

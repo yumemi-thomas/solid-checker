@@ -1,0 +1,16 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/event-dispatch-shadow/variants/key-reader-computed/App.tsx",
+      "start": 510,
+      "end": 517,
+      "fixes": 0
+    }
+  ]
+}
