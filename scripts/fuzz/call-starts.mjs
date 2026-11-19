@@ -170,6 +170,12 @@ export function callStarts(source, fileName = "App.tsx") {
    * substitution, a local binding; a coercing operator between a local binding and a primitive literal; `instanceof` from an inert left to a
    * local binding. `starts` are the coercion's and its operand's starts (the rows), `until` the end of its operator (or of the template's head).
    */
+  /** Whether an expression is the whole of its statement (`x;`), of a `void` or of a declaration's initializer, through parentheses and casts. */
+  const isWhole = (expression) => {
+    let outer = expression;
+    while (ts.isParenthesizedExpression(outer.parent) || ts.isAsExpression(outer.parent) || ts.isSatisfiesExpression(outer.parent) || ts.isNonNullExpression(outer.parent)) outer = outer.parent;
+    return ts.isExpressionStatement(outer.parent) || ts.isVoidExpression(outer.parent) || (ts.isVariableDeclaration(outer.parent) && outer.parent.initializer === outer);
+  };
   const loneCoercion = (expression) => {
     if (ts.isTemplateExpression(expression)) {
       if (expression.templateSpans.length !== 1 || !isLocal(expression.templateSpans[0].expression)) return null;
@@ -304,10 +310,11 @@ export function callStarts(source, fileName = "App.tsx") {
     // ADR 1117c: a lone coercion. V8 frames the hook a coercion calls (`toString`, `Symbol.toPrimitive`, `Symbol.hasInstance`) at its operator,
     // which the source map has no segment for (`{} instanceof jr1` comes back on the `}`, `"a" + jr1` on the `"a"`), or, under a `void`, at the
     // `void` (`void \`${jr1}\``); the row is on the coercion or its operand. Only where the coercion is the one thing there that can run code:
-    // its operand a local binding (reading it runs nothing) and the rest a literal, so no other read, call or hook can have that frame.
-    const lone = ts.isBinaryExpression(node) ? loneCoercion(node) : null;
+    // its operand a local binding (reading it runs nothing) and the rest a literal, so no other read, call or hook can have that frame; and the
+    // whole of its statement, `void` or initializer, so nothing after it in the expression (another operator) can come back on it either.
+    const lone = ts.isBinaryExpression(node) && isWhole(node) ? loneCoercion(node) : null;
     if (lone) for (const at of lone.starts) calls.push([node.getStart(file), lone.until, at, at]);
-    if (ts.isVoidExpression(node)) {
+    if (ts.isVoidExpression(node) && isWhole(node)) {
       const operand = unwrap(node.expression);
       const inner = loneCoercion(operand);
       if (inner) for (const at of inner.starts) calls.push([node.getStart(file), operand.getStart(file), at, at]);

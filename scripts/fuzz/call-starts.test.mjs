@@ -218,7 +218,7 @@ describe("callStarts", () => {
     it("keeps a frame past the operator, or on the operand, where it is", () => {
       expect(at(5, 17)).toEqual([{ line: 5, column: 17 }]);
       expect(at(6, 25)).toEqual([{ line: 6, column: 25 }]);
-      expect(at(7, 34)).toEqual([{ line: 7, column: 34 }]);
+      expect(at(7, 29)).toEqual([{ line: 7, column: 29 }]);
     });
     it("claims no row of another site on the line: each frame stands for its own statement's coercion only", () => {
       const two = callStarts(`${hooks}  const jr2 = { toString: () => \"\" };\n  void \`\${jr1}\`; void \`\${jr2}\`; void ("a" + jr1); void ("b" + jr2);\n}\n`);
@@ -231,28 +231,26 @@ describe("callStarts", () => {
       const other = callStarts(`${hooks}  const jr2 = 1;\n${[
         "  void `${jr1}${jr2}`;", "  void (jr1 + jr2);", "  void `${st.x}`;", "  void (\"a\" + st.x);", "  void `${f()}`;", '  void ("a" + devicePixelRatio);',
         "  void ({} + jr1);", "  void (jr2 instanceof jr1);", "  void (jr1 === \"a\");", "  void (`${jr1}` + f());", "  void (\"a\" + jr1 + jr2);"].join("\n")}\n}\n`);
-      for (let line = 6; line <= 16; line += 1) {
-        expect(other(line, 3), `line ${line} at void`).toEqual([{ line, column: 3 }]);
-      }
-      // In the operand too, but for the inner `"a" + jr1` of `"a" + jr1 + jr2`, a lone coercion of its own: its frame is not the outer `+`'s.
-      for (const line of [6, 7, 8, 9, 10, 11, 12, 13, 14, 15]) expect(other(line, 9), `line ${line} in the operand`).toEqual([{ line, column: 9 }]);
-      expect(other(16, 9)).toEqual([{ line: 16, column: 9 }, { line: 16, column: 15 }]);
-      expect(other(16, 19)).toEqual([{ line: 16, column: 19 }]);
+      for (let line = 5; line <= 15; line += 1) expect(other(line, 3), `line ${line} at void`).toEqual([{ line, column: 3 }]);
+      // A frame in a binary operand: no new start (a template's own frames keep the template rule above). Nor in `"a" + jr1 + jr2`, whose
+      // inner `"a" + jr1` is no whole expression: the outer `+`, for jr2's hook, could come back there.
+      for (const line of [6, 8, 10, 11, 12, 15]) expect(other(line, 9), `line ${line} in the operand`).toEqual([{ line, column: 9 }]);
+      expect(other(15, 13)).toEqual([{ line: 15, column: 13 }]);
     });
     it("needs the operand to be a binding declared around it: an unknown name may be a global's getter", () => {
       const at2 = callStarts('function h(p: unknown) {\n  void `${p}`;\n  void `${q}`;\n  for (const r of [1]) void ("a" + r);\n  try {} catch (e) { void `${e}`; }\n}\n');
-      expect(at2(2, 3)).toContainEqual({ line: 2, column: 10 });
+      expect(at2(2, 3)).toContainEqual({ line: 2, column: 11 });
       expect(at2(3, 3)).toEqual([{ line: 3, column: 3 }]);
       expect(at2(4, 30)).toContainEqual({ line: 4, column: 36 });
-      expect(at2(5, 22)).toContainEqual({ line: 5, column: 29 });
+      expect(at2(5, 22)).toContainEqual({ line: 5, column: 30 });
     });
     it("covers the hook's frame by the coercion's row, and an unrelated row on the line by none", () => {
       const source = `${hooks}  void \`\${jr1}\`; void st.x;\n}\n`;
-      const stack = withStarts([{ line: 2, column: 26 }, { line: 5, column: 3 }], frameStarts(source));
+      const stack = withStarts([{ line: 2, column: 26 }, { line: 4, column: 3 }], frameStarts(source));
       const row = (line, column) => ({ rule: "strict-read-untracked", kind: "uncertifiable", line, column });
-      expect(withheldAtStack(row(5, 11), stack, () => false)).toBe(true);
-      expect(withheldAtStack(row(5, 17), stack, () => false)).toBe(false);
-      expect(withheldAtStack(row(5, 22), stack, () => false)).toBe(false);
+      expect(withheldAtStack(row(4, 11), stack, () => false)).toBe(true);
+      // The other statement's read (`st.x` at 4:22, its property at 4:25) is not this frame's.
+      for (const column of [17, 22, 25]) expect(withheldAtStack(row(4, column), stack, () => false), String(column)).toBe(false);
     });
   });
   it("finds the statement of a position on a line of several", () => {
