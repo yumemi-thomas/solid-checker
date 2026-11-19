@@ -177,6 +177,8 @@ export function callStarts(source, fileName = "App.tsx") {
     scan(named.body);
     if (calls.length) forwarders.set(name, [...(forwarders.get(name) ?? []), ...calls]);
   };
+  /** An expression that frames itself (ADR 1117b): a call, `new`, tagged template or member read, through parentheses and casts. */
+  const runsItself = (expression) => { const inner = unwrap(expression); return ts.isCallExpression(inner) || ts.isNewExpression(inner) || ts.isTaggedTemplateExpression(inner) || ts.isPropertyAccessExpression(inner) || ts.isElementAccessExpression(inner); };
   const visit = (node) => {
     forwarding(node);
     let callee = null;
@@ -237,8 +239,28 @@ export function callStarts(source, fileName = "App.tsx") {
     else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.InKeyword) calls.push([node.getStart(file), node.right.getStart(file), node.right.getStart(file), rootOf(node.right).getStart(file)]);
     // A spread steps its operand: V8's frame is on the operand, the row on the `...`.
     else if (ts.isSpreadElement(node) || ts.isSpreadAssignment(node)) calls.push([node.expression.getStart(file), node.expression.getEnd(), node.getStart(file), rootOf(node.expression).getStart(file)]);
-    // A template coerces its substitutions natively: V8's frame is the template's, the row on the substitution.
-    else if (ts.isTemplateExpression(node)) for (const span of node.templateSpans) calls.push([node.getStart(file), node.head.getEnd(), span.expression.getStart(file), rootOf(span.expression).getStart(file)]);
+    // A template coerces its substitutions natively: V8's frame is the template's, the row on the substitution. ADR 1117b: inside a `void`, `typeof`, unary
+    // or parenthesized operand the compiled program maps no position at the template, so the frame comes back at the outermost of those wrappers
+    // (`void `${o}`;` is framed at `void`): that position stands for the substitutions too.
+    else if (ts.isTemplateExpression(node)) {
+      let outer = node;
+      while (ts.isParenthesizedExpression(outer.parent) || ts.isVoidExpression(outer.parent) || ts.isTypeOfExpression(outer.parent) || ts.isPrefixUnaryExpression(outer.parent)
+        || ts.isAsExpression(outer.parent) || ts.isSatisfiesExpression(outer.parent) || ts.isNonNullExpression(outer.parent)) outer = outer.parent;
+      for (const span of node.templateSpans) {
+        calls.push([node.getStart(file), node.head.getEnd(), span.expression.getStart(file), rootOf(span.expression).getStart(file)]);
+        if (outer !== node) calls.push([outer.getStart(file), outer.getStart(file) + 1, span.expression.getStart(file), rootOf(span.expression).getStart(file)]);
+      }
+    }
+    // ADR 1117b: `instanceof` calls the right operand's `Symbol.hasInstance` (or walks a proxy's prototype) natively; V8's frame is within the left
+    // operand (`{} instanceof K` maps one column into the `{}`), the row at the binary's start.
+    // Not where the left operand runs code of its own (a call, `new`, tagged template or member read frames itself).
+    else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.InstanceOfKeyword && !runsItself(node.left)) calls.push([node.getStart(file), node.right.getStart(file), node.getStart(file), node.getStart(file)]);
+    // ADR 1117b: an arithmetic or relational operator coerces both operands natively (`valueOf`, `toString`, `Symbol.toPrimitive`); V8's frame is the
+    // binary's start (`"a" + o` is framed at `"a"`), the row on the coerced operand.
+    else if (ts.isBinaryExpression(node) && [ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.AsteriskToken, ts.SyntaxKind.SlashToken, ts.SyntaxKind.PercentToken,
+      ts.SyntaxKind.LessThanToken, ts.SyntaxKind.LessThanEqualsToken, ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.GreaterThanEqualsToken].includes(node.operatorToken.kind) && !runsItself(node.left)) {
+      for (const operand of [node.left, node.right]) calls.push([node.getStart(file), node.getStart(file) + 1, operand.getStart(file), rootOf(operand).getStart(file)]);
+    }
     // A destructuring reads its properties: V8's frame is on the binding, the row on the pattern.
     else if (ts.isBindingElement(node)) { let pattern = node.parent; while (ts.isBindingElement(pattern.parent)) pattern = pattern.parent.parent; calls.push([node.getStart(file), node.getEnd(), pattern.getStart(file), pattern.getStart(file)]); }
     // A global read has no position of its own where nothing around it sets one: V8's frame is the statement's start (`void x;`, `typeof x;`, `if (x) {}`, `return x;`),
