@@ -824,6 +824,8 @@ pub(super) struct SemanticLookup<'a> {
     object_members: OnceLock<crate::object_members::Targets>,
     /// ADR 0358: the handlers each intrinsic element's spread supplies.
     spread_handlers: OnceLock<crate::object_members::SpreadTargets>,
+    /// ADR 1129: the keys a `merge`/`omit` view proof gives a spread.
+    spread_views: OnceLock<crate::object_members::SpreadViews>,
     /// Every member whose receiver is bound to an exact object literal, and
     /// the ones whose literal is declared in another file.
     literal_receiver_members: OnceLock<crate::object_members::LiteralReceiverCensus>,
@@ -1289,6 +1291,7 @@ impl<'a> SemanticLookup<'a> {
         Self {
             object_members: OnceLock::new(),
             spread_handlers: OnceLock::new(),
+            spread_views: OnceLock::new(),
             literal_receiver_members: OnceLock::new(),
             facts,
             dialect,
@@ -2000,6 +2003,21 @@ impl<'a> SemanticLookup<'a> {
                     }
                     hasher.update([0xfe]);
                 }
+                // ADR 1129: the view proof's keys, read under the same section.
+                let mut views = self.spread_views_unnoted().iter().collect::<Vec<_>>();
+                views.sort_unstable_by_key(|(site, _)| {
+                    (site.path.as_ref(), site.start_byte, site.end_byte)
+                });
+                for (site, (keys, by_view)) in views {
+                    text(&mut hasher, site.path.as_ref());
+                    hasher.update(site.start_byte.to_le_bytes());
+                    hasher.update(site.end_byte.to_le_bytes());
+                    hasher.update([u8::from(*by_view)]);
+                    for key in keys {
+                        text(&mut hasher, key);
+                    }
+                    hasher.update([0xfd]);
+                }
             }
             Section::LiteralReceivers => {
                 // The whole census: a reader may ask about a member in any
@@ -2555,6 +2573,20 @@ impl<'a> SemanticLookup<'a> {
         crate::base::reads::note(crate::base::reads::Section::SpreadTargets);
         self.spread_handlers.get_or_init(|| {
             crate::base::reads::suppress(|| crate::object_members::spread_index(self))
+        })
+    }
+
+    /// ADR 1129: what the `merge`/`omit` view proof gives each spread argument
+    /// of an intrinsic element: every key the spread object may own, and
+    /// whether the spread's handlers came from the proof.
+    pub(crate) fn spread_views(&self) -> &crate::object_members::SpreadViews {
+        crate::base::reads::note(crate::base::reads::Section::SpreadTargets);
+        self.spread_views_unnoted()
+    }
+
+    fn spread_views_unnoted(&self) -> &crate::object_members::SpreadViews {
+        self.spread_views.get_or_init(|| {
+            crate::base::reads::suppress(|| crate::object_members::spread_view_index(self))
         })
     }
 

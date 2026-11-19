@@ -18,13 +18,24 @@ use solid_facts::core::Span;
 use super::{is_lowercase_led, text, violation};
 use crate::StaticViolation;
 
-pub(super) fn check_file<'a>(
+/// The key sets a spread argument is known to carry: its declared type's
+/// complete key set (ADR 0436), and the keys ADR 1129's `merge`/`omit` view
+/// proof gives it.
+pub(super) struct SpreadKeySets<D, V> {
+    pub(super) declared: D,
+    pub(super) view: V,
+}
+
+pub(super) fn check_file<'a, 'b>(
     file: &FileFacts,
-    declared_keys: impl Fn(Span) -> Option<&'a [Arc<str>]>,
+    keys: SpreadKeySets<
+        impl Fn(Span) -> Option<&'a [Arc<str>]>,
+        impl Fn(Span) -> Option<&'b [Arc<str>]>,
+    >,
     violations: &mut Vec<StaticViolation>,
 ) {
     for element in &file.ast.jsx_elements {
-        jsx_no_duplicate_props(file, element, &declared_keys, violations);
+        jsx_no_duplicate_props(file, element, &keys, violations);
     }
 }
 
@@ -33,10 +44,13 @@ pub(super) fn check_file<'a>(
 /// "more than one content source" check (`children` prop, JSX children,
 /// `innerHTML`, `innerText`, and `textContent` all fighting over the same
 /// element).
-fn jsx_no_duplicate_props<'a>(
+fn jsx_no_duplicate_props<'a, 'b>(
     file: &FileFacts,
     element: &JsxElementFact,
-    declared_keys: &impl Fn(Span) -> Option<&'a [Arc<str>]>,
+    keys: &SpreadKeySets<
+        impl Fn(Span) -> Option<&'a [Arc<str>]>,
+        impl Fn(Span) -> Option<&'b [Arc<str>]>,
+    >,
     violations: &mut Vec<StaticViolation>,
 ) {
     // Attributes and spread-carried object properties compete for the same
@@ -235,7 +249,7 @@ fn jsx_no_duplicate_props<'a>(
     let mut open_spread_at = None;
     let mut any_key = false;
     for spread in &element.spreads {
-        let keys = spread_content_keys(file, spread.argument, declared_keys);
+        let keys = spread_content_keys(file, spread.argument, keys);
         match keys {
             SpreadKeys::Closed => continue,
             SpreadKeys::Declared(keys) => open_sources.extend(keys),
@@ -390,10 +404,13 @@ enum SpreadKeys {
     Any,
 }
 
-fn spread_content_keys<'a>(
+fn spread_content_keys<'a, 'b>(
     file: &FileFacts,
     argument: Span,
-    declared_keys: &impl Fn(Span) -> Option<&'a [Arc<str>]>,
+    sets: &SpreadKeySets<
+        impl Fn(Span) -> Option<&'a [Arc<str>]>,
+        impl Fn(Span) -> Option<&'b [Arc<str>]>,
+    >,
 ) -> SpreadKeys {
     if let Some(properties) = super::direct_object_literal_properties(file, argument)
         && properties.iter().all(|property| !property.computed)
@@ -405,13 +422,36 @@ fn spread_content_keys<'a>(
     {
         return SpreadKeys::Closed;
     }
-    let Some(keys) = declared_keys(argument) else {
-        return SpreadKeys::Any;
+    let content = |keys: &[Arc<str>]| {
+        CONTENT_ATTRIBUTES
+            .into_iter()
+            .filter(|name| keys.iter().any(|key| key.as_ref() == *name))
+            .collect::<Vec<_>>()
     };
-    let keys = CONTENT_ATTRIBUTES
-        .into_iter()
-        .filter(|name| keys.iter().any(|key| key.as_ref() == *name))
-        .collect::<Vec<_>>();
+    let declared = (sets.declared)(argument).map(content);
+    if declared.as_ref().is_some_and(Vec::is_empty) {
+        return SpreadKeys::Closed;
+    }
+    // ADR 1129, asked only where the declared keys left the spread open: the
+    // view proof's keys are every key the spread object may own on any run,
+    // so a content key outside them is not there. Both sets over-approximate
+    // the runtime keys, so their intersection does too.
+    let Some(view) = (sets.view)(argument).map(content) else {
+        return declared.map_or(SpreadKeys::Any, SpreadKeys::Declared);
+    };
+    crate::proof_log::silent(
+        "SC8003",
+        &crate::location(file.path.shared(), argument),
+        crate::object_members::VIEW_SPREAD_PROOF,
+        &[],
+    );
+    let keys = match declared {
+        Some(declared) => view
+            .into_iter()
+            .filter(|key| declared.contains(key))
+            .collect(),
+        None => view,
+    };
     if keys.is_empty() {
         SpreadKeys::Closed
     } else {

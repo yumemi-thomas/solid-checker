@@ -20,7 +20,10 @@ mod assigned;
 pub(crate) use assigned::{AssignedAnswer, AssignedMembersAnswer, PrototypeOwnerAt};
 #[path = "object_members/memo.rs"]
 mod memo;
+#[path = "object_members/view_spread.rs"]
+mod view_spread;
 pub(crate) use memo::{LiteralReceivers, ObjectMemberTargets, ReceiverClosed, SpreadTargetsAt};
+pub(crate) use view_spread::PROOF as VIEW_SPREAD_PROOF;
 
 pub(crate) type Targets = HashMap<Location, (String, Span)>;
 
@@ -49,7 +52,7 @@ pub(crate) fn spread_index(lookup: &SemanticLookup<'_>) -> SpreadTargets {
     let mut spreads = HashMap::default();
     for (slot, file) in lookup.file_slots().iter().enumerate() {
         let key = lookup.memo_slot_of(slot);
-        for (argument, targets) in world.answer::<SpreadTargetsAt>(&key) {
+        for (argument, targets, _) in world.answer::<SpreadTargetsAt>(&key) {
             spreads.insert(
                 location(file.path.shared(), argument),
                 targets.map(|targets| {
@@ -62,6 +65,32 @@ pub(crate) fn spread_index(lookup: &SemanticLookup<'_>) -> SpreadTargets {
         }
     }
     spreads
+}
+
+/// ADR 1129: per intrinsic element's spread argument, the keys a `merge`/`omit`
+/// view proof gives it and whether its handlers came from that proof.
+pub(crate) type SpreadViews = HashMap<Location, (Vec<std::sync::Arc<str>>, bool)>;
+
+/// The view proof's answers, assembled like [`spread_index`].
+pub(crate) fn spread_view_index(lookup: &SemanticLookup<'_>) -> SpreadViews {
+    let world = lookup.memo_world();
+    let mut views = HashMap::default();
+    for (slot, file) in lookup.file_slots().iter().enumerate() {
+        let key = lookup.memo_slot_of(slot);
+        for (argument, _, view) in world.answer::<SpreadTargetsAt>(&key) {
+            let location = location(file.path.shared(), argument);
+            match view {
+                Some(view) => {
+                    views.insert(location, view);
+                }
+                // A later slot of a path overwrites an earlier one.
+                None => {
+                    views.remove(&location);
+                }
+            }
+        }
+    }
+    views
 }
 
 fn references(file: &FileFacts) -> HashSet<Span> {

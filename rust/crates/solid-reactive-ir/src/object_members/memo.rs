@@ -739,13 +739,18 @@ impl Memo<BuildSchema> for ObjectMemberTargets {
 /// be resolved exactly.
 type Handlers = Option<Vec<(Arc<str>, Span)>>;
 
+/// ADR 1129: a spread a `merge`/`omit` view proof answered: every key the
+/// spread object may own, and whether the handlers came from that proof.
+pub(crate) type ViewKeys = Option<(Vec<Arc<str>>, bool)>;
+
 /// What each intrinsic element's spread argument of one file slot supplies,
-/// by the argument's span, in production order.
+/// by the argument's span, in production order, with the view proof's keys
+/// (ADR 1129) where it holds.
 pub(crate) struct SpreadTargetsAt;
 
 impl Memo<BuildSchema> for SpreadTargetsAt {
     type Key = SlotKey;
-    type Value = Vec<(Span, Handlers)>;
+    type Value = Vec<(Span, Handlers, ViewKeys)>;
     const NAME: &'static str = "spread_handler_targets";
     const ID: TableId = SPREAD_TARGETS_AT;
 
@@ -771,14 +776,24 @@ impl Memo<BuildSchema> for SpreadTargetsAt {
                 let argument = file.ast.peel_ts_sugar_span(spread.argument);
                 // A direct `eval` anywhere can rewrite any object, so every
                 // spread is unresolved then.
-                let targets = if cx.hazard(Hazard::Eval) {
-                    None
+                let (targets, view) = if cx.hazard(Hazard::Eval) {
+                    (None, None)
                 } else {
-                    spread_handlers(cx, slot, file, argument, &references)?.or_else(|| {
-                        declared_keys_hold_no_listener(cx, slot, spread.argument).then(Vec::new)
-                    })
+                    let targets =
+                        spread_handlers(cx, slot, file, argument, &references)?.or_else(|| {
+                            declared_keys_hold_no_listener(cx, slot, spread.argument).then(Vec::new)
+                        });
+                    // ADR 1129, asked last: a spread an earlier route resolved
+                    // keeps that answer, so the proof only adds answers.
+                    match super::view_spread::view_spread(cx, slot, argument)? {
+                        Some(view) => match (targets, view.handlers) {
+                            (None, Some(handlers)) => (Some(handlers), Some((view.keys, true))),
+                            (targets, _) => (targets, Some((view.keys, false))),
+                        },
+                        None => (targets, None),
+                    }
                 };
-                spreads.push((spread.argument, targets));
+                spreads.push((spread.argument, targets, view));
             }
         }
         Ok(spreads)
