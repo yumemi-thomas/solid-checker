@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1119: a named callback (memo compute, onClick handler, onSettled callback) also run through a reference no position records (`[cb].forEach((g) => g())`) reads in the component body: Chrome reports STRICT_READ_UNTRACKED; main certified those reads clean, now SC1001 uncertifiable. The proved shapes (only positions, a const alias, two positions) stay quiet and clean; the global store is never called (quiet, uncertifiable)."
+}

@@ -27,6 +27,12 @@
 //                         the case is dropped on a sentence. A hand-off to another rule's claim is the typed `Delegate`, which ends the site only
 //                         where that rule has a row; each hit states the proof that makes the drop sound (the other check does answer, and
 //                         where), or becomes a `Delegate` or an uncertifiable row.
+//   private-judgment      ADR 1120: a function that judges inertness or a property key itself (named `*inert*`, `*runs_nothing*`,
+//                         `runs_no_user_code`, `proven_primitive`, `*key_of*`, `*member_key*`, `*cooked*`, …), or a key read from quote-trimmed
+//                         text (`.trim_matches(['"', '\''])`). The kernel answers these (`solid_facts::kernel`, `solid_reactive_ir::kernel`:
+//                         allow-lists over hostile operands, cooked keys) and a proof calls it; the census of main (155 judgments, ADR 1120)
+//                         is the baseline, migrated one at a time under the monotonicity gate, so the count only falls. The solid-facts
+//                         sources are scanned for this kind too; the kernel's own files are not.
 //   finding-filter        a `retain`, `retain_mut`, `extract_if`, a `dedup*` of rows or sites or a rows-assigned-from-`filter` over a collection that holds
 //                         findings, sites, rows or the facts they stand on (ADR 0958): code that discards findings or sites by path,
 //                         kind, rule or location. A finding leaves the report only through the attribution seam
@@ -73,6 +79,10 @@ export const PENDING = "pending-review";
 export const SCANNED = [SOURCE_ROOT, "rust/crates/solid-dialect/src", "rust/dialects/solid-v2/rules/src"];
 export const PROOF_LOG = `${SOURCE_ROOT}/proof_log.rs`;
 /** The backend files where findings leave the report (ADR 0958): scanned for `finding-filter` only, the other kinds are the analysis crates'. */
+/** ADR 1120: the kernel's own files, where a key or inertness judgment is the shared answer and not a private copy. */
+export const KERNEL_FILES = ["rust/crates/solid-facts/src/kernel.rs", "rust/crates/solid-reactive-ir/src/kernel.rs"];
+/** ADR 1120: the facts crate, scanned for `private-judgment` only (its other kinds are the analysis crates'). */
+export const PRIVATE_JUDGMENT_ONLY = ["rust/crates/solid-facts/src"];
 export const FINDING_FILTER_ONLY = ["rust/crates/solid-facts-backend/src/diagnostics.rs", "rust/crates/solid-facts-backend/src/package_drop.rs"];
 
 /** The files that produce roles: the classifier and the placement code. The rest read roles, and compare or match them. */
@@ -123,6 +133,11 @@ const KINDS = {
   "silent-unmatched-slot": [/(?:^|[\s{,(])(?:_|None)\s*=>\s*(?:\{\s*\}|continue\b|break\b|return\s*(?:None\b)?\s*(?:[,;}]|$))/],
   // ADR 0958. A collection loses members by a predicate (`retain`, `retain_mut`, `extract_if`), by equality (`dedup`, `dedup_by`, `dedup_by_key`)
   // or is rebuilt from a filtered copy of itself (`findings = findings.into_iter().filter(..)`).
+  // ADR 1120. A definition by the vocabulary of a private judgment, or a key compared as quote-trimmed text.
+  "private-judgment": [
+    /\bfn\s+[a-z0-9_]*(?:inert|runs_nothing|runs_no_user_code|runs_no_code|evaluates_without|proven_primitive|primitive_literal|harmless|key_of|key_text|key_name|static_key|member_key|spelled_key|cooked|literal_key|written_key|property_key)[a-z0-9_]*\s*[<(]/,
+    /\.\s*trim_matches\s*\(\s*(?:\[\s*)?'(?:"|\\'|`)'/,
+  ],
   "finding-filter": [
     /\.\s*(?:retain|retain_mut|extract_if)\s*\(/,
     /\b(?:findings|violations|defects|rows|operations|requirements|reads|writes|actions|async_reads|sites|replacements)\s*\.\s*dedup(?:_by(?:_key)?)?\s*\(/,
@@ -237,6 +252,20 @@ export function measure(root = ROOT) {
     for (const path of sourceFiles(base)) {
       const file = relative(root, path);
       for (const hit of hitsOf(readFileSync(path, "utf8"), PRODUCERS.some((pattern) => pattern.test(file)), VOCABULARY_OWNERS.some((pattern) => pattern.test(file)))) {
+        if (hit.kind === "private-judgment" && KERNEL_FILES.includes(file)) continue;
+        counts[file] ??= {};
+        counts[file][hit.kind] = (counts[file][hit.kind] ?? 0) + 1;
+        hits.push({ file, ...hit });
+      }
+    }
+  }
+  for (const directory of PRIVATE_JUDGMENT_ONLY) {
+    const base = join(root, directory);
+    if (!existsSync(base)) continue;
+    for (const path of sourceFiles(base)) {
+      const file = relative(root, path);
+      if (KERNEL_FILES.includes(file)) continue;
+      for (const hit of hitsOf(readFileSync(path, "utf8"), false, false, "private-judgment")) {
         counts[file] ??= {};
         counts[file][hit.kind] = (counts[file][hit.kind] ?? 0) + 1;
         hits.push({ file, ...hit });

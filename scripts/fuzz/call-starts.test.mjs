@@ -97,6 +97,15 @@ describe("callStarts", () => {
     expect(at(1, 4)).toEqual([{ line: 1, column: 4 }]);
     expect(at(2, 4)).toContainEqual({ line: 2, column: 15 });
   });
+  // ADR 1117b: Chrome rc.21 frames a native coercion or `instanceof` hook's caller where the compiled program's source map has a position (measured on the js-* cells).
+  it("takes a wrapped template's outer start, a coercing binary's start and an instanceof's left operand to the row", () => {
+    const at = callStarts('void `${o}`;\nvoid ("a" + o);\nconst b = {} instanceof K;\nvoid (f() + o);');
+    expect(at(1, 1)).toContainEqual({ line: 1, column: 9 });
+    expect(at(2, 7)).toContainEqual({ line: 2, column: 13 });
+    expect(at(3, 12)).toContainEqual({ line: 3, column: 11 });
+    // A left operand that runs code frames itself: its frame is not the operator's.
+    expect(at(4, 7)).not.toContainEqual({ line: 4, column: 13 });
+  });
   it("takes a frame at `in` to its right operand, and a tagged call's template to its tag", () => {
     const at = callStarts('v = "v" in s1;\nhf`x`;');
     expect(at(1, 5)).toContainEqual({ line: 1, column: 12 });

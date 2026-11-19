@@ -74,6 +74,16 @@ export const STORE_DESTRUCTURES = {
   "store-dstr-empty-sibling": { reads: true, nested: true, text: (o) => `{ const { v, a: {} } = ${o}; void v; }` },
   "store-dstr-then-first": { reads: true, then: true, text: (o) => `{ const { then, v } = ${o}; void then; void v; }` },
   "store-dstr-quoted": { reads: true, text: (o) => `{ const { "v": x } = ${o}; void x; }` },
+  // ADR 1122 (review of ADR 1107 round 2): a `then` slot in any spelling reads no warning, nor does a pattern with only a comment;
+  // main reported each as an SC1003 violation in a component body (legal: runtime silent).
+  "store-dstr-then-default": { then: true, text: (o) => `{ const { then = 1 } = ${o}; void then; }` },
+  "store-dstr-then-renamed-default": { then: true, text: (o) => `{ const { then: w = 1 } = ${o}; void w; }` },
+  "store-dstr-then-nested": { then: true, text: (o) => `{ const { then: {} } = ${o}; }` },
+  "store-dstr-then-escaped": { then: true, text: (o) => `{ const { th\\u0065n } = ${o}; void th\\u0065n; }` },
+  "store-dstr-then-renamed": { then: true, text: (o) => `{ const { then: w } = ${o}; void w; }` },
+  "store-dstr-then-quoted": { then: true, text: (o) => `{ const { "then": w } = ${o}; void w; }` },
+  "store-dstr-then-computed": { then: true, text: (o) => `{ const K = "then"; const { /* c */ [K]: w } = ${o}; void w; }` },
+  "store-dstr-empty-comment": { text: (o) => `{ const { /* nothing */ } = ${o}; }` },
 };
 
 // ADR 0781: the type names a standard method, and the program runs its own. Each runs the site on the caller's stack, in a component body.

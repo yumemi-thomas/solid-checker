@@ -165,6 +165,10 @@ pub struct AstFacts {
     /// boolean, `undefined` or text containing a number is left out: no key a consumer asks about can be one of them. A key's type is no proof (an `any`, a cast, a union).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub computed_keys: Vec<ComputedKeyFact>,
+    /// ADR 1120 (facts schema 101): the places that may break the plain-program premise, in source order. Nothing is listed for a file
+    /// that holds none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub premise_sites: Vec<PremiseSiteFact>,
     pub awaits: Vec<Span>,
     /// The subset of [`AstFacts::awaits`] proven to execute on every run of
     /// their innermost enclosing function (or of module evaluation): awaits
@@ -918,6 +922,13 @@ pub struct BindingFact {
     pub array_slots: Vec<Option<NamedSpan>>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub object_slots: Vec<ObjectBindingFact>,
+    /// Facts schema 100 (ADR 1122): every property of an object pattern, in order, whatever its value (`object_slots` keeps the
+    /// plain identifier slots only). Empty for any other shape.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub object_properties: Vec<PatternPropertyFact>,
+    /// Facts schema 100 (ADR 1122): the pattern ends in a rest element (`{ ...r }`, `[...r]`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pattern_rest: bool,
     /// Whether this binding is a `const` variable declarator. Parameters and
     /// mutable declarations are false.
     #[serde(default)]
@@ -945,6 +956,30 @@ pub struct BindingFact {
     /// for an argument: `const items = [a, b]` is `Array`.
     #[serde(default)]
     pub initializer_value_kind: RuntimeValueKind,
+}
+
+/// Facts schema 100 (ADR 1122): one property of an object binding pattern.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatternPropertyFact {
+    pub span: Span,
+    /// The key the runtime reads, from the parser's value, not the source text: an identifier's name (escapes decoded), a
+    /// string literal's value, a numeric literal's value, a template with no substitution. `None` for any other computed key
+    /// (`[k]`), whose value no fact names.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<CompactString>,
+    /// The key is written in brackets (`[k]`, `["then"]`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub computed: bool,
+    /// The value has a default (`{ a = 1 }`, `{ a: b = 1 }`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub has_default: bool,
+    /// The value is a nested pattern (`{ a: {} }`, `{ a: [b] }`, with or without a default).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub nested: bool,
+    /// The identifier the value binds, when it is one (with or without a default).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local: Option<NamedSpan>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1818,6 +1853,51 @@ pub struct ComputedKeyFact {
     pub texts: Vec<CompactString>,
 }
 
+/// What a premise site may do to the plain-program premise (ADR 1120): the clause it falls under.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PremiseClause {
+    /// A reference to the global `Proxy` or `Reflect`: traps on any operation, reflective writes.
+    ProxyOrReflect,
+    /// A prototype route by name, key or string: `prototype`, `__proto__`, `constructor`, `[gs]etPrototypeOf`, `defineProperty`,
+    /// `defineProperties`, `getOwnPropertyDescriptor(s)`, `__define[GS]etter__`, `__lookup[GS]etter__`.
+    PrototypeRoute,
+    /// A write to a name no binding of the file declares (a property of the global object).
+    GlobalWrite,
+    /// A write, on any receiver, under a function-valued standard name (`standard_members.txt`): the receiver may be a prototype, the
+    /// window or an element by a route no scan names (`event.currentTarget.escape = …`).
+    StandardKeyWrite,
+    /// `Object.assign` onto a value not made in place.
+    ObjectAssign,
+    /// A coercion or protocol hook defined or written (`toString`, `valueOf`, `toJSON`, `then`, `handleEvent`, `toLocaleString`), a
+    /// well-known `Symbol.*` used, or code put under a computed key no literal names.
+    CoercionHook,
+    /// A getter or setter defined (object literal, class, `accessor` field).
+    Accessor,
+    /// A key that holds `$$` or starts `_$`: Solid's private slots (`_$$click`), compared by the cooked value.
+    PrivateKey,
+    /// A shadow-root or custom-element spelling (ADR 1115's list): a listener may sit in a shadow tree.
+    ShadowRoot,
+    /// A `with` statement: a bare name may be any object's property.
+    With,
+}
+
+/// One place that may break the plain-program premise (ADR 1120, facts schema 101): its clause, its span and the key or name it
+/// concerns (`*` for a key no literal names). The IR scopes these per program, by dependency reach, and per value.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PremiseSiteFact {
+    pub at: Span,
+    pub clause: PremiseClause,
+    pub key: CompactString,
+    /// A hook or accessor defined on a value no other value can reach (the per-value answer): an object literal that initializes a
+    /// non-exported `const`, or a non-exported class declaration, every reference to which is the object of a static member that is
+    /// read (never written, never `constructor` or `__proto__`), and no `this` or `super` inside it. Its hooks run only through those
+    /// members, where a proof reads the member itself; no operand a proof converts can be it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub contained: bool,
+}
+
 /// One member of an array or object literal written directly as a call
 /// argument: the property key the runtime gives it and the span of the value
 /// written there. See [`ArgumentFact::literal_members`].
@@ -2496,6 +2576,7 @@ impl AstFacts {
             global_value_references: Vec::new(),
             assignment_pattern_keys: Vec::new(),
             computed_keys: Vec::new(),
+            premise_sites: Vec::new(),
             code_sinks: Vec::new(),
             uses_receiver: false,
             awaits: Vec::new(),
