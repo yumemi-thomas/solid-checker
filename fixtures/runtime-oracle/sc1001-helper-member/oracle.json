@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1121: a store member read in a helper the component body calls. A projection store (direct or returned by a hook) and a TypeScript-wrapped receiver (`as`, `!`, `satisfies`) were certified clean on main; Chrome reports STRICT_READ_UNTRACKED at each, now SC1001 violations at the call. The memo and untrack negatives stay silent. From the Fable review of ADR 1107 (F2, F3)."
+}

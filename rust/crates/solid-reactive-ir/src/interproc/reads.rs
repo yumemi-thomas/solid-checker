@@ -242,7 +242,10 @@ pub(super) fn direct_reference_contributions(
                 file.ast
                     .members
                     .iter()
-                    .filter(|member| member.object == reference_span)
+                    // ADR 1121: the receiver under a TypeScript wrapper
+                    // (`(store as S).v`, `store!.v`, `satisfies`) is the
+                    // same Get; the JavaScript is `store.v`.
+                    .filter(|member| file.ast.peel_ts_sugar_span(member.object) == reference_span)
                     // A plain assignment's target, or a destructuring leaf
                     // (ADR 0526), is written and never read: no Get. Nor is
                     // a `delete` or a `for`-head target (ADR 0614), as in
