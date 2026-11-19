@@ -848,6 +848,25 @@ pub(crate) fn account<'a>(
                                 here.iter().any(|end| end.answers(policy.as_ref(), code))
                             })
                     });
+                if silenced && crate::role_log::enabled() {
+                    // ADR 1119 step 0 (measurement only): the silences that ended the site and the reference audit of the
+                    // functions around it.
+                    let ids: Vec<&'static str> = std::iter::once(site.at)
+                        .chain(site.alternates.iter().copied())
+                        .filter_map(|span| named.get(&(path, span.start, span.end)))
+                        .flatten()
+                        .filter(|end| end.answers(policy.as_ref(), code))
+                        .map(|end| end.silence.id())
+                        .collect();
+                    let layers = crate::role_log::quiet(|| {
+                        crate::execution_role::layer_reference_audit(
+                            file,
+                            site.at,
+                            ctx.semantic_lookup,
+                        )
+                    });
+                    crate::role_log::silence(path, site.at, &format!("{code:?}"), &ids, &layers);
+                }
                 if !silenced && filed.insert((path, site.at.start, site.at.end, code)) {
                     if code == SiteCode::MissingEffectFn {
                         defects.push(unaccounted_defect(file, site, code));

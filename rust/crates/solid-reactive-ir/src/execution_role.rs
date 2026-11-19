@@ -429,9 +429,68 @@ pub(crate) fn read_execution_role(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
 ) -> ExecutionRole {
-    crate::role_log::decide("read", file.path.as_str(), span, || {
-        read_execution_role_unlogged(file, span, allowed, entities, symbol_names, lookup)
-    })
+    crate::role_log::decide_audited(
+        "read",
+        file.path.as_str(),
+        span,
+        || read_execution_role_unlogged(file, span, allowed, entities, symbol_names, lookup),
+        || layer_reference_audit(file, span, lookup),
+    )
+}
+
+/// ADR 1119 step 0 (measurement only, written to the role log): for each
+/// function owning `span`, innermost first: `K` a component, `I` an IIFE,
+/// `A` a literal written as a call's whole argument, `a` another literal
+/// (a JSX attribute, a property, a returned value); for a named function, `P`
+/// when every entry is a named-callback position, `C` when the entries are
+/// complete but some are direct calls, `O` when the entry census is open
+/// ([`write_roles::entry_census_complete`]).
+pub(crate) fn layer_reference_audit(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> String {
+    let mut functions: Vec<&solid_facts::ast::FunctionFact> =
+        file.ast.functions_owning(span).collect();
+    functions.sort_by_key(|function| function.span.end - function.span.start);
+    let mut out = String::new();
+    for function in functions {
+        let tag = if lookup.function_component_status(file, function) != ComponentStatus::No {
+            'K'
+        } else if crate::owners::function_binding_name(file, function).is_none() {
+            if file
+                .ast
+                .calls
+                .iter()
+                .any(|call| file.ast.peel_ts_sugar_span(call.callee) == function.span)
+            {
+                'I'
+            } else if file
+                .ast
+                .arguments_containing(function.span)
+                .any(|(call, index)| {
+                    call.arguments.get(index).is_some_and(|argument| {
+                        file.ast.peel_ts_sugar_span(argument.span) == function.span
+                    })
+                })
+            {
+                'A'
+            } else {
+                'a'
+            }
+        } else if !write_roles::entry_census_complete(file, function, lookup) {
+            'O'
+        } else if lookup
+            .function_call_site_references(file.path.as_str(), function.span)
+            .is_empty()
+        {
+            'P'
+        } else {
+            'C'
+        };
+        out.push(tag);
+    }
+    out
 }
 
 fn read_execution_role_unlogged(

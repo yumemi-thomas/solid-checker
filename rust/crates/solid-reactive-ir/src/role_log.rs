@@ -237,6 +237,9 @@ struct Decision {
     path: String,
     span: Span,
     arms: Vec<((&'static str, bool), ExecutionRole)>,
+    /// ADR 1119 step 0 (measurement only): the reference audit of the
+    /// functions around a silent decision's site, innermost first.
+    layers: Option<String>,
 }
 
 thread_local! {
@@ -348,7 +351,23 @@ pub(crate) fn decide(
     if !enabled() {
         return classify();
     }
-    decide_logged(kind, path, span, classify)
+    decide_logged(kind, path, span, classify, None::<fn() -> String>)
+}
+
+/// [`decide`], and when the outermost decision ends silent, `audit` (ADR 1119
+/// step 0, measurement only) is written as its `layers`.
+#[inline]
+pub(crate) fn decide_audited(
+    kind: &'static str,
+    path: &str,
+    span: Span,
+    classify: impl FnOnce() -> ExecutionRole,
+    audit: impl FnOnce() -> String,
+) -> ExecutionRole {
+    if !enabled() {
+        return classify();
+    }
+    decide_logged(kind, path, span, classify, Some(audit))
 }
 
 #[inline(never)]
@@ -357,6 +376,7 @@ fn decide_logged(
     path: &str,
     span: Span,
     classify: impl FnOnce() -> ExecutionRole,
+    audit: Option<impl FnOnce() -> String>,
 ) -> ExecutionRole {
     let outermost = CURRENT.with(|current| {
         let mut current = current.borrow_mut();
@@ -368,6 +388,7 @@ fn decide_logged(
             path: path.to_owned(),
             span,
             arms: Vec::new(),
+            layers: None,
         });
         true
     });
@@ -384,9 +405,25 @@ fn decide_logged(
     }
     let close = Close;
     let role = classify();
+    // The audit runs inside the open frame, so a decision it asks for logs no line of its own; the arms it passes are dropped.
+    let layers = match audit {
+        Some(audit) if silent(kind, role) == Some(true) => {
+            let arms =
+                CURRENT.with(|current| current.borrow().as_ref().map_or(0, |d| d.arms.len()));
+            let layers = audit();
+            CURRENT.with(|current| {
+                if let Some(decision) = current.borrow_mut().as_mut() {
+                    decision.arms.truncate(arms);
+                }
+            });
+            Some(layers)
+        }
+        _ => None,
+    };
     let decision = CURRENT.with(|current| current.borrow_mut().take());
     drop(close);
-    if let Some(decision) = decision {
+    if let Some(mut decision) = decision {
+        decision.layers = layers;
         write_decision(&decision, role);
     }
     role
@@ -546,6 +583,10 @@ fn decision_line(decision: &Decision, path: PathRef, role: ExecutionRole) -> Vec
         "],\"default\":{}",
         answering.is_some_and(|(_, default)| default)
     );
+    if let Some(layers) = &decision.layers {
+        line.extend_from_slice(b",\"layers\":");
+        push_json_str(&mut line, layers);
+    }
     match silent(decision.kind, role) {
         Some(silent) => {
             let _ = writeln!(line, ",\"silent\":{silent}}}");
@@ -555,6 +596,59 @@ fn decision_line(decision: &Decision, path: PathRef, role: ExecutionRole) -> Vec
         }
     }
     line
+}
+
+/// ADR 1119 step 0 (measurement only): runs `f` under a placeholder frame,
+/// so the decisions it asks for write no lines.
+pub(crate) fn quiet<R>(f: impl FnOnce() -> R) -> R {
+    let opened = CURRENT.with(|current| {
+        let mut current = current.borrow_mut();
+        if current.is_some() {
+            return false;
+        }
+        *current = Some(Decision {
+            kind: "quiet",
+            path: String::new(),
+            span: Span::new(0, 0),
+            arms: Vec::new(),
+            layers: None,
+        });
+        true
+    });
+    struct Close(bool);
+    impl Drop for Close {
+        fn drop(&mut self) {
+            if self.0 {
+                CURRENT.with(|current| current.borrow_mut().take());
+            }
+        }
+    }
+    let _close = Close(opened);
+    f()
+}
+
+/// ADR 1119 step 0 (measurement only): a universe site a named silence ended,
+/// with the silences' ids and the reference audit of the functions around it.
+pub(crate) fn silence(path: &str, span: Span, code: &str, ids: &[&str], layers: &str) {
+    let Some(path) = path_ref(path) else {
+        return;
+    };
+    let mut line = Vec::with_capacity(128);
+    line.extend_from_slice(b"{\"k\":\"silence\"");
+    push_path(&mut line, path);
+    let _ = write!(line, ",\"s\":{},\"e\":{},\"code\":", span.start, span.end);
+    push_json_str(&mut line, code);
+    line.extend_from_slice(b",\"ids\":[");
+    for (index, id) in ids.iter().enumerate() {
+        if index > 0 {
+            line.push(b',');
+        }
+        push_json_str(&mut line, id);
+    }
+    line.extend_from_slice(b"],\"layers\":");
+    push_json_str(&mut line, layers);
+    line.extend_from_slice(b"}\n");
+    append(&line);
 }
 
 /// One owner answer of `owners::owner_emission`: the operation `rule` at
@@ -695,6 +789,7 @@ mod tests {
                 ),
                 (arm_id!("a.first"), ExecutionRole::TrackedJsx),
             ],
+            layers: None,
         };
         let path = PathRef { process: 41, id: 2 };
         let line = decision_line(&decision, path, ExecutionRole::DeferredCallback);
