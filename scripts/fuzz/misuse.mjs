@@ -232,7 +232,9 @@ const DENIED = {
 /** Solid's own DOM work: the focused element leaves on the stack of a `flush()`, a disposer or `insert`, with no call of the program's naming it. */
 const DISPOSALS = { "dny-dispose-body": "body", "dny-dispose-memo": "memo", "dny-dispose-compute": "compute", "dny-dispose-untrack": "untrack" };
 /** The same triggers on an event of the measured list: nothing delivers it, and it keeps the proof. */
-const DENIED_LEGAL = ["dny-legal-keydown", "dny-legal-click", "dny-legal-pointer", "dny-legal-project-click", "dny-blur-lowercase"];
+// ADR 1132 (review F6): `dny-legal-mount-disabled`, the click control disabled by its own JSX from mount: no event ever reaches its handler, so a
+// violation there is no "wrong if it runs" (legal.mjs `undrivenHandlerSite` refuses it) and stays a look.
+const DENIED_LEGAL = ["dny-legal-keydown", "dny-legal-click", "dny-legal-pointer", "dny-legal-project-click", "dny-blur-lowercase", "dny-legal-mount-disabled"];
 const DENIED_OTHER = ["dny-blur-spread", "dny-typo-event", "dny-blur-dynamic", "dny-portal-dispose", "dny-load-append", "dny-load-for", "dny-load-show", "dny-unmount-flush-body", "dny-unmount-flush-root", "dny-insert-body", "dny-renamed-prop", "dny-shared-fn", "dny-chain-click"];
 const DENIED_CONTEXTS = [...Object.keys(DENIED), ...Object.keys(DISPOSALS), ...DENIED_OTHER];
 /** `flush()` in a denied handler, with no dispatch in the program (`a04`, `b03`, `b09`): SC2008. */
@@ -1722,7 +1724,7 @@ function laterRoot(kit, prep, trigger, solid, web) {
  */
 const TAKEN_AWAY = new Set(["dny-blur-disabled", "dny-blur-replace", "dny-focusout-replace", "dny-change-typed", "dny-blur-select-remove",
   ...Object.keys(DISPOSALS), "dny-unmount-flush-body", "dny-unmount-flush-root", "dny-insert-body", "dny-shared-fn", "dny-chain-click",
-  "dny-flush-unmount", "dny-blur-spread", "dny-blur-dynamic", "dny-portal-dispose", "dny-blur-lowercase", "dny-legal-keydown", "dny-legal-click", "dny-legal-pointer"]);
+  "dny-flush-unmount", "dny-blur-spread", "dny-blur-dynamic", "dny-portal-dispose", "dny-blur-lowercase", "dny-legal-keydown", "dny-legal-click", "dny-legal-pointer", "dny-legal-mount-disabled"]);
 function undriven(tree, id) {
   if (Array.isArray(tree)) { for (const item of tree) undriven(item, id); return; }
   if (tree === null || typeof tree !== "object") return;
@@ -1739,6 +1741,7 @@ function deniedContextOf(context, stmts, kit, b) {
   const el = anyEl(b);
   if (context === "dny-blur-lowercase") { const h = kit.name("f"); return { body: [decl(h, fn(stmts)), ...laterRoot(kit, [`${el}.focus()`], `${el}.disabled = true`)], view: [button(b, [], { on: "onKeyDown", attrs: `{...{ onblur: ${h} }}` })] }; }
   if (context === "dny-legal-project-click") return { body: laterRoot(kit, [], "({ click() { return 1; } }).click()"), view: [button(b, stmts)] };
+  if (context === "dny-legal-mount-disabled") return { body: [], view: [button(b, stmts, { tag: "button", on: "onClick", attrs: "disabled" })] };
   const legal = { "dny-legal-keydown": { tag: "input", on: "onKeyDown" }, "dny-legal-click": { tag: "button", on: "onClick" }, "dny-legal-pointer": { tag: "button", on: "onPointerDown" } }[context];
   if (legal) return { body: laterRoot(kit, [`${el}.focus()`], `${el}.disabled = true`), view: [button(b, stmts, legal)] };
   const spec = DENIED[context];
