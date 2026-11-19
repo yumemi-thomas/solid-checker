@@ -16,10 +16,11 @@ describe("the cp contexts", () => {
       expect(recallShapes(CODE, context).map((shape) => `${shape.binding}/${shape.layer}/${shape.source ?? ""}`)).toEqual(["direct/none/"]);
     }
   });
-  it("write the site in a module-level child of the element, read in a tracked effect", () => {
-    expect(textOf("cp-stored")).toMatch(/const pe = <CpC1 value=\{1\}><CpK1 a=\{1\} \/><\/CpC1>; createTrackedEffect\(/);
+  it("write the site in an arrow the element's child expression calls, read in a tracked effect", () => {
+    expect(textOf("cp-stored")).toMatch(/const pe = <CpC1 value=\{1\}>\{\(\(\) => \{/);
+    expect(textOf("cp-stored")).toMatch(/\)\(\)\}<\/CpC1>; createTrackedEffect\(/);
     expect(textOf("cp-pattern")).toMatch(/const \{ defaultValue: CpC1 = CpR1 \} = createContext\(CpR1\)/);
     expect(textOf("cp-let")).toMatch(/let CpC1 = createContext\(1\);\nCpC1 = CpR1 as unknown as typeof CpC1/);
-    for (const context of CP_CONTEXT_NAMES) expect(textOf(context)).toMatch(/function CpK1\(_props: \{ a\?: unknown \}\) \{\n\s*flush\(\);/);
+    for (const context of CP_CONTEXT_NAMES) expect(textOf(context)).toMatch(/\{\(\(\) => \{\n\s*flush\(\);\n\s*\}\)\(\)\}<\/CpC1>/);
   });
 });
