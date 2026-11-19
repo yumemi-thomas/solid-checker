@@ -34144,6 +34144,73 @@
   "rediscovered": "`focus.mjs --codes UNTRACKED_READ_AFTER_AWAIT --grids mx-recall --ids` with the release checker of bundle u 6e26187f1 (same analysis): the judge before this change false-clean on all five, after it recall-gap; the other 15 js-* cells unchanged"
  },
  {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent at a call that runs a method an installed package wrote on a built-in's prototype by name, reached by `.call`, `.apply`, `Reflect.apply` or a destructured binding (`a.reverse.call(a)`, `const { reverse } = a; reverse()`): ADR 1108 part 1 took only a direct member call whose declaration is the library's for a site",
+  "found": "Fable review of ADR 1108 part 1 (1e441fa3e); pattern lane `pkgaction/proto-site-{call,apply,reflect-apply,destructured}`, Chrome-confirmed false cleans (held by ADR 1108 part 2)",
+  "fixed": "ADR 1114 family 3 slice A (`package_action_calls.rs` `prototype_call`: the function of `.call`/`.apply`/`.bind` and `Reflect.apply`, the key of the pattern that binds a callee; ported from 19953739e)",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pa-gprotocall-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotocall-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotocall-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoapply-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoapply-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoapply-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoreflect-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoreflect-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoreflect-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotodestr-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotodestr-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotodestr-root-x-direct-none"
+  ],
+  "rediscovered": "new contexts pa-gprotocall, pa-gprotoapply, pa-gprotoreflect, pa-gprotodestr (pa-shapes.mjs): `focus.mjs --codes ACTION_CALLED_IN_OWNED_SCOPE --grids mx-recall --boundary both --ids`, release builds: main e637f50f2 exits 1, false-clean 3 per context in both boundaries; ADR 1114 family 3 slice A exits 0, recall-gap 3 (the SC2002 row at the call, uncertifiable). Pattern lane: the four programs false clean on main, fine here"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent where the standard library itself runs a method an installed package wrote on a built-in's prototype: `test` runs `exec`, the `Map` constructor runs `set`, an array's `toString` and a template's substitution run `join`, `JSON.stringify` runs `toJSON`",
+  "found": "Fable review of ADR 1108 part 1; pattern lane `pkgaction/proto-site-{test-exec,map-set,tostring-join,template-join,json-tojson}`, Chrome-confirmed",
+  "fixed": "ADR 1114 family 3 slice A (`IMPLICIT_CALLS`; a template's site is each substitution, where V8 places the conversion)",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pa-gprotoimplicit-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoimplicit-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoimplicit-root-x-direct-none"
+  ],
+  "rediscovered": "new context pa-gprotoimplicit (`/fzprobe/.test(\"x\")` after `RegExp.prototype.exec` is written): `focus.mjs --codes ACTION_CALLED_IN_OWNED_SCOPE --grids mx-recall --boundary both --ids`, release builds: main e637f50f2 exits 1, false-clean 3 per context in both boundaries; ADR 1114 family 3 slice A exits 0, recall-gap 3 (the SC2002 row at the call, uncertifiable). The other implicit calls are rows of the same table, held by the pattern lane (false clean on main, fine here, the template probe unchanged: `void `${…}`` is judged at the substitution V8 reports) and fixture action-in-owned-scope-prototype-sites"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent at a call of a method an installed package wrote on a built-in's prototype where the receiver is typed by a project interface or `any`, a bare `dispatchEvent(…)` after `EventTarget.prototype.dispatchEvent` is written (the window inherits it), a read of an accessor a package defined on a prototype (`void dv.byteLength`), and `new Set(it)` or `new Map(it)` after an any-name writer writes the iterator",
+  "found": "Fable review of ADR 1108 part 1; pattern lane `pkgaction/proto-site-{interface,any,bare-eventtarget,accessor}` and `pkgaction/proto-iter-{set,map}`, Chrome-confirmed",
+  "fixed": "ADR 1114 family 3 slice A (`prototype_call`: any member call of a written name, `INHERITED_BY_WINDOW`, `ITERATING_CONSTRUCTORS`; `prototype_read` for an evaluated member or a pattern key of a written name)",
+  "outside": "the pa contexts write one site expression with no declaration outside the component's body (an interface), and their receivers are the library's: these six are held verbatim by the pattern lane (false clean on main e637f50f2, fine here), the runtime oracle cases package-prototype-sites and package-prototype-iteration, and fixtures action-in-owned-scope-prototype-sites and action-in-owned-scope-prototype-iteration"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent at an iteration (a spread, `for…of`, an array pattern) after an installed package writes `Symbol.iterator` on a built-in's prototype, a key the scan does not decide (an any-name writer)",
+  "found": "Fable review of ADR 1108 part 1; pattern lane `pkgaction/proto-iter-{spread,forof,pattern}`, Chrome-confirmed (held by ADR 1108 part 2 and ADR 1114 family 3 slice A)",
+  "fixed": "ADR 1114 family 3 slice C (`package_action_calls.rs`: every iterated operand is a site where a writer under any name is loaded; kind `iteration`)",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pa-gprotoiter-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoiter-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoiter-root-x-direct-none"
+  ],
+  "rediscovered": "new context pa-gprotoiter (`void [...new Float32Array(1)]`, pa-shapes.mjs): `focus.mjs --codes ACTION_CALLED_IN_OWNED_SCOPE --grids mx-recall --boundary both --ids`, release builds: main e637f50f2 and slice A (69d19949a) exit 1, false-clean 3 in both boundaries; slice C exits 0, recall-gap 3; oracle 3 compared, 0 behaviour. `for…of` and the array pattern are held by the pattern lane (false clean before, fine here) and fixture action-in-owned-scope-prototype-iteration"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent at a member call no declaration resolves (a receiver typed `any`, `as any`) after an installed package writes a built-in's prototype under a key the scan does not decide (an any-name writer)",
+  "found": "ADR 1114 family 3 ruling (evidence for the held kind any-untyped-member): pattern lane `pkgaction/proto-anyname-{any,as-any}`, Chrome-confirmed false cleans on main e637f50f2 and slice C 26e6ba2cf",
+  "fixed": "ADR 1114 family 3 slice D (`prototype_call`: kind any-untyped-member made, no kind held)",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pa-gprotoany-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoany-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoany-root-x-direct-none"
+  ],
+  "rediscovered": "new context pa-gprotoany (`void (new Float32Array(1) as any).reverse()` after `fz-gprotokey` writes `Float32Array.prototype[key]`, key a call's result): `focus.mjs --codes ACTION_CALLED_IN_OWNED_SCOPE --grids mx-recall --boundary both --ids`, release builds: main e637f50f2 and slice C exit 1, false-clean 3 in both boundaries; slice D exits 0, recall-gap 3; oracle 3 compared, 0 behaviour. `proto-anyname-any` and `-as-any` held by the pattern lane (false clean before, fine here)"
+ },
+ {
   "finding": "Fable review of ADR 1124 (side finding, live on main), widened: a named function expression (`const f = function inner() {…}`) called through the `const` holding it reached no summary (the interprocedural graph keyed the function by its own name only), so its read was clean at a direct call in the body, an apply or a helper; and ADR 1111's direct-call check listed calls through the own name only, so a callback named by a primitive and called through the `const` kept its silent role; rc.21 warns STRICT_READ_UNTRACKED",
   "found": "review-1124 (DirectCallBody); widened by ADR 1127's probes (no primitive needed)",
   "fixed": "ADR 1127 (write_roles::entry_bindings, the entry census's list; interproc summary nodes indexed under the holding binding too; callee_roles function_called_by_name over every binding)",
@@ -36838,5 +36905,58 @@
    "mx-context-not-found-tbl-reflect-apply-h-x-direct-none"
   ],
   "rediscovered": "focus on the 16 false-positive ids of the run (mx-census CONTEXT_NOT_FOUND): d40e3f3cd 13 false positives plus the 3 known open (dny-flush-*, scripts/fuzz/open-defects.json); FIXED here (13 not-fired, the 3 known open unchanged)"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent at an operation that runs a member a package wrote on a built-in's prototype other than a member call the library declares: a call typed by a project interface or type literal under an any-name writer, a conversion by an operator (`\"\" + d`), a template substitution, `p.catch(f)` running `then`, a bare `dispatchEvent`, an accessor read, `new Set(it)`, `new URL(u)`",
+  "found": "Fable review of ADR 1114 family 3 (A+C, round 1: F1-F4, F6) and pattern lane `pkgaction/proto-anyname-{interface,unknown-cast}`; Chrome-confirmed (review-f3 oracle)",
+  "fixed": "ADR 1114 family 3 slice E (fail closed under a prototype writer: every member call, every library call, constructor and tag, every converting operator (facts schema 103 `converting_operators`), every array pattern, `await`, `using`, JSX values)",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pa-gprotocast-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotocast-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotocast-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoannot-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoannot-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoannot-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoconcat-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoconcat-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoconcat-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprototemplate-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprototemplate-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprototemplate-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotocatch-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotocatch-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotocatch-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotobare-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotobare-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotobare-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoget-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoget-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoget-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoset-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoset-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoset-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotourl-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotourl-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotourl-root-x-direct-none"
+  ],
+  "rediscovered": "new contexts pa-gprotocast, -gprotoannot, -gprotoconcat, -gprototemplate, -gprotocatch, -gprotobare, -gprotoget, -gprotoset, -gprotourl (pa-shapes.mjs; the last six move the review's `outside` shapes into the generator): `focus.mjs --codes ACTION_CALLED_IN_OWNED_SCOPE --grids mx-recall --boundary both --ids`, release builds: main e637f50f2 exits 1 (false-clean 24, recall-gap 3: the template, already a site), slice D 41c5e399f exits 1 (false-clean 15), slice E exits 0 (recall-gap 27); oracle 27 compared, 0 behaviour"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent where a written prototype member runs from code no site of the program spells: a package whose closure names no Solid package runs `reverse` another package wrote on `Float32Array.prototype`; the Solid runtime clones a template root with `cloneNode`/`importNode` a package wrote on `Node.prototype`/`Document.prototype`",
+  "found": "Fable review of ADR 1114 family 3 (A+C, round 1: F5), pattern lane `pkgaction/proto-known-clearpkg`, `-runtime`; Chrome-confirmed",
+  "fixed": "ADR 1114 family 3 slice F (no package is clear under a prototype writer; a JSX template root is a site under a writer of cloneNode/importNode)",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pa-gprotoclear-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoclear-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoclear-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoruntime-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoruntime-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoruntime-root-x-direct-none"
+  ],
+  "rediscovered": "new contexts pa-gprotoclear, pa-gprotoruntime (pa-shapes.mjs): `focus.mjs --codes ACTION_CALLED_IN_OWNED_SCOPE --grids mx-recall --boundary both --ids`, release builds: slice E 7db0f9ff0 exits 1 (false-clean 6), slice F exits 0 (recall-gap 6); oracle 6 compared, 0 behaviour"
  }
 ]

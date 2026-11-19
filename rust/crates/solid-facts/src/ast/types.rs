@@ -311,6 +311,14 @@ pub struct AstFacts {
     /// is this checker's to report.
     #[serde(default)]
     pub coercive_operands: Vec<CoerciveOperandFact>,
+    /// Every operator expression that converts an operand to a primitive or a property key, by span, sorted (facts schema 103, ADR 1114 family 3; the
+    /// expression, where V8 places the conversion, not the operand), when that operand is no literal: both sides of `==`, `!=`, the
+    /// relational, arithmetic, shift and bitwise binaries and `+`; the left of `in`; the operand of unary `+`, `-`, `~` and of `++`/`--`; both sides of a
+    /// compound assignment that is not logical; and a computed key that is no literal (a member, an object or class property). An object there runs its
+    /// `Symbol.toPrimitive`, `valueOf` or `toString`, which a package may have written on a built-in's prototype. `===`, `!==`, `instanceof`, `!`,
+    /// `typeof`, `void` and `delete` convert nothing. A template's substitutions are [`AstFacts::template_literals`]'.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub converting_operators: Vec<Span>,
     /// Every operand span of an operator that applies ToPrimitive to it, by
     /// span, sorted: the binary and compound-assignment operators the Type
     /// Facts producer's `coercingBinaryOperators` lists (arithmetic, the four
@@ -2752,6 +2760,7 @@ impl AstFacts {
             object_get_shapes: Vec::new(),
             template_literals: Vec::new(),
             coercive_operands: Vec::new(),
+            converting_operators: Vec::new(),
             coercing_operands: Vec::new(),
             primitive_results: Vec::new(),
             iterated_operands: Vec::new(),

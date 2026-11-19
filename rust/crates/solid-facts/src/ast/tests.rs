@@ -4405,3 +4405,33 @@ fn a_computed_read_whose_value_only_feeds_operators_and_tests_is_inert() {
         "the arrow body returns it; the statement discards it"
     );
 }
+
+/// ADR 1114 family 3: the operator expressions that convert an operand that is no literal, where V8 places the conversion.
+#[test]
+fn converting_operators_list_every_converting_expression() {
+    let source = concat!(
+        "declare const d: any, e: any, o: any, k: any;\n",
+        "void (\"\" + d);\n",
+        "void (d < e);\n",
+        "void +d;\n",
+        "let s: any = \"\"; s += d;\n",
+        "void o[k];\n",
+        "void (k in o);\n",
+        "void (d == e);\n",
+        "let n = 0; n++;\n",
+        "void { [k]: 1 };\n",
+        "void (d === e); void (d instanceof e); void !d; void typeof d; void o[\"x\"]; void (1 + 2);\n",
+    );
+    let facts = super::extract("converting.ts", source).unwrap();
+    let texts: Vec<&str> = facts
+        .converting_operators
+        .iter()
+        .map(|span| &source[span.start as usize..span.end as usize])
+        .collect();
+    assert_eq!(
+        texts,
+        [
+            "\"\" + d", "d < e", "+d", "s += d", "o[k]", "k in o", "d == e", "n++", "[k]: 1",
+        ]
+    );
+}

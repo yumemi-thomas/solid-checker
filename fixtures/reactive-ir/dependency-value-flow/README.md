@@ -15,3 +15,5 @@ a memo. Cells:
 - `Local`: a project function named `useLocation`: no package, no row.
 
 Chrome: `fixtures/runtime-oracle/package-value-flow`.
+
+**ADR 1114 family 3 slice E.** Where a loaded package writes a built-in's prototype and may reach a Solid action, every operation that may run a written member is uncertifiable (`package-may-call-action:<reach>:prototype-<kind>`): a member call whatever its declaration, a call, constructor or tag the library declares or nothing resolves, a converting operator, a template substitution, an array pattern, `await`, `using` and a JSX value. A twin above called silent that makes such an operation in an owned scope under such a writer is uncertifiable now; a twin in a handler stays silent.
