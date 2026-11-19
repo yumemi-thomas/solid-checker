@@ -337,6 +337,17 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   followed, or that is also called where nothing proves the run, leaves its
   body's reads obligations (ADR 0547).
 
+- **A creation the effect-callback guard refuses first (ADR 1111).** A read
+  written after a creation SC6002 proves refused, or holds as its
+  `effect-owner-unproven` obligation, in the same function or in a function
+  that function calls by name after the creation (`const f = () => s.v;
+  createMemo(f); f();` in an apply), is uncertifiable
+  `creation-throws-first`: PRIMITIVE_IN_EFFECT_CALLBACK throws before the
+  read. A function handed by name to a primitive and also called by name
+  where untracked reads are reported, or where nothing places the call, is
+  unplaced (`function-run-unplaced`)
+  (`fixtures/reactive-ir/competing-check-read-after-creation`).
+
 A read that no row, discard or named silence ends is uncertifiable: `strict-read-unaccounted` (ADR 0936).
 
 ## Why is this bad?

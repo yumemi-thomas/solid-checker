@@ -4409,3 +4409,20 @@ Both modes move the same rows, all SC1002: +76 `unresolved-invocation` in projec
 
 **Evidence.** Fixture `callback-runs-1109`, main → this: `TryThrowMember` SC1001 V → U (`callee-callback-timing`); `NamedEmptyForEach`, `OneElementSort` (SC1003) and `OneElementSortMember` (SC1001) V → U (`function-unentered`); `MapParamDestructure`, `MapParamMember` none → SC9012 U (`value-in-carrier`); kept violations that run in Chrome: `PlainHelper`, `TwoElementSort`, `NamedFilledForEach`, `NamedEmptyHanded`, `TryRethrowMember`, `TryFinallyMember`; the cost `TryCallFirst` V → U. `dead-site-empty-collection` `NamedEmpty` V → U. Chrome on the case: main 2 unproven-clean (F2) and 6 static-only, this 2 static-only (the two SC1003 some-path rows).
 Generator: `try-helper-never` (a `tryThrowCall` helper), table variants `zeroname` and `one`, store variants `store-map-dstr`, `store-map-member`, `store-map-unread`. On every new program of lg-recall and the direct-none store-map programs of mx-recall (release): main 1,480 unexecuted violations, 40 false positives, 174 false cleans; this 0, 0, 0 (2 harness rows: the class-field position records no run). The census's 879 new programs: all `not-fired`, no violation.
+<a id="adr-1111"></a>
+## ADR 1111 — A read after a creation the effect guard refuses is an obligation; a callback also called by name is unplaced
+**The gap.** A function handed by name to `createMemo` and also called by name (`const f = () => s.v; createMemo(f); f();`) took the memo compute's tracked role, so the read at the direct call was certified clean in an action an apply or a reaction steps, or in a late-mounted handler: 52 mx-recall false cleans, found by ADR 1107's `store-dstr-byname` variant. The member twin, the new generator variant `store-byname` (`misuse.mjs` `WHOLE_STORE_READS`; 1,938 mx-recall and 1,359 lg-recall programs), also showed 29 false positives on main: in an effect's apply, a reaction, or a render effect's apply the first run leaves early, `createMemo(f)` throws PRIMITIVE_IN_EFFECT_CALLBACK and `f()` never runs, yet SC1001 claimed the read.
+**Decision.**
+- `callee_roles.rs` (`named-callback-also-called`): a named callback whose direct calls include one where untracked reads are reported, or one nothing places, is unplaced (SC1001 uncertifiable `function-run-unplaced`). A callback met again while its calls are being classified is a cycle, and also unplaced. Before that guard, the dev-mode corpus overflowed the stack on 10 projects.
+- `competing_checks.rs` `mark` (ADR 1052's pattern): a read row is uncertifiable `creation-throws-first` when its read (the origin, else the row) runs after a creation SC6002 proves refused, or holds as its `effect-owner-unproven` obligation, on the same run. That is, the read is written after the creation in the same function, or sits in a function that function calls by name after it. Excluded:
+  - a creation SC6002 holds as `effect-creation-unaccounted` (no row places it): that proves no throw, and unknown counts as reachable;
+  - a read in the creation's own arguments;
+  - a read the pending rule holds open (ADR 0509): its pending row hangs on the open read.
+
+  A first build without the last two exclusions lost 5 SC5003 rows (smoke false cleans) and 11 corpus violations.
+**Measured** (release, main 28fde14bf against this build):
+- `store-byname` mx-recall: FC 52 to 0, FP 29 to 0, agree 451 to 433. The 18 render-apply programs went to recall-gap: their SC6002 is `effect-owner-unproven`, though the owned first run reaches the read (docs/open-work.md).
+- lg-recall: clean 372 to 360.
+- Smoke (seed 777): lg-base, lg-combo, lg-src, mx-base, mx-combo, mx-src and mx-census are identical.
+- Corpus (rc.21 frozen v2, 34 projects): no violation moves; SC1001 U +6 in dev and +8 in std, plus one SC5003 row of `probus-hk` re-split into SC5001 and SC5003 U.
+- Fixture `competing-check-read-after-creation`: three U rows and two kept V. Chrome cases `competing-check-read-after-creation-helper` and `-rerun` (covered). In `accessor-provenance`, `Eager`'s `has` gains a U row at its read; its V through `has` stays.

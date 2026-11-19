@@ -419,6 +419,9 @@ const WHOLE_STORE_READS = {
   "store-array-from": { reads: true, array: true, text: (o) => `Array.from(${o})` },
   "store-array-spread": { reads: true, array: true, text: (o) => `[...${o}]` },
   "store-for-of": { reads: true, array: true, text: (o) => `for (const x of ${o}) { void x; }` },
+  // ADR 1111: a member read in a function handed by name to `createMemo` and also called here; the by-name role certified it
+  // where no summary claims the call (an action step, a late-mounted handler).
+  "store-byname": { reads: true, imports: ["createMemo"], text: (o) => `{ const f = () => ${o}.v; createMemo(f); f(); }` },
   ...STORE_DESTRUCTURES,
   "store-keys": { text: (o) => `Object.keys(${o})` },
   "store-has": { text: (o) => `"v" in ${o}` },

@@ -4870,6 +4870,14 @@
    "to": 6,
    "adr": "ADR 1109",
    "fact": "owner-carrier-provably-runs SortOne: [1].sort(hf) never runs hf, so its useContext row is relabeled from function-run-unplaced (still uncertifiable)"
+  },
+  {
+   "fixture": "reactive-ir/accessor-provenance",
+   "key": "SC1001 function-run-unplaced",
+   "from": 16,
+   "to": 17,
+   "adr": "ADR 1111",
+   "fact": "a function the body also calls by name where untracked reads are reported is unplaced: U at its own read, the V through it stays"
   }
  ]
 }

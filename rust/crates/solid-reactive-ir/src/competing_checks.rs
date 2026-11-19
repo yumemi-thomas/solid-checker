@@ -62,6 +62,44 @@ pub(crate) fn mark(
         .filter(|violation| violation.id == "SC6002" && !violation.uncertain)
         .map(|violation| violation.location.clone())
         .collect();
+    // ADR 1111: a read written after a creation the effect-callback guard refuses or may refuse (an SC6002 violation, or its
+    // `effect-owner-unproven` obligation: an apply runs the creation, its owner unproven; not a creation no row places, which
+    // proves no throw: unknown counts as reachable) in the same function, or in a function that function calls by name after the creation, may never run on
+    // that run: the guard throws first (`const f = () => s.v; createMemo(f); f();` in an effect's apply; the row stands at
+    // the call into the helper, the read at its origin). The row is an obligation. A read the pending rule holds open
+    // (ADR 0509) is one already, and its pending row hangs on the open read: it is left as it is.
+    let may_refuse: Vec<Location> = program
+        .static_violations
+        .iter()
+        .filter(|violation| {
+            violation.id == "SC6002"
+                && (!violation.uncertain
+                    || violation_blocker(violation) == crate::blockers::EFFECT_OWNER_UNPROVEN)
+        })
+        .map(|violation| violation.location.clone())
+        .collect();
+    let pending_open: std::collections::HashSet<Location> = program
+        .async_reads
+        .iter()
+        .filter(|read| read.async_provenance && !read.apply_first_run_pending && !read.unaccounted)
+        .map(|read| read.location.clone())
+        .collect();
+    for read in &mut program.reads {
+        if read.uncertain
+            || pending_open.contains(&read.location)
+            || !read_after_refused_creation(
+                read.origin.as_ref().unwrap_or(&read.location),
+                &may_refuse,
+                lookup,
+            )
+        {
+            continue;
+        }
+        read.uncertain = true;
+        read.context =
+            crate::blockers::with_detail(crate::blockers::CREATION_THROWS_FIRST, &read.context)
+                .into();
+    }
     // ADR 1052, part 3: SC6002's `effect-owner-unproven` obligation names a caller that runs the creation in an effect's
     // apply (a helper the apply and a handler or a render both call). On that run the guard throws first and halts; the
     // run the owner row proves unowned may be that one, and no fact orders the others' runs against the halt: the owner
@@ -944,4 +982,44 @@ fn listener_detached_in_owned_leaf(
     removed
         && leaf
             .is_some_and(|callback| component.span.contains(callback) && callback != component.span)
+
+/// ADR 1111: whether `at` (a read: a row's origin, else its location) runs after a call in `refused` (a creation the
+/// effect-callback guard refuses or may refuse) on a run of the function holding that call: written after it in that
+/// function, or in a function that function calls by name after it. A read in the creation's own arguments is not one.
+fn read_after_refused_creation(
+    at: &Location,
+    refused: &[Location],
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some(file) = lookup.file_by_path(at.path.as_ref()) else {
+        return false;
+    };
+    let (Ok(start), Ok(end)) = (u32::try_from(at.start_byte), u32::try_from(at.end_byte)) else {
+        return false;
+    };
+    let ast = &file.ast;
+    let read = solid_facts::core::Span::new(start, end);
+    let read_function = crate::owners::owning_function(ast, read);
+    let holder_of = |span: solid_facts::core::Span| {
+        crate::owners::owning_function(ast, span).map(|function| function.span)
+    };
+    refused.iter().any(|creation| {
+        creation.path == at.path
+            && ast.calls.iter().any(|call| {
+                if u64::from(call.span.start) != creation.start_byte || call.span.contains(read) {
+                    return false;
+                }
+                let Some(holder) = holder_of(call.span) else {
+                    return false;
+                };
+                if read_function.map(|function| function.span) == Some(holder) {
+                    return call.span.end <= read.start;
+                }
+                read_function.is_some_and(|function| {
+                    crate::execution_role::function_called_by_name(file, function, lookup)
+                        .into_iter()
+                        .any(|run| call.span.end <= run.start && holder_of(run) == Some(holder))
+                })
+            })
+    })
 }
