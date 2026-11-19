@@ -228,7 +228,11 @@ declared return type, a union of such types; ADR 0436). The proof reads the
 declared type: an index signature, `any`, a generic or open union member, or a
 type the checker cannot enumerate keeps the obligation. A value typed
 `{ class?: string }` may carry more keys at run time (structural subtyping), and
-direct `eval` withholds the proof. Unknown holders,
+direct `eval` withholds the proof. A `merge`/`omit` view of a component's own
+props spread onto an intrinsic element is resolved from the component's callers
+when every one is a JSX site with literal keys (ADR 1129): its listener keys hold
+the function literals the callers (or the view's literals) write there, which join
+the owner graph as handlers, and no other value. Unknown holders,
 getters, generators and unaudited web spread keys retain internal obligations. These placements obey
 the synchronous-dispatch veto above; no unresolved target proves a violation.
 

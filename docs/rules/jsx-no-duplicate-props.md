@@ -76,5 +76,9 @@ filled `textContent` loses to any child in the source, even a comment; a nullish
 empty one drops nothing. A source whose value is not proven is uncertifiable,
 blocker `content-source-value-unproven`. A spread whose keys are not closed against
 the content props is uncertifiable too, blocker `spread-content-unproven`; a complete
-declared key set closes it, under ADR 0436's premise. Upstream reads neither: both
+declared key set closes it, under ADR 0436's premise. So does a `merge`/`omit` view
+of a component's own props whose every caller is a JSX site with literal attribute
+keys and no spread (ADR 1129): the spread then holds the callers' keys (`children`
+where they write children) and the view's literal keys, minus the `omit` keys. A
+caller that writes a content key keeps the spread uncertifiable. Upstream reads neither: both
 divergences are pinned in `fixtures/ownership-cases/cases.json`.
