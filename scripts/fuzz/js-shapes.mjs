@@ -21,6 +21,7 @@
 // or concatenated keys, cross-module re-exports (default, star, namespace, barrel), and the review probes of ADRs 1097, 1102b, 1089 E, 1108 and 1098 D.
 // Recall contexts, the direct binding bare (`jsShape`), one program per cell, not crossed by the census, out of api-fire's plan.
 import { awaitStmt, call, decl, domExpr, expr, fn, num, obj, prim, ref, ret } from "./model.mjs";
+import { W3_ROUTES } from "./js-shapes-w3.mjs";
 
 /** Each cell: the value its hook returns, the declarations that install the hook (given `f`, the hook function's reference text, and `n`, the route's name), and the
  * statement the memo runs after its await. */
@@ -37,6 +38,9 @@ const ROUTES = {
   "js-hasinst": ["false", (f, n) => [`const ${n} = { [Symbol.hasInstance]: ${f} } as unknown as new () => object`], (n) => `void ({} instanceof ${n})`],
   "js-computed": ['"k"', (f, n) => [`const ${n} = { toString: ${f} }`, `const ${n}t: Record<string, number> = {}`], (n) => `void ${n}t[${n} as unknown as string]`],
   "js-tagged": ['""', (f, n) => [`const ${n} = ${f}`], (n) => `void ${n}\`x\``],
+  // W3's half (js-shapes-w3.mjs): patched prototypes, event delivery, shadow roots, computed and escaped keys, re-exports. A fourth element gives the module-scope
+  // declarations, imports and files a cell adds.
+  ...W3_ROUTES,
 };
 
 export const JS_CONTEXTS = Object.fromEntries(Object.keys(ROUTES).map((name) => [name, "misuse"]));
@@ -44,7 +48,7 @@ export const JS_CONTEXT_NAMES = Object.keys(JS_CONTEXTS);
 export const JS_CODES = ["UNTRACKED_READ_AFTER_AWAIT"];
 
 /** Who writes and runs each cell (ADR 1117's split between W4 and W3): these twelve are W4's; W3 takes the seeds listed above. */
-export const JS_OWNER = Object.fromEntries(JS_CONTEXT_NAMES.map((name) => [name, "W4"]));
+export const JS_OWNER = Object.fromEntries(JS_CONTEXT_NAMES.map((name) => [name, name in W3_ROUTES ? "W3" : "W4"]));
 
 /** The base shapes a `js-*` cell takes: the direct binding, no layer. */
 export function jsShape(context, shape) {
@@ -57,7 +61,7 @@ export function jsShape(context, shape) {
  */
 export function jsContext(context, stmts, kit) {
   if (!JS_CONTEXT_NAMES.includes(context)) return undefined;
-  const [returned, install, run] = ROUTES[context];
+  const [returned, install, run, extra] = ROUTES[context];
   const holder = kit.name("jo");
   const route = kit.name("jr");
   const m = kit.name("m");
@@ -65,6 +69,7 @@ export function jsContext(context, stmts, kit) {
   return {
     body: [decl(holder, obj([["f", fn([...stmts, ret(domExpr(returned))])]])), ...install(`${holder}.f`, route).map((text) => expr(domExpr(text))), memo, expr(prim("effect", fn([ret(call(ref(m)))]), { apply: fn([]) }))],
     view: [],
+    ...(extra ? (({ hoisted, importLines, files }) => ({ hoisted: hoisted.map((text) => expr(domExpr(text))), importLines, files }))(extra(route)) : {}),
   };
 }
 
