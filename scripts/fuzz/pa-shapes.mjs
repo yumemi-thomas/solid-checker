@@ -108,8 +108,16 @@ export const PA_PACKAGES = {
   gprotoimplicit: ["fz-gprotoexec"], gprotoiter: ["fz-gprotoiter"], gprotoany: ["fz-gprotokey"], gprotocast: ["fz-gprotokey"], gprotoannot: ["fz-gprotokey"], gprotoconcat: ["fz-gprotodate"], gprototemplate: ["fz-gprotodate"], gprotocatch: ["fz-gprotothen"], gprotobare: ["fz-gprotoevent"], gprotoget: ["fz-gprotoget"], gprotoset: ["fz-gprotoiter"], gprotourl: ["fz-gprotourl"], gprotoclear: ["fz-gproto", "fz-calmrev"], gprotoruntime: ["fz-gprotoclone"], gviewpattern: ["fz-gviewpattern"],
 };
 /** `{ [context]: "misuse" | "legal" }`. */
+/** Kinds with no legal twin: under `fz-gprotoclone` the runtime clones every template with the written `cloneNode`, the component's own view included, so
+ * a program that renders anything calls the action in an owned scope whatever host holds the site (ADR 1114 family 3 slice F). */
+const OWNED_ONLY_KINDS = ["gprotoruntime"];
 export const PA_CONTEXTS = Object.fromEntries(
-  PA_PACKAGE_KINDS.flatMap((kind) => PA_HOSTS.map((host) => [`pa-${kind}-${host}`, THROWING_KINDS.includes(kind) && OWNED_HOSTS.includes(host) ? "misuse" : "legal"])),
+  PA_PACKAGE_KINDS.flatMap((kind) =>
+    PA_HOSTS.filter((host) => !OWNED_ONLY_KINDS.includes(kind) || OWNED_HOSTS.includes(host)).map((host) => [
+      `pa-${kind}-${host}`,
+      THROWING_KINDS.includes(kind) && OWNED_HOSTS.includes(host) ? "misuse" : "legal",
+    ]),
+  ),
 );
 export const PA_CONTEXT_NAMES = Object.keys(PA_CONTEXTS);
 
