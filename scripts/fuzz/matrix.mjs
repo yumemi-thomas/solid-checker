@@ -585,7 +585,10 @@ function recallShapesOf(code, context, base, variants, { legal = false, lean = t
   // The wrapper mounts a misuse cell takes (misuse.mjs `wrapMounts`): the direct binding and no layer.
   for (const mount of legal ? [] : SPEC[code].wrapMounts?.[context] ?? []) for (const shape of local.filter(wrapShape)) shapes.push({ ...shape, mount });
   // ADR 0940: CONTEXT_NOT_FOUND's `package` source is a recall source too, so it crosses the base shapes of the code's cells here and moves no default grid.
-  for (const source of [...SOURCE_AXES.files, ...SOURCE_AXES.package]) for (const shape of local) if (sourcesOf(code, shape.variant, shape.binding, context).includes(source)) shapes.push({ ...shape, source });
+  // ADR 1129: `prop-view-spread` adds an element beside the site, not another way to reach it: the plain shape of each variant (direct
+  // binding, no layer) is enough, and keeps the recall grids from growing by the whole base grid again.
+  const plainOnly = (source, shape) => source !== "prop-view-spread" || (shape.binding === "direct" && shape.layer === "none");
+  for (const source of [...SOURCE_AXES.files, ...SOURCE_AXES.package]) for (const shape of local) if (plainOnly(source, shape) && sourcesOf(code, shape.variant, shape.binding, context).includes(source)) shapes.push({ ...shape, source });
   return shapes;
 }
 
