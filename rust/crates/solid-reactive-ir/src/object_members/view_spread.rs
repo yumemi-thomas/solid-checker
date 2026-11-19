@@ -336,10 +336,17 @@ fn component_sites(
     if spells(file, component.body, "arguments") {
         return None;
     }
-    let name = component_name(file, component)?;
-    if binding_written(file, name.span) || exported(file, name) {
+    // ADR 1127: every binding the function is entered through is a caller's
+    // name (a named function expression's own name as well as the binding
+    // holding it); a function with no such list is a value handed anywhere.
+    let names = component_names(file, component)?;
+    if names
+        .iter()
+        .any(|name| binding_written(file, name.span) || exported(file, name))
+    {
         return None;
     }
+    let bound = names.iter().map(|name| name.span).collect::<BTreeSet<_>>();
     // The props and the view bindings: every reference is accounted for.
     if !props_references_accounted(file, primitives, props, chain) {
         return None;
@@ -349,14 +356,14 @@ fn component_sites(
             return None;
         }
     }
-    // The component's references: each a JSX tag naming it.
+    // The component's references, by any of its names: each a JSX tag naming it.
     let mut tags = BTreeSet::new();
     let mut sites = Vec::new();
     for (reference, _) in file
         .ast
         .reference_declarations
         .iter()
-        .filter(|(_, bound)| *bound == name.span)
+        .filter(|(_, declaration)| bound.contains(declaration))
     {
         if in_type_query(file, *reference) {
             continue;
@@ -380,45 +387,61 @@ fn component_sites(
             return None;
         }
     }
-    // TypeScript's references of the component's symbol: every one is the
-    // declaration or a tag the binder accounted for.
-    let symbol = cx.file(slot.id, slot.rank as usize)?.symbol_at(name.span)?;
-    let references = cx.symbol_references(symbol.as_str())?;
-    for (path, start, end) in references {
-        let (id, _) = cx.path_file(&path)?;
-        let (Ok(start), Ok(end)) = (u32::try_from(start), u32::try_from(end)) else {
-            return None;
-        };
-        let span = Span::new(start, end);
-        if id != slot.id
-            || !(span == name.span || tags.contains(&span) || in_type_query(file, span))
-        {
-            return None;
+    // TypeScript's references of each name's symbol: every one is a name, or
+    // a tag the binder accounted for.
+    let read = cx.file(slot.id, slot.rank as usize)?;
+    for name in &names {
+        let symbol = read.symbol_at(name.span)?;
+        let references = cx.symbol_references(symbol.as_str())?;
+        for (path, start, end) in references {
+            let (id, _) = cx.path_file(&path)?;
+            let (Ok(start), Ok(end)) = (u32::try_from(start), u32::try_from(end)) else {
+                return None;
+            };
+            let span = Span::new(start, end);
+            if id != slot.id
+                || !(bound.contains(&span) || tags.contains(&span) || in_type_query(file, span))
+            {
+                return None;
+            }
         }
     }
     (!sites.is_empty()).then_some(sites)
 }
 
-/// The name a component function is bound to: a function declaration's own
-/// name, or an immutable identifier binding whose initializer is exactly the
-/// function. A method, a wrapped function (`const C = wrap((p) => …)`) and an
-/// anonymous function have none.
-fn component_name<'f>(
+/// The names a component function is entered through
+/// ([`crate::execution_role::entry_bindings`], ADR 1127): a declaration's own
+/// name; a function expression's binding, and a named expression's own name
+/// beside it. Each binding that holds the function must be an immutable
+/// identifier whose initializer is exactly the function: a method, a wrapped
+/// function (`const C = wrap((p) => …)`) and a function with no binding have
+/// none.
+fn component_names<'f>(
     file: &'f FileFacts,
     function: &'f ast::FunctionFact,
-) -> Option<&'f ast::NamedSpan> {
-    if function.kind == ast::FunctionKind::Declaration {
-        return function.name.as_ref();
+) -> Option<Vec<&'f ast::NamedSpan>> {
+    let names = crate::execution_role::entry_bindings(file, function)?;
+    let own = function.name.as_ref().map(|name| name.span);
+    for name in &names {
+        if Some(name.span) == own {
+            continue;
+        }
+        let binding = file
+            .ast
+            .bindings
+            .iter()
+            .find(|binding| binding.names.len() == 1 && binding.names[0].span == name.span)?;
+        if !(binding.immutable
+            && binding.shape == ast::BindingShape::Identifier
+            && binding.initializer.is_some_and(|initializer| {
+                file.ast.peel_ts_sugar_span(initializer) == function.span
+            }))
+        {
+            return None;
+        }
     }
-    let binding = file.ast.bindings.iter().find(|binding| {
-        binding
-            .initializer
-            .is_some_and(|initializer| file.ast.peel_ts_sugar_span(initializer) == function.span)
-    })?;
-    (binding.immutable
-        && binding.shape == ast::BindingShape::Identifier
-        && binding.names.len() == 1)
-        .then(|| &binding.names[0])
+    // A function expression with no name and no holding binding is a value.
+    (!names.is_empty()).then_some(names)
 }
 
 /// Whether the file exports the name in any form (a spelling veto as well as

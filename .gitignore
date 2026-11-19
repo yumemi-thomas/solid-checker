@@ -1149,6 +1149,10 @@ packages/wasm/owned/
 !fixtures/reactive-ir/merge-omit-view-spread/node_modules/**
 !fixtures/reactive-ir/merge-omit-view-spread-handler/node_modules/
 !fixtures/reactive-ir/merge-omit-view-spread-handler/node_modules/**
+!fixtures/reactive-ir/merge-omit-view-spread-entries/node_modules/
+!fixtures/reactive-ir/merge-omit-view-spread-entries/node_modules/**
+!fixtures/reactive-ir/merge-omit-view-spread-includes/node_modules/
+!fixtures/reactive-ir/merge-omit-view-spread-includes/node_modules/**
 !fixtures/reactive-ir/handed-call-results/node_modules/
 !fixtures/reactive-ir/handed-call-results/node_modules/**
 !fixtures/reactive-ir/handed-net-guards/node_modules/
