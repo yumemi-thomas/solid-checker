@@ -58,7 +58,10 @@ export const STORE_DESTRUCTURES = {
   "store-dstr-for-of": { reads: true, text: (o) => `for (const { v } of [${o}]) void v;` },
   "store-dstr-merge": { reads: true, imports: ["merge"], text: (o) => `const { v } = merge(${o}, { w: 1 }); void v;` },
   // ADR 1106: the plain object destructure. In a named helper the body calls (the `closure` layer) it was a clean nothing explained.
-  "store-dstr-object": { reads: true, text: (o) => `const { v } = ${o}; void v;` },
+  "store-dstr-object": { reads: true, text: (o) => `{ const { v } = ${o}; void v; }` },
+  // ADR 1107 (review of ADR 1106, F1): the destructure in a named function handed by name to a tracked slot and also called here:
+  // the call is a read in the window around it, which the by-name role kept SC1003 from seeing.
+  "store-dstr-byname": { reads: true, imports: ["createMemo"], text: (o) => `{ const f = () => { const { v } = ${o}; return v; }; createMemo(f); f(); }` },
 };
 
 // ADR 0781: the type names a standard method, and the program runs its own. Each runs the site on the caller's stack, in a component body.

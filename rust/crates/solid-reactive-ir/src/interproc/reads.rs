@@ -238,10 +238,32 @@ pub(super) fn direct_reference_contributions(
             continue;
         }
         if source_kinds.get(source.symbol.as_str()) == Some(&ReactiveSourceKind::Store) {
+            // ADR 1107: a destructure SC1003 hands over (`delegated_destructure_slots`) reads each slot as a member of the store.
+            let slot_members: Vec<solid_facts::ast::MemberFact> = file
+                .ast
+                .bindings
+                .iter()
+                .filter(|binding| {
+                    binding
+                        .initializer_identifier
+                        .as_ref()
+                        .is_some_and(|identifier| identifier.span == reference_span)
+                })
+                .filter_map(|binding| {
+                    crate::static_rules::delegated_destructure_slots(lookup, file, binding)
+                })
+                .flatten()
+                .map(|slot| solid_facts::ast::MemberFact {
+                    span: slot,
+                    object: reference_span,
+                    property: slot,
+                })
+                .collect();
             contributions.extend(
                 file.ast
                     .members
                     .iter()
+                    .chain(slot_members.iter())
                     // ADR 1121: the receiver under a TypeScript wrapper
                     // (`(store as S).v`, `store!.v`, `satisfies`) is the
                     // same Get; the JavaScript is `store.v`.

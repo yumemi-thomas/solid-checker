@@ -698,6 +698,13 @@ impl DiagnosticSession {
         if let Some(stage) = stage {
             stage.end(solid_reactive_ir::DropPass::CompilerRefusedFile, &findings);
         }
+        // ADR 1107: after every gate above, each destructured slot's read folds into its destructure's SC1003 row, so the row
+        // takes the slot reads' final verdicts; before suppression, so a comment at the pattern applies to it.
+        let stage = solid_reactive_ir::ProofStage::begin(&findings);
+        solid_reactive_ir::fold_destructure_findings(&mut findings);
+        if let Some(stage) = stage {
+            stage.end(solid_reactive_ir::DropPass::DestructureFold, &findings);
+        }
         // ADR 0429: after every reclassification, so a comment removes only a
         // violation that would have been reported, and before the notices,
         // which have no site to comment on.
