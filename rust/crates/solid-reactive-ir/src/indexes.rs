@@ -27,8 +27,8 @@ pub(crate) use callees::{
 };
 pub(crate) use census::{
     CENSUS_TABLES_FROM, CallPrimitives, CallSite, CallSitesOf, CensusTables, ComponentIdentity,
-    FileComponentStatuses, LazyWitnessesIn, PropRenderSitesIn, PrototypeWriteVeto,
-    ResultAccessForwardedAll, TagRendered, exported_call_sites_of,
+    FileComponentStatuses, LazyWitnessesIn, PropRenderSitesIn, ResultAccessForwardedAll,
+    StandardMemberReplaced, TagRendered, exported_call_sites_of,
 };
 mod class_prototype;
 mod closed_members;

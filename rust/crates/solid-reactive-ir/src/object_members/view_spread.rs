@@ -20,8 +20,9 @@
 //! - `omit` (9684-9707) with string keys is a proxy whose `ownKeys` is its
 //!   source's minus the listed keys (`isHidden` is `hidden.includes(key)`,
 //!   8766); over a merge it filters the merge's keys. `includes` is
-//!   `Array.prototype`'s, a premise checked per name: a program that may
-//!   replace it gets no `omit` view proved ([`includes_may_be_replaced`]).
+//!   `Array.prototype`'s, a premise checked by the shared standard-member
+//!   question: a program, or a loaded package, that may replace it gets no
+//!   `omit` view proved ([`includes_may_be_replaced`]).
 //! - Both proxies' `set` and `deleteProperty` traps are no-ops (`trueFn`).
 //! - `createComponent` (`solid.dev.js` 1403, `observedComponent` 64-90) hands
 //!   the component the props object the compiled JSX built, as is (`props ||
@@ -163,28 +164,19 @@ pub(super) fn view_spread(
     Ok(spread_of_sites(cx, file, &chain, &sites))
 }
 
-/// Whether some analysed file may replace `Array.prototype.includes`, by which
-/// rc.21's `omit` hides a key (`isHidden`: `hidden.includes(key)`, over the
-/// rest array `omit(props, ...keys)` makes): a write to a member named
-/// `includes` on any receiver (`Array.prototype.includes = f`, through an
-/// alias of the prototype too), a write through a prototype whose owner is not
-/// proven or through a host prototype not every declaration of which is in
-/// `lib.dom.d.ts` (ADR 0314's builtin-member question), or a reflective write
-/// spelled through a `prototype` (`Object.defineProperty(Array.prototype,
-/// "includes", …)`, ADR 0292's veto), as ADR 0338 asks it for
-/// `Function.prototype.bind`. A tripwire over what the project visibly writes.
+/// The standard member rc.21's `omit` hides a key by (`isHidden`:
+/// `hidden.includes(key)`, over the rest array `omit(props, ...keys)` makes).
+const INCLUDES: &str = "Array.includes";
+
+/// Whether `Array.prototype.includes` may not be the standard one where the
+/// program runs: the shared standard-member premise
+/// ([`crate::indexes::StandardMemberReplaced`]): a file of the program that
+/// may replace it (ADRs 0781, 0876, 0939: by any receiver, alias, definer,
+/// `Reflect.set`, `Object.assign`, a prototype a chain reaches, a root handed
+/// to a writer), or a loaded package whose closure writes a built-in
+/// prototype's `includes` or any key (ADR 1108's index).
 fn includes_may_be_replaced(cx: &Ctx<'_, '_, BuildSchema>) -> Result<bool, Cycle> {
-    let assigned = cx.memo::<crate::object_members::AssignedMembersAnswer>(&())?;
-    if assigned.global
-        || assigned.hosts.iter().any(|(_, dom)| !dom)
-        || assigned
-            .names
-            .binary_search_by(|name| name.as_ref().cmp("includes"))
-            .is_ok()
-    {
-        return Ok(true);
-    }
-    cx.memo::<crate::indexes::PrototypeWriteVeto>(&())
+    cx.memo::<crate::indexes::StandardMemberReplaced>(&Arc::from(INCLUDES))
 }
 
 /// The view at `span`: an `omit` or `merge` call written there or held by a
