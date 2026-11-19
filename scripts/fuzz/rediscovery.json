@@ -31077,5 +31077,23 @@
    "mx-sync-node-received-async-evt-apply-dispatch-shadow-effect-direct-none"
   ],
   "rediscovered": "focus on the context's 43 mx-census programs (30 codes, seed 1): 5 false positives on the ADR 1115 build 39f85f1be; FIXED here (0 false positives; agree 10, not-fired 26, recall-gap 7); mx-recall unchanged (1,808 recall-gap, 18 typed-away)"
+ },
+ {
+  "finding": "ADR 1114 family 1: a write chain's Gets before its terminal Set (`s1.a` of `s1.a.v = 7`, `s.items` of `s.items.push(x)`) were no site of the universe, so a read rule's silence there went unchecked. After ADR 1112 the 1112 programs were no longer certified (SC1001 uncertifiable at `s1.a`), but UNTRACKED_READ_AFTER_AWAIT at that read still had no row: a secondary false clean, Chrome's diagnostic `unproven-clean` in the oracle",
+  "found": "Mac 23's site-completeness census on 28fde14bf (sitec/work-p1112), re-run on bundle u 0a897aa9d",
+  "fixed": "ADR 1114 family 1 (`proof_universe.rs` `sites_at`: a write-prefix read site per write chain, answered at any link of the chain)",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-effect-async-for-await-nested-assign-direct-none-cb-bundle",
+   "mx-store-write-outside-setter-effect-async-for-await-nested-assign-alias-none-cb-bundle",
+   "mx-store-write-outside-setter-effect-async-for-await-nested-assign-tuple-none-cb-bundle",
+   "mx-store-write-outside-setter-effect-async-for-await-nested-assign-hook-none-cb-bundle",
+   "mx-store-write-outside-setter-memo-async-for-await-nested-assign-direct-none-cb-bundle",
+   "mx-store-write-outside-setter-memo-async-for-await-nested-assign-alias-none-cb-bundle",
+   "mx-store-write-outside-setter-memo-async-for-await-nested-assign-tuple-none-cb-bundle",
+   "mx-store-write-outside-setter-memo-async-for-await-nested-assign-hook-none-cb-bundle"
+  ],
+  "rediscovered": "bundle u 0a897aa9d (release): focus --runtime-diff all by id, secondary UNTRACKED_READ_AFTER_AWAIT false-clean 8; this fix: 0 (8 recall-gap, uncertifiable at the read). Oracle on the probe: unproven-clean -> covered-uncertifiable"
  }
 ]
