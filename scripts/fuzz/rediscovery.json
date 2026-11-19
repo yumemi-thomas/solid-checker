@@ -26603,5 +26603,119 @@
    "mx-action-called-in-owned-scope-pa-gproto-root-x-direct-none"
   ],
   "rediscovered": "new context pa-gproto (pa-shapes.mjs): the fix gives the SC2002 row at the call (`action-called-in-owned-scope/uncertifiable`, claiming), main gives none of the rule's. `focus.mjs --grids mx-recall --ids`, release builds, `--boundary both`: both builds exit 0 with recall-gap 3, because the grid's program also gets SC9012 `standard-member-impostor` at the call on main (the package file's prototype write is an open write of `reverse`), which the judge counts as a withholding; the generator expresses the shape, the base build does not fail on it. The base failure is the pattern lane's: `pkgaction/patch-f32-undeclared` false clean on main (no row at the call), fine on the fix; and the runtime oracle case package-prototype-writes: main 3 unproven-clean, the fix 3 covered-uncertifiable"
+ },
+ {
+  "finding": "An async memo's continuation calls a setter whose argument coerces an object (`${po}`), whose `toString` reads a signal (Chrome rc.21: UNTRACKED_READ_AFTER_AWAIT); through the direct setter call (ADR 0976's LibraryRunsNothing) the call had no SC1002 row at Chrome's frame: `argument_is_inert` took `proven_primitive` for an expression, which proves its kind, not that computing it runs no code",
+  "found": "the Fable reviews of ADR 1097's widening (fc71ff16a round 1, 0ede74566 round 2)",
+  "fixed": "ADR 1097 narrow only: `argument_is_inert` takes `proven_primitive` only for a declared name; the row stands at the code-running operand (`after_await_accounting.rs` `code_running_operand`); the narrow callee body refuses operators, coercions, templates, object properties, computed keys and loops",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": ["mx-untracked-read-after-await-pu-coerce-direct-x-direct-none"],
+  "rediscovered": "main 28fde14bf: false-clean, Chrome firing (focus exit 1); this fix: recall-gap"
+ },
+ {
+  "finding": "An async memo's continuation calls a setter whose argument coerces an object (`${po}`), whose `toString` reads a signal (Chrome rc.21: UNTRACKED_READ_AFTER_AWAIT); through a `const` wrapper of the setter call the call had no SC1002 row at Chrome's frame: `argument_is_inert` took `proven_primitive` for an expression, which proves its kind, not that computing it runs no code",
+  "found": "the Fable reviews of ADR 1097's widening (fc71ff16a round 1, 0ede74566 round 2)",
+  "fixed": "ADR 1097 narrow only: `argument_is_inert` takes `proven_primitive` only for a declared name; the row stands at the code-running operand (`after_await_accounting.rs` `code_running_operand`); the narrow callee body refuses operators, coercions, templates, object properties, computed keys and loops",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": ["mx-untracked-read-after-await-pu-coerce-wrapper-x-direct-none"],
+  "rediscovered": "main 28fde14bf: recall-gap (no callee reason there); the dropped widening's builds lost the row in the review's probes (fixture after-await-review-probes); this fix: recall-gap"
+ },
+ {
+  "finding": "An async memo's continuation calls a setter whose argument coerces an object (`${po}`), whose `toString` reads a signal (Chrome rc.21: UNTRACKED_READ_AFTER_AWAIT); through an IIFE of the setter call the call had no SC1002 row at Chrome's frame: `argument_is_inert` took `proven_primitive` for an expression, which proves its kind, not that computing it runs no code",
+  "found": "the Fable reviews of ADR 1097's widening (fc71ff16a round 1, 0ede74566 round 2)",
+  "fixed": "ADR 1097 narrow only: `argument_is_inert` takes `proven_primitive` only for a declared name; the row stands at the code-running operand (`after_await_accounting.rs` `code_running_operand`); the narrow callee body refuses operators, coercions, templates, object properties, computed keys and loops",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": ["mx-untracked-read-after-await-pu-coerce-iife-x-direct-none"],
+  "rediscovered": "main 28fde14bf: recall-gap (no callee reason there); the dropped widening's builds lost the row in the review's probes (fixture after-await-review-probes); this fix: recall-gap"
+ },
+ {
+  "finding": "An async memo's continuation calls a setter whose argument tests `\"k\" in pt` on a Proxy, whose `has` trap reads a signal (Chrome rc.21: UNTRACKED_READ_AFTER_AWAIT); through the direct setter call (ADR 0976's LibraryRunsNothing) the call had no SC1002 row at Chrome's frame: `argument_is_inert` took `proven_primitive` for an expression, which proves its kind, not that computing it runs no code",
+  "found": "the Fable reviews of ADR 1097's widening (fc71ff16a round 1, 0ede74566 round 2)",
+  "fixed": "ADR 1097 narrow only: `argument_is_inert` takes `proven_primitive` only for a declared name; the row stands at the code-running operand (`after_await_accounting.rs` `code_running_operand`); the narrow callee body refuses operators, coercions, templates, object properties, computed keys and loops",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": ["mx-untracked-read-after-await-pu-in-direct-x-direct-none"],
+  "rediscovered": "main 28fde14bf: false-clean, Chrome firing (focus exit 1); this fix: recall-gap"
+ },
+ {
+  "finding": "An async memo's continuation calls a setter whose argument tests `\"k\" in pt` on a Proxy, whose `has` trap reads a signal (Chrome rc.21: UNTRACKED_READ_AFTER_AWAIT); through a `const` wrapper of the setter call the call had no SC1002 row at Chrome's frame: `argument_is_inert` took `proven_primitive` for an expression, which proves its kind, not that computing it runs no code",
+  "found": "the Fable reviews of ADR 1097's widening (fc71ff16a round 1, 0ede74566 round 2)",
+  "fixed": "ADR 1097 narrow only: `argument_is_inert` takes `proven_primitive` only for a declared name; the row stands at the code-running operand (`after_await_accounting.rs` `code_running_operand`); the narrow callee body refuses operators, coercions, templates, object properties, computed keys and loops",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": ["mx-untracked-read-after-await-pu-in-wrapper-x-direct-none"],
+  "rediscovered": "main 28fde14bf: recall-gap (no callee reason there); the dropped widening's builds lost the row in the review's probes (fixture after-await-review-probes); this fix: recall-gap"
+ },
+ {
+  "finding": "An async memo's continuation calls a setter whose argument tests `\"k\" in pt` on a Proxy, whose `has` trap reads a signal (Chrome rc.21: UNTRACKED_READ_AFTER_AWAIT); through an IIFE of the setter call the call had no SC1002 row at Chrome's frame: `argument_is_inert` took `proven_primitive` for an expression, which proves its kind, not that computing it runs no code",
+  "found": "the Fable reviews of ADR 1097's widening (fc71ff16a round 1, 0ede74566 round 2)",
+  "fixed": "ADR 1097 narrow only: `argument_is_inert` takes `proven_primitive` only for a declared name; the row stands at the code-running operand (`after_await_accounting.rs` `code_running_operand`); the narrow callee body refuses operators, coercions, templates, object properties, computed keys and loops",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": ["mx-untracked-read-after-await-pu-in-iife-x-direct-none"],
+  "rediscovered": "main 28fde14bf: recall-gap (no callee reason there); the dropped widening's builds lost the row in the review's probes (fixture after-await-review-probes); this fix: recall-gap"
+ },
+ {
+  "finding": "An async memo's continuation calls a setter whose argument tests `pt instanceof po`, whose `Symbol.hasInstance` reads a signal (Chrome rc.21: UNTRACKED_READ_AFTER_AWAIT); through the direct setter call (ADR 0976's LibraryRunsNothing) the call had no SC1002 row at Chrome's frame: `argument_is_inert` took `proven_primitive` for an expression, which proves its kind, not that computing it runs no code",
+  "found": "the Fable reviews of ADR 1097's widening (fc71ff16a round 1, 0ede74566 round 2)",
+  "fixed": "ADR 1097 narrow only: `argument_is_inert` takes `proven_primitive` only for a declared name; the row stands at the code-running operand (`after_await_accounting.rs` `code_running_operand`); the narrow callee body refuses operators, coercions, templates, object properties, computed keys and loops",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": ["mx-untracked-read-after-await-pu-instanceof-direct-x-direct-none"],
+  "rediscovered": "main 28fde14bf: false-clean, Chrome firing (focus exit 1); this fix: recall-gap"
+ },
+ {
+  "finding": "An async memo's continuation calls a setter whose argument tests `pt instanceof po`, whose `Symbol.hasInstance` reads a signal (Chrome rc.21: UNTRACKED_READ_AFTER_AWAIT); through a `const` wrapper of the setter call the call had no SC1002 row at Chrome's frame: `argument_is_inert` took `proven_primitive` for an expression, which proves its kind, not that computing it runs no code",
+  "found": "the Fable reviews of ADR 1097's widening (fc71ff16a round 1, 0ede74566 round 2)",
+  "fixed": "ADR 1097 narrow only: `argument_is_inert` takes `proven_primitive` only for a declared name; the row stands at the code-running operand (`after_await_accounting.rs` `code_running_operand`); the narrow callee body refuses operators, coercions, templates, object properties, computed keys and loops",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": ["mx-untracked-read-after-await-pu-instanceof-wrapper-x-direct-none"],
+  "rediscovered": "main 28fde14bf: recall-gap (no callee reason there); the dropped widening's builds lost the row in the review's probes (fixture after-await-review-probes); this fix: recall-gap"
+ },
+ {
+  "finding": "An async memo's continuation calls a setter whose argument tests `pt instanceof po`, whose `Symbol.hasInstance` reads a signal (Chrome rc.21: UNTRACKED_READ_AFTER_AWAIT); through an IIFE of the setter call the call had no SC1002 row at Chrome's frame: `argument_is_inert` took `proven_primitive` for an expression, which proves its kind, not that computing it runs no code",
+  "found": "the Fable reviews of ADR 1097's widening (fc71ff16a round 1, 0ede74566 round 2)",
+  "fixed": "ADR 1097 narrow only: `argument_is_inert` takes `proven_primitive` only for a declared name; the row stands at the code-running operand (`after_await_accounting.rs` `code_running_operand`); the narrow callee body refuses operators, coercions, templates, object properties, computed keys and loops",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": ["mx-untracked-read-after-await-pu-instanceof-iife-x-direct-none"],
+  "rediscovered": "main 28fde14bf: recall-gap (no callee reason there); the dropped widening's builds lost the row in the review's probes (fixture after-await-review-probes); this fix: recall-gap"
+ },
+ {
+  "finding": "An async memo's continuation calls a setter whose argument is an object literal with a computed key `[po]`, whose `toString` reads a signal (Chrome rc.21: UNTRACKED_READ_AFTER_AWAIT); through the direct setter call (ADR 0976's LibraryRunsNothing) the call had no SC1002 row at Chrome's frame: `argument_is_inert` took `proven_primitive` for an expression, which proves its kind, not that computing it runs no code",
+  "found": "the Fable reviews of ADR 1097's widening (fc71ff16a round 1, 0ede74566 round 2)",
+  "fixed": "ADR 1097 narrow only: `argument_is_inert` takes `proven_primitive` only for a declared name; the row stands at the code-running operand (`after_await_accounting.rs` `code_running_operand`); the narrow callee body refuses operators, coercions, templates, object properties, computed keys and loops",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": ["mx-untracked-read-after-await-pu-key-direct-x-direct-none"],
+  "rediscovered": "main 28fde14bf: false-clean, Chrome firing (focus exit 1); this fix: recall-gap"
+ },
+ {
+  "finding": "An async memo's continuation calls a setter whose argument is an object literal with a computed key `[po]`, whose `toString` reads a signal (Chrome rc.21: UNTRACKED_READ_AFTER_AWAIT); through a `const` wrapper of the setter call the call had no SC1002 row at Chrome's frame: `argument_is_inert` took `proven_primitive` for an expression, which proves its kind, not that computing it runs no code",
+  "found": "the Fable reviews of ADR 1097's widening (fc71ff16a round 1, 0ede74566 round 2)",
+  "fixed": "ADR 1097 narrow only: `argument_is_inert` takes `proven_primitive` only for a declared name; the row stands at the code-running operand (`after_await_accounting.rs` `code_running_operand`); the narrow callee body refuses operators, coercions, templates, object properties, computed keys and loops",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": ["mx-untracked-read-after-await-pu-key-wrapper-x-direct-none"],
+  "rediscovered": "main 28fde14bf: recall-gap (no callee reason there); the dropped widening's builds lost the row in the review's probes (fixture after-await-review-probes); this fix: recall-gap"
+ },
+ {
+  "finding": "An async memo's continuation calls a setter whose argument is an object literal with a computed key `[po]`, whose `toString` reads a signal (Chrome rc.21: UNTRACKED_READ_AFTER_AWAIT); through an IIFE of the setter call the call had no SC1002 row at Chrome's frame: `argument_is_inert` took `proven_primitive` for an expression, which proves its kind, not that computing it runs no code",
+  "found": "the Fable reviews of ADR 1097's widening (fc71ff16a round 1, 0ede74566 round 2)",
+  "fixed": "ADR 1097 narrow only: `argument_is_inert` takes `proven_primitive` only for a declared name; the row stands at the code-running operand (`after_await_accounting.rs` `code_running_operand`); the narrow callee body refuses operators, coercions, templates, object properties, computed keys and loops",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": ["mx-untracked-read-after-await-pu-key-iife-x-direct-none"],
+  "rediscovered": "main 28fde14bf: recall-gap (no callee reason there); the dropped widening's builds lost the row in the review's probes (fixture after-await-review-probes); this fix: recall-gap"
+ },
+ {
+  "finding": "A callee body probing `this` (a Proxy) with `in`, `for…in` or `instanceof` runs project code with no call; ADR 1097's widened body check (0ede74566) took it for setter-only, and the wrapper and IIFE calls lost their only SC1002 row while Chrome rc.21 warned",
+  "found": "the Fable review of ADR 1097's widening, round 2 (0ede74566)",
+  "fixed": "ADR 1097 narrow only: the body refuses every operator (`primitive_results`), coercion, template, object property, computed key and loop",
+  "outside": "not generated: the generator writes no class method, and an arrow's `this` outside one is a TypeScript error. Fixture reactive-ir/after-await-review-probes `ThisProbes` holds the four forms, each SC1002 uncertifiable here"
  }
 ]

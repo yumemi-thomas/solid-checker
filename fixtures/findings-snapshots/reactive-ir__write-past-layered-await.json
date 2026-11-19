@@ -46,17 +46,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "read-after-await-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/write-past-layered-await/App.tsx",
-      "start": 537,
-      "end": 542,
-      "fixes": 0
-    },
-    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -316,17 +305,6 @@
       "path": "fixtures/reactive-ir/write-past-layered-await/App.tsx",
       "start": 1973,
       "end": 1980,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "read-after-await-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/write-past-layered-await/App.tsx",
-      "start": 1997,
-      "end": 1998,
       "fixes": 0
     },
     {

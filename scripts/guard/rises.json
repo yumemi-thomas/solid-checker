@@ -4894,6 +4894,24 @@
    "to": 41,
    "adr": "ADR 1108",
    "fact": "a call of a standard-library method (map, forEach) where a loaded package is undecided or hands window on, so it may write any built-in's prototype"
+  },
+  {
+   "fixture": "reactive-ir/write-legality-proofs",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 12,
+   "to": 22,
+   "adr": "ADR 1097",
+   "fact": "argument_is_inert: proven_primitive only for a declared name (an operator, coercion or negated literal argument is not inert)",
+   "why": "the reviews of ADR 1097's widening: in, instanceof, coercion and computed keys run project code with no call"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 1097",
+   "fact": "argument_is_inert: proven_primitive only for a declared name (an operator, coercion or negated literal argument is not inert)",
+   "why": "the reviews of ADR 1097's widening: in, instanceof, coercion and computed keys run project code with no call"
   }
  ]
 }
