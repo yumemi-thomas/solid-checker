@@ -19,7 +19,9 @@
 //!   One non-function source is returned as is (the same key set).
 //! - `omit` (9684-9707) with string keys is a proxy whose `ownKeys` is its
 //!   source's minus the listed keys (`isHidden` is `hidden.includes(key)`,
-//!   8766); over a merge it filters the merge's keys.
+//!   8766); over a merge it filters the merge's keys. `includes` is
+//!   `Array.prototype`'s, a premise checked per name: a program that may
+//!   replace it gets no `omit` view proved ([`includes_may_be_replaced`]).
 //! - Both proxies' `set` and `deleteProperty` traps are no-ops (`trueFn`).
 //! - `createComponent` (`solid.dev.js` 1403, `observedComponent` 64-90) hands
 //!   the component the props object the compiled JSX built, as is (`props ||
@@ -100,6 +102,8 @@ enum Source {
 /// declaration).
 struct Chain {
     sources: Vec<Source>,
+    /// The chain has an `omit`, which hides its keys by `Array.prototype.includes`.
+    omit: bool,
     hidden: BTreeSet<String>,
     props: Option<Span>,
     accounted: BTreeSet<Span>,
@@ -134,6 +138,7 @@ pub(super) fn view_spread(
     let primitives = cx.memo::<crate::indexes::CallPrimitives>(&slot.id)?;
     let mut chain = Chain {
         sources: Vec::new(),
+        omit: false,
         hidden: BTreeSet::new(),
         props: None,
         accounted: BTreeSet::new(),
@@ -145,10 +150,37 @@ pub(super) fn view_spread(
     let Some(props) = chain.props else {
         return Ok(None);
     };
+    if chain.omit && includes_may_be_replaced(cx)? {
+        return Ok(None);
+    }
     let Some(sites) = component_sites(cx, slot, (file, &primitives), props, &chain) else {
         return Ok(None);
     };
     Ok(spread_of_sites(cx, file, &chain, &sites))
+}
+
+/// Whether some analysed file may replace `Array.prototype.includes`, by which
+/// rc.21's `omit` hides a key (`isHidden`: `hidden.includes(key)`, over the
+/// rest array `omit(props, ...keys)` makes): a write to a member named
+/// `includes` on any receiver (`Array.prototype.includes = f`, through an
+/// alias of the prototype too), a write through a prototype whose owner is not
+/// proven or through a host prototype not every declaration of which is in
+/// `lib.dom.d.ts` (ADR 0314's builtin-member question), or a reflective write
+/// spelled through a `prototype` (`Object.defineProperty(Array.prototype,
+/// "includes", …)`, ADR 0292's veto), as ADR 0338 asks it for
+/// `Function.prototype.bind`. A tripwire over what the project visibly writes.
+fn includes_may_be_replaced(cx: &Ctx<'_, '_, BuildSchema>) -> Result<bool, Cycle> {
+    let assigned = cx.memo::<crate::object_members::AssignedMembersAnswer>(&())?;
+    if assigned.global
+        || assigned.hosts.iter().any(|(_, dom)| !dom)
+        || assigned
+            .names
+            .binary_search_by(|name| name.as_ref().cmp("includes"))
+            .is_ok()
+    {
+        return Ok(true);
+    }
+    cx.memo::<crate::indexes::PrototypeWriteVeto>(&())
 }
 
 /// The view at `span`: an `omit` or `merge` call written there or held by a
@@ -215,6 +247,7 @@ fn resolve_view(
             let Some((source, keys)) = call.arguments.split_first() else {
                 return false;
             };
+            chain.omit = true;
             for key in keys {
                 match &key.literal_value {
                     ast::ArgumentLiteralFact::String(key) => {
