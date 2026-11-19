@@ -39,7 +39,7 @@
   "SC1003 destructure-root-unproven": 30,
   "SC1003 function-unentered": 2,
   "SC1003 package-finding-at-entry": 14,
-  "SC1003 props-callers-unenumerated": 23,
+  "SC1003 props-callers-unenumerated": 25,
   "SC1004 component-identity-unproven": 1,
   "SC1004 conditional-return-unproven": 8,
   "SC1005 accessor-value-coerced": 15,
