@@ -312,10 +312,37 @@ describe("the store operations and the setup positions (recall only)", () => {
   });
 });
 
+// ADR 1129: what a `merge`/`omit` view of a component's own props hands an intrinsic element's spread.
+describe("the merge/omit view spreads (recall only)", () => {
+  it("cbp-view passes the site's function as onClick and the child spreads a view of its props onto its button, which the plan clicks", () => {
+    const files = text("NO_OWNER_EFFECT", "cbp-view", { variant: "effect" });
+    expect(files["App.tsx"]).toMatch(/<Kid1 onClick=\{\(\) => \{/);
+    expect(files["App.tsx"]).toContain('<button data-act="k1" {...omit(merge({ type: "button" as const }, props), "innerHTML")}>go</button>');
+    expect(files["App.tsx"]).toMatch(/import \{[^}]*merge[^}]*omit[^}]*\} from "solid-js"/);
+  });
+  it("prop-view-spread reads through merge and spreads omit(props, <every passed key>) onto a <p>, on base cells' plain shapes only", () => {
+    const cell = cellList({ recall: true }).find((c) => c.code === "STRICT_READ_UNTRACKED" && c.context === "body");
+    const shapes = recallShapes(cell.code, cell.context, FULL).filter((shape) => shape.source === "prop-view-spread");
+    expect(shapes.length).toBeGreaterThan(0);
+    expect(shapes.every((shape) => shape.binding === "direct" && shape.layer === "none")).toBe(true);
+    const app = generateShape({ seed: 1 }, cell, shapes[0], 0).built.files["App.tsx"];
+    expect(app).toContain("const merged = merge({ extra: 1 }, props);");
+    expect(app).toMatch(/const rest = omit\(props, "\w+"(, "\w+")*\);/);
+    expect(app).toContain("<p {...rest}>v</p>");
+    expect(app).toContain("innerHTML?: string; onClick?: () => void");
+    // A recall-only context's template may rest on C1 making its values itself: no view spread there.
+    for (const recall of cellList({ recall: true }).filter((c) => c.context.startsWith("iter-"))) {
+      expect(recallShapes(recall.code, recall.context, FULL).filter((shape) => shape.source === "prop-view-spread"), recall.context).toEqual([]);
+    }
+  });
+});
+
 describe("the callback props (recall only)", () => {
   const isCbp = (cell) => cell.context.startsWith("cbp-");
   it("are recall cells of the misuse and legal grids, never base cells", () => {
-    expect(CBP_CONTEXTS.length).toBe(CBP_CALLS.length * CBP_FORMS.length);
+    // `view` (ADR 1129) takes no `destructured` form: a destructured child has no props object to view.
+    expect(CBP_CONTEXTS.length).toBe(CBP_CALLS.length * CBP_FORMS.length - 1);
+    expect(CBP_CONTEXTS).not.toContain("cbp-view-destructured");
     expect(cellList().filter(isCbp)).toEqual([]);
     expect(legalCells().filter(isCbp)).toEqual([]);
     expect(cellList({ recall: true })).toContainEqual({ code: "REACTIVE_WRITE_IN_OWNED_SCOPE", context: "cbp-body-spread" });
@@ -325,7 +352,7 @@ describe("the callback props (recall only)", () => {
     // Every pass form of a call position is placed alike: rc.17 runs `run` where the child calls it, whatever the form.
     for (const code of Object.keys(SPEC)) for (const list of [recallContextsOf(code), recallLegalOf(code)]) {
       const calls = new Set(list.filter((context) => context.startsWith("cbp-")).map((context) => context.split("-")[1]));
-      for (const call of calls) for (const form of CBP_FORMS) expect(list, `${code} ${call} ${form}`).toContain(form === "inline" ? `cbp-${call}` : `cbp-${call}-${form}`);
+      for (const call of calls) for (const form of CBP_FORMS.filter((form) => !(call === "view" && form === "destructured"))) expect(list, `${code} ${call} ${form}`).toContain(form === "inline" ? `cbp-${call}` : `cbp-${call}-${form}`);
     }
   });
   it("a context is a misuse cell or a legal cell of a code, never both; a call never made is legal", () => {
