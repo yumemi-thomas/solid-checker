@@ -72,6 +72,10 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   accessor's call takes at the same place: an intrinsic `ref` the body applies
   (ADR 0520), a carrier that runs a named function (ADR 0531), a hand-off nothing
   follows (an obligation), a layer a summary climbs (ADR 0522; all ADR 0614).
+  A store's member read in a helper the body calls is the body's read whatever
+  makes the store (a `createStore` slot, a projection a primitive or a hook returns
+  whole) and whatever TypeScript wraps the receiver (`as`, `!`, `satisfies`;
+  ADR 1121).
 - **Plain assignment targets are writes, not reads.** `store.name = next` is
   diagnosed by `no-store-mutation-outside-setter` without also reporting `store.name` here.
   Only the member that *is* the written target is exempt: read-modify-write

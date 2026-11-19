@@ -151,8 +151,13 @@ pub(crate) fn discover_file_sources(
             ));
             result.source_phases.push((symbol.clone(), 1));
             // ADR 0628: read through a function like a direct creation's
-            // accessor (ADR 0486): the summaries carry it.
-            if !lookup.dialect.returns_store(primitive) {
+            // accessor (ADR 0486): the summaries carry it. ADR 1121: so is a
+            // store the hook returns whole (a projection): a member read in a
+            // helper is the read of whatever calls it. A store tuple held whole
+            // is no store Get at its members (`s[0]`).
+            if !lookup.dialect.returns_store(primitive)
+                || !lookup.dialect.returns_reactive_tuple(primitive)
+            {
                 result.summary_source_symbols.push(symbol.clone());
             }
             if let Some(spelling) = lookup.dialect.name_of(primitive) {
@@ -287,9 +292,15 @@ pub(crate) fn discover_file_sources(
                 if go_returned_source {
                     result.returned_source_symbols.push(symbol.clone());
                     result.summary_source_symbols.push(symbol.clone());
-                } else if source_kind == ReactiveSourceKind::Accessor
-                    && binding.shape == solid_facts::ast::BindingShape::Identifier
+                } else if binding.shape == solid_facts::ast::BindingShape::Identifier
+                    && (source_kind == ReactiveSourceKind::Accessor
+                        || resolved.is_some_and(|primitive| {
+                            !lookup.dialect.returns_reactive_tuple(primitive)
+                        }))
                 {
+                    // ADR 1121: a store a primitive returns whole
+                    // (`const store = createProjection(...)`) too: its member
+                    // read in a helper the body calls was certified clean.
                     // ADR 0486: an accessor a primitive returns directly
                     // (`const m = createMemo(...)`) is read through a function
                     // like a tuple's accessor is: the summaries carry it, so a
