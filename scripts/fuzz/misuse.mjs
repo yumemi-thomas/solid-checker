@@ -238,7 +238,9 @@ const DENIED_LEGAL = ["dny-legal-keydown", "dny-legal-click", "dny-legal-pointer
 const DENIED_OTHER = ["dny-blur-spread", "dny-typo-event", "dny-blur-dynamic", "dny-portal-dispose", "dny-load-append", "dny-load-for", "dny-load-show", "dny-unmount-flush-body", "dny-unmount-flush-root", "dny-insert-body", "dny-renamed-prop", "dny-shared-fn", "dny-chain-click"];
 /** ADR 1125: the Fable review of ADR 1089 E round 2 (G1, G3, G6) and round 1's F2 on main's event-callback read proof: each runs the
  * handler of an element's `onScroll` from an effect's apply other than by a delivery that sets `window.event`. */
-const DELIVERY_BREAKERS = ["evt-apply-event-replaced", "evt-apply-listener-patch", "evt-apply-fake-node", "evt-apply-shadow-concat", "evt-apply-stored-values", "evt-apply-shadow-arrow-body", "evt-apply-shadow-valueof"];
+const DELIVERY_BREAKERS = ["evt-apply-event-replaced", "evt-apply-listener-patch", "evt-apply-fake-node", "evt-apply-shadow-concat", "evt-apply-stored-values", "evt-apply-shadow-arrow-body", "evt-apply-shadow-valueof",
+  // Fable round 2, N1: the same reader by a computed key, an optional computed key, and `JSON.stringify` handed its replacer by a spread.
+  "evt-apply-stored-values-computed", "evt-apply-stored-values-optional", "evt-apply-stored-stringify-spread"];
 const DENIED_CONTEXTS = [...Object.keys(DENIED), ...Object.keys(DISPOSALS), ...DENIED_OTHER];
 /** `flush()` in a denied handler, with no dispatch in the program (`a04`, `b03`, `b09`): SC2008. */
 const DENIED_FLUSH = ["dny-flush-unmount", "dny-flush-load", "dny-flush-popover"];
@@ -1975,10 +1977,14 @@ function inContext(context, stmts, kit) {
     }
     // ADR 1125, Fable round 1 F1: a reader of the element's own values takes Solid's stored delegated handler (`_$$click`) and the
     // apply calls it with no event.
-    case "evt-apply-stored-values": {
+    case "evt-apply-stored-values": case "evt-apply-stored-values-computed": case "evt-apply-stored-values-optional": case "evt-apply-stored-stringify-spread": {
       const el = kit.name("el");
       const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onClick", undriven: true })));
-      const run = expr(domExpr(`for (const value of Object.values(${el} as object)) if (typeof value === "function") (value as (event: Event) => void)(new Event("click"))`));
+      const call = (value) => `if (typeof ${value} === "function") (${value} as (event: Event) => void)(new Event("click"))`;
+      const reader = { "evt-apply-stored-values": "Object.values", "evt-apply-stored-values-computed": 'Object["values"]', "evt-apply-stored-values-optional": '(Object as typeof Object)?.["values"]' }[context];
+      const run = expr(domExpr(reader
+        ? `for (const value of ${reader}(${el} as object)) ${call("value")}`
+        : `JSON.stringify(...([${el}, (_key: string, value: unknown) => { ${call("value")}; return value; }] as [object, (key: string, value: unknown) => unknown]))`));
       return { body: [made, expr(prim("effect", fn([ret(num(1))]), { apply: fn([run]) }))], view: [] };
     }
     // F3: the shadow root attached through an arrow's expression body under a key built at run time (`join`, which no fact decodes).

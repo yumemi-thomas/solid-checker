@@ -10,3 +10,6 @@ holds only while no listener of the program may sit in a shadow tree (`event_del
 - `variants/shadow`: the element sits in a shadow root: the read stays uncertifiable.
 - `variants/custom-element`: the light program and a `customElements.define`: the program may hold a shadow tree, so the read
   stays uncertifiable.
+- `variants/key-reader-computed`, `key-reader-optional`, `stringify-spread` (ADR 1125, Fable round 2, N1): Solid's stored handler
+  taken by `Object["values"]`, `Object?.["values"]`, or `JSON.stringify` handed its replacer by a spread, and called from an
+  apply with no event: the read stays uncertifiable.

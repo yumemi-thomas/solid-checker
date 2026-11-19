@@ -10,8 +10,9 @@
 //! answers count apart, as resolved: a hook or accessor on a contained value (`PremiseSiteFact::contained`), and a computed key
 //! proven to be constant texts none of which is a prototype route or a private key.
 //!
-//! An entry's realm is its closure over static value imports, export-froms and literal loads among the analysed files: test and story
-//! files are entries of their own, so the tooling they load does not count against the application's entry (Fable's tier 2).
+//! The census groups files by entry (an entry's closure over static value imports, export-froms and literal loads among the analysed
+//! files). No proof uses that grouping: ADR 1125's delivery and shadow answers take the whole program as one realm
+//! ([`realm_holds_both`]), since no fact proves two analysed files never share a page.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -447,7 +448,7 @@ pub(crate) fn census(lookup: &SemanticLookup<'_>) -> Vec<CensusRow> {
 }
 
 /// ADR 1125: whether the program holds both a file `hazard` answers yes for and a file that may register an event handler
-/// (`may_hold_handler`).
+/// (`may_hold_handler`), anywhere among the analysed files: the files need not load each other.
 pub(crate) fn realm_holds_both(
     lookup: &SemanticLookup<'_>,
     hazard: &dyn Fn(&FileFacts) -> bool,
@@ -455,7 +456,7 @@ pub(crate) fn realm_holds_both(
 ) -> bool {
     // ADR 1125, Fable round 1 (F2, F8): no fact proves that two analysed files never share a page (a second script, a multi-input
     // build, a test runner's setup files, `import.meta.glob`), and an import cycle may hold the entry. So the realm is the program:
-    // a hazard in any analysed file moves the proofs of every handler. [`realms`] stays the census's view.
+    // a hazard in any analysed file moves the proofs of every handler. Only the census rows ([`census`]) still group files by entry.
     let all = lookup.files();
     all.iter().any(hazard) && all.iter().any(may_hold_handler)
 }
