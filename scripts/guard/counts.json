@@ -36,10 +36,15 @@
   "SC1002 site-reach-undecided": 1,
   "SC1002 tuple-iteration-written": 82,
   "SC1002 unresolved-invocation": 121,
+  "SC1003 callee-callback-timing": 3,
   "SC1003 destructure-root-unproven": 30,
+  "SC1003 function-run-unplaced": 1,
   "SC1003 function-unentered": 2,
+  "SC1003 host-callback-timing": 1,
   "SC1003 package-finding-at-entry": 14,
-  "SC1003 props-callers-unenumerated": 25,
+  "SC1003 props-callers-unenumerated": 19,
+  "SC1003 store-key-undecided": 9,
+  "SC1003 summary-read-unplaced": 1,
   "SC1004 component-identity-unproven": 1,
   "SC1004 conditional-return-unproven": 8,
   "SC1005 accessor-value-coerced": 15,
@@ -266,7 +271,7 @@
   "SC9012 search-depth-limit": 6,
   "SC9012 solid-call-rejected-unchecked": 3,
   "SC9012 standard-member-impostor": 467,
-  "SC9012 store-key-undecided": 12,
+  "SC9012 store-key-undecided": 13,
   "SC9012 tuple-iteration-written": 1438,
   "SC9012 type-only-source": 88,
   "SC9012 value-as-parameter-default": 9,
@@ -4222,6 +4227,19 @@
     "open": "reactive-ir/after-await-setter-callee"
    },
    "note": "an after-await call of a const setter-only wrapper (narrow only): the body is nothing but exact setter calls, or no call at all, and the call reads no source (ADR 1097)"
+  },
+  {
+   "fixture": "reactive-ir/destructure-store-placement",
+   "key": "SC1003 props-callers-unenumerated",
+   "from": 5,
+   "to": 0,
+   "adr": "ADR 1107",
+   "proof": "rust/crates/solid-reactive-ir/src/static_rules.rs::delegated_destructure_slots",
+   "fixtures": {
+    "proved": "reactive-ir/destructure-store-placement",
+    "open": "reactive-ir/destructure-store-slots"
+   },
+   "note": "a store destructure setup does not provably run is handed to SC1001 slot by slot: the five rows take SC1001s placement (violations where SC1001 proves one; callee-callback-timing, host-callback-timing, summary-read-unplaced where it leaves an obligation); a pattern not handed over (a nested sub-pattern, SiblingEmptyInHelper) keeps ADR 1106s blocker"
   }
  ],
  "renames": []

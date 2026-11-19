@@ -531,10 +531,10 @@ fn component_props_destructure(
             if crate::execution_role::discarded_region_contains(file, binding.pattern) {
                 continue;
             }
-            // ADR 1107 (review of ADR 1106, P3): an empty pattern (`const {} = store`) reads no property. Only the literal
-            // top-level `{}` or `[]` (round 2, F1): a sub-pattern that binds no name (`{ a: {} }`, `{ list: [] }`,
-            // `{ [k]: {} }`) still reads its property.
-            if empty_pattern(file, binding.pattern) {
+            // ADR 1107 (review of ADR 1106, P3): an empty pattern (`const {} = store`) reads no property; a sub-pattern that
+            // binds no name (`{ a: {} }`, `{ list: [] }`, `{ [k]: {} }`) still reads its property. ADR 1122: decided by the
+            // pattern's properties (facts schema 100), so a comment inside the braces is no property.
+            if empty_pattern(binding) {
                 continue;
             }
             let role = semantic_execution_role(
@@ -684,19 +684,12 @@ fn component_props_destructure(
             // does not warn), as SC1001's member read under one is undecided (`store-key-undecided`). The facts leave a computed
             // slot out of `object_slots` (as a default, a nested pattern and a rest element); a `[` in the pattern's text may be
             // one, and the row fails closed (a nested array pattern or a `[]` default too).
-            // Round 2: a quoted key (`{ "v": x }`) is a decided key, as a plain one; a `then` key, quoted or not, does not
-            // warn where its backing runs nothing, which no fact here decides (main reported `const { then } = store`). A
-            // pattern with another slot reads that slot's key, which warns (`{ then, v }`).
-            let computed_store_key = !props
-                && ((!binding.object_slots.is_empty()
-                    && binding.names.len() == binding.object_slots.len()
-                    && binding
-                        .object_slots
-                        .iter()
-                        .all(|slot| slot.property == "then"))
-                    || file
-                        .source_text(binding.pattern)
-                        .is_some_and(pattern_has_computed_key));
+            // Round 2: a quoted key (`{ "v": x }`) is a decided key, as a plain one; a `then` key does not warn where its
+            // backing runs nothing, which no fact here decides (main reported `const { then } = store`). A pattern with another
+            // property reads that key, which warns (`{ then, v }`). ADR 1122: every top-level property by its key's value
+            // (facts schema 100): a default, a nested value, a quoted or escaped spelling and a comment change nothing, and a
+            // computed key whose value no fact names (`[k]`, a `const` holding "then") is undecided.
+            let computed_store_key = !props && store_key_undecided(binding);
             uncertain |= computed_store_key;
             if let Some(declaration) = &prop_declaration {
                 match destructured_props_use(tables, binding, declaration) {
@@ -885,55 +878,57 @@ pub(crate) fn delegated_destructure_slots(
         || binding.object_slots.is_empty()
         || binding.names.len() != binding.object_slots.len()
         // Round 2 (F1): the slot counts match by coincidence when a sub-pattern binds no name (`{ v, a: {} }`), whose
-        // property no slot reads: a nested pattern, or a default holding one, is not handed over.
-        || nested_pattern(file.source_text(binding.pattern)?)
+        // property no slot reads: a pattern with a nested value, a default, a computed key or a rest element is not handed
+        // over (ADR 1122: by the pattern's properties).
+        || binding.pattern_rest
+        || binding.object_properties.len() != binding.object_slots.len()
+        || binding
+            .object_properties
+            .iter()
+            .any(|property| property.nested || property.has_default || property.computed)
         || written_directly_in_setup(lookup, file, binding.pattern)
     {
         return None;
     }
-    // The synthetic member reads its key from the slot's local name, so a renamed slot (`{ then: w }`) is not handed over.
+    // The synthetic member reads its key from the slot's local name as written, so only a slot whose key, by the parser's
+    // value, is that text is handed over: not a renamed slot (`{ then: w }`), nor an escaped spelling (`{ th\u0065n }`,
+    // ADR 1122).
     binding
-        .object_slots
+        .object_properties
         .iter()
-        .map(|slot| {
-            (slot.plain_identifier_key
-                && file.source_text(slot.local.span) == Some(slot.property.as_str()))
-            .then_some(slot.local.span)
+        .map(|property| {
+            let local = property.local.as_ref()?;
+            (property.key.is_some() && property.key.as_deref() == file.source_text(local.span))
+                .then_some(local.span)
         })
         .collect()
 }
 
-/// ADR 1107 round 2 (F1): whether an object pattern's text holds a nested pattern (or a default holding an object or array
-/// literal) inside its outer braces: such a pattern is not handed over to SC1001.
-fn nested_pattern(text: &str) -> bool {
-    let inner = text.trim().trim_start_matches('{').trim_end_matches('}');
-    inner.contains('{') || inner.contains('[')
+/// ADR 1107 round 2 (F1), ADR 1122: whether a destructure's pattern reads no property: an object pattern with no property and no
+/// rest element, or an array pattern with no element and no rest element (facts schema 100; a comment is no property).
+fn empty_pattern(binding: &solid_facts::ast::BindingFact) -> bool {
+    !binding.pattern_rest
+        && match binding.shape {
+            solid_facts::ast::BindingShape::Object => binding.object_properties.is_empty(),
+            solid_facts::ast::BindingShape::Array => binding.array_slots.is_empty(),
+            solid_facts::ast::BindingShape::Identifier => false,
+        }
 }
 
-/// ADR 1107 round 2 (F1): whether a destructure's pattern is the literal `{}` or `[]` (whitespace aside), the only pattern that
-/// reads no property.
-fn empty_pattern(file: &solid_facts::FileFacts, pattern: solid_facts::core::Span) -> bool {
-    file.source_text(pattern).is_some_and(|text| {
-        let compact: String = text.chars().filter(|c| !c.is_whitespace()).collect();
-        compact == "{}" || compact == "[]"
-    })
-}
-
-/// ADR 1107: whether a pattern's text has a computed key at any depth: a `[` that opens a property, right after `{` or `,`
-/// (whitespace aside). An array sub-pattern follows `:` and a default `=`, so neither is one. The facts leave a computed slot
-/// out of `object_slots`.
-fn pattern_has_computed_key(text: &str) -> bool {
-    let mut previous = None;
-    for c in text.chars() {
-        if c.is_whitespace() {
-            continue;
-        }
-        if c == '[' && matches!(previous, Some('{' | ',')) {
-            return true;
-        }
-        previous = Some(c);
-    }
-    false
+/// ADR 1107, ADR 1122: whether a store destructure's top-level Get is undecided: a property whose key no fact names (a computed
+/// key that is no literal), or a pattern whose every property reads `then` (whose Get does not warn when its backing runs
+/// nothing), with or without a rest element (which reads keys no fact lists). Keys by the parser's value (facts schema 100).
+fn store_key_undecided(binding: &solid_facts::ast::BindingFact) -> bool {
+    binding.shape == solid_facts::ast::BindingShape::Object
+        && (binding
+            .object_properties
+            .iter()
+            .any(|property| property.key.is_none())
+            || (!binding.object_properties.is_empty()
+                && binding
+                    .object_properties
+                    .iter()
+                    .all(|property| property.key.as_deref() == Some("then"))))
 }
 
 /// ADR 1107: whether a destructure is written directly in setup: at module scope, or in a component's own body through immediately

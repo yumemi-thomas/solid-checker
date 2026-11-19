@@ -928,6 +928,40 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
                     .collect(),
                 _ => Vec::new(),
             },
+            object_properties: match pattern {
+                BindingPattern::ObjectPattern(object) => object
+                    .properties
+                    .iter()
+                    .map(|property| {
+                        let (value, has_default) = match &property.value {
+                            BindingPattern::AssignmentPattern(assignment) => (&assignment.left, true),
+                            value => (value, false),
+                        };
+                        PatternPropertyFact {
+                            span: span(property.span),
+                            key: property.key.static_name().map(|key| key.as_ref().into()),
+                            computed: property.computed,
+                            has_default,
+                            nested: matches!(
+                                value,
+                                BindingPattern::ObjectPattern(_) | BindingPattern::ArrayPattern(_)
+                            ),
+                            local: match value {
+                                BindingPattern::BindingIdentifier(local) => Some(NamedSpan {
+                                    span: span(local.span),
+                                }),
+                                _ => None,
+                            },
+                        }
+                    })
+                    .collect(),
+                _ => Vec::new(),
+            },
+            pattern_rest: match pattern {
+                BindingPattern::ObjectPattern(object) => object.rest.is_some(),
+                BindingPattern::ArrayPattern(array) => array.rest.is_some(),
+                _ => false,
+            },
             immutable: metadata.immutable,
             runtime_let: metadata.runtime_let,
             in_switch_case: metadata.in_switch_case,

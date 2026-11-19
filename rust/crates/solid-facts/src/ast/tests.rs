@@ -4237,3 +4237,39 @@ fn throws_and_catch_parameters_are_recorded() {
         .collect::<Vec<_>>();
     assert_eq!(caught, [(Some("e"), true), (None, true), (None, false)]);
 }
+
+#[test]
+fn object_pattern_properties_carry_the_parsers_key_and_shape() {
+    // ADR 1122 (facts schema 100): every property, by the key's value, whatever the spelling, default or nested value.
+    let source = r#"const { then = 1, then: w = 1, then: {}, then, "then": q, [K]: k, ["v"]: x, /* c */ v, ...rest } = store;
+const { /* nothing */ } = store;
+const [] = list;
+const [...all] = list;"#;
+    let facts = extract("pattern.ts", source).unwrap();
+    let properties = &facts.bindings[0].object_properties;
+    let keys = properties
+        .iter()
+        .map(|property| property.key.as_deref())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        keys,
+        [
+            Some("then"),
+            Some("then"),
+            Some("then"),
+            Some("then"),
+            Some("then"),
+            None,
+            Some("v"),
+            Some("v")
+        ]
+    );
+    assert!(properties[0].has_default && properties[0].local.is_some());
+    assert!(properties[1].has_default && properties[1].local.is_some());
+    assert!(properties[2].nested && properties[2].local.is_none());
+    assert!(properties[5].computed && properties[6].computed);
+    assert!(facts.bindings[0].pattern_rest);
+    assert!(facts.bindings[1].object_properties.is_empty() && !facts.bindings[1].pattern_rest);
+    assert!(facts.bindings[2].array_slots.is_empty() && !facts.bindings[2].pattern_rest);
+    assert!(facts.bindings[3].pattern_rest);
+}

@@ -918,6 +918,13 @@ pub struct BindingFact {
     pub array_slots: Vec<Option<NamedSpan>>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub object_slots: Vec<ObjectBindingFact>,
+    /// Facts schema 100 (ADR 1122): every property of an object pattern, in order, whatever its value (`object_slots` keeps the
+    /// plain identifier slots only). Empty for any other shape.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub object_properties: Vec<PatternPropertyFact>,
+    /// Facts schema 100 (ADR 1122): the pattern ends in a rest element (`{ ...r }`, `[...r]`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pattern_rest: bool,
     /// Whether this binding is a `const` variable declarator. Parameters and
     /// mutable declarations are false.
     #[serde(default)]
@@ -945,6 +952,30 @@ pub struct BindingFact {
     /// for an argument: `const items = [a, b]` is `Array`.
     #[serde(default)]
     pub initializer_value_kind: RuntimeValueKind,
+}
+
+/// Facts schema 100 (ADR 1122): one property of an object binding pattern.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatternPropertyFact {
+    pub span: Span,
+    /// The key the runtime reads, from the parser's value, not the source text: an identifier's name (escapes decoded), a
+    /// string literal's value, a numeric literal's value, a template with no substitution. `None` for any other computed key
+    /// (`[k]`), whose value no fact names.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<CompactString>,
+    /// The key is written in brackets (`[k]`, `["then"]`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub computed: bool,
+    /// The value has a default (`{ a = 1 }`, `{ a: b = 1 }`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub has_default: bool,
+    /// The value is a nested pattern (`{ a: {} }`, `{ a: [b] }`, with or without a default).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub nested: bool,
+    /// The identifier the value binds, when it is one (with or without a default).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local: Option<NamedSpan>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
