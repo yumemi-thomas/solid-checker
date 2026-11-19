@@ -218,6 +218,12 @@ export const CHECKS = {
       "shapes that make a clean without a proof; the lint ratchets them down (scripts/proof-lint.mjs, ADR 0933)",
     command: ["bun", "scripts/proof-lint.mjs"],
   },
+  "kernel-oracle": {
+    why:
+      "the inertness kernel's K1 allow-list must run no hook in Node for any form it accepts, over hostile operands " +
+      "(scripts/kernel-oracle.mjs, ADR 1120)",
+    command: ["node", "scripts/kernel-oracle.mjs"],
+  },
   "ir-edit-fuzz": {
     why:
       "the retained daemon's answer must equal a fresh one after random edits (and shadow mode must stay " +
@@ -416,6 +422,22 @@ export const ROWS = [
     prefix: "rust/dialects/solid-v2/rules/",
     owner: "the Solid 2 rules crate (analysis only)",
     checks: ["dialects-process", ...FINDING_GATES, "wasm-compile"],
+  },
+  // ADR 1120: the kernel and its oracle. Rows match longest-first and alone, so a kernel file keeps its crate's checks and adds the oracle.
+  {
+    prefix: "rust/crates/solid-facts/src/kernel.rs",
+    owner: "the inertness kernel, syntax half (ADR 1120)",
+    checks: ["facts-lib", ...FINDING_GATES, "wasm-compile", "kernel-oracle"],
+  },
+  {
+    prefix: "rust/crates/solid-reactive-ir/src/kernel.rs",
+    owner: "the inertness kernel, IR half (ADR 1120)",
+    checks: ["ir-lib", "backend-process", "write-walk-strategies", ...FINDING_GATES, "ir-read-lint", "proof-lint", "ir-edit-fuzz", "wasm-compile", "kernel-oracle"],
+  },
+  {
+    prefix: "scripts/kernel-oracle.mjs",
+    owner: "the inertness kernel's Node oracle (ADR 1120)",
+    checks: ["kernel-oracle"],
   },
   // proof-gate runs the checker over every fixture project (fixtureProjects: reactive-ir, engine and the reproduction set), so a fixture edit
   // can open a site nothing ends (ADR 0995): `witnesses` reads no fixture (scripts/flip/witnesses.json carries its own programs).

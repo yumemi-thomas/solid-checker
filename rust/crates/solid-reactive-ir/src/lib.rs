@@ -67,6 +67,7 @@ mod identity;
 mod indexes;
 mod installed_members;
 mod interproc;
+pub mod kernel;
 mod late_chunks;
 mod listener_reach;
 mod literal_member_slots;
