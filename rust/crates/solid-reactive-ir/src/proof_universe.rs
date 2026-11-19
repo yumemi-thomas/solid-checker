@@ -40,7 +40,7 @@
 
 use solid_dialect::{CodePolicy, Dialect, RuntimeCode};
 use solid_facts::FileFacts;
-use solid_facts::ast::MemberFact;
+use solid_facts::ast::{MemberFact, ReferencePosition};
 use solid_facts::core::Span;
 use typefacts::Location;
 
@@ -180,6 +180,151 @@ impl FileTables {
                 .iter()
                 .map(|target| ast.peel_ts_sugar_span(*target))
                 .collect(),
+        }
+    }
+}
+
+/// What a root's reference is by its position (ADR 1114 families 2-4): every [`ReferencePosition`] named, no default.
+enum RootUse {
+    /// A member chain: `sites_at`'s chain sites (`s.a`, `s.a.b = x`).
+    Chain,
+    /// A destructuring read of the root (family 2): every slot is a Get of it.
+    Destructure,
+    /// A value use the value-use census walks and ends (`value_use.rs`): no site here.
+    Census,
+    /// Erased by TypeScript: no runtime use.
+    TypeOnly,
+}
+
+fn root_use(position: ReferencePosition) -> RootUse {
+    use ReferencePosition as P;
+    match position {
+        P::MemberObject => RootUse::Chain,
+        P::Initializer { pattern: true } | P::AssignmentValue { pattern: true } => {
+            RootUse::Destructure
+        }
+        P::TypeOnly => RootUse::TypeOnly,
+        P::Callee
+        | P::Argument { .. }
+        | P::NewCallee
+        | P::NewArgument { .. }
+        | P::TaggedTemplateTag
+        | P::TemplateExpression
+        | P::ComputedKey
+        | P::AssignmentTarget { .. }
+        | P::AssignmentValue { pattern: false }
+        | P::UpdateOperand
+        | P::PatternTarget
+        | P::Initializer { pattern: false }
+        | P::PatternDefault
+        | P::PropertyKey
+        | P::PropertyValue { .. }
+        | P::ClassFieldValue
+        | P::Spread
+        | P::ArrayElement
+        | P::Return
+        | P::ArrowBody
+        | P::Yield
+        | P::Await
+        | P::Throw
+        | P::Typeof
+        | P::Void
+        | P::Delete
+        | P::UnaryOperand
+        | P::BinaryOperand
+        | P::PrivateIn
+        | P::LogicalOperand
+        | P::ConditionalTest
+        | P::ConditionalBranch
+        | P::Sequence { .. }
+        | P::Statement
+        | P::Test
+        | P::ForInit
+        | P::ForUpdate
+        | P::ForInOfSource
+        | P::ForInOfTarget
+        | P::SwitchDiscriminant
+        | P::CaseTest
+        | P::WithObject
+        | P::JsxExpression
+        | P::JsxSpread
+        | P::JsxTag
+        | P::JsxMemberObject
+        | P::ExportSpecifier
+        | P::ExportDefault
+        | P::ClassExtends
+        | P::Decorator
+        | P::ImportSource
+        | P::TsExport
+        | P::EnumInitializer
+        | P::TsImportAlias
+        | P::Other => RootUse::Census,
+    }
+}
+
+/// ADR 1114 family 2: the read sites of a root's destructure (`const { a, b: c, ...r } = st`, `({ a } = st)`): one per keyed slot, at the
+/// property (a Get of its key), and one at the pattern for a rest element or an array pattern with elements (it reads every key, or
+/// iterates); a destructuring assignment that assigns something is one site at the reference. A literal empty pattern reads nothing and is
+/// no site (ADRs 1107 r2 and 1122). A row for any of them may stand at the reference,
+/// the initializer or the pattern (SC1001's and SC1003's rows at a destructure).
+fn root_position_sites(file: &FileFacts, reference: Span, source: &'static str) -> Vec<Site> {
+    let positions = &file.ast.reference_positions;
+    let Ok(found) = positions.binary_search_by_key(&(reference.start, reference.end), |fact| {
+        (fact.span.start, fact.span.end)
+    }) else {
+        return Vec::new();
+    };
+    let fact = positions[found];
+    match root_use(fact.position) {
+        RootUse::Chain | RootUse::Census | RootUse::TypeOnly => Vec::new(),
+        RootUse::Destructure => {
+            let site = |at: Span, alternates: Vec<Span>| Site {
+                table: "read",
+                source,
+                via: "destructure",
+                at,
+                alternates,
+                codes: READ_CODES,
+            };
+            let binding = file.ast.bindings.iter().find(|binding| {
+                binding
+                    .initializer
+                    .is_some_and(|init| init == fact.at || init == reference)
+            });
+            let Some(binding) = binding else {
+                // A destructuring assignment: a site only when its pattern assigns something (ADR 1107 r2 and 1122: an empty pattern,
+                // `({} = st)`, reads nothing and is a proven clean). A destructure neither fact describes is a site, fail closed.
+                let assignment = file.ast.assignments.iter().find(|assignment| {
+                    assignment.value_span == fact.at || assignment.value_span == reference
+                });
+                return match assignment {
+                    Some(assignment)
+                        if !file.ast.write_targets.iter().any(|target| {
+                            assignment.target.start <= target.start
+                                && target.end <= assignment.target.end
+                        }) =>
+                    {
+                        Vec::new()
+                    }
+                    Some(assignment) => vec![site(fact.at, vec![reference, assignment.target])],
+                    None => vec![site(fact.at, vec![reference])],
+                };
+            };
+            let around = vec![reference, fact.at, binding.pattern, binding.declaration];
+            let mut out = Vec::new();
+            for property in &binding.object_properties {
+                let mut alternates = around.clone();
+                if let Some(local) = &property.local {
+                    alternates.push(local.span);
+                }
+                out.push(site(property.span, alternates));
+            }
+            // A rest element reads every key; an array pattern with elements iterates. A literal empty pattern (`const {} = st`) reads
+            // nothing: no site (ADRs 1107 r2 and 1122, Chrome).
+            if binding.pattern_rest || !binding.array_slots.is_empty() {
+                out.push(site(binding.pattern, around));
+            }
+            out
         }
     }
 }
@@ -574,6 +719,8 @@ fn sites_at(file: &FileFacts, tables: &FileTables, kind: Kind, reference: Span) 
         return sites;
     }
     let source = if kind.store { "store" } else { "props" };
+    // ADR 1114 family 2: a root's reference classified by its position (`reference_positions`, facts schema 102), every position named.
+    sites.extend(root_position_sites(file, reference, source));
     for first in ast.members_with_peeled_object(reference) {
         let (site, prefix) = match chain_end(file, tables, first) {
             ChainEnd::Read(links) => {
