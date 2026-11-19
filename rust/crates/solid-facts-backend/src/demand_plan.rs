@@ -808,9 +808,14 @@ fn collect_argument_spans(dialect: &'static Dialect, file: &FileFacts, spans: &m
     // `.catch`, `.finally`, ADR 0976). A handler another file defines gets no domain and keeps its row.
     let hands_promise_handler = || {
         file.ast.calls.iter().any(|call| {
-            file.ast.member_at(file.ast.peel_ts_sugar_span(call.callee)).is_some_and(|member| {
-                matches!(file.source_text(member.property), Some("then" | "catch" | "finally"))
-            })
+            file.ast
+                .member_at(file.ast.peel_ts_sugar_span(call.callee))
+                .is_some_and(|member| {
+                    matches!(
+                        file.source_text(member.property),
+                        Some("then" | "catch" | "finally")
+                    )
+                })
         })
     };
     if !file.ast.awaits.is_empty()

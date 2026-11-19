@@ -668,12 +668,17 @@ fn sites<'a>(
                 solid_facts::ast::RelationOperatorKind::Instanceof => true,
             })
             .map(|relation| relation.span);
-        let deletes = file.ast.primitive_results.iter().copied().filter(|operator| {
-            file.ast
-                .deleted_targets
-                .iter()
-                .any(|target| operator.start < target.start && operator.end == target.end)
-        });
+        let deletes = file
+            .ast
+            .primitive_results
+            .iter()
+            .copied()
+            .filter(|operator| {
+                file.ast
+                    .deleted_targets
+                    .iter()
+                    .any(|target| operator.start < target.start && operator.end == target.end)
+            });
         let operators = coerced.chain(related).chain(deletes).collect::<Vec<_>>();
         for operator in operators {
             if !after(file, operator) {
