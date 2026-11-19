@@ -218,6 +218,12 @@ export const CHECKS = {
       "shapes that make a clean without a proof; the lint ratchets them down (scripts/proof-lint.mjs, ADR 0933)",
     command: ["bun", "scripts/proof-lint.mjs"],
   },
+  "standard-members": {
+    why:
+      "the plain-program premise refuses writes by key from rust/crates/solid-facts/src/ast/standard_members.txt, generated from " +
+      "TypeScript's lib files; a stale table misses a standard name (scripts/kernel/standard-members.mjs, ADR 1120)",
+    command: ["node", "scripts/kernel/standard-members.mjs", "--check"],
+  },
   "kernel-oracle": {
     why:
       "the inertness kernel's K1 allow-list must run no hook in Node for any form it accepts, over hostile operands " +
@@ -433,6 +439,11 @@ export const ROWS = [
     prefix: "rust/crates/solid-reactive-ir/src/kernel.rs",
     owner: "the inertness kernel, IR half (ADR 1120)",
     checks: ["ir-lib", "backend-process", "write-walk-strategies", ...FINDING_GATES, "ir-read-lint", "proof-lint", "ir-edit-fuzz", "wasm-compile", "kernel-oracle"],
+  },
+  {
+    prefix: "scripts/kernel/",
+    owner: "the premise's standard-member table generator (ADR 1120)",
+    checks: ["standard-members", "facts-lib"],
   },
   {
     prefix: "scripts/kernel-oracle.mjs",

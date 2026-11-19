@@ -365,9 +365,7 @@ fn literal_key_value(expression: &Expression<'_>) -> Option<String> {
 /// exponent form, `-0`) is not settled here.
 fn canonical_integer(value: f64) -> Option<String> {
     const LIMIT: f64 = 9_007_199_254_740_992.0;
-    if value.is_finite()
-        && value >= 0.0
-        && value < LIMIT
+    if (0.0..LIMIT).contains(&value)
         && value.fract() == 0.0
         && !(value == 0.0 && value.is_sign_negative())
     {
