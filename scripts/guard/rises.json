@@ -5046,6 +5046,406 @@
    "to": 6,
    "adr": "ADR 1119",
    "fact": "round 2 (H2): a named callback also called by name is checked at every silent named-callback arm; helper-prop-read's read relabels from function-run-unplaced to callee-callback-timing"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-walk",
+   "key": "SC2002 package-may-call-action",
+   "from": 41,
+   "to": 42,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice A: under the fixture's any-name prototype writer (fz-ctor hands Float32Array to a Proxy), localIdentity() is a binding whose resolved declaration is the library's VoidFunction (a project arrow handed through id(f: VoidFunction)), which the any-bound-library arm takes for a library method: fail-closed, Chrome silent; the arm should ask the binding's value origin, not its type"
+  },
+  {
+   "fixture": "reactive-ir/dependency-phantom-solid-undecided",
+   "key": "SC2002 package-may-call-action",
+   "from": 3,
+   "to": 4,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice C: every iterated operand (a spread, for…of, an array pattern such as const [v, setV] = createSignal(), yield*) is an SC2002 site where a loaded package may write a built-in's prototype under any name (an undecided closure, the global object handed on, generated code): fail-closed, uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/dependency-value-flow",
+   "key": "SC2002 package-may-call-action",
+   "from": 19,
+   "to": 20,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice C: every iterated operand (a spread, for…of, an array pattern such as const [v, setV] = createSignal(), yield*) is an SC2002 site where a loaded package may write a built-in's prototype under any name (an undecided closure, the global object handed on, generated code): fail-closed, uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper",
+   "key": "SC2002 package-may-call-action",
+   "from": 122,
+   "to": 164,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice C: every iterated operand (a spread, for…of, an array pattern such as const [v, setV] = createSignal(), yield*) is an SC2002 site where a loaded package may write a built-in's prototype under any name (an undecided closure, the global object handed on, generated code): fail-closed, uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper-eval",
+   "key": "SC2002 package-may-call-action",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice C: every iterated operand (a spread, for…of, an array pattern such as const [v, setV] = createSignal(), yield*) is an SC2002 site where a loaded package may write a built-in's prototype under any name (an undecided closure, the global object handed on, generated code): fail-closed, uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper-patched-bind",
+   "key": "SC2002 package-may-call-action",
+   "from": 5,
+   "to": 6,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice C: every iterated operand (a spread, for…of, an array pattern such as const [v, setV] = createSignal(), yield*) is an SC2002 site where a loaded package may write a built-in's prototype under any name (an undecided closure, the global object handed on, generated code): fail-closed, uncertifiable only"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC2002 package-may-call-action",
+   "from": 38,
+   "to": 111,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice C: every iterated operand (a spread, for…of, an array pattern such as const [v, setV] = createSignal(), yield*) is an SC2002 site where a loaded package may write a built-in's prototype under any name (an undecided closure, the global object handed on, generated code): fail-closed, uncertifiable only"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc4001",
+   "key": "SC2002 package-may-call-action",
+   "from": 43,
+   "to": 63,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice C: every iterated operand (a spread, for…of, an array pattern such as const [v, setV] = createSignal(), yield*) is an SC2002 site where a loaded package may write a built-in's prototype under any name (an undecided closure, the global object handed on, generated code): fail-closed, uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-walk",
+   "key": "SC2002 package-may-call-action",
+   "from": 41,
+   "to": 43,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice D: a member call no declaration resolves (a receiver typed any, a file without Type Facts) is an SC2002 site where a loaded package may write a built-in's prototype under any name (an undecided closure, the global object handed on, generated code): fail-closed, uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper",
+   "key": "SC2002 package-may-call-action",
+   "from": 122,
+   "to": 180,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice D: a member call no declaration resolves (a receiver typed any, a file without Type Facts) is an SC2002 site where a loaded package may write a built-in's prototype under any name (an undecided closure, the global object handed on, generated code): fail-closed, uncertifiable only"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC2002 package-may-call-action",
+   "from": 38,
+   "to": 131,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice D: a member call no declaration resolves (a receiver typed any, a file without Type Facts) is an SC2002 site where a loaded package may write a built-in's prototype under any name (an undecided closure, the global object handed on, generated code): fail-closed, uncertifiable only"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc4001",
+   "key": "SC2002 package-may-call-action",
+   "from": 43,
+   "to": 67,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice D: a member call no declaration resolves (a receiver typed any, a file without Type Facts) is an SC2002 site where a loaded package may write a built-in's prototype under any name (an undecided closure, the global object handed on, generated code): fail-closed, uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-origins",
+   "key": "SC2002 package-may-call-action",
+   "from": 31,
+   "to": 45,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice E (fail closed under a prototype writer, Fable review round 1): every member call whatever its declaration, every call, constructor and tag the library declares or nothing resolves, every converting operator, template substitution, array pattern, await, using and JSX value is an SC2002 site where a loaded package writes a built-in's prototype and may reach Solid: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-prototype-writer-shapes",
+   "key": "SC2002 package-may-call-action",
+   "from": 9,
+   "to": 23,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice E (fail closed under a prototype writer, Fable review round 1): every member call whatever its declaration, every call, constructor and tag the library declares or nothing resolves, every converting operator, template substitution, array pattern, await, using and JSX value is an SC2002 site where a loaded package writes a built-in's prototype and may reach Solid: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-prototype-writes",
+   "key": "SC2002 package-may-call-action",
+   "from": 4,
+   "to": 14,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice E (fail closed under a prototype writer, Fable review round 1): every member call whatever its declaration, every call, constructor and tag the library declares or nothing resolves, every converting operator, template substitution, array pattern, await, using and JSX value is an SC2002 site where a loaded package writes a built-in's prototype and may reach Solid: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-unread-packages",
+   "key": "SC2002 package-may-call-action",
+   "from": 25,
+   "to": 33,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice E (fail closed under a prototype writer, Fable review round 1): every member call whatever its declaration, every call, constructor and tag the library declares or nothing resolves, every converting operator, template substitution, array pattern, await, using and JSX value is an SC2002 site where a loaded package writes a built-in's prototype and may reach Solid: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-walk",
+   "key": "SC2002 package-may-call-action",
+   "from": 41,
+   "to": 45,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice E (fail closed under a prototype writer, Fable review round 1): every member call whatever its declaration, every call, constructor and tag the library declares or nothing resolves, every converting operator, template substitution, array pattern, await, using and JSX value is an SC2002 site where a loaded package writes a built-in's prototype and may reach Solid: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/dependency-phantom-solid-undecided",
+   "key": "SC2002 package-may-call-action",
+   "from": 3,
+   "to": 7,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice E (fail closed under a prototype writer, Fable review round 1): every member call whatever its declaration, every call, constructor and tag the library declares or nothing resolves, every converting operator, template substitution, array pattern, await, using and JSX value is an SC2002 site where a loaded package writes a built-in's prototype and may reach Solid: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/dependency-value-flow",
+   "key": "SC2002 package-may-call-action",
+   "from": 19,
+   "to": 37,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice E (fail closed under a prototype writer, Fable review round 1): every member call whatever its declaration, every call, constructor and tag the library declares or nothing resolves, every converting operator, template substitution, array pattern, await, using and JSX value is an SC2002 site where a loaded package writes a built-in's prototype and may reach Solid: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/inert-global-reads-in-key",
+   "key": "SC2002 package-may-call-action",
+   "from": 6,
+   "to": 7,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice E (fail closed under a prototype writer, Fable review round 1): every member call whatever its declaration, every call, constructor and tag the library declares or nothing resolves, every converting operator, template substitution, array pattern, await, using and JSX value is an SC2002 site where a loaded package writes a built-in's prototype and may reach Solid: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper",
+   "key": "SC2002 package-may-call-action",
+   "from": 122,
+   "to": 274,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice E (fail closed under a prototype writer, Fable review round 1): every member call whatever its declaration, every call, constructor and tag the library declares or nothing resolves, every converting operator, template substitution, array pattern, await, using and JSX value is an SC2002 site where a loaded package writes a built-in's prototype and may reach Solid: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper-eval",
+   "key": "SC2002 package-may-call-action",
+   "from": 2,
+   "to": 5,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice E (fail closed under a prototype writer, Fable review round 1): every member call whatever its declaration, every call, constructor and tag the library declares or nothing resolves, every converting operator, template substitution, array pattern, await, using and JSX value is an SC2002 site where a loaded package writes a built-in's prototype and may reach Solid: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper-patched-bind",
+   "key": "SC2002 package-may-call-action",
+   "from": 5,
+   "to": 8,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice E (fail closed under a prototype writer, Fable review round 1): every member call whatever its declaration, every call, constructor and tag the library declares or nothing resolves, every converting operator, template substitution, array pattern, await, using and JSX value is an SC2002 site where a loaded package writes a built-in's prototype and may reach Solid: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/route-components",
+   "key": "SC2002 package-may-call-action",
+   "from": 3,
+   "to": 27,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice E (fail closed under a prototype writer, Fable review round 1): every member call whatever its declaration, every call, constructor and tag the library declares or nothing resolves, every converting operator, template substitution, array pattern, await, using and JSX value is an SC2002 site where a loaded package writes a built-in's prototype and may reach Solid: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/route-components-core-modified",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 12,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice E (fail closed under a prototype writer, Fable review round 1): every member call whatever its declaration, every call, constructor and tag the library declares or nothing resolves, every converting operator, template substitution, array pattern, await, using and JSX value is an SC2002 site where a loaded package writes a built-in's prototype and may reach Solid: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/route-components-destructured",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 12,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice E (fail closed under a prototype writer, Fable review round 1): every member call whatever its declaration, every call, constructor and tag the library declares or nothing resolves, every converting operator, template substitution, array pattern, await, using and JSX value is an SC2002 site where a loaded package writes a built-in's prototype and may reach Solid: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/route-components-key-read",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 12,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice E (fail closed under a prototype writer, Fable review round 1): every member call whatever its declaration, every call, constructor and tag the library declares or nothing resolves, every converting operator, template substitution, array pattern, await, using and JSX value is an SC2002 site where a loaded package writes a built-in's prototype and may reach Solid: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/route-components-modified-bytes",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 12,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice E (fail closed under a prototype writer, Fable review round 1): every member call whatever its declaration, every call, constructor and tag the library declares or nothing resolves, every converting operator, template substitution, array pattern, await, using and JSX value is an SC2002 site where a loaded package writes a built-in's prototype and may reach Solid: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/route-components-patched",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 12,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice E (fail closed under a prototype writer, Fable review round 1): every member call whatever its declaration, every call, constructor and tag the library declares or nothing resolves, every converting operator, template substitution, array pattern, await, using and JSX value is an SC2002 site where a loaded package writes a built-in's prototype and may reach Solid: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/route-components-rc8",
+   "key": "SC2002 package-may-call-action",
+   "from": 3,
+   "to": 29,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice E (fail closed under a prototype writer, Fable review round 1): every member call whatever its declaration, every call, constructor and tag the library declares or nothing resolves, every converting operator, template substitution, array pattern, await, using and JSX value is an SC2002 site where a loaded package writes a built-in's prototype and may reach Solid: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/route-components-rc9",
+   "key": "SC2002 package-may-call-action",
+   "from": 3,
+   "to": 29,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice E (fail closed under a prototype writer, Fable review round 1): every member call whatever its declaration, every call, constructor and tag the library declares or nothing resolves, every converting operator, template substitution, array pattern, await, using and JSX value is an SC2002 site where a loaded package writes a built-in's prototype and may reach Solid: uncertifiable only"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC2002 package-may-call-action",
+   "from": 38,
+   "to": 412,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice E (fail closed under a prototype writer, Fable review round 1): every member call whatever its declaration, every call, constructor and tag the library declares or nothing resolves, every converting operator, template substitution, array pattern, await, using and JSX value is an SC2002 site where a loaded package writes a built-in's prototype and may reach Solid: uncertifiable only"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc4001",
+   "key": "SC2002 package-may-call-action",
+   "from": 43,
+   "to": 139,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice E (fail closed under a prototype writer, Fable review round 1): every member call whatever its declaration, every call, constructor and tag the library declares or nothing resolves, every converting operator, template substitution, array pattern, await, using and JSX value is an SC2002 site where a loaded package writes a built-in's prototype and may reach Solid: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-origins",
+   "key": "SC2002 package-may-call-action",
+   "from": 31,
+   "to": 47,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-unread-packages",
+   "key": "SC2002 package-may-call-action",
+   "from": 25,
+   "to": 41,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/dependency-phantom-solid-undecided",
+   "key": "SC2002 package-may-call-action",
+   "from": 3,
+   "to": 8,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/dependency-value-flow",
+   "key": "SC2002 package-may-call-action",
+   "from": 19,
+   "to": 50,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper",
+   "key": "SC2002 package-may-call-action",
+   "from": 122,
+   "to": 328,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper-eval",
+   "key": "SC2002 package-may-call-action",
+   "from": 2,
+   "to": 6,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper-patched-bind",
+   "key": "SC2002 package-may-call-action",
+   "from": 5,
+   "to": 9,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/route-components",
+   "key": "SC2002 package-may-call-action",
+   "from": 3,
+   "to": 39,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/route-components-core-modified",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 18,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/route-components-destructured",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 18,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/route-components-key-read",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 18,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/route-components-modified-bytes",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 18,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/route-components-patched",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 18,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/route-components-rc8",
+   "key": "SC2002 package-may-call-action",
+   "from": 3,
+   "to": 42,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/route-components-rc9",
+   "key": "SC2002 package-may-call-action",
+   "from": 3,
+   "to": 42,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC2002 package-may-call-action",
+   "from": 38,
+   "to": 467,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc4001",
+   "key": "SC2002 package-may-call-action",
+   "from": 43,
+   "to": 160,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
   }
  ]
 }

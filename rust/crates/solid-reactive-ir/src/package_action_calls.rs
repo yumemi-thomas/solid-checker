@@ -212,6 +212,9 @@ fn file_sites(
     let accessors_possible = ctx
         .package_reach
         .is_some_and(solid_facts::package_reach::PackageReachIndex::defines_global_accessors);
+    let prototype_writer_loaded = ctx
+        .package_reach
+        .is_some_and(|index| index.prototype_writers_of_unspelled().next().is_some());
     let mut push = |at: Span, callee: Span, entry: Entry, declaration: Option<DeclarationAt>| {
         let Some(declaration) = declaration else {
             return;
@@ -223,7 +226,9 @@ fn file_sites(
                 detail: "this adapter reads no installed package".into(),
             },
         };
-        if reach.is_clear() {
+        // ADR 1114 family 3 slice F (Fable F5): under a prototype writer that may reach Solid, a clear package's call may run a member another
+        // package wrote (Chrome-confirmed), so its site stays.
+        if reach.is_clear() && !prototype_writer_loaded {
             return;
         }
         // A site two routes find (an identifier and the member it is the object of) stands once; a clear package's value handed to the same call never hides
@@ -309,8 +314,10 @@ fn file_sites(
             continue;
         }
         // What can be a site is asked first (a call no package's code runs ends here, as a site needs a declaration): the questions that clear a call are the dearer ones.
+        // ADR 1108 part 2: a call no route gives a package's declaration may still run a method a package writes on a built-in's prototype.
         let Some(declaration) =
             package_declaration(ctx, analyzed, file, &bound, call.callee, Resolve::Call)
+                .or_else(|| prototype_call(ctx, file, call))
         else {
             continue;
         };
@@ -326,12 +333,52 @@ fn file_sites(
             template.span,
             template.tag,
             Entry::Tag,
-            package_declaration(ctx, analyzed, file, &bound, template.tag, Resolve::Call),
+            package_declaration(ctx, analyzed, file, &bound, template.tag, Resolve::Call).or_else(
+                || {
+                    // ADR 1114 family 3 slice E (review F2): a tag the library declares, or one nothing resolves (`String.raw`), converts what it is
+                    // handed; the project's own tag is analysed as a function.
+                    let resolved = ctx
+                        .semantic_lookup
+                        .resolved_callee_call(file, template.tag)
+                        .and_then(|resolved| resolved.declaration.as_ref());
+                    resolved
+                        .is_none_or(|declaration| declaration.standard_library)
+                        .then(|| {
+                            prototype_read(
+                                ctx,
+                                &["toString", "valueOf", "join"],
+                                Some("[Symbol.toPrimitive]"),
+                                "tag",
+                            )
+                        })
+                        .flatten()
+                },
+            ),
         );
     }
     for element in &file.ast.jsx_elements {
         // An intrinsic element (`<button>`) is the DOM's; its tag names no code.
         if crate::object_members::intrinsic_element(file, element) {
+            // ADR 1114 family 3 slice F (Fable F5): the runtime clones a template root (`cloneNode`, `importNode`), which a package may have
+            // written on `Node.prototype` or `Document.prototype` (Chrome-confirmed).
+            if template_root(file, element) {
+                let opening = if element.opening.end > element.opening.start {
+                    element.opening
+                } else {
+                    element.span
+                };
+                push(
+                    element.span,
+                    opening,
+                    Entry::Render,
+                    prototype_read(
+                        ctx,
+                        &["cloneNode", "importNode"],
+                        Some("[cloneNode]"),
+                        "runtime-element",
+                    ),
+                );
+            }
             continue;
         }
         let opening = if element.opening.end > element.opening.start {
@@ -606,6 +653,125 @@ fn file_sites(
             if callable_fact(ctx, file, at) == Some(true) && handed_as_value(ctx, file, at) {
                 push(call.span, at, Entry::Value, Some(origin));
             }
+        }
+    }
+    // ADR 1108 part 2: what runs a method a package writes on a built-in's prototype without a call of it: a member of that name read for its value or handed on, an
+    // object pattern that reads it, an iteration (a writer under any name may have written `Symbol.iterator` or `next`), a template literal (`toString`, `join`).
+    if ctx.package_reach.is_some_and(|index| {
+        !index.prototype_writers.is_empty() || !index.prototype_writers_any.is_empty()
+    }) {
+        for member in &file.ast.members {
+            if !evaluated_member(file, member.span) {
+                continue;
+            }
+            if let Key::Name(name) = member_key(file, member) {
+                push(
+                    member.span,
+                    member.span,
+                    Entry::Read,
+                    prototype_read(ctx, &[name.as_str()], None, "read-member"),
+                );
+            }
+        }
+        for element in &file.ast.pattern_elements {
+            if let solid_facts::ast::PatternSlot::Key(name) = &element.slot {
+                push(
+                    element.pattern,
+                    element.pattern,
+                    Entry::Read,
+                    prototype_read(ctx, &[name.as_str()], None, "read-pattern"),
+                );
+            }
+        }
+        for &operand in &file.ast.iterated_operands {
+            push(
+                operand,
+                operand,
+                Entry::Read,
+                prototype_read(ctx, &["next"], Some("[Symbol.iterator]"), "iteration"),
+            );
+        }
+        for template in &file.ast.template_literals {
+            if template.expressions.is_empty()
+                || file.ast.tagged_templates.iter().any(|tagged| {
+                    tagged.span.end == template.span.end && tagged.span.contains(template.span)
+                })
+            {
+                continue;
+            }
+            // Each substitution is converted to a string: the conversion runs its value's `toString`, `valueOf` (an array's `join`), where V8 places it.
+            for &expression in &template.expressions {
+                push(
+                    expression,
+                    expression,
+                    Entry::Read,
+                    prototype_read(
+                        ctx,
+                        &["toString", "valueOf", "join"],
+                        Some("[Symbol.toPrimitive]"),
+                        "template",
+                    ),
+                );
+            }
+        }
+        // ADR 1114 family 3 slice E (review F2, F4): every other operation that runs a member of what it is handed. A conversion by an operator
+        // (`"" + d`, `d < e`, `+d`, `o[k]`) runs `Symbol.toPrimitive`, `valueOf` or `toString`; every array pattern (a parameter's, a nested one) iterates
+        // its value; `await` reads `then`; `using` reads `Symbol.dispose`; a JSX attribute or child is converted or iterated where it is rendered.
+        let conversion = ["toString", "valueOf", "join"];
+        for &operand in &file.ast.converting_operators {
+            push(
+                operand,
+                operand,
+                Entry::Read,
+                prototype_read(ctx, &conversion, Some("[Symbol.toPrimitive]"), "conversion"),
+            );
+        }
+        for element in &file.ast.pattern_elements {
+            if matches!(element.slot, solid_facts::ast::PatternSlot::Index(_)) {
+                push(
+                    element.pattern,
+                    element.pattern,
+                    Entry::Read,
+                    prototype_read(ctx, &["next"], Some("[Symbol.iterator]"), "iteration"),
+                );
+            }
+        }
+        for &operand in &file.ast.await_operands {
+            push(
+                operand,
+                operand,
+                Entry::Read,
+                prototype_read(ctx, &["then"], Some("then"), "await"),
+            );
+        }
+        for &initializer in &file.ast.disposal_initializers {
+            push(
+                initializer,
+                initializer,
+                Entry::Read,
+                prototype_read(ctx, &[], Some("[Symbol.dispose]"), "disposal"),
+            );
+        }
+        let jsx_values = file.ast.jsx_child_expressions.iter().copied().chain(
+            file.ast.jsx_elements.iter().flat_map(|element| {
+                element
+                    .attributes
+                    .iter()
+                    .filter_map(|attribute| attribute.expression)
+            }),
+        );
+        for value in jsx_values {
+            push(
+                value,
+                value,
+                Entry::Read,
+                prototype_read(
+                    ctx,
+                    &conversion,
+                    Some("[Symbol.toPrimitive]"),
+                    "jsx-conversion",
+                ),
+            );
         }
     }
     sites.sort_by_key(|site| (site.at.start, site.at.end));
@@ -2703,6 +2869,260 @@ fn prototype_written(
     })
 }
 
+/// ADR 1108 part 2: the methods the standard library runs on its own for a call of the method (or global) of that name, looked up on the value it is given or makes:
+/// `RegExp.prototype.test` and the string methods that take a pattern run `exec`, an array's `toString` runs `join`, `JSON.stringify` runs `toJSON`, `String(x)` runs
+/// `toString` and `valueOf`, the collection constructors run `set` or `add`, the promise combinators run `then` and `resolve`.
+const IMPLICIT_CALLS: &[(&str, &[&str])] = &[
+    ("test", &["exec"]),
+    ("match", &["exec"]),
+    ("matchAll", &["exec"]),
+    ("replace", &["exec"]),
+    ("replaceAll", &["exec"]),
+    ("search", &["exec"]),
+    ("split", &["exec"]),
+    ("toString", &["join"]),
+    ("toLocaleString", &["join"]),
+    ("stringify", &["toJSON"]),
+    ("String", &["toString", "valueOf"]),
+    ("Map", &["set"]),
+    ("WeakMap", &["set"]),
+    ("Set", &["add"]),
+    ("WeakSet", &["add"]),
+    ("all", &["then", "resolve"]),
+    ("allSettled", &["then", "resolve"]),
+    ("race", &["then", "resolve"]),
+    ("any", &["then", "resolve"]),
+];
+
+/// ADR 1108 part 2: the constructors that iterate the value they are given (`new Set(it)`): the iterator's methods run, which a writer under any name may have written.
+const ITERATING_CONSTRUCTORS: &[&str] = &["Map", "WeakMap", "Set", "WeakSet"];
+
+/// ADR 1108 part 2: the methods the window inherits from `EventTarget.prototype` and `Object.prototype`, which a bare call of the global of that name runs.
+const INHERITED_BY_WINDOW: &[&str] = &[
+    "addEventListener",
+    "removeEventListener",
+    "dispatchEvent",
+    "toString",
+    "toLocaleString",
+    "valueOf",
+    "hasOwnProperty",
+    "isPrototypeOf",
+    "propertyIsEnumerable",
+];
+
+/// ADR 1108 part 2: the code a call that no other route gives a package's declaration may run where a package the program loads writes a built-in's prototype and may
+/// reach a Solid action: every call of a method of a name written (whatever its receiver's type: a project interface, `any`), the function of `.call`, `.apply`, `.bind`
+/// and `Reflect.apply`, a binding or a bare global the library declares as such a method (`const { reverse } = a; reverse()`, `dispatchEvent(…)`), and the methods the
+/// library runs on its own ([`IMPLICIT_CALLS`]). A writer under any name may have written what a library method, an untyped member, an iterating constructor, a method
+/// the window inherits or a binding of a library method runs. `None` where no such writer is loaded.
+fn prototype_call(
+    ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> Option<DeclarationAt> {
+    let index = ctx.package_reach?;
+    if index.prototype_writers.is_empty() && index.prototype_writers_any.is_empty() {
+        return None;
+    }
+    let mut how = "member";
+    let mut any_kind = std::borrow::Cow::Borrowed("any-library-member");
+    let ast = &file.ast;
+    let callee = ast.peel_ts_sugar_span(call.callee);
+    let resolved = ctx
+        .semantic_lookup
+        .resolved_callee_call(file, call.callee)
+        .and_then(|resolved| resolved.declaration.as_ref());
+    let standard = resolved.is_some_and(|declaration| declaration.standard_library);
+    let mut names = Vec::<String>::new();
+    let mut unspelled = false;
+    let any;
+    let key_of = |span: Span, names: &mut Vec<String>, unspelled: &mut bool| {
+        if let Some(member) = ast.member_at(ast.peel_ts_sugar_span(span)) {
+            match member_key(file, member) {
+                Key::Name(name) => names.push(name),
+                Key::Unspelled => *unspelled = true,
+            }
+        }
+    };
+    if let Some(member) = ast.member_at(callee) {
+        match member_key(file, member) {
+            Key::Name(name) => {
+                // `o.m.call(t)`, `o.m.apply(t, a)`, `o.m.bind(t)`: the function is `m`; `Reflect.apply(o.m, t, a)`: its first argument.
+                if matches!(name.as_str(), "call" | "apply" | "bind") {
+                    how = "call-apply";
+                    key_of(member.object, &mut names, &mut unspelled);
+                }
+                if name == "apply"
+                    && is_unbound_global(file, ast.peel_ts_sugar_span(member.object), "Reflect")
+                    && let Some(first) = call.arguments.first()
+                {
+                    how = "call-apply";
+                    key_of(first.span, &mut names, &mut unspelled);
+                }
+                names.push(name);
+            }
+            Key::Unspelled => unspelled = true,
+        }
+        // ADR 1114 family 3 slice E: a call that resolves to the project's declaration (an interface, a type literal, a cast) may still run a built-in's
+        // member: the value is not proven a project object, and a type admits a built-in (`const x: Indexed = [1]`).
+        any_kind = match resolved {
+            None => "any-untyped-member".into(),
+            Some(declaration) if !standard => {
+                format!("any-project-{}", declaration.kind.to_ascii_lowercase()).into()
+            }
+            Some(_) => any_kind,
+        };
+        any = true;
+    } else if let Some(declaration) = resolved.filter(|_| standard) {
+        // The name the call spells (`new Map(…)`: the library declares the constructor's signature under another) and the one the library declares.
+        let spelled = file
+            .source_text(callee)
+            .map(|text| cooked_identifier(text).into_owned())
+            .unwrap_or_default();
+        let bound = ast.reference_declaration(callee).is_some();
+        how = "bare-global";
+        // ADR 1114 family 3 slice E: every call of a function or constructor the library declares may run a written member: it converts, iterates
+        // or calls members of what it is handed (`String(d)`, `new URL(u)`, `new Float32Array([…])`), or is one the window inherits.
+        any_kind = if bound {
+            "any-bound-library"
+        } else if call.construct && ITERATING_CONSTRUCTORS.contains(&spelled.as_str()) {
+            "any-iterating-ctor"
+        } else if INHERITED_BY_WINDOW.contains(&spelled.as_str()) {
+            "any-bare-inherited"
+        } else if call.construct {
+            "any-library-ctor"
+        } else {
+            "any-library-call"
+        }
+        .into();
+        any = true;
+        let declared = declaration.name.to_string();
+        names.push(spelled);
+        if !declared.is_empty() && names[0] != declared {
+            names.push(declared);
+        }
+        names.extend(pattern_key_of(file, callee));
+    } else if let Some(key) = pattern_key_of(file, callee) {
+        // `const { reverse } = a; reverse()`: the binding holds the member the pattern reads, whatever the compiler resolves the call to.
+        names.push(key);
+        how = "destructured";
+        any_kind = "any-destructured".into();
+        any = true;
+    } else if resolved.is_none() {
+        // ADR 1114 family 3 slice E: a call no declaration resolves may be of a global the library provides.
+        // The name the call spells when it is an identifier; another callee (`f()()`, an IIFE) has none.
+        names.push(
+            file.source_text(callee)
+                .map(|text| cooked_identifier(text).into_owned())
+                .filter(|name| is_identifier_name(name))
+                .unwrap_or_else(|| "[…]".to_owned()),
+        );
+        any_kind = "any-untyped-call".into();
+        any = true;
+    } else {
+        // The project's own function: its body's operations are sites of their own.
+        return None;
+    }
+    let spelled_count = names.len();
+    let implicit = names
+        .iter()
+        .flat_map(|name| {
+            IMPLICIT_CALLS
+                .iter()
+                .filter(move |(caller, _)| caller == name)
+                .flat_map(|(_, runs)| runs.iter().map(|run| (*run).to_owned()))
+        })
+        .collect::<Vec<_>>();
+    names.extend(implicit);
+    if let Some((at, name, root)) = names.iter().enumerate().find_map(|(at, name)| {
+        index
+            .prototype_writers_by_name(name)
+            .next()
+            .map(|root| (at, name, root))
+    }) {
+        let kind = if at >= spelled_count { "implicit" } else { how };
+        return Some(DeclarationAt {
+            path: format!("{PROTOTYPE_WRITE_PREFIX}{name}#{kind}:{root}"),
+        });
+    }
+    if unspelled && let Some(root) = index.prototype_writers_of_unspelled().next() {
+        return Some(DeclarationAt {
+            path: format!("{PROTOTYPE_WRITE_ANY_PREFIX}[…]#unspelled:{root}"),
+        });
+    }
+    if !any {
+        return None;
+    }
+    if let Some(root) = index.prototype_writers_any_name().next() {
+        return Some(DeclarationAt {
+            path: format!(
+                "{PROTOTYPE_WRITE_ANY_PREFIX}{}#{any_kind}:{root}",
+                names.first().map_or("[…]", String::as_str)
+            ),
+        });
+    }
+    // ADR 1114 family 3 slice E (review F3): a name the table of implicit calls lacks is no proof. Where a package writes a member by name, any
+    // call that may reach a built-in (a library function or constructor, a member call whatever its declaration) may run it (`p.catch(f)` runs
+    // `then`, `JSON.stringify(d)` runs `toISOString`): a site naming the written member, unless a reviewed reading clears the callee (none yet).
+    let (written, root) = index.prototype_writers.iter().find_map(|(name, roots)| {
+        roots
+            .iter()
+            .find(|root| {
+                index
+                    .by_root
+                    .get(root.as_str())
+                    .is_none_or(|reach| !reach.is_clear())
+            })
+            .map(|root| (name, root))
+    })?;
+    let kind = any_kind.strip_prefix("any-").unwrap_or(&any_kind);
+    Some(DeclarationAt {
+        path: format!("{PROTOTYPE_WRITE_PREFIX}{written}#named-{kind}:{root}"),
+    })
+}
+
+/// ADR 1108 part 2: the key of the object pattern that binds the identifier at `callee` (`reverse` of `const { reverse } = a`, `r` of `const { reverse: r } = a`).
+fn pattern_key_of(file: &FileFacts, callee: Span) -> Option<String> {
+    let declaration = file.ast.reference_declaration(callee)?;
+    file.ast
+        .pattern_elements
+        .iter()
+        .find_map(|element| match &element.slot {
+            solid_facts::ast::PatternSlot::Key(key) if element.target == declaration => {
+                Some(key.to_string())
+            }
+            _ => None,
+        })
+}
+
+/// ADR 1108 part 2: the code a value the program does not call may run where a package the program loads writes a built-in's prototype: a member of a name written read
+/// for its value (an accessor a package defines on the prototype, `void dv.byteLength`), or the method handed on; an iteration (`[...it]`, `for … of`, an array pattern,
+/// `yield*`) runs `Symbol.iterator` and `next`, which a writer under any name may have written; a template literal runs `toString`, `valueOf` and an array's `join`.
+fn prototype_read(
+    ctx: &AnalysisContext<'_>,
+    names: &[&str],
+    any_name: Option<&str>,
+    kind: &str,
+) -> Option<DeclarationAt> {
+    let index = ctx.package_reach?;
+    if let Some((name, root)) = names.iter().find_map(|name| {
+        index
+            .prototype_writers_by_name(name)
+            .next()
+            .map(|root| (*name, root))
+    }) {
+        return Some(DeclarationAt {
+            path: format!("{PROTOTYPE_WRITE_PREFIX}{name}#{kind}:{root}"),
+        });
+    }
+    // `any_name`: the member the operation runs that a writer under any name may have written (`[Symbol.iterator]`, `[Symbol.toPrimitive]`).
+    let member = any_name?;
+    let root = index.prototype_writers_any_name().next()?;
+    Some(DeclarationAt {
+        path: format!("{PROTOTYPE_WRITE_ANY_PREFIX}{member}#{kind}:{root}"),
+    })
+}
+
 /// The import binding a value's root names: the identifier `span` is, or the object of the member chain it is (`Pkg` of `Pkg.a.b`).
 fn root_import<'t, 'f>(
     file: &FileFacts,
@@ -2922,6 +3342,7 @@ fn reach_census(path: &str, entry: Entry, reach: &PackageReach, project_js: bool
         .or_else(|| path.strip_prefix(PROTOTYPE_WRITE_ANY_PREFIX))
     {
         let name = written.split_once(':').map_or(written, |(name, _)| name);
+        let name = name.split_once('#').map_or(name, |(name, _)| name);
         return vec![format!("global|prototype:{name}")];
     }
     if path.starts_with(READ_ANY_PREFIX) {
@@ -3061,6 +3482,15 @@ fn row(file: &FileFacts, site: &PackageSite) -> crate::StaticViolation {
         {
             "this read runs an accessor of"
         }
+        // ADR 1108 part 2: the library runs a method a package wrote on a built-in's prototype (an accessor, an iterator, `toString`).
+        Entry::Read
+            if matches!(
+                site.provider,
+                Provider::PrototypeWritten | Provider::PrototypeWrittenAny
+            ) =>
+        {
+            "this read, iteration or conversion runs a method"
+        }
         Entry::Read => "this reads a member of an object of",
     };
     crate::StaticViolation {
@@ -3069,7 +3499,7 @@ fn row(file: &FileFacts, site: &PackageSite) -> crate::StaticViolation {
         message: format!(
             "{entered} `{}`, {}, where an owner may be active; {}, so whether it calls a Solid \
              action (which throws `ACTION_CALLED_IN_OWNED_SCOPE` in the dev build) is not proven",
-            site.package,
+            site.package.split_once('#').map_or(site.package.as_str(), |(name, _)| name),
             match site.provider {
                 Provider::Ambient => "a declaration file whose global the host, a script or a package this build does not read as source may provide",
                 Provider::Limit => "a value whose origin this build's walk could not follow to its end",
@@ -3091,7 +3521,11 @@ fn row(file: &FileFacts, site: &PackageSite) -> crate::StaticViolation {
         }
         .into(),
         location: crate::location(file.path.shared(), site.at),
-        analysis_context: format!("{}:{}", crate::blockers::PACKAGE_MAY_CALL_ACTION, site.reach.word()),
+        // ADR 1114 family 3: a prototype-writer site names its kind after the reach (`package-may-call-action:reaches-solid:prototype-template`).
+        analysis_context: match site.package.split_once('#') {
+            Some((_, kind)) => format!("{}:{}:prototype-{kind}", crate::blockers::PACKAGE_MAY_CALL_ACTION, site.reach.word()),
+            None => format!("{}:{}", crate::blockers::PACKAGE_MAY_CALL_ACTION, site.reach.word()),
+        },
         fixes: Vec::new(),
         uncertain: true,
     }
@@ -3112,6 +3546,42 @@ pub(crate) fn universe_sites<'a>(
         }
     }
     found
+}
+
+/// ADR 1114 family 3 slice F: whether an intrinsic element is the root of a template the runtime clones: no element
+/// encloses it, the nearest one is a component, or a JSX expression (a child or an attribute value) lies between them.
+fn template_root(file: &FileFacts, element: &solid_facts::ast::JsxElementFact) -> bool {
+    let ast = &file.ast;
+    let Some(parent) = ast
+        .jsx_elements
+        .iter()
+        .filter(|other| other.span != element.span && other.span.contains(element.span))
+        .min_by_key(|other| other.span.end - other.span.start)
+    else {
+        return true;
+    };
+    if !crate::object_members::intrinsic_element(file, parent) {
+        return true;
+    }
+    let between = |span: Span| {
+        parent.span.contains(span) && span != parent.span && span.contains(element.span)
+    };
+    ast.jsx_child_expressions.iter().any(|&span| between(span))
+        || parent
+            .attributes
+            .iter()
+            .filter_map(|attribute| attribute.expression)
+            .any(between)
+        || ast
+            .jsx_elements
+            .iter()
+            .flat_map(|other| {
+                other
+                    .attributes
+                    .iter()
+                    .filter_map(|attribute| attribute.expression)
+            })
+            .any(between)
 }
 
 #[cfg(test)]
