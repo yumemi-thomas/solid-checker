@@ -44,21 +44,25 @@
 //!   beyond `omit(merge(...))`, an `omit` key that is not a string literal (a
 //!   predicate, a variable), a key the kernel cannot cook, a namespaced key;
 //! - a props parameter that is not the only, plain, undefaulted, unwritten
-//!   parameter of a function bound to an unwritten, unexported name, a body
-//!   that spells `arguments`, a reference to the parameter or to a view binding
-//!   that is not an argument of the chain, a member read (not written, deleted,
-//!   iterated into or called: a call hands the receiver to the callee as
-//!   `this`), an intrinsic element's spread (views only), a type query, or (the
+//!   parameter of a function every binding of which (ADR 1127's
+//!   `entry_bindings`: a named expression's own name too) is unwritten and
+//!   unexported, a component that is not receiver-inert (ADR 0358: `arguments`,
+//!   `this`, `super`, `eval`, an escape), a reference to the parameter or to a
+//!   view binding that is not an argument of the chain, a member read (the
+//!   shared `reference_positions` and write census: not written, deleted,
+//!   iterated into, called or tagged: a call hands the receiver to the callee
+//!   as `this`), an intrinsic element's spread (views only), a type query, or (the
 //!   parameter only) an argument of another exact `merge`/`omit` call held by a
 //!   `const` whose references pass the same test;
-//! - a reference to the component that is not the tag of a JSX element (a
-//!   value use, a call, an export, a dotted tag), a TypeScript reference the
-//!   binder does not account for, a site with a spread, a namespaced
-//!   attribute, or an attribute or child that spells `this` (a getter the
-//!   compiler builds for it would see the props object as `this`);
-//! - under a listener key, a value that is not a function literal written at
-//!   the site or as a literal's data property; an unaudited dialect (whether a
-//!   key is a listener is unknown).
+//! - a reference to the component, by any of its bindings, that is not the tag
+//!   of a JSX element (a value use, a call, an export, a dotted tag), a
+//!   TypeScript reference the binder does not account for, a site with a
+//!   spread, a namespaced attribute, or an attribute or child that may reach a
+//!   receiver (`receiver_spelled`: a getter the compiler builds for it would
+//!   see the props object as `this`);
+//! - under a listener key, a value that is not a receiver-inert function
+//!   literal written at the site or as a literal's data property; an unaudited
+//!   dialect (whether a key is a listener is unknown).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -71,7 +75,7 @@ use crate::base::memo::build::BuildSchema;
 use crate::base::memo::{Ctx, Cycle};
 
 use super::memo::{Slot, facts};
-use super::{binding_written, intrinsic_element};
+use super::{binding_written, intrinsic_element, receiver_inert, receiver_spelled};
 
 /// The proof's id: the proof log's `silent` lines name it, and
 /// `SOLID_CHECKER_IR_ABLATE_SILENCE` turns it off (ADR 1118's gate).
@@ -364,9 +368,10 @@ fn component_sites(
     {
         return None;
     }
-    // `arguments[0]` is the props object under another name: a spelling veto
-    // (comments and strings may over-veto; it never proves anything).
-    if spells(file, component.body, "arguments") {
+    // `arguments[0]` is the props object under another name, `this` and
+    // `super` the receiver it runs with: ADR 0358's receiver premise
+    // ([`receiver_inert`]) on the component itself.
+    if !receiver_inert(file, component) {
         return None;
     }
     // ADR 1127: every binding the function is entered through is a caller's
@@ -580,34 +585,35 @@ fn references_accounted(file: &FileFacts, declaration: Span, chain: &Chain, view
         })
 }
 
-/// Whether `reference` is the object of a non-computed member that is only
-/// read: never written, deleted, assigned by a loop head, or called (a call
-/// passes the object as `this`) or used as a template tag.
+/// Whether `reference` is only read as the object of a named member, by the
+/// shared facts: its position is a member's object (`reference_positions`,
+/// ADR 1114's closed table of every reference's parent slot), the member is
+/// not computed, written nowhere (an assignment, update, destructuring,
+/// `delete` or loop-head target: [`crate::literal_member_slots::member_written`]),
+/// and runs nothing with the object as `this` (no call's callee, no template's
+/// tag; a comma or conditional callee hands the function over bare).
 fn member_read(file: &FileFacts, reference: Span) -> bool {
-    let Some(member) = file
-        .ast
-        .members
-        .iter()
-        .find(|member| file.ast.peel_ts_sugar_span(member.object) == reference)
-    else {
+    let positions = &file.ast.reference_positions;
+    let Ok(found) = positions.binary_search_by_key(&(reference.start, reference.end), |fact| {
+        (fact.span.start, fact.span.end)
+    }) else {
+        return false;
+    };
+    if positions[found].position != ast::ReferencePosition::MemberObject {
+        return false;
+    }
+    let Some(member) = file.ast.member_with_peeled_object(reference) else {
         return false;
     };
     let span = member.span;
     file.ast.computed_members.binary_search(&span).is_err()
-        && !file.ast.write_targets.contains(&span)
-        && !file.ast.deleted_targets.contains(&span)
-        && !file.ast.iteration_targets.contains(&span)
-        && !file.ast.tagged_template_tags.contains(&span)
+        && !crate::literal_member_slots::member_written(file, span)
+        && !file.ast.any_call_with_peeled_callee(span)
         && !file
             .ast
-            .calls
+            .tagged_template_tags
             .iter()
-            .any(|call| file.ast.peel_ts_sugar_span(call.callee) == span)
-        && !file
-            .ast
-            .assignments
-            .iter()
-            .any(|assignment| file.ast.peel_ts_sugar_span(assignment.target) == span)
+            .any(|tag| file.ast.peel_ts_sugar_span(*tag) == span)
 }
 
 fn in_type_query(file: &FileFacts, span: Span) -> bool {
@@ -615,21 +621,6 @@ fn in_type_query(file: &FileFacts, span: Span) -> bool {
         .type_queries
         .iter()
         .any(|query| query.contains(span))
-}
-
-/// Whether `word` is spelled as a whole word in the source at `span`.
-fn spells(file: &FileFacts, span: Span, word: &str) -> bool {
-    let Some(text) = file.source_text(span) else {
-        return true;
-    };
-    let identifier = |c: char| c.is_ascii_alphanumeric() || c == '_' || c == '$';
-    text.match_indices(word).any(|(at, _)| {
-        !text[..at].chars().next_back().is_some_and(identifier)
-            && !text[at + word.len()..]
-                .chars()
-                .next()
-                .is_some_and(identifier)
-    })
 }
 
 /// One JSX call site's keys: every attribute name, and `children` when the
@@ -650,15 +641,14 @@ fn site_keys(file: &FileFacts, element: &ast::JsxElementFact) -> Option<SiteKeys
         }
         if attribute
             .value
-            .is_some_and(|value| spells(file, value, "this"))
+            .is_some_and(|value| receiver_spelled(file, value, false))
         {
             return None;
         }
         let value = match (attribute.value_kind, attribute.expression) {
-            (ast::JsxAttributeValueKind::Expression, Some(expression)) => file
-                .ast
-                .function_at(file.ast.peel_ts_sugar_span(expression))
-                .map_or(Value::Other, |function| Value::Function(function.span)),
+            (ast::JsxAttributeValueKind::Expression, Some(expression)) => {
+                function_value(file, expression)
+            }
             _ => Value::Other,
         };
         keys.entry(name.to_owned()).or_default().push(value);
@@ -667,7 +657,7 @@ fn site_keys(file: &FileFacts, element: &ast::JsxElementFact) -> Option<SiteKeys
         if element
             .children
             .iter()
-            .any(|child| spells(file, *child, "this"))
+            .any(|child| receiver_spelled(file, *child, false))
         {
             return None;
         }
@@ -676,6 +666,17 @@ fn site_keys(file: &FileFacts, element: &ast::JsxElementFact) -> Option<SiteKeys
             .push(Value::Other);
     }
     Some(keys)
+}
+
+/// The function literal written at `value`, when calling it as the element's
+/// handler (with the element as `this`) behaves as calling it where it was
+/// written ([`receiver_inert`], ADR 0358): an arrow, or a function that
+/// spells no receiver.
+fn function_value(file: &FileFacts, value: Span) -> Value {
+    file.ast
+        .function_at(file.ast.peel_ts_sugar_span(value))
+        .filter(|function| receiver_inert(file, function))
+        .map_or(Value::Other, |function| Value::Function(function.span))
 }
 
 /// The spread's keys and listener values over every site.
@@ -699,9 +700,7 @@ fn spread_of_sites(
                 return None;
             }
             let value = if property.data && !property.method {
-                file.ast
-                    .function_at(file.ast.peel_ts_sugar_span(property.value))
-                    .map_or(Value::Other, |function| Value::Function(function.span))
+                function_value(file, property.value)
             } else {
                 Value::Other
             };

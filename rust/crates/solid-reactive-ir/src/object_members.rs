@@ -747,17 +747,28 @@ fn enclosing_function(file: &FileFacts, span: Span) -> Option<Span> {
 /// the enclosing scope's and are the same either way (ADR 0581); `eval` and
 /// an escape stay refused for every function.
 pub(crate) fn receiver_inert(file: &FileFacts, function: &ast::FunctionFact) -> bool {
-    let receiver_spellings: &[&str] = if function.kind == ast::FunctionKind::Arrow {
+    !function.generator
+        && !receiver_spelled(
+            file,
+            function.span,
+            function.kind == ast::FunctionKind::Arrow,
+        )
+}
+
+/// Whether the code at `span` may reach the receiver or the arguments of the
+/// call that runs it, [`receiver_inert`]'s spellings: `eval` and an escape
+/// always, and unless the code runs as an arrow's (`lexical`), `this`,
+/// `arguments` and `super` as well (ADR 1129: the getter the compiler builds
+/// for a JSX attribute or child sees the props object as `this`). Unreadable
+/// text may spell anything.
+pub(crate) fn receiver_spelled(file: &FileFacts, span: Span, lexical: bool) -> bool {
+    let spellings: &[&str] = if lexical {
         &["eval", "\\"]
     } else {
         &["this", "arguments", "eval", "super", "\\"]
     };
-    !function.generator
-        && file.source_text(function.span).is_some_and(|text| {
-            !receiver_spellings
-                .iter()
-                .any(|spelling| text.contains(spelling))
-        })
+    file.source_text(span)
+        .is_none_or(|text| spellings.iter().any(|spelling| text.contains(spelling)))
 }
 
 #[cfg(test)]
