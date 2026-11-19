@@ -234,6 +234,9 @@ const DISPOSALS = { "dny-dispose-body": "body", "dny-dispose-memo": "memo", "dny
 /** The same triggers on an event of the measured list: nothing delivers it, and it keeps the proof. */
 const DENIED_LEGAL = ["dny-legal-keydown", "dny-legal-click", "dny-legal-pointer", "dny-legal-project-click", "dny-blur-lowercase"];
 const DENIED_OTHER = ["dny-blur-spread", "dny-typo-event", "dny-blur-dynamic", "dny-portal-dispose", "dny-load-append", "dny-load-for", "dny-load-show", "dny-unmount-flush-body", "dny-unmount-flush-root", "dny-insert-body", "dny-renamed-prop", "dny-shared-fn", "dny-chain-click"];
+/** ADR 1125: the Fable review of ADR 1089 E round 2 (G1, G3, G6) and round 1's F2 on main's event-callback read proof: each runs the
+ * handler of an element's `onScroll` from an effect's apply other than by a delivery that sets `window.event`. */
+const DELIVERY_BREAKERS = ["evt-apply-event-replaced", "evt-apply-listener-patch", "evt-apply-fake-node", "evt-apply-shadow-concat"];
 const DENIED_CONTEXTS = [...Object.keys(DENIED), ...Object.keys(DISPOSALS), ...DENIED_OTHER];
 /** `flush()` in a denied handler, with no dispatch in the program (`a04`, `b03`, `b09`): SC2008. */
 const DENIED_FLUSH = ["dny-flush-unmount", "dny-flush-load", "dny-flush-popover"];
@@ -595,7 +598,7 @@ export const SPEC = {
   },
   // `settled`: an async memo read after it settled (ADR 0511 review: probe pending-async/hook-shared-instance, rc.17 warns this code in an
   // apply, no pending throw), through the module-scope hook result beside the body's own call.
-  STRICT_READ_UNTRACKED: { legal: ["memo", "effect-compute", "render-compute", "jsx", "jsx-helper", "untrack"], recallContexts: ["evt-body-dispatch", "evt-apply-dispatch-shadow", ...firesAt("body"), ...listenersAt("body"), ...DENIED_CONTEXTS.filter((context) => !context.startsWith("dny-unmount-flush") && !["dny-dispose-memo", "dny-dispose-compute", "dny-dispose-untrack"].includes(context))], recallLegal: [...EVENT_LEGAL, ...ZERO_READS, "handed-flush"],
+  STRICT_READ_UNTRACKED: { legal: ["memo", "effect-compute", "render-compute", "jsx", "jsx-helper", "untrack"], recallContexts: ["evt-body-dispatch", "evt-apply-dispatch-shadow", ...DELIVERY_BREAKERS, ...firesAt("body"), ...listenersAt("body"), ...DENIED_CONTEXTS.filter((context) => !context.startsWith("dny-unmount-flush") && !["dny-dispose-memo", "dny-dispose-compute", "dny-dispose-untrack"].includes(context))], recallLegal: [...EVENT_LEGAL, ...ZERO_READS, "handed-flush"],
     // `settled` is a grid variant (never drawn at random, so random programs and combinations' extras keep theirs) and a legal one.
     variants: ["signal", "memo"], gridVariants: ["settled"], legalVariants: ["signal", "memo", "settled"],
     contexts: ["body", "effect-apply", "root", "render-apply"], bindings: ["direct", "alias", "destructured", "wrapper"],
@@ -1912,6 +1915,50 @@ function inContext(context, stmts, kit) {
       // Detached: nothing can click it (`undriven`); the dispatch is the driver.
       const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onScroll", undriven: true })));
       const attach = expr(domExpr(`document.createElement("div").attachShadow({ mode: "open" }).appendChild(${el} as HTMLElement)`));
+      const fire = expr(domExpr(`(${el} as HTMLElement).dispatchEvent(new Event("scroll"))`));
+      return { body: [made, attach, expr(prim("effect", fn([ret(num(1))]), { apply: fn([fire]) }))], view: [] };
+    }
+    // ADR 1125 (G1): `globalThis.event` replaced by a data property, which no delivery sets again: a light-tree dispatch from the
+    // apply runs the handler with no event, inside the apply's strict-read window.
+    case "evt-apply-event-replaced": {
+      const el = kit.name("el");
+      const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onScroll", undriven: true })));
+      const replace = expr(domExpr("globalThis.event = undefined"));
+      const fire = expr(domExpr(`(${el} as HTMLElement).dispatchEvent(new Event("scroll"))`));
+      return { body: [replace, made, expr(prim("effect", fn([ret(num(1))]), { apply: fn([fire]) }))], view: [] };
+    }
+    // ADR 1125 (round 1 F2 on main): a replaced `EventTarget.prototype.addEventListener` keeps the listener; the apply runs it.
+    case "evt-apply-listener-patch": {
+      const el = kit.name("el"), taken = kit.name("taken"), add = kit.name("add");
+      const patch = [
+        decl(taken, domExpr("[] as EventListener[]")),
+        decl(add, domExpr("EventTarget.prototype.addEventListener")),
+        expr(domExpr(`EventTarget.prototype.addEventListener = function (this: EventTarget, type: string, listener: EventListenerOrEventListenerObject | null, options?: boolean | AddEventListenerOptions) { if (typeof listener === "function") ${taken}.push(listener); return ${add}.call(this, type, listener, options); }`)),
+      ];
+      const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onScroll", undriven: true })));
+      const run = expr(domExpr(`for (const run of ${taken}) run(new Event("scroll"))`));
+      return { body: [...patch, made, expr(prim("effect", fn([ret(num(1))]), { apply: fn([run]) }))], view: [] };
+    }
+    // ADR 1125 (G6): `document.createElement` replaced while the element is made: Solid's template clones a fake node whose
+    // `addEventListener` keeps the listener; the apply runs it.
+    case "evt-apply-fake-node": {
+      const el = kit.name("el"), taken = kit.name("taken"), real = kit.name("real"), armed = kit.name("armed");
+      const patch = [
+        decl(taken, domExpr("[] as Array<(event: Event) => void>")),
+        decl(real, domExpr("document.createElement.bind(document)")),
+        decl(armed, domExpr("{ on: false }")),
+        expr(domExpr(`document.createElement = ((tag: string) => ${armed}.on && tag === "template" ? { innerHTML: "", content: { firstChild: { cloneNode: () => ({ addEventListener(_type: string, listener: (event: Event) => void) { ${taken}.push(listener); } }) } } } : ${real}(tag)) as typeof document.createElement`)),
+        expr(domExpr(`${armed}.on = true`)),
+      ];
+      const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onScroll", undriven: true })));
+      const run = expr(domExpr(`for (const run of ${taken}) run(new Event("scroll"))`));
+      return { body: [...patch, made, expr(domExpr(`${armed}.on = false`)), expr(prim("effect", fn([ret(num(1))]), { apply: fn([run]) }))], view: [] };
+    }
+    // ADR 1125 (G3): the shadow root attached under a concatenated key, which no text test of ADR 1115 reads.
+    case "evt-apply-shadow-concat": {
+      const el = kit.name("el");
+      const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onScroll", undriven: true })));
+      const attach = expr(domExpr(`(document.createElement("div") as unknown as Record<string, (init: ShadowRootInit) => ShadowRoot>)["attach" + "Shadow"]({ mode: "open" }).appendChild(${el} as HTMLElement)`));
       const fire = expr(domExpr(`(${el} as HTMLElement).dispatchEvent(new Event("scroll"))`));
       return { body: [made, attach, expr(prim("effect", fn([ret(num(1))]), { apply: fn([fire]) }))], view: [] };
     }

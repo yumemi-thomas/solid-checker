@@ -123,6 +123,17 @@
       "fixes": 0
     },
     {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-operations/App.tsx",
+      "start": 760,
+      "end": 769,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "violation",

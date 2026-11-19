@@ -13,7 +13,7 @@
 
 use compact_str::CompactString;
 use oxc_ast::AstKind;
-use oxc_ast::ast::{Expression, IdentifierReference, PropertyKey, PropertyKind};
+use oxc_ast::ast::{CallExpression, Expression, IdentifierReference, PropertyKey, PropertyKind};
 use oxc_semantic::{NodeId, Semantic};
 use oxc_span::GetSpan;
 use oxc_syntax::operator::UnaryOperator;
@@ -50,6 +50,27 @@ const HOOK_KEYS: [&str; 6] = [
     "then",
     "handleEvent",
     "toLocaleString",
+];
+
+/// ADR 1125 (G2): the standard readers of an object's own keys or values (`Object.*`).
+const KEY_READERS: [&str; 9] = [
+    "keys",
+    "values",
+    "entries",
+    "getOwnPropertyNames",
+    "getOwnPropertySymbols",
+    "getOwnPropertyDescriptor",
+    "getOwnPropertyDescriptors",
+    "assign",
+    "groupBy",
+];
+
+/// ADR 1125 (G4): the reflective definers and the index of their key argument.
+const DEFINERS: [(&str, usize); 4] = [
+    ("defineProperty", 1),
+    ("__defineGetter__", 0),
+    ("__defineSetter__", 0),
+    ("set", 1),
 ];
 
 /// ADR 1115's spellings.
@@ -98,8 +119,21 @@ pub(super) fn premise_sites<'a>(semantic: &Semantic<'a>, resolve: bool) -> Vec<P
                 sites.add(statement.span, PremiseClause::With, "with")
             }
             AstKind::IdentifierReference(identifier) => sites.reference(identifier),
+            AstKind::ForInStatement(statement) => {
+                sites.add(statement.span, PremiseClause::KeyReader, "for-in")
+            }
             AstKind::StaticMemberExpression(member) => {
                 let key = member.property.name.as_str();
+                // ADR 1125 (G2): a standard reader of own keys or values, named in any position (a call, a value handed on, `.call`).
+                if let Expression::Identifier(object) = peel_ts_sugar(&member.object)
+                    && sites.global(object)
+                    && ((object.name == "Object" && KEY_READERS.contains(&key))
+                        || (object.name == "JSON"
+                            && key == "stringify"
+                            && !sites.is_callee(node.id(), member.span)))
+                {
+                    sites.add(member.span, PremiseClause::KeyReader, key);
+                }
                 sites.key(member.span, key);
                 if sites.is_write(node.id(), member.span) {
                     sites.written(member.span, key);
@@ -124,6 +158,14 @@ pub(super) fn premise_sites<'a>(semantic: &Semantic<'a>, resolve: bool) -> Vec<P
                     sites.key(member.span, &key);
                     if sites.is_write(node.id(), member.span) {
                         sites.written(member.span, &key);
+                    }
+                } else if !sites.is_write(node.id(), member.span) {
+                    // ADR 1125 (G3/G4): a read under a key proven to be constant texts (`"attach" + "Shadow"`, `"proto" + "type"`) is
+                    // checked against every spelling, as a literal key is.
+                    if let Some((texts, _)) = keys.key(&member.expression) {
+                        for text in texts {
+                            sites.key(member.span, &text);
+                        }
                     }
                 } else if sites.is_write(node.id(), member.span) {
                     // A write under a key no literal names: the key's proof (`computed_keys`) narrows it to its texts; a number or a
@@ -210,6 +252,10 @@ pub(super) fn premise_sites<'a>(semantic: &Semantic<'a>, resolve: bool) -> Vec<P
             AstKind::BindingProperty(property) => {
                 if let Some(key) = kernel_key(&property.key) {
                     sites.key(property.span, &key);
+                    // ADR 1125 (G2): `const { entries } = Object` takes a reader out by name (whatever the object: fail closed).
+                    if KEY_READERS.contains(&key.as_str()) {
+                        sites.add(property.span, PremiseClause::KeyReader, &key);
+                    }
                 }
             }
             AstKind::AssignmentTargetPropertyProperty(property) => {
@@ -218,6 +264,17 @@ pub(super) fn premise_sites<'a>(semantic: &Semantic<'a>, resolve: bool) -> Vec<P
                 }
             }
             AstKind::CallExpression(call) => {
+                sites.definer_key(call, &mut keys);
+                if let Expression::StaticMemberExpression(callee) = peel_ts_sugar(&call.callee)
+                    && callee.property.name == "stringify"
+                    && let Expression::Identifier(object) = peel_ts_sugar(&callee.object)
+                    && object.name == "JSON"
+                    && sites.global(object)
+                    && call.arguments.len() >= 2
+                {
+                    // ADR 1125 (G2): a replacer is handed every own enumerable value of every object it walks.
+                    sites.add(call.span, PremiseClause::KeyReader, "JSON.stringify");
+                }
                 if let Expression::StaticMemberExpression(callee) = peel_ts_sugar(&call.callee)
                     && callee.property.name == "assign"
                     && let Expression::Identifier(object) = peel_ts_sugar(&callee.object)
@@ -543,6 +600,60 @@ impl<'a> Sites<'_, 'a> {
             })
     }
 
+    /// Whether the member at `span` is the callee of a call (`x.m(…)`).
+    fn is_callee(&self, id: NodeId, span: oxc_span::Span) -> bool {
+        matches!(self.semantic.nodes().parent_kind(id), AstKind::CallExpression(call) if call.callee.span() == span)
+    }
+
+    /// ADR 1125 (G4): the key a reflective definer writes (`Object.defineProperty(o, k, d)`, `Reflect.defineProperty`,
+    /// `o.__defineGetter__(k, f)`, `Reflect.set(o, k, v)`) is a key written, by its value: a literal or proven texts are checked as
+    /// written keys, anything else may be any standard name. `defineProperties` writes every key of its map: any.
+    fn definer_key(
+        &mut self,
+        call: &'a CallExpression<'a>,
+        keys: &mut super::computed_keys::KeyProver<'_, 'a>,
+    ) {
+        let Expression::StaticMemberExpression(callee) = peel_ts_sugar(&call.callee) else {
+            return;
+        };
+        let name = callee.property.name.as_str();
+        if name == "defineProperties" {
+            self.add(call.span, PremiseClause::StandardKeyWrite, "*");
+            return;
+        }
+        let Some(&(_, index)) = DEFINERS.iter().find(|(definer, _)| *definer == name) else {
+            return;
+        };
+        // `set` is a definer only as `Reflect.set`; any other `set` (a Map's) writes no property.
+        if name == "set"
+            && !matches!(peel_ts_sugar(&callee.object), Expression::Identifier(object) if object.name == "Reflect" && self.global(object))
+        {
+            return;
+        }
+        let Some(key) = call
+            .arguments
+            .get(index)
+            .and_then(|argument| argument.as_expression())
+        else {
+            self.add(call.span, PremiseClause::StandardKeyWrite, "*");
+            return;
+        };
+        if let Some(text) = literal_property_key(key) {
+            self.key(call.span, &text);
+            self.written(call.span, &text);
+            return;
+        }
+        match keys.key(key) {
+            Some((texts, false)) => {
+                for text in texts {
+                    self.key(call.span, &text);
+                    self.written(call.span, &text);
+                }
+            }
+            _ => self.add(call.span, PremiseClause::StandardKeyWrite, "*"),
+        }
+    }
+
     /// Whether the member at `span` is written: the target of an assignment, an update, a `delete`, a destructuring assignment or a
     /// `for in`/`for of` head. Errs toward a write: any assignment-target parent counts.
     fn is_write(&self, id: NodeId, span: oxc_span::Span) -> bool {
@@ -843,6 +954,109 @@ mod tests {
                 "v"
             ),
             Some(false)
+        );
+    }
+
+    #[test]
+    fn keys_are_read_by_value_and_key_readers_by_any_name() {
+        // G3, G4: a computed read under a key proven to be constant texts is checked against every spelling.
+        assert!(has(
+            "const r = (host as any)[\"attach\" + \"Shadow\"];",
+            PremiseClause::ShadowRoot,
+            "attachShadow"
+        ));
+        assert!(has(
+            "const d = (Object as any)[\"define\" + \"Property\"];",
+            PremiseClause::PrototypeRoute,
+            "defineProperty"
+        ));
+        assert!(has(
+            "const p = (Element as any)[\"proto\" + \"type\"];",
+            PremiseClause::PrototypeRoute,
+            "prototype"
+        ));
+        // G4: a definer's key argument is a written key, by its value.
+        assert!(has(
+            "Object.defineProperty(o, \"_$\" + \"$click\", d);",
+            PremiseClause::PrivateKey,
+            "_$$click"
+        ));
+        assert!(has(
+            "Object.defineProperty(o, \"add\" + \"EventListener\", d);",
+            PremiseClause::StandardKeyWrite,
+            "addEventListener"
+        ));
+        assert!(has(
+            "Object.defineProperty(o, k, d);",
+            PremiseClause::StandardKeyWrite,
+            "*"
+        ));
+        assert!(has(
+            "Reflect.set(o, \"event\", v);",
+            PremiseClause::StandardKeyWrite,
+            "event"
+        ));
+        assert!(
+            !has("map.set(k, v);", PremiseClause::StandardKeyWrite, "*"),
+            "a Map's set writes no property"
+        );
+        // G2: key readers in any position.
+        assert!(has(
+            "[el].flatMap(Object.values);",
+            PremiseClause::KeyReader,
+            "values"
+        ));
+        assert!(has(
+            "const { entries } = Object;",
+            PremiseClause::KeyReader,
+            "entries"
+        ));
+        assert!(has(
+            "Object.values.call(Object, bag);",
+            PremiseClause::KeyReader,
+            "values"
+        ));
+        assert!(has(
+            "JSON.stringify(el, (k, v) => v);",
+            PremiseClause::KeyReader,
+            "JSON.stringify"
+        ));
+        assert!(!has(
+            "JSON.stringify(data);",
+            PremiseClause::KeyReader,
+            "JSON.stringify"
+        ));
+        assert!(has(
+            "for (const k in o) void k;",
+            PremiseClause::KeyReader,
+            "for-in"
+        ));
+    }
+
+    #[test]
+    fn a_timer_by_any_name_may_run_a_string() {
+        let sinks = |source: &str| {
+            crate::ast::extract("case.tsx", source)
+                .unwrap()
+                .code_sinks
+                .len()
+        };
+        assert_eq!(
+            sinks("const later = setTimeout; later(\"code\", 0);"),
+            1,
+            "the alias"
+        );
+        assert_eq!(
+            sinks("document.defaultView?.setTimeout(\"code\", 0);"),
+            1,
+            "any receiver"
+        );
+        assert_eq!(sinks("const t = window.setTimeout;"), 1, "a member read");
+        assert_eq!(sinks("setTimeout.call(null, \"code\");"), 1);
+        assert_eq!(sinks("setTimeout(() => 1, 0);"), 0);
+        assert_eq!(
+            sinks("el.ownerDocument.defaultView!.setTimeout(() => 1, 0);"),
+            0
         );
     }
 

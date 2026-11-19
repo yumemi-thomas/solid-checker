@@ -27,11 +27,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-escapes/App.tsx",
       "start": 1034,
-      "end": 1041,
+      "end": 1039,
       "fixes": 0
     },
     {
@@ -71,11 +71,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-escapes/App.tsx",
       "start": 1367,
-      "end": 1374,
+      "end": 1372,
       "fixes": 0
     },
     {
@@ -115,11 +115,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-escapes/App.tsx",
       "start": 1669,
-      "end": 1676,
+      "end": 1674,
       "fixes": 0
     },
     {
@@ -170,11 +170,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-escapes/App.tsx",
       "start": 1999,
-      "end": 2006,
+      "end": 2004,
       "fixes": 0
     },
     {
@@ -214,11 +214,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-escapes/App.tsx",
       "start": 2407,
-      "end": 2414,
+      "end": 2412,
       "fixes": 0
     },
     {
@@ -258,11 +258,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-escapes/App.tsx",
       "start": 2772,
-      "end": 2779,
+      "end": 2777,
       "fixes": 0
     },
     {

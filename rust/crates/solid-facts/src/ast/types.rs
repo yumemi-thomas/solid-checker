@@ -1880,6 +1880,9 @@ pub enum PremiseClause {
     ShadowRoot,
     /// A `with` statement: a bare name may be any object's property.
     With,
+    /// ADR 1125 (G2): a standard reader of an object's own keys or values named in any position (`Object.values` handed to
+    /// `flatMap`, `const { entries } = Object`, `Object.keys.call(…)`), `JSON.stringify` with a replacer or handed on, a `for … in`.
+    KeyReader,
 }
 
 /// One place that may break the plain-program premise (ADR 1120, facts schema 101): its clause, its span and the key or name it

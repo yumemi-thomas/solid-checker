@@ -142,6 +142,28 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/route-config/variants/use-action-kept/Save.tsx",
+      "start": 716,
+      "end": 721,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-config/variants/use-action-kept/Save.tsx",
+      "start": 716,
+      "end": 721,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -150,6 +172,50 @@
       "path": "fixtures/reactive-ir/route-config/variants/use-action-kept/Save.tsx",
       "start": 716,
       "end": 721,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/route-config/variants/use-action-kept/Save.tsx",
+      "start": 766,
+      "end": 774,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-config/variants/use-action-kept/Save.tsx",
+      "start": 766,
+      "end": 774,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/route-config/variants/use-action-kept/Save.tsx",
+      "start": 821,
+      "end": 828,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-config/variants/use-action-kept/Save.tsx",
+      "start": 821,
+      "end": 828,
       "fixes": 0
     }
   ]

@@ -4,8 +4,9 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
+      "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
+      "severity": "error",
       "path": "fixtures/reactive-ir/test-runner-suites/variants/playwright-module/App.test.tsx",
       "start": 263,
       "end": 281,

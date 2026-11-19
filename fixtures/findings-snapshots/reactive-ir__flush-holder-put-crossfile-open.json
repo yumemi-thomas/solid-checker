@@ -27,11 +27,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-holder-put-crossfile-open/n1-put.ts",
       "start": 94,
-      "end": 101,
+      "end": 99,
       "fixes": 0
     },
     {
@@ -71,11 +71,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-holder-put-crossfile-open/twin-put.ts",
       "start": 98,
-      "end": 105,
+      "end": 103,
       "fixes": 0
     },
     {

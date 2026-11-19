@@ -48,6 +48,7 @@ fn clause_name(clause: PremiseClause) -> &'static str {
         PremiseClause::PrivateKey => "private-key",
         PremiseClause::ShadowRoot => "shadow",
         PremiseClause::With => "with",
+        PremiseClause::KeyReader => "key-reader",
     }
 }
 
@@ -393,6 +394,16 @@ pub(crate) fn census(lookup: &SemanticLookup<'_>) -> Vec<CensusRow> {
             end: 0,
             kind: "plain-premise".into(),
             blockers,
+        });
+    }
+    // ADR 1125: the first reason the program's event delivery is not proven intact.
+    if let Some((path, why, key)) = crate::indexes::event_delivery::delivery_hazard_reason(lookup) {
+        rows.push(CensusRow {
+            path,
+            start: 0,
+            end: 0,
+            kind: "event-delivery-hazard".into(),
+            blockers: vec![format!("{why}|{key}")],
         });
     }
     let all: BTreeSet<&str> = files.iter().map(|file| file.path.as_str()).collect();

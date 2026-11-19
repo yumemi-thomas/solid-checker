@@ -351,7 +351,16 @@ impl SemanticLookup<'_> {
     /// PRIMITIVE_IN_EFFECT_CALLBACK before any later check at that creation.
     pub(crate) fn apply_delivery_in_shadow_possible(&self) -> bool {
         crate::base::reads::note(crate::base::reads::Section::DispatchVeto);
-        self.dispatch_veto().4 && self.shadow_roots_possible()
+        self.dispatch_veto().4 && (self.shadow_roots_possible() || !self.event_delivery_intact())
+    }
+
+    /// ADR 1125: whether no analysed code may make a handler run other than as a DOM delivery that sets `window.event`
+    /// ([`scan_delivery_hazard`]), scanned once per build.
+    pub(crate) fn event_delivery_intact(&self) -> bool {
+        crate::base::reads::note(crate::base::reads::Section::EventDeliveryIntact);
+        !*self
+            .delivery_hazard
+            .get_or_init(|| scan_delivery_hazard(self))
     }
 
     /// [`DispatchSite::withholds_flush_proofs`] of any dispatch of the program.
@@ -389,6 +398,11 @@ impl SemanticLookup<'_> {
     pub(crate) fn dispatch_veto(&self) -> (bool, bool, bool, bool, bool) {
         #[cfg(debug_assertions)]
         VetoComputation::assert_not_computing();
+        // ADR 1125: every event proof rests on handlers running only as DOM deliveries that set `window.event`. Where code may replace
+        // that global, the listener API or the nodes Solid creates, a handler may run anywhere, with no event: withhold them all.
+        if !self.event_delivery_intact() {
+            return (true, true, true, true, true);
+        }
         if !self.hazard_present(crate::base::Hazard::SynchronousDispatch) {
             return (false, false, false, false, false);
         }
@@ -1269,6 +1283,18 @@ pub(crate) fn scan_shadow_roots(lookup: &super::SemanticLookup<'_>) -> bool {
         {
             return true;
         }
+        // ADR 1125 (G3, G5): a spelling the facts decode (a key proven to be `"attach" + "Shadow"`), a computed key nothing proves
+        // (it may be any of them), and code built from a string (a string timer by any name), which no text test can read.
+        if file
+            .ast
+            .premise_sites
+            .iter()
+            .any(|site| site.clause == solid_facts::ast::PremiseClause::ShadowRoot)
+            || file.ast.computed_keys.iter().any(|key| !key.proven)
+            || !file.ast.code_sinks.is_empty()
+        {
+            return true;
+        }
         let ast = &file.ast;
         let unread = |at: solid_facts::core::Span, specifier: &str| {
             if lookup.dialect.owns_module(specifier) {
@@ -1304,5 +1330,135 @@ pub(crate) fn scan_shadow_roots(lookup: &super::SemanticLookup<'_>) -> bool {
                     // A load by a computed specifier may load anything.
                     None => true,
                 })
+    })
+}
+
+/// ADR 1125: the names under which a write may make a handler run outside a delivery, or make `window.event` no longer the event
+/// delivered: the global, the listener API, and the factories and node methods Solid's templates go through.
+const DELIVERY_KEYS: &[&str] = &[
+    "event",
+    "addEventListener",
+    "removeEventListener",
+    "dispatchEvent",
+    "handleEvent",
+    "createElement",
+    "createElementNS",
+    "createTextNode",
+    "importNode",
+    "cloneNode",
+    "appendChild",
+    "insertBefore",
+    "replaceChild",
+];
+
+/// The reflective routes by which code may define such a name under a key the facts do not decode.
+const DELIVERY_ROUTES: &[&str] = &[
+    "defineProperty",
+    "defineProperties",
+    "setPrototypeOf",
+    "__proto__",
+    "__defineGetter__",
+    "__defineSetter__",
+];
+
+/// ADR 1125: whether some analysed code may make a handler run other than as a DOM delivery that sets `window.event` (fail closed):
+/// a write of `event` (G1: `globalThis.event = undefined` makes it an own data property no delivery sets), of a listener-API name
+/// (round 1 F2) or of a node factory (G6), by any spelling the facts decode, or under a key nothing narrows; a reflective definer or
+/// prototype setter; `Proxy`/`Reflect`; `Object.assign` onto a value not made in place; `with`; code built from a string; code from
+/// a string or a module the build does not read.
+pub(crate) fn scan_delivery_hazard(lookup: &super::SemanticLookup<'_>) -> bool {
+    delivery_hazard_reason(lookup).is_some()
+}
+
+/// [`scan_delivery_hazard`]'s first reason: `(file, clause, key)`, for the census.
+pub(crate) fn delivery_hazard_reason(
+    lookup: &super::SemanticLookup<'_>,
+) -> Option<(String, &'static str, String)> {
+    use solid_facts::ast::PremiseClause as C;
+    if lookup.hazard_present(crate::base::Hazard::Eval)
+        || lookup.hazard_present(crate::base::Hazard::CodeEvaluatingCall)
+    {
+        return Some((String::new(), "eval", String::new()));
+    }
+    let Some(imports) = lookup.resolved_imports() else {
+        return Some((String::new(), "no-attestation", String::new()));
+    };
+    let program = lookup
+        .files()
+        .iter()
+        .map(|file| file.path.as_str())
+        .collect::<std::collections::HashSet<_>>();
+    lookup.files().iter().find_map(|file| {
+        let ast = &file.ast;
+        let found =
+            |why: &'static str, key: &str| Some((file.path.to_string(), why, key.to_owned()));
+        for site in &ast.premise_sites {
+            let why = match site.clause {
+                C::ProxyOrReflect => Some("proxy"),
+                C::With => Some("with"),
+                C::ObjectAssign => Some("object-assign"),
+                C::StandardKeyWrite | C::GlobalWrite
+                    if site.key == "*" || DELIVERY_KEYS.contains(&site.key.as_str()) =>
+                {
+                    Some("delivery-key-write")
+                }
+                C::PrototypeRoute if DELIVERY_ROUTES.contains(&site.key.as_str()) => {
+                    Some("definer")
+                }
+                C::StandardKeyWrite
+                | C::GlobalWrite
+                | C::PrototypeRoute
+                | C::CoercionHook
+                | C::Accessor
+                | C::PrivateKey
+                | C::ShadowRoot
+                | C::KeyReader => None,
+            };
+            if let Some(why) = why {
+                return found(why, &site.key);
+            }
+        }
+        if let Some(sink) = ast.code_sinks.first() {
+            return found("code-from-string", &format!("{:?}", sink.kind));
+        }
+        let unread = |at: solid_facts::core::Span, specifier: &str| {
+            if lookup.dialect.owns_module(specifier) {
+                return false;
+            }
+            match imports.specifier(file.path.as_str(), at, specifier) {
+                solid_facts::SpecifierAttestation::Attested(row) => {
+                    row.resolution == solid_facts::ImportResolution::Unresolved
+                        || !program.contains(row.resolved_path.as_ref())
+                }
+                solid_facts::SpecifierAttestation::Unattested => true,
+            }
+        };
+        let unread_load = ast
+            .imports
+            .iter()
+            .filter(|import| !import.type_only)
+            .any(|import| unread(import.span, import.module.as_str()))
+            || ast
+                .exports
+                .iter()
+                .filter(|export| !export.type_only)
+                .any(|export| {
+                    export
+                        .module
+                        .as_deref()
+                        .is_some_and(|module| unread(export.span, module))
+                })
+            || ast
+                .module_loads
+                .iter()
+                .any(|load| match load.specifier.as_deref() {
+                    Some(specifier) => unread(load.span, specifier),
+                    None => true,
+                });
+        if unread_load {
+            found("unread-module", "")
+        } else {
+            None
+        }
     })
 }

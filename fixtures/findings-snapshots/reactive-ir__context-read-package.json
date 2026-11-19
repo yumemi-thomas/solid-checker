@@ -1,5 +1,5 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
     {
       "rule": "package-behavior-unavailable",
@@ -15,29 +15,43 @@
       "hint": "Installed Solid packages are analyzed from their runtime source when the run declares a runtime target and build (--runtime-target, --runtime-build) and a Solid Vite plugin resolves from the project, or when --dependency-source names them. A package source analysis cannot read stays uncertifiable."
     },
     {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
       "path": "fixtures/reactive-ir/context-read-package/App.tsx",
       "start": 386,
       "end": 404,
       "fixes": 0,
-      "message": "useContext is called without a reactive owner; Solid throws NoOwnerError (\"Context can only be accessed under a reactive root.\") here, so the read never returns a value; this call runs it inside a package analyzed as source, under this call's owner context",
+      "message": "this call runs code of `dep-dialog-context`, a package this build reads as source, whose code no analysis follows from this site, where an owner may be active; its closure loads a Solid package (dep-dialog-context/dist/index.js loads solid-js), so whether it calls a Solid action (which throws `ACTION_CALLED_IN_OWNED_SCOPE` in the dev build) is not proven",
+      "hint": "Call the package from an event handler, an effect's apply function or onSettled."
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-read-package/App.tsx",
+      "start": 386,
+      "end": 404,
+      "fixes": 0,
+      "message": "useContext is called without a reactive owner; Solid throws NoOwnerError (\"Context can only be accessed under a reactive root.\") here, so the read never returns a value; this call runs it inside a package analyzed as source, under this call's owner context; its callers differ, so solid-checker cannot prove every execution has an owner",
       "hint": "Read the context while a component, or a computation it creates, is being set up, and pass the value to the handler, timer or callback that needs it. A handler, a timer, a module-scope statement and code after an await run with no owner. The operation is in the package; give this call an owner (call it in a component or computation, or under createRoot)."
     },
     {
       "rule": "missing-context-provider",
       "code": "SC4002",
       "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
+      "blocker": "provider-not-proven-above",
       "severity": "error",
       "path": "fixtures/reactive-ir/context-read-package/App.tsx",
       "start": 386,
       "end": 404,
       "fixes": 0,
-      "message": "this read runs under an owner, and nothing proves a default for its context or a provider above every render of the function reading it; Solid throws `ContextNotFoundError` where a context with no default has no provider above; this finding is in a package analyzed as source and is reported at this call because the package code that holds it may run from here, which is not proven either way",
-      "hint": "Render a provider above every use of this component, or give the context a default."
+      "message": "useContext reads a context created with no default, and no provider for it exists in the analyzed program; Solid throws ContextNotFoundError here, so the read never returns a value; this call runs it inside a package analyzed as source, under this call's owner context; but the context is a package's, which may provide it itself, and no provider is proven above this call, so this is not proven",
+      "hint": "Render a provider for this context above the component that reads it (`<Context value={...}>`), or create the context with a default if a fallback value is meant. The provider must enclose the reader in the rendered tree. The read is in the package: render a provider for the package's context above this call."
     },
     {
       "rule": "action-called-in-owned-scope",
@@ -57,12 +71,12 @@
       "code": "SC4001",
       "kind": "uncertifiable",
       "blocker": "package-finding-at-entry",
-      "severity": "warning",
+      "severity": "error",
       "path": "fixtures/reactive-ir/context-read-package/App.tsx",
       "start": 501,
       "end": 519,
       "fixes": 0,
-      "message": "useContext is called without a reactive owner; Solid throws NoOwnerError (\"Context can only be accessed under a reactive root.\") here, so the read never returns a value; this finding is in a package analyzed as source and is reported at this call because the package code that holds it may run from here, which is not proven either way",
+      "message": "useContext is called without a reactive owner; Solid throws NoOwnerError (\"Context can only be accessed under a reactive root.\") here, so the read never returns a value; its callers differ, so solid-checker cannot prove every execution has an owner; this finding is in a package analyzed as source and is reported at this call because the package code that holds it may run from here, which is not proven either way",
       "hint": "Read the context while a component, or a computation it creates, is being set up, and pass the value to the handler, timer or callback that needs it. A handler, a timer, a module-scope statement and code after an await run with no owner."
     },
     {
@@ -79,30 +93,69 @@
       "hint": "Render a provider for this context above the component that reads it (`<Context value={...}>`), or create the context with a default if a fallback value is meant. The provider must enclose the reader in the rendered tree. The read is in the package: render a provider for the package's context above this call."
     },
     {
-      "rule": "missing-owner",
-      "code": "SC4001",
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
       "kind": "uncertifiable",
-      "blocker": "owner-unproven",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/context-read-package/App.tsx",
+      "start": 795,
+      "end": 806,
+      "fixes": 0,
+      "message": "component prop \"props.armed\" is read in while evaluating a condition, but no compiler or semantic fact places where this code runs (tracked, untracked, in a callback, or never), so whether this read is untracked cannot be proven either way; this component's call sites cannot be enumerated (it is exported, spread into, or referenced outside JSX), so whether the prop is signal-backed can be neither proven nor ruled out — this finding is a proof obligation, not a proven runtime warning",
+      "hint": "Move the prop read into a tracking scope: read props.<name> directly in JSX, derive it with createMemo(() => props.<name>), or read it in the compute function of createEffect(compute, apply). Do not use untrack() to make a prop reactive; untrack() only documents an intentional one-time snapshot. If this read executes untracked in dev, Solid warns STRICT_READ_UNTRACKED for it; this finding does not establish that it does, so confirm the read's actual execution and tracking status before relying on that warning."
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/context-read-package/App.tsx",
       "start": 808,
       "end": 826,
       "fixes": 0,
-      "message": "useContext is called without a reactive owner; Solid throws NoOwnerError (\"Context can only be accessed under a reactive root.\") here, so the read never returns a value; this call runs it inside a package analyzed as source, under this call's owner context, which solid-checker cannot prove provides an owner on every path to it",
+      "message": "this call runs code of `dep-dialog-context`, a package this build reads as source, whose code no analysis follows from this site, where an owner may be active; its closure loads a Solid package (dep-dialog-context/dist/index.js loads solid-js), so whether it calls a Solid action (which throws `ACTION_CALLED_IN_OWNED_SCOPE` in the dev build) is not proven",
+      "hint": "Call the package from an event handler, an effect's apply function or onSettled."
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-read-package/App.tsx",
+      "start": 808,
+      "end": 826,
+      "fixes": 0,
+      "message": "useContext is called without a reactive owner; Solid throws NoOwnerError (\"Context can only be accessed under a reactive root.\") here, so the read never returns a value; this call runs it inside a package analyzed as source, under this call's owner context; its callers differ, so solid-checker cannot prove every execution has an owner",
       "hint": "Read the context while a component, or a computation it creates, is being set up, and pass the value to the handler, timer or callback that needs it. A handler, a timer, a module-scope statement and code after an await run with no owner. The operation is in the package; give this call an owner (call it in a component or computation, or under createRoot)."
     },
     {
       "rule": "missing-context-provider",
       "code": "SC4002",
       "kind": "uncertifiable",
-      "blocker": "package-finding-at-entry",
+      "blocker": "provider-not-proven-above",
       "severity": "error",
       "path": "fixtures/reactive-ir/context-read-package/App.tsx",
       "start": 808,
       "end": 826,
       "fixes": 0,
-      "message": "this read runs under an owner, and nothing proves a default for its context or a provider above every render of the function reading it; Solid throws `ContextNotFoundError` where a context with no default has no provider above; this finding is in a package analyzed as source and is reported at this call because the package code that holds it may run from here, which is not proven either way",
-      "hint": "Render a provider above every use of this component, or give the context a default."
+      "message": "useContext reads a context created with no default, and no provider for it exists in the analyzed program; Solid throws ContextNotFoundError here, so the read never returns a value; this call runs it inside a package analyzed as source, under this call's owner context; but the context is a package's, which may provide it itself, and no provider is proven above this call, so this is not proven",
+      "hint": "Render a provider for this context above the component that reads it (`<Context value={...}>`), or create the context with a default if a fallback value is meant. The provider must enclose the reader in the rendered tree. The read is in the package: render a provider for the package's context above this call."
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-read-package/App.tsx",
+      "start": 1099,
+      "end": 1109,
+      "fixes": 0,
+      "message": "this call runs code of `dep-unselected`, a package this build does not read as source, where an owner may be active; its closure loads a Solid package (dep-unselected/dist/index.js loads solid-js), so whether it calls a Solid action (which throws `ACTION_CALLED_IN_OWNED_SCOPE` in the dev build) is not proven",
+      "hint": "Call the package from an event handler, an effect's apply function or onSettled; or let the build read the package as source (a declared host with the Solid Vite plugin reads the packages that name Solid)."
     }
   ]
 }

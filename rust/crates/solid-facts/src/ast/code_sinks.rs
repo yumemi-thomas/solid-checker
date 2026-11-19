@@ -32,6 +32,9 @@ use super::extract_helpers::{literal_property_key, peel_ts_sugar};
 use super::{CodeSinkFact, CodeSinkKind};
 use crate::core::Span;
 
+/// The timers that run a string as code.
+const TIMERS: [&str; 4] = ["setTimeout", "setInterval", "setImmediate", "execScript"];
+
 /// The names of the global objects: a member of one is the global of that name.
 const GLOBAL_OBJECTS: [&str; 7] = [
     "globalThis",
@@ -69,6 +72,13 @@ pub(super) fn code_sinks(semantic: &Semantic<'_>, resolve: bool) -> (Vec<CodeSin
                 {
                     sinks.add(assignment.span, CodeSinkKind::MarkupWrite);
                 }
+            }
+            // ADR 1125 (G5): a timer read as a member anywhere but as a call's callee (`const t = window.setTimeout`) may be handed a string.
+            AstKind::StaticMemberExpression(member)
+                if TIMERS.contains(&member.property.name.as_str())
+                    && !matches!(semantic.nodes().parent_kind(node.id()), AstKind::CallExpression(call) if call.callee.span() == member.span) =>
+            {
+                sinks.add(member.span, CodeSinkKind::StringTimer);
             }
             // `window.eval(..)`, `top.Function(..)`: the global read as a member, by its name.
             AstKind::StaticMemberExpression(member)
@@ -131,6 +141,14 @@ impl<'a> Sinks<'_, 'a> {
 
     /// `eval` and `Function`, by the reference to the global.
     fn reference(&mut self, id: NodeId, identifier: &'a IdentifierReference<'a>) {
+        // ADR 1125 (G5): a global timer named anywhere but as the callee of a call (`const later = setTimeout`,
+        // `setTimeout.call(null, "code")`, `Reflect.apply(setTimeout, …)`) may be handed a string.
+        if TIMERS.contains(&identifier.name.as_str())
+            && (!self.resolve || self.symbol_of(identifier).is_none())
+            && !matches!(self.semantic.nodes().parent_kind(id), AstKind::CallExpression(call) if call.callee.span() == identifier.span)
+        {
+            self.add(identifier.span, CodeSinkKind::StringTimer);
+        }
         let kind = match identifier.name.as_str() {
             "eval" => CodeSinkKind::Eval,
             "Function" => CodeSinkKind::FunctionConstructor,
@@ -186,10 +204,10 @@ impl<'a> Sinks<'_, 'a> {
         let Some(name) = name else {
             return;
         };
-        let global_call = object.is_none_or(|object| self.is_global_object(object));
         match name.as_str() {
-            // A timer given anything but a proven function runs a string.
-            "setTimeout" | "setInterval" | "setImmediate" | "execScript" if global_call => {
+            // A timer given anything but a proven function runs a string. ADR 1125 (G5): on any receiver, not only a global object
+            // spelled (`document.defaultView?.setTimeout("…")`): a member so named may be the window's.
+            "setTimeout" | "setInterval" | "setImmediate" | "execScript" => {
                 let proven = call
                     .arguments
                     .first()

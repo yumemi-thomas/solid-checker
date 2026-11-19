@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/App.tsx",
+      "start": 525,
+      "end": 532,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -24,6 +35,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/App.tsx",
+      "start": 917,
+      "end": 924,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -32,6 +54,28 @@
       "path": "fixtures/reactive-ir/invocation-flow/App.tsx",
       "start": 953,
       "end": 955,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/App.tsx",
+      "start": 1156,
+      "end": 1163,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "parameter-member-target-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/App.tsx",
+      "start": 1396,
+      "end": 1539,
       "fixes": 0
     },
     {
@@ -120,6 +164,17 @@
       "path": "fixtures/reactive-ir/invocation-flow/App.tsx",
       "start": 2157,
       "end": 2160,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "parameter-member-target-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/App.tsx",
+      "start": 2292,
+      "end": 2329,
       "fixes": 0
     },
     {
@@ -296,6 +351,17 @@
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 2090,
       "end": 2097,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 2109,
+      "end": 2122,
       "fixes": 0
     },
     {
@@ -540,6 +606,17 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 5964,
+      "end": 5971,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -617,6 +694,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "withheld-object-member",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 6677,
+      "end": 6685,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -639,6 +727,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "withheld-object-member",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 6948,
+      "end": 6956,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
@@ -658,6 +757,17 @@
       "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
       "start": 7335,
       "end": 7341,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/invocation-flow/counterexamples.tsx",
+      "start": 7371,
+      "end": 7379,
       "fixes": 0
     },
     {

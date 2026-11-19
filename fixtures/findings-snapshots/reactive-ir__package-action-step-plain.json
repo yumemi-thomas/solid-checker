@@ -1,4 +1,16 @@
 {
-  "status": "certified",
-  "findings": []
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "handler-dispatch-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-action-step-plain/App.tsx",
+      "start": 257,
+      "end": 262,
+      "fixes": 0
+    }
+  ]
 }

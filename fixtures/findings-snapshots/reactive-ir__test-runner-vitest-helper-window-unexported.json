@@ -11,6 +11,17 @@
       "start": 349,
       "end": 359,
       "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "handler-dispatch-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/test-runner-vitest/variants/helper-window-unexported/App.test.tsx",
+      "start": 489,
+      "end": 494,
+      "fixes": 0
     }
   ]
 }

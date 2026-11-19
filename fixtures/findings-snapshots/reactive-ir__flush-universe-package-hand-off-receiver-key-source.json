@@ -16,11 +16,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-key-source/App.tsx",
       "start": 808,
-      "end": 815,
+      "end": 813,
       "fixes": 0
     },
     {

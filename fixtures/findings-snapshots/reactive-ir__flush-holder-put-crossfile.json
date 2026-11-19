@@ -16,11 +16,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-holder-put-crossfile/n1-put.ts",
       "start": 94,
-      "end": 101,
+      "end": 99,
       "fixes": 0
     },
     {
@@ -49,11 +49,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-holder-put-crossfile/n3-put.ts",
       "start": 94,
-      "end": 101,
+      "end": 99,
       "fixes": 0
     },
     {
@@ -82,11 +82,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-holder-put-crossfile/n4-put.ts",
       "start": 94,
-      "end": 101,
+      "end": 99,
       "fixes": 0
     },
     {
@@ -115,11 +115,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-holder-put-crossfile/n5-put.ts",
       "start": 102,
-      "end": 109,
+      "end": 107,
       "fixes": 0
     },
     {
@@ -159,11 +159,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-holder-put-crossfile/n6-put.ts",
       "start": 94,
-      "end": 101,
+      "end": 99,
       "fixes": 0
     },
     {
@@ -192,11 +192,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-holder-put-crossfile/n8-put.ts",
       "start": 94,
-      "end": 101,
+      "end": 99,
       "fixes": 0
     },
     {
@@ -208,6 +208,28 @@
       "path": "fixtures/reactive-ir/flush-holder-put-crossfile/n8-put.ts",
       "start": 94,
       "end": 101,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "handler-dispatch-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flush-holder-put-crossfile/twin-put.ts",
+      "start": 98,
+      "end": 103,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "handler-dispatch-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flush-holder-put-crossfile/twin2-put.ts",
+      "start": 100,
+      "end": 105,
       "fixes": 0
     }
   ]

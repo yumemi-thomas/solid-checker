@@ -27,11 +27,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
       "start": 1223,
-      "end": 1230,
+      "end": 1228,
       "fixes": 0
     },
     {
@@ -82,11 +82,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
       "start": 1521,
-      "end": 1528,
+      "end": 1526,
       "fixes": 0
     },
     {
@@ -137,11 +137,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
       "start": 1864,
-      "end": 1871,
+      "end": 1869,
       "fixes": 0
     },
     {
@@ -181,11 +181,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
       "start": 2215,
-      "end": 2222,
+      "end": 2220,
       "fixes": 0
     },
     {
@@ -225,11 +225,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
       "start": 2549,
-      "end": 2556,
+      "end": 2554,
       "fixes": 0
     },
     {
@@ -269,11 +269,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
       "start": 2893,
-      "end": 2900,
+      "end": 2898,
       "fixes": 0
     },
     {
@@ -313,11 +313,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
       "start": 3200,
-      "end": 3207,
+      "end": 3205,
       "fixes": 0
     },
     {
@@ -357,11 +357,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
       "start": 3648,
-      "end": 3655,
+      "end": 3653,
       "fixes": 0
     },
     {
@@ -401,11 +401,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
       "start": 4089,
-      "end": 4096,
+      "end": 4094,
       "fixes": 0
     },
     {
@@ -445,11 +445,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
       "start": 4446,
-      "end": 4453,
+      "end": 4451,
       "fixes": 0
     },
     {
@@ -489,11 +489,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
       "start": 4783,
-      "end": 4790,
+      "end": 4788,
       "fixes": 0
     },
     {
@@ -516,6 +516,39 @@
       "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
       "start": 4983,
       "end": 5038,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "handler-dispatch-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
+      "start": 5210,
+      "end": 5215,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "handler-dispatch-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
+      "start": 5562,
+      "end": 5567,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "handler-dispatch-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flush-universe-package-hand-off-receiver-reads/App.tsx",
+      "start": 5740,
+      "end": 5745,
       "fixes": 0
     }
   ]

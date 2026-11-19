@@ -5,6 +5,17 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
+      "blocker": "listener-reach",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-host-proto/App.tsx",
+      "start": 66,
+      "end": 104,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
       "blocker": "standard-member-impostor",
       "severity": "warning",
       "path": "fixtures/reactive-ir/impostor-host-proto/App.tsx",
@@ -65,6 +76,17 @@
       "path": "fixtures/reactive-ir/impostor-host-proto/App.tsx",
       "start": 487,
       "end": 497,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "listener-reach",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/impostor-host-proto/App.tsx",
+      "start": 510,
+      "end": 564,
       "fixes": 0
     },
     {

@@ -34142,5 +34142,19 @@
   "code": "UNTRACKED_READ_AFTER_AWAIT",
   "ids": ["mx-untracked-read-after-await-js-tostring-x-direct-none", "mx-untracked-read-after-await-js-toprim-x-direct-none", "mx-untracked-read-after-await-js-hasinst-x-direct-none", "mx-untracked-read-after-await-js-tostring-plus-x-direct-none", "mx-untracked-read-after-await-js-hasinst-const-x-direct-none"],
   "rediscovered": "`focus.mjs --codes UNTRACKED_READ_AFTER_AWAIT --grids mx-recall --ids` with the release checker of bundle u 6e26187f1 (same analysis): the judge before this change false-clean on all five, after it recall-gap; the other 15 js-* cells unchanged"
+ },
+ {
+  "finding": "main's event-handler read proof (ADR 0639) certified a read in a light-DOM onScroll handler run from an effect's apply other than by a delivery that sets window.event: G1 globalThis.event replaced, round 1 F2 a patched addEventListener running the listener, G6 a replaced document.createElement handing Solid a fake node; G3 a shadow root under a concatenated key (covered on main only by an unrelated row); Chrome rc.21 warns STRICT_READ_UNTRACKED",
+  "found": "the Fable review of ADR 1089 E round 2 (coord-land/review-1089e-r2.md, G1, G3, G6), probed on main c212ad5f5 (sc-scratch mac21/f1125)",
+  "fixed": "ADR 1125 (`event_delivery::scan_delivery_hazard`: the dispatch veto withholds every event proof where delivery is not proven intact; ADR 1115's shadow scan reads decoded keys and code sinks)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-evt-apply-event-replaced-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-listener-patch-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-fake-node-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-shadow-concat-signal-direct-none"
+  ],
+  "rediscovered": "focus on the four contexts' mx-recall programs: main 4,386 false cleans (1,462 per context but shadow-concat) and 120 false positives; FIXED here (0 false cleans, 0 false positives)"
  }
 ]
