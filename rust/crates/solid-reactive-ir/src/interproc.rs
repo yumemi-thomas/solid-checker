@@ -405,6 +405,9 @@ pub(super) struct SummaryNode {
     pub(super) body: Span,
     pub(super) name: Option<String>,
     pub(super) symbol: Option<SymbolId>,
+    /// ADR 1127: the symbol of the binding holding a named function expression (`const cb = function inner() {}`): a call
+    /// through `cb` enters the node as one through `inner` does ([`crate::execution_role::entry_bindings`]).
+    pub(super) holder_symbol: Option<SymbolId>,
     pub(super) runtime_identity: String,
     pub(super) parameters: Vec<SymbolId>,
     pub(super) exported: bool,

@@ -18,6 +18,8 @@
 //   js-tagged       `` jg`x` ``, a tagged template (a call written without parentheses)
 //   js-tostring-*, js-toprim-const, js-hasinst-*: the same hooks in other expression positions (a `const`, an argument, a bare statement, `+`, an `if`): where
 //                   the compiled program's source map frames the hook's caller (ADR 1117b)
+//   js-hasinst-member `[jr.v] instanceof JK`: a getter in the left operand and `Symbol.hasInstance` both run the site, so the judge must tell the getter's frame from the
+//                   instanceof's (ADR 1117c)
 //
 // Seeds still to write (ADR 1117 split): patched standard and DOM prototypes (a getPrototypeOf route, `EventTarget.prototype.addEventListener`), shadow DOM delivery, escaped
 // or concatenated keys, cross-module re-exports (default, star, namespace, barrel), and the review probes of ADRs 1097, 1102b, 1089 E, 1108 and 1098 D.
@@ -46,6 +48,8 @@ const ROUTES = {
   "js-hasinst-const": ["false", (f, n) => [`const ${n} = { [Symbol.hasInstance]: ${f} } as unknown as new () => object`], (n) => `const b = {} instanceof ${n}; void b`],
   "js-hasinst-if": ["false", (f, n) => [`const ${n} = { [Symbol.hasInstance]: ${f} } as unknown as new () => object`, `const ${n}v: unknown = {}`], (n) => `if (${n}v instanceof ${n}) void 0`],
   "js-hasinst-bare": ["false", (f, n) => [`const ${n} = { [Symbol.hasInstance]: ${f} } as unknown as new () => object`, `const ${n}v: unknown = {}`], (n) => `${n}v instanceof ${n}`],
+  "js-hasinst-member": ["false", (f, n) => [`const ${n} = Object.defineProperty({} as { v?: boolean }, "v", { get: ${f} })`, `const ${n}k = { [Symbol.hasInstance]: ${f} } as unknown as new () => object`],
+    (n) => `void ([${n}.v] instanceof ${n}k)`],
   "js-tagged": ['""', (f, n) => [`const ${n} = ${f}`], (n) => `void ${n}\`x\``],
 };
 

@@ -363,6 +363,17 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   unplaced (`function-run-unplaced`)
   (`fixtures/reactive-ir/competing-check-read-after-creation`).
 
+- **A named function expression (ADR 1127).** `const f = function inner() {}`
+  is entered through `f` as well as through `inner`: a call through either
+  is a call of the function, and a read it makes is reported there as for an
+  arrow (`fixtures/reactive-ir/named-fn-expr-calls`).
+
+- **An effect compute also called by name (ADR 1130).** A store read in a
+  function named as an effect's compute is silent there only when no direct
+  call of the function runs where untracked reads are reported or where
+  nothing places it; otherwise it is `function-run-unplaced`
+  (`fixtures/reactive-ir/effect-compute-also-called`).
+
 A read that no row, discard or named silence ends is uncertifiable: `strict-read-unaccounted` (ADR 0936).
 
 ## Why is this bad?

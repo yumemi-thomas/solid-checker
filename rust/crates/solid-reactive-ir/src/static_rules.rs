@@ -40,7 +40,12 @@ pub(crate) fn static_prepass<'a>(
         &inputs,
         |file| component_props_destructure(ctx, &inputs.discovery, file),
     );
-    push_defects(draft, &per_file);
+    for result in &per_file {
+        for defect in &result.defects {
+            draft.push_defect(defect.clone());
+        }
+        draft.site_ends.extend(&result.ends);
+    }
     reactive_read_after_await(ctx, computations, draft);
     let per_file = crate::late_chunks::FileChunks::run(
         chunks
@@ -412,6 +417,14 @@ fn handing_call(
         .min_by_key(|call| call.span.end - call.span.start)
 }
 
+/// One file's output of [`component_props_destructure`]: its defects, and the silences it names for the destructure sites it ends with
+/// no row (ADR 1114 family 2: the site universe lists every slot of a root's destructure).
+#[derive(Debug, Default, PartialEq)]
+pub(crate) struct DestructureFileResult {
+    pub(crate) defects: Vec<StaticDefect>,
+    pub(crate) ends: crate::site_accounting::SiteEnds,
+}
+
 /// SC1003: a reactive object destructured outside tracking. Component
 /// parameter patterns are necessarily setup-time reads; body bindings are
 /// classified through the same semantic execution-role engine as direct reads.
@@ -429,6 +442,17 @@ fn component_props_destructure(
     ctx: &AnalysisContext<'_>,
     tables: &crate::late_chunks::DiscoveryTables<'_>,
     file: &solid_facts::FileFacts,
+) -> DestructureFileResult {
+    let mut ends = crate::site_accounting::SiteEnds::default();
+    let defects = component_props_destructure_into(ctx, tables, file, &mut ends);
+    DestructureFileResult { defects, ends }
+}
+
+fn component_props_destructure_into(
+    ctx: &AnalysisContext<'_>,
+    tables: &crate::late_chunks::DiscoveryTables<'_>,
+    file: &solid_facts::FileFacts,
+    ends: &mut crate::site_accounting::SiteEnds,
 ) -> Vec<StaticDefect> {
     let mut defects = open_destructures(ctx, tables, file);
     {
@@ -624,6 +648,14 @@ fn component_props_destructure(
                         | crate::ExecutionRole::UntrackedUnwindowed
                 )
             {
+                // ADR 1114 family 2: the slots are read sites of the universe; this role reports no untracked read there, named so.
+                ends.role_silent(
+                    file,
+                    binding.pattern,
+                    crate::site_accounting::SiteSilence::DestructureRoleDoesNotReport,
+                    role,
+                    binding.pattern,
+                );
                 continue;
             }
             // ADR 1106: an effect's apply, an `untrack` callback and a directive's (a ref's) application read
@@ -693,7 +725,18 @@ fn component_props_destructure(
             uncertain |= computed_store_key;
             if let Some(declaration) = &prop_declaration {
                 match destructured_props_use(tables, binding, declaration) {
-                    crate::source_discovery::PropUse::Static => continue,
+                    crate::source_discovery::PropUse::Static => {
+                        // ADR 1114 family 2: every caller passes the destructured props static values, so no slot is a reactive read;
+                        // named as a member read's is (`MemberPropsStatic`).
+                        ends.end_at(
+                            file,
+                            binding.pattern,
+                            crate::site_accounting::SiteSilence::DestructurePropsStatic,
+                            crate::proof_log::PremiseKind::PropsCallersStatic,
+                            || crate::proof_log::span_of(declaration),
+                        );
+                        continue;
+                    }
                     crate::source_discovery::PropUse::Reactive => {}
                     crate::source_discovery::PropUse::Unknown => uncertain = true,
                 }
