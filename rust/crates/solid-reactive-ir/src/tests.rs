@@ -130,6 +130,7 @@ fn summary_node(path: &str, span: Span, body: Span) -> SummaryNode {
         body,
         name: None,
         symbol: None,
+        holder_symbol: None,
         runtime_identity: String::new(),
         parameters: Vec::new(),
         exported: false,
