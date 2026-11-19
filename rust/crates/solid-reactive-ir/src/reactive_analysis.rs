@@ -467,7 +467,33 @@ pub(crate) fn collect_project<'facts>(
     // each source, then (P13) each creating call no binding holds.
     let mut starts = Vec::new();
     for symbol in callables.iter().copied() {
-        for reference in ctx.semantic_lookup.symbol_references(symbol.as_str()) {
+        let references = ctx.semantic_lookup.symbol_references(symbol.as_str());
+        // ADR 1126: the census starts where the universe does. An export specifier (`export { st }`, `export { st as other }`) is an
+        // identifier the binder resolves to the source and the compiler lists no reference at: the universe's sibling, which the census
+        // answers as its walk does (the importers' references are the name's own, each a start of its own). The binder's other siblings
+        // stay the universe's alone.
+        let spans = references
+            .iter()
+            .filter_map(|reference| {
+                let file = ctx.semantic_lookup.file_by_path(reference.path.as_ref())?;
+                let start = u32::try_from(reference.start_byte).ok()?;
+                let end = u32::try_from(reference.end_byte).ok()?;
+                Some((file, solid_facts::core::Span::new(start, end)))
+            })
+            .collect::<Vec<_>>();
+        let specifiers = crate::proof_universe::binder_siblings(ctx, symbol, &spans)
+            .into_iter()
+            .filter(|(file, at)| {
+                file.ast
+                    .exports
+                    .iter()
+                    .filter(|export| export.module.is_none())
+                    .flat_map(|export| &export.specifiers)
+                    .any(|specifier| specifier.local.span == *at)
+            })
+            .map(|(file, at)| at.location(file.path.as_str()))
+            .collect::<Vec<_>>();
+        for reference in references.into_iter().chain(specifiers) {
             starts.push(CensusStart::Reference(symbol, reference));
         }
     }

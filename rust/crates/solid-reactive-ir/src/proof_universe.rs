@@ -1274,6 +1274,44 @@ impl<'p> Endings<'p> {
     }
 }
 
+/// The identifiers the binder resolves to `symbol`'s declaration that are not among its TypeScript `references`: the siblings of each
+/// reference, and of each of the symbol's own declarations (a symbol whose only use sits under a wrapper has no reference of its own). An
+/// export specifier (`export { st }`) is one: the compiler lists no reference there.
+pub(crate) fn binder_siblings<'a>(
+    ctx: &AnalysisContext<'a>,
+    symbol: &crate::SymbolId,
+    references: &[(&'a FileFacts, Span)],
+) -> Vec<(&'a FileFacts, Span)> {
+    let lookup = ctx.semantic_lookup;
+    let mut known = references
+        .iter()
+        .map(|(file, span)| (file.path.as_str(), *span))
+        .collect::<HashSet<_>>();
+    let mut anchors = references.to_vec();
+    if let Some(declared) = ctx.facts.typescript.symbol(symbol.as_str()) {
+        for declaration in declared.declarations() {
+            if let Some(file) = lookup.file_by_path(declaration.location.path.as_ref())
+                && let (Ok(start), Ok(end)) = (
+                    u32::try_from(declaration.location.start_byte),
+                    u32::try_from(declaration.location.end_byte),
+                )
+            {
+                anchors.push((file, Span::new(start, end)));
+            }
+        }
+    }
+    let mut siblings = Vec::new();
+    for (file, span) in &anchors {
+        let declaration = file.ast.reference_declaration(*span).unwrap_or(*span);
+        for sibling in file.ast.references_to(declaration) {
+            if known.insert((file.path.as_str(), *sibling)) {
+                siblings.push((*file, *sibling));
+            }
+        }
+    }
+    siblings
+}
+
 /// Every site of the universe, each once, with the file it is in: the sites of
 /// the references of each source symbol outside dependency source, and the
 /// calls of `onFlush`.
@@ -1310,35 +1348,7 @@ pub(crate) fn sites<'a>(ctx: &AnalysisContext<'a>) -> Vec<(&'a FileFacts, Site)>
                 Some((file, Span::new(start, end)))
             })
             .collect::<Vec<_>>();
-        let mut known = references
-            .iter()
-            .map(|(file, span)| (file.path.as_str(), *span))
-            .collect::<HashSet<_>>();
-        // The anchors the binder resolves from: the references, and the symbol's
-        // own declarations (a symbol whose only use sits under a wrapper has no
-        // reference of its own).
-        let mut anchors = references.clone();
-        if let Some(declared) = ctx.facts.typescript.symbol(symbol.as_str()) {
-            for declaration in declared.declarations() {
-                if let Some(file) = lookup.file_by_path(declaration.location.path.as_ref())
-                    && let (Ok(start), Ok(end)) = (
-                        u32::try_from(declaration.location.start_byte),
-                        u32::try_from(declaration.location.end_byte),
-                    )
-                {
-                    anchors.push((file, Span::new(start, end)));
-                }
-            }
-        }
-        let mut siblings = Vec::new();
-        for (file, span) in &anchors {
-            let declaration = file.ast.reference_declaration(*span).unwrap_or(*span);
-            for sibling in file.ast.references_to(declaration) {
-                if known.insert((file.path.as_str(), *sibling)) {
-                    siblings.push((*file, *sibling));
-                }
-            }
-        }
+        let siblings = binder_siblings(ctx, symbol, &references);
         references.extend(siblings);
         for (file, reference) in references {
             if lookup.in_dependency_source(file.path.as_str()) {

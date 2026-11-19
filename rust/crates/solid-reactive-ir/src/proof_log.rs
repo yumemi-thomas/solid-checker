@@ -919,6 +919,26 @@ pub(crate) fn decision(
     );
 }
 
+/// ADR 1126: a proof arm that answers no role passed at `span` ([`crate::role_log::proof_arm`]): a decision with no role, named by its arm.
+pub(crate) fn named_arm(kind: &str, path: &str, span: Span, arm: (&'static str, bool)) {
+    if !enabled() {
+        return;
+    }
+    emit(
+        path,
+        Some(span_pair(span)),
+        object(json!({
+            "k": "decision",
+            "t": kind,
+            "role": null,
+            "arm": arm.0,
+            "arms": [arm.0],
+            "default": arm.1,
+            "silent": null,
+        })),
+    );
+}
+
 /// One owner answer of `owners::owner_emission` ([`crate::role_log::owner`]).
 pub(crate) fn owner_decision(
     rule: &str,

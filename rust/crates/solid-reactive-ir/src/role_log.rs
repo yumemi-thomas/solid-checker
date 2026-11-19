@@ -309,6 +309,19 @@ pub(crate) fn arm(id: (&'static str, bool), role: ExecutionRole) -> ExecutionRol
     role
 }
 
+/// ADR 1126: an arm that answers no role (an entry the owner census accepts) is taken at `span` of `path`: false when it is the arm being
+/// ablated, so the proof stands without it; else true, with a proof-log `decision` line of kind `kind` naming it (the monotone gate's M2b).
+pub(crate) fn proof_arm(kind: &'static str, path: &str, span: Span, id: (&'static str, bool)) -> bool {
+    if !enabled() {
+        return true;
+    }
+    if ablated(id.0) {
+        return false;
+    }
+    crate::proof_log::named_arm(kind, path, span, id);
+    true
+}
+
 /// Whether the arm `id` is the one being ablated (see [`ABLATE`]).
 #[cold]
 fn ablated(id: &str) -> bool {

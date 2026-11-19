@@ -10416,7 +10416,34 @@ pub(crate) fn function_reference_hand_offs(
     }?;
     let mut placed = Vec::new();
     binding_reference_hand_offs(file, name.span, lookup, &mut placed);
-    Some(placed)
+    Some(without_default_exports(file, function, placed, |(at, _)| (file, *at)))
+}
+
+/// ADR 1126: `references` without those that are the whole expression of an `export default` ([`default_export_reference`]): that statement exports the binding as
+/// an export specifier does, and a specifier is no reference at all, so the two forms leave the same list. What enters an export is asked where a specifier's is
+/// (`entered_by_unseen_code`, the namespace census, the importers' own references). The arm `local_access.default-export-entry` names the drop at `function`'s span
+/// in the proof log; ablated, every reference stays.
+fn without_default_exports<'f, T>(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    references: Vec<T>,
+    at: impl Fn(&T) -> (&'f solid_facts::FileFacts, solid_facts::core::Span),
+) -> Vec<T> {
+    let exported = |reference: &T| {
+        let (holder, span) = at(reference);
+        default_export_reference(holder, span)
+    };
+    if !references.iter().any(exported)
+        || !crate::role_log::proof_arm(
+            "entry",
+            file.path.as_str(),
+            function.span,
+            crate::role_log::arm_id!("local_access.default-export-entry"),
+        )
+    {
+        return references;
+    }
+    references.into_iter().filter(|reference| !exported(reference)).collect()
 }
 
 /// ADR 0674: the hand-off of every reference of `function`'s binding in the
@@ -10508,7 +10535,24 @@ pub(crate) fn foreign_reference_hand_offs<'s, 'f: 's>(
         }
         out.push((holder, at, hand_off_at(holder, at, lookup)));
     }
-    out
+    without_default_exports(file, function, out, |(holder, at, _)| (*holder, *at))
+}
+
+/// ADR 1126: whether the reference at `at` is the whole expression of a local `export default` (`export default Comp`): an export, as a
+/// specifier (`export { Comp }`, which no reference census lists) is, handing the value to the importers whose own references name it.
+/// Parentheses or TypeScript sugar around the name (`export default (Comp)`) are another expression's span, and stay a hand-off.
+pub(crate) fn default_export_reference(
+    file: &solid_facts::FileFacts,
+    at: solid_facts::core::Span,
+) -> bool {
+    file.ast.exports.iter().any(|export| {
+        export.kind == solid_facts::ast::ExportKind::Default
+            && export.module.is_none()
+            && export
+                .declarations
+                .iter()
+                .any(|declaration| declaration.local.span == at)
+    })
 }
 
 /// [`binding_hand_offs`] with each reference's span.
