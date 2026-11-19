@@ -36777,5 +36777,27 @@
    "mx-strict-read-untracked-evt-apply-shadow-concat-signal-direct-none"
   ],
   "rediscovered": "focus on the four contexts' mx-recall programs: main 4,386 false cleans (1,462 per context but shadow-concat) and 120 false positives (12 in shadow-concat: an apply's delivery to a shadow listener, a creation reported missing-owner where rc.21 throws PRIMITIVE_IN_EFFECT_CALLBACK); FIXED here (0 false cleans, 0 false positives over 8,600 programs)"
+ },
+ {
+  "finding": "Bundle y #294 smoke (f3d2c5769): a legal dny-legal-click/-keydown/-pointer program with createEffect in the handler was an `unexecuted-violation` (SC4001 missing-owner violation at a site no run reached), though the handler is reachable: its element is mounted enabled and only the page timer disables it later, so a user can deliver the event first and the violation is the reading of \"wrong if it runs\" (coordinator ruling: the checker is right, the fuzz label was wrong)",
+  "found": "bundle y CI smoke on #294 (lg-recall dny-legal-click-store-effect-called-direct-none); the five siblings and the six effect-carried twins by focus",
+  "fixed": "ADR 1132 (legal.mjs undrivenHandlerSite: the one site use in the handler of the control a dny-legal-click/-keydown/-pointer context mounts, a top-level view element with that tag and event, undriven, no disabled/inert/spread; the unexecuted row is `reachable` only when every at-site violation is missing-owner at a createEffect or createRenderEffect line (Chrome runtime-oracle handler-effect-driven) and none is of the cell's own rules; codes.mjs unexecutedViolation asks no look for it)",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-dny-legal-click-store-effect-called-direct-none",
+   "lg-strict-read-untracked-dny-legal-click-store-effect-carried-direct-none",
+   "lg-strict-read-untracked-dny-legal-click-store-effect-named-called-direct-none",
+   "lg-strict-read-untracked-dny-legal-click-store-render-effect-carried-direct-none",
+   "lg-strict-read-untracked-dny-legal-keydown-store-effect-called-direct-none",
+   "lg-strict-read-untracked-dny-legal-keydown-store-effect-carried-direct-none",
+   "lg-strict-read-untracked-dny-legal-keydown-store-effect-named-called-direct-none",
+   "lg-strict-read-untracked-dny-legal-keydown-store-render-effect-carried-direct-none",
+   "lg-strict-read-untracked-dny-legal-pointer-store-effect-called-direct-none",
+   "lg-strict-read-untracked-dny-legal-pointer-store-effect-carried-direct-none",
+   "lg-strict-read-untracked-dny-legal-pointer-store-effect-named-called-direct-none",
+   "lg-strict-read-untracked-dny-legal-pointer-store-render-effect-carried-direct-none"
+  ],
+  "rediscovered": "focus lg-recall on the 12 dny-legal programs with a handler createEffect (bundle y f3d2c5769 release): before, 12 unexecuted-violation rows; after, the same rows unexecuted with reachable=undriven-handler and nothing needs a look"
  }
 ]
