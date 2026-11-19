@@ -311,7 +311,7 @@ pub struct AstFacts {
     /// is this checker's to report.
     #[serde(default)]
     pub coercive_operands: Vec<CoerciveOperandFact>,
-    /// Every operator expression that converts an operand to a primitive or a property key, by span, sorted (facts schema 103, ADR 1114 family 3; the
+    /// Every operator expression that converts an operand to a primitive or a property key, by span, sorted (facts schema 104, ADR 1114 family 3; the
     /// expression, where V8 places the conversion, not the operand), when that operand is no literal: both sides of `==`, `!=`, the
     /// relational, arithmetic, shift and bitwise binaries and `+`; the left of `in`; the operand of unary `+`, `-`, `~` and of `++`/`--`; both sides of a
     /// compound assignment that is not logical; and a computed key that is no literal (a member, an object or class property). An object there runs its
