@@ -35,6 +35,8 @@
 //               gprotoimplicit  `fz-gprotoexec` replaces `RegExp.prototype.exec`; the site is `/fzprobe/.test("x")`, which the library runs `exec` for (ADR 1108 part 2)
 //               gprotoiter  `fz-gprotoiter` replaces `Float32Array.prototype[Symbol.iterator]` (a key the scan does not decide: any name); the site is the spread
 //                        `[...new Float32Array(1)]` (ADR 1114 family 3: an iteration runs the iterator)
+//               gprotoany  `fz-gprotokey` replaces `Float32Array.prototype.reverse` under a key the scan does not decide (a call's result: any name); the site is
+//                        `(new Float32Array(1) as any).reverse()`, a member call no declaration resolves (ADR 1114 family 3, kind any-untyped-member)
 //               gviewpattern  `fz-gviewpattern` replaces `btoa` through a click event's `view` read by a pattern (`({ view }) => …`); the site is `btoa("x")` (ADR 1108 part 2)
 //               gaccmember, gaccbare, gacctypeof, gaccpattern  `fz-gaccessor` redefines `devicePixelRatio` with a getter that calls the action; the site is the value read, no
 //                        call: `void window.devicePixelRatio`, `void devicePixelRatio`, `void typeof window.devicePixelRatio`, `({ devicePixelRatio: ratio } = window)` (ADR 0974)
@@ -64,6 +66,7 @@ const PROTO_ROUTES = {
   gprotodestr: { prelude: ["const { reverse } = new Float32Array(1);"], text: "reverse()" },
   gprotoimplicit: { text: '/fzprobe/.test("x")' },
   gprotoiter: { text: "void [...new Float32Array(1)]" },
+  gprotoany: { text: "void (new Float32Array(1) as any).reverse()" },
   gviewpattern: { text: 'btoa("x")' },
 };
 const PROTO_KINDS = Object.keys(PROTO_ROUTES);
@@ -82,7 +85,7 @@ export const PA_PACKAGES = {
   ...Object.fromEntries(PATTERN_KINDS.map((kind) => [kind, ["fz-getter"]])),
   gproto: ["fz-gproto"], gview: ["fz-gview"],
   gprotocall: ["fz-gproto"], gprotoapply: ["fz-gproto"], gprotoreflect: ["fz-gproto"], gprotodestr: ["fz-gproto"],
-  gprotoimplicit: ["fz-gprotoexec"], gprotoiter: ["fz-gprotoiter"], gviewpattern: ["fz-gviewpattern"],
+  gprotoimplicit: ["fz-gprotoexec"], gprotoiter: ["fz-gprotoiter"], gprotoany: ["fz-gprotokey"], gviewpattern: ["fz-gviewpattern"],
 };
 /** `{ [context]: "misuse" | "legal" }`. */
 export const PA_CONTEXTS = Object.fromEntries(
@@ -131,6 +134,7 @@ export function paPackageFiles(kind, name = PA_PACKAGES[kind].at(-1)) {
     // ADR 1108 part 2: `exec` replaced (the library runs it for `test`), and `btoa` replaced through `view` read by a pattern.
     "fz-gprotoexec": { js: ['import { action } from "solid-js";', "", "const real = RegExp.prototype.exec;", "RegExp.prototype.exec = function (text) {", '  if (this.source === "fzprobe") void action(function* () {})();', "  return real.call(this, text);", "};"], dts: ["export {};"] },
     "fz-gprotoiter": { js: ['import { action } from "solid-js";', "", "const real = Float32Array.prototype[Symbol.iterator];", "Float32Array.prototype[Symbol.iterator] = function () {", "  void action(function* () {})();", "  return real.call(this);", "};"], dts: ["export {};"] },
+    "fz-gprotokey": { js: ['import { action } from "solid-js";', "", 'const key = ["re", "verse"].join("");', "const real = Float32Array.prototype[key];", "Float32Array.prototype[key] = function () {", "  void action(function* () {})();", "  return real.call(this);", "};"], dts: ["export {};"] },
     "fz-gviewpattern": { js: ['import { action } from "solid-js";', "", "const real = globalThis.btoa;", 'document.addEventListener("click", ({ view }) => {', "  view.btoa = (text) => {", "    void action(function* () {})();", "    return real(text);", "  };", "}, { once: true });", "document.documentElement.click();"], dts: ["export {};"] },
     "fz-gwritesym": { js: ['import { action } from "solid-js";', "", 'var MARK = /* @__PURE__ */ Symbol.for("fz-gwritesym");', "globalThis[MARK] = () => {", "  void action(function* () {})();", "};"], dts: ["export {};"] },
   }[name];

@@ -2903,10 +2903,6 @@ fn prototype_call(
         .collect::<Vec<_>>();
     names.extend(implicit);
     if let Some((at, name, root)) = names.iter().enumerate().find_map(|(at, name)| {
-        let kind = if at >= spelled_count { "implicit" } else { how };
-        if !prototype_kind_on(kind) {
-            return None;
-        }
         index
             .prototype_writers_by_name(name)
             .next()
@@ -2917,15 +2913,12 @@ fn prototype_call(
             path: format!("{PROTOTYPE_WRITE_PREFIX}{name}#{kind}:{root}"),
         });
     }
-    if unspelled
-        && prototype_kind_on("unspelled")
-        && let Some(root) = index.prototype_writers_of_unspelled().next()
-    {
+    if unspelled && let Some(root) = index.prototype_writers_of_unspelled().next() {
         return Some(DeclarationAt {
             path: format!("{PROTOTYPE_WRITE_ANY_PREFIX}[…]#unspelled:{root}"),
         });
     }
-    if !any || !prototype_kind_on(any_kind) {
+    if !any {
         return None;
     }
     let root = index.prototype_writers_any_name().next()?;
@@ -2935,15 +2928,6 @@ fn prototype_call(
             names.first().map_or("[…]", String::as_str)
         ),
     })
-}
-
-/// ADR 1114 family 3: the kind of prototype-writer site not yet made, a named cost (`docs/open-work.md`): a member call with no resolved declaration under
-/// an any-name writer (no probe or known false clean needs it; its cost waits for a ruling).
-const HELD_PROTOTYPE_KINDS: &[&str] = &["any-untyped-member"];
-
-/// ADR 1114 family 3: whether a site of this kind is made (every kind but [`HELD_PROTOTYPE_KINDS`]).
-fn prototype_kind_on(kind: &str) -> bool {
-    !HELD_PROTOTYPE_KINDS.contains(&kind)
 }
 
 /// ADR 1108 part 2: the key of the object pattern that binds the identifier at `callee` (`reverse` of `const { reverse } = a`, `r` of `const { reverse: r } = a`).
@@ -2970,9 +2954,6 @@ fn prototype_read(
     kind: &str,
 ) -> Option<DeclarationAt> {
     let index = ctx.package_reach?;
-    if !prototype_kind_on(kind) {
-        return None;
-    }
     if let Some((name, root)) = names.iter().find_map(|name| {
         index
             .prototype_writers_by_name(name)

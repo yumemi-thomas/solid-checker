@@ -34196,5 +34196,18 @@
    "mx-action-called-in-owned-scope-pa-gprotoiter-root-x-direct-none"
   ],
   "rediscovered": "new context pa-gprotoiter (`void [...new Float32Array(1)]`, pa-shapes.mjs): `focus.mjs --codes ACTION_CALLED_IN_OWNED_SCOPE --grids mx-recall --boundary both --ids`, release builds: main e637f50f2 and slice A (69d19949a) exit 1, false-clean 3 in both boundaries; slice C exits 0, recall-gap 3; oracle 3 compared, 0 behaviour. `for…of` and the array pattern are held by the pattern lane (false clean before, fine here) and fixture action-in-owned-scope-prototype-iteration"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent at a member call no declaration resolves (a receiver typed `any`, `as any`) after an installed package writes a built-in's prototype under a key the scan does not decide (an any-name writer)",
+  "found": "ADR 1114 family 3 ruling (evidence for the held kind any-untyped-member): pattern lane `pkgaction/proto-anyname-{any,as-any}`, Chrome-confirmed false cleans on main e637f50f2 and slice C 26e6ba2cf",
+  "fixed": "ADR 1114 family 3 slice D (`prototype_call`: kind any-untyped-member made, no kind held)",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pa-gprotoany-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoany-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoany-root-x-direct-none"
+  ],
+  "rediscovered": "new context pa-gprotoany (`void (new Float32Array(1) as any).reverse()` after `fz-gprotokey` writes `Float32Array.prototype[key]`, key a call's result): `focus.mjs --codes ACTION_CALLED_IN_OWNED_SCOPE --grids mx-recall --boundary both --ids`, release builds: main e637f50f2 and slice C exit 1, false-clean 3 in both boundaries; slice D exits 0, recall-gap 3; oracle 3 compared, 0 behaviour. `proto-anyname-any` and `-as-any` held by the pattern lane (false clean before, fine here)"
  }
 ]

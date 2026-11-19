@@ -5110,6 +5110,38 @@
    "to": 63,
    "adr": "ADR 1114",
    "fact": "family 3 slice C: every iterated operand (a spread, for…of, an array pattern such as const [v, setV] = createSignal(), yield*) is an SC2002 site where a loaded package may write a built-in's prototype under any name (an undecided closure, the global object handed on, generated code): fail-closed, uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-walk",
+   "key": "SC2002 package-may-call-action",
+   "from": 41,
+   "to": 43,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice D: a member call no declaration resolves (a receiver typed any, a file without Type Facts) is an SC2002 site where a loaded package may write a built-in's prototype under any name (an undecided closure, the global object handed on, generated code): fail-closed, uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper",
+   "key": "SC2002 package-may-call-action",
+   "from": 122,
+   "to": 180,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice D: a member call no declaration resolves (a receiver typed any, a file without Type Facts) is an SC2002 site where a loaded package may write a built-in's prototype under any name (an undecided closure, the global object handed on, generated code): fail-closed, uncertifiable only"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC2002 package-may-call-action",
+   "from": 38,
+   "to": 131,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice D: a member call no declaration resolves (a receiver typed any, a file without Type Facts) is an SC2002 site where a loaded package may write a built-in's prototype under any name (an undecided closure, the global object handed on, generated code): fail-closed, uncertifiable only"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc4001",
+   "key": "SC2002 package-may-call-action",
+   "from": 43,
+   "to": 67,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice D: a member call no declaration resolves (a receiver typed any, a file without Type Facts) is an SC2002 site where a loaded package may write a built-in's prototype under any name (an undecided closure, the global object handed on, generated code): fail-closed, uncertifiable only"
   }
  ]
 }

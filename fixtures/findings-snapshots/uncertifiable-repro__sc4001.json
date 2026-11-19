@@ -134,6 +134,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/cleanup-after-await.tsx",
+      "start": 336,
+      "end": 350,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -469,6 +480,17 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/compiler-refused-reads.tsx",
       "start": 456,
       "end": 462,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/dynamic-import-barrel.ts",
+      "start": 581,
+      "end": 634,
       "fixes": 0
     },
     {
@@ -1073,6 +1095,17 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/handler-spread-any-call-result.tsx",
       "start": 507,
       "end": 522,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/handler-spread-any-call-result.tsx",
+      "start": 525,
+      "end": 570,
       "fixes": 0
     },
     {
@@ -4327,6 +4360,17 @@
       "path": "fixtures/uncertifiable-repro/sc4001/src/primitive-in-ref-callback.tsx",
       "start": 501,
       "end": 509,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc4001/src/primitive-in-ref-callback.tsx",
+      "start": 574,
+      "end": 583,
       "fixes": 0
     },
     {
