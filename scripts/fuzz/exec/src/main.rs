@@ -314,6 +314,8 @@ impl Checker {
         // directory is the same for every program it holds (`prepare_projects`).
         if let Some(program) = program {
             command.env("SOLID_CHECKER_IR_ROLE_LOG_PROGRAM", program);
+            // ADR 1114: the proof log names its program the same way (its path lines' `g`), for proof-fold.mjs.
+            command.env("SOLID_CHECKER_IR_PROOF_LOG_PROGRAM", program);
         }
         command.env("SOLID_CHECKER_DAEMON", if daemon { "1" } else { "0" });
         // A slot's daemon lives while the executor does (it stops them at its end, `stop_warm`); the checker's two-minute default
