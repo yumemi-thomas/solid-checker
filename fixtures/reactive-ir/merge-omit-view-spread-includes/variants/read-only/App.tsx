@@ -7,7 +7,7 @@ export const known = ["a", "b"].includes("a");
 
 type Attrs = {
   label?: string;
-  innerHTML?: string;
+  textContent?: string;
   children?: JSX.Element;
 };
 

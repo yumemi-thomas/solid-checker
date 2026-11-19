@@ -11,7 +11,7 @@ proto.includes = function (this: unknown[], value: unknown, from?: number): bool
 
 type Attrs = {
   label?: string;
-  innerHTML?: string;
+  textContent?: string;
   children?: JSX.Element;
 };
 

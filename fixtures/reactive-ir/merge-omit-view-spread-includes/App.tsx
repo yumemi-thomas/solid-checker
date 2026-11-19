@@ -14,7 +14,7 @@ Array.prototype.includes = function (this: unknown[], value: unknown, from?: num
 
 type Attrs = {
   label?: string;
-  innerHTML?: string;
+  textContent?: string;
   children?: JSX.Element;
   onClick?: () => void;
 };

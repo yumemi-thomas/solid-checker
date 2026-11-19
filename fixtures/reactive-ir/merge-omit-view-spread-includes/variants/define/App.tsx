@@ -14,7 +14,7 @@ Object.defineProperty(Array.prototype, "includes", {
 
 type Attrs = {
   label?: string;
-  innerHTML?: string;
+  textContent?: string;
   children?: JSX.Element;
 };
 
