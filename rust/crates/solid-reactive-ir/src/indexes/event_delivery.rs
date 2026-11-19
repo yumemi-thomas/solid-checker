@@ -358,9 +358,11 @@ impl SemanticLookup<'_> {
     /// ([`scan_delivery_hazard`]), scanned once per build.
     pub(crate) fn event_delivery_intact(&self) -> bool {
         crate::base::reads::note(crate::base::reads::Section::EventDeliveryIntact);
+        // Per-build existential: the section's fingerprint recomputes the whole scan (`Section::EventDeliveryIntact`), so the scan's own
+        // raw reads are not each reader's (every dispatch-veto reader asks this first).
         !*self
             .delivery_hazard
-            .get_or_init(|| scan_delivery_hazard(self))
+            .get_or_init(|| crate::base::reads::suppress(|| scan_delivery_hazard(self)))
     }
 
     /// [`DispatchSite::withholds_flush_proofs`] of any dispatch of the program.
