@@ -429,6 +429,17 @@ const WHOLE_STORE_READS = {
   "store-non-null": { reads: true, text: (o) => `${o}!.v` },
   "store-satisfies": { reads: true, text: (o) => `(${o} satisfies typeof ${o}).v` },
   "store-projection": { reads: true, projection: true, text: (o) => `${o}.v` },
+
+  // ADR 1119: a member read in a function a primitive names by its binding and an array element a carrier runs in place; the
+  // position's silent role certified it though `forEach` runs it here.
+  "store-byname-carried": { reads: true, imports: ["createMemo"], text: (o) => `{ const f = () => ${o}.v; createMemo(f); [f].forEach((g) => g()); }` },
+  "store-settled-carried": { reads: true, imports: ["onSettled"], text: (o) => `{ const f = () => { void ${o}.v; }; onSettled(f); [f].forEach((g) => g()); }` },
+  // ADR 1119 round 2 (Fable review): H1, an effect's or a render effect's compute named by its binding with a carried entry
+  // (no named-callback arm admits a compute, so the census was never asked); H2, a settled callback also called by name (the
+  // deferred arm answered before ADR 1111's check).
+  "store-effect-carried": { reads: true, imports: ["createEffect"], text: (o) => `{ const f = () => ${o}.v; createEffect(f, () => {}); [f].forEach((g) => g()); }` },
+  "store-render-effect-carried": { reads: true, imports: ["createRenderEffect"], text: (o) => `{ const f = () => ${o}.v; createRenderEffect(f, () => {}); [f].forEach((g) => g()); }` },
+  "store-settled-called": { reads: true, imports: ["onSettled"], text: (o) => `{ const f = () => { void ${o}.v; }; onSettled(f); f(); }` },
   ...STORE_DESTRUCTURES,
   "store-keys": { text: (o) => `Object.keys(${o})` },
   "store-has": { text: (o) => `"v" in ${o}` },

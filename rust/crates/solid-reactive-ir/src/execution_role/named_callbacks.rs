@@ -733,7 +733,11 @@ pub(crate) fn named_at_tracked_position(
     }
     containing_ast_function(&file.ast, span).is_some_and(|function| {
         let role = lookup.named_callback_roles(file).get(function.span);
-        role.tracked || role.effect_compute
+        // ADR 1119 round 2 (H1): the tracked position says where the read runs only when it is every way into the function
+        // (an effect's compute admits no role arm, so the census at the named-callback arm never asked for it):
+        // `createEffect(cb, …); [cb].forEach((g) => g())` runs the read in the body too.
+        (role.tracked || role.effect_compute)
+            && super::write_roles::role_entries_complete(file, function, lookup)
     })
 }
 

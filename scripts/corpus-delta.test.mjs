@@ -153,3 +153,17 @@ test("a what-if report from either build stops the delta, and a default build's 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("--proof (ADR 1118): every (site, code) of a proof change moves only up; any other move is a needs-a-look line", () => {
+  const key = keyOf(row("kui", "a"));
+  const affected = new Map([[key, "all"]]);
+  const report = (before, after) => buildReport({ oldResults: new Map([[key, result("kui", "a", before)]]), newResults: new Map([[key, result("kui", "a", after)]]), affected, controls: [], proof: true });
+  const up = report([finding("SC1001", "uncertifiable", 1, "x"), finding("SC2001", "uncertifiable", 9, "y")], [finding("SC2001", "violation", 9)]);
+  assert.deepEqual(up.proof, { up: 2, bad: 0, projects: 0 });
+  assert.deepEqual(up.needsLook, ["kui/a: SC2001 uncertifiable -> violation at line 9 (none)"]); // the corpus's own rule: a new violation is read
+  const down = report([finding("SC1001", "violation", 1)], [finding("SC1001", "uncertifiable", 1, "x"), finding("SC2001", "uncertifiable", 9, "y")]);
+  assert.deepEqual(down.proof, { up: 0, bad: 2, projects: 1 });
+  assert.ok(down.needsLook.some((line) => /^proof kui\/a: 2 \(site, code\) moved down or sideways/.test(line)));
+  assert.equal(buildReport({ oldResults: new Map([[key, result("kui", "a", [])]]), newResults: new Map([[key, result("kui", "a", [finding("SC1001", "uncertifiable", 1, "x")])]]), affected, controls: [] }).proof, undefined);
+  assert.equal(parseOptions(["--old", "a", "--new", "b", "--all", "--proof"]).proof, true);
+});

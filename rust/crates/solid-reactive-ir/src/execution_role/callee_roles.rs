@@ -363,6 +363,47 @@ pub(super) fn semantic_role_before_awaits(
             return role_arm!("callee_roles.named-callback-write", role);
         }
     } else if let Some(role) = named_callback_execution_role(file, span, lookup) {
+        // ADR 1119: the callback's role is its positions' only when every way into the function is one of them (or a call,
+        // classified at the call): a reference no position records (`[cb].forEach((g) => g())`, a global store, an export)
+        // runs the read where no position says. Silent roles need that proof; a reporting role already reports.
+        if !role.reports_untracked_read()
+            && !role.reports_unplaced()
+            && super::named_callbacks::named_callback_containing(file, span, lookup).is_some_and(
+                |callback| !super::write_roles::role_entries_complete(file, callback, lookup),
+            )
+        {
+            return role_arm!(
+                "callee_roles.named-callback-entries-open",
+                ExecutionRole::Unknown
+            );
+        }
+        // ADR 1111, ADR 1119 round 2 (H2): a silent answer of any arm below needs the direct calls of the callback checked too
+        // (`onSettled(f); f()` answered by the deferred arm before 1111's check at the last arm).
+        let also_called = |classifying: &mut HashSet<(String, Span)>, answered: ExecutionRole| {
+            !answered.reports_untracked_read()
+                && !answered.reports_unplaced()
+                && named_callback_also_called(
+                    file,
+                    span,
+                    allowed,
+                    entities,
+                    symbol_names,
+                    lookup,
+                    classifying,
+                )
+        };
+        // The arms below that answer the tracked role (a carried closure, an in-place layer) are silent by construction.
+        let also_called_silent = |classifying: &mut HashSet<(String, Span)>| {
+            named_callback_also_called(
+                file,
+                span,
+                allowed,
+                entities,
+                symbol_names,
+                lookup,
+                classifying,
+            )
+        };
         // ADR 0585: a closure nested in a named tracked callback that is
         // handed on to a call not proven to invoke it there, stored, or
         // written as an attribute value runs when something calls it, which
@@ -433,6 +474,12 @@ pub(super) fn semantic_role_before_awaits(
                     )
                     || carried_into_callback(file, span, callback.span, lookup, 4)
                 {
+                    if also_called(classifying, role) {
+                        return role_arm!(
+                            "callee_roles.named-callback-also-called-untracked",
+                            ExecutionRole::Unknown
+                        );
+                    }
                     return role_arm!("callee_roles.named-callback-untracked", role);
                 }
                 let nested = nested_unplaced_role(
@@ -444,6 +491,12 @@ pub(super) fn semantic_role_before_awaits(
                     lookup,
                     classifying,
                 );
+                if also_called(classifying, nested) {
+                    return role_arm!(
+                        "callee_roles.named-callback-also-called-untracked-nested",
+                        ExecutionRole::Unknown
+                    );
+                }
                 return role_arm!("callee_roles.named-callback-untracked-nested", nested);
             }
             // A closure whose binding only inline carriers in the callback's
@@ -455,6 +508,12 @@ pub(super) fn semantic_role_before_awaits(
                 && !callback.r#async
                 && carried_into_callback(file, span, callback.span, lookup, 4)
             {
+                if also_called_silent(classifying) {
+                    return role_arm!(
+                        "callee_roles.named-callback-also-called-carried",
+                        ExecutionRole::Unknown
+                    );
+                }
                 return role_arm!(
                     "callee_roles.named-callback-carried",
                     ExecutionRole::TrackedJsx
@@ -479,46 +538,19 @@ pub(super) fn semantic_role_before_awaits(
                     },
                 )
             {
+                if also_called_silent(classifying) {
+                    return role_arm!(
+                        "callee_roles.named-callback-also-called-in-place",
+                        ExecutionRole::Unknown
+                    );
+                }
                 return role_arm!(
                     "callee_roles.named-callback-in-place",
                     ExecutionRole::TrackedJsx
                 );
             }
         }
-        // ADR 1111: a named callback the code also calls by name (`createMemo(f); f();`) runs at each such call too, whose role
-        // is not the callback's; where no summary claims the read at that call (a call in an action step, a late-mounted
-        // handler) the callback's quiet role would certify it. The read is unplaced unless that role already reports it.
-        if !role.reports_untracked_read()
-            && !classifying.contains(&write_classification_marker())
-            && super::named_callbacks::named_callback_containing(file, span, lookup).is_some_and(
-                |callback| {
-                    // Only a call that runs the read where untracked reads are reported, or where nothing places it: a
-                    // function only handlers also call keeps the callback's role.
-                    // A callback reached again while its calls are classified (it calls itself, or a callback it runs calls
-                    // it) is a cycle: unplaced.
-                    let key = (file.path.to_string(), callback.span);
-                    if !classifying.insert(key.clone()) {
-                        return true;
-                    }
-                    let unplaced = function_called_by_name(file, callback, lookup)
-                        .into_iter()
-                        .any(|call| {
-                            let at = semantic_execution_role_within(
-                                file,
-                                call,
-                                allowed,
-                                entities,
-                                symbol_names,
-                                lookup,
-                                classifying,
-                            );
-                            at.reports_untracked_read() || at == ExecutionRole::Unknown
-                        });
-                    classifying.remove(&key);
-                    unplaced
-                },
-            )
-        {
+        if also_called(classifying, role) {
             return role_arm!(
                 "callee_roles.named-callback-also-called",
                 ExecutionRole::Unknown
@@ -3262,6 +3294,46 @@ fn carried_into_callback(
             !function.span.contains(*carrier)
                 && carried_into_callback(file, *carrier, callback, lookup, depth - 1)
         })
+}
+
+/// ADR 1111 (and ADR 1119 round 2, for every silent named-callback arm): whether the named callback around `span` is also
+/// called by name where untracked reads are reported, or where nothing places the call: such a call runs the read with the
+/// call's role, which the callback's quiet role would certify. Writes keep their own role walk. A callback reached again while
+/// its calls are classified (it calls itself, or a callback it runs calls it) is a cycle: unplaced.
+fn named_callback_also_called(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    classifying: &mut HashSet<(String, Span)>,
+) -> bool {
+    if classifying.contains(&write_classification_marker()) {
+        return false;
+    }
+    super::named_callbacks::named_callback_containing(file, span, lookup).is_some_and(|callback| {
+        let key = (file.path.to_string(), callback.span);
+        if !classifying.insert(key.clone()) {
+            return true;
+        }
+        let unplaced = function_called_by_name(file, callback, lookup)
+            .into_iter()
+            .any(|call| {
+                let at = semantic_execution_role_within(
+                    file,
+                    call,
+                    allowed,
+                    entities,
+                    symbol_names,
+                    lookup,
+                    classifying,
+                );
+                at.reports_untracked_read() || at == ExecutionRole::Unknown
+            });
+        classifying.remove(&key);
+        unplaced
+    })
 }
 
 /// ADR 1111: the direct calls of `function`'s binding (its own name or the `const` it initializes): the function runs at each,

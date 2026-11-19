@@ -1,4 +1,4 @@
-// node scripts/guard/count.mjs [--update]: the one-way uncertifiable count (endstage-report.md 1b).
+// node scripts/guard/count.mjs [--update [--adr "ADR NNNN"] [--proof file::symbol]]: the one-way uncertifiable count (endstage-report.md 1b).
 // Counts the uncertifiable rows of every coverage snapshot by `code blocker` and checks them against scripts/guard/counts.json:
 // - the ledger's `inRepo` must equal the snapshots exactly; a rise is recorded with --update, in the same commit;
 // - against the ledger at the base (COUNT_BASE, else the merge base with origin/main, else with origin/claude/flip-census while the
@@ -20,8 +20,11 @@
 // - no base is a failure, never a pass (scripts/guard/base-revision.mjs): COUNT_BASE=<rev> names one explicitly.
 // A clean needs a proof: removing an obligation to gain cleans is what this makes visible. Exit 1 on any failure.
 //
-// Recording an intended change: append the row to `drops` in scripts/guard/counts.json by hand (the file `--update` rewrites keeps
-// them), name an ADR that exists in docs/decisions.md, and `--update` the counts in the same commit. `--help` prints this.
+// Recording an intended change: `node scripts/guard/count.mjs --update --adr "ADR NNNN"` (or COUNT_ADR) records the counts and writes
+// the drops rows every fall needs, from the snapshots: a relabel where another key of the fixture gained what the key lost, a moved
+// row where another path gained what a site lost, otherwise a clean, which also needs `--proof file::symbol` (or COUNT_PROOF); it
+// writes nothing and exits 1 when the ADR or the proof is missing, and checks what it wrote. Rows can still be written by hand (the
+// file `--update` rewrites keeps them). The ADR must exist in docs/decisions.md. `--help` prints this.
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
@@ -84,31 +87,7 @@ export function checkLedger({ ledger, base, computed, decisions, read, snapshotO
     else renamed.set(rename.from, rename.to);
   }
   const keyCount = (snapshot, key, path) => (snapshot?.findings ?? []).filter((finding) => finding.kind === "uncertifiable" && `${finding.code} ${finding.blocker ?? ""}` === key && (path === undefined || finding.path === path)).length;
-  // Falls per fixture against the base's snapshots; with none at the base, per key against its totals.
-  const falls = [];
-  const pathFalls = [];
-  if (baseSnapshots) {
-    for (const [fixture, snapshot] of baseSnapshots) {
-      const sites = keySites(snapshot);
-      const sitesNow = keySites(snapshotOf(fixture));
-      for (const [key, paths] of sites) {
-        if (renamed.has(key)) continue;
-        const was = [...paths.values()].reduce((a, b) => a + b, 0);
-        const now = [...(sitesNow.get(key)?.values() ?? [])].reduce((a, b) => a + b, 0);
-        if (now < was) falls.push({ fixture, key, was, now });
-        for (const [path, before] of paths) {
-          const after = sitesNow.get(key)?.get(path) ?? 0;
-          if (after < before) pathFalls.push({ fixture, key, path, was: before, now: after });
-        }
-      }
-    }
-  } else {
-    for (const [key, was] of Object.entries(base.inRepo ?? {})) {
-      if (renamed.has(key)) continue;
-      const now = computed[key] ?? 0;
-      if (now < was) falls.push({ fixture: undefined, key, was, now });
-    }
-  }
+  const { falls, pathFalls } = fallsAgainst({ base, computed, baseSnapshots, snapshotOf, renamed });
   const checkRow = (row, { fixture, key, path, was, now }) => {
     const why = `${fixture ? `${fixture} ` : ""}${key}${path ? ` at ${path}` : ""}: ${was} -> ${now}`;
     if (!adrExists(row.adr)) failures.push(`${why}: ${row.adr ?? "no ADR"} is not in docs/decisions.md`);
@@ -150,10 +129,8 @@ export function checkLedger({ ledger, base, computed, decisions, read, snapshotO
   // A site that lost rows (ADR 0995). When the fixture total fell by exactly what its paths lost, the fixture-level row above answers
   // them; otherwise (a path gained, or the total held) a row left a site and the fixture total hides it: each such path needs its own row.
   for (const fall of pathFalls) {
-    const sameKey = pathFalls.filter((other) => other.fixture === fall.fixture && other.key === fall.key);
-    const lost = sameKey.reduce((sum, other) => sum + other.was - other.now, 0);
+    if (!pathFallNeedsRow(fall, falls, pathFalls)) continue;
     const total = falls.find((other) => other.fixture === fall.fixture && other.key === fall.key);
-    if (total && total.was - total.now === lost) continue;
     const row = (ledger.drops ?? []).find((drop) => drop.fixture === fall.fixture && drop.key === fall.key && drop.path === fall.path && drop.from === fall.was && drop.to === fall.now);
     if (!row) {
       failures.push(`${fall.fixture} ${fall.key} at ${fall.path}: ${fall.was} -> ${fall.now}, no drops row: ${total ? "the fixture's total fell by less than its paths lost" : "the fixture's total holds or rose"}, so a row left this site (another path gained one) or was cleaned and another appeared; add { fixture, key, path, from, to, adr, kind: "moved", movedTo } or a path-level proof row`);
@@ -162,6 +139,100 @@ export function checkLedger({ ledger, base, computed, decisions, read, snapshotO
     checkRow(row, fall);
   }
   return failures;
+}
+
+/**
+ * The falls against the base, as the guard counts them: per fixture against the base's snapshots (with none there, per key against its
+ * totals), and per (fixture, key, path) site (ADR 0995). `renamed` keys are skipped.
+ */
+export function fallsAgainst({ base, computed, baseSnapshots, snapshotOf, renamed = new Map() }) {
+  const falls = [];
+  const pathFalls = [];
+  if (baseSnapshots) {
+    for (const [fixture, snapshot] of baseSnapshots) {
+      const sites = keySites(snapshot);
+      const sitesNow = keySites(snapshotOf(fixture));
+      for (const [key, paths] of sites) {
+        if (renamed.has(key)) continue;
+        const was = [...paths.values()].reduce((a, b) => a + b, 0);
+        const now = [...(sitesNow.get(key)?.values() ?? [])].reduce((a, b) => a + b, 0);
+        if (now < was) falls.push({ fixture, key, was, now });
+        for (const [path, before] of paths) {
+          const after = sitesNow.get(key)?.get(path) ?? 0;
+          if (after < before) pathFalls.push({ fixture, key, path, was: before, now: after });
+        }
+      }
+    }
+  } else {
+    for (const [key, was] of Object.entries(base?.inRepo ?? {})) {
+      if (renamed.has(key)) continue;
+      const now = computed[key] ?? 0;
+      if (now < was) falls.push({ fixture: undefined, key, was, now });
+    }
+  }
+  return { falls, pathFalls };
+}
+
+/** Whether a site's fall needs a row of its own: the fixture total did not fall by exactly what its paths lost (ADR 0995). */
+function pathFallNeedsRow(fall, falls, pathFalls) {
+  const lost = pathFalls.filter((other) => other.fixture === fall.fixture && other.key === fall.key).reduce((sum, other) => sum + other.was - other.now, 0);
+  const total = falls.find((other) => other.fixture === fall.fixture && other.key === fall.key);
+  return !(total && total.was - total.now === lost);
+}
+
+/**
+ * The drops rows `--update` writes for the falls no row answers yet, so an intended change never fails the guard for a forgotten row.
+ * Each row names `adr` (the guard still checks it is in docs/decisions.md). The kind follows the snapshots:
+ * - another key of the fixture gained at least what this key lost: a `relabel` row (the rows kept their finding under that blocker);
+ * - another path of the key gained at least what a site lost: a `moved` row;
+ * - otherwise a clean, which names `proof` (`file::symbol`) and its fixtures: `proved` the fixture itself, `open` the first snapshot
+ *   that keeps the key (the fixture itself when it still does).
+ * `needs` lists what is missing to write them: no `adr` for any row, no `proof` for a clean.
+ *
+ * @returns {{ rows: object[], needs: string[] }}
+ */
+export function draftDrops({ ledger, base, computed, baseSnapshots, snapshotOf, baseSnapshotOf, fixtures = [], adr, proof }) {
+  const renamed = new Map((ledger.renames ?? []).map((rename) => [rename.from, rename.to]));
+  const { falls, pathFalls } = fallsAgainst({ base, computed, baseSnapshots, snapshotOf, renamed });
+  const drops = ledger.drops ?? [];
+  const keyTotal = (snapshot, key) => [...(keySites(snapshot).get(key)?.values() ?? [])].reduce((a, b) => a + b, 0);
+  const rows = [];
+  const needs = [];
+  const clean = (fall, path) => {
+    if (!proof) needs.push(`${fall.fixture ?? "(totals)"} ${fall.key}${path ? ` at ${path}` : ""}: ${fall.was} -> ${fall.now} is a clean (no other key or path gained it): pass --proof <file::symbol>`);
+    const open = [fall.fixture, ...fixtures].find((fixture) => fixture && keyTotal(snapshotOf(fixture), fall.key) > 0);
+    return { ...(fall.fixture ? { fixture: fall.fixture } : {}), key: fall.key, ...(path ? { path } : {}), from: fall.was, to: fall.now, adr, proof, fixtures: { proved: fall.fixture, open } };
+  };
+  for (const fall of falls) {
+    if (drops.some((drop) => drop.fixture === fall.fixture && drop.path === undefined && drop.key === fall.key && drop.from === fall.was && drop.to === fall.now)) continue;
+    const lost = fall.was - fall.now;
+    if (fall.fixture) {
+      const now = keySites(snapshotOf(fall.fixture));
+      const was = keySites(baseSnapshotOf(fall.fixture));
+      const gains = [...now.keys()]
+        .filter((key) => key !== fall.key)
+        .map((key) => ({ key, gained: keyTotal(snapshotOf(fall.fixture), key) - [...(was.get(key)?.values() ?? [])].reduce((a, b) => a + b, 0) }))
+        .filter(({ gained }) => gained >= lost)
+        .sort((a, b) => b.gained - a.gained || a.key.localeCompare(b.key));
+      if (gains.length) {
+        rows.push({ fixture: fall.fixture, key: fall.key, from: fall.was, to: fall.now, adr, kind: "relabel", relabeledTo: gains[0].key });
+        continue;
+      }
+    }
+    rows.push(clean(fall));
+  }
+  for (const fall of pathFalls) {
+    if (!pathFallNeedsRow(fall, falls, pathFalls)) continue;
+    if (drops.some((drop) => drop.fixture === fall.fixture && drop.key === fall.key && drop.path === fall.path && drop.from === fall.was && drop.to === fall.now)) continue;
+    const lost = fall.was - fall.now;
+    const now = keySites(snapshotOf(fall.fixture)).get(fall.key) ?? new Map();
+    const was = keySites(baseSnapshotOf(fall.fixture)).get(fall.key) ?? new Map();
+    const movedTo = [...now.keys()].filter((path) => path !== fall.path && (now.get(path) ?? 0) - (was.get(path) ?? 0) >= lost).sort()[0];
+    if (movedTo) rows.push({ fixture: fall.fixture, key: fall.key, path: fall.path, from: fall.was, to: fall.now, adr, kind: "moved", movedTo });
+    else rows.push(clean(fall, fall.path));
+  }
+  if (rows.length && !adr) needs.unshift(`${rows.length} drops row(s) to write (${rows.map((row) => `${row.fixture ?? "(totals)"} ${row.key}${row.kind ? ` ${row.kind}` : ""}`).join("; ")}): pass --adr "ADR NNNN" (or COUNT_ADR)`);
+  return { rows, needs };
 }
 
 /** `key -> path -> uncertifiable rows` of one snapshot (the sites a fall is measured at). */
@@ -213,25 +284,51 @@ async function main() {
     const path = join(repo, SNAPSHOTS, `${fixture.replace(/^fixtures\//, "").replace("/", "__")}.json`);
     return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : null;
   };
-  const snapshots = readdirSync(join(repo, SNAPSHOTS)).filter((name) => name.endsWith(".json")).map((name) => JSON.parse(readFileSync(join(repo, SNAPSHOTS, name), "utf8")));
+  const names = readdirSync(join(repo, SNAPSHOTS)).filter((name) => name.endsWith(".json")).sort();
+  const snapshots = names.map((name) => JSON.parse(readFileSync(join(repo, SNAPSHOTS, name), "utf8")));
   const computed = countRows(snapshots);
   const path = join(repo, LEDGER);
   const ledger = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : { inRepo: {}, drops: [], renames: [] };
-  if (process.argv.includes("--update")) {
-    writeFileSync(path, `${JSON.stringify({ about: ledger.about, inRepo: computed, drops: ledger.drops ?? [], renames: ledger.renames ?? [] }, null, 1)}\n`);
-    console.log(`${LEDGER}: ${Object.keys(computed).length} keys, ${Object.values(computed).reduce((a, b) => a + b, 0)} rows recorded`);
-    return;
-  }
   const { revision, ledger: base, problem } = baseLedger();
   const baseSnapshots = base ? snapshotsAt(revision) : null;
-  const failures = problem ? [problem] : [];
-  failures.push(...checkLedger({
-    ledger, base, computed, baseSnapshots,
-    baseSnapshotOf: (fixture) => (fixture ? baseSnapshots?.get(fixture.replace(/^fixtures\//, "")) ?? null : null),
+  const baseSnapshotOf = (fixture) => (fixture ? baseSnapshots?.get(fixture.replace(/^fixtures\//, "")) ?? null : null);
+  const check = (candidate) => checkLedger({
+    ledger: candidate, base, computed, baseSnapshots, baseSnapshotOf,
     decisions: readFileSync(join(repo, "docs/decisions.md"), "utf8"),
     read: (file) => (existsSync(join(repo, file)) ? readFileSync(join(repo, file), "utf8") : null),
     snapshotOf,
-  }));
+  });
+  if (process.argv.includes("--update")) {
+    // The drops rows a fall needs are written here, from the snapshots, so a fix never fails the guard for a forgotten row; the ADR
+    // (and, for a clean, the proof) is the author's to name: `--adr "ADR NNNN"` / COUNT_ADR, `--proof file::symbol` / COUNT_PROOF.
+    const flag = (name) => {
+      const index = process.argv.indexOf(name);
+      return index >= 0 ? process.argv[index + 1] : undefined;
+    };
+    const adrArg = flag("--adr") ?? process.env.COUNT_ADR;
+    const adr = adrArg ? (/^\d{4}$/.test(adrArg) ? `ADR ${adrArg}` : adrArg) : undefined;
+    const proof = flag("--proof") ?? process.env.COUNT_PROOF;
+    const { rows: drafted, needs } = base
+      ? draftDrops({ ledger, base, computed, baseSnapshots, snapshotOf, baseSnapshotOf, fixtures: names.map(fixtureOf), adr, proof })
+      : { rows: [], needs: [] };
+    if (needs.length) {
+      for (const need of needs) console.error(`count --update: ${need}`);
+      console.error(`count --update: nothing written`);
+      process.exitCode = 1;
+      return;
+    }
+    const updated = { about: ledger.about, inRepo: computed, drops: [...(ledger.drops ?? []), ...drafted], renames: ledger.renames ?? [] };
+    writeFileSync(path, `${JSON.stringify(updated, null, 1)}\n`);
+    for (const row of drafted) console.log(`count --update: drops row ${row.fixture ?? "(totals)"} ${row.key}${row.path ? ` at ${row.path}` : ""} ${row.from} -> ${row.to} (${row.kind ?? "clean"}${row.relabeledTo ? ` to ${row.relabeledTo}` : row.movedTo ? ` to ${row.movedTo}` : ""}, ${row.adr})`);
+    console.log(`${LEDGER}: ${Object.keys(computed).length} keys, ${Object.values(computed).reduce((a, b) => a + b, 0)} rows recorded${drafted.length ? `, ${drafted.length} drops row(s) written` : ""}`);
+    // What was written must pass the guard as it stands (an ADR missing from docs/decisions.md, a proof the file does not declare).
+    const left = problem ? [problem] : check(updated);
+    for (const failure of left) console.error(failure);
+    process.exitCode = left.length ? 1 : 0;
+    return;
+  }
+  const failures = problem ? [problem] : [];
+  failures.push(...check(ledger));
   for (const failure of failures) console.error(failure);
   if (base) console.log(`count: falls compared ${baseSnapshots ? `per fixture over ${baseSnapshots.size} base snapshots` : "per key (no snapshots at the base)"}`);
   const rows = Object.values(computed).reduce((a, b) => a + b, 0);

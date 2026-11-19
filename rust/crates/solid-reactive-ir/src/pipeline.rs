@@ -1044,6 +1044,12 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         report_memos(&report, &mut build_timings, emit_timings);
     }
     program.runtime_configuration = runtime_configuration;
+    // ADR 1120: the plain-program premise census (measurement only; no proof asks the premise).
+    if crate::blocker_census::enabled() && crate::plain_premise::enabled() {
+        program
+            .blocker_census
+            .extend(crate::plain_premise::census(semantic_lookup));
+    }
     // ADR 1065 part 2: the causes the stages after the draft recorded (the after-await accounting, the late reach queries).
     if crate::blocker_census::enabled() {
         program

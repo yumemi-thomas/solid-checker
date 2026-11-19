@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 
-import { checkLedger, countRows } from "./guard/count.mjs";
+import { checkLedger, countRows, draftDrops } from "./guard/count.mjs";
 
 // The one-way uncertifiable count (scripts/guard/count.mjs), on in-memory ledgers.
 const row = (code, blocker) => ({ code, kind: "uncertifiable", blocker });
@@ -169,3 +169,56 @@ test("a deleted fixture's paths fall with its total: the fixture-level row answe
   assert.equal(failures.filter((failure) => / at /.test(failure)).length, 0);
   assert.match(failures[0], /reactive-ir\/m SC1001 function-run-unplaced: 2 -> 0, no drops row/);
 });
+
+// `--update` writes the drops rows a fall needs (gate chores, 2026-11-19: 1119 round 2 failed verify-delta twice on a forgotten row).
+test("--update drafts the drops rows a fall needs, and asks for the ADR and a clean's proof", () => {
+  const at = (path, code, blocker) => ({ code, kind: "uncertifiable", blocker, path });
+  const R = "SC1001 callee-callback-timing";
+  const base = { inRepo: { [K]: 2 } };
+  const baseSnapshots = new Map([["reactive-ir/f", { findings: [at("a.tsx", "SC1001", "function-run-unplaced"), at("b.tsx", "SC1001", "function-run-unplaced")] }]]);
+  const draft = (now, extra = {}) =>
+    draftDrops({
+      ledger: { drops: [], renames: [] }, base, computed: countRows([now]), baseSnapshots,
+      snapshotOf: (fixture) => (fixture === "reactive-ir/f" ? now : snaps[fixture] ?? null),
+      baseSnapshotOf: (fixture) => baseSnapshots.get(fixture) ?? null,
+      fixtures: ["reactive-ir/f", "reactive-ir/open"],
+      ...extra,
+    });
+  // A relabel: the fixture gained the other blocker what the key lost.
+  const relabeled = { findings: [at("a.tsx", "SC1001", "function-run-unplaced"), at("b.tsx", "SC1001", "callee-callback-timing")] };
+  const { rows, needs } = draft(relabeled, { adr: "ADR 0812" });
+  assert.deepEqual(needs, []);
+  assert.deepEqual(rows, [{ fixture: "reactive-ir/f", key: K, from: 2, to: 1, adr: "ADR 0812", kind: "relabel", relabeledTo: R }]);
+  // The rows it drafts pass the guard.
+  assert.deepEqual(
+    checkLedger({
+      ledger: { inRepo: countRows([relabeled]), drops: rows }, base, computed: countRows([relabeled]), decisions, baseSnapshots,
+      read: (path) => files[path] ?? null,
+      snapshotOf: (fixture) => (fixture === "reactive-ir/f" ? relabeled : null),
+      baseSnapshotOf: (fixture) => baseSnapshots.get(fixture) ?? null,
+    }),
+    [],
+  );
+  // No ADR: nothing to write, and it says what is missing.
+  assert.match(draft(relabeled).needs[0], /pass --adr/);
+  // A clean (no key or path gained it) needs the proof too; its open fixture is the first snapshot that keeps the key.
+  const cleaned = { findings: [at("a.tsx", "SC1001", "function-run-unplaced")] };
+  assert.match(draft(cleaned, { adr: "ADR 0812" }).needs.join("\n"), /pass --proof/);
+  assert.deepEqual(draft(cleaned, { adr: "ADR 0812", proof: "rust/x.rs::proves_y" }).rows, [
+    { fixture: "reactive-ir/f", key: K, from: 2, to: 1, adr: "ADR 0812", proof: "rust/x.rs::proves_y", fixtures: { proved: "reactive-ir/f", open: "reactive-ir/f" } },
+  ]);
+  // A row that left a site for another path of the key (the fixture total holds): a moved row.
+  const moved = { findings: [at("a.tsx", "SC1001", "function-run-unplaced"), at("c.tsx", "SC1001", "function-run-unplaced")] };
+  assert.deepEqual(draft(moved, { adr: "ADR 0812" }).rows, [
+    { fixture: "reactive-ir/f", key: K, path: "b.tsx", from: 1, to: 0, adr: "ADR 0812", kind: "moved", movedTo: "c.tsx" },
+  ]);
+  // A fall a row already answers drafts nothing.
+  assert.deepEqual(
+    draftDrops({
+      ledger: { drops: rows, renames: [] }, base, computed: countRows([relabeled]), baseSnapshots,
+      snapshotOf: () => relabeled, baseSnapshotOf: (fixture) => baseSnapshots.get(fixture) ?? null, adr: "ADR 0812",
+    }).rows,
+    [],
+  );
+});
+

@@ -80,6 +80,7 @@ pub fn extract(path: impl Into<String>, source: &str) -> Result<AstFacts, AstFac
             .any(|node| matches!(node.kind(), oxc_ast::AstKind::WithStatement(_)));
     facts.computed_keys = computed_keys::computed_keys(&semantic, follows_names);
     (facts.code_sinks, facts.uses_receiver) = code_sinks::code_sinks(&semantic, follows_names);
+    facts.premise_sites = premise_sites::premise_sites(&semantic, follows_names);
     if execution_semantics_valid {
         (facts.host_execution, facts.host_defaults) = host_execution::host_execution(&semantic);
         facts.host_undefined_arguments = host_execution::undefined_values(&semantic);
@@ -774,6 +775,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             assignment_pattern_keys: self.assignment_pattern_keys,
             // Read from the semantic model after the walk (`computed_keys::computed_keys`).
             computed_keys: Vec::new(),
+            premise_sites: Vec::new(),
             code_sinks: Vec::new(),
             uses_receiver: false,
             awaits: self.awaits,
@@ -927,6 +929,40 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
                     })
                     .collect(),
                 _ => Vec::new(),
+            },
+            object_properties: match pattern {
+                BindingPattern::ObjectPattern(object) => object
+                    .properties
+                    .iter()
+                    .map(|property| {
+                        let (value, has_default) = match &property.value {
+                            BindingPattern::AssignmentPattern(assignment) => (&assignment.left, true),
+                            value => (value, false),
+                        };
+                        PatternPropertyFact {
+                            span: span(property.span),
+                            key: property.key.static_name().map(|key| key.as_ref().into()),
+                            computed: property.computed,
+                            has_default,
+                            nested: matches!(
+                                value,
+                                BindingPattern::ObjectPattern(_) | BindingPattern::ArrayPattern(_)
+                            ),
+                            local: match value {
+                                BindingPattern::BindingIdentifier(local) => Some(NamedSpan {
+                                    span: span(local.span),
+                                }),
+                                _ => None,
+                            },
+                        }
+                    })
+                    .collect(),
+                _ => Vec::new(),
+            },
+            pattern_rest: match pattern {
+                BindingPattern::ObjectPattern(object) => object.rest.is_some(),
+                BindingPattern::ArrayPattern(array) => array.rest.is_some(),
+                _ => false,
             },
             immutable: metadata.immutable,
             runtime_let: metadata.runtime_let,
