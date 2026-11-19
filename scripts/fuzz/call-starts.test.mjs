@@ -126,7 +126,7 @@ describe("callStarts", () => {
       const at = lines("void ([a.b] instanceof K);", "void ({ x: a.b } instanceof K);", "void ((a.b || {}) instanceof K);", "void ([g] instanceof K);", "void ({ a: g } instanceof K);",
         "void ([0, a.b] instanceof K);", "void ([f()] instanceof K);", "void ([...xs] instanceof K);", "void ({ [jv as string]: 1 } instanceof K);");
       const binary = { column: 7 };
-      for (const [line, columns] of [[2, [7, 8, 9, 10, 11, 13]], [3, [8, 12, 13, 14, 16]], [4, [8, 9, 10, 12, 15]], [5, [8, 9]], [6, [9, 12]], [7, [8, 11, 13]], [8, [8, 9]], [9, [8, 11]], [10, [8, 10]]]) {
+      for (const [line, columns] of [[2, [8, 9, 10, 11, 13]], [3, [8, 12, 13, 14, 16]], [4, [8, 9, 10, 12, 15]], [5, [8, 9]], [6, [9, 12]], [7, [8, 11, 13]], [8, [8, 9]], [9, [8, 11]], [10, [8, 10]]]) {
         for (const column of columns) expect(at(line, column)).not.toContainEqual({ line, ...binary });
       }
       // The member read keeps its own row: the access's start.
