@@ -4541,6 +4541,222 @@
    "to": 17,
    "adr": "ADR 1052",
    "fact": "part 9: competing-check-sync-memo gains four components (a helper refused at mount with a handler or a tracked effect, and its timer and apply twins); measured against main 76477c121, which holds part 8"
+  },
+  {
+   "fixture": "engine/eslint-reactivity-v2",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 9,
+   "to": 13,
+   "adr": "ADR 1113",
+   "fact": "an operator or coercing operand after a suspension is an after-await site unless operator_runs_no_code",
+   "why": "no fact tells in/instanceof from arithmetic and none names this: fail closed"
+  },
+  {
+   "fixture": "reactive-ir/after-await-exact-callbacks",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 3,
+   "to": 6,
+   "adr": "ADR 1113",
+   "fact": "an operator or coercing operand after a suspension is an after-await site unless operator_runs_no_code",
+   "why": "no fact tells in/instanceof from arithmetic and none names this: fail closed"
+  },
+  {
+   "fixture": "reactive-ir/after-await-net",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 11,
+   "to": 15,
+   "adr": "ADR 1113",
+   "fact": "an operator or coercing operand after a suspension is an after-await site unless operator_runs_no_code",
+   "why": "no fact tells in/instanceof from arithmetic and none names this: fail closed"
+  },
+  {
+   "fixture": "reactive-ir/after-await-promise-unconsumed",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 14,
+   "to": 17,
+   "adr": "ADR 1113",
+   "fact": "an operator or coercing operand after a suspension is an after-await site unless operator_runs_no_code",
+   "why": "no fact tells in/instanceof from arithmetic and none names this: fail closed"
+  },
+  {
+   "fixture": "reactive-ir/after-await-rowless-ends",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 9,
+   "to": 11,
+   "adr": "ADR 1113",
+   "fact": "an operator or coercing operand after a suspension is an after-await site unless operator_runs_no_code",
+   "why": "no fact tells in/instanceof from arithmetic and none names this: fail closed"
+  },
+  {
+   "fixture": "reactive-ir/after-await-store-alias",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 11,
+   "to": 12,
+   "adr": "ADR 1113",
+   "fact": "an operator or coercing operand after a suspension is an after-await site unless operator_runs_no_code",
+   "why": "no fact tells in/instanceof from arithmetic and none names this: fail closed"
+  },
+  {
+   "fixture": "reactive-ir/after-await-store-paths",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 3,
+   "to": 5,
+   "adr": "ADR 1113",
+   "fact": "an operator or coercing operand after a suspension is an after-await site unless operator_runs_no_code",
+   "why": "no fact tells in/instanceof from arithmetic and none names this: fail closed"
+  },
+  {
+   "fixture": "reactive-ir/async-call-prefix",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 11,
+   "to": 16,
+   "adr": "ADR 1113",
+   "fact": "an operator or coercing operand after a suspension is an after-await site unless operator_runs_no_code",
+   "why": "no fact tells in/instanceof from arithmetic and none names this: fail closed"
+  },
+  {
+   "fixture": "reactive-ir/dead-site-unused-class",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 7,
+   "to": 8,
+   "adr": "ADR 1113",
+   "fact": "an operator or coercing operand after a suspension is an after-await site unless operator_runs_no_code",
+   "why": "no fact tells in/instanceof from arithmetic and none names this: fail closed"
+  },
+  {
+   "fixture": "reactive-ir/eslint-plugin-corpus",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 6,
+   "to": 8,
+   "adr": "ADR 1113",
+   "fact": "an operator or coercing operand after a suspension is an after-await site unless operator_runs_no_code",
+   "why": "no fact tells in/instanceof from arithmetic and none names this: fail closed"
+  },
+  {
+   "fixture": "reactive-ir/generator-step-owner",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1113",
+   "fact": "an operator or coercing operand after a suspension is an after-await site unless operator_runs_no_code",
+   "why": "no fact tells in/instanceof from arithmetic and none names this: fail closed"
+  },
+  {
+   "fixture": "reactive-ir/helper-prop-read",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 3,
+   "to": 5,
+   "adr": "ADR 1113",
+   "fact": "an operator or coercing operand after a suspension is an after-await site unless operator_runs_no_code",
+   "why": "no fact tells in/instanceof from arithmetic and none names this: fail closed"
+  },
+  {
+   "fixture": "reactive-ir/jsx-creation-sites",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1113",
+   "fact": "an operator or coercing operand after a suspension is an after-await site unless operator_runs_no_code",
+   "why": "no fact tells in/instanceof from arithmetic and none names this: fail closed"
+  },
+  {
+   "fixture": "reactive-ir/member-routes-after-await",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 12,
+   "to": 18,
+   "adr": "ADR 1113",
+   "fact": "an operator or coercing operand after a suspension is an after-await site unless operator_runs_no_code",
+   "why": "no fact tells in/instanceof from arithmetic and none names this: fail closed"
+  },
+  {
+   "fixture": "reactive-ir/owner-probe-suspension",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 1113",
+   "fact": "an operator or coercing operand after a suspension is an after-await site unless operator_runs_no_code",
+   "why": "no fact tells in/instanceof from arithmetic and none names this: fail closed"
+  },
+  {
+   "fixture": "reactive-ir/past-await-owner-observer",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 1113",
+   "fact": "an operator or coercing operand after a suspension is an after-await site unless operator_runs_no_code",
+   "why": "no fact tells in/instanceof from arithmetic and none names this: fail closed"
+  },
+  {
+   "fixture": "reactive-ir/rc9-flush-in-action",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1113",
+   "fact": "an operator or coercing operand after a suspension is an after-await site unless operator_runs_no_code",
+   "why": "no fact tells in/instanceof from arithmetic and none names this: fail closed"
+  },
+  {
+   "fixture": "reactive-ir/read-after-await-already-tracked",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 3,
+   "to": 4,
+   "adr": "ADR 1113",
+   "fact": "an operator or coercing operand after a suspension is an after-await site unless operator_runs_no_code",
+   "why": "no fact tells in/instanceof from arithmetic and none names this: fail closed"
+  },
+  {
+   "fixture": "reactive-ir/settled-cleanup-after-await",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 3,
+   "to": 10,
+   "adr": "ADR 1113",
+   "fact": "an operator or coercing operand after a suspension is an after-await site unless operator_runs_no_code",
+   "why": "no fact tells in/instanceof from arithmetic and none names this: fail closed"
+  },
+  {
+   "fixture": "reactive-ir/strict-read-maybe-suspended",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 28,
+   "to": 36,
+   "adr": "ADR 1113",
+   "fact": "an operator or coercing operand after a suspension is an after-await site unless operator_runs_no_code",
+   "why": "no fact tells in/instanceof from arithmetic and none names this: fail closed"
+  },
+  {
+   "fixture": "reactive-ir/unplaced-site-obligations",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 8,
+   "to": 9,
+   "adr": "ADR 1113",
+   "fact": "an operator or coercing operand after a suspension is an after-await site unless operator_runs_no_code",
+   "why": "no fact tells in/instanceof from arithmetic and none names this: fail closed"
+  },
+  {
+   "fixture": "reactive-ir/write-legality-proofs",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 12,
+   "to": 13,
+   "adr": "ADR 1113",
+   "fact": "an operator or coercing operand after a suspension is an after-await site unless operator_runs_no_code",
+   "why": "no fact tells in/instanceof from arithmetic and none names this: fail closed"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 2,
+   "to": 4,
+   "adr": "ADR 1113",
+   "fact": "an operator or coercing operand after a suspension is an after-await site unless operator_runs_no_code",
+   "why": "no fact tells in/instanceof from arithmetic and none names this: fail closed"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc9012",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 11,
+   "to": 12,
+   "adr": "ADR 1113",
+   "fact": "an operator or coercing operand after a suspension is an after-await site unless operator_runs_no_code",
+   "why": "no fact tells in/instanceof from arithmetic and none names this: fail closed"
   }
  ]
 }

@@ -99,6 +99,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
+      "start": 1174,
+      "end": 1179,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -151,6 +162,17 @@
       "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
       "start": 2019,
       "end": 2023,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/generator-step-owner/App.tsx",
+      "start": 2103,
+      "end": 2116,
       "fixes": 0
     },
     {

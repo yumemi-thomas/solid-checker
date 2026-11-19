@@ -4285,3 +4285,15 @@ The 24 `wrapper` programs stay uncertifiable on SC5003 `async-options-opaque`, a
 - uncertifiable twins: the closure in an effect's apply, under `untrack`, also kept, or handed to the helper as a value.
 
 Chrome rc.21 is quiet on the four clean components, and reports PENDING_ASYNC_UNTRACKED_READ only at the apply twin. A first build without the leaf-owner condition lost `async-unsuspendable-call-attributed`'s `TrackedWrapper` violation; the regress gate caught it. Three fixtures lose only U rows, recorded as drops rows: `MemoClosure` in that fixture (claimed silent), five `read-after-await-reach` helpers each called in a memo's compute before any await, and the `value-walk-chain` caught cases (their SC5008 stands, as Chrome reports).
+
+<a id="adr-1113"></a>
+## ADR 1113 — An operator after a suspension that may run project code is an after-await site
+**The gap.** The second review of ADR 1097's widening saw on main 28fde14bf a bare `` `${host}`; `` or `"x" in px;` statement after an async memo's await, with no SC1002 row, while rc.21 reports UNTRACKED_READ_AFTER_AWAIT. The template reaches `host`'s `toString`; `in` reaches a Proxy's `has` trap. Confirmed: the after-await site list had calls, reads and member reads, but no operator.
+**Decision (fail closed).** Every operator whose value is a primitive (`primitive_results`) and every coercing operand written after a suspension is a site (`via: operator`), unless `operator_runs_no_code` holds. That needs a file that holds no `this` or `super` (`uses_receiver`), an expression with no call, member, object property, computed key or tagged template, and every name it references declared and proven primitive. No fact tells the operators apart (`in` and `instanceof` from arithmetic), and none names `this`, so the rule is broad on purpose. An expression no operand of which can be an object reaches no project code. The parked allow-list (docs/open-work.md, ADR 1097) would narrow it.
+*Evidence.* Release, main 28fde14bf against this change:
+- the probe's two statements each get SC1002 uncertifiable;
+- generator cells `pu-bare-coerce` and `pu-bare-in`: false-clean on main, recall-gap here;
+- corpus delta (rc.21 frozen, 34 projects): +2,220 SC1002 uncertifiable rows in each mode (1,933 non-test, 287 test), 0 removed, 0 violations moved;
+- focus UNTRACKED_READ_AFTER_AWAIT on the base grids: unchanged;
+- the cost on fixtures is named rises.
+

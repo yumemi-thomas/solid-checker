@@ -638,8 +638,72 @@ fn sites<'a>(
                 root: Some(chain.root),
             });
         }
+        // ADR 1113: an operator that may run project code with no call of its own, written after a suspension. A coercion (a template substitution, a `+`, a
+        // relational comparison) reaches a value's `toString` or `valueOf`; `in` reaches a Proxy's `has` trap; `instanceof` reaches `Symbol.hasInstance` or
+        // a `getPrototypeOf` trap. A bare `` `${host}`; `` or `"x" in px;` statement had no site at all. No fact tells these operators apart
+        // (`primitive_results` holds every operator whose value is a primitive), and none names `this`. So every such expression is a site unless the file
+        // holds no `this` or `super` (`uses_receiver`), and the expression holds no call, member, object property or computed key, and every name it
+        // references is proven primitive: then no operand is an object, and no operator reaches project code.
+        let mut taken: HashSet<u32> = found
+            .iter()
+            .filter(|site: &&AwaitSite<'_>| std::ptr::eq(site.file, file))
+            .map(|site| site.at.start)
+            .collect();
+        for operator in file
+            .ast
+            .primitive_results
+            .iter()
+            .chain(file.ast.coercing_operands.iter())
+            .copied()
+        {
+            if !after(file, operator) || operator_runs_no_code(ctx, file, operator) {
+                continue;
+            }
+            let at = file.ast.peel_ts_sugar_span(operator);
+            if !taken.insert(at.start) {
+                continue;
+            }
+            let (registration, host) = classify(file, at);
+            found.push(AwaitSite {
+                file,
+                at,
+                alternates: Vec::new(),
+                via: "operator",
+                test: registration.is_some(),
+                registration,
+                host,
+                call: None,
+                root: None,
+            });
+        }
     }
     found
+}
+
+/// ADR 1113: whether evaluating the operator expression at `span` reaches no project code: see the site loop above.
+fn operator_runs_no_code(ctx: &AnalysisContext<'_>, file: &FileFacts, span: Span) -> bool {
+    let ast = &file.ast;
+    let inside = |inner: Span| span.contains(inner);
+    !file.ast.uses_receiver
+        && !ast.calls.iter().any(|call| inside(call.span))
+        && !ast.members.iter().any(|member| inside(member.span))
+        && !ast
+            .object_properties
+            .iter()
+            .any(|property| inside(property.span))
+        && !ast.computed_keys.iter().any(|key| inside(key.read))
+        && !ast
+            .tagged_templates
+            .iter()
+            .any(|tagged| inside(tagged.span))
+        && ast.identifiers.iter().all(|identifier| {
+            identifier.role != solid_facts::ast::IdentifierRole::Reference
+                || !inside(identifier.span)
+                || (ast.reference_declaration(identifier.span).is_some()
+                    && ctx
+                        .semantic_lookup
+                        .proven_primitive(file, identifier.span, 4))
+        })
 }
 
 /// ADR 1065 part 2 (census only): what the root of a member read is, by its syntax and binding.
