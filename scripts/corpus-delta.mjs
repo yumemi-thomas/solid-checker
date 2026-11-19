@@ -5,7 +5,11 @@
 //     (--hazard <id[,id...]> | --blocker <kind[,kind...]> | --all)
 //     [--baseline <old build's corpus-sweep report>] [--controls 3]
 //     [--manifest scripts/corpus/rc21-manifest.json] [--apps-root /Users/thomas/Documents/Github/solid-checker-rc21-frozen-v2/apps] [--apps a,b]
-//     [--jobs 4] [--timeout 900] [--program-boundary open|closed] [--out <report.json>] [--json]
+//     [--jobs 4] [--timeout 900] [--program-boundary open|closed] [--out <report.json>] [--json] [--proof]
+//
+// `--proof` (ADR 1118): the change is a proof, so the corpus is one of its monotone sets (scripts/monotone.mjs M2): per project, every
+// (site, code) that moved must go from uncertifiable to clean or to a violation. Any other move (a clean or a violation that turned
+// uncertifiable, a violation that left, a clean that turned violation) is a needs-a-look line; the report's `proof` counts the moves.
 //
 // A veto reads whole-program hazards (ADR 0947), so a change to one moves rows only in the projects where those hazards are present. The
 // `hazards` table of the OLD build's report says which: a project is affected when its table holds a hazard `--hazard` names (an id, or its
@@ -32,6 +36,7 @@ import { AssumedReportError, refuseAssumed } from "./lib/assumed.mjs";
 import { assertAdditionsPresent } from "./lib/corpus-additions.mjs";
 import { DEFAULT_APPS_ROOT, assertManifestProvenance } from "./lib/corpus-manifest.mjs";
 import { readReportFile } from "./lib/corpus-report.mjs";
+import { moves as siteMoves, siteCodes } from "./monotone.mjs";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -135,12 +140,13 @@ export function diffProject(oldFindings, newFindings) {
 export const addsViolation = (move) => move.to.split("+").includes("violation") && !move.from.split("+").includes("violation");
 
 /** The report data from the old and new results (by key), the scope and the controls. Plain data, deterministic. */
-export function buildReport({ oldResults, newResults, affected, controls, errors = [] }) {
+export function buildReport({ oldResults, newResults, affected, controls, errors = [], proof = false }) {
   const projects = [];
   const blockers = new Map();
   const moves = new Map();
   const needsLook = [];
   const totals = { old: { violation: 0, uncertifiable: 0 }, new: { violation: 0, uncertifiable: 0 } };
+  const proofMoves = { up: 0, bad: 0, projects: 0 };
   for (const key of [...newResults.keys()].sort()) {
     const before = oldResults.get(key);
     const after = newResults.get(key);
@@ -164,6 +170,16 @@ export function buildReport({ oldResults, newResults, affected, controls, errors
       if (addsViolation(move)) needsLook.push(`${app}/${project}: ${move.rule} ${move.from} -> ${move.to}${move.line ? ` at line ${move.line}` : ""} (${move.blocker})`);
     }
     if (control && delta.moves.length > 0) needsLook.push(`control ${app}/${project} moved ${delta.moves.length} rows: the scope missed a hazard`);
+    if (proof) {
+      // ADR 1118 M2: a proof moves a (site, code) only up.
+      const m2 = siteMoves(siteCodes(before, ""), siteCodes(after, ""));
+      proofMoves.up += m2.up.length;
+      proofMoves.bad += m2.bad.length;
+      if (m2.bad.length) {
+        proofMoves.projects += 1;
+        needsLook.push(`proof ${app}/${project}: ${m2.bad.length} (site, code) moved down or sideways, e.g. ${m2.bad.slice(0, 3).map((move) => `${move.site.replace(/^.*\//, "")} ${move.from} -> ${move.to}`).join("; ")}`);
+      }
+    }
   }
   for (const error of errors) needsLook.push(error);
   const byTotal = (a, b) => b.rows - a.rows || (JSON.stringify(a) < JSON.stringify(b) ? -1 : 1);
@@ -173,6 +189,7 @@ export function buildReport({ oldResults, newResults, affected, controls, errors
     blockers: [...blockers.values()].filter((entry) => entry.old !== entry.new).sort((a, b) => Math.abs(b.new - b.old) - Math.abs(a.new - a.old) || (a.kind < b.kind ? -1 : 1)),
     moves: [...moves.values()].map(({ projects: set, ...rest }) => ({ ...rest, projects: set.size })).sort(byTotal),
     needsLook: [...new Set(needsLook)].sort(),
+    ...(proof ? { proof: proofMoves } : {}),
   };
 }
 
@@ -193,6 +210,7 @@ export function render(report, header = []) {
   out.push("", "moves by rule, kind and blocker", `  ${pad("rows", 7)} ${pad("projects", 8)}  rule  from -> to  (blocker)`);
   for (const move of report.moves) out.push(`  ${pad(move.rows, 7)} ${pad(move.projects, 8)}  ${move.rule}  ${move.from} -> ${move.to}  (${move.blocker})`);
   if (report.moves.length === 0) out.push("  none");
+  if (report.proof) out.push("", `proof moves (M2): ${report.proof.up} (site, code) up, ${report.proof.bad} down or sideways in ${report.proof.projects} projects`);
   out.push("", report.needsLook.length === 0 ? "needs a look: nothing" : `needs a look (${report.needsLook.length}):`);
   for (const line of report.needsLook) out.push(`  ${line}`);
   return `${out.join("\n")}\n`;
@@ -209,7 +227,7 @@ export function parseOptions(argv) {
     manifest: join(repo, "scripts/corpus/rc21-manifest.json"), "apps-root": DEFAULT_APPS_ROOT,
     apps: null, jobs: "4", timeout: "900", "program-boundary": null, out: null,
   };
-  const flags = new Set(["all", "json"]);
+  const flags = new Set(["all", "json", "proof"]);
   const seen = new Set();
   for (let index = 0; index < argv.length; index += 1) {
     const key = argv[index].replace(/^--/, "");
@@ -229,7 +247,7 @@ export function parseOptions(argv) {
   if (spec.all && (spec.hazards.length > 0 || spec.blockers.length > 0)) throw new Error("--all is the whole corpus: it takes no --hazard or --blocker");
   const controls = Number(options.controls);
   if (!Number.isInteger(controls) || controls < 0) throw new Error("--controls takes a count");
-  return { options, spec, controls, json: seen.has("json") };
+  return { options, spec, controls, json: seen.has("json"), proof: seen.has("proof") };
 }
 
 const sha256 = (path) => createHash("sha256").update(readFileSync(path)).digest("hex");
@@ -281,7 +299,7 @@ async function pool(rows, jobs, job, label) {
 }
 
 async function main(argv) {
-  const { options, spec, controls: controlCount, json } = parseOptions(argv);
+  const { options, spec, controls: controlCount, json, proof } = parseOptions(argv);
   const manifestPath = resolve(options.manifest);
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   assertManifestProvenance(manifest, manifestPath);
@@ -321,7 +339,7 @@ async function main(argv) {
       else if (result.exitCode > 1) errors.push(`${side} build, ${key.replace("\u0000", "/")}: exit ${result.exitCode} ${result.stderr ?? ""}`.trim());
     }
   }
-  const report = buildReport({ oldResults: new Map([...oldResults].filter(([key]) => newResults.has(key))), newResults, affected, controls, errors });
+  const report = buildReport({ oldResults: new Map([...oldResults].filter(([key]) => newResults.has(key))), newResults, affected, controls, errors, proof });
   const header = [
     `corpus delta: old ${oldBin} (sha256 ${sha256(oldBin).slice(0, 12)}), new ${newBin} (sha256 ${sha256(newBin).slice(0, 12)})`,
     `corpus ${manifest.corpus ?? manifestPath}: ${rows.length} projects; scope ${spec.all ? "all" : [spec.hazards.length ? `hazards ${spec.hazards.join(", ")}` : null, spec.blockers.length ? `blockers ${spec.blockers.join(", ")}` : null].filter(Boolean).join(" or ")}: ${affected.size} affected, ${controls.length} controls, ${unaffected.length - controls.length} not run`,

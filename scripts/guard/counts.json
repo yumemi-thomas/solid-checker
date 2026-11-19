@@ -5,12 +5,12 @@
   "SC1001 binding-before-initialization": 7,
   "SC1001 build-constant-arm": 3,
   "SC1001 callback-invocation-unproven": 3,
-  "SC1001 callee-callback-timing": 426,
+  "SC1001 callee-callback-timing": 427,
   "SC1001 client-root-unproven": 1,
   "SC1001 compiler-refused-file": 1,
   "SC1001 component-identity-unproven": 136,
   "SC1001 creation-throws-first": 3,
-  "SC1001 function-run-unplaced": 1536,
+  "SC1001 function-run-unplaced": 1546,
   "SC1001 function-unentered": 1,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
@@ -43,7 +43,7 @@
   "SC1003 host-callback-timing": 1,
   "SC1003 package-finding-at-entry": 14,
   "SC1003 props-callers-unenumerated": 19,
-  "SC1003 store-key-undecided": 2,
+  "SC1003 store-key-undecided": 9,
   "SC1003 summary-read-unplaced": 1,
   "SC1004 component-identity-unproven": 1,
   "SC1004 conditional-return-unproven": 8,
@@ -122,7 +122,7 @@
   "SC3001 function-run-unplaced": 34,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 7,
-  "SC3001 leaf-operation-unaccounted": 6877,
+  "SC3001 leaf-operation-unaccounted": 6893,
   "SC3001 leaf-owner-unproven": 67,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
@@ -136,7 +136,7 @@
   "SC4001 handler-member-unresolved": 39,
   "SC4001 handler-spread-unresolved": 59,
   "SC4001 owner-allocation-unproven": 23,
-  "SC4001 owner-callers-unenumerated": 3505,
+  "SC4001 owner-callers-unenumerated": 3515,
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 13,
@@ -171,7 +171,7 @@
   "SC5001 source-module-unresolved": 1,
   "SC5001 source-pending-unproven": 341,
   "SC5003 async-options-opaque": 37,
-  "SC5003 async-provenance-unproven": 154,
+  "SC5003 async-provenance-unproven": 156,
   "SC5003 async-read-caught": 4,
   "SC5003 async-read-unaccounted": 351,
   "SC5003 call-attributed-read": 155,
@@ -196,9 +196,9 @@
   "SC5008 pending-read-unresolved": 23,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5268,
+  "SC6002 effect-creation-unaccounted": 5283,
   "SC6002 effect-owner-unproven": 52,
-  "SC6002 function-run-unplaced": 58,
+  "SC6002 function-run-unplaced": 59,
   "SC6002 generator-step-unplaced": 1,
   "SC6002 package-finding-at-entry": 26,
   "SC6002 package-operation-in-effect-apply": 1,
@@ -4240,6 +4240,32 @@
     "open": "reactive-ir/destructure-store-slots"
    },
    "note": "a store destructure setup does not provably run is handed to SC1001 slot by slot: the five rows take SC1001s placement (violations where SC1001 proves one; callee-callback-timing, host-callback-timing, summary-read-unplaced where it leaves an obligation); a pattern not handed over (a nested sub-pattern, SiblingEmptyInHelper) keeps ADR 1106s blocker"
+  },
+  {
+   "fixture": "reactive-ir/owner-call-saved-callback",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 5,
+   "to": 4,
+   "adr": "ADR 1119",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs::role_entries_complete",
+   "fixtures": {
+    "proved": "reactive-ir/owner-call-saved-callback",
+    "open": "reactive-ir/owner-call-saved-callback"
+   },
+   "note": "relabel, still uncertifiable: a named callback whose binding has a reference no position or resolved call accounts for (a saved callback) takes no role from its positions, so the effect created in it is function-run-unplaced"
+  },
+  {
+   "fixture": "reactive-ir/helper-prop-read",
+   "key": "SC1001 function-run-unplaced",
+   "from": 15,
+   "to": 14,
+   "adr": "ADR 1119",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/callee_roles.rs::named_callback_also_called",
+   "fixtures": {
+    "proved": "reactive-ir/helper-prop-read",
+    "open": "reactive-ir/helper-prop-read"
+   },
+   "note": "relabel, still uncertifiable: round 2 checks a named callback also called by name before every silent named-callback arm; this read is answered by the call-timing blocker (callee-callback-timing) instead"
   }
  ],
  "renames": []
