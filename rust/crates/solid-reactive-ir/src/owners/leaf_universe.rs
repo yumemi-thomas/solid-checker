@@ -270,6 +270,23 @@ pub(super) fn silences(
                 // and ends only where every read that may run ends it.
                 match crate::owners::getter_read_sites(file, lookup, span) {
                     Some(reads) => {
+                        // ADR 1123: a read the provider's children arm decided names the arm at the getter's site too (monotone.mjs M2b).
+                        if let Some(off) = unread_off.as_ref()
+                            && reads.iter().any(|(read_file, read)| {
+                                !unread.may_run(read_file, *read) && off.may_run(read_file, *read)
+                            })
+                        {
+                            let arm = crate::package_hand_off::CONTEXT_PROVIDER_CHILDREN;
+                            crate::proof_log::decision(
+                                "owner-call",
+                                file.path.as_str(),
+                                site,
+                                crate::ExecutionRole::Unknown,
+                                Some((arm, false)),
+                                &[arm],
+                                Some(false),
+                            );
+                        }
                         answer_at_reads(&question, &reads, leaf, effect, &mut allowed_by_path)
                     }
                     None => Answers {
