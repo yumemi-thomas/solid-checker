@@ -32,7 +32,7 @@
 //   js-reexp-barrel     `export { jx as jm } from "./App"` in one module, `export * from` it in a barrel
 
 //
-// Against main eed2f3621 (UNTRACKED_READ_AFTER_AWAIT, mx-recall, Chrome rc.21): no false clean and no false positive. Every cell is uncertifiable (SC1002 or SC9012)
+// Against main eed2f3621 and 01516bc92 (the same rows on both; UNTRACKED_READ_AFTER_AWAIT, mx-recall, Chrome rc.21): no false clean and no false positive. Every cell is uncertifiable (SC1002 or SC9012)
 // on the line of Chrome's frame (`covered-uncertifiable`), most at the statement's operand rather than Chrome's column. js-proto-ael's site runs in Chrome only:
 // happy-dom's `window.addEventListener` does not reach the patched `EventTarget.prototype` method, so the generic judge says not-fired.
 
