@@ -26717,5 +26717,16 @@
   "found": "the Fable review of ADR 1097's widening, round 2 (0ede74566)",
   "fixed": "ADR 1097 narrow only: the body refuses every operator (`primitive_results`), coercion, template, object property, computed key and loop",
   "outside": "not generated: the generator writes no class method, and an arrow's `this` outside one is a TypeScript error. Fixture reactive-ir/after-await-review-probes `ThisProbes` holds the four forms, each SC1002 uncertifiable here"
+ },
+ {
+  "finding": "a read in a JSX `onScroll` handler (a listener on the element itself) of an element moved into a shadow root, delivered by `dispatchEvent` from an effect apply: rc.21 runs a shadow-tree listener with `window.event` unset, so the apply's strict-read window holds and Chrome warns STRICT_READ_UNTRACKED, while ADR 0639's apply-delivery read proof certified it",
+  "found": "the Fable review of ADR 1089 part E (coord-land/review-1089e.md, F1), probed on main 28fde14bf (sc-scratch mac21/f1115, f1115-dispatch)",
+  "fixed": "ADR 1115 (`event_delivery::scan_shadow_roots`, `DispatchSite::read_proof_rests_on_event`: the dispatch veto withholds the read proof wherever a listener may sit in a shadow tree)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-evt-apply-dispatch-shadow-signal-direct-none"
+  ],
+  "rediscovered": "focus on the context's 1,826 mx-recall programs: 1,282 false cleans on the build with the scan off (main's answer); FIXED here (0 false cleans, 1,808 recall-gap, 18 typed-away)"
  }
 ]

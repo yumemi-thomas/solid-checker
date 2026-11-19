@@ -577,7 +577,7 @@ export const SPEC = {
   },
   // `settled`: an async memo read after it settled (ADR 0511 review: probe pending-async/hook-shared-instance, rc.17 warns this code in an
   // apply, no pending throw), through the module-scope hook result beside the body's own call.
-  STRICT_READ_UNTRACKED: { legal: ["memo", "effect-compute", "render-compute", "jsx", "jsx-helper", "untrack"], recallContexts: ["evt-body-dispatch", ...firesAt("body"), ...listenersAt("body"), ...DENIED_CONTEXTS.filter((context) => !context.startsWith("dny-unmount-flush") && !["dny-dispose-memo", "dny-dispose-compute", "dny-dispose-untrack"].includes(context))], recallLegal: [...EVENT_LEGAL, ...ZERO_READS, "handed-flush"],
+  STRICT_READ_UNTRACKED: { legal: ["memo", "effect-compute", "render-compute", "jsx", "jsx-helper", "untrack"], recallContexts: ["evt-body-dispatch", "evt-apply-dispatch-shadow", ...firesAt("body"), ...listenersAt("body"), ...DENIED_CONTEXTS.filter((context) => !context.startsWith("dny-unmount-flush") && !["dny-dispose-memo", "dny-dispose-compute", "dny-dispose-untrack"].includes(context))], recallLegal: [...EVENT_LEGAL, ...ZERO_READS, "handed-flush"],
     // `settled` is a grid variant (never drawn at random, so random programs and combinations' extras keep theirs) and a legal one.
     variants: ["signal", "memo"], gridVariants: ["settled"], legalVariants: ["signal", "memo", "settled"],
     contexts: ["body", "effect-apply", "root", "render-apply"], bindings: ["direct", "alias", "destructured", "wrapper"],
@@ -1883,6 +1883,17 @@ function inContext(context, stmts, kit) {
       if (context === "evt-body-dispatch") return { body: [...made, fire], view: [] };
       if (context === "evt-apply-dispatch") return { body: [...made, expr(prim("effect", fn([ret(num(1))]), { apply: fn([fire]) }))], view: [] };
       return { body: made, view: [button(kit.name("b"), [fire])] };
+    }
+    // ADR 1115: a detached element's `onScroll` (a listener on the element itself, not delegated) holds the site; the element is moved
+    // into a shadow tree and an effect's apply dispatches the event. A listener in a shadow tree runs with `window.event` unset (rc.21
+    // `dev-shared.js:5796, 5803`), so the apply's strict-read window, keyed on its queue's event, holds for the read: Chrome warns.
+    case "evt-apply-dispatch-shadow": {
+      const host = kit.name("host"), el = kit.name("el");
+      // Detached: nothing can click it (`undriven`); the dispatch is the driver.
+      const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onScroll", undriven: true })));
+      const attach = expr(domExpr(`document.createElement("div").attachShadow({ mode: "open" }).appendChild(${el} as HTMLElement)`));
+      const fire = expr(domExpr(`(${el} as HTMLElement).dispatchEvent(new Event("scroll"))`));
+      return { body: [made, attach, expr(prim("effect", fn([ret(num(1))]), { apply: fn([fire]) }))], view: [] };
     }
     // ADR 0639: `flush()`'s guard takes no event, and the dispatch that reaches it may sit in a helper or on `window`.
     case "evt-apply-helper-dispatch": {

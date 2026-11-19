@@ -1906,3 +1906,9 @@ packages/wasm/owned/
 !fixtures/runtime-oracle/package-prototype-writes/node_modules/**
 !fixtures/runtime-oracle/package-window-members/node_modules/
 !fixtures/runtime-oracle/package-window-members/node_modules/**
+!fixtures/reactive-ir/event-dispatch-shadow/variants/shadow/node_modules/
+!fixtures/reactive-ir/event-dispatch-shadow/variants/shadow/node_modules/**
+!fixtures/reactive-ir/event-dispatch-shadow/variants/custom-element/node_modules/
+!fixtures/reactive-ir/event-dispatch-shadow/variants/custom-element/node_modules/**
+!fixtures/reactive-ir/event-dispatch-shadow/node_modules/
+!fixtures/reactive-ir/event-dispatch-shadow/node_modules/**

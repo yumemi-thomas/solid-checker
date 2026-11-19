@@ -1,0 +1,6 @@
+{
+  "programBoundary": "closed",
+  "target": "browser",
+  "build": "development",
+  "rendering": "csr"
+}
