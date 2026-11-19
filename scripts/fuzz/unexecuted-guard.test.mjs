@@ -42,7 +42,7 @@ describe("an unexecuted violation", () => {
       const { program, built } = generateLegal({ seed: 1 }, cell, { shape });
       const site = siteOf(built);
       const verdict = judgeLegal({ code: cell.code, site, typecheck: { ok: true }, checker: { ok: true, findings: findings.map((rule) => ({ rule, kind: "violation", line: site.line, endLine: site.line, id: "SC", file: "App.tsx" })) },
-        runtime: { diagnostics: [], errors: [], witnesses: [], hits: { [site.hit]: 0 } }, reachable: undrivenHandlerSite(program) });
+        runtime: { diagnostics: [], errors: [], witnesses: [], hits: { [site.hit]: 0 } }, reachable: undrivenHandlerSite(program) && String(built.files?.["App.tsx"] ?? "").split("\n") });
       return { reachable: undrivenHandlerSite(program), problem: rowProblem({ id: `lg-${cell.code}-${context}`, ...verdict }) };
     };
     for (const context of ["dny-legal-click", "dny-legal-keydown", "dny-legal-pointer"]) {
@@ -51,6 +51,10 @@ describe("an unexecuted violation", () => {
       expect(judged(context, "store-effect-called", ["strict-read-untracked"]).problem).toBe("unexecuted-violation");
       expect(judged(context, "store-effect-called", ["missing-owner", "strict-read-untracked"]).problem).toBe("unexecuted-violation");
     }
+    // Round 2 N1: only the creations a driven twin substantiates (createEffect, createRenderEffect); a memo's owner row keeps the look.
+    expect(judged("dny-legal-click", "store-render-effect-carried", ["missing-owner"]).problem).toBeNull();
+    expect(judged("dny-legal-click", "store-byname", ["missing-owner"]).problem).toBe("unexecuted-violation");
+    expect(judged("dny-legal-click", "store-settled-called", ["missing-owner"]).problem).toBe("unexecuted-violation");
     // Disabled from its mount: no event ever reaches the handler, so nothing is reachable and a violation stays a look.
     expect(judged("dny-legal-mount-disabled", "store-effect-called", ["missing-owner"])).toEqual({ reachable: false, problem: "unexecuted-violation" });
     // Another TAKEN_AWAY context means its trigger to fire the handler: a counter of 0 there is a look.

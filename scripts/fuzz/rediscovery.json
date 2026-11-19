@@ -36767,7 +36767,7 @@
  {
   "finding": "Bundle y #294 smoke (f3d2c5769): a legal dny-legal-click/-keydown/-pointer program with createEffect in the handler was an `unexecuted-violation` (SC4001 missing-owner violation at a site no run reached), though the handler is reachable: its element is mounted enabled and only the page timer disables it later, so a user can deliver the event first and the violation is the reading of \"wrong if it runs\" (coordinator ruling: the checker is right, the fuzz label was wrong)",
   "found": "bundle y CI smoke on #294 (lg-recall dny-legal-click-store-effect-called-direct-none); the five siblings and the six effect-carried twins by focus",
-  "fixed": "ADR 1132 (legal.mjs undrivenHandlerSite: a site in an undriven intrinsic handler of a mounted view is `reachable`; codes.mjs unexecutedViolation does not ask for a look)",
+  "fixed": "ADR 1132 (legal.mjs undrivenHandlerSite: the one site use in the handler of the control a dny-legal-click/-keydown/-pointer context mounts, a top-level view element with that tag and event, undriven, no disabled/inert/spread; the unexecuted row is `reachable` only when every at-site violation is missing-owner at a createEffect or createRenderEffect line (Chrome runtime-oracle handler-effect-driven) and none is of the cell's own rules; codes.mjs unexecutedViolation asks no look for it)",
   "grid": "lg-recall",
   "code": "STRICT_READ_UNTRACKED",
   "ids": [

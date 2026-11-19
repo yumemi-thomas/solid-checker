@@ -66,6 +66,7 @@ const RUN_CLAIMING_RULES = ["pending-async-unsuspendable-read"];
  * @param {{ code: string, site: object, typecheck: object, checker: object, runtime: object, plan?: object }} input
  */
 export function judgeLegal({ code, site, typecheck: typed, checker: whole, runtime, plan, atSite: siteScoped = false, evaluated = false, reachable = false }) {
+  // ADR 1132: `reachable` is the program's App.tsx lines when its site sits in a handler a user can reach (`undrivenHandlerSite`), else false.
   const checker = splitChecker(whole);
   // A program tsc rejects is no evidence, but a checker violation on the rejected code is surfaced (tsc-overlap.mjs).
   if (typed && typed.ok === false) return typedAwayVerdict({ typed, checker, region: regionOf(site), rules: codeRules[code] ?? [] });
@@ -126,7 +127,8 @@ export function judgeLegal({ code, site, typecheck: typed, checker: whole, runti
   // ADR 1132: a site in a handler a user can reach (`undrivenHandlerSite`) whose every violation is of a `REACHABLE_RULES` rule other than the
   // cell's own is the reading of "wrong if it runs" (the owner's reachability ruling), held as `reachable` (codes.mjs `unexecutedViolation`
   // asks no look for it); any other violation there keeps its look.
-  const substantiated = reachable && contradicted.every((finding) => REACHABLE_RULES.includes(finding.rule) && !(codeRules[code] ?? []).includes(finding.rule));
+  const substantiated = Array.isArray(reachable) && contradicted.every((finding) => !(codeRules[code] ?? []).includes(finding.rule)
+    && REACHABLE_RULES[finding.rule]?.creation.test(reachable[finding.line - 1] ?? "") && !REACHABLE_OTHER_CALLS.test(reachable[finding.line - 1] ?? ""));
   if (ran === 0 && !(evaluated && contradicted.some((finding) => RUN_CLAIMING_RULES.includes(finding.rule)))) return { outcome: "unexecuted", detail: substantiated ? { ...detail, reachable: "undriven-handler" } : detail };
   return { outcome: "false-positive", detail: { ...detail, rules: [...new Set(contradicted.map((finding) => finding.rule))] } };
 }
@@ -162,11 +164,13 @@ const MOUNT_DISABLED = /\b(?:disabled|inert)\b|\.\.\./;
 const REACHABLE_CONTEXTS = { "dny-legal-click": ["button", "onClick"], "dny-legal-keydown": ["input", "onKeyDown"], "dny-legal-pointer": ["button", "onPointerDown"] };
 
 /**
- * ADR 1132 (review F1): the rules whose violation in such a handler is the reading of "wrong if it runs", each substantiated by a driven
- * twin in Chrome (runtime-oracle `handler-effect-driven`: NO_OWNER_EFFECT at a handler's `createEffect`). Never a rule of the cell's own code:
- * that code is legal at the site by construction, so its violation stays a look.
+ * ADR 1132 (review F1, round 2 N1): the rules whose violation in such a handler is the reading of "wrong if it runs", each narrowed to the
+ * creations a driven twin substantiates in Chrome (runtime-oracle `handler-effect-driven`: NO_OWNER_EFFECT at a handler's `createEffect`,
+ * `Driven`, and `createRenderEffect`, `DrivenRender`): the violation's line must call one, and no other primitive (`createMemo`,
+ * `onSettled` and the rest keep the look). Never a rule of the cell's own code: that code is legal at the site by construction.
  */
-export const REACHABLE_RULES = ["missing-owner"];
+export const REACHABLE_RULES = { "missing-owner": { creation: /\bcreate(?:Render)?Effect\(/ } };
+const REACHABLE_OTHER_CALLS = /\b(?:createMemo|createProjection|createOptimistic(?:Store)?|createTrackedEffect|createReaction|createRoot|createOwner|createSignal|createStore|createContext|useContext|onSettled|onCleanup|runWithOwner|action|resolve|untrack|flush)\(/;
 
 /**
  * ADR 1132: whether the program's one site use (review F4: by identity, so a combination program, which holds several, never is) sits in the
@@ -204,12 +208,12 @@ export function judgeLegalProgram({ built, program, ...input }) {
   const uses = built.sites.filter((site) => site.code);
   const combo = uses.some((site) => site.primary);
   const site = siteOf(built);
-  const verdict = combo ? judgeUses(built, uses, { ...input, program }) : judgeLegal({ ...input, site, evaluated: evaluatedDead(program, built, site), reachable: undrivenHandlerSite(program) });
+  const verdict = combo ? judgeUses(built, uses, { ...input, program }) : judgeLegal({ ...input, site, evaluated: evaluatedDead(program, built, site), reachable: undrivenHandlerSite(program) && String(built.files?.["App.tsx"] ?? "").split("\n") });
   return withOffSite(verdict, combo ? uses : [siteOf(built)], { built, program, ...input });
 }
 
 function judgeUses(built, uses, input) {
-  const verdicts = uses.map((site) => ({ site, ...judgeLegal({ ...input, code: site.code, site, atSite: true, evaluated: evaluatedDead(input.program, built, site), reachable: undrivenHandlerSite(input.program) }) }));
+  const verdicts = uses.map((site) => ({ site, ...judgeLegal({ ...input, code: site.code, site, atSite: true, evaluated: evaluatedDead(input.program, built, site), reachable: undrivenHandlerSite(input.program) && String(built.files?.["App.tsx"] ?? "").split("\n") }) }));
   const worst = verdicts.reduce((a, b) => (WORST_FIRST.indexOf(b.outcome) < WORST_FIRST.indexOf(a.outcome) ? b : a));
   return { outcome: worst.outcome, detail: { ...worst.detail, at: worst.site.line, code: worst.site.code, sites: verdicts.map((v) => `${v.site.code}@${v.site.line}:${v.outcome}`) } };
 }

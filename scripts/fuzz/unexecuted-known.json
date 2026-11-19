@@ -1,5 +1,5 @@
 {
- "note": "ADR 1018: the legal programs whose checker violation sits at a site no run reaches (legal.mjs outcome `unexecuted`) that a person has seen. Such a row needs a look (codes.mjs `rowProblem`: `unexecuted-violation`) unless an entry below matches its grid and id: `explained` (the judge is right that the site never runs and the row is not a checker defect, a lane that never drives the site, say) or `pending-fix` (a real false positive whose fix is the ADR named, held so CI stays green until it lands; the fix's change removes the entry). A provably dead site gives U, never V (ADR 1018 retires the 2026-11-10 \"wrong if it runs\" ruling). Seeded from the full audit at 78ddeb849 (run 43739577046): 6,205 rows in lg-recall, four groups, each Chrome-confirmed on 993e83f74.",
+ "note": "ADR 1018: the legal programs whose checker violation sits at a site no run reaches (legal.mjs outcome `unexecuted`) that a person has seen. Such a row needs a look (codes.mjs `rowProblem`: `unexecuted-violation`) unless an entry below matches its grid and id: `explained` (the judge is right that the site never runs and the row is not a checker defect, a lane that never drives the site, say) or `pending-fix` (a real false positive whose fix is the ADR named, held so CI stays green until it lands; the fix's change removes the entry). A provably dead site gives U, never V (ADR 1018); a site that may run, however this page fails to drive it, keeps the owner's reachability ruling: a violation means \"wrong if it runs\" (ADR 1132). Seeded from the full audit at 78ddeb849 (run 43739577046): 6,205 rows in lg-recall, four groups, each Chrome-confirmed on 993e83f74.",
  "entries": [
   {
    "grid": "lg-recall",
@@ -14,8 +14,8 @@
    "kind": "pending-fix",
    "item": "dny-legal-mount-disabled-effect",
    "idRegex": "^lg-strict-read-untracked-dny-legal-mount-disabled-store-(effect-called|effect-named-called|effect-carried|render-effect-carried)-direct-none$",
-   "adr": "ADR 1132",
-   "why": "ADR 1132 review F6 twin: `createEffect` in the onClick of a button disabled by its own JSX from mount. No event reaches the handler (Chrome quiet, runtime-oracle handler-effect-driven `MountDisabled`), yet the checker reports SC4001 missing-owner as a violation: a false positive on main, reported to the coordinator, fix not yet assigned. The driven twin (`Driven`) reports NO_OWNER_EFFECT."
+   "adr": "ADR 1134",
+   "why": "ADR 1132 review F6 twin: `createEffect` in the onClick of a button disabled by its own JSX from mount. No event reaches the handler (Chrome quiet, runtime-oracle handler-effect-driven `MountDisabled`), yet the checker reports SC4001 missing-owner as a violation: a false positive on main; ADR 1134 (Mac 22) makes it uncertifiable. The driven twin (`Driven`) reports NO_OWNER_EFFECT."
   }
  ]
 }
