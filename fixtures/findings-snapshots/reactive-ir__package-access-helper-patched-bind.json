@@ -151,6 +151,17 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/package-access-helper/variants/patched-bind/App.tsx",
+      "start": 422,
+      "end": 444,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-access-helper/variants/patched-bind/App.tsx",
       "start": 429,
       "end": 436,
       "fixes": 0

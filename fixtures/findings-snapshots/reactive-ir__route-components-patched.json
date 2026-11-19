@@ -41,6 +41,17 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/route-components/variants/patched/Routes.tsx",
+      "start": 464,
+      "end": 478,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-components/variants/patched/Routes.tsx",
       "start": 468,
       "end": 473,
       "fixes": 0
@@ -76,6 +87,17 @@
       "path": "fixtures/reactive-ir/route-components/variants/patched/Routes.tsx",
       "start": 520,
       "end": 527,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-components/variants/patched/Routes.tsx",
+      "start": 538,
+      "end": 552,
       "fixes": 0
     },
     {
@@ -129,6 +151,17 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/route-components/variants/patched/Routes.tsx",
+      "start": 611,
+      "end": 625,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-components/variants/patched/Routes.tsx",
       "start": 615,
       "end": 620,
       "fixes": 0
@@ -164,6 +197,17 @@
       "path": "fixtures/reactive-ir/route-components/variants/patched/Routes.tsx",
       "start": 667,
       "end": 674,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-components/variants/patched/Routes.tsx",
+      "start": 685,
+      "end": 699,
       "fixes": 0
     },
     {
@@ -228,6 +272,17 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/route-components/variants/patched/Routes.tsx",
+      "start": 1023,
+      "end": 1041,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-components/variants/patched/Routes.tsx",
       "start": 1029,
       "end": 1034,
       "fixes": 0
@@ -274,6 +329,17 @@
       "path": "fixtures/reactive-ir/route-components/variants/patched/Routes.tsx",
       "start": 1172,
       "end": 1179,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-components/variants/patched/Routes.tsx",
+      "start": 1190,
+      "end": 1204,
       "fixes": 0
     },
     {

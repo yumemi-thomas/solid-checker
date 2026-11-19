@@ -36867,5 +36867,21 @@
    "mx-action-called-in-owned-scope-pa-gprotourl-root-x-direct-none"
   ],
   "rediscovered": "new contexts pa-gprotocast, -gprotoannot, -gprotoconcat, -gprototemplate, -gprotocatch, -gprotobare, -gprotoget, -gprotoset, -gprotourl (pa-shapes.mjs; the last six move the review's `outside` shapes into the generator): `focus.mjs --codes ACTION_CALLED_IN_OWNED_SCOPE --grids mx-recall --boundary both --ids`, release builds: main e637f50f2 exits 1 (false-clean 24, recall-gap 3: the template, already a site), slice D 41c5e399f exits 1 (false-clean 15), slice E exits 0 (recall-gap 27); oracle 27 compared, 0 behaviour"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent where a written prototype member runs from code no site of the program spells: a package whose closure names no Solid package runs `reverse` another package wrote on `Float32Array.prototype`; the Solid runtime clones a template root with `cloneNode`/`importNode` a package wrote on `Node.prototype`/`Document.prototype`",
+  "found": "Fable review of ADR 1114 family 3 (A+C, round 1: F5), pattern lane `pkgaction/proto-known-clearpkg`, `-runtime`; Chrome-confirmed",
+  "fixed": "ADR 1114 family 3 slice F (no package is clear under a prototype writer; a JSX template root is a site under a writer of cloneNode/importNode)",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pa-gprotoclear-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoclear-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoclear-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoruntime-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoruntime-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoruntime-root-x-direct-none"
+  ],
+  "rediscovered": "new contexts pa-gprotoclear, pa-gprotoruntime (pa-shapes.mjs): `focus.mjs --codes ACTION_CALLED_IN_OWNED_SCOPE --grids mx-recall --boundary both --ids`, release builds: slice E 7db0f9ff0 exits 1 (false-clean 6), slice F exits 0 (recall-gap 6); oracle 6 compared, 0 behaviour"
  }
 ]

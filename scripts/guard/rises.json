@@ -5310,6 +5310,142 @@
    "to": 139,
    "adr": "ADR 1114",
    "fact": "family 3 slice E (fail closed under a prototype writer, Fable review round 1): every member call whatever its declaration, every call, constructor and tag the library declares or nothing resolves, every converting operator, template substitution, array pattern, await, using and JSX value is an SC2002 site where a loaded package writes a built-in's prototype and may reach Solid: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-origins",
+   "key": "SC2002 package-may-call-action",
+   "from": 31,
+   "to": 47,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-unread-packages",
+   "key": "SC2002 package-may-call-action",
+   "from": 25,
+   "to": 41,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/dependency-phantom-solid-undecided",
+   "key": "SC2002 package-may-call-action",
+   "from": 3,
+   "to": 8,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/dependency-value-flow",
+   "key": "SC2002 package-may-call-action",
+   "from": 19,
+   "to": 50,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper",
+   "key": "SC2002 package-may-call-action",
+   "from": 122,
+   "to": 328,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper-eval",
+   "key": "SC2002 package-may-call-action",
+   "from": 2,
+   "to": 6,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper-patched-bind",
+   "key": "SC2002 package-may-call-action",
+   "from": 5,
+   "to": 9,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/route-components",
+   "key": "SC2002 package-may-call-action",
+   "from": 3,
+   "to": 39,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/route-components-core-modified",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 18,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/route-components-destructured",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 18,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/route-components-key-read",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 18,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/route-components-modified-bytes",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 18,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/route-components-patched",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 18,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/route-components-rc8",
+   "key": "SC2002 package-may-call-action",
+   "from": 3,
+   "to": 42,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/route-components-rc9",
+   "key": "SC2002 package-may-call-action",
+   "from": 3,
+   "to": 42,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC2002 package-may-call-action",
+   "from": 38,
+   "to": 467,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc4001",
+   "key": "SC2002 package-may-call-action",
+   "from": 43,
+   "to": 160,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
   }
  ]
 }

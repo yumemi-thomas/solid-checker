@@ -44,6 +44,9 @@
 //                        (ADR 1114 family 3 slice E): `"" + new Date(0)` and a template's substitution after `fz-gprotodate` writes `Date.prototype.toString`;
 //                        `Promise.resolve(1).catch(…)` after `fz-gprotothen` writes `then`; a bare `dispatchEvent(…)` after `fz-gprotoevent`; an accessor read
 //                        after `fz-gprotoget` defines `DataView.prototype.byteLength`; `new Set(it)` after `fz-gprotoiter`; `new URL(u)` after `fz-gprotourl`
+//               gprotoclear, gprotoruntime  the written member run by code no site of the program spells (ADR 1114 family 3 slice F, Fable F5): `rev(a)` of
+//                        `fz-calmrev`, a package that reaches no Solid, runs `reverse` after `fz-gproto` writes it; the runtime clones a template root
+//                        (`void (<i>x</i>)`) after `fz-gprotoclone` writes `Node.prototype.cloneNode` and `Document.prototype.importNode`
 //               gviewpattern  `fz-gviewpattern` replaces `btoa` through a click event's `view` read by a pattern (`({ view }) => …`); the site is `btoa("x")` (ADR 1108 part 2)
 //               gaccmember, gaccbare, gacctypeof, gaccpattern  `fz-gaccessor` redefines `devicePixelRatio` with a getter that calls the action; the site is the value read, no
 //                        call: `void window.devicePixelRatio`, `void devicePixelRatio`, `void typeof window.devicePixelRatio`, `({ devicePixelRatio: ratio } = window)` (ADR 0974)
@@ -83,9 +86,10 @@ const PROTO_ROUTES = {
   gprotoget: { text: "void new DataView(new ArrayBuffer(1)).byteLength" },
   gprotoset: { text: "void new Set(new Float32Array(1))" },
   gprotourl: { text: 'void new URL(new URL("http://fz.test/"))' },
+  gprotoruntime: { text: "void (<i>x</i>)" },
   gviewpattern: { text: 'btoa("x")' },
 };
-const PROTO_KINDS = Object.keys(PROTO_ROUTES);
+const PROTO_KINDS = [...Object.keys(PROTO_ROUTES), "gprotoclear"];
 export const PA_PACKAGE_KINDS = ["reach", "pure", "dyn", "inline", "winself", "docview", "getter", ...WRITER_KINDS, ...CALL_KINDS, ...ACCESSOR_KINDS, ...PATTERN_KINDS, ...ROUTE_KINDS, ...PROTO_KINDS];
 export const PA_HOSTS = ["body", "memo", "root", "timer", "micro"];
 const OWNED_HOSTS = ["body", "memo", "root"];
@@ -101,7 +105,7 @@ export const PA_PACKAGES = {
   ...Object.fromEntries(PATTERN_KINDS.map((kind) => [kind, ["fz-getter"]])),
   gproto: ["fz-gproto"], gview: ["fz-gview"],
   gprotocall: ["fz-gproto"], gprotoapply: ["fz-gproto"], gprotoreflect: ["fz-gproto"], gprotodestr: ["fz-gproto"],
-  gprotoimplicit: ["fz-gprotoexec"], gprotoiter: ["fz-gprotoiter"], gprotoany: ["fz-gprotokey"], gprotocast: ["fz-gprotokey"], gprotoannot: ["fz-gprotokey"], gprotoconcat: ["fz-gprotodate"], gprototemplate: ["fz-gprotodate"], gprotocatch: ["fz-gprotothen"], gprotobare: ["fz-gprotoevent"], gprotoget: ["fz-gprotoget"], gprotoset: ["fz-gprotoiter"], gprotourl: ["fz-gprotourl"], gviewpattern: ["fz-gviewpattern"],
+  gprotoimplicit: ["fz-gprotoexec"], gprotoiter: ["fz-gprotoiter"], gprotoany: ["fz-gprotokey"], gprotocast: ["fz-gprotokey"], gprotoannot: ["fz-gprotokey"], gprotoconcat: ["fz-gprotodate"], gprototemplate: ["fz-gprotodate"], gprotocatch: ["fz-gprotothen"], gprotobare: ["fz-gprotoevent"], gprotoget: ["fz-gprotoget"], gprotoset: ["fz-gprotoiter"], gprotourl: ["fz-gprotourl"], gprotoclear: ["fz-gproto", "fz-calmrev"], gprotoruntime: ["fz-gprotoclone"], gviewpattern: ["fz-gviewpattern"],
 };
 /** `{ [context]: "misuse" | "legal" }`. */
 export const PA_CONTEXTS = Object.fromEntries(
@@ -156,6 +160,9 @@ export function paPackageFiles(kind, name = PA_PACKAGES[kind].at(-1)) {
     "fz-gprotoevent": { js: ['import { action } from "solid-js";', "", "const real = EventTarget.prototype.dispatchEvent;", "EventTarget.prototype.dispatchEvent = function (event) {", "  if (event.type === \"fzprobe\") void action(function* () {})();", "  return real.call(this, event);", "};"], dts: ["export {};"] },
     "fz-gprotoget": { js: ['import { action } from "solid-js";', "", "const real = Object.getOwnPropertyDescriptor(DataView.prototype, \"byteLength\").get;", "Object.defineProperty(DataView.prototype, \"byteLength\", { configurable: true, get() {", "  void action(function* () {})();", "  return real.call(this);", "} });"], dts: ["export {};"] },
     "fz-gprotourl": { js: ['import { action } from "solid-js";', "", "const real = URL.prototype.toString;", "URL.prototype.toString = function () {", "  void action(function* () {})();", "  return real.call(this);", "};"], dts: ["export {};"] },
+    // ADR 1114 family 3 slice F: a package that reaches no Solid and runs `reverse`; the methods the runtime clones a template with, replaced.
+    "fz-calmrev": { js: ["export const rev = (a) => a.reverse();"], dts: ["export declare function rev(a: Float32Array): Float32Array;"] },
+    "fz-gprotoclone": { js: ['import { action } from "solid-js";', "", "for (const [proto, key] of [[Node.prototype, \"cloneNode\"], [Document.prototype, \"importNode\"]]) {", "  const real = proto[key];", "  proto[key] = function (...args) {", "    void action(function* () {})();", "    return real.apply(this, args);", "  };", "}"], dts: ["export {};"] },
     "fz-gviewpattern": { js: ['import { action } from "solid-js";', "", "const real = globalThis.btoa;", 'document.addEventListener("click", ({ view }) => {', "  view.btoa = (text) => {", "    void action(function* () {})();", "    return real(text);", "  };", "}, { once: true });", "document.documentElement.click();"], dts: ["export {};"] },
     "fz-gwritesym": { js: ['import { action } from "solid-js";', "", 'var MARK = /* @__PURE__ */ Symbol.for("fz-gwritesym");', "globalThis[MARK] = () => {", "  void action(function* () {})();", "};"], dts: ["export {};"] },
   }[name];
@@ -200,6 +207,8 @@ export function paUse(kind) {
   // ADR 0974: the same replaced global reached by another route (a declaration the body holds first, then the call), or a redefined accessor read (the site is the read).
   const form = CALL_ROUTES[kind] ?? ACCESSOR_READS[kind] ?? PROTO_ROUTES[kind];
   if (form) return { ...base, text: form.text, preludeLines: form.prelude ?? [], importLines: [`import "${PA_PACKAGES[kind][0]}";`] };
+  // ADR 1114 family 3 slice F: a package that reaches no Solid runs the member `fz-gproto` wrote.
+  if (kind === "gprotoclear") return { ...base, text: "void rev(new Float32Array(1))", importLines: [`import "${PA_PACKAGES[kind][0]}";`, `import { rev } from "${PA_PACKAGES[kind][1]}";`] };
   if (GETTER_PATTERNS[kind]) return { ...base, text: GETTER_PATTERNS[kind].text, preludeLines: GETTER_PATTERNS[kind].prelude, importLines: [`import { clock } from "${PA_PACKAGES[kind][0]}";`] };
   // The read of a getter: no call, the member evaluated for its value.
   if (kind === "getter") return { ...base, text: "void clock.now", importLines: [`import { clock } from "${PA_PACKAGES[kind][0]}";`] };
