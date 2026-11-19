@@ -346,6 +346,14 @@ impl SemanticLookup<'_> {
         veto.1 || (veto.4 && self.flush_drains_under_owner())
     }
 
+    /// ADR 1115 part 2: whether an effect's apply may deliver an event to a listener in a shadow tree, which runs with `window.event`
+    /// unset and so inside the apply's effect-callback window: a primitive created in the handler then throws
+    /// PRIMITIVE_IN_EFFECT_CALLBACK before any later check at that creation.
+    pub(crate) fn apply_delivery_in_shadow_possible(&self) -> bool {
+        crate::base::reads::note(crate::base::reads::Section::DispatchVeto);
+        self.dispatch_veto().4 && self.shadow_roots_possible()
+    }
+
     /// [`DispatchSite::withholds_flush_proofs`] of any dispatch of the program.
     pub(crate) fn synchronous_event_flush_dispatch_present(&self) -> bool {
         crate::base::reads::note(crate::base::reads::Section::DispatchVeto);

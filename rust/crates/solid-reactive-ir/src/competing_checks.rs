@@ -158,7 +158,9 @@ pub(crate) fn mark(
                     && (effect_may_guard
                         .iter()
                         .any(|guarded| same_call(guarded, &requirement.location))
-                        || in_slot_called_only_in_applies(&requirement.location, true, lookup)))
+                        || in_slot_called_only_in_applies(&requirement.location, true, lookup)
+                        // ADR 1115 part 2: the apply's delivery to a shadow-tree listener runs the creation in the effect-callback window.
+                        || in_handler_an_apply_may_deliver_in_shadow(&requirement.location, lookup)))
                     || leaf_refused
                         .iter()
                         .any(|refused| same_call(refused, &requirement.location))
@@ -224,6 +226,7 @@ pub(crate) fn mark(
             || prop_runs_only_in_owned_leaf(&violation.location, settled_gates, lookup)
             || refused_at_mount_else_handlers(&violation.location, settled_gates, lookup)
             || listener_detached_in_owned_leaf(&violation.location, settled_gates, lookup)
+            || in_handler_an_apply_may_deliver_in_shadow(&violation.location, lookup)
         {
             violation.uncertain = true;
             violation.analysis_context = crate::blockers::with_detail(
@@ -314,6 +317,33 @@ fn every_run_refused(site: &Location, anchors: &[&Location], lookup: &SemanticLo
 /// `createRenderEffect`'s), and it is no completion site of that apply (`completion_sites`: an earlier `return`, `throw`,
 /// `break` or `continue`, or a branch, may skip it). The owned first run may never reach it; every later run meets the
 /// effect-callback guard (a creation) or the owner check (a context read) first. `false` for anything else.
+/// ADR 1115 part 2: the creation is written in an intrinsic element's `on*` handler (any function inside the attribute's value), and an
+/// effect's apply may deliver an event to a listener in a shadow tree. That delivery runs the handler inside the apply's effect-callback
+/// window, where the guard throws PRIMITIVE_IN_EFFECT_CALLBACK first, and nothing orders another delivery's run before it.
+fn in_handler_an_apply_may_deliver_in_shadow(site: &Location, lookup: &SemanticLookup<'_>) -> bool {
+    if !lookup.apply_delivery_in_shadow_possible() {
+        return false;
+    }
+    let Some(file) = lookup.file_by_path(site.path.as_ref()) else {
+        return false;
+    };
+    let (Ok(start), Ok(end)) = (u32::try_from(site.start_byte), u32::try_from(site.end_byte))
+    else {
+        return false;
+    };
+    let span = solid_facts::core::Span::new(start, end);
+    file.ast.jsx_elements.iter().any(|element| {
+        element.attributes.iter().any(|attribute| {
+            // `onScroll`, `onclick`, and `on:scroll` (a namespaced listener); a name that is no handler only widens the answer.
+            attribute.value.is_some_and(|value| value.contains(span))
+                && (attribute.namespace.is_some()
+                    || file
+                        .source_text(attribute.local_name)
+                        .is_some_and(|name| name.len() > 2 && name.starts_with("on")))
+        })
+    })
+}
+
 fn later_render_apply_run_only(site: &Location, lookup: &SemanticLookup<'_>) -> bool {
     let Some(file) = lookup.file_by_path(site.path.as_ref()) else {
         return false;

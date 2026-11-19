@@ -1922,6 +1922,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/event-dispatch-shadow/variants/shadow/node_modules/**
 !fixtures/reactive-ir/event-dispatch-shadow/variants/custom-element/node_modules/
 !fixtures/reactive-ir/event-dispatch-shadow/variants/custom-element/node_modules/**
+!fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation/node_modules/
+!fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation/node_modules/**
 !fixtures/reactive-ir/event-dispatch-shadow/node_modules/
 !fixtures/reactive-ir/event-dispatch-shadow/node_modules/**
 !fixtures/reactive-ir/after-await-forin/node_modules/

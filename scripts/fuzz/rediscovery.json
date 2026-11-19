@@ -31042,5 +31042,40 @@
    "mx-strict-read-untracked-root-store-dstr-then-first-direct-none"
   ],
   "rediscovered": "fuzz-focus mx-recall on the new variants store-dstr-empty-sub, -empty-items, -empty-sibling, -then-first, -quoted (9,690 programs): the round-1 build 91e248e90 1985 false cleans; main eed2f3621 and round 2 none"
+ },
+ {
+  "finding": "a creation (`createEffect`, `createRenderEffect`, `createMemo(async, { sync: true })`) in the JSX `onScroll` handler of an element moved into a shadow root, delivered by `dispatchEvent` from an effect apply: the listener runs with `window.event` unset, inside the apply's effect-callback window, so Chrome reports PRIMITIVE_IN_EFFECT_CALLBACK first, while the checker kept the missing-owner (SC4001) or sync-received-async (SC7002) violation stacked behind it",
+  "found": "smoke-census of #289 (bundle u, head 0a897aa9d), run 44454575575: 3 false positives in ADR 1115's new context evt-apply-dispatch-shadow",
+  "fixed": "ADR 1115 part 2 (`competing_checks::in_handler_an_apply_may_deliver_in_shadow`, `SemanticLookup::apply_delivery_in_shadow_possible`: where an apply may deliver to a shadow-tree listener, the effect-callback guard may throw first at a creation in an `on*` handler, so the owner row of an effect and the SC7002 row are obligations)",
+  "grid": "mx-census",
+  "code": "NO_OWNER_EFFECT",
+  "ids": [
+   "mx-no-owner-effect-evt-apply-dispatch-shadow-render-direct-none",
+   "mx-no-owner-effect-evt-apply-dispatch-shadow-effect-direct-none"
+  ],
+  "rediscovered": "focus on the context's 43 mx-census programs (30 codes, seed 1): 5 false positives on the ADR 1115 build 39f85f1be; FIXED here (0 false positives; agree 10, not-fired 26, recall-gap 7); mx-recall unchanged (1,808 recall-gap, 18 typed-away)"
+ },
+ {
+  "finding": "a creation (`createEffect`, `createRenderEffect`, `createMemo(async, { sync: true })`) in the JSX `onScroll` handler of an element moved into a shadow root, delivered by `dispatchEvent` from an effect apply: the listener runs with `window.event` unset, inside the apply's effect-callback window, so Chrome reports PRIMITIVE_IN_EFFECT_CALLBACK first, while the checker kept the missing-owner (SC4001) or sync-received-async (SC7002) violation stacked behind it",
+  "found": "smoke-census of #289 (bundle u, head 0a897aa9d), run 44454575575: 3 false positives in ADR 1115's new context evt-apply-dispatch-shadow",
+  "fixed": "ADR 1115 part 2 (`competing_checks::in_handler_an_apply_may_deliver_in_shadow`, `SemanticLookup::apply_delivery_in_shadow_possible`: where an apply may deliver to a shadow-tree listener, the effect-callback guard may throw first at a creation in an `on*` handler, so the owner row of an effect and the SC7002 row are obligations)",
+  "grid": "mx-census",
+  "code": "PRIMITIVE_IN_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-primitive-in-forbidden-scope-evt-apply-dispatch-shadow-effect-direct-none"
+  ],
+  "rediscovered": "focus on the context's 43 mx-census programs (30 codes, seed 1): 5 false positives on the ADR 1115 build 39f85f1be; FIXED here (0 false positives; agree 10, not-fired 26, recall-gap 7); mx-recall unchanged (1,808 recall-gap, 18 typed-away)"
+ },
+ {
+  "finding": "a creation (`createEffect`, `createRenderEffect`, `createMemo(async, { sync: true })`) in the JSX `onScroll` handler of an element moved into a shadow root, delivered by `dispatchEvent` from an effect apply: the listener runs with `window.event` unset, inside the apply's effect-callback window, so Chrome reports PRIMITIVE_IN_EFFECT_CALLBACK first, while the checker kept the missing-owner (SC4001) or sync-received-async (SC7002) violation stacked behind it",
+  "found": "smoke-census of #289 (bundle u, head 0a897aa9d), run 44454575575: 3 false positives in ADR 1115's new context evt-apply-dispatch-shadow",
+  "fixed": "ADR 1115 part 2 (`competing_checks::in_handler_an_apply_may_deliver_in_shadow`, `SemanticLookup::apply_delivery_in_shadow_possible`: where an apply may deliver to a shadow-tree listener, the effect-callback guard may throw first at a creation in an `on*` handler, so the owner row of an effect and the SC7002 row are obligations)",
+  "grid": "mx-census",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "mx-sync-node-received-async-evt-apply-dispatch-shadow-memo-direct-none",
+   "mx-sync-node-received-async-evt-apply-dispatch-shadow-effect-direct-none"
+  ],
+  "rediscovered": "focus on the context's 43 mx-census programs (30 codes, seed 1): 5 false positives on the ADR 1115 build 39f85f1be; FIXED here (0 false positives; agree 10, not-fired 26, recall-gap 7); mx-recall unchanged (1,808 recall-gap, 18 typed-away)"
  }
 ]
