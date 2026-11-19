@@ -166,10 +166,10 @@ pub mod callback_host;
 pub mod hosts;
 
 pub use findings::{
-    DOCS_BASE_URL, EvidenceStep, Finding, RuleManifestIdentity, RuleMetadata, SolveTimings,
-    assert_rules_have_documentation, direct_mutation_wording, finish_findings, rule_manifest_json,
-    strict_read_evidence, strict_read_message, strict_read_message_with_compute,
-    strict_read_related_locations,
+    DOCS_BASE_URL, DestructureFold, EvidenceStep, Finding, RuleManifestIdentity, RuleMetadata,
+    SolveTimings, assert_rules_have_documentation, direct_mutation_wording, finish_findings,
+    fold_destructure_findings, rule_manifest_json, strict_read_evidence, strict_read_message,
+    strict_read_message_with_compute, strict_read_related_locations,
 };
 pub use projection::{
     CatalogCapabilities, CatalogWording, FindingSeed, FindingWording, StaticDefectTerms,
@@ -1852,9 +1852,26 @@ pub use blockers::{
 pub use execution_paths::{ArmSide, BuildArm, ClientPath, ExecutionPaths};
 pub use summary_semantics::{CallbackSchedule, CallbackSummary, ReturnSummary};
 
+/// ADR 1107: a slot of a store destructure SC1003 hands over (`static_rules::delegated_destructure_slots`).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DestructureSlot {
+    /// The slot's local binding: where its synthetic member read stands.
+    pub slot: Location,
+    /// The destructure's pattern: where SC1003's row stands.
+    pub pattern: Location,
+    /// The initializer's text, for the row's message.
+    pub source: String,
+    /// The enclosing function's label (the row's context when it is a violation).
+    pub label: String,
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Program {
+    /// ADR 1107: the store destructures SC1003 hands to SC1001's placement: each slot's synthetic member read, and the row
+    /// the verdict folds into (the pattern). Projection reads it; nothing else does.
+    #[serde(skip)]
+    pub destructure_slots: Vec<DestructureSlot>,
     /// Message-only observations, recomputed from the current merged reads.
     /// These apply sites also read the exact source in their paired compute.
     #[serde(skip)]

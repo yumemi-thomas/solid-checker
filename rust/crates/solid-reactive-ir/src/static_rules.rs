@@ -531,6 +531,12 @@ fn component_props_destructure(
             if crate::execution_role::discarded_region_contains(file, binding.pattern) {
                 continue;
             }
+            // ADR 1107 (review of ADR 1106, P3): an empty pattern (`const {} = store`) reads no property. Only the literal
+            // top-level `{}` or `[]` (round 2, F1): a sub-pattern that binds no name (`{ a: {} }`, `{ list: [] }`,
+            // `{ [k]: {} }`) still reads its property.
+            if empty_pattern(file, binding.pattern) {
+                continue;
+            }
             let role = semantic_execution_role(
                 file,
                 binding.pattern,
@@ -539,6 +545,11 @@ fn component_props_destructure(
                 ctx.symbol_names,
                 ctx.semantic_lookup,
             );
+            // ADR 1107: a store's destructure that setup does not provably run is no claim of SC1003's: each slot is a member
+            // read SC1001 places (`delegated_destructure_slots`, `LocalAccess`), a violation, an obligation or a proven silence.
+            if !props && delegated_destructure_slots(ctx.semantic_lookup, file, binding).is_some() {
+                continue;
+            }
             // ADR 0823: a destructure reads every slot it binds. In a leaf
             // owner a pending getter there is PENDING_ASYNC_FORBIDDEN_SCOPE;
             // the callers either exclude one or the read is an obligation.
@@ -663,12 +674,30 @@ fn component_props_destructure(
             let mut uncertain = helper_setup
                 || fresh_windowed
                 || nested_in_named_callback
-                || !written_in_setup(ctx, file, binding.pattern)
+                || !written_in_setup(ctx.semantic_lookup, file, binding.pattern)
                 || matches!(
                     role,
                     crate::ExecutionRole::Unknown | crate::ExecutionRole::Unreported
                 )
                 || prop_symbol.is_some_and(|symbol| tables.uncertain_prop_source(symbol));
+            // ADR 1107 (review of ADR 1106): a store slot under a computed key reads a key no fact names (a symbol or `then`
+            // does not warn), as SC1001's member read under one is undecided (`store-key-undecided`). The facts leave a computed
+            // slot out of `object_slots` (as a default, a nested pattern and a rest element); a `[` in the pattern's text may be
+            // one, and the row fails closed (a nested array pattern or a `[]` default too).
+            // Round 2: a quoted key (`{ "v": x }`) is a decided key, as a plain one; a `then` key, quoted or not, does not
+            // warn where its backing runs nothing, which no fact here decides (main reported `const { then } = store`). A
+            // pattern with another slot reads that slot's key, which warns (`{ then, v }`).
+            let computed_store_key = !props
+                && ((!binding.object_slots.is_empty()
+                    && binding.names.len() == binding.object_slots.len()
+                    && binding
+                        .object_slots
+                        .iter()
+                        .all(|slot| slot.property == "then"))
+                    || file
+                        .source_text(binding.pattern)
+                        .is_some_and(pattern_has_computed_key));
+            uncertain |= computed_store_key;
             if let Some(declaration) = &prop_declaration {
                 match destructured_props_use(tables, binding, declaration) {
                     crate::source_discovery::PropUse::Static => continue,
@@ -688,7 +717,15 @@ fn component_props_destructure(
                     component_props: props,
                 },
                 location,
-                analysis_context: enclosing_function_label(file, binding.pattern),
+                analysis_context: if computed_store_key {
+                    format!(
+                        "{}{}",
+                        crate::STORE_KEY_UNDECIDED,
+                        enclosing_function_label(file, binding.pattern)
+                    )
+                } else {
+                    enclosing_function_label(file, binding.pattern)
+                },
                 fixes: vec![],
                 uncertain,
             });
@@ -803,6 +840,126 @@ fn helper_runs_only_fresh(
     calls > 0
 }
 
+/// ADR 1107: every slot of every destructure `delegated_destructure_slots` hands over, with its pattern. A read row can stand at a
+/// slot's local binding only when it is the slot's synthetic member read (`LocalAccess`), so a destructure of no store adds none.
+pub(crate) fn destructure_slots(
+    lookup: &crate::indexes::SemanticLookup<'_>,
+) -> Vec<crate::DestructureSlot> {
+    let mut out = Vec::new();
+    for file in lookup.files() {
+        for binding in &file.ast.bindings {
+            let Some(slots) = delegated_destructure_slots(lookup, file, binding) else {
+                continue;
+            };
+            let source = binding
+                .initializer
+                .and_then(|span| file.source_text(span))
+                .unwrap_or("reactive object")
+                .to_owned();
+            let label = enclosing_function_label(file, binding.pattern);
+            for slot in slots {
+                out.push(crate::DestructureSlot {
+                    slot: location(file.path.shared(), slot),
+                    pattern: location(file.path.shared(), binding.pattern),
+                    source: source.clone(),
+                    label: label.clone(),
+                });
+            }
+        }
+    }
+    out
+}
+
+/// ADR 1107: the slots of an object destructure that SC1001 reads as members, when the destructure hands its claim over: the
+/// initializer is a plain identifier, every slot has a static key (`{ a, b: c, d = 1 }`; no rest, no nested pattern, no computed
+/// key), and it is not written directly in setup (`written_directly_in_setup`: a component's body or module scope, through
+/// immediately invoked functions only). SC1001's placement decides everything else, including a helper the body calls in place.
+/// The slots' local spans, each a member read `x.a` at the slot. Whether the identifier holds a store each caller asks itself.
+pub(crate) fn delegated_destructure_slots(
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    binding: &solid_facts::ast::BindingFact,
+) -> Option<Vec<solid_facts::core::Span>> {
+    if binding.shape != solid_facts::ast::BindingShape::Object
+        || binding.initializer_identifier.is_none()
+        || binding.object_slots.is_empty()
+        || binding.names.len() != binding.object_slots.len()
+        // Round 2 (F1): the slot counts match by coincidence when a sub-pattern binds no name (`{ v, a: {} }`), whose
+        // property no slot reads: a nested pattern, or a default holding one, is not handed over.
+        || nested_pattern(file.source_text(binding.pattern)?)
+        || written_directly_in_setup(lookup, file, binding.pattern)
+    {
+        return None;
+    }
+    // The synthetic member reads its key from the slot's local name, so a renamed slot (`{ then: w }`) is not handed over.
+    binding
+        .object_slots
+        .iter()
+        .map(|slot| {
+            (slot.plain_identifier_key
+                && file.source_text(slot.local.span) == Some(slot.property.as_str()))
+            .then_some(slot.local.span)
+        })
+        .collect()
+}
+
+/// ADR 1107 round 2 (F1): whether an object pattern's text holds a nested pattern (or a default holding an object or array
+/// literal) inside its outer braces: such a pattern is not handed over to SC1001.
+fn nested_pattern(text: &str) -> bool {
+    let inner = text.trim().trim_start_matches('{').trim_end_matches('}');
+    inner.contains('{') || inner.contains('[')
+}
+
+/// ADR 1107 round 2 (F1): whether a destructure's pattern is the literal `{}` or `[]` (whitespace aside), the only pattern that
+/// reads no property.
+fn empty_pattern(file: &solid_facts::FileFacts, pattern: solid_facts::core::Span) -> bool {
+    file.source_text(pattern).is_some_and(|text| {
+        let compact: String = text.chars().filter(|c| !c.is_whitespace()).collect();
+        compact == "{}" || compact == "[]"
+    })
+}
+
+/// ADR 1107: whether a pattern's text has a computed key at any depth: a `[` that opens a property, right after `{` or `,`
+/// (whitespace aside). An array sub-pattern follows `:` and a default `=`, so neither is one. The facts leave a computed slot
+/// out of `object_slots`.
+fn pattern_has_computed_key(text: &str) -> bool {
+    let mut previous = None;
+    for c in text.chars() {
+        if c.is_whitespace() {
+            continue;
+        }
+        if c == '[' && matches!(previous, Some('{' | ',')) {
+            return true;
+        }
+        previous = Some(c);
+    }
+    false
+}
+
+/// ADR 1107: whether a destructure is written directly in setup: at module scope, or in a component's own body through immediately
+/// invoked functions only (they run in place, where they are written).
+pub(crate) fn written_directly_in_setup(
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    pattern: solid_facts::core::Span,
+) -> bool {
+    let ast = &file.ast;
+    let Some(mut function) = crate::owners::containing_ast_function(ast, pattern) else {
+        return true;
+    };
+    while ast
+        .calls
+        .iter()
+        .any(|call| !call.construct && ast.peel_ts_sugar_span(call.callee) == function.span)
+    {
+        let Some(outer) = crate::owners::containing_ast_function(ast, function.span) else {
+            return true;
+        };
+        function = outer;
+    }
+    lookup.function_may_be_component(file, function)
+}
+
 /// ADR 1106: whether a destructure at `pattern` is written where setup runs it, the one place SC1003's violation rests on an exact
 /// fact: at module scope, or in a component's own body, through layers that run their function in place on the caller's stack (an
 /// immediately invoked function, a standard-library inline callback such as `forEach`, a project helper that calls its argument
@@ -811,13 +968,12 @@ fn helper_runs_only_fresh(
 /// a function handed to a call or to `render`) the role is the lexical fallback of the code around it, not a proof of when it runs:
 /// uncertifiable, never a violation (the lg-recall `store-dstr-object` programs in event-dispatch, synchronous-fire and listener
 /// contexts, where Chrome reports nothing).
-fn written_in_setup(
-    ctx: &AnalysisContext<'_>,
+pub(crate) fn written_in_setup(
+    lookup: &crate::indexes::SemanticLookup<'_>,
     file: &solid_facts::FileFacts,
     pattern: solid_facts::core::Span,
 ) -> bool {
     let ast = &file.ast;
-    let lookup = ctx.semantic_lookup;
     // The innermost function strictly around `span`.
     let around = |span: solid_facts::core::Span| {
         ast.functions

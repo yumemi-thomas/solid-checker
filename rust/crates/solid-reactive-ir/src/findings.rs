@@ -164,6 +164,57 @@ pub struct Finding {
     pub evidence: Vec<EvidenceStep>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fixes: Vec<Fix>,
+    /// ADR 1107: a destructured slot's member read, which folds into its destructure's SC1003 row after every gate
+    /// ([`fold_destructure_findings`]). Never serialized: no finding with it leaves the backend.
+    #[serde(skip)]
+    pub fold_into: Option<Box<DestructureFold>>,
+}
+
+/// ADR 1107: the SC1003 row a destructured slot's read folds into, worded both ways by the catalog at projection.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DestructureFold {
+    pub pattern: Location,
+    /// The slot read's own rule id (SC1001): the passes before the fold that ask what a rule claims ask it of this one.
+    pub read_id: String,
+    pub as_violation: Finding,
+    pub as_obligation: Finding,
+}
+
+/// ADR 1107: after every gate, the tagged slot reads of each destructure become one SC1003 row at its pattern: a violation if any
+/// slot read is still one, else an obligation (the context of the first such read), else nothing.
+pub fn fold_destructure_findings(findings: &mut Vec<Finding>) {
+    // Per pattern: its fold target, whether a slot read is still a violation, and the first obligation's context.
+    let mut folds: Vec<(DestructureFold, bool, String)> = Vec::new();
+    findings.retain(|finding| {
+        let Some(target) = &finding.fold_into else {
+            return true;
+        };
+        let violation = finding.kind == "violation";
+        if let Some(entry) = folds
+            .iter_mut()
+            .find(|(known, ..)| known.pattern == target.pattern)
+        {
+            entry.1 |= violation;
+        } else {
+            folds.push((
+                (**target).clone(),
+                violation,
+                finding.analysis_context.clone(),
+            ));
+        }
+        false
+    });
+    for (target, violation, context) in folds {
+        if violation {
+            findings.push(target.as_violation);
+        } else {
+            let mut row = target.as_obligation;
+            if !context.is_empty() {
+                row.analysis_context = context;
+            }
+            findings.push(row);
+        }
+    }
 }
 
 impl Finding {
@@ -187,6 +238,7 @@ impl Finding {
             related_locations: vec![],
             evidence: vec![],
             fixes: vec![],
+            fold_into: None,
         }
     }
 

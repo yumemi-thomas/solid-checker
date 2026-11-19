@@ -4966,6 +4966,38 @@
    "adr": "ADR 1113",
    "fact": "operator-after-suspension: an operand coerced or probed (template, +, relational, ++/--, in) with no Type Facts primitive domain, or any instanceof/delete, after an await or in a promise handler",
    "why": "the operator may reach toString/valueOf/Symbol.toPrimitive or a Proxy trap; no fact proves it runs no project code"
+ },
+ {
+   "fixture": "reactive-ir/destructure-store-placement",
+   "key": "SC1003 callee-callback-timing",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1107",
+   "fact": "destructure-store-placement: a store destructure setup does not provably run takes SC1001's blocker for its slots (callee-callback-timing, host-callback-timing, summary-read-unplaced, relabels of ADR 1106's U); store-strict-read-keys DestructuredThen: a destructure whose every slot is `then` is store-key-undecided (the then Get does not warn; main's V was a false positive)"
+  },
+  {
+   "fixture": "reactive-ir/destructure-store-placement",
+   "key": "SC1003 host-callback-timing",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1107",
+   "fact": "destructure-store-placement: a store destructure setup does not provably run takes SC1001's blocker for its slots (callee-callback-timing, host-callback-timing, summary-read-unplaced, relabels of ADR 1106's U); store-strict-read-keys DestructuredThen: a destructure whose every slot is `then` is store-key-undecided (the then Get does not warn; main's V was a false positive)"
+  },
+  {
+   "fixture": "reactive-ir/destructure-store-placement",
+   "key": "SC1003 summary-read-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1107",
+   "fact": "destructure-store-placement: a store destructure setup does not provably run takes SC1001's blocker for its slots (callee-callback-timing, host-callback-timing, summary-read-unplaced, relabels of ADR 1106's U); store-strict-read-keys DestructuredThen: a destructure whose every slot is `then` is store-key-undecided (the then Get does not warn; main's V was a false positive)"
+  },
+  {
+   "fixture": "reactive-ir/store-strict-read-keys",
+   "key": "SC1003 store-key-undecided",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1107",
+   "fact": "destructure-store-placement: a store destructure setup does not provably run takes SC1001's blocker for its slots (callee-callback-timing, host-callback-timing, summary-read-unplaced, relabels of ADR 1106's U); store-strict-read-keys DestructuredThen: a destructure whose every slot is `then` is store-key-undecided (the then Get does not warn; main's V was a false positive)"
   }
  ]
 }

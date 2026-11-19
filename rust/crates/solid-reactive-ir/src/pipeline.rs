@@ -279,6 +279,7 @@ impl ProgramDraft {
         self.async_reads
             .sort_by(|left, right| location_order(&left.location, &right.location));
         Program {
+            destructure_slots: Vec::new(),
             apply_compute_reads: self.apply_compute_reads,
             runtime_configuration: crate::RuntimeConfigurationPremise::Assumed,
             development_feedback: self.development_feedback,
@@ -1019,6 +1020,8 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
         program.static_defects.extend(claims.defects);
     }
     // ADR 1052: a row whose call meets an earlier check that throws, over the final rows.
+    // ADR 1107: the slots of the store destructures SC1003 hands to SC1001's placement, for projection's fold.
+    program.destructure_slots = crate::static_rules::destructure_slots(semantic_lookup);
     crate::competing_checks::mark(&mut program, &settled_gates, semantic_lookup);
     // ADR 0947: the typed blocker of each row a veto formula holds, over the final rows.
     (program.blocked_by, program.hazards) =

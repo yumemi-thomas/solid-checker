@@ -117,3 +117,5 @@ destructured in a standard inline callback's parameter (`[store].map(({ v }) => 
 `value-in-carrier` row. A callback a helper calls on some path only (`if (c) f()`) stays a violation: the path counts as
 reachable. One called after a statement that may throw, in a `try` whose `catch` completes
 normally, is uncertifiable (the setup proof above does not hold).
+
+A store destructure written anywhere else takes the verdict [strict-read-untracked](strict-read-untracked.md) gives each slot read as a member (`const { v } = store` is `store.v`): a violation where SC1001 proves one, uncertifiable where it leaves an obligation, no row where it proves a silence ([ADR 1107](../decisions.md#adr-1107)). Only the literal `{}` or `[]` reads nothing; a sub-pattern that binds no name (`{ a: {} }`, `{ items: [] }`) reads its property. A nested pattern or a renamed slot is not handed over (the setup verdict stands). A computed key (a `[` opening a property) is uncertifiable (`store-key-undecided`), and so is a pattern whose every slot is `then` (its Get does not warn); a quoted key is a decided key.

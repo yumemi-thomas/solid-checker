@@ -398,6 +398,7 @@ fn replacement(dropped: &Finding, at: &Location, kind: Option<DependencyEntry>) 
         related_locations: vec![dropped.primary_location.clone()],
         evidence,
         fixes: Vec::new(),
+        fold_into: None,
     }
 }
 
@@ -430,6 +431,7 @@ mod tests {
             related_locations: Vec::new(),
             evidence: Vec::new(),
             fixes: Vec::new(),
+            fold_into: None,
         }
     }
 
