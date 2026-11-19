@@ -18,7 +18,7 @@ type Attrs = {
   children?: JSX.Element;
   onClick?: () => void;
 };
-type ButtonProps = { variant?: "primary" | "plain"; type?: string; onClick?: () => void; children?: JSX.Element };
+type ButtonProps = { variant?: "primary" | "plain"; type?: "button" | "submit"; onClick?: () => void; children?: JSX.Element };
 
 // Proved: defaults by `merge`, the rest by `omit` (the cheatsheet's Props
 // helpers): no caller writes a content key or a listener.
@@ -35,7 +35,7 @@ function Badge(props: Attrs) {
 // Proved: the listener a caller writes reaches the spread as that function,
 // and `children` is omitted.
 function Button(props: ButtonProps) {
-  const merged = merge({ variant: "plain" as const, type: "button" }, props);
+  const merged = merge({ variant: "plain" as const, type: "button" as const }, props);
   const rest = omit(merged, "variant", "children");
   return (
     <button {...rest} class={merged.variant}>
