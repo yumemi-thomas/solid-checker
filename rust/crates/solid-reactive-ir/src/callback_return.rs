@@ -339,7 +339,8 @@ pub(crate) const CONTEXT_PROVIDED_TUPLE: &str = "context-provided-tuple";
 ///   holder of the shared tuple can replace a slot);
 /// - the provider's value is the `createSignal` call itself, or an
 ///   unwritten, unexported `const` it initializes whose one reference is
-///   that value;
+///   that value, a plain value signal ([`plain_value_creation`]: no function
+///   form, no options);
 /// - the slots are read only as callees ([`called_slots`]), and nothing in
 ///   the program may mutate the iteration protocol the patterns use.
 pub(super) fn context_provided_tuple<'a>(
@@ -425,7 +426,7 @@ pub(super) fn context_provided_tuple<'a>(
     let created = file.ast.call_at(created_span)?;
     if created.construct
         || !file.ast.straight_line_calls.contains(&created.span)
-        || created.arguments.iter().any(|argument| argument.spread)
+        || !plain_value_creation(created)
         || lookup
             .resolved_callee_call(file, created.callee)
             .is_some_and(|resolved| resolved.validity == typefacts::ResolvedCallValidity::Recovery)
@@ -488,6 +489,31 @@ pub(super) fn context_provided_tuple<'a>(
     })
 }
 
+/// ADR 1123 (the review's F1): the provided signal is a plain value signal. `createSignal(fn)` is the function form, a derived signal whose
+/// computation may be async (rc.21 makes it a writable memo), so a read under no `Loading` throws where the value form returns. Only no
+/// argument, or one argument the facts prove is a non-function literal (null, a boolean, an integer, a string, an object or array literal),
+/// with no options object and no spread, qualifies; anything else (an identifier, a call, a function, a second argument) keeps its rows.
+fn plain_value_creation(created: &CallFact) -> bool {
+    use solid_facts::ast::ArgumentLiteralFact;
+    match created.arguments.as_slice() {
+        [] => true,
+        [value] => {
+            !value.spread
+                && !value.runtime_type_escape
+                && matches!(
+                    value.literal_value,
+                    ArgumentLiteralFact::Null
+                        | ArgumentLiteralFact::Boolean(_)
+                        | ArgumentLiteralFact::Integer(_)
+                        | ArgumentLiteralFact::String(_)
+                        | ArgumentLiteralFact::Object(_)
+                        | ArgumentLiteralFact::ArrayLength(_)
+                )
+        }
+        _ => false,
+    }
+}
+
 /// A plain call of the context read with one argument, no spread.
 fn context_read(lookup: &SemanticLookup<'_>, file: &FileFacts, call: &CallFact) -> bool {
     !call.construct
@@ -503,7 +529,7 @@ fn context_read(lookup: &SemanticLookup<'_>, file: &FileFacts, call: &CallFact) 
 /// The `const` of one name, in `file`, that the identifier reference at `span`
 /// reads, when nothing writes it and no export (or a script's global scope)
 /// publishes it.
-fn sole_reference_binding(file: &FileFacts, span: Span) -> Option<&BindingFact> {
+pub(crate) fn sole_reference_binding(file: &FileFacts, span: Span) -> Option<&BindingFact> {
     if !file
         .ast
         .identifiers

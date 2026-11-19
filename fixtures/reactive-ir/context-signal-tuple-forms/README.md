@@ -1,0 +1,3 @@
+# Context signal tuple forms (ADR 1123, the review's F1)
+
+The tuple arm takes the slots of a plain value signal only: `createSignal(<literal>)` or `createSignal()`, no options. `Plain` and `Empty` read the accessor slot in the body: SC1001. The function form (`createSignal(() => slow())` over an async memo, which Chrome reports as ASYNC_OUTSIDE_LOADING_BOUNDARY at `Slow`'s JSX read; `createSignal(() => "d")`), a value the facts do not prove is no function (`createSignal(initial)`) and an options object keep their rows (SC9012, uncertifiable). Stub: `context-signal-tuple`'s plus rc.21's function-form overload. Chrome: `fixtures/runtime-oracle/context-signal-tuple-forms`.

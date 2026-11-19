@@ -1991,6 +1991,11 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
 
     /// ADR 1123: whether `at` is in a child of `element`, a context provider of the dialect's own form (the context object as the tag, no member), whose tag
     /// resolves exactly to a binding the dialect's `createContext` initializes.
+    ///
+    /// The review's F2: the tag names a `const` of one name in this file (an identifier pattern, unwritten, unexported) whose initializer is the dialect's
+    /// `createContext` call itself, resolved by no recovery; a `let`, a pattern's name or an import fails closed. F3: rc.21's provider returns
+    /// `children(() => props.children)`, a memo its reader runs, so the children run in place only where the provider's own value is placed directly in owned JSX
+    /// ([`Self::provider_placed`]); a provider element stored, passed to a call or returned to code nothing here follows fails closed.
     fn provider_child(&self, file: &'a FileFacts, element: &JsxElementFact, at: Span) -> bool {
         self.provider_children
             && element.member_object.is_none()
@@ -2000,6 +2005,113 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             && self
                 .lookup
                 .is_context_reference(file.path.as_str(), element.name.span)
+            && self.local_created_context(file, element.name.span)
+            && self.provider_placed(file, element)
+    }
+
+    /// ADR 1123 (F2): whether the tag at `tag` names an unwritten, unexported `const` of one identifier in `file` that the dialect's `createContext` call initializes.
+    fn local_created_context(&self, file: &'a FileFacts, tag: Span) -> bool {
+        let Some(binding) = crate::callback_return::sole_reference_binding(file, tag) else {
+            return false;
+        };
+        let Some(created) = binding
+            .call_initializer
+            .and_then(|span| file.ast.call_at(span))
+        else {
+            return false;
+        };
+        binding
+            .initializer
+            .map(|value| file.ast.peel_ts_sugar_span(value))
+            == Some(created.span)
+            && !created.construct
+            && created.arguments.iter().all(|argument| !argument.spread)
+            && self.lookup.primitive_at_call(file, created.span)
+                == Some(solid_dialect::Primitive::CreateContext)
+            && self
+                .lookup
+                .resolved_callee_call(file, created.callee)
+                .is_some_and(|resolved| {
+                    resolved.validity != typefacts::ResolvedCallValidity::Recovery
+                })
+    }
+
+    /// ADR 1123 (F3): whether the provider element's value is placed directly in owned JSX: written as a child of another element (whose evaluation
+    /// [`Self::element_created_in`] follows), or as the whole returned value of a component, a function the project renders only by its tag (every reference a
+    /// call, every call site a JSX tag) or an entry nothing in a closed program references.
+    fn provider_placed(&self, file: &'a FileFacts, element: &JsxElementFact) -> bool {
+        let ast = &file.ast;
+        if ast
+            .jsx_elements
+            .iter()
+            .any(|outer| outer.span != element.span && outer.children.contains(&element.span))
+        {
+            return true;
+        }
+        let Some(function) = ast.innermost_function_owning(element.span) else {
+            return false;
+        };
+        let returned = |argument: Option<Span>| {
+            argument.is_some_and(|argument| ast.peel_ts_sugar_span(argument) == element.span)
+        };
+        let returns_it = if function.expression_body {
+            function
+                .expression_return
+                .as_ref()
+                .is_some_and(|ret| returned(ret.argument))
+        } else {
+            ast.returns.iter().any(|ret| {
+                ast.innermost_function_owning(ret.span)
+                    .is_some_and(|owner| owner.span == function.span)
+                    && returned(ret.argument)
+            })
+        };
+        returns_it && self.rendered_component(file, function)
+    }
+
+    /// ADR 1123 (F3): `function` is rendered only by its tag: it has a binding, every reference of it (in any file) is a call or a tag, and every call site is the tag of a JSX
+    /// element; or, in a closed program, nothing references it (an entry the dialect's renderer mounts). A class member or a function nothing binds is not.
+    fn rendered_component(&self, file: &'a FileFacts, function: &'a FunctionFact) -> bool {
+        if file
+            .ast
+            .classes
+            .iter()
+            .any(|class| class.span.contains(function.span))
+        {
+            return false;
+        }
+        let Some(local) =
+            crate::local_access::function_reference_hand_offs(file, function, self.lookup)
+        else {
+            return false;
+        };
+        // A tag (`<Comp />`, its closing tag too) is no call hand-off (ADR 1091's `rendering_tag`): `createComponent` runs it in the render holding the tag.
+        let foreign = crate::local_access::foreign_reference_hand_offs(file, function, self.lookup);
+        let rendered = |holder: &FileFacts, at: Span, hand_off: HandOff| {
+            hand_off == HandOff::Call || crate::local_access::rendering_tag(holder, at)
+        };
+        if !local
+            .iter()
+            .all(|(at, hand_off)| rendered(file, *at, *hand_off))
+            || !foreign
+                .iter()
+                .all(|(holder, at, hand_off)| rendered(holder, *at, *hand_off))
+        {
+            return false;
+        }
+        let sites = self
+            .lookup
+            .function_call_sites(file.path.as_str(), function.span);
+        if sites.is_empty() {
+            return local.is_empty() && foreign.is_empty() && self.lookup.program_closed;
+        }
+        sites.into_iter().all(|(site_file, callee)| {
+            site_file
+                .ast
+                .jsx_elements
+                .iter()
+                .any(|tagged| tagged.member_object.is_none() && tagged.name.span == callee)
+        })
     }
 
     /// Whether what the receiver does with the value hands it to a package.
