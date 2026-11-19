@@ -525,3 +525,24 @@ pub(super) fn computed_keys(semantic: &Semantic<'_>, resolve: bool) -> Vec<Compu
     facts.sort_by_key(|fact| (fact.read, fact.site as u8));
     facts
 }
+
+/// ADR 1120: what a computed key may be, for the plain-program premise (`premise_sites`): `None` when nothing proves it, else the
+/// constant texts it may be and whether it may be text that holds a digit or a number's text (which a standard name such as `Int8Array`
+/// or `atan2` may also be). A number, a symbol and a plain non-text value are no name at all.
+pub(super) struct KeyProver<'s, 'a>(Prover<'s, 'a>);
+
+impl<'s, 'a> KeyProver<'s, 'a> {
+    pub(super) fn new(semantic: &'s Semantic<'a>, resolve: bool) -> Self {
+        Self(Prover {
+            semantic,
+            resolve,
+            symbols: HashMap::new(),
+            in_progress: HashSet::new(),
+        })
+    }
+
+    pub(super) fn key(&mut self, expression: &'a Expression<'a>) -> Option<(Vec<String>, bool)> {
+        let proof = self.0.expression(expression, 0)?;
+        Some((proof.texts.into_iter().collect(), proof.digit))
+    }
+}

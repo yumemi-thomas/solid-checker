@@ -108,6 +108,7 @@ mod package_hand_off;
 pub use package_hand_off::{UnseenCode, unseen_code_in};
 mod pending_accounting;
 mod pipeline;
+mod plain_premise;
 mod projection;
 mod proof_candidates;
 mod proof_log;

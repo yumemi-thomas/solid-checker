@@ -67,7 +67,8 @@ use thiserror::Error;
 /// 98 (ADR 1109): `swallowing_try_blocks`, the `try` blocks a throw in which may end in a normal completion of the `try` (a
 /// `catch` that does more than rethrow, or a `finally` that may jump).
 /// 99 (ADR 1113): every `in` and `instanceof` binary with its operands (`relation_operators`).
-pub const AST_FACTS_SCHEMA: u32 = 99;
+/// 100 (ADR 1120): the places that may break the plain-program premise (`premise_sites`).
+pub const AST_FACTS_SCHEMA: u32 = 100;
 
 mod argument_completion;
 mod code_sinks;
@@ -81,6 +82,7 @@ mod host_execution;
 mod inert_javascript;
 mod literal_array;
 mod module_requests;
+mod premise_sites;
 mod primitive_completion;
 mod proxy_get_forward;
 mod span_index;
