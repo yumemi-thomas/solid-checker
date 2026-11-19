@@ -123,10 +123,11 @@ export function judgeLegal({ code, site, typecheck: typed, checker: whole, runti
   const ran = hitCount(runtime.hits ?? null, site.hit);
   if (ran === null) return { outcome: "disturbed", detail: { ...detail, why: "no hit ledger" } };
   // A site that never ran is unexecuted, a run-claiming rule's violation too (review 4c; ADR 0504's review had scored it a false positive).
-  // ADR 1132: a site in an intrinsic handler on an element mounted enabled that this page only never drives (`undrivenHandlerSite`) is
-  // reachable: a user can deliver the event in the window before the page's timer disables it, so a violation there is the reading of
-  // "wrong if it runs" (the owner's reachability ruling), held as `reachable` (codes.mjs `unexecutedViolation` does not ask for a look).
-  if (ran === 0 && !(evaluated && contradicted.some((finding) => RUN_CLAIMING_RULES.includes(finding.rule)))) return { outcome: "unexecuted", detail: reachable ? { ...detail, reachable: "undriven-handler" } : detail };
+  // ADR 1132: a site in a handler a user can reach (`undrivenHandlerSite`) whose every violation is of a `REACHABLE_RULES` rule other than the
+  // cell's own is the reading of "wrong if it runs" (the owner's reachability ruling), held as `reachable` (codes.mjs `unexecutedViolation`
+  // asks no look for it); any other violation there keeps its look.
+  const substantiated = reachable && contradicted.every((finding) => REACHABLE_RULES.includes(finding.rule) && !(codeRules[code] ?? []).includes(finding.rule));
+  if (ran === 0 && !(evaluated && contradicted.some((finding) => RUN_CLAIMING_RULES.includes(finding.rule)))) return { outcome: "unexecuted", detail: substantiated ? { ...detail, reachable: "undriven-handler" } : detail };
   return { outcome: "false-positive", detail: { ...detail, rules: [...new Set(contradicted.map((finding) => finding.rule))] } };
 }
 
@@ -154,24 +155,45 @@ export function evaluatedDead(program, built, site) {
 const MOUNT_DISABLED = /\b(?:disabled|inert)\b|\.\.\./;
 
 /**
- * ADR 1132: whether the site's use sits in the handler of an intrinsic element the program mounts enabled in a component's view and the page
- * never drives (`undriven`: the context's own timer disables or removes it later, misuse.mjs `TAKEN_AWAY`). Such a handler is reachable: the
- * element can receive its event from mount until the timer. An element made in a declaration (a detached `div` a dispatch drives) is no view's.
+ * ADR 1132: the contexts whose control is enabled from its mount until the context's own timer disables it (misuse.mjs `DENIED_LEGAL`,
+ * `laterRoot`), with the tag and event each mounts. Other `TAKEN_AWAY` contexts mean their trigger to fire the handler: a counter of 0 there
+ * is a harness look, not reachability (review F3).
  */
-export function undrivenHandlerSite(program, site) {
-  const holdsSite = (tree) => {
-    if (Array.isArray(tree)) return tree.some(holdsSite);
-    if (tree === null || typeof tree !== "object") return false;
-    if (tree.k === "use" && tree.site && (!site?.code || tree.code === site.code)) return true;
-    return Object.values(tree).some(holdsSite);
+const REACHABLE_CONTEXTS = { "dny-legal-click": ["button", "onClick"], "dny-legal-keydown": ["input", "onKeyDown"], "dny-legal-pointer": ["button", "onPointerDown"] };
+
+/**
+ * ADR 1132 (review F1): the rules whose violation in such a handler is the reading of "wrong if it runs", each substantiated by a driven
+ * twin in Chrome (runtime-oracle `handler-effect-driven`: NO_OWNER_EFFECT at a handler's `createEffect`). Never a rule of the cell's own code:
+ * that code is legal at the site by construction, so its violation stays a look.
+ */
+export const REACHABLE_RULES = ["missing-owner"];
+
+/**
+ * ADR 1132: whether the program's one site use (review F4: by identity, so a combination program, which holds several, never is) sits in the
+ * handler of the control a `REACHABLE_CONTEXTS` context mounts: a top-level element of the component's view (no `Show` or branch around it,
+ * review F3), with the context's tag and event, marked `undriven`, and no `disabled`, `inert` or spread attribute. Such a handler is
+ * reachable: a user can deliver the event from mount until the timer.
+ */
+export function undrivenHandlerSite(program) {
+  const uses = [];
+  const collect = (tree) => {
+    if (Array.isArray(tree)) { for (const item of tree) collect(item); return; }
+    if (tree === null || typeof tree !== "object") return;
+    if (tree.k === "use" && tree.site) uses.push(tree);
+    for (const value of Object.values(tree)) collect(value);
   };
-  const inView = (tree) => {
-    if (Array.isArray(tree)) return tree.some(inView);
+  collect(program?.components ?? []);
+  if (uses.length !== 1) return false;
+  const holds = (tree) => {
+    if (Array.isArray(tree)) return tree.some(holds);
     if (tree === null || typeof tree !== "object") return false;
-    if ((tree.k === "button" || tree.k === "hbutton") && tree.undriven && !MOUNT_DISABLED.test(String(tree.attrs ?? "")) && holdsSite(tree.handler)) return true;
-    return Object.values(tree).some(inView);
+    return tree === uses[0] || Object.values(tree).some(holds);
   };
-  return (program?.components ?? []).some((component) => inView(component.view));
+  return (program?.components ?? []).some((component) => {
+    const pair = REACHABLE_CONTEXTS[component.misuse?.context];
+    return pair !== undefined && Array.isArray(component.view) && component.view.some((node) => node?.k === "button" && node.undriven === true
+      && (node.tag ?? "button") === pair[0] && node.on === pair[1] && !MOUNT_DISABLED.test(String(node.attrs ?? "")) && holds(node.handler));
+  });
 }
 
 /**
@@ -182,12 +204,12 @@ export function judgeLegalProgram({ built, program, ...input }) {
   const uses = built.sites.filter((site) => site.code);
   const combo = uses.some((site) => site.primary);
   const site = siteOf(built);
-  const verdict = combo ? judgeUses(built, uses, { ...input, program }) : judgeLegal({ ...input, site, evaluated: evaluatedDead(program, built, site), reachable: undrivenHandlerSite(program, site) });
+  const verdict = combo ? judgeUses(built, uses, { ...input, program }) : judgeLegal({ ...input, site, evaluated: evaluatedDead(program, built, site), reachable: undrivenHandlerSite(program) });
   return withOffSite(verdict, combo ? uses : [siteOf(built)], { built, program, ...input });
 }
 
 function judgeUses(built, uses, input) {
-  const verdicts = uses.map((site) => ({ site, ...judgeLegal({ ...input, code: site.code, site, atSite: true, evaluated: evaluatedDead(input.program, built, site), reachable: undrivenHandlerSite(input.program, site) }) }));
+  const verdicts = uses.map((site) => ({ site, ...judgeLegal({ ...input, code: site.code, site, atSite: true, evaluated: evaluatedDead(input.program, built, site), reachable: undrivenHandlerSite(input.program) }) }));
   const worst = verdicts.reduce((a, b) => (WORST_FIRST.indexOf(b.outcome) < WORST_FIRST.indexOf(a.outcome) ? b : a));
   return { outcome: worst.outcome, detail: { ...worst.detail, at: worst.site.line, code: worst.site.code, sites: verdicts.map((v) => `${v.site.code}@${v.site.line}:${v.outcome}`) } };
 }

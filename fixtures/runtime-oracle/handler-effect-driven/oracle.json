@@ -1,0 +1,1 @@
+{ "note": "ADR 1132 (review F6): the dny-legal handler body (`createEffect` in an onClick) driven by the oracle reports NO_OWNER_EFFECT, covered by SC4001; on a button disabled from mount nothing runs, and the SC4001 violation there is a known false positive (static-only)." }

@@ -5,7 +5,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { UNEXECUTED_KNOWN, rowProblem, unexecutedEntry, unexecutedViolation } from "./codes.mjs";
-import { undrivenHandlerSite } from "./legal.mjs";
+import { generateLegal, judgeLegal, legalCells, recallLegalShapes, undrivenHandlerSite } from "./legal.mjs";
+import { siteOf } from "./matrix.mjs";
 import { compare } from "./smoke.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -33,19 +34,30 @@ describe("an unexecuted violation", () => {
     expect(rowProblem(row, { unexecutedKnown: without })).toBe("unexecuted-violation");
   });
 
-  it("ADR 1132: one in a handler a user can reach (an element mounted enabled that only the page never drives) passes", () => {
-    const row = { ...legal("lg-strict-read-untracked-dny-legal-click-store-effect-called-direct-none"), detail: { findings: ["missing-owner/violation@15"], reachable: "undriven-handler" } };
-    expect(rowProblem(row)).toBeNull();
-    const use = { k: "use", code: "STRICT_READ_UNTRACKED", site: true };
-    const program = (view, body = []) => ({ components: [{ k: "component", name: "C1", body, view }] });
-    const site = { code: "STRICT_READ_UNTRACKED" };
-    expect(undrivenHandlerSite(program([{ k: "button", id: "b1", handler: [{ k: "expr", e: use }], undriven: true }]), site)).toBe(true);
-    // Disabled or inert from its mount (or a spread that may say so): never reachable through this element.
-    expect(undrivenHandlerSite(program([{ k: "button", id: "b1", handler: [{ k: "expr", e: use }], undriven: true, attrs: "disabled" }]), site)).toBe(false);
-    expect(undrivenHandlerSite(program([{ k: "button", id: "b1", handler: [{ k: "expr", e: use }], undriven: true, attrs: "{...{ inert: true }}" }]), site)).toBe(false);
-    // Driven (the plan clicks it): an unexecuted row there is a look; detached (made in a declaration, no view): nothing can click it.
-    expect(undrivenHandlerSite(program([{ k: "button", id: "b1", handler: [{ k: "expr", e: use }] }]), site)).toBe(false);
-    expect(undrivenHandlerSite(program([], [{ k: "decl", name: "el", e: { k: "jsx", e: { k: "button", id: "b1", handler: [{ k: "expr", e: use }], undriven: true } } }]), site)).toBe(false);
+  it("ADR 1132: one in a handler a user can reach passes only for the missing-owner rule, never the cell's own (review F1, F3, F6)", () => {
+    // Generated programs, judged with the checker's rows and a run that never reached the site (the page never drives the control).
+    const judged = (context, variant, findings) => {
+      const cell = legalCells({ recall: true }).find((candidate) => candidate.code === "STRICT_READ_UNTRACKED" && candidate.context === context);
+      const shape = recallLegalShapes(cell.code, cell.context).find((candidate) => candidate.variant === variant);
+      const { program, built } = generateLegal({ seed: 1 }, cell, { shape });
+      const site = siteOf(built);
+      const verdict = judgeLegal({ code: cell.code, site, typecheck: { ok: true }, checker: { ok: true, findings: findings.map((rule) => ({ rule, kind: "violation", line: site.line, endLine: site.line, id: "SC", file: "App.tsx" })) },
+        runtime: { diagnostics: [], errors: [], witnesses: [], hits: { [site.hit]: 0 } }, reachable: undrivenHandlerSite(program) });
+      return { reachable: undrivenHandlerSite(program), problem: rowProblem({ id: `lg-${cell.code}-${context}`, ...verdict }) };
+    };
+    for (const context of ["dny-legal-click", "dny-legal-keydown", "dny-legal-pointer"]) {
+      expect(judged(context, "store-effect-called", ["missing-owner"])).toEqual({ reachable: true, problem: null });
+      // The cell's own rule: legal there by construction, so its violation keeps the look.
+      expect(judged(context, "store-effect-called", ["strict-read-untracked"]).problem).toBe("unexecuted-violation");
+      expect(judged(context, "store-effect-called", ["missing-owner", "strict-read-untracked"]).problem).toBe("unexecuted-violation");
+    }
+    // Disabled from its mount: no event ever reaches the handler, so nothing is reachable and a violation stays a look.
+    expect(judged("dny-legal-mount-disabled", "store-effect-called", ["missing-owner"])).toEqual({ reachable: false, problem: "unexecuted-violation" });
+    // Another TAKEN_AWAY context means its trigger to fire the handler: a counter of 0 there is a look.
+    // (Not a legal cell of this code: the same handler tree under its name.)
+    const tree = (context) => ({ components: [{ k: "component", misuse: { context }, view: [{ k: "button", tag: "button", on: "onClick", undriven: true, handler: [{ k: "expr", e: { k: "use", site: true } }] }] }] });
+    expect(undrivenHandlerSite(tree("dny-legal-click"))).toBe(true);
+    expect(undrivenHandlerSite(tree("dny-blur-disabled"))).toBe(false);
   });
 
   it("a misuse grid's `unexecuted` (the page halted before the site) is another outcome, and other outcomes are untouched", () => {
