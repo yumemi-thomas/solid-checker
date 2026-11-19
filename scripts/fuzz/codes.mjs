@@ -333,5 +333,6 @@ export function unexecutedEntry(row, ledger = UNEXECUTED_KNOWN) {
  * A misuse grid's `unexecuted` (matrix.mjs: the page halted before the site) is another outcome and is not this.
  */
 export function unexecutedViolation(row, ledger = UNEXECUTED_KNOWN) {
-  return row.outcome === "unexecuted" && typeof row.id === "string" && row.id.startsWith("lg-") && !unexecutedEntry(row, ledger);
+  // ADR 1132: a violation in a handler a user can reach (legal.mjs `undrivenHandlerSite`) is no look either.
+  return row.outcome === "unexecuted" && typeof row.id === "string" && row.id.startsWith("lg-") && !row.detail?.reachable && !unexecutedEntry(row, ledger);
 }

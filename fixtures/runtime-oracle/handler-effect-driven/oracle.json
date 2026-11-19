@@ -1,0 +1,11 @@
+{
+  "note": "ADR 1132 (review F6, round 2 N1): the dny-legal handler body driven by the oracle reports NO_OWNER_EFFECT at `createEffect` (Driven) and at `createRenderEffect` (DrivenRender), each covered by SC4001; on a button disabled from mount (MountDisabled) nothing runs and the SC4001 violation there is a known false positive, ADR 1134 (Mac 22).",
+  "open": [
+    {
+      "finding": "missing-owner App.tsx:23",
+      "kind": "no-diagnostic",
+      "reason": "createEffect in the onClick of a button disabled by its own JSX from mount: no event reaches the handler, so Chrome reports nothing; the checker should leave it uncertifiable (ADR 1134)",
+      "owner": "Mac 22"
+    }
+  ]
+}
