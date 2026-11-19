@@ -439,6 +439,12 @@ const WHOLE_STORE_READS = {
   // deferred arm answered before ADR 1111's check).
   "store-effect-carried": { reads: true, imports: ["createEffect"], text: (o) => `{ const f = () => ${o}.v; createEffect(f, () => {}); [f].forEach((g) => g()); }` },
   "store-render-effect-carried": { reads: true, imports: ["createRenderEffect"], text: (o) => `{ const f = () => ${o}.v; createRenderEffect(f, () => {}); [f].forEach((g) => g()); }` },
+  // ADR 1124: the twins of the forEach-carried entry, which stay no call of the callback: `map`, a non-literal receiver, a parameter
+  // passed on, a parameter reassigned.
+  "store-byname-mapped": { reads: true, imports: ["createMemo"], text: (o) => `{ const f = () => ${o}.v; createMemo(f); [f].map((g) => g()); }` },
+  "store-byname-list": { reads: true, imports: ["createMemo"], text: (o) => `{ const f = () => ${o}.v; createMemo(f); const l = [f]; l.forEach((g) => g()); }` },
+  "store-byname-passed": { reads: true, imports: ["createMemo"], text: (o) => `{ const f = () => ${o}.v; createMemo(f); [f].forEach((g) => { queueMicrotask(g); }); }` },
+  "store-byname-reassigned": { reads: true, imports: ["createMemo"], text: (o) => `{ const f = () => ${o}.v; createMemo(f); [f].forEach((g) => { g = () => 0; g(); }); }` },
   "store-settled-called": { reads: true, imports: ["onSettled"], text: (o) => `{ const f = () => { void ${o}.v; }; onSettled(f); f(); }` },
   ...STORE_DESTRUCTURES,
   "store-keys": { text: (o) => `Object.keys(${o})` },

@@ -3354,10 +3354,134 @@ fn entry_census(
             &[]
         },
         follow_aliases,
+        carried: follow_aliases && foreach_carried_enabled(),
     };
     bindings
         .iter()
         .all(|binding| census.binding_accounted(binding, &bindings, 0))
+}
+
+/// ADR 1124: the id `SOLID_CHECKER_IR_ABLATE_SILENCE` names to turn [`foreach_carried_call`] off (the monotone gate's ablation).
+pub(crate) const FOREACH_CARRIED: &str = "write_roles.role_entries_complete.foreach-carried";
+
+/// Whether ADR 1124's carried entries count (not ablated).
+pub(crate) fn foreach_carried_enabled() -> bool {
+    !crate::site_accounting::ablated_id(FOREACH_CARRIED)
+}
+
+/// ADR 1124 (the Fable review of ADR 1119, "Proposed rule"): the call that runs the function `reference` names, when `reference` is
+/// a whole element of a spread-free array literal that is the direct receiver of the standard `Array.prototype.forEach` (Type Facts,
+/// no impostor veto), whose first argument is an inline arrow, not async and not a generator, with one plain parameter, no default,
+/// that is never written and whose every reference is the callee of a plain call written in the arrow's own body: the arrow then runs
+/// the function on the `forEach` call's stack, synchronously, as `cb()` written there would. Returns the `forEach` call's span (the
+/// place the run is classified at); `None` for anything else (`map`, a non-literal receiver, a spread, a parameter passed on, stored,
+/// written or called in a nested function, a second parameter that could reach the array).
+pub(crate) fn foreach_carried_call(
+    file: &solid_facts::FileFacts,
+    reference: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    let ast = &file.ast;
+    let literal = ast.array_literal_elements.iter().find(|literal| {
+        literal.elements.iter().any(|element| {
+            element.kind == solid_facts::ast::ArrayElementKind::Value
+                && ast.peel_ts_sugar_span(element.span) == reference
+        })
+    })?;
+    if literal
+        .elements
+        .iter()
+        .any(|element| element.kind == solid_facts::ast::ArrayElementKind::Spread)
+    {
+        return None;
+    }
+    let call = ast.calls.iter().find(|call| {
+        !call.construct
+            && ast
+                .member_at(ast.peel_ts_sugar_span(call.callee))
+                .is_some_and(|member| ast.peel_ts_sugar_span(member.object) == literal.span)
+    })?;
+    let declaration = crate::indexes::standard_library_declaration_of(
+        lookup.resolved_callee_call(file, call.callee),
+        typefacts::CallKind::Call,
+    )?;
+    if !matches!(
+        declaration.qualified_name.as_ref(),
+        "Array.forEach" | "ReadonlyArray.forEach"
+    ) || lookup.standard_call_withheld(file, call.callee)
+    {
+        return None;
+    }
+    let argument = call.arguments.first().filter(|argument| !argument.spread)?;
+    let callback = ast
+        .functions
+        .iter()
+        .find(|function| function.span == ast.peel_ts_sugar_span(argument.span))?;
+    if callback.kind != solid_facts::ast::FunctionKind::Arrow
+        || callback.r#async
+        || callback.generator
+        || callback.rest_parameter
+        || callback.parameters.len() != 1
+    {
+        return None;
+    }
+    let parameter = &callback.parameters[0];
+    if parameter.shape != solid_facts::ast::BindingShape::Identifier
+        || parameter.initializer.is_some()
+    {
+        return None;
+    }
+    let name = parameter.names.first()?;
+    let symbol = lookup.entities().at(file.path.as_str(), name.span)?;
+    let references = lookup.symbol_references_if_present(symbol.as_str())?;
+    let only_called = references.iter().all(|use_| {
+        if use_.path.as_ref() != file.path.as_str() {
+            return false;
+        }
+        let (Ok(start), Ok(end)) = (u32::try_from(use_.start_byte), u32::try_from(use_.end_byte))
+        else {
+            return false;
+        };
+        let at = Span::new(start, end);
+        at == name.span
+            || ast.calls.iter().any(|inner| {
+                !inner.construct
+                    && ast.peel_ts_sugar_span(inner.callee) == at
+                    && crate::owners::owning_function(ast, inner.span)
+                        .is_some_and(|owner| owner.span == callback.span)
+            })
+    });
+    only_called.then_some(call.span)
+}
+
+/// ADR 1124: every call [`foreach_carried_call`] finds for a reference of `function`'s own binding (no alias: a carried alias would
+/// be an entry no classification reads), or none when the proof is ablated.
+pub(crate) fn foreach_carried_calls(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<Span> {
+    if !foreach_carried_enabled() {
+        return Vec::new();
+    }
+    let Some(name) = function_binding_name(file, function) else {
+        return Vec::new();
+    };
+    let Some(symbol) = lookup.entities().at(file.path.as_str(), name.span) else {
+        return Vec::new();
+    };
+    let Some(references) = lookup.symbol_references_if_present(symbol.as_str()) else {
+        return Vec::new();
+    };
+    references
+        .iter()
+        .filter(|reference| reference.path.as_ref() == file.path.as_str())
+        .filter_map(|reference| {
+            let start = u32::try_from(reference.start_byte).ok()?;
+            let end = u32::try_from(reference.end_byte).ok()?;
+            foreach_carried_call(file, Span::new(start, end), lookup)
+        })
+        .collect()
 }
 
 /// The entries [`entry_census`] counts as seen.
@@ -3369,6 +3493,9 @@ struct Census<'c, 'a> {
     positions: &'c [Span],
     tracking: &'c [Span],
     follow_aliases: bool,
+    /// ADR 1124: a reference of the function's own binding (depth 0) that [`foreach_carried_call`] runs is an entry, which the role's
+    /// callers classify at the `forEach` call ([`foreach_carried_calls`]).
+    carried: bool,
 }
 
 impl Census<'_, '_> {
@@ -3421,6 +3548,9 @@ impl Census<'_, '_> {
                             .any(|literal| literal.span.contains(at))
                 })
                 || (self.follow_aliases && depth < ALIAS_DEPTH && self.alias_accounted(at, depth))
+                || (self.carried
+                    && depth == 0
+                    && foreach_carried_call(self.file, at, self.lookup).is_some())
         })
     }
 

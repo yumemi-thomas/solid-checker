@@ -738,7 +738,69 @@ pub(crate) fn named_at_tracked_position(
         // `createEffect(cb, …); [cb].forEach((g) => g())` runs the read in the body too.
         (role.tracked || role.effect_compute)
             && super::write_roles::role_entries_complete(file, function, lookup)
+            && carried_calls_silent(file, function, lookup)
     })
+}
+
+thread_local! {
+    /// The functions whose carried calls [`carried_calls_silent`] is classifying on this thread: one reached again (it carries itself)
+    /// is refused, never recursed into.
+    static CLASSIFYING_CARRIED: std::cell::RefCell<HashSet<(String, Span)>> = std::cell::RefCell::new(HashSet::default());
+}
+
+/// ADR 1124: the census accepts a reference the standard `forEach` runs ([`super::write_roles::foreach_carried_call`]) as an entry,
+/// which only holds when the run it stands for is silent where it runs: each such `forEach` call is classified as `cb()` written there,
+/// with a read's own placement ([`super::read_execution_role`]: a `ref` an intrinsic applies runs in the body's rendering), and a role
+/// that reports a read or a write, or none (unplaced), refuses the tracked position's silence. A direct call needs no such check here:
+/// the summaries carry the function's rows to it.
+fn carried_calls_silent(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let calls = super::write_roles::foreach_carried_calls(file, function, lookup);
+    if calls.is_empty() {
+        return true;
+    }
+    let allowed = super::read_context::allowed_callback_spans(file, lookup);
+    calls.into_iter().all(|call| {
+        let role = carried_call_role(
+            file,
+            function,
+            call,
+            &allowed,
+            lookup.entities(),
+            lookup.symbol_names(),
+            lookup,
+        );
+        !role.reports_untracked_read()
+            && !role.reports_disallowed_write()
+            && !role.reports_unplaced()
+    })
+}
+
+/// ADR 1124: the role of the run a carried `forEach` call stands for, as a read written at the call would take it
+/// ([`super::read_execution_role`]); [`ExecutionRole::Unknown`] (unplaced, refused) when `function`'s carried calls are already being
+/// classified on this thread (it carries itself), never a recursion.
+pub(super) fn carried_call_role(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    call: Span,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> ExecutionRole {
+    let key = (file.path.to_string(), function.span);
+    if !CLASSIFYING_CARRIED.with(|set| set.borrow_mut().insert(key.clone())) {
+        return role_arm!(
+            "named_callbacks.carried_call_role.reentered",
+            ExecutionRole::Unknown
+        );
+    }
+    let role = super::read_execution_role(file, call, allowed, entities, symbol_names, lookup);
+    CLASSIFYING_CARRIED.with(|set| set.borrow_mut().remove(&key));
+    role
 }
 
 /// ADR 0933, 0936: the argument positions that name the innermost

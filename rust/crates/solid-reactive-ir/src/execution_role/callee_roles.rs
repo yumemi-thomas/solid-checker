@@ -3317,20 +3317,38 @@ fn named_callback_also_called(
         if !classifying.insert(key.clone()) {
             return true;
         }
-        let unplaced = function_called_by_name(file, callback, lookup)
+        // ADR 1124: a whole element of a literal the standard `forEach` runs through an only-called parameter is a call of the
+        // callback at that `forEach` call, classified as a read written there would be (a `ref` an intrinsic applies included);
+        // a callback whose carried calls are already being classified is refused.
+        let carried = super::write_roles::foreach_carried_calls(file, callback, lookup)
             .into_iter()
             .any(|call| {
-                let at = semantic_execution_role_within(
+                let at = super::named_callbacks::carried_call_role(
                     file,
+                    callback,
                     call,
                     allowed,
                     entities,
                     symbol_names,
                     lookup,
-                    classifying,
                 );
                 at.reports_untracked_read() || at == ExecutionRole::Unknown
             });
+        let unplaced = carried
+            || function_called_by_name(file, callback, lookup)
+                .into_iter()
+                .any(|call| {
+                    let at = semantic_execution_role_within(
+                        file,
+                        call,
+                        allowed,
+                        entities,
+                        symbol_names,
+                        lookup,
+                        classifying,
+                    );
+                    at.reports_untracked_read() || at == ExecutionRole::Unknown
+                });
         classifying.remove(&key);
         unplaced
     })
