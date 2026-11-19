@@ -34183,5 +34183,18 @@
   "found": "Fable review of ADR 1108 part 1; pattern lane `pkgaction/proto-site-{interface,any,bare-eventtarget,accessor}` and `pkgaction/proto-iter-{set,map}`, Chrome-confirmed",
   "fixed": "ADR 1114 family 3 slice A (`prototype_call`: any member call of a written name, `INHERITED_BY_WINDOW`, `ITERATING_CONSTRUCTORS`; `prototype_read` for an evaluated member or a pattern key of a written name)",
   "outside": "the pa contexts write one site expression with no declaration outside the component's body (an interface), and their receivers are the library's: these six are held verbatim by the pattern lane (false clean on main e637f50f2, fine here), the runtime oracle cases package-prototype-sites and package-prototype-iteration, and fixtures action-in-owned-scope-prototype-sites and action-in-owned-scope-prototype-iteration"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent at an iteration (a spread, `for…of`, an array pattern) after an installed package writes `Symbol.iterator` on a built-in's prototype, a key the scan does not decide (an any-name writer)",
+  "found": "Fable review of ADR 1108 part 1; pattern lane `pkgaction/proto-iter-{spread,forof,pattern}`, Chrome-confirmed (held by ADR 1108 part 2 and ADR 1114 family 3 slice A)",
+  "fixed": "ADR 1114 family 3 slice C (`package_action_calls.rs`: every iterated operand is a site where a writer under any name is loaded; kind `iteration`)",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pa-gprotoiter-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoiter-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoiter-root-x-direct-none"
+  ],
+  "rediscovered": "new context pa-gprotoiter (`void [...new Float32Array(1)]`, pa-shapes.mjs): `focus.mjs --codes ACTION_CALLED_IN_OWNED_SCOPE --grids mx-recall --boundary both --ids`, release builds: main e637f50f2 and slice A (69d19949a) exit 1, false-clean 3 in both boundaries; slice C exits 0, recall-gap 3; oracle 3 compared, 0 behaviour. `for…of` and the array pattern are held by the pattern lane (false clean before, fine here) and fixture action-in-owned-scope-prototype-iteration"
  }
 ]

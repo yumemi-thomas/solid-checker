@@ -2937,9 +2937,9 @@ fn prototype_call(
     })
 }
 
-/// ADR 1114 family 3: the kinds of prototype-writer site not yet made, each a named cost (`docs/open-work.md`): a member call with no resolved declaration under
-/// an any-name writer, and an iteration under one. Their writers are cut first (ADR 1114 family 3, slice B), then they are made.
-const HELD_PROTOTYPE_KINDS: &[&str] = &["any-untyped-member", "iteration"];
+/// ADR 1114 family 3: the kind of prototype-writer site not yet made, a named cost (`docs/open-work.md`): a member call with no resolved declaration under
+/// an any-name writer (no probe or known false clean needs it; its cost waits for a ruling).
+const HELD_PROTOTYPE_KINDS: &[&str] = &["any-untyped-member"];
 
 /// ADR 1114 family 3: whether a site of this kind is made (every kind but [`HELD_PROTOTYPE_KINDS`]).
 fn prototype_kind_on(kind: &str) -> bool {

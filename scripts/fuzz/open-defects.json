@@ -128,33 +128,6 @@
     "ACTION_CALLED_IN_OWNED_SCOPE"
    ],
    "certified": false
-  },
-  {
-   "id": "pkgaction/proto-iter-forof",
-   "item": "ADR 1108 part 2 named miss, held by ADR 1114 family 3 (kind `iteration`, slice C after its writers are cut) (Chrome-confirmed, rc.21): a `for…of` after a package writes `Float32Array.prototype[Symbol.iterator]`",
-   "outcome": "false-clean",
-   "codes": [
-    "ACTION_CALLED_IN_OWNED_SCOPE"
-   ],
-   "certified": false
-  },
-  {
-   "id": "pkgaction/proto-iter-pattern",
-   "item": "ADR 1108 part 2 named miss, held by ADR 1114 family 3 (kind `iteration`, slice C after its writers are cut) (Chrome-confirmed, rc.21): an array pattern after a package writes `Float32Array.prototype[Symbol.iterator]`",
-   "outcome": "false-clean",
-   "codes": [
-    "ACTION_CALLED_IN_OWNED_SCOPE"
-   ],
-   "certified": false
-  },
-  {
-   "id": "pkgaction/proto-iter-spread",
-   "item": "ADR 1108 part 2 named miss, held by ADR 1114 family 3 (kind `iteration`, slice C after its writers are cut) (Chrome-confirmed, rc.21): a spread after a package writes `Float32Array.prototype[Symbol.iterator]`",
-   "outcome": "false-clean",
-   "codes": [
-    "ACTION_CALLED_IN_OWNED_SCOPE"
-   ],
-   "certified": false
   }
  ],
  "notGenerated": [

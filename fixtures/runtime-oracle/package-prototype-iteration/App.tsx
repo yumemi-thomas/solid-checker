@@ -1,8 +1,20 @@
 import "fz-piter";
 
 
-// ADR 1114 family 3 (ADR 1108 part 2): a collection constructor given a value runs the iterator `fz-piter` writes. A spread, `for…of` and an array pattern
-// wait for slice C (held in `scripts/fuzz/open-defects.json`).
+// ADR 1114 family 3 (ADR 1108 part 2): each iteration runs the iterator `fz-piter` writes.
+export function Spread() {
+  void [...new Float32Array(1)];
+  return null;
+}
+export function ForOf() {
+  for (const n of new Float32Array(1)) void n;
+  return null;
+}
+export function ArrayPattern() {
+  const [n] = new Float32Array(1);
+  void n;
+  return null;
+}
 export function SetConstructor() {
   void new Set(new Float32Array(1));
   return null;

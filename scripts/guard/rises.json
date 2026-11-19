@@ -5054,6 +5054,62 @@
    "to": 42,
    "adr": "ADR 1114",
    "fact": "family 3 slice A: under the fixture's any-name prototype writer (fz-ctor hands Float32Array to a Proxy), localIdentity() is a binding whose resolved declaration is the library's VoidFunction (a project arrow handed through id(f: VoidFunction)), which the any-bound-library arm takes for a library method: fail-closed, Chrome silent; the arm should ask the binding's value origin, not its type"
+  },
+  {
+   "fixture": "reactive-ir/dependency-phantom-solid-undecided",
+   "key": "SC2002 package-may-call-action",
+   "from": 3,
+   "to": 4,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice C: every iterated operand (a spread, for…of, an array pattern such as const [v, setV] = createSignal(), yield*) is an SC2002 site where a loaded package may write a built-in's prototype under any name (an undecided closure, the global object handed on, generated code): fail-closed, uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/dependency-value-flow",
+   "key": "SC2002 package-may-call-action",
+   "from": 19,
+   "to": 20,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice C: every iterated operand (a spread, for…of, an array pattern such as const [v, setV] = createSignal(), yield*) is an SC2002 site where a loaded package may write a built-in's prototype under any name (an undecided closure, the global object handed on, generated code): fail-closed, uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper",
+   "key": "SC2002 package-may-call-action",
+   "from": 122,
+   "to": 164,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice C: every iterated operand (a spread, for…of, an array pattern such as const [v, setV] = createSignal(), yield*) is an SC2002 site where a loaded package may write a built-in's prototype under any name (an undecided closure, the global object handed on, generated code): fail-closed, uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper-eval",
+   "key": "SC2002 package-may-call-action",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice C: every iterated operand (a spread, for…of, an array pattern such as const [v, setV] = createSignal(), yield*) is an SC2002 site where a loaded package may write a built-in's prototype under any name (an undecided closure, the global object handed on, generated code): fail-closed, uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper-patched-bind",
+   "key": "SC2002 package-may-call-action",
+   "from": 5,
+   "to": 6,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice C: every iterated operand (a spread, for…of, an array pattern such as const [v, setV] = createSignal(), yield*) is an SC2002 site where a loaded package may write a built-in's prototype under any name (an undecided closure, the global object handed on, generated code): fail-closed, uncertifiable only"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC2002 package-may-call-action",
+   "from": 38,
+   "to": 111,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice C: every iterated operand (a spread, for…of, an array pattern such as const [v, setV] = createSignal(), yield*) is an SC2002 site where a loaded package may write a built-in's prototype under any name (an undecided closure, the global object handed on, generated code): fail-closed, uncertifiable only"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc4001",
+   "key": "SC2002 package-may-call-action",
+   "from": 43,
+   "to": 63,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice C: every iterated operand (a spread, for…of, an array pattern such as const [v, setV] = createSignal(), yield*) is an SC2002 site where a loaded package may write a built-in's prototype under any name (an undecided closure, the global object handed on, generated code): fail-closed, uncertifiable only"
   }
  ]
 }

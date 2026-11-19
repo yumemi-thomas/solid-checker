@@ -1,5 +1,5 @@
 {
- "note": "ADR 1108 part 2: a package writes `Symbol.iterator` on a built-in's prototype, a key the scan does not decide, so it may write any method: the `Set` and `Map` constructors run the iterator (a spread, `for…of` and an array pattern wait for ADR 1114 family 3 slice C). Chrome throws ACTION_CALLED_IN_OWNED_SCOPE at each site, covered-uncertifiable; the clear writer, the unwritten names and the handler are quiet.",
+ "note": "ADR 1108 part 2: a package writes `Symbol.iterator` on a built-in's prototype, a key the scan does not decide, so it may write any method: a spread, `for…of`, an array pattern and the `Set` and `Map` constructors run the iterator. Chrome throws ACTION_CALLED_IN_OWNED_SCOPE at each site, covered-uncertifiable; the clear writer, the unwritten names and the handler are quiet.",
  "packages": [
   "fz-piter"
  ]
