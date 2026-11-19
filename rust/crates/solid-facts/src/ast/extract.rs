@@ -72,6 +72,7 @@ pub fn extract(path: impl Into<String>, source: &str) -> Result<AstFacts, AstFac
             .is_some_and(|text| text.contains("@ts-nocheck"))
     });
     facts.unreachable_regions = unreachable::unreachable_regions(&parsed.program);
+    facts.reference_positions = super::reference_positions::reference_positions(semantic.nodes());
     // A name is followed to its declaration only where the binder reported no error and no `with` statement can rebind a bare name to a property of an object.
     let follows_names = execution_semantics_valid
         && !semantic
@@ -811,6 +812,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             iterated_operands: self.iterated_operands,
             key_probed_operands: self.key_probed_operands,
             relation_operators: self.relation_operators,
+            reference_positions: Vec::new(),
             assignments: self.assignments,
             write_targets: self.write_targets,
             deleted_targets: self.deleted_targets,

@@ -4237,3 +4237,80 @@ fn throws_and_catch_parameters_are_recorded() {
         .collect::<Vec<_>>();
     assert_eq!(caught, [(Some("e"), true), (None, true), (None, false)]);
 }
+
+/// ADR 1114 families 2-4: every identifier reference has a position from its parent, wrappers climbed.
+#[test]
+fn reference_positions_name_the_parent_slot() {
+    use super::ReferencePosition as P;
+    let source = concat!(
+        "declare const st: any; declare function f(a: any, b: any): void;\n",
+        "const { v } = st;\n",
+        "const w = st;\n",
+        "f(1, st);\n",
+        "st.a.v = 7;\n",
+        "const g = () => st;\n",
+        "f(st as any, 0);\n",
+        "for (const x of st) {}\n",
+        "({ v: w } = st);\n",
+        "function h(p = st) { return p; }\n",
+        "typeof st;\n",
+        "let n = 0; n += 1; n++;\n",
+        "const o = { st, k: st };\n",
+        "st();\n",
+    );
+    let facts = super::extract("positions.ts", source).unwrap();
+    let positions: Vec<(usize, P)> = facts
+        .reference_positions
+        .iter()
+        .filter(|fact| &source[fact.span.start as usize..fact.span.end as usize] == "st")
+        .map(|fact| {
+            (
+                source[..fact.span.start as usize].matches('\n').count() + 1,
+                fact.position,
+            )
+        })
+        .collect();
+    assert_eq!(
+        positions,
+        vec![
+            (2, P::Initializer { pattern: true }),
+            (3, P::Initializer { pattern: false }),
+            (4, P::Argument { index: 1 }),
+            (5, P::MemberObject),
+            (6, P::ArrowBody),
+            (7, P::Argument { index: 0 }),
+            (8, P::ForInOfSource),
+            (9, P::AssignmentValue { pattern: true }),
+            (10, P::PatternDefault),
+            (11, P::Typeof),
+            (13, P::PropertyValue { shorthand: true }),
+            (13, P::PropertyValue { shorthand: false }),
+            (14, P::Callee),
+        ]
+    );
+    let n: Vec<P> = facts
+        .reference_positions
+        .iter()
+        .filter(|fact| &source[fact.span.start as usize..fact.span.end as usize] == "n")
+        .map(|fact| fact.position)
+        .collect();
+    assert_eq!(
+        n,
+        vec![P::AssignmentTarget { compound: true }, P::UpdateOperand]
+    );
+    // `st as any` holds the argument slot through the wrapper: `at` is the wrapper.
+    let wrapped = facts
+        .reference_positions
+        .iter()
+        .find(|fact| fact.at != fact.span)
+        .unwrap();
+    assert_eq!(
+        &source[wrapped.at.start as usize..wrapped.at.end as usize],
+        "st as any"
+    );
+    // `w` written by a destructuring assignment.
+    assert!(facts.reference_positions.iter().any(|fact| &source
+        [fact.span.start as usize..fact.span.end as usize]
+        == "w"
+        && fact.position == P::PatternTarget));
+}

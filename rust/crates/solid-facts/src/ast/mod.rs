@@ -83,6 +83,7 @@ mod literal_array;
 mod module_requests;
 mod primitive_completion;
 mod proxy_get_forward;
+mod reference_positions;
 mod span_index;
 mod suppression;
 mod unconditional_calls;
