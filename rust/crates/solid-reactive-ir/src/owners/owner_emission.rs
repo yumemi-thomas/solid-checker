@@ -1138,15 +1138,40 @@ pub(super) fn named_layer_entry_open(
     caller_unplaced: impl Fn(&solid_facts::FileFacts, Span) -> bool,
 ) -> bool {
     let mut walked = HashSet::default();
-    layer_entry_open(
-        file,
-        span,
-        region,
-        lookup,
-        &caller_unplaced,
-        &mut walked,
-        LAYER_CALLER_DEPTH,
-    )
+    with_origin(file, span, || {
+        layer_entry_open(
+            file,
+            span,
+            region,
+            lookup,
+            &caller_unplaced,
+            &mut walked,
+            LAYER_CALLER_DEPTH,
+        )
+    })
+}
+
+thread_local! {
+    /// ADR 1118 M2b: the site a layer walk started from, so an arm that ends it deep in the walk names it in the proof log.
+    static ORIGIN: std::cell::RefCell<Option<crate::Location>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Runs `walk` with the origin site set (only while the proof log is on; the outermost walk's site wins).
+fn with_origin<T>(file: &solid_facts::FileFacts, span: Span, walk: impl FnOnce() -> T) -> T {
+    if !crate::proof_log::enabled() {
+        return walk();
+    }
+    let previous = ORIGIN.with(|origin| {
+        let mut origin = origin.borrow_mut();
+        let previous = origin.clone();
+        if previous.is_none() {
+            *origin = Some(span.location(file.path.shared()));
+        }
+        previous
+    });
+    let result = walk();
+    ORIGIN.with(|origin| *origin.borrow_mut() = previous);
+    result
 }
 
 /// [`named_layer_entry_open`] with no region, for the owner-call universe's silences (batch 11, slice 6): the same walk, whose premises the emission adopted
@@ -1161,15 +1186,17 @@ pub(super) fn layer_entry_open_by_reference(
     caller_unplaced: impl Fn(&solid_facts::FileFacts, Span) -> bool,
 ) -> bool {
     let mut walked = HashSet::default();
-    layer_entry_open(
-        file,
-        span,
-        None,
-        lookup,
-        &caller_unplaced,
-        &mut walked,
-        LAYER_CALLER_DEPTH,
-    )
+    with_origin(file, span, || {
+        layer_entry_open(
+            file,
+            span,
+            None,
+            lookup,
+            &caller_unplaced,
+            &mut walked,
+            LAYER_CALLER_DEPTH,
+        )
+    })
 }
 
 /// ADR 1089 part E: whether `function` is, as written, the whole value of a plain `on<letter>…` attribute (no namespace) of an
@@ -1420,6 +1447,17 @@ fn layer_entry_open(
             && !lookup.stored_handler_reachable_from(file.path.as_str())
             && !crate::role_log::proof_arm_ablated("owner_emission.layer_entry_open.handler-entry")
         {
+            // ADR 1118 M2b: the proof log names the arm on the handler's span, which holds every row it ends.
+            const ARM: &str = "owner_emission.layer_entry_open.handler-entry";
+            crate::proof_log::silent(
+                "SC6002",
+                &function.span.location(file.path.shared()),
+                ARM,
+                &[],
+            );
+            if let Some(origin) = ORIGIN.with(|origin| origin.borrow().clone()) {
+                crate::proof_log::silent("SC6002", &origin, ARM, &[]);
+            }
             continue;
         }
         if function_binding_name(file, function).is_none() {
