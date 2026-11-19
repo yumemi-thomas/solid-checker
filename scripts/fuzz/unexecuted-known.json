@@ -8,6 +8,14 @@
    "idRegex": "^lg-[a-z-]+-tbl-nodelistof-foreach-zero-",
    "adr": "ADR 1033",
    "why": "`document.querySelectorAll(\"sc-no-such-tag\").forEach(f)`: the site may run, since a real page can hold such elements (its HTML, the project, a package may add them), so the violation is the conditional-render reading and right; only the fuzz page holds none, which is why Chrome never runs `f` there (5 rows: SC2001 x3, SC2002, SC3002)."
+  },
+  {
+   "grid": "lg-recall",
+   "kind": "pending-fix",
+   "item": "dny-legal-store-effect-called",
+   "idRegex": "^lg-strict-read-untracked-dny-legal-(click|keydown|pointer)-store-effect-(named-)?called-direct-none$",
+   "adr": "ADR 1132",
+   "why": "An SC4001 `missing-owner` violation at line 15 of a store effect also called by name in a dny-legal click/keydown/pointer handler, which no run reaches (#294 smoke, f3d2c5769). It is pre-existing: main c212ad5f5 gives the same findings, and ADR 1127's twin variant only generated these programs. By the coordinator's ruling the violation is correct under the reachability ruling; ADR 1132 is the fuzz-side judge/generator fix (Mac 20), which removes this entry."
   }
  ]
 }
