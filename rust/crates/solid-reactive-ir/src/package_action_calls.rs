@@ -212,6 +212,11 @@ fn file_sites(
     let accessors_possible = ctx
         .package_reach
         .is_some_and(solid_facts::package_reach::PackageReachIndex::defines_global_accessors);
+    let f5_clear = std::env::var("SOLID_CHECKER_F5_CLEAR").is_ok_and(|value| value == "1");
+    let f5_runtime = std::env::var("SOLID_CHECKER_F5_RUNTIME").is_ok_and(|value| value == "1");
+    let prototype_writer_loaded = ctx
+        .package_reach
+        .is_some_and(|index| index.prototype_writers_of_unspelled().next().is_some());
     let mut push = |at: Span, callee: Span, entry: Entry, declaration: Option<DeclarationAt>| {
         let Some(declaration) = declaration else {
             return;
@@ -223,7 +228,9 @@ fn file_sites(
                 detail: "this adapter reads no installed package".into(),
             },
         };
-        if reach.is_clear() {
+        // ADR 1114 family 3 slice F step 0 (measurement only, `SOLID_CHECKER_F5_CLEAR=1`): under a prototype writer that may reach Solid, a clear
+        // package's call may run a member another package wrote; kept as a site to count them.
+        if reach.is_clear() && !(f5_clear && prototype_writer_loaded) {
             return;
         }
         // A site two routes find (an identifier and the member it is the object of) stands once; a clear package's value handed to the same call never hides
@@ -354,6 +361,26 @@ fn file_sites(
     for element in &file.ast.jsx_elements {
         // An intrinsic element (`<button>`) is the DOM's; its tag names no code.
         if crate::object_members::intrinsic_element(file, element) {
+            // ADR 1114 family 3 slice F step 0 (measurement only, `SOLID_CHECKER_F5_RUNTIME=1`): the runtime clones a template root (`cloneNode`,
+            // `importNode`), which a package may have written on `Node.prototype` or `Document.prototype`.
+            if f5_runtime && template_root(file, element) {
+                let opening = if element.opening.end > element.opening.start {
+                    element.opening
+                } else {
+                    element.span
+                };
+                push(
+                    element.span,
+                    opening,
+                    Entry::Render,
+                    prototype_read(
+                        ctx,
+                        &["cloneNode", "importNode"],
+                        Some("[cloneNode]"),
+                        "runtime-element",
+                    ),
+                );
+            }
             continue;
         }
         let opening = if element.opening.end > element.opening.start {
@@ -3566,4 +3593,40 @@ mod tests {
             assert!(!is_identifier_name(name), "{name}");
         }
     }
+}
+
+/// ADR 1114 family 3 slice F step 0 (measurement only): whether an intrinsic element is the root of a template the runtime clones: no element
+/// encloses it, the nearest one is a component, or a JSX expression (a child or an attribute value) lies between them.
+fn template_root(file: &FileFacts, element: &solid_facts::ast::JsxElementFact) -> bool {
+    let ast = &file.ast;
+    let Some(parent) = ast
+        .jsx_elements
+        .iter()
+        .filter(|other| other.span != element.span && other.span.contains(element.span))
+        .min_by_key(|other| other.span.end - other.span.start)
+    else {
+        return true;
+    };
+    if !crate::object_members::intrinsic_element(file, parent) {
+        return true;
+    }
+    let between = |span: Span| {
+        parent.span.contains(span) && span != parent.span && span.contains(element.span)
+    };
+    ast.jsx_child_expressions.iter().any(|&span| between(span))
+        || parent
+            .attributes
+            .iter()
+            .filter_map(|attribute| attribute.expression)
+            .any(between)
+        || ast
+            .jsx_elements
+            .iter()
+            .flat_map(|other| {
+                other
+                    .attributes
+                    .iter()
+                    .filter_map(|attribute| attribute.expression)
+            })
+            .any(between)
 }
