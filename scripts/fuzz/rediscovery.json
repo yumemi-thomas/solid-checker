@@ -36830,5 +36830,42 @@
    "mx-strict-read-untracked-dny-portal-dispose-store-effect-named-called-direct-none"
   ],
   "rediscovered": "fuzz-focus mx-recall on store-effect-called and store-effect-named-called: main c212ad5f5 (and ADR 1127 alone) 104 false cleans; ADR 1130 none"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent at an operation that runs a member a package wrote on a built-in's prototype other than a member call the library declares: a call typed by a project interface or type literal under an any-name writer, a conversion by an operator (`\"\" + d`), a template substitution, `p.catch(f)` running `then`, a bare `dispatchEvent`, an accessor read, `new Set(it)`, `new URL(u)`",
+  "found": "Fable review of ADR 1114 family 3 (A+C, round 1: F1-F4, F6) and pattern lane `pkgaction/proto-anyname-{interface,unknown-cast}`; Chrome-confirmed (review-f3 oracle)",
+  "fixed": "ADR 1114 family 3 slice E (fail closed under a prototype writer: every member call, every library call, constructor and tag, every converting operator (facts schema 103 `converting_operators`), every array pattern, `await`, `using`, JSX values)",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pa-gprotocast-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotocast-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotocast-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoannot-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoannot-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoannot-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoconcat-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoconcat-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoconcat-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprototemplate-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprototemplate-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprototemplate-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotocatch-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotocatch-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotocatch-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotobare-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotobare-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotobare-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoget-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoget-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoget-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoset-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoset-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoset-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotourl-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotourl-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotourl-root-x-direct-none"
+  ],
+  "rediscovered": "new contexts pa-gprotocast, -gprotoannot, -gprotoconcat, -gprototemplate, -gprotocatch, -gprotobare, -gprotoget, -gprotoset, -gprotourl (pa-shapes.mjs; the last six move the review's `outside` shapes into the generator): `focus.mjs --codes ACTION_CALLED_IN_OWNED_SCOPE --grids mx-recall --boundary both --ids`, release builds: main e637f50f2 exits 1 (false-clean 24, recall-gap 3: the template, already a site), slice D 41c5e399f exits 1 (false-clean 15), slice E exits 0 (recall-gap 27); oracle 27 compared, 0 behaviour"
  }
 ]

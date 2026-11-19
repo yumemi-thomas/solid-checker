@@ -128,6 +128,24 @@
     "ACTION_CALLED_IN_OWNED_SCOPE"
    ],
    "certified": false
+  },
+  {
+   "id": "pkgaction/proto-known-clearpkg",
+   "item": "ADR 1114 family 3 review F5 (Fable, round 1; Chrome-confirmed, rc.21; older than family 3): a package whose closure names no Solid package (`rev = (a) => a.reverse()`) is taken as clear, though its standard call runs the `reverse` another package wrote on `Float32Array.prototype`. Held for a ruling: under a prototype writer no package is clear and every primitive call and element may run a written member, a cost question (docs/open-work.md)",
+   "outcome": "false-clean",
+   "codes": [
+    "ACTION_CALLED_IN_OWNED_SCOPE"
+   ],
+   "certified": false
+  },
+  {
+   "id": "pkgaction/proto-known-runtime",
+   "item": "ADR 1114 family 3 review F5 (Fable, round 1; Chrome-confirmed, rc.21; older than family 3): the Solid runtime renders `<div>x</div>` with `cloneNode`/`importNode`, which a package wrote on `Node.prototype` and `Document.prototype`; an intrinsic element and a primitive call are no site. Held for a ruling: under a prototype writer no package is clear and every primitive call and element may run a written member, a cost question (docs/open-work.md)",
+   "outcome": "false-clean",
+   "codes": [
+    "ACTION_CALLED_IN_OWNED_SCOPE"
+   ],
+   "certified": false
   }
  ],
  "notGenerated": [

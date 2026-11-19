@@ -328,7 +328,27 @@ fn file_sites(
             template.span,
             template.tag,
             Entry::Tag,
-            package_declaration(ctx, analyzed, file, &bound, template.tag, Resolve::Call),
+            package_declaration(ctx, analyzed, file, &bound, template.tag, Resolve::Call).or_else(
+                || {
+                    // ADR 1114 family 3 slice E (review F2): a tag the library declares, or one nothing resolves (`String.raw`), converts what it is
+                    // handed; the project's own tag is analysed as a function.
+                    let resolved = ctx
+                        .semantic_lookup
+                        .resolved_callee_call(file, template.tag)
+                        .and_then(|resolved| resolved.declaration.as_ref());
+                    resolved
+                        .is_none_or(|declaration| declaration.standard_library)
+                        .then(|| {
+                            prototype_read(
+                                ctx,
+                                &["toString", "valueOf", "join"],
+                                Some("[Symbol.toPrimitive]"),
+                                "tag",
+                            )
+                        })
+                        .flatten()
+                },
+            ),
         );
     }
     for element in &file.ast.jsx_elements {
@@ -624,7 +644,7 @@ fn file_sites(
                     member.span,
                     member.span,
                     Entry::Read,
-                    prototype_read(ctx, &[name.as_str()], false, "read-member"),
+                    prototype_read(ctx, &[name.as_str()], None, "read-member"),
                 );
             }
         }
@@ -634,7 +654,7 @@ fn file_sites(
                     element.pattern,
                     element.pattern,
                     Entry::Read,
-                    prototype_read(ctx, &[name.as_str()], false, "read-pattern"),
+                    prototype_read(ctx, &[name.as_str()], None, "read-pattern"),
                 );
             }
         }
@@ -643,7 +663,7 @@ fn file_sites(
                 operand,
                 operand,
                 Entry::Read,
-                prototype_read(ctx, &["next"], true, "iteration"),
+                prototype_read(ctx, &["next"], Some("[Symbol.iterator]"), "iteration"),
             );
         }
         for template in &file.ast.template_literals {
@@ -660,9 +680,73 @@ fn file_sites(
                     expression,
                     expression,
                     Entry::Read,
-                    prototype_read(ctx, &["toString", "valueOf", "join"], false, "template"),
+                    prototype_read(
+                        ctx,
+                        &["toString", "valueOf", "join"],
+                        Some("[Symbol.toPrimitive]"),
+                        "template",
+                    ),
                 );
             }
+        }
+        // ADR 1114 family 3 slice E (review F2, F4): every other operation that runs a member of what it is handed. A conversion by an operator
+        // (`"" + d`, `d < e`, `+d`, `o[k]`) runs `Symbol.toPrimitive`, `valueOf` or `toString`; every array pattern (a parameter's, a nested one) iterates
+        // its value; `await` reads `then`; `using` reads `Symbol.dispose`; a JSX attribute or child is converted or iterated where it is rendered.
+        let conversion = ["toString", "valueOf", "join"];
+        for &operand in &file.ast.converting_operators {
+            push(
+                operand,
+                operand,
+                Entry::Read,
+                prototype_read(ctx, &conversion, Some("[Symbol.toPrimitive]"), "conversion"),
+            );
+        }
+        for element in &file.ast.pattern_elements {
+            if matches!(element.slot, solid_facts::ast::PatternSlot::Index(_)) {
+                push(
+                    element.pattern,
+                    element.pattern,
+                    Entry::Read,
+                    prototype_read(ctx, &["next"], Some("[Symbol.iterator]"), "iteration"),
+                );
+            }
+        }
+        for &operand in &file.ast.await_operands {
+            push(
+                operand,
+                operand,
+                Entry::Read,
+                prototype_read(ctx, &["then"], Some("then"), "await"),
+            );
+        }
+        for &initializer in &file.ast.disposal_initializers {
+            push(
+                initializer,
+                initializer,
+                Entry::Read,
+                prototype_read(ctx, &[], Some("[Symbol.dispose]"), "disposal"),
+            );
+        }
+        let jsx_values = file.ast.jsx_child_expressions.iter().copied().chain(
+            file.ast.jsx_elements.iter().flat_map(|element| {
+                element
+                    .attributes
+                    .iter()
+                    .filter_map(|attribute| attribute.expression)
+            }),
+        );
+        for value in jsx_values {
+            push(
+                value,
+                value,
+                Entry::Read,
+                prototype_read(
+                    ctx,
+                    &conversion,
+                    Some("[Symbol.toPrimitive]"),
+                    "jsx-conversion",
+                ),
+            );
         }
     }
     sites.sort_by_key(|site| (site.at.start, site.at.end));
@@ -2872,31 +2956,47 @@ fn prototype_call(
             .unwrap_or_default();
         let bound = ast.reference_declaration(callee).is_some();
         how = "bare-global";
+        // ADR 1114 family 3 slice E: every call of a function or constructor the library declares may run a written member: it converts, iterates
+        // or calls members of what it is handed (`String(d)`, `new URL(u)`, `new Float32Array([…])`), or is one the window inherits.
         any_kind = if bound {
             "any-bound-library"
-        } else if call.construct {
+        } else if call.construct && ITERATING_CONSTRUCTORS.contains(&spelled.as_str()) {
             "any-iterating-ctor"
-        } else {
+        } else if INHERITED_BY_WINDOW.contains(&spelled.as_str()) {
             "any-bare-inherited"
+        } else if call.construct {
+            "any-library-ctor"
+        } else {
+            "any-library-call"
         }
         .into();
-        any = (!bound
-            && call.construct
-            && !call.arguments.is_empty()
-            && ITERATING_CONSTRUCTORS.contains(&spelled.as_str()))
-            || (!bound && INHERITED_BY_WINDOW.contains(&spelled.as_str()))
-            || (bound && declaration.qualified_name.contains('.'));
+        any = true;
         let declared = declaration.name.to_string();
         names.push(spelled);
         if !declared.is_empty() && names[0] != declared {
             names.push(declared);
         }
         names.extend(pattern_key_of(file, callee));
-    } else {
+    } else if let Some(key) = pattern_key_of(file, callee) {
         // `const { reverse } = a; reverse()`: the binding holds the member the pattern reads, whatever the compiler resolves the call to.
-        names.push(pattern_key_of(file, callee)?);
+        names.push(key);
         how = "destructured";
-        any = false;
+        any_kind = "any-destructured".into();
+        any = true;
+    } else if resolved.is_none() {
+        // ADR 1114 family 3 slice E: a call no declaration resolves may be of a global the library provides.
+        // The name the call spells when it is an identifier; another callee (`f()()`, an IIFE) has none.
+        names.push(
+            file.source_text(callee)
+                .map(|text| cooked_identifier(text).into_owned())
+                .filter(|name| is_identifier_name(name))
+                .unwrap_or_else(|| "[…]".to_owned()),
+        );
+        any_kind = "any-untyped-call".into();
+        any = true;
+    } else {
+        // The project's own function: its body's operations are sites of their own.
+        return None;
     }
     let spelled_count = names.len();
     let implicit = names
@@ -2928,12 +3028,31 @@ fn prototype_call(
     if !any {
         return None;
     }
-    let root = index.prototype_writers_any_name().next()?;
+    if let Some(root) = index.prototype_writers_any_name().next() {
+        return Some(DeclarationAt {
+            path: format!(
+                "{PROTOTYPE_WRITE_ANY_PREFIX}{}#{any_kind}:{root}",
+                names.first().map_or("[…]", String::as_str)
+            ),
+        });
+    }
+    // ADR 1114 family 3 slice E (review F3): a name the table of implicit calls lacks is no proof. Where a package writes a member by name, any
+    // call that may reach a built-in (a library function or constructor, a member call whatever its declaration) may run it (`p.catch(f)` runs
+    // `then`, `JSON.stringify(d)` runs `toISOString`): a site naming the written member, unless a reviewed reading clears the callee (none yet).
+    let (written, root) = index.prototype_writers.iter().find_map(|(name, roots)| {
+        roots
+            .iter()
+            .find(|root| {
+                index
+                    .by_root
+                    .get(root.as_str())
+                    .is_none_or(|reach| !reach.is_clear())
+            })
+            .map(|root| (name, root))
+    })?;
+    let kind = any_kind.strip_prefix("any-").unwrap_or(&any_kind);
     Some(DeclarationAt {
-        path: format!(
-            "{PROTOTYPE_WRITE_ANY_PREFIX}{}#{any_kind}:{root}",
-            names.first().map_or("[…]", String::as_str)
-        ),
+        path: format!("{PROTOTYPE_WRITE_PREFIX}{written}#named-{kind}:{root}"),
     })
 }
 
@@ -2957,7 +3076,7 @@ fn pattern_key_of(file: &FileFacts, callee: Span) -> Option<String> {
 fn prototype_read(
     ctx: &AnalysisContext<'_>,
     names: &[&str],
-    iteration: bool,
+    any_name: Option<&str>,
     kind: &str,
 ) -> Option<DeclarationAt> {
     let index = ctx.package_reach?;
@@ -2971,12 +3090,11 @@ fn prototype_read(
             path: format!("{PROTOTYPE_WRITE_PREFIX}{name}#{kind}:{root}"),
         });
     }
-    if !iteration {
-        return None;
-    }
+    // `any_name`: the member the operation runs that a writer under any name may have written (`[Symbol.iterator]`, `[Symbol.toPrimitive]`).
+    let member = any_name?;
     let root = index.prototype_writers_any_name().next()?;
     Some(DeclarationAt {
-        path: format!("{PROTOTYPE_WRITE_ANY_PREFIX}[Symbol.iterator]#{kind}:{root}"),
+        path: format!("{PROTOTYPE_WRITE_ANY_PREFIX}{member}#{kind}:{root}"),
     })
 }
 

@@ -20,9 +20,9 @@ const built = (context) => {
 };
 
 describe("the pa contexts (a package the build does not read may call an action)", () => {
-  it("are forty package kinds on five hosts, misuse where the call throws, each name parsed back", () => {
-    expect(PA_PACKAGE_KINDS).toHaveLength(40);
-    expect(PA_CONTEXT_NAMES).toHaveLength(200);
+  it("are forty-seven package kinds on five hosts, misuse where the call throws, each name parsed back", () => {
+    expect(PA_PACKAGE_KINDS).toHaveLength(47);
+    expect(PA_CONTEXT_NAMES).toHaveLength(235);
     // Legal on every host: the package that calls nothing (`pure`), loads on a branch that never runs (`dyn`), and the symbol-keyed writer (`gwritesym`).
     const quiet = ["pure", "dyn", "gwritesym"];
     for (const name of PA_CONTEXT_NAMES) {

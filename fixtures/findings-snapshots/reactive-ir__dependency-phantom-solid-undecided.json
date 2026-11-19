@@ -19,6 +19,17 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/dependency-phantom-solid-undecided/App.tsx",
+      "start": 152,
+      "end": 159,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-phantom-solid-undecided/App.tsx",
       "start": 162,
       "end": 191,
       "fixes": 0
@@ -43,6 +54,28 @@
       "path": "fixtures/reactive-ir/dependency-phantom-solid-undecided/App.tsx",
       "start": 175,
       "end": 190,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-phantom-solid-undecided/App.tsx",
+      "start": 206,
+      "end": 213,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-phantom-solid-undecided/App.tsx",
+      "start": 206,
+      "end": 213,
       "fixes": 0
     },
     {

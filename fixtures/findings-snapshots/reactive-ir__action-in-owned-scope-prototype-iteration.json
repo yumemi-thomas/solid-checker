@@ -19,8 +19,52 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/action-in-owned-scope-prototype-iteration/App.tsx",
+      "start": 151,
+      "end": 170,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-prototype-iteration/App.tsx",
       "start": 234,
       "end": 253,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-prototype-iteration/App.tsx",
+      "start": 234,
+      "end": 253,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-prototype-iteration/App.tsx",
+      "start": 321,
+      "end": 324,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-prototype-iteration/App.tsx",
+      "start": 327,
+      "end": 346,
       "fixes": 0
     },
     {
@@ -52,6 +96,17 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/action-in-owned-scope-prototype-iteration/App.tsx",
+      "start": 425,
+      "end": 444,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-prototype-iteration/App.tsx",
       "start": 602,
       "end": 616,
       "fixes": 0
@@ -64,7 +119,29 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/action-in-owned-scope-prototype-iteration/App.tsx",
       "start": 779,
+      "end": 798,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-prototype-iteration/App.tsx",
+      "start": 779,
       "end": 806,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-prototype-iteration/App.tsx",
+      "start": 927,
+      "end": 962,
       "fixes": 0
     }
   ]

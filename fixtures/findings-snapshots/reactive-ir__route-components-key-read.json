@@ -35,6 +35,28 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-components/variants/key-read/Routes.tsx",
+      "start": 446,
+      "end": 453,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-components/variants/key-read/Routes.tsx",
+      "start": 468,
+      "end": 473,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -54,6 +76,28 @@
       "path": "fixtures/reactive-ir/route-components/variants/key-read/Routes.tsx",
       "start": 520,
       "end": 527,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-components/variants/key-read/Routes.tsx",
+      "start": 520,
+      "end": 527,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-components/variants/key-read/Routes.tsx",
+      "start": 542,
+      "end": 547,
       "fixes": 0
     },
     {
@@ -79,6 +123,28 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-components/variants/key-read/Routes.tsx",
+      "start": 593,
+      "end": 600,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-components/variants/key-read/Routes.tsx",
+      "start": 615,
+      "end": 620,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -98,6 +164,28 @@
       "path": "fixtures/reactive-ir/route-components/variants/key-read/Routes.tsx",
       "start": 667,
       "end": 674,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-components/variants/key-read/Routes.tsx",
+      "start": 667,
+      "end": 674,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-components/variants/key-read/Routes.tsx",
+      "start": 689,
+      "end": 694,
       "fixes": 0
     },
     {
@@ -134,6 +222,28 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-components/variants/key-read/Routes.tsx",
+      "start": 1005,
+      "end": 1012,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-components/variants/key-read/Routes.tsx",
+      "start": 1029,
+      "end": 1034,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -164,6 +274,28 @@
       "path": "fixtures/reactive-ir/route-components/variants/key-read/Routes.tsx",
       "start": 1172,
       "end": 1179,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-components/variants/key-read/Routes.tsx",
+      "start": 1172,
+      "end": 1179,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/route-components/variants/key-read/Routes.tsx",
+      "start": 1194,
+      "end": 1199,
       "fixes": 0
     },
     {

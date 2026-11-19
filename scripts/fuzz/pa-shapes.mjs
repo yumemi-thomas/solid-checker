@@ -40,6 +40,10 @@
 //               gprotocast, gprotoannot  `fz-gprotokey` again; the receiver is typed by a type literal, so the call resolves to the project's declaration:
 //                        `(new Float32Array(1) as unknown as { reverse(): unknown }).reverse()`, `const a: { reverse(): unknown } = new Float32Array(1); a.reverse()`
 //                        (ADR 1114 family 3 slice E)
+//               gprotoconcat, gprototemplate, gprotocatch, gprotobare, gprotoget, gprotoset, gprotourl  the other operations that run a written member
+//                        (ADR 1114 family 3 slice E): `"" + new Date(0)` and a template's substitution after `fz-gprotodate` writes `Date.prototype.toString`;
+//                        `Promise.resolve(1).catch(…)` after `fz-gprotothen` writes `then`; a bare `dispatchEvent(…)` after `fz-gprotoevent`; an accessor read
+//                        after `fz-gprotoget` defines `DataView.prototype.byteLength`; `new Set(it)` after `fz-gprotoiter`; `new URL(u)` after `fz-gprotourl`
 //               gviewpattern  `fz-gviewpattern` replaces `btoa` through a click event's `view` read by a pattern (`({ view }) => …`); the site is `btoa("x")` (ADR 1108 part 2)
 //               gaccmember, gaccbare, gacctypeof, gaccpattern  `fz-gaccessor` redefines `devicePixelRatio` with a getter that calls the action; the site is the value read, no
 //                        call: `void window.devicePixelRatio`, `void devicePixelRatio`, `void typeof window.devicePixelRatio`, `({ devicePixelRatio: ratio } = window)` (ADR 0974)
@@ -72,6 +76,13 @@ const PROTO_ROUTES = {
   gprotoany: { text: "void (new Float32Array(1) as any).reverse()" },
   gprotocast: { text: "void (new Float32Array(1) as unknown as { reverse(): unknown }).reverse()" },
   gprotoannot: { prelude: ["const a: { reverse(): unknown } = new Float32Array(1);"], text: "void a.reverse()" },
+  gprotoconcat: { text: 'void ("" + new Date(0))' },
+  gprototemplate: { text: "void `${new Date(0)}`" },
+  gprotocatch: { text: "void Promise.resolve(1).catch(() => {})" },
+  gprotobare: { text: 'void dispatchEvent(new Event("fzprobe"))' },
+  gprotoget: { text: "void new DataView(new ArrayBuffer(1)).byteLength" },
+  gprotoset: { text: "void new Set(new Float32Array(1))" },
+  gprotourl: { text: 'void new URL(new URL("http://fz.test/"))' },
   gviewpattern: { text: 'btoa("x")' },
 };
 const PROTO_KINDS = Object.keys(PROTO_ROUTES);
@@ -90,7 +101,7 @@ export const PA_PACKAGES = {
   ...Object.fromEntries(PATTERN_KINDS.map((kind) => [kind, ["fz-getter"]])),
   gproto: ["fz-gproto"], gview: ["fz-gview"],
   gprotocall: ["fz-gproto"], gprotoapply: ["fz-gproto"], gprotoreflect: ["fz-gproto"], gprotodestr: ["fz-gproto"],
-  gprotoimplicit: ["fz-gprotoexec"], gprotoiter: ["fz-gprotoiter"], gprotoany: ["fz-gprotokey"], gprotocast: ["fz-gprotokey"], gprotoannot: ["fz-gprotokey"], gviewpattern: ["fz-gviewpattern"],
+  gprotoimplicit: ["fz-gprotoexec"], gprotoiter: ["fz-gprotoiter"], gprotoany: ["fz-gprotokey"], gprotocast: ["fz-gprotokey"], gprotoannot: ["fz-gprotokey"], gprotoconcat: ["fz-gprotodate"], gprototemplate: ["fz-gprotodate"], gprotocatch: ["fz-gprotothen"], gprotobare: ["fz-gprotoevent"], gprotoget: ["fz-gprotoget"], gprotoset: ["fz-gprotoiter"], gprotourl: ["fz-gprotourl"], gviewpattern: ["fz-gviewpattern"],
 };
 /** `{ [context]: "misuse" | "legal" }`. */
 export const PA_CONTEXTS = Object.fromEntries(
@@ -140,6 +151,11 @@ export function paPackageFiles(kind, name = PA_PACKAGES[kind].at(-1)) {
     "fz-gprotoexec": { js: ['import { action } from "solid-js";', "", "const real = RegExp.prototype.exec;", "RegExp.prototype.exec = function (text) {", '  if (this.source === "fzprobe") void action(function* () {})();', "  return real.call(this, text);", "};"], dts: ["export {};"] },
     "fz-gprotoiter": { js: ['import { action } from "solid-js";', "", "const real = Float32Array.prototype[Symbol.iterator];", "Float32Array.prototype[Symbol.iterator] = function () {", "  void action(function* () {})();", "  return real.call(this);", "};"], dts: ["export {};"] },
     "fz-gprotokey": { js: ['import { action } from "solid-js";', "", 'const key = ["re", "verse"].join("");', "const real = Float32Array.prototype[key];", "Float32Array.prototype[key] = function () {", "  void action(function* () {})();", "  return real.call(this);", "};"], dts: ["export {};"] },
+    "fz-gprotodate": { js: ['import { action } from "solid-js";', "", "const real = Date.prototype.toString;", "Date.prototype.toString = function () {", "  void action(function* () {})();", "  return real.call(this);", "};"], dts: ["export {};"] },
+    "fz-gprotothen": { js: ['import { action } from "solid-js";', "", "const real = Promise.prototype.then;", "Promise.prototype.then = function (...args) {", "  if (!globalThis.__fzInThen) { globalThis.__fzInThen = true; try { void action(function* () {})(); } finally { globalThis.__fzInThen = false; } }", "  return real.apply(this, args);", "};"], dts: ["export {};"] },
+    "fz-gprotoevent": { js: ['import { action } from "solid-js";', "", "const real = EventTarget.prototype.dispatchEvent;", "EventTarget.prototype.dispatchEvent = function (event) {", "  if (event.type === \"fzprobe\") void action(function* () {})();", "  return real.call(this, event);", "};"], dts: ["export {};"] },
+    "fz-gprotoget": { js: ['import { action } from "solid-js";', "", "const real = Object.getOwnPropertyDescriptor(DataView.prototype, \"byteLength\").get;", "Object.defineProperty(DataView.prototype, \"byteLength\", { configurable: true, get() {", "  void action(function* () {})();", "  return real.call(this);", "} });"], dts: ["export {};"] },
+    "fz-gprotourl": { js: ['import { action } from "solid-js";', "", "const real = URL.prototype.toString;", "URL.prototype.toString = function () {", "  void action(function* () {})();", "  return real.call(this);", "};"], dts: ["export {};"] },
     "fz-gviewpattern": { js: ['import { action } from "solid-js";', "", "const real = globalThis.btoa;", 'document.addEventListener("click", ({ view }) => {', "  view.btoa = (text) => {", "    void action(function* () {})();", "    return real(text);", "  };", "}, { once: true });", "document.documentElement.click();"], dts: ["export {};"] },
     "fz-gwritesym": { js: ['import { action } from "solid-js";', "", 'var MARK = /* @__PURE__ */ Symbol.for("fz-gwritesym");', "globalThis[MARK] = () => {", "  void action(function* () {})();", "};"], dts: ["export {};"] },
   }[name];
