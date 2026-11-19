@@ -21,6 +21,6 @@ describe("the cp contexts", () => {
     expect(textOf("cp-stored")).toMatch(/\)\(\)\}<\/CpC1>; createTrackedEffect\(/);
     expect(textOf("cp-pattern")).toMatch(/const \{ defaultValue: CpC1 = CpR1 \} = createContext\(CpR1\)/);
     expect(textOf("cp-let")).toMatch(/let CpC1 = createContext\(1\);\nCpC1 = CpR1 as unknown as typeof CpC1/);
-    for (const context of CP_CONTEXT_NAMES) expect(textOf(context)).toMatch(/\{\(\(\) => \{\n\s*flush\(\);\n\s*\}\)\(\)\}<\/CpC1>/);
+    for (const context of CP_CONTEXT_NAMES) expect(textOf(context)).toMatch(/\{\(\(\) => \{\n\s*flush\(\);\n\s*return <p>c<\/p>;\n\s*\}\)\(\)\}<\/CpC1>/);
   });
 });

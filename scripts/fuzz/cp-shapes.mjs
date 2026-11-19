@@ -47,7 +47,8 @@ export function cpContext(context, stmts, kit) {
   const names = { r: kit.name("CpR"), c: kit.name("CpC"), h: kit.name("CpH") };
   const solid = ["createContext", "createTrackedEffect"];
   const [before, after] = cell.host(names);
-  const host = contain("frame", 9, stmts, { head: `function ${names.h}(_props: { a?: unknown }) { ${before}`, close: `${after} }`, imports: solid });
+  const host = contain("frame", 9, stmts, { head: `function ${names.h}(_props: { a?: unknown }) { ${before}`, close: `${after} }`, after: ["return <p>c</p>;"], imports: solid });
+  // The arrow returns an element: a provider's `children` is typed `JSX.Element` (rc.21), which `void` is not.
   return {
     hoisted: [...cell.module(names).map((text) => expr(domExpr(text, undefined, solid))), host],
     body: [],
