@@ -40479,5 +40479,33 @@
    "mx-strict-read-untracked-barm-strpatch-newfn-memo-direct-none"
   ],
   "rediscovered": "new contexts barm-strpatch-eval, barm-strpatch-newfn (legal twin barm-strpatch-none, arm-shapes.mjs): `focus.mjs --codes STRICT_READ_UNTRACKED --grids mx-recall -- --contexts …`, release builds: main dba9d3cee false-clean 2 (the memo variants; the signal variants carry the tuple slot's SC9012), ADR 1137 recall-gap 4; lg-recall twin clean 2 both; oracle compared, 0 behaviour"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent where a written prototype member runs from a read under an any-name writer (an accessor, a Proxy prototype: `dv.byteLength`, `\"k\" in dv`), a member assignment's or a computed key's conversion (`el.title = d`, `{ [d]: x } = rec`), a conversion whose native path reads a written accessor (`${e}` reads `message`), or an async function's returned value (reads `then`)",
+  "found": "Fable round-2 review of ADR 1114 family 3 (A-E: N1, N2, N3, N5), pattern lane `pkgaction/proto-r2-*`; Chrome-confirmed",
+  "fixed": "ADR 1114 family 3 slice G (any-name reads and `in`, member assignments and computed keys as conversions, the named default in prototype_read, async returns)",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pa-gprotoanyget-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoanyget-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoanyget-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoin-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoin-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoin-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoassign-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoassign-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoassign-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotokey-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotokey-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotokey-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoerror-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoerror-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoerror-root-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoasyncret-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoasyncret-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotoasyncret-root-x-direct-none"
+  ],
+  "rediscovered": "new contexts pa-gprotoanyget, -gprotoin, -gprotoassign, -gprotokey, -gprotoerror, -gprotoasyncret (pa-shapes.mjs; gprotoasyncret calls a resolved project async arrow): `focus.mjs --codes ACTION_CALLED_IN_OWNED_SCOPE --grids mx-recall --ids`, release builds: slice F 93598e618 exits 1 (false-clean 18), slice G exits 0 (recall-gap 18); oracle compared, 0 behaviour"
  }
 ]
