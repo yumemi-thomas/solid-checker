@@ -304,6 +304,21 @@ const OBJECT_PROTOTYPE_KEYS: &[&str] = &[
 ];
 
 impl Collector<'_, '_> {
+    /// ADR 1114 family 3: the operator expression `whole` converts `operand` (`converting_operators`, where V8 places the conversion); a literal
+    /// converts by itself and runs nothing.
+    fn converted(&mut self, whole: oxc_span::Span, operand: &Expression<'_>) {
+        if !matches!(
+            operand.without_parentheses(),
+            Expression::StringLiteral(_)
+                | Expression::NumericLiteral(_)
+                | Expression::BooleanLiteral(_)
+                | Expression::NullLiteral(_)
+                | Expression::BigIntLiteral(_)
+        ) {
+            self.converting_operators.push(span(whole));
+        }
+    }
+
     /// The declaration the binder resolves `identifier` to, if any.
     fn declaration_of(&self, identifier: &IdentifierReference<'_>) -> Option<Span> {
         identifier
@@ -1819,6 +1834,15 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_assignment_expression(&mut self, expression: &AssignmentExpression<'a>) {
+        if !matches!(
+            expression.operator,
+            AssignmentOperator::Assign
+                | AssignmentOperator::LogicalAnd
+                | AssignmentOperator::LogicalOr
+                | AssignmentOperator::LogicalNullish
+        ) {
+            self.converting_operators.push(span(expression.span));
+        }
         if self.assignment_target_has_unresolved(&expression.left) {
             self.module_hazards.push(ModuleHazardFact {
                 span: span(expression.span),
@@ -1981,6 +2005,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_update_expression(&mut self, expression: &UpdateExpression<'a>) {
+        self.converting_operators.push(span(expression.span));
         self.primitive_results.push(span(expression.span));
         if self.simple_assignment_target_has_unresolved(&expression.argument) {
             self.module_hazards.push(ModuleHazardFact {
@@ -2348,6 +2373,11 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_object_property(&mut self, property: &ObjectProperty<'a>) {
+        if property.computed
+            && let Some(key) = property.key.as_expression()
+        {
+            self.converted(property.span, key);
+        }
         // `{ __proto__: p }` sets the prototype at construction, and no member
         // expression exists for a literal key, so the static-member arm never
         // sees it. A *computed* `{ ["__proto__"]: p }` is an ordinary own
@@ -2815,6 +2845,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_computed_member_expression(&mut self, member: &ComputedMemberExpression<'a>) {
+        self.converted(member.span, &member.expression);
         // A computed member on an intrinsic namespace can spell any of the
         // names above, so the namespace itself is the fact.
         if let Expression::Identifier(object) = &member.object
@@ -2946,6 +2977,19 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_binary_expression(&mut self, expression: &BinaryExpression<'a>) {
+        // ADR 1114 family 3: the operands the operator converts.
+        match expression.operator {
+            oxc_syntax::operator::BinaryOperator::StrictEquality
+            | oxc_syntax::operator::BinaryOperator::StrictInequality
+            | oxc_syntax::operator::BinaryOperator::Instanceof => {}
+            oxc_syntax::operator::BinaryOperator::In => {
+                self.converted(expression.span, &expression.left)
+            }
+            _ => {
+                self.converted(expression.span, &expression.left);
+                self.converted(expression.span, &expression.right);
+            }
+        }
         if expression.operator == oxc_ast::ast::BinaryOperator::In {
             self.key_probed_operands.push(span(expression.right.span()));
         }
@@ -3073,6 +3117,14 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_unary_expression(&mut self, expression: &UnaryExpression<'a>) {
+        if matches!(
+            expression.operator,
+            oxc_syntax::operator::UnaryOperator::UnaryPlus
+                | oxc_syntax::operator::UnaryOperator::UnaryNegation
+                | oxc_syntax::operator::UnaryOperator::BitwiseNot
+        ) {
+            self.converted(expression.span, &expression.argument);
+        }
         use oxc_syntax::operator::UnaryOperator;
         if expression.operator != UnaryOperator::Void {
             self.primitive_results.push(span(expression.span));

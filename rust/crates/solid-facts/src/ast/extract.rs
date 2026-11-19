@@ -200,6 +200,7 @@ pub(super) struct Collector<'s, 'semantic> {
     pub(super) object_get_shapes: Vec<ObjectGetShapeFact>,
     pub(super) template_literals: Vec<TemplateLiteralFact>,
     pub(super) coercive_operands: Vec<CoerciveOperandFact>,
+    pub(super) converting_operators: Vec<Span>,
     pub(super) coercing_operands: Vec<Span>,
     pub(super) primitive_results: Vec<Span>,
     pub(super) iterated_operands: Vec<Span>,
@@ -457,6 +458,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             object_get_shapes: Vec::new(),
             template_literals: Vec::new(),
             coercive_operands: Vec::new(),
+            converting_operators: Vec::new(),
             coercing_operands: Vec::new(),
             primitive_results: Vec::new(),
             iterated_operands: Vec::new(),
@@ -557,6 +559,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.object_properties.sort_by_key(|fact| fact.span);
         self.template_literals.sort_by_key(|fact| fact.span);
         self.coercive_operands.sort_by_key(|fact| fact.span);
+        self.converting_operators.sort_unstable();
+        self.converting_operators.dedup();
         self.coercing_operands.sort_unstable();
         self.coercing_operands.dedup();
         self.primitive_results.sort_unstable();
@@ -809,6 +813,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             object_get_shapes: self.object_get_shapes,
             template_literals: self.template_literals,
             coercive_operands: self.coercive_operands,
+            converting_operators: self.converting_operators,
             coercing_operands: self.coercing_operands,
             primitive_results: self.primitive_results,
             iterated_operands: self.iterated_operands,
