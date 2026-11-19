@@ -189,6 +189,12 @@
         "why": "pending-review"
       }
     },
+    "rust/crates/solid-reactive-ir/src/after_await_accounting.rs": {
+      "private-judgment": {
+        "count": 1,
+        "why": "pending-review"
+      }
+    },
     "rust/crates/solid-reactive-ir/src/after_await_accounting/library_call.rs": {
       "private-judgment": {
         "count": 7,
