@@ -1,4 +1,4 @@
-{"grid":"lg-combo","ids":[
-"lg-reactive-write-in-owned-scope-async-store-tuple-closure-m-child-c",
-"lg-strict-read-untracked-render-compute-memo-wrapper-none-m-for-c"
+{"grid":"lg-combo","entries":[
+["075b21cc1273a5d0195b:REACTIVE_WRITE_IN_OWNED_SCOPE:16","lg-reactive-write-in-owned-scope-async-store-tuple-closure-m-child-c"],
+["793f5d1e284df9096d6c:STRICT_READ_UNTRACKED:34","lg-strict-read-untracked-render-compute-memo-wrapper-none-m-for-c"]
 ]}

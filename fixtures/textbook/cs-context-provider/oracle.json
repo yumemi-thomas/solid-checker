@@ -1,0 +1,7 @@
+{
+  "note": "Cheatsheet Context, in our own words: a default-less context whose value is created in the provider component, the context itself used as the provider.",
+  "steps": [],
+  "mount": [
+    "ThemeApp"
+  ]
+}

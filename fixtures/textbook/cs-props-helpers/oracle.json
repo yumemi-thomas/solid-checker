@@ -1,0 +1,7 @@
+{
+  "note": "Cheatsheet Props helpers, in our own words: merge for defaults and omit for the rest, props read as props.x.",
+  "steps": [],
+  "mount": [
+    "Badges"
+  ]
+}

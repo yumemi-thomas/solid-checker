@@ -12,7 +12,7 @@
 //     [--concurrency 12] [--install scripts/fuzz/install] [--seed 1]
 //
 // The first line is `{ scan: { grids, codes, contexts, ids, sample, sampleSeed, shard, seed, programs } }`, the selection. Each other line:
-// `{ id, grid, side, code, context, site: { file, line, region }, u: { total, kinds: { <kind>: [atSite, away] } }, violationsAtSite,
+// `{ id, grid, side, code, context, site: { file, line, region }, u: { total, kinds: { <kind>: [atSite, away] }, entry: { <kind>: n } }, violationsAtSite,
 // formulas: [{ rule, kind, formula, fired, missing, line, atSite }] }`; `violationsAtSite` counts the violations standing in the site region. A row is `atSite` when it stands in the program's judged site
 // region (matrix.mjs `regionOf`: the site's line and its aux lines) in App.tsx; the judge also covers by a frame Chrome recorded, which
 // this run has no record of, so a row at a frame reads `away` here. `kinds` counts every uncertifiable finding by its blocker kind
@@ -98,6 +98,9 @@ export function reduceReport(report, root, site) {
   const prefix = `${root}/`;
   const region = new Set(regionOf(site));
   const kinds = {};
+  // Rows in the harness's entry (main.tsx, written by checker.mjs `entryFor`, not by the generator): counted in `kinds` too, and here by kind, so
+  // a whole-program count can leave the harness's own code out.
+  const entry = {};
   const formulas = [];
   let total = 0;
   let violationsAtSite = 0;
@@ -115,11 +118,12 @@ export function reduceReport(report, root, site) {
     total += 1;
     kinds[kind] ??= [0, 0];
     kinds[kind][atSite ? 0 : 1] += 1;
+    if (file === "main.tsx") entry[kind] = (entry[kind] ?? 0) + 1;
     if (blocked && (blocked.formula || blocked.missing)) {
       formulas.push({ rule: finding.id, kind, formula: blocked.formula ?? null, fired: [...(blocked.fired ?? [])].sort(), missing: blocked.missing ?? null, line, atSite });
     }
   }
-  return { total, violationsAtSite, kinds: Object.fromEntries(Object.entries(kinds).sort(([a], [b]) => (a < b ? -1 : 1))), formulas };
+  return { total, violationsAtSite, kinds: Object.fromEntries(Object.entries(kinds).sort(([a], [b]) => (a < b ? -1 : 1))), entry, formulas };
 }
 
 /** One checker run: `{ report }`, `{ error }` for a run with no report, or `{ refused }` (an `AssumedReportError`, ADR 0950) for a what-if report, which stops the scan. */
@@ -177,7 +181,7 @@ async function scan(options) {
             const u = reduceReport(answer.report, realpathSync(dir), site);
             stats.rows += u.total;
             stats.formulaRows += u.formulas.length;
-            line = { id: row.id, grid: row.grid, side: row.side, code: row.code, context: row.context, site: { file: "App.tsx", line: site.line, region: regionOf(site) }, u: { total: u.total, kinds: u.kinds }, violationsAtSite: u.violationsAtSite, formulas: u.formulas };
+            line = { id: row.id, grid: row.grid, side: row.side, code: row.code, context: row.context, site: { file: "App.tsx", line: site.line, region: regionOf(site) }, u: { total: u.total, kinds: u.kinds, entry: u.entry }, violationsAtSite: u.violationsAtSite, formulas: u.formulas };
           }
         } finally {
           rmSync(dir, { recursive: true, force: true });

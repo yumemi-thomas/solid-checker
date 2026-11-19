@@ -1,0 +1,7 @@
+{
+  "note": "Our idiom: several components together, a parent passing values and a callback down and a child reporting up.",
+  "steps": [],
+  "mount": [
+    "Picker"
+  ]
+}
