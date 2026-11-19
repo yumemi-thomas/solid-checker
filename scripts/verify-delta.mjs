@@ -218,6 +218,18 @@ export const CHECKS = {
       "shapes that make a clean without a proof; the lint ratchets them down (scripts/proof-lint.mjs, ADR 0933)",
     command: ["bun", "scripts/proof-lint.mjs"],
   },
+  "standard-members": {
+    why:
+      "the plain-program premise refuses writes by key from rust/crates/solid-facts/src/ast/standard_members.txt, generated from " +
+      "TypeScript's lib files; a stale table misses a standard name (scripts/kernel/standard-members.mjs, ADR 1120)",
+    command: ["node", "scripts/kernel/standard-members.mjs", "--check"],
+  },
+  "kernel-oracle": {
+    why:
+      "the inertness kernel's K1 allow-list must run no hook in Node for any form it accepts, over hostile operands " +
+      "(scripts/kernel-oracle.mjs, ADR 1120)",
+    command: ["node", "scripts/kernel-oracle.mjs"],
+  },
   "ir-edit-fuzz": {
     why:
       "the retained daemon's answer must equal a fresh one after random edits (and shadow mode must stay " +
@@ -416,6 +428,18 @@ export const ROWS = [
     prefix: "rust/dialects/solid-v2/rules/",
     owner: "the Solid 2 rules crate (analysis only)",
     checks: ["dialects-process", ...FINDING_GATES, "wasm-compile"],
+  },
+  // ADR 1120: the kernel's oracle and the premise's table generator. A kernel source change selects its crate's row; run the oracle
+  // (`node scripts/kernel-oracle.mjs`) with it.
+  {
+    prefix: "scripts/kernel/",
+    owner: "the premise's standard-member table generator (ADR 1120)",
+    checks: ["standard-members", "facts-lib"],
+  },
+  {
+    prefix: "scripts/kernel-oracle.mjs",
+    owner: "the inertness kernel's Node oracle (ADR 1120)",
+    checks: ["kernel-oracle"],
   },
   // proof-gate runs the checker over every fixture project (fixtureProjects: reactive-ir, engine and the reproduction set), so a fixture edit
   // can open a site nothing ends (ADR 0995): `witnesses` reads no fixture (scripts/flip/witnesses.json carries its own programs).
@@ -627,6 +651,8 @@ export function planFor(paths) {
     ),
     ...[...FINDING_GATES, "repro-budget"].filter((id) => selected.has(id)),
     ...["ir-read-lint", "proof-lint", "ir-tools-test", "proof-tools-test", "ir-edit-fuzz", "fuzz-tests"].filter((id) => selected.has(id)),
+    // ADR 1120: the premise's table and the kernel's oracle.
+    ...["standard-members", "kernel-oracle"].filter((id) => selected.has(id)),
     // Separate workspace; its tests drive the producer built above.
     ...["typefacts"].filter((id) => selected.has(id)),
     ...["differential-harness"].filter((id) => selected.has(id)),
@@ -846,6 +872,9 @@ export const LANES = {
   // The IR edit fuzz drives the debug checker's daemon, like the gates; the
   // read lint and the IR tool tests build nothing.
   "ir-edit-fuzz": "gates",
+  // ADR 1120: the oracle builds and runs one solid-facts test in rust/target; the table check builds nothing.
+  "kernel-oracle": "rust",
+  "standard-members": "preflight",
   "ir-read-lint": "preflight",
   "proof-lint": "preflight",
   "ir-tools-test": "preflight",

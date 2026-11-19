@@ -69,7 +69,8 @@ use thiserror::Error;
 /// 99 (ADR 1113): every `in` and `instanceof` binary with its operands (`relation_operators`).
 /// 100 (ADR 1122): every property of an object binding pattern with its key by value (`object_properties`: the parser's
 /// key, `computed`, `has_default`, `nested`, `local`), and whether a pattern ends in a rest element (`pattern_rest`).
-pub const AST_FACTS_SCHEMA: u32 = 100;
+/// 101 (ADR 1120): the places that may break the plain-program premise (`premise_sites`).
+pub const AST_FACTS_SCHEMA: u32 = 101;
 
 mod argument_completion;
 mod code_sinks;
@@ -83,6 +84,7 @@ mod host_execution;
 mod inert_javascript;
 mod literal_array;
 mod module_requests;
+mod premise_sites;
 mod primitive_completion;
 mod proxy_get_forward;
 mod span_index;
