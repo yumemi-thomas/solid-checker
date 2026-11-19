@@ -1,0 +1,7 @@
+# after-await-class-value
+
+**Claim (ADR 1105).** An instance field initializer or a constructor runs where `new` runs, not in the function that wrote the class. A class value a helper returns, stored and constructed later (here in a `toString` an async memo's template literal runs after its await), runs its reads on that continuation: Chrome (rc.21) warns `UNTRACKED_READ_AFTER_AWAIT` at the helper's read (probe k1n). Main 28fde14bf certified three of these clean. The unplaced walks (`static_api.rs`) took the initializer's call for code of the helper that returns the class and climbed on to that helper's call at module scope. The depth-bounded walk also read only the call graph, which withholds a call in a constructor or a method (ADR 0339). Each read here is an uncertifiable row of SC1002 (`function-run-unplaced`) and of SC1001, never a violation.
+
+Uncertifiable: `Made` (a field initializer), `MadeCtor` (the constructor's body), `MadeMethod` (a method the constructor calls), `Stored` (an escaping class declaration, as on main), and the made class nothing constructs (`peekNever`, clean on main, the cost: where a stored class value is constructed is not modelled). As on main: `InPlace`, a class written in place and constructed directly after the await (SC1002 violation at the read, uncertifiable rows at the site), and `Unused`, a class declaration nothing names (clean, ADR 1021).
+
+The runtime-oracle case `after-await-class-value` runs the same components in Chrome.

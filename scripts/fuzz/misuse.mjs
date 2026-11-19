@@ -327,7 +327,9 @@ export const RECALL_API_BINDINGS = ["ns-nested", "ns-default", "ns-rest", "ns-le
  * a project hook's slot then keeps the handed net, or nothing placed it (c1 report, S0).
  */
 export const HOOK_SLOT_BINDINGS = ["hook-fn-slot", "hook-fn-slot-written", "hook-method-slot-written", "hook-shorthand-fn-written", "hook-fn-member-written"];
-export const RECALL_VALUE_BINDINGS = ["let-alias", "var-alias", "cond-alias", "identity", "spread-literal", "computed-key", "getter", "literal-member", "default-slot", "nested", "array-slot"];
+// ADR 1104: the carrier shapes (R-carrier): an element call out of a standard enumeration, a method reading its slot through `this`, a
+// `for…of` binding called; the census's row must stand at the read, not only where the value entered the carrier.
+export const RECALL_VALUE_BINDINGS = ["let-alias", "var-alias", "cond-alias", "identity", "spread-literal", "computed-key", "getter", "literal-member", "default-slot", "nested", "array-slot", "values-callee", "this-method", "loop-callee"];
 /**
  * Type arguments a `.call` spelling needs to type-check under `strict`: `CallableFunction.call` infers from the last overload
  * (`flush<T>(fn: () => T)`) and loses a generic (`useContext`'s `Context<T>`, invariant). The runtime call is unchanged.
@@ -1554,6 +1556,10 @@ function valueBinding(bind, name) {
     case "elem-callee": return { prelude: [`const fns = [${name}];`], callee: "fns[0]" };
     case "result-callee": return { prelude: [`const getIt = () => ${name};`], callee: "getIt()" };
     case "cond-callee": return { prelude: [], callee: `(Math.random() < 2 ? ${name} : ${name})` };
+    // ADR 1104: the carrier shapes.
+    case "values-callee": return { prelude: [`const box = { useIt: ${name} };`], callee: "Object.values(box)[0]" };
+    case "this-method": return { prelude: [`const box = { useIt: ${name}, run(...xs: any[]) { return (this.useIt as any)(...xs); } };`], callee: "box.run" };
+    case "loop-callee": return { prelude: [`const fns = [${name}];`, "const loop = (...xs: any[]) => { for (const f of fns) return (f as any)(...xs); };"], callee: "loop" };
     default: return null;
   }
 }

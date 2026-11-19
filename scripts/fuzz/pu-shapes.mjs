@@ -10,13 +10,17 @@
 //                  initializer is no function fact, so the call was the function's read after its await, but it runs where `new` runs: a `toString`
 //                  the memo's template literal runs (`new pb.K!()`). A read written in the initializer itself was already refused
 //                  (`field-initializer-unplaced`), so the helper is the hole
+//   pu-class-made  ADR 1105 (probe k1n, H1's module-level hole): `const pm = () => class { x = ph(); }; pb.K = pm();` at module scope, constructed by the
+//                  `toString` the memo's template literal runs. The walks took the initializer's call for code of `pm` and placed it at `pm()`
+//   pu-class-ctor  ADR 1105: the same, the helper called in the made class's constructor (the call graph withholds a call there, ADR 0339)
+//   pu-class-meth  ADR 1105: the same, the helper called in a method the made class's constructor calls
 //
 // The third finding (F3, a direct `eval` calling the function where its promise is kept) cannot be generated: the code's variants read a signal tuple or a store, and a program
 // with direct `eval` withdraws their slots (SC9012 `tuple-iteration-written` on the site's line, a withholding that covers the code). Fixture after-await-promise-unconsumed-eval
 // holds it with a memo accessor (rediscovery.json). Recall contexts, the direct binding bare (`puShape`), one program per cell, not crossed by the census, out of api-fire's plan.
 import { awaitStmt, call, ctl, decl, domExpr, expr, fn, num, obj, prim, ref, ret } from "./model.mjs";
 
-export const PU_CONTEXTS = { "pu-then-sub": "misuse", "pu-loop": "misuse", "pu-class": "misuse", "pu-bare-coerce": "misuse", "pu-bare-in": "misuse" };
+export const PU_CONTEXTS = { "pu-then-sub": "misuse", "pu-loop": "misuse", "pu-class": "misuse", "pu-class-made": "misuse", "pu-class-ctor": "misuse", "pu-class-meth": "misuse", "pu-bare-coerce": "misuse", "pu-bare-in": "misuse" };
 export const PU_CONTEXT_NAMES = Object.keys(PU_CONTEXTS);
 export const PU_CODES = ["UNTRACKED_READ_AFTER_AWAIT"];
 
@@ -64,6 +68,21 @@ export function puContext(context, stmts, kit) {
       const field = expr(domExpr(`${box}.K = class { x = ${helper}(); }`));
       return {
         hoisted: [decl(helper, fn(stmts)), expr(domExpr(`const ${box}: { K?: new () => unknown } = {}`)), decl(f, fn([awaitStmt(), field], { async: true })), expr(domExpr(`${f}()`)), expr(domExpr(`const ${o} = { toString() { new ${box}.K!(); return ""; } }`))],
+        body: memoOf(kit, [awaitStmt(), expr(domExpr("void `${" + o + "}`"))]),
+        view: [],
+      };
+    }
+    case "pu-class-made":
+    case "pu-class-ctor":
+    case "pu-class-meth": {
+      // ADR 1105: a class value a helper returns, made at module scope and constructed later; its field, constructor or method reads where `new` runs.
+      const box = kit.name("pb");
+      const helper = kit.name("ph");
+      const maker = kit.name("pm");
+      const o = kit.name("po");
+      const body = { "pu-class-made": `x = ${helper}();`, "pu-class-ctor": `constructor() { ${helper}(); }`, "pu-class-meth": `constructor() { this.run(); } run() { ${helper}(); }` }[context];
+      return {
+        hoisted: [decl(helper, fn(stmts)), expr(domExpr(`const ${box}: { K?: new () => unknown } = {}`)), expr(domExpr(`const ${maker} = () => class { ${body} }`)), expr(domExpr(`${box}.K = ${maker}()`)), expr(domExpr(`const ${o} = { toString() { new ${box}.K!(); return ""; } }`))],
         body: memoOf(kit, [awaitStmt(), expr(domExpr("void `${" + o + "}`"))]),
         view: [],
       };

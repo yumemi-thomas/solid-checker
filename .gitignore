@@ -1141,6 +1141,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/store-sub-value-flow/node_modules/**
 !fixtures/reactive-ir/absent-guard-prop/node_modules/
 !fixtures/reactive-ir/absent-guard-prop/node_modules/**
+!fixtures/reactive-ir/merge-omit-view-props-call/node_modules/
+!fixtures/reactive-ir/merge-omit-view-props-call/node_modules/**
 !fixtures/reactive-ir/handed-call-results/node_modules/
 !fixtures/reactive-ir/handed-call-results/node_modules/**
 !fixtures/reactive-ir/handed-net-guards/node_modules/
@@ -1667,6 +1669,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/after-await-promise-unconsumed/node_modules/**
 !fixtures/reactive-ir/after-await-promise-unconsumed-eval/node_modules/
 !fixtures/reactive-ir/after-await-promise-unconsumed-eval/node_modules/**
+!fixtures/reactive-ir/after-await-class-value/node_modules/
+!fixtures/reactive-ir/after-await-class-value/node_modules/**
 !fixtures/reactive-ir/after-await-library/node_modules/
 !fixtures/reactive-ir/after-await-library/node_modules/**
 !fixtures/reactive-ir/after-await-timer-handle/node_modules/
@@ -1884,3 +1888,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-created-label-apply-flush/node_modules/**
 !fixtures/reactive-ir/store-setter-after-await/node_modules/
 !fixtures/reactive-ir/store-setter-after-await/node_modules/**
+!fixtures/reactive-ir/store-copy-element-write/node_modules/
+!fixtures/reactive-ir/store-copy-element-write/node_modules/**

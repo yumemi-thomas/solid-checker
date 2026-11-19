@@ -789,6 +789,17 @@
       "blocker": "value-through-new",
       "severity": "warning",
       "path": "fixtures/reactive-ir/returned-store-proxy/hook.ts",
+      "start": 589,
+      "end": 954,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-through-new",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-proxy/hook.ts",
       "start": 595,
       "end": 600,
       "fixes": 0
@@ -822,8 +833,30 @@
       "blocker": "value-through-new",
       "severity": "warning",
       "path": "fixtures/reactive-ir/returned-store-proxy/hook.ts",
+      "start": 1141,
+      "end": 1231,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-through-new",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-proxy/hook.ts",
       "start": 1147,
       "end": 1152,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-through-new",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-proxy/hook.ts",
+      "start": 1365,
+      "end": 1451,
       "fixes": 0
     },
     {
@@ -844,8 +877,30 @@
       "blocker": "value-through-new",
       "severity": "warning",
       "path": "fixtures/reactive-ir/returned-store-proxy/hook.ts",
+      "start": 1724,
+      "end": 1872,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-through-new",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-proxy/hook.ts",
       "start": 1730,
       "end": 1735,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-through-new",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-proxy/hook.ts",
+      "start": 2003,
+      "end": 2151,
       "fixes": 0
     },
     {
@@ -866,8 +921,30 @@
       "blocker": "value-through-new",
       "severity": "warning",
       "path": "fixtures/reactive-ir/returned-store-proxy/hook.ts",
+      "start": 2453,
+      "end": 2655,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-through-new",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-proxy/hook.ts",
       "start": 2459,
       "end": 2464,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-through-new",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-proxy/hook.ts",
+      "start": 2941,
+      "end": 3031,
       "fixes": 0
     },
     {
@@ -896,7 +973,7 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "value-to-unresolved-callee",
+      "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/returned-store-proxy/hook.ts",
       "start": 2994,
@@ -932,6 +1009,17 @@
       "blocker": "value-through-new",
       "severity": "warning",
       "path": "fixtures/reactive-ir/returned-store-proxy/hook.ts",
+      "start": 3236,
+      "end": 3368,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-through-new",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-proxy/hook.ts",
       "start": 3242,
       "end": 3247,
       "fixes": 0
@@ -943,8 +1031,30 @@
       "blocker": "value-through-new",
       "severity": "warning",
       "path": "fixtures/reactive-ir/returned-store-proxy/hook.ts",
+      "start": 3504,
+      "end": 3634,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-through-new",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-proxy/hook.ts",
       "start": 3510,
       "end": 3515,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-through-new",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-proxy/hook.ts",
+      "start": 3769,
+      "end": 3944,
       "fixes": 0
     },
     {
@@ -976,6 +1086,17 @@
       "blocker": "value-through-new",
       "severity": "warning",
       "path": "fixtures/reactive-ir/returned-store-proxy/hook.ts",
+      "start": 4640,
+      "end": 4669,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-through-new",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-proxy/hook.ts",
       "start": 4646,
       "end": 4651,
       "fixes": 0
@@ -989,6 +1110,17 @@
       "path": "fixtures/reactive-ir/returned-store-proxy/hook.ts",
       "start": 4653,
       "end": 4668,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-through-new",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-proxy/hook.ts",
+      "start": 4804,
+      "end": 4826,
       "fixes": 0
     },
     {
@@ -1022,6 +1154,17 @@
       "path": "fixtures/reactive-ir/returned-store-proxy/hook.ts",
       "start": 4999,
       "end": 5004,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-through-new",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/returned-store-proxy/hook.ts",
+      "start": 5020,
+      "end": 5130,
       "fixes": 0
     },
     {

@@ -6324,6 +6324,21 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "value-to-unresolved-callee"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "value-to-unresolved-callee"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "value-to-unresolved-callee"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "value-use-unclassified"
      }
     ]
    }
@@ -11357,6 +11372,21 @@
       "kind": "uncertifiable",
       "rule": "SC2002",
       "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "value-to-unresolved-callee"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "value-to-unresolved-callee"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "value-use-unclassified"
      }
     ]
    }

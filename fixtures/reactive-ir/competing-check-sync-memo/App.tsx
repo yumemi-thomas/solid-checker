@@ -291,6 +291,21 @@ export function MemoSharedApplyAndHandler() {
   );
   return <button onClick={() => make()} />;
 }
+// Violation kept: a deferred apply does not run at mount (`defer: true`); it first runs on the handler's flush, where no refusal
+// precedes the creation's probe (Chrome: SYNC_NODE_RECEIVED_ASYNC; mx-recall `effect-apply-defer-flush-rerun`).
+export function MemoSharedDeferredApplyAndHandler() {
+  const make = () => {
+    createMemo(async () => 1, { sync: true });
+  };
+  createEffect(
+    () => 1,
+    () => {
+      make();
+    },
+    { defer: true },
+  );
+  return <button onClick={() => make()} />;
+}
 export function MemoSharedTrackedAndHandler() {
   const make = () => {
     createMemo(async () => 1, { sync: true });
@@ -328,4 +343,45 @@ export function MemoSharedConditionalApply(props: { on: boolean }) {
     );
   }
   return <button onClick={() => make()} />;
+}
+// Part 10: a listener on a fresh element that only an owned onSettled fires (by removing the focused element): every run is on
+// the leaf owner's stack, and the element leaves the page there, so no later event reaches it.
+export function MemoInRemovedListener() {
+  const el = document.createElement("input");
+  document.body.append(el);
+  el.addEventListener("blur", () => {
+    createMemo(async () => 1, { sync: true });
+  });
+  el.focus();
+  onSettled(() => {
+    el.remove();
+  });
+  return <i />;
+}
+// Violation kept: the element stays attached, so a later blur runs the listener with no owner.
+export function MemoInAttachedListener() {
+  const el = document.createElement("input");
+  document.body.append(el);
+  el.addEventListener("blur", () => {
+    createMemo(async () => 1, { sync: true });
+  });
+  el.focus();
+  onSettled(() => {
+    el.blur();
+  });
+  return <i />;
+}
+// Violation kept: the body blurs the element first, under the component's owner, and the probe runs.
+export function MemoInRemovedListenerBlurredInBody() {
+  const el = document.createElement("input");
+  document.body.append(el);
+  el.addEventListener("blur", () => {
+    createMemo(async () => 1, { sync: true });
+  });
+  el.focus();
+  el.blur();
+  onSettled(() => {
+    el.remove();
+  });
+  return <i />;
 }

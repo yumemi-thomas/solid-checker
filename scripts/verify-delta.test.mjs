@@ -65,6 +65,7 @@ test("each table row claims its own owner's paths", () => {
     ["packages/wasm/src/index.ts", ["bun-test-wasm", "wasm-parity"]],
     ["scripts/fuzz/focus.mjs", ["fuzz-tests"]],
     ["scripts/fuzz/roles.test.mjs", ["fuzz-tests"]],
+    ["scripts/runtime-oracle.mjs", ["fuzz-tests"]],
   ];
   for (const [path, checks] of expected) {
     assert.deepEqual(classify(path)?.checks, checks, path);

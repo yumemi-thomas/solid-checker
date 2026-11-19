@@ -1,0 +1,6 @@
+{
+  "note": "ADR 1052 part 10: the element stays attached (onSettled blurs it): the later blur (ADR 1101) runs the listener with no owner, SYNC_NODE_RECEIVED_ASYNC; SC7002 stays a violation. Generated program `mx-sync-node-received-async-evt-settled-fire-blur-memo-direct-none`.",
+  "haltMarker": true,
+  "mount": ["C1"],
+  "steps": []
+}
