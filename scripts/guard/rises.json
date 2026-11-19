@@ -4998,6 +4998,14 @@
    "to": 1,
    "adr": "ADR 1107",
    "fact": "destructure-store-placement: a store destructure setup does not provably run takes SC1001's blocker for its slots (callee-callback-timing, host-callback-timing, summary-read-unplaced, relabels of ADR 1106's U); store-strict-read-keys DestructuredThen: a destructure whose every slot is `then` is store-key-undecided (the then Get does not warn; main's V was a false positive)"
+  },
+  {
+   "fixture": "reactive-ir/past-await-owner-observer",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 1114",
+   "fact": "family 1: a write chain's Gets before its terminal Set are read sites; past-await-owner-observer gains the chain's read prefix after the await (uncertifiable)"
   }
  ]
 }
