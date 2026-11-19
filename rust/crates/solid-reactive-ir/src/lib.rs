@@ -50,9 +50,9 @@ mod callback_return;
 mod carrier_runs;
 mod cleanup;
 mod competing_checks;
-mod disabled_handlers;
 mod development_feedback;
 mod directives;
+mod disabled_handlers;
 mod execution_paths;
 #[cfg(feature = "what-if")]
 pub mod what_if;

@@ -78,6 +78,12 @@
   "rust/crates/solid-reactive-ir/src/directives.rs": {
     "file_slots": 1
   },
+  "rust/crates/solid-reactive-ir/src/disabled_handlers.rs": {
+    "file_by_path": 1,
+    "pending-review": [
+      "file_by_path rose 0 -> 1 (--allow-rise): unreviewed"
+    ]
+  },
   "rust/crates/solid-reactive-ir/src/effect_execution.rs": {
     "file_slots": 5,
     "file_by_path": 1,
