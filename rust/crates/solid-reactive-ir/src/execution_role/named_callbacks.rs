@@ -658,7 +658,7 @@ pub(crate) fn function_length(function: &solid_facts::ast::FunctionFact) -> usiz
 /// The innermost function around `span` that a callback position of its file
 /// names ([`NamedCallbackRoles`]): the function whose role
 /// [`named_callback_execution_role`] reads.
-pub(super) fn named_callback_containing<'f>(
+pub(crate) fn named_callback_containing<'f>(
     file: &'f solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,

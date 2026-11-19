@@ -624,6 +624,17 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/Created.tsx",
+      "start": 347,
+      "end": 387,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/Created.tsx",
       "start": 362,
       "end": 383,
       "fixes": 0
@@ -1020,6 +1031,17 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/Held.tsx",
+      "start": 613,
+      "end": 649,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/Held.tsx",
       "start": 628,
       "end": 648,
       "fixes": 0
@@ -1033,6 +1055,17 @@
       "path": "fixtures/reactive-ir/value-use-census/Held.tsx",
       "start": 725,
       "end": 728,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/Held.tsx",
+      "start": 809,
+      "end": 825,
       "fixes": 0
     },
     {
@@ -3472,6 +3505,17 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InNamed.tsx",
+      "start": 1898,
+      "end": 1916,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InNamed.tsx",
       "start": 1913,
       "end": 1915,
       "fixes": 0
@@ -3480,6 +3524,17 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-census/InNamed.tsx",
+      "start": 1923,
+      "end": 1940,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-census/InNamed.tsx",
       "start": 1923,

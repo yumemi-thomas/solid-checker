@@ -437,169 +437,6 @@
  ],
  "patterns": [
   {
-   "id": "api/r01-values-inline",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "api/r03-arrayfrom-inline",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "api/r05-entries-inline",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "census/a22-object-values",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "census/f10-getter-this-chain",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "returns/v11-for-of",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "values/d2n-slice-element-write",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STORE_WRITE_OUTSIDE_SETTER"
-   ],
-   "certified": false
-  },
-  {
-   "id": "values/d3-object-values",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "values/d3-options-destructure",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "values/d3-sources-const",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "values/d5-json",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "values/d5-object-values",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "values/d5-view-then-json",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "values/d7-ambient-fn",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "values/d9-this-getter",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "values/t5-helper-destructure-param",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "values/t5-store-helper-destructure",
-   "item": "R-carrier: census row at the carrier, none at the read or write",
-   "outcome": "false-clean",
-   "codes": [
-    "STRICT_READ_UNTRACKED"
-   ],
-   "certified": false
-  },
-  {
-   "id": "flip/st-tracked-handled-sync-memo",
-   "item": "ADR 1052: a sync memo in a helper a tracked effect runs under <Errored>: Chrome reports PRIMITIVE_IN_FORBIDDEN_SCOPE at the site and never SYNC_NODE_RECEIVED_ASYNC; the V beside it is a false positive (its stacked pair is retired; the refusal reached through a helper is not counted, owner Mac 20)",
-   "outcome": "false-positive",
-   "codes": [],
-   "rules": [
-    "sync-computation-received-async"
-   ],
-   "owner": "Mac 20"
-  },
-  {
    "id": "pkgaction/patch-f32-undeclared",
    "item": "ADR 0974 named miss: a builtin prototype a package extends without declaring it (`Float32Array.prototype.reverse = …`): no fact of the whole program says who writes the shared object",
    "outcome": "false-clean",
@@ -660,15 +497,13 @@
  "owners": {
   "mx-census/mx-context-not-found-dny-flush-load-x-direct-none": "Mac 23",
   "mx-census/mx-context-not-found-dny-flush-popover-x-direct-none": "Mac 23",
-  "mx-census/mx-context-not-found-dny-flush-unmount-x-direct-none": "Mac 23",
-  "mx-census/mx-sync-node-received-async-evt-settled-fire-remove-effect-direct-none": "Mac 20",
-  "mx-census/mx-sync-node-received-async-evt-settled-fire-remove-memo-direct-none": "Mac 20"
+  "mx-census/mx-context-not-found-dny-flush-unmount-x-direct-none": "Mac 23"
  },
  "corpusBlockers": [],
  "ratchet": {
   "certified": 0,
   "certifiedF2": 0,
-  "falsePositive": 5,
+  "falsePositive": 3,
   "stackedClaim": 0,
   "stackedPairs": {},
   "unjudgedClaim": 0,
@@ -676,7 +511,7 @@
   "causes": {
    "R-unplaced": 8,
    "R-halted": 2,
-   "false-positive": 5
+   "false-positive": 3
   }
  }
 }

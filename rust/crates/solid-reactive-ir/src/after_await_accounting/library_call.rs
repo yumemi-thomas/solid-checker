@@ -219,34 +219,69 @@ fn setter_runs_nothing(
     use solid_dialect::OptionLiteral;
     let lookup = ctx.semantic_lookup;
     let callee = file.ast.peel_ts_sugar_span(call.callee);
-    if !crate::owners::is_identifier_span(file, callee) {
-        return false;
-    }
-    let Some((binding_file, binding, _)) = lookup.binding_at_reference(file.path.as_str(), callee)
-    else {
-        return false;
+    let (binding_file, binding) = if crate::owners::is_identifier_span(file, callee) {
+        let Some((binding_file, binding, _)) =
+            lookup.binding_at_reference(file.path.as_str(), callee)
+        else {
+            return false;
+        };
+        let Some(setter) = binding.array_slots.get(1).and_then(Option::as_ref) else {
+            return false;
+        };
+        if binding_file.path != file.path
+            || !binding.immutable
+            || binding.shape != BindingShape::Array
+            || file.ast.reference_declaration(callee) != Some(setter.span)
+        {
+            return false;
+        }
+        (binding_file, binding)
+    } else {
+        // ADR 1098: a setter a value carries (`thing.useIt(7)`, the setter a hook's returned literal holds): the callee's symbol is a
+        // setter of the table (the transport the write rules use), and its declaration is the setter slot of an exact
+        // `const [get, set] = createSignal(…)` or `createStore(…)`, asked below as the plain callee's is (a store's only in its own
+        // file).
+        let Some((_, declared, _, _)) = crate::static_rules::solid_call_symbol(ctx, file, call)
+            .and_then(|symbol| ctx.setters.get(symbol))
+        else {
+            return false;
+        };
+        // The binder's own answer at the declaration (a recorded read of the declaring file), and its setter slot is that name.
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(declared.start_byte),
+            u32::try_from(declared.end_byte),
+        ) else {
+            return false;
+        };
+        let at = solid_facts::core::Span::new(start, end);
+        let Some((declaring, binding, _)) = lookup.binding_at_reference(declared.path.as_ref(), at)
+        else {
+            return false;
+        };
+        if !binding
+            .array_slots
+            .get(1)
+            .and_then(Option::as_ref)
+            .is_some_and(|slot| slot.span == at)
+        {
+            return false;
+        }
+        if !binding.immutable || binding.shape != BindingShape::Array {
+            return false;
+        }
+        (declaring, binding)
     };
-    let Some(setter) = binding.array_slots.get(1).and_then(Option::as_ref) else {
-        return false;
-    };
-    if binding_file.path != file.path
-        || !binding.immutable
-        || binding.shape != BindingShape::Array
-        || file.ast.reference_declaration(callee) != Some(setter.span)
-    {
-        return false;
-    }
     let Some(created) = binding
         .initializer
-        .map(|initializer| file.ast.peel_ts_sugar_span(initializer))
-        .and_then(|initializer| file.ast.call_at(initializer))
+        .map(|initializer| binding_file.ast.peel_ts_sugar_span(initializer))
+        .and_then(|initializer| binding_file.ast.call_at(initializer))
     else {
         return false;
     };
     if created.construct {
         return false;
     }
-    let Some(primitive) = lookup.primitive_at_call(file, created.span) else {
+    let Some(primitive) = lookup.primitive_at_call(binding_file, created.span) else {
         return false;
     };
     // The call is the dialect's signal creation, and its options argument is the dialect's.
@@ -254,7 +289,7 @@ fn setter_runs_nothing(
         return call.arguments.iter().all(|argument| {
             argument_is_inert(ctx, file, argument, None, object_prototype_touched)
         }) && matches!(
-            crate::call_option_literal(file, created, options, "equals"),
+            crate::call_option_literal(binding_file, created, options, "equals"),
             OptionLiteral::Absent | OptionLiteral::False
         );
     }
@@ -272,7 +307,9 @@ fn setter_runs_nothing(
     let [updater] = call.arguments.as_slice() else {
         return false;
     };
-    ctx.dialect.store_setter_calls_updater(primitive)
+    // ADR 1098: the store's root and initial value are read where the setter is called: same file only.
+    binding_file.path == file.path
+        && ctx.dialect.store_setter_calls_updater(primitive)
         && !initial.spread
         && (initial.exact_object_literal
             || file

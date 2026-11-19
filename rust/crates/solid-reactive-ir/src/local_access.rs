@@ -1838,6 +1838,92 @@ impl LocalAccessContext<'_, '_> {
         }))
     }
 
+    /// ADR 1100: whether a Get of `key` on the `const` view `object` is a Get
+    /// of `key` on the props parameter `parameter` itself, by the view's rc.21
+    /// semantics (`@solidjs/signals@2.0.0-rc.21` `dist/dev.js:9247-9283`,
+    /// `9477-9497`, `9576-9683`, `9684-9707`). Two forms, every argument written:
+    /// - `merge(lit…, props)`: the Get walks the sources last to first, one
+    ///   `in` each (or the own-key table, which keeps the same order), so with
+    ///   the parameter last it lands on the parameter whenever the parameter
+    ///   has the key. Each earlier source is a closed object literal (no
+    ///   spread, computed key, `__proto__`, setter or duplicate) without the
+    ///   key, and the key names no member of `Object.prototype`, so where the
+    ///   parameter lacks the key no other source answers it.
+    /// - `omit(props, "k"…)`: every hidden key a string literal and none of
+    ///   them `key`; the Get is `source[key]`.
+    ///
+    /// Anything else (a spread argument, another source, a view of a view, a
+    /// predicate, a call no dialect primitive resolves to) answers false.
+    fn view_get_is_props_get(
+        &self,
+        file: &solid_facts::FileFacts,
+        object: solid_facts::core::Span,
+        parameter: &SymbolId,
+        key: &str,
+    ) -> bool {
+        const OBJECT_PROTOTYPE: [&str; 12] = [
+            "constructor",
+            "hasOwnProperty",
+            "isPrototypeOf",
+            "propertyIsEnumerable",
+            "toLocaleString",
+            "toString",
+            "valueOf",
+            "__proto__",
+            "__defineGetter__",
+            "__defineSetter__",
+            "__lookupGetter__",
+            "__lookupSetter__",
+        ];
+        let object = file.ast.peel_ts_sugar_span(object);
+        // Only a name bound to the view: `view_call` also answers a call.
+        if file.ast.call_at(object).is_some() {
+            return false;
+        }
+        let Some(call) = self.view_call(file, object) else {
+            return false;
+        };
+        if call.arguments.iter().any(|argument| argument.spread) {
+            return false;
+        }
+        let names_parameter = |argument: &solid_facts::ast::ArgumentFact| {
+            let span = file.ast.peel_ts_sugar_span(argument.span);
+            file.ast.has_reference_identifier_at(span)
+                && self.entities.get(&location(file.path.shared(), span)) == Some(parameter)
+        };
+        match self.lookup.primitive_at_call(file, call.span) {
+            Some(solid_dialect::Primitive::Merge) => {
+                let Some((last, earlier)) = call.arguments.split_last() else {
+                    return false;
+                };
+                !OBJECT_PROTOTYPE.contains(&key)
+                    && names_parameter(last)
+                    && earlier.iter().all(|argument| {
+                        let value = file.ast.peel_ts_sugar_span(argument.span);
+                        file.ast.object_get_shapes.iter().any(|shape| {
+                            shape.span == value
+                                && shape.closed
+                                && !shape.properties.iter().any(|property| property.key == key)
+                        })
+                    })
+            }
+            Some(solid_dialect::Primitive::Omit) => {
+                let Some((source, hidden)) = call.arguments.split_first() else {
+                    return false;
+                };
+                names_parameter(source)
+                    && hidden.iter().all(|argument| {
+                        matches!(
+                            &argument.literal_value,
+                            solid_facts::ast::ArgumentLiteralFact::String(hidden)
+                                if hidden.as_str() != key
+                        )
+                    })
+            }
+            _ => false,
+        }
+    }
+
     /// The source an inline `omit` or `merge` view expression reads through to
     /// ([`crate::source_discovery::view_root`]): a props parameter or a store.
     fn inline_view_root(
@@ -3496,11 +3582,29 @@ impl LocalAccessContext<'_, '_> {
         }
         // ADR 0511: or a closed alias of the prop (`const d = props.k`,
         // `const { d } = { d: props.k }`).
-        let props_callee = self.exact_props_callee(file, call.callee).or_else(|| {
-            crate::execution_role::handed_member_alias(file, call.callee)
-                .filter(|member| *member != file.ast.peel_ts_sugar_span(call.callee))
-                .and_then(|member| self.exact_props_callee(file, member))
-        });
+        let props_callee = self
+            .props_callee_through(file, call.callee, true)
+            .or_else(|| {
+                crate::execution_role::handed_member_alias(file, call.callee)
+                    .filter(|member| *member != file.ast.peel_ts_sugar_span(call.callee))
+                    .and_then(|member| self.props_callee_through(file, member, true))
+            })
+            // ADR 1100: a view's member stands for the prop only where the
+            // prop's own call is placed; elsewhere the handed obligation below
+            // stays, as before.
+            .filter(|(declaration, property, view)| {
+                !view
+                    || self.props_call_placed(file, call)
+                    || self.props_call_pending_in_layers(
+                        file,
+                        call,
+                        &self
+                            .props_reactivity
+                            .passed_sources(declaration, property)
+                            .0,
+                    )
+            })
+            .map(|(declaration, property, _)| (declaration, property));
         if let Some((declaration, property)) = props_callee {
             if self.discover_props_call(file, call, &declaration, &property, allowed, result) {
                 return;
@@ -3921,6 +4025,19 @@ impl LocalAccessContext<'_, '_> {
         file: &solid_facts::FileFacts,
         callee: solid_facts::core::Span,
     ) -> Option<(Location, String)> {
+        self.props_callee_through(file, callee, false)
+            .map(|(declaration, property, _)| (declaration, property))
+    }
+
+    /// [`Self::exact_props_callee`]; with `views`, also a member of a `const`
+    /// view whose Get is the parameter's ([`Self::view_get_is_props_get`],
+    /// ADR 1100). The flag says the answer came through such a view.
+    fn props_callee_through(
+        &self,
+        file: &solid_facts::FileFacts,
+        callee: solid_facts::core::Span,
+        views: bool,
+    ) -> Option<(Location, String, bool)> {
         let callee = file.ast.peel_ts_sugar_span(callee);
         if let Some(member) = file.ast.member_at(callee) {
             if file
@@ -3948,21 +4065,28 @@ impl LocalAccessContext<'_, '_> {
                 return None;
             }
             let (_, declaration) = self.prop_sources.get(root)?;
-            let exact = self.entities.get(declaration) == Some(root)
-                && props_root_is_current(file, declaration, root, self.entities, self.lookup)
-                && props_root_attachments_are_views(
-                    file,
-                    self.prop_sources,
-                    declaration,
-                    root,
-                    self.entities,
-                    self.lookup,
-                );
+            let name = file.source_text(member.property)?.to_owned();
+            // ADR 1100: a `const` view of the parameter whose Get of `name`
+            // is the parameter's own Get stands for the parameter.
+            let parameter = self.entities.get(declaration)?;
+            let view = parameter != root;
+            if view && !(views && self.view_get_is_props_get(file, object, parameter, &name)) {
+                return None;
+            }
+            let exact =
+                props_root_is_current(file, declaration, parameter, self.entities, self.lookup)
+                    && props_root_attachments_are_views(
+                        file,
+                        self.prop_sources,
+                        declaration,
+                        parameter,
+                        self.entities,
+                        self.lookup,
+                    );
             if !exact {
                 return None;
             }
-            let name = file.source_text(member.property)?.to_owned();
-            return Some((declaration.clone(), name));
+            return Some((declaration.clone(), name, view));
         }
         // A destructured props parameter: the classification is addressed by
         // the parameter's pattern.
@@ -3985,7 +4109,7 @@ impl LocalAccessContext<'_, '_> {
                     .props_reactivity
                     .for_declaration(&pattern)
                     .is_some()
-                    .then(|| (pattern, slot.property.to_string()));
+                    .then(|| (pattern, slot.property.to_string(), false));
             }
             owner = file
                 .ast
@@ -7850,7 +7974,15 @@ impl LocalAccessContext<'_, '_> {
                     );
                     return;
                 }
-                if !(unplaced || placed_nowhere(file, member.span, self.lookup)) {
+                // ADR 1103: the silence rests on the summaries claiming the read at the call edges into the function around it, or
+                // (ADR 0936) into the named function around an anonymous one. An anonymous function handed whole to a call that is no
+                // primitive's (`h1(() => props.m1)` in `const dir1 = () => …`) is entered by that call, and no summary carries its reads
+                // to `dir1()`: the read has no row anywhere, so it is unplaced, never placed elsewhere. A store's read there is
+                // carried (a violation at `dir1()`).
+                // Only a component prop's read: the summaries carry a store's or an accessor's read of such a literal to the call.
+                let handed_literal = self.prop_sources.contains_key(symbol)
+                    && handed_anonymous_literal(file, member.span, self.lookup);
+                if !(unplaced || handed_literal || placed_nowhere(file, member.span, self.lookup)) {
                     let ends_before = result.ends.len();
                     result.ends.end_with(
                         file,
@@ -7877,7 +8009,9 @@ impl LocalAccessContext<'_, '_> {
                     || {
                         format!(
                             "cause|read-unknown|member|{}",
-                            if gate_refuses {
+                            if handed_literal {
+                                "handed-literal"
+                            } else if gate_refuses {
                                 "gate-refuses"
                             } else if unplaced {
                                 "handed-unplaced"
@@ -9625,6 +9759,27 @@ pub(crate) fn nested_named_function(
             !lookup.function_may_be_component(file, function)
                 && function_binding_name(file, function).is_some()
         })
+}
+
+/// ADR 1103: whether the function written directly around `span` is an anonymous function literal (no name, no binding)
+/// handed whole as an argument to a call that is no primitive's: that call enters it, not the named function around it, so
+/// ADR 0936's fallback to the named function's call edges does not place it.
+pub(crate) fn handed_anonymous_literal(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    containing_ast_function(&file.ast, span).is_some_and(|function| {
+        function.name.is_none()
+            && function_binding_name(file, function).is_none()
+            && file
+                .ast
+                .arguments_containing(function.span)
+                .any(|(call, index)| {
+                    file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
+                        && lookup.primitive_at_call(file, call.span).is_none()
+                })
+    })
 }
 
 /// ADR 0535: whether `span` is in a non-component function written as a

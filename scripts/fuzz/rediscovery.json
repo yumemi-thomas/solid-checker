@@ -26263,5 +26263,154 @@
    "mx-sync-node-received-async-flw-settled-report-error-memo-direct-none"
   ],
   "rediscovered": "old harness (6be8e3e34), same checker: `focus.mjs --codes SYNC_NODE_RECEIVED_ASYNC --grids mx-census` on the ids fails (false-positive); this harness: 26 agree"
+ },
+ {
+  "finding": "a false positive: SC7002 at a sync memo in a blur listener on a fresh element that an owned onSettled fires by removing the element: every run is the leaf owner's (PRIMITIVE_IN_FORBIDDEN_SCOPE) and the detached element hears no later event",
+  "found": "ADR 1052 part 4's ledger (evt-settled-fire-remove); left after ADR 1101's harness fix",
+  "fixed": "ADR 1052 part 10 (`competing_checks.rs` `listener_detached_in_owned_leaf`)",
+  "grid": "mx-census",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "mx-sync-node-received-async-evt-settled-fire-remove-memo-direct-none",
+   "mx-sync-node-received-async-evt-settled-fire-remove-effect-direct-none"
+  ],
+  "rediscovered": "base aed152831 (main 2b4adb9c6 + parts 8/9 + ADR 1101): with the rows out of open-defects-rows.json `focus.mjs --codes SYNC_NODE_RECEIVED_ASYNC --grids mx-census` on the 2 ids fails (2 false-positive); this build: 2 not-fired"
+ },
+ {
+  "finding": "a proved verdict lost (recall, not a false positive): ADR 1052 part 9 read a helper called from an effect's apply as refused at mount, though the effect is `{ defer: true }` and its apply first runs on a handler's flush; there no PRIMITIVE_IN_EFFECT_CALLBACK precedes the creation's probe and Chrome reports SYNC_NODE_RECEIVED_ASYNC, so SC7002 went violation -> uncertifiable (creation-throws-first)",
+  "found": "the smoke of #287 (run 44304355728): `mx-recall: proved verdict lost mx-sync-node-received-async-effect-apply-defer-flush-rerun-memo-direct-closure -> recall-gap`; bisected to part 9 (3870a6c6e loses it, 76477c121 holds it)",
+  "fixed": "ADR 1052 part 9's mount premise (`competing_checks.rs` `apply_runs_at_mount`: an effect's apply refuses at mount only when its `defer` option is absent or `false`); fixture competing-check-sync-memo `MemoSharedDeferredApplyAndHandler`",
+  "grid": "mx-recall",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "mx-sync-node-received-async-effect-apply-defer-flush-rerun-memo-direct-closure"
+  ],
+  "rediscovered": "main ea8cca2fd and 28fde14bf recall-gap (SC7002 uncertifiable at line 9), this build agree (SC7002 violation, Chrome corroborates SYNC_NODE_RECEIVED_ASYNC); main 76477c121 agree"
+ },
+ {
+  "finding": "a false positive: SC7002 at a sync memo in a helper only a tracked effect's callback calls, under <Errored>: Chrome reports PRIMITIVE_IN_FORBIDDEN_SCOPE at the site and never SYNC_NODE_RECEIVED_ASYNC",
+  "found": "open-defects pattern flip/st-tracked-handled-sync-memo (ADR 1052 part 4 retired its stacked pair)",
+  "fixed": "ADR 1052 part 5 (`competing_checks.rs` `every_run_refused`: a refusal reached through a helper every reference of which is a refused call); part 9's `refused_at_mount_else_handlers` covers it too",
+  "grid": "patterns",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": ["flip/st-tracked-handled-sync-memo"],
+  "rediscovered": "make fuzz-patterns --only st-tracked-handled-sync-memo: false positive on main 28fde14bf built with both clauses off; FIXED on main (and on e4712a977 + parts 6/7, part 5 alone)",
+  "outside": "the pattern lane holds this program (scripts/fuzz/patterns/flip); mx-census tracked-sibling-async and tracked-shared generate the family (ADR 1052 parts 5 and 9 entries above)"
+ },
+ {
+  "finding": "a false clean: SC1001 at a component prop read in an anonymous literal handed to a project helper inside a named local function the render runs (`dir1 = () => { h1(() => { props.m1 }) }`): Chrome reports STRICT_READ_UNTRACKED, and the read ended as `placed-elsewhere` with no row at the named function's calls",
+  "found": "Mac 20's count of the dead false-clean families on main 28fde14bf (a sample of R-near memo); exposed by ADR 1091 (e2d9d4a8f U, 6c9420b8d clean), older than it",
+  "fixed": "ADR 1103 (`local_access.rs` `handed_anonymous_literal`)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": ["mx-strict-read-untracked-ref-factory-body-memo-direct-helper-s-prop-value-cast"],
+  "rediscovered": "`focus.mjs --codes STRICT_READ_UNTRACKED --grids mx-recall --ids`: main 28fde14bf false-clean; this build recall-gap"
+ },
+ {
+  "finding": "ADR 1105 (probe k1n, H1's module-level hole): a reactive read in a helper called from the instance field initializer, the constructor, or a method the constructor calls, of a class value a helper returns (`const pm = () => class { x = ph(); }; pb.K = pm();` at module scope), constructed in a `toString` an async memo's template literal runs after its await. Chrome rc.21 reports UNTRACKED_READ_AFTER_AWAIT at the read; main 28fde14bf certified the field form clean and gave the constructor and method forms only SC1001's uncertifiable row",
+  "found": "a review probe (k1n) on main 28fde14bf, 2026-11-19",
+  "fixed": "ADR 1105 (`static_api.rs`: `field_initializer_on_the_way` in the three unplaced walks, so a climb that crosses a call written directly in an instance field initializer is unplaced; `runs_unplaced_once` also reads the binding's calls in its file that the call graph withholds, ADR 0339)",
+  "grid": "mx-recall",
+  "code": "UNTRACKED_READ_AFTER_AWAIT",
+  "ids": [
+   "mx-untracked-read-after-await-pu-class-made-x-direct-none",
+   "mx-untracked-read-after-await-pu-class-ctor-x-direct-none",
+   "mx-untracked-read-after-await-pu-class-meth-x-direct-none"
+  ],
+  "rediscovered": "main 28fde14bf (release): `focus.mjs --codes UNTRACKED_READ_AFTER_AWAIT --grids mx-recall --ids` on the three fails (false-clean 3, the field form certified); the fix: recall-gap 3 (SC1002 function-run-unplaced at the read), exit 0"
+ },
+ {
+  "finding": "R-carrier: a reactive read through a value an accessor or root left in a carrier (an element call `Object.values(o)[0]()`, a `for…of` binding over a carrier, a holder literal's getter reading `this.s()`, a standard call reading a props or store root's getters such as `JSON.stringify(props)`, an ambient global function the program assigns): the census row stood at the carrier and none at the read",
+  "found": "open-defects patterns (R-carrier): api/r01-values-inline, api/r03-arrayfrom-inline, api/r05-entries-inline, census/a22-object-values, census/f10-getter-this-chain, returns/v11-for-of, values/d3-object-values, values/d3-sources-const, values/d5-json, values/d5-object-values, values/d5-view-then-json, values/d7-ambient-fn, values/d9-this-getter",
+  "fixed": "ADR 1104 (`value_use.rs`: for-of bindings past an escape, element calls, `this` members of a holder literal, a standard call's read of a root, ambient global functions)",
+  "grid": "patterns",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "api/r01-values-inline",
+   "api/r03-arrayfrom-inline",
+   "api/r05-entries-inline",
+   "census/a22-object-values",
+   "census/f10-getter-this-chain",
+   "returns/v11-for-of",
+   "values/d3-object-values",
+   "values/d3-sources-const",
+   "values/d5-json",
+   "values/d5-object-values",
+   "values/d5-view-then-json",
+   "values/d7-ambient-fn",
+   "values/d9-this-getter"
+  ],
+  "rediscovered": "make fuzz-patterns: false clean on main 28fde14bf; FIXED on the ADR 1104 tree (SC9012 uncertifiable at the read)",
+  "outside": "the pattern lane holds these programs (scripts/fuzz/patterns, make fuzz-patterns); no grid generator writes the carrier shapes yet"
+ },
+ {
+  "finding": "R-carrier through the generator (ADR 1104 1b): an element call out of Object.values of a holder (`Object.values(box)[0]()`) and a `for…of` binding called in a helper (`for (const f of fns) return f()`): no row at the read",
+  "found": "the review of ADR 1104 slice 1 (coord-land/review-1104.md, item 5: the patterns lane alone held the shapes)",
+  "fixed": "ADR 1104 slice 1 (value_use.rs late walks) and 1b; generator bindings values-callee, this-method, loop-callee (misuse.mjs RECALL_VALUE_BINDINGS)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-signal-values-callee-none",
+   "mx-strict-read-untracked-body-signal-loop-callee-none",
+   "mx-strict-read-untracked-body-memo-values-callee-none",
+   "mx-strict-read-untracked-body-memo-loop-callee-none",
+   "mx-strict-read-untracked-effect-apply-signal-values-callee-none",
+   "mx-strict-read-untracked-effect-apply-signal-loop-callee-none",
+   "mx-strict-read-untracked-effect-apply-memo-values-callee-none",
+   "mx-strict-read-untracked-effect-apply-memo-loop-callee-none",
+   "mx-strict-read-untracked-root-signal-values-callee-none",
+   "mx-strict-read-untracked-root-signal-loop-callee-none",
+   "mx-strict-read-untracked-root-memo-values-callee-none",
+   "mx-strict-read-untracked-root-memo-loop-callee-none",
+   "mx-strict-read-untracked-render-apply-signal-values-callee-none",
+   "mx-strict-read-untracked-render-apply-signal-loop-callee-none",
+   "mx-strict-read-untracked-render-apply-memo-values-callee-none",
+   "mx-strict-read-untracked-render-apply-memo-loop-callee-none"
+  ],
+  "rediscovered": "focus --grids mx-recall --ids (24 programs): main 28fde14bf 16 false-clean; this build 24 recall-gap (SC9012 at the read). this-method already had its row on main (a recall gap)"
+ },
+ {
+  "finding": "a false clean: SC1003 at a store destructure (`const { v } = store`) in a named helper the body calls, an effect's apply, a ref's application or a function nested in a named ref callback: Chrome reports STRICT_READ_UNTRACKED, and SC1003 skipped it as a fresh read (530 of the 1,938 `store-dstr-object` mx-recall programs on main 28fde14bf)",
+  "found": "Mac 20 checking ADR 1103's siblings (a Chrome probe), then the new fuzz variant `store-dstr-object`",
+  "fixed": "ADR 1106 (`static_rules.rs` `component_props_destructure`: `helper_runs_only_fresh`, `nested_in_named_callback`, `written_in_setup`)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": ["mx-strict-read-untracked-body-store-dstr-object-direct-closure", "mx-strict-read-untracked-effect-apply-store-dstr-object-direct-none", "mx-strict-read-untracked-ref-named-store-dstr-object-direct-closure", "mx-strict-read-untracked-ref-named-store-dstr-object-wrapper-helper"],
+  "rediscovered": "`focus.mjs --codes STRICT_READ_UNTRACKED --grids mx-recall --ids` (the 1,938 `store-dstr-object` ids): main 28fde14bf 530 false-clean; this build 0"
+ },
+ {
+  "finding": "a false positive: SC1003 violation at a store destructure in a listener, an object's method or a function handed to `render` (event-dispatch, synchronous-fire and listener contexts), whose role was the lexical fallback of the code around it: Chrome reports nothing (60 lg-recall `store-dstr-object` programs on main 28fde14bf)",
+  "found": "the new fuzz variant `store-dstr-object` (lg-recall)",
+  "fixed": "ADR 1106 (`static_rules.rs` `written_in_setup`)",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": ["lg-strict-read-untracked-evt-handler-dispatch-store-dstr-object-direct-none", "lg-strict-read-untracked-lst-none-method-store-dstr-object-direct-none", "lg-strict-read-untracked-mount-named-store-dstr-object-direct-none"],
+  "rediscovered": "`focus.mjs --codes STRICT_READ_UNTRACKED --grids lg-recall --ids` (the 6,795 destructure ids): main 28fde14bf 60 false-positive; this build 0"
+ },
+ {
+  "finding": "R-carrier (part 2): a reactive read through a carrier an exact project callee destructures in its parameter (`({ get }) => get()` handed `{ get: a }`; `function pick({ a })` handed props or a store root): the census row stood at the argument and none at the read",
+  "found": "open-defects patterns (R-carrier): values/d3-options-destructure, values/t5-helper-destructure-param, values/t5-store-helper-destructure",
+  "fixed": "ADR 1104 part 2 (`value_use.rs` `escaped_argument`: a pattern parameter reads a root at the pattern and holds what it read in its names)",
+  "grid": "patterns",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "values/d3-options-destructure",
+   "values/t5-helper-destructure-param",
+   "values/t5-store-helper-destructure"
+  ],
+  "rediscovered": "make fuzz-patterns: false clean on main 28fde14bf and on ADR 1104 part 1; FIXED on part 2 (SC9012 uncertifiable at the read)",
+  "outside": "the pattern lane holds these programs (scripts/fuzz/patterns, make fuzz-patterns); no grid generator writes a destructured parameter of a carrier yet"
+ },
+ {
+  "finding": "R-carrier d2n: a write through an element of a store array's copy (`const c = st.items.slice(); c[0].v = 5`): the only SC2003 row stood at the `slice()` call (ADR 0638's store-method obligation); the write had none, because Type Facts placed `slice` nowhere and the container flow followed nothing through an unresolved call",
+  "found": "open-defects patterns (R-carrier): values/d2n-slice-element-write",
+  "fixed": "ADR 1104 d2n (`shared_reactivity.rs` `call_value`: a linked method call nothing resolves may answer what it was handed, as a standard call's result may)",
+  "grid": "patterns",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "values/d2n-slice-element-write"
+  ],
+  "rediscovered": "make fuzz-patterns: false clean on main 28fde14bf and on 4eea43735; FIXED here (SC2003 uncertifiable at the write)",
+  "outside": "the pattern lane holds the program (scripts/fuzz/patterns); no grid generator writes a write through a copy's element yet"
  }
 ]

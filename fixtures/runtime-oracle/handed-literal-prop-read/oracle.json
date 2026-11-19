@@ -1,0 +1,6 @@
+{
+  "note": "ADR 1103: a prop read in an anonymous literal handed to a project helper inside a named ref factory the render calls: Chrome reports STRICT_READ_UNTRACKED at the read; SC1001 uncertifiable (it was a clean nothing explained, exposed by ADR 1091). Generated program `mx-strict-read-untracked-ref-factory-body-memo-direct-helper-s-prop-value-cast` (differential fuzzer, generator 2).",
+  "haltMarker": true,
+  "mount": ["P1"],
+  "steps": []
+}

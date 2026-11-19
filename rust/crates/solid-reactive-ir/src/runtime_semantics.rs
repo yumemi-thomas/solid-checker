@@ -978,6 +978,18 @@ pub(crate) fn synchronously_delivered_event_types(
     }
 }
 
+/// ADR 1052 part 10: the event types a synchronously dispatching `lib.dom` member (exact qualified name) can deliver to its own
+/// receiver before it returns, when they are known: `focus()` gives its receiver `focus` and `focusin` (a receiver already focused
+/// gets nothing; the `blur` it causes is another element's). `None` for every other member.
+pub(crate) fn events_delivered_to_receiver(
+    qualified_name: &str,
+) -> Option<&'static [&'static str]> {
+    match qualified_name {
+        "HTMLOrSVGOrMathMLElement.focus" | "HTMLOrSVGElement.focus" => Some(&["focus", "focusin"]),
+        _ => None,
+    }
+}
+
 pub(crate) fn delivers_synchronously(qualified_name: &str) -> bool {
     // ADR 0705: the global `reportError` dispatches `error` at the window.
     // ADR 0937: lib.dom's global `dispatchEvent` is the window's own method.

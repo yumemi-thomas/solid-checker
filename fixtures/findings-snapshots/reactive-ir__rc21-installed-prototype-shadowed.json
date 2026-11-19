@@ -30,6 +30,17 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-installed-prototype-shadowed/App.tsx",
+      "start": 313,
+      "end": 381,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-installed-prototype-shadowed/App.tsx",
       "start": 325,
       "end": 345,
       "fixes": 0
