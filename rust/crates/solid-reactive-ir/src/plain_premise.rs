@@ -248,6 +248,21 @@ fn file_hazards(
     hazards
 }
 
+/// The package a file of `node_modules` belongs to (a scoped name being two segments).
+fn package_name(path: &str) -> Option<&str> {
+    let (_, rest) = path.rsplit_once("/node_modules/")?;
+    let first = rest.split('/').next()?;
+    if first.starts_with('@') {
+        let end = rest
+            .match_indices('/')
+            .nth(1)
+            .map_or(rest.len(), |(at, _)| at);
+        Some(&rest[..end])
+    } else {
+        Some(first)
+    }
+}
+
 fn is_package(path: &str) -> bool {
     path.contains("/node_modules/")
 }
@@ -301,7 +316,13 @@ pub(crate) fn census(lookup: &SemanticLookup<'_>) -> Vec<CensusRow> {
                 if !hazard.resolved {
                     let set = distinct.entry(hazard.clause.clone()).or_default();
                     if set.len() < 500 {
-                        set.insert(hazard.key.replace(['|', ','], "_"));
+                        // An any-key site names where it is: `*@project`, or `*@<package>`.
+                        let key = if hazard.key == "*" {
+                            format!("*@{}", package_name(path).unwrap_or("project"))
+                        } else {
+                            hazard.key.clone()
+                        };
+                        set.insert(key.replace(['|', ','], "_"));
                     }
                     if !is_package(path) {
                         *project_open.entry(hazard.clause.clone()).or_default() += 1;

@@ -135,6 +135,11 @@ pub(super) fn premise_sites<'a>(semantic: &Semantic<'a>, resolve: bool) -> Vec<P
                                 sites.written(member.span, &text);
                             }
                         }
+                        // A receiver the program made here (a binding of an object or array literal that every write keeps one)
+                        // is no prototype, window or element: the write gives that object an own key, which may be a hook on it.
+                        _ if sites.fresh_receiver(&member.object) => {
+                            sites.add(member.span, PremiseClause::CoercionHook, "*");
+                        }
                         _ => sites.add(member.span, PremiseClause::StandardKeyWrite, "*"),
                     }
                 }
@@ -475,6 +480,69 @@ impl<'a> Sites<'_, 'a> {
         }
     }
 
+    /// ADR 1120 (per value): whether `receiver` is a name bound to an object or array literal the program made, every write to which is
+    /// such a literal: a variable declarator's binding (no parameter, no import, no pattern, no loop head), its initializer a literal,
+    /// each assignment to it (`=` only) a literal. Such an object is no shared prototype, the window or an element, whatever key is written.
+    fn fresh_receiver(&self, receiver: &Expression<'a>) -> bool {
+        let Expression::Identifier(identifier) = peel_ts_sugar(receiver) else {
+            return false;
+        };
+        if !self.resolve {
+            return false;
+        }
+        let scoping = self.semantic.scoping();
+        let nodes = self.semantic.nodes();
+        let Some(symbol) = identifier
+            .reference_id
+            .get()
+            .and_then(|reference| scoping.get_reference(reference).symbol_id())
+        else {
+            return false;
+        };
+        let literal = |expression: &Expression<'_>| {
+            matches!(
+                peel_ts_sugar(expression),
+                Expression::ObjectExpression(_) | Expression::ArrayExpression(_)
+            )
+        };
+        // The declaration node is the declarator itself (or, for a binding identifier, its parent).
+        let declaration = scoping.symbol_declaration(symbol);
+        let declarator_node = match nodes.kind(declaration) {
+            AstKind::VariableDeclarator(_) => declaration,
+            _ => nodes.parent_id(declaration),
+        };
+        let AstKind::VariableDeclarator(declarator) = nodes.kind(declarator_node) else {
+            return false;
+        };
+        if !declarator.id.is_binding_identifier() || !declarator.init.as_ref().is_some_and(literal)
+        {
+            return false;
+        }
+        // A loop head's binding (`for (const o of xs)`) holds each element, never the literal.
+        if matches!(
+            nodes.parent_kind(nodes.parent_id(declarator_node)),
+            AstKind::ForInStatement(_) | AstKind::ForOfStatement(_)
+        ) {
+            return false;
+        }
+        scoping
+            .get_resolved_reference_ids(symbol)
+            .iter()
+            .all(|&reference| {
+                let reference = scoping.get_reference(reference);
+                if !reference.is_write() {
+                    return true;
+                }
+                match nodes.parent_kind(reference.node_id()) {
+                    AstKind::AssignmentExpression(assignment) => {
+                        assignment.operator == oxc_syntax::operator::AssignmentOperator::Assign
+                            && literal(&assignment.right)
+                    }
+                    _ => false,
+                }
+            })
+    }
+
     /// Whether the member at `span` is written: the target of an assignment, an update, a `delete`, a destructuring assignment or a
     /// `for in`/`for of` head. Errs toward a write: any assignment-target parent counts.
     fn is_write(&self, id: NodeId, span: oxc_span::Span) -> bool {
@@ -554,6 +622,46 @@ mod tests {
             "addEventListener"
         ));
         assert!(has("el[k] = f;", PremiseClause::StandardKeyWrite, "*"));
+        assert!(
+            !has(
+                "const params = {}; params[k] = v;",
+                PremiseClause::StandardKeyWrite,
+                "*"
+            ),
+            "a fresh receiver"
+        );
+        assert!(
+            has(
+                "const params = {}; params[k] = v;",
+                PremiseClause::CoercionHook,
+                "*"
+            ),
+            "which may get a hook"
+        );
+        assert!(
+            has(
+                "let o = {}; o = window; o[k] = f;",
+                PremiseClause::StandardKeyWrite,
+                "*"
+            ),
+            "rebound to the window"
+        );
+        assert!(
+            has(
+                "function f(o) { o[k] = g; }",
+                PremiseClause::StandardKeyWrite,
+                "*"
+            ),
+            "a parameter"
+        );
+        assert!(
+            has(
+                "const o = make(); o[k] = g;",
+                PremiseClause::StandardKeyWrite,
+                "*"
+            ),
+            "a call may return a prototype"
+        );
         assert!(
             !has(
                 "const a = []; for (let i = 0; i < 3; i++) a[i] = i;",
