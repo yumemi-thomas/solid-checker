@@ -122,7 +122,7 @@
   "SC3001 function-run-unplaced": 34,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 7,
-  "SC3001 leaf-operation-unaccounted": 6916,
+  "SC3001 leaf-operation-unaccounted": 6896,
   "SC3001 leaf-owner-unproven": 67,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
@@ -196,7 +196,7 @@
   "SC5008 pending-read-unresolved": 23,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5306,
+  "SC6002 effect-creation-unaccounted": 5287,
   "SC6002 effect-owner-unproven": 52,
   "SC6002 function-run-unplaced": 59,
   "SC6002 generator-step-unplaced": 1,
@@ -273,12 +273,12 @@
   "SC9012 standard-member-impostor": 467,
   "SC9012 store-key-undecided": 13,
   "SC9012 tuple-iteration-written": 1464,
-  "SC9012 type-only-source": 88,
+  "SC9012 type-only-source": 95,
   "SC9012 value-as-parameter-default": 9,
   "SC9012 value-bound-held": 6,
   "SC9012 value-escaped-from-untrack": 8,
   "SC9012 value-exported-unnamed": 6,
-  "SC9012 value-forwarded": 282,
+  "SC9012 value-forwarded": 286,
   "SC9012 value-from-primitive-callback": 26,
   "SC9012 value-held-in-binding": 121,
   "SC9012 value-held-in-member": 30,
@@ -4266,6 +4266,253 @@
     "open": "reactive-ir/helper-prop-read"
    },
    "note": "relabel, still uncertifiable: round 2 checks a named callback also called by name before every silent named-callback arm; this read is answered by the call-timing blocker (callee-callback-timing) instead"
+  },
+  {
+   "fixture": "reactive-ir/async-creation-pass-forms",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 8,
+   "to": 0,
+   "adr": "ADR 1123",
+   "proof": "rust/crates/solid-reactive-ir/src/package_hand_off.rs::provider_child",
+   "fixtures": {
+    "proved": "reactive-ir/async-creation-pass-forms",
+    "open": "reactive-ir/context-signal-tuple-twins"
+   },
+   "note": "a dialect context provider (the context object as the tag) reads its written children in place, under the provider's root: the child component's creation and its leaf calls run in the component's owner, not an effect callback (arm context-provider-children)"
+  },
+  {
+   "fixture": "reactive-ir/async-creation-pass-forms",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 8,
+   "to": 0,
+   "adr": "ADR 1123",
+   "proof": "rust/crates/solid-reactive-ir/src/package_hand_off.rs::provider_child",
+   "fixtures": {
+    "proved": "reactive-ir/async-creation-pass-forms",
+    "open": "reactive-ir/context-signal-tuple-twins"
+   },
+   "note": "a dialect context provider (the context object as the tag) reads its written children in place, under the provider's root: the child component's creation and its leaf calls run in the component's owner, not an effect callback (arm context-provider-children)"
+  },
+  {
+   "fixture": "reactive-ir/async-creation-pass",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 1123",
+   "proof": "rust/crates/solid-reactive-ir/src/package_hand_off.rs::provider_child",
+   "fixtures": {
+    "proved": "reactive-ir/async-creation-pass",
+    "open": "reactive-ir/context-signal-tuple-twins"
+   },
+   "note": "a dialect context provider (the context object as the tag) reads its written children in place, under the provider's root: the child component's creation and its leaf calls run in the component's owner, not an effect callback (arm context-provider-children)"
+  },
+  {
+   "fixture": "reactive-ir/async-creation-pass",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 1123",
+   "proof": "rust/crates/solid-reactive-ir/src/package_hand_off.rs::provider_child",
+   "fixtures": {
+    "proved": "reactive-ir/async-creation-pass",
+    "open": "reactive-ir/context-signal-tuple-twins"
+   },
+   "note": "a dialect context provider (the context object as the tag) reads its written children in place, under the provider's root: the child component's creation and its leaf calls run in the component's owner, not an effect callback (arm context-provider-children)"
+  },
+  {
+   "fixture": "reactive-ir/context-provider-proof",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 3,
+   "to": 0,
+   "adr": "ADR 1123",
+   "proof": "rust/crates/solid-reactive-ir/src/package_hand_off.rs::provider_child",
+   "fixtures": {
+    "proved": "reactive-ir/context-provider-proof",
+    "open": "reactive-ir/context-signal-tuple-twins"
+   },
+   "note": "a dialect context provider (the context object as the tag) reads its written children in place, under the provider's root: the child component's creation and its leaf calls run in the component's owner, not an effect callback (arm context-provider-children)"
+  },
+  {
+   "fixture": "reactive-ir/context-provider-proof",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 3,
+   "to": 0,
+   "adr": "ADR 1123",
+   "proof": "rust/crates/solid-reactive-ir/src/package_hand_off.rs::provider_child",
+   "fixtures": {
+    "proved": "reactive-ir/context-provider-proof",
+    "open": "reactive-ir/context-signal-tuple-twins"
+   },
+   "note": "a dialect context provider (the context object as the tag) reads its written children in place, under the provider's root: the child component's creation and its leaf calls run in the component's owner, not an effect callback (arm context-provider-children)"
+  },
+  {
+   "fixture": "reactive-ir/owner-call-inplace-nested",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1123",
+   "proof": "rust/crates/solid-reactive-ir/src/package_hand_off.rs::provider_child",
+   "fixtures": {
+    "proved": "reactive-ir/owner-call-inplace-nested",
+    "open": "reactive-ir/context-signal-tuple-twins"
+   },
+   "note": "a dialect context provider (the context object as the tag) reads its written children in place, under the provider's root: the child component's creation and its leaf calls run in the component's owner, not an effect callback (arm context-provider-children)"
+  },
+  {
+   "fixture": "reactive-ir/pending-source-first-run-context-effect",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1123",
+   "proof": "rust/crates/solid-reactive-ir/src/package_hand_off.rs::provider_child",
+   "fixtures": {
+    "proved": "reactive-ir/pending-source-first-run-context-effect",
+    "open": "reactive-ir/context-signal-tuple-twins"
+   },
+   "note": "a dialect context provider (the context object as the tag) reads its written children in place, under the provider's root: the child component's creation and its leaf calls run in the component's owner, not an effect callback (arm context-provider-children)"
+  },
+  {
+   "fixture": "reactive-ir/pending-source-first-run-context-effect",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1123",
+   "proof": "rust/crates/solid-reactive-ir/src/package_hand_off.rs::provider_child",
+   "fixtures": {
+    "proved": "reactive-ir/pending-source-first-run-context-effect",
+    "open": "reactive-ir/context-signal-tuple-twins"
+   },
+   "note": "a dialect context provider (the context object as the tag) reads its written children in place, under the provider's root: the child component's creation and its leaf calls run in the component's owner, not an effect callback (arm context-provider-children)"
+  },
+  {
+   "fixture": "reactive-ir/pending-source-first-run-provider-getter",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1123",
+   "proof": "rust/crates/solid-reactive-ir/src/package_hand_off.rs::provider_child",
+   "fixtures": {
+    "proved": "reactive-ir/pending-source-first-run-provider-getter",
+    "open": "reactive-ir/context-signal-tuple-twins"
+   },
+   "note": "a dialect context provider (the context object as the tag) reads its written children in place, under the provider's root: the child component's creation and its leaf calls run in the component's owner, not an effect callback (arm context-provider-children)"
+  },
+  {
+   "fixture": "reactive-ir/pending-source-first-run-provider-getter",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1123",
+   "proof": "rust/crates/solid-reactive-ir/src/package_hand_off.rs::provider_child",
+   "fixtures": {
+    "proved": "reactive-ir/pending-source-first-run-provider-getter",
+    "open": "reactive-ir/context-signal-tuple-twins"
+   },
+   "note": "a dialect context provider (the context object as the tag) reads its written children in place, under the provider's root: the child component's creation and its leaf calls run in the component's owner, not an effect callback (arm context-provider-children)"
+  },
+  {
+   "fixture": "reactive-ir/pending-source-first-run",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 1123",
+   "proof": "rust/crates/solid-reactive-ir/src/package_hand_off.rs::provider_child",
+   "fixtures": {
+    "proved": "reactive-ir/pending-source-first-run",
+    "open": "reactive-ir/context-signal-tuple-twins"
+   },
+   "note": "a dialect context provider (the context object as the tag) reads its written children in place, under the provider's root: the child component's creation and its leaf calls run in the component's owner, not an effect callback (arm context-provider-children)"
+  },
+  {
+   "fixture": "reactive-ir/pending-source-first-run",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 1123",
+   "proof": "rust/crates/solid-reactive-ir/src/package_hand_off.rs::provider_child",
+   "fixtures": {
+    "proved": "reactive-ir/pending-source-first-run",
+    "open": "reactive-ir/context-signal-tuple-twins"
+   },
+   "note": "a dialect context provider (the context object as the tag) reads its written children in place, under the provider's root: the child component's creation and its leaf calls run in the component's owner, not an effect callback (arm context-provider-children)"
+  },
+  {
+   "fixture": "reactive-ir/pending-source-layers-context-alias-effect",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1123",
+   "proof": "rust/crates/solid-reactive-ir/src/package_hand_off.rs::provider_child",
+   "fixtures": {
+    "proved": "reactive-ir/pending-source-layers-context-alias-effect",
+    "open": "reactive-ir/context-signal-tuple-twins"
+   },
+   "note": "a dialect context provider (the context object as the tag) reads its written children in place, under the provider's root: the child component's creation and its leaf calls run in the component's owner, not an effect callback (arm context-provider-children)"
+  },
+  {
+   "fixture": "reactive-ir/pending-source-layers-context-alias-effect",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1123",
+   "proof": "rust/crates/solid-reactive-ir/src/package_hand_off.rs::provider_child",
+   "fixtures": {
+    "proved": "reactive-ir/pending-source-layers-context-alias-effect",
+    "open": "reactive-ir/context-signal-tuple-twins"
+   },
+   "note": "a dialect context provider (the context object as the tag) reads its written children in place, under the provider's root: the child component's creation and its leaf calls run in the component's owner, not an effect callback (arm context-provider-children)"
+  },
+  {
+   "fixture": "reactive-ir/pending-source-layers",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1123",
+   "proof": "rust/crates/solid-reactive-ir/src/package_hand_off.rs::provider_child",
+   "fixtures": {
+    "proved": "reactive-ir/pending-source-layers",
+    "open": "reactive-ir/context-signal-tuple-twins"
+   },
+   "note": "a dialect context provider (the context object as the tag) reads its written children in place, under the provider's root: the child component's creation and its leaf calls run in the component's owner, not an effect callback (arm context-provider-children)"
+  },
+  {
+   "fixture": "reactive-ir/pending-source-layers",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1123",
+   "proof": "rust/crates/solid-reactive-ir/src/package_hand_off.rs::provider_child",
+   "fixtures": {
+    "proved": "reactive-ir/pending-source-layers",
+    "open": "reactive-ir/context-signal-tuple-twins"
+   },
+   "note": "a dialect context provider (the context object as the tag) reads its written children in place, under the provider's root: the child component's creation and its leaf calls run in the component's owner, not an effect callback (arm context-provider-children)"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc1001",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 8,
+   "to": 7,
+   "adr": "ADR 1123",
+   "proof": "rust/crates/solid-reactive-ir/src/package_hand_off.rs::provider_child",
+   "fixtures": {
+    "proved": "uncertifiable-repro/sc1001",
+    "open": "reactive-ir/context-signal-tuple-twins"
+   },
+   "note": "a dialect context provider (the context object as the tag) reads its written children in place, under the provider's root: the child component's creation and its leaf calls run in the component's owner, not an effect callback (arm context-provider-children)"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc1001",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 7,
+   "to": 6,
+   "adr": "ADR 1123",
+   "proof": "rust/crates/solid-reactive-ir/src/package_hand_off.rs::provider_child",
+   "fixtures": {
+    "proved": "uncertifiable-repro/sc1001",
+    "open": "reactive-ir/context-signal-tuple-twins"
+   },
+   "note": "a dialect context provider (the context object as the tag) reads its written children in place, under the provider's root: the child component's creation and its leaf calls run in the component's owner, not an effect callback (arm context-provider-children)"
   }
  ],
  "renames": []
