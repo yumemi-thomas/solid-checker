@@ -34133,5 +34133,19 @@
    "mx-strict-read-untracked-root-store-render-effect-carried-wrapper-none"
   ],
   "rediscovered": "fuzz-focus mx-recall on the new variants store-effect-carried, store-render-effect-carried, store-settled-called (5,814 programs): the reviewed head f1c3f1f02 1454 false cleans; round 2 none"
+ },
+ {
+  "finding": "ADR 1089 part E (round 1, 0916affd0) certified a creation in an intrinsic element's anonymous on* handler run from an effect's apply other than by an event delivery that sets window.event, where Chrome rc.21 reports PRIMITIVE_IN_EFFECT_CALLBACK: F1 the iframe moved into a shadow root (load with window.event unset), F2 a replaced EventTarget.prototype.addEventListener keeping the listener, F3 the stored handler read under an escaped key, F4 a setter on Element.prototype under \"_$$\" + \"click\"",
+  "found": "the Fable review of ADR 1089 part E (coord-land/review-1089e.md, F1-F4)",
+  "fixed": "ADR 1089 part E round 2 on ADR 1120's per-question API (`plain_premise::stored_handler_hazard`, asked by realm: shadow spellings, prototype routes, listener-API writes, Solid private keys by cooked value)",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-evt-handler-shadow-load-memo-direct-none",
+   "mx-primitive-in-effect-callback-evt-handler-patched-listener-memo-direct-none",
+   "mx-primitive-in-effect-callback-evt-handler-escaped-key-memo-direct-none",
+   "mx-primitive-in-effect-callback-evt-handler-proto-setter-memo-direct-none"
+  ],
+  "rediscovered": "focus on the four contexts' 4,992 mx-recall programs: 3,381 false cleans on round 1 (F1 750, F2 912, F3 912, F4 807); FIXED here (0 false cleans, 4,992 recall-gap)"
  }
 ]
