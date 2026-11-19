@@ -446,92 +446,16 @@ pub(crate) fn census(lookup: &SemanticLookup<'_>) -> Vec<CensusRow> {
     rows
 }
 
-/// ADR 1120 part 4 / ADR 1125: the per-question API. A proof asks a narrow question of the code that may run in the same realm as a file (the
-/// union of the closures of every entry module whose closure holds it), instead of asking whether the whole program is plain: one
-/// undecided package elsewhere answers nothing about this file. Entries and closures are those of [`census`] (static value loads,
-/// the bundler's resolution or TypeScript's, a package by its analysed files).
-pub(crate) struct Realms {
-    /// Each entry's closure, as indexes into `lookup.files()`.
-    closures: Vec<BTreeSet<usize>>,
-}
-
-/// The program's entries and their closures.
-pub(crate) fn realms(lookup: &SemanticLookup<'_>) -> Realms {
-    let all = lookup.files();
-    let program: BTreeSet<&str> = all.iter().map(|file| file.path.as_str()).collect();
-    let files: Vec<String> = all.iter().map(|file| file.path.to_string()).collect();
-    let index: BTreeMap<&str, usize> = files
-        .iter()
-        .enumerate()
-        .map(|(at, path)| (path.as_str(), at))
-        .collect();
-    let mut edges: Vec<Vec<usize>> = vec![Vec::new(); files.len()];
-    let mut loaded = vec![false; files.len()];
-    for (at, file) in all.iter().enumerate() {
-        for load in loads(lookup, file, &program) {
-            let targets = match load {
-                Load::Read(path) => vec![path],
-                Load::Package(paths) => paths,
-                // Not an analysed file: no edge (its hazard is the file's own, `stored_handler_hazard`).
-                Load::Style(_) | Load::Asset(_) | Load::Unread(_) => continue,
-            };
-            for target in targets {
-                if let Some(&to) = index.get(target.as_str())
-                    && to != at
-                {
-                    edges[at].push(to);
-                    loaded[to] = true;
-                }
-            }
-        }
-    }
-    let mut roots: Vec<usize> = (0..files.len())
-        .filter(|&at| !is_package(&files[at]) && !loaded[at])
-        .collect();
-    if roots.is_empty() {
-        roots = (0..files.len())
-            .filter(|&at| !is_package(&files[at]))
-            .collect();
-    }
-    let closures = roots
-        .into_iter()
-        .map(|root| {
-            let mut reach = BTreeSet::new();
-            let mut queue = VecDeque::from([root]);
-            while let Some(at) = queue.pop_front() {
-                if reach.insert(at) {
-                    queue.extend(edges[at].iter().copied());
-                }
-            }
-            reach
-        })
-        .collect();
-    Realms { closures }
-}
-
-/// ADR 1125: whether some realm holds both a file `hazard` answers yes for and a file that may register an event handler
-/// (`may_hold_handler`): a hazard only moves the proofs of handlers that run beside it. A file in no entry's closure is its own realm.
+/// ADR 1125: whether the program holds both a file `hazard` answers yes for and a file that may register an event handler
+/// (`may_hold_handler`).
 pub(crate) fn realm_holds_both(
     lookup: &SemanticLookup<'_>,
     hazard: &dyn Fn(&FileFacts) -> bool,
     may_hold_handler: &dyn Fn(&FileFacts) -> bool,
 ) -> bool {
+    // ADR 1125, Fable round 1 (F2, F8): no fact proves that two analysed files never share a page (a second script, a multi-input
+    // build, a test runner's setup files, `import.meta.glob`), and an import cycle may hold the entry. So the realm is the program:
+    // a hazard in any analysed file moves the proofs of every handler. [`realms`] stays the census's view.
     let all = lookup.files();
-    let realms = realms(lookup);
-    let hazards: Vec<bool> = all.iter().map(hazard).collect();
-    let handlers: Vec<bool> = all.iter().map(may_hold_handler).collect();
-    let mut in_realm = vec![false; all.len()];
-    for closure in &realms.closures {
-        let mut found_hazard = false;
-        let mut found_handler = false;
-        for &at in closure {
-            in_realm[at] = true;
-            found_hazard |= hazards[at];
-            found_handler |= handlers[at];
-        }
-        if found_hazard && found_handler {
-            return true;
-        }
-    }
-    (0..all.len()).any(|at| !in_realm[at] && hazards[at] && handlers[at])
+    all.iter().any(hazard) && all.iter().any(may_hold_handler)
 }

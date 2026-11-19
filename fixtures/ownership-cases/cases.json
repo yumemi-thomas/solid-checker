@@ -3057,22 +3057,6 @@
       }
      },
      {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "span": {
-       "marker": "count()"
-      },
-      "fix": {
-       "behavior": "none"
-      },
-      "typescript": {
-       "ownership": "checker-only",
-       "diagnostics": []
-      }
-     },
-     {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -3100,7 +3084,7 @@
     ],
     "absent": []
    },
-   "note": "ADR 0963: the gate runs this case in one program with another that holds an async computation, so the member-route net adds SC1002's uncertifiable row for the read in the object's method (`function-run-unplaced`)."
+   "note": "ADR 1125: the gate runs each case as a program of its own, so no async computation of another case reaches it and the member-route net (ADR 0963) adds no SC1002 row."
   },
   {
    "id": "no-write-in-pure-computation/positive/002",
@@ -5895,22 +5879,6 @@
       }
      },
      {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "span": {
-       "marker": "s()"
-      },
-      "fix": {
-       "behavior": "none"
-      },
-      "typescript": {
-       "ownership": "checker-only",
-       "diagnostics": []
-      }
-     },
-     {
       "rule": "prefer-show",
       "code": "SC8015",
       "kind": "uncertifiable",
@@ -5976,7 +5944,7 @@
     ],
     "absent": []
    },
-   "note": "Kept divergence, ADR 0671: a project method's call may read, and no row settles it, so the site stays open. ADR 0963: the gate runs this case in one program with another that holds an async computation, so the member-route net adds SC1002's uncertifiable row for the read in the method (`function-run-unplaced`)."
+   "note": "Kept divergence, ADR 0671: a project method's call may read, and no row settles it, so the site stays open. ADR 1125: the gate runs each case as a program of its own, so no async computation of another case reaches it and the member-route net (ADR 0963) adds no SC1002 row."
   },
   {
    "id": "prefer-for/solid-v2/settled-literal-receiver/001",
@@ -6229,11 +6197,68 @@
       "span": { "textRange": [534, 540] },
       "fix": { "behavior": "none" },
       "typescript": { "ownership": "checker-only", "diagnostics": [] }
+     },
+     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        457,
+        462
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        497,
+        517
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
+     },
+     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "span": {
+       "textRange": [
+        512,
+        516
+       ]
+      },
+      "fix": {
+       "behavior": "none"
+      },
+      "typescript": {
+       "ownership": "checker-only",
+       "diagnostics": []
+      }
      }
     ],
     "absent": []
    },
-   "note": "Kept divergence from eslint-plugin-solid 0.14.5 (6d3bc311): upstream's `noWrite` reports only a write through a tracked props or store identifier, so a store reached through a nested identity, a destructured loop binding or an entry's value is silent there. rc.21 drops each write with STORE_WRITE_OUTSIDE_SETTER (Chrome, witnessed). The frame binds `y` to `st` at this call, so the first write is proven; the others read past a link (ADR 0476) and stay obligations."
+   "note": "Kept divergence from eslint-plugin-solid 0.14.5 (6d3bc311): upstream's `noWrite` reports only a write through a tracked props or store identifier, so a store reached through a nested identity, a destructured loop binding or an entry's value is silent there. rc.21 drops each write with STORE_WRITE_OUTSIDE_SETTER (Chrome, witnessed). The frame binds `y` to `st` at this call, so the first write is proven; the others read past a link (ADR 0476) and stay obligations. ADR 1125: `Object.entries` is a key reader, which may hand Solid's stored handler on with no event, so the handler's reads are uncertifiable (SC1001)."
   },
   {
    "id": "no-store-mutation-outside-setter/sub-value-flow/002",

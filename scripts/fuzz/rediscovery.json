@@ -36799,5 +36799,18 @@
    "lg-strict-read-untracked-dny-legal-pointer-store-render-effect-carried-direct-none"
   ],
   "rediscovered": "focus lg-recall on the 12 dny-legal programs with a handler createEffect (bundle y f3d2c5769 release): before, 12 unexecuted-violation rows; after, the same rows unexecuted with reachable=undriven-handler and nothing needs a look"
+ },
+ {
+  "finding": "ADR 1125 head 3bc8f9a6e certified a read in a handler Chrome rc.21 warns STRICT_READ_UNTRACKED at, run with no event: F1 a key reader (`Object.values` of the element) calling Solid's stored delegated handler; F3 a shadow root attached through an arrow's expression body under a key built by `join` (`value_inert` read the body as a discarded statement); F4 a replaced `Function.prototype.valueOf` attaching the shadow root on a unary minus",
+  "found": "the Fable review of ADR 1125 round 1 (coord-land/review-1125.md, F1, F3, F4; probes sc-scratch review-1125)",
+  "fixed": "ADR 1125 round 1: KeyReader, PrivateKey and CoercionHook sites are delivery hazards, CoercionHook sites shadow hazards, an arrow's expression body is no discarded statement (`kernel::value_inert`)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-evt-apply-stored-values-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-shadow-arrow-body-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-shadow-valueof-signal-direct-none"
+  ],
+  "rediscovered": "focus on the three contexts' mx-recall programs (6,450): the reviewed head 4,344 false cleans (1,448 per context) and 108 false positives; FIXED here (0 and 0). F2 (an import cycle holding the entry beside a root nothing loads) and F8 (a hazard in a file no analysed file loads, on the page by a second script or a test setup) are not generator-expressible: every fuzz program's entry is the harness `main.tsx`, which loads `App.tsx`, and Chrome runs only what the entry loads; both are closed by asking the program, not a realm (process tests and the review's probes p8, p11b)"
  }
 ]

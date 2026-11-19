@@ -4391,4 +4391,17 @@ fn a_computed_read_whose_value_only_feeds_operators_and_tests_is_inert() {
             .map(|(text, inert)| (text.to_string(), *inert))
             .collect::<Vec<_>>()
     );
+    // Fable round 1 (F3): an arrow's expression body is its return, not a discarded statement.
+    let arrow = "declare const a: any; const pick = (k: any) => a[k]; function f(k: any) { a[k]; }";
+    let inert = extract("keys.ts", arrow)
+        .unwrap()
+        .computed_keys
+        .iter()
+        .map(|fact| fact.value_inert)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        inert,
+        vec![false, true],
+        "the arrow body returns it; the statement discards it"
+    );
 }

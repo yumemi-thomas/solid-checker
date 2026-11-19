@@ -684,6 +684,50 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 3223,
+      "end": 3232,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "source-pending-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 3223,
+      "end": 3232,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 3223,
+      "end": 3232,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "withheld-object-member",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 3234,
+      "end": 3245,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -959,6 +1003,61 @@
       "fixes": 0
     },
     {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "invocation-context-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 4777,
+      "end": 4786,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "call-attributed-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 4777,
+      "end": 4786,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 4820,
+      "end": 4829,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "source-pending-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 4820,
+      "end": 4829,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-read-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 4820,
+      "end": 4829,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -1022,6 +1121,39 @@
       "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
       "start": 5516,
       "end": 5526,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 5575,
+      "end": 5584,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "invocation-context-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 5575,
+      "end": 5584,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "call-attributed-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/pending-read-accounted/App.tsx",
+      "start": 5575,
+      "end": 5584,
       "fixes": 0
     },
     {

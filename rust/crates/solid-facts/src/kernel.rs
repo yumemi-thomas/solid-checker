@@ -447,7 +447,15 @@ pub(crate) fn value_inert(
             AstKind::ComputedMemberExpression(member) => {
                 return member.expression.span() == child_span;
             }
-            AstKind::ExpressionStatement(_) => return true,
+            // An arrow's expression body is an expression statement in Oxc's tree: its value is the arrow's return (F3).
+            AstKind::ExpressionStatement(_) => {
+                let body = nodes.parent_id(parent);
+                let arrow = nodes.parent_id(body);
+                return !matches!(
+                    (nodes.kind(body), nodes.kind(arrow)),
+                    (AstKind::FunctionBody(_), AstKind::ArrowFunctionExpression(function)) if function.expression
+                );
+            }
             _ => return false,
         }
     }

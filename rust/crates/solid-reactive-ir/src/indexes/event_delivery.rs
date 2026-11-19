@@ -1309,16 +1309,19 @@ pub(crate) fn scan_shadow_roots(lookup: &super::SemanticLookup<'_>) -> bool {
         }
         // ADR 1125 (G3, G5): a spelling the facts decode (a key proven to be `"attach" + "Shadow"`), a computed key nothing proves
         // (it may be any of them) whose value may be called or kept, and code built from a string (a string timer by any name), which no text test can read.
-        if file
+        if file.ast.premise_sites.iter().any(|site| {
+            // ADR 1125 (F4): a coercion or protocol hook (written on any object, a prototype reached by a route included) runs with
+            // the value an operator converts as `this`, so it may run `attachShadow` on it. A route alone (`constructor`) writes nothing.
+            matches!(
+                site.clause,
+                solid_facts::ast::PremiseClause::ShadowRoot
+                    | solid_facts::ast::PremiseClause::CoercionHook
+            )
+        }) || file
             .ast
-            .premise_sites
+            .computed_keys
             .iter()
-            .any(|site| site.clause == solid_facts::ast::PremiseClause::ShadowRoot)
-            || file
-                .ast
-                .computed_keys
-                .iter()
-                .any(|key| !key.proven && !key.value_inert)
+            .any(|key| !key.proven && !key.value_inert)
             || !file.ast.code_sinks.is_empty()
         {
             return true;
@@ -1481,14 +1484,17 @@ fn file_delivery_hazard(
                 Some("delivery-key-write")
             }
             C::PrototypeRoute if DELIVERY_ROUTES.contains(&site.key.as_str()) => Some("definer"),
+            // ADR 1125 (Fable round 1, F1): a reader of own keys or values may take Solid's stored handler (`_$$click`) and call it
+            // with no event; a private key names that slot.
+            C::KeyReader => Some("key-reader"),
+            C::PrivateKey => Some("private-key"),
+            // F4: a coercion or protocol hook runs, with the coerced value as `this`, wherever an operator converts one.
+            C::CoercionHook => Some("coercion-hook"),
             C::StandardKeyWrite
             | C::GlobalWrite
             | C::PrototypeRoute
-            | C::CoercionHook
             | C::Accessor
-            | C::PrivateKey
-            | C::ShadowRoot
-            | C::KeyReader => None,
+            | C::ShadowRoot => None,
         };
         if let Some(why) = why {
             return Some((why, site.key.to_string()));

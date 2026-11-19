@@ -315,7 +315,9 @@ for (const value of resolved.values()) {
     presets: normalizedStrings(testCase.presets),
     enableRules: normalizedStrings(testCase.enableRules),
   };
-  const key = JSON.stringify(config);
+  // ADR 1125: each case is a program of its own. Whole-program premises (event delivery, the plain-program kernel) read every file of a
+  // project, so cases sharing one would hand each other their hazards.
+  const key = JSON.stringify({ ...config, case: testCase.id });
   if (!groups.has(key)) groups.set(key, { config, members: [] });
   groups.get(key).members.push(value);
 }
