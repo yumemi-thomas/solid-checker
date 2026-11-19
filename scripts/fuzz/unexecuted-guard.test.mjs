@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { UNEXECUTED_KNOWN, rowProblem, unexecutedEntry, unexecutedViolation } from "./codes.mjs";
+import { undrivenHandlerSite } from "./legal.mjs";
 import { compare } from "./smoke.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -30,6 +31,21 @@ describe("an unexecuted violation", () => {
     const without = { entries: SYNTHETIC.entries.filter((entry) => entry.item !== "synthetic-dead") };
     expect(rowProblem(row, { unexecutedKnown: SYNTHETIC })).toBeNull();
     expect(rowProblem(row, { unexecutedKnown: without })).toBe("unexecuted-violation");
+  });
+
+  it("ADR 1132: one in a handler a user can reach (an element mounted enabled that only the page never drives) passes", () => {
+    const row = { ...legal("lg-strict-read-untracked-dny-legal-click-store-effect-called-direct-none"), detail: { findings: ["missing-owner/violation@15"], reachable: "undriven-handler" } };
+    expect(rowProblem(row)).toBeNull();
+    const use = { k: "use", code: "STRICT_READ_UNTRACKED", site: true };
+    const program = (view, body = []) => ({ components: [{ k: "component", name: "C1", body, view }] });
+    const site = { code: "STRICT_READ_UNTRACKED" };
+    expect(undrivenHandlerSite(program([{ k: "button", id: "b1", handler: [{ k: "expr", e: use }], undriven: true }]), site)).toBe(true);
+    // Disabled or inert from its mount (or a spread that may say so): never reachable through this element.
+    expect(undrivenHandlerSite(program([{ k: "button", id: "b1", handler: [{ k: "expr", e: use }], undriven: true, attrs: "disabled" }]), site)).toBe(false);
+    expect(undrivenHandlerSite(program([{ k: "button", id: "b1", handler: [{ k: "expr", e: use }], undriven: true, attrs: "{...{ inert: true }}" }]), site)).toBe(false);
+    // Driven (the plan clicks it): an unexecuted row there is a look; detached (made in a declaration, no view): nothing can click it.
+    expect(undrivenHandlerSite(program([{ k: "button", id: "b1", handler: [{ k: "expr", e: use }] }]), site)).toBe(false);
+    expect(undrivenHandlerSite(program([], [{ k: "decl", name: "el", e: { k: "jsx", e: { k: "button", id: "b1", handler: [{ k: "expr", e: use }], undriven: true } } }]), site)).toBe(false);
   });
 
   it("a misuse grid's `unexecuted` (the page halted before the site) is another outcome, and other outcomes are untouched", () => {

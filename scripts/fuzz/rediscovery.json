@@ -36763,5 +36763,27 @@
    "mx-strict-read-untracked-dny-portal-dispose-store-effect-named-called-direct-none"
   ],
   "rediscovered": "fuzz-focus mx-recall on store-effect-called and store-effect-named-called: main c212ad5f5 (and ADR 1127 alone) 104 false cleans; ADR 1130 none"
+ },
+ {
+  "finding": "Bundle y #294 smoke (f3d2c5769): a legal dny-legal-click/-keydown/-pointer program with createEffect in the handler was an `unexecuted-violation` (SC4001 missing-owner violation at a site no run reached), though the handler is reachable: its element is mounted enabled and only the page timer disables it later, so a user can deliver the event first and the violation is the reading of \"wrong if it runs\" (coordinator ruling: the checker is right, the fuzz label was wrong)",
+  "found": "bundle y CI smoke on #294 (lg-recall dny-legal-click-store-effect-called-direct-none); the five siblings and the six effect-carried twins by focus",
+  "fixed": "ADR 1132 (legal.mjs undrivenHandlerSite: a site in an undriven intrinsic handler of a mounted view is `reachable`; codes.mjs unexecutedViolation does not ask for a look)",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-dny-legal-click-store-effect-called-direct-none",
+   "lg-strict-read-untracked-dny-legal-click-store-effect-carried-direct-none",
+   "lg-strict-read-untracked-dny-legal-click-store-effect-named-called-direct-none",
+   "lg-strict-read-untracked-dny-legal-click-store-render-effect-carried-direct-none",
+   "lg-strict-read-untracked-dny-legal-keydown-store-effect-called-direct-none",
+   "lg-strict-read-untracked-dny-legal-keydown-store-effect-carried-direct-none",
+   "lg-strict-read-untracked-dny-legal-keydown-store-effect-named-called-direct-none",
+   "lg-strict-read-untracked-dny-legal-keydown-store-render-effect-carried-direct-none",
+   "lg-strict-read-untracked-dny-legal-pointer-store-effect-called-direct-none",
+   "lg-strict-read-untracked-dny-legal-pointer-store-effect-carried-direct-none",
+   "lg-strict-read-untracked-dny-legal-pointer-store-effect-named-called-direct-none",
+   "lg-strict-read-untracked-dny-legal-pointer-store-render-effect-carried-direct-none"
+  ],
+  "rediscovered": "focus lg-recall on the 12 dny-legal programs with a handler createEffect (bundle y f3d2c5769 release): before, 12 unexecuted-violation rows; after, the same rows unexecuted with reachable=undriven-handler and nothing needs a look"
  }
 ]
