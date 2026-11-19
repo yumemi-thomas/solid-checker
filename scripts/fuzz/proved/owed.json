@@ -1,0 +1,278 @@
+{
+ "about": "Proved fuzz verdicts an ADR withholds as named collateral and owes back (scripts/fuzz/proved/changes.json names each loss; this file says what recovers it). Not a ledger (proved.mjs NOT_LEDGERS). A row leaves when its proof returns.",
+ "rows": [
+  {
+   "grid": "lg-pairs",
+   "id": "lg-action-called-in-owned-scope-handler-x-direct-handoff-reflect-module-barrel",
+   "adr": "ADR 1125",
+   "hazard": "proxy|Reflect",
+   "recover": "recovered in ADR 1133: Reflect.apply/construct/get/has only call or read, so only a writing member (defineProperty, set, setPrototypeOf, deleteProperty) or a key reader (ownKeys) is a hazard; an unknown Reflect member stays one"
+  },
+  {
+   "grid": "lg-pairs",
+   "id": "lg-store-write-outside-setter-handler-draft-direct-handoff-reflect-module-barrel",
+   "adr": "ADR 1125",
+   "hazard": "proxy|Reflect",
+   "recover": "recovered in ADR 1133: Reflect.apply/construct/get/has only call or read, so only a writing member (defineProperty, set, setPrototypeOf, deleteProperty) or a key reader (ownKeys) is a hazard; an unknown Reflect member stays one"
+  },
+  {
+   "grid": "lg-pairs",
+   "id": "lg-store-write-outside-setter-handler-draft-hook-member-handoff-reflect-module-default",
+   "adr": "ADR 1125",
+   "hazard": "proxy|Reflect",
+   "recover": "recovered in ADR 1133: Reflect.apply/construct/get/has only call or read, so only a writing member (defineProperty, set, setPrototypeOf, deleteProperty) or a key reader (ownKeys) is a hazard; an unknown Reflect member stays one"
+  },
+  {
+   "grid": "lg-pairs",
+   "id": "lg-store-write-outside-setter-handler-in-setter-alias-handoff-reflect-module-barrel",
+   "adr": "ADR 1125",
+   "hazard": "proxy|Reflect",
+   "recover": "recovered in ADR 1133: Reflect.apply/construct/get/has only call or read, so only a writing member (defineProperty, set, setPrototypeOf, deleteProperty) or a key reader (ownKeys) is a hazard; an unknown Reflect member stays one"
+  },
+  {
+   "grid": "lg-recall",
+   "id": "lg-action-called-in-owned-scope-tbl-reflect-apply-h-x-direct-none",
+   "adr": "ADR 1125",
+   "hazard": "proxy|Reflect",
+   "recover": "recovered in ADR 1133: Reflect.apply/construct/get/has only call or read, so only a writing member (defineProperty, set, setPrototypeOf, deleteProperty) or a key reader (ownKeys) is a hazard; an unknown Reflect member stays one"
+  },
+  {
+   "grid": "lg-recall",
+   "id": "lg-on-flush-in-owned-scope-tbl-reflect-apply-h-x-direct-none",
+   "adr": "ADR 1125",
+   "hazard": "proxy|Reflect",
+   "recover": "recovered in ADR 1133: Reflect.apply/construct/get/has only call or read, so only a writing member (defineProperty, set, setPrototypeOf, deleteProperty) or a key reader (ownKeys) is a hazard; an unknown Reflect member stays one"
+  },
+  {
+   "grid": "lg-recall",
+   "id": "lg-reactive-write-in-owned-scope-tbl-reflect-apply-h-store-direct-none",
+   "adr": "ADR 1125",
+   "hazard": "proxy|Reflect",
+   "recover": "recovered in ADR 1133: Reflect.apply/construct/get/has only call or read, so only a writing member (defineProperty, set, setPrototypeOf, deleteProperty) or a key reader (ownKeys) is a hazard; an unknown Reflect member stays one"
+  },
+  {
+   "grid": "lg-recall",
+   "id": "lg-strict-read-untracked-tbl-reflect-apply-h-memo-direct-none",
+   "adr": "ADR 1125",
+   "hazard": "proxy|Reflect",
+   "recover": "recovered in ADR 1133: Reflect.apply/construct/get/has only call or read, so only a writing member (defineProperty, set, setPrototypeOf, deleteProperty) or a key reader (ownKeys) is a hazard; an unknown Reflect member stays one"
+  },
+  {
+   "grid": "lg-recall",
+   "id": "lg-action-called-in-owned-scope-tbl-json-stringify-h-x-direct-none",
+   "adr": "ADR 1125",
+   "hazard": "key-reader|JSON.stringify",
+   "recover": "owed: a replacer that calls none of the values it is given, or a walked value that is no element, is not proven by any fact yet (open-work: ADR 1125 N4 narrowings)"
+  },
+  {
+   "grid": "lg-recall",
+   "id": "lg-on-flush-in-owned-scope-tbl-json-stringify-h-x-direct-none",
+   "adr": "ADR 1125",
+   "hazard": "key-reader|JSON.stringify",
+   "recover": "owed: a replacer that calls none of the values it is given, or a walked value that is no element, is not proven by any fact yet (open-work: ADR 1125 N4 narrowings)"
+  },
+  {
+   "grid": "lg-recall",
+   "id": "lg-reactive-write-in-owned-scope-tbl-json-stringify-h-signal-direct-none",
+   "adr": "ADR 1125",
+   "hazard": "key-reader|JSON.stringify",
+   "recover": "owed: a replacer that calls none of the values it is given, or a walked value that is no element, is not proven by any fact yet (open-work: ADR 1125 N4 narrowings)"
+  },
+  {
+   "grid": "lg-recall",
+   "id": "lg-strict-read-untracked-tbl-json-stringify-h-memo-direct-none",
+   "adr": "ADR 1125",
+   "hazard": "key-reader|JSON.stringify",
+   "recover": "owed: a replacer that calls none of the values it is given, or a walked value that is no element, is not proven by any fact yet (open-work: ADR 1125 N4 narrowings)"
+  },
+  {
+   "grid": "mx-pairs",
+   "id": "mx-no-owner-boundary-handler-errored-destructured-handoff-reflect-module-default",
+   "adr": "ADR 1125",
+   "hazard": "proxy|Reflect",
+   "recover": "recovered in ADR 1133: Reflect.apply/construct/get/has only call or read, so only a writing member (defineProperty, set, setPrototypeOf, deleteProperty) or a key reader (ownKeys) is a hazard; an unknown Reflect member stays one"
+  },
+  {
+   "grid": "mx-pairs",
+   "id": "mx-no-owner-boundary-handler-errored-namespace-handoff-reflect-module-ns",
+   "adr": "ADR 1125",
+   "hazard": "proxy|Reflect",
+   "recover": "recovered in ADR 1133: Reflect.apply/construct/get/has only call or read, so only a writing member (defineProperty, set, setPrototypeOf, deleteProperty) or a key reader (ownKeys) is a hazard; an unknown Reflect member stays one"
+  },
+  {
+   "grid": "mx-pairs",
+   "id": "mx-no-owner-context-handler-x-alias-handoff-reflect-module-default",
+   "adr": "ADR 1125",
+   "hazard": "proxy|Reflect",
+   "recover": "recovered in ADR 1133: Reflect.apply/construct/get/has only call or read, so only a writing member (defineProperty, set, setPrototypeOf, deleteProperty) or a key reader (ownKeys) is a hazard; an unknown Reflect member stays one"
+  },
+  {
+   "grid": "mx-pairs",
+   "id": "mx-settled-cleanup-unowned-handler-x-destructured-handoff-reflect-module-star",
+   "adr": "ADR 1125",
+   "hazard": "proxy|Reflect",
+   "recover": "recovered in ADR 1133: Reflect.apply/construct/get/has only call or read, so only a writing member (defineProperty, set, setPrototypeOf, deleteProperty) or a key reader (ownKeys) is a hazard; an unknown Reflect member stays one"
+  },
+  {
+   "grid": "mx-recall",
+   "id": "mx-no-owner-boundary-handler-errored-direct-none-pk-call-inner-phantom",
+   "adr": "ADR 1125",
+   "hazard": "unread-module",
+   "recover": "owed until a fact proves the unread module shares no page with the handler or cannot reach the listener API (open-work: ADR 1125 F8, the realm is the program)"
+  },
+  {
+   "grid": "mx-recall",
+   "id": "mx-no-owner-boundary-handler-errored-direct-none-pk-call-phantom",
+   "adr": "ADR 1125",
+   "hazard": "unread-module",
+   "recover": "owed until a fact proves the unread module shares no page with the handler or cannot reach the listener API (open-work: ADR 1125 F8, the realm is the program)"
+  },
+  {
+   "grid": "mx-recall",
+   "id": "mx-no-owner-boundary-handler-loading-direct-none-pk-call-inner-phantom",
+   "adr": "ADR 1125",
+   "hazard": "unread-module",
+   "recover": "owed until a fact proves the unread module shares no page with the handler or cannot reach the listener API (open-work: ADR 1125 F8, the realm is the program)"
+  },
+  {
+   "grid": "mx-recall",
+   "id": "mx-no-owner-boundary-handler-loading-direct-none-pk-call-phantom",
+   "adr": "ADR 1125",
+   "hazard": "unread-module",
+   "recover": "owed until a fact proves the unread module shares no page with the handler or cannot reach the listener API (open-work: ADR 1125 F8, the realm is the program)"
+  },
+  {
+   "grid": "mx-recall",
+   "id": "mx-no-owner-cleanup-handler-x-direct-none-pk-call-inner-phantom",
+   "adr": "ADR 1125",
+   "hazard": "unread-module",
+   "recover": "owed until a fact proves the unread module shares no page with the handler or cannot reach the listener API (open-work: ADR 1125 F8, the realm is the program)"
+  },
+  {
+   "grid": "mx-recall",
+   "id": "mx-no-owner-cleanup-handler-x-direct-none-pk-call-phantom",
+   "adr": "ADR 1125",
+   "hazard": "unread-module",
+   "recover": "owed until a fact proves the unread module shares no page with the handler or cannot reach the listener API (open-work: ADR 1125 F8, the realm is the program)"
+  },
+  {
+   "grid": "mx-recall",
+   "id": "mx-no-owner-context-handler-x-direct-none-pk-call-inner-phantom",
+   "adr": "ADR 1125",
+   "hazard": "unread-module",
+   "recover": "owed until a fact proves the unread module shares no page with the handler or cannot reach the listener API (open-work: ADR 1125 F8, the realm is the program)"
+  },
+  {
+   "grid": "mx-recall",
+   "id": "mx-no-owner-context-handler-x-direct-none-pk-call-phantom",
+   "adr": "ADR 1125",
+   "hazard": "unread-module",
+   "recover": "owed until a fact proves the unread module shares no page with the handler or cannot reach the listener API (open-work: ADR 1125 F8, the realm is the program)"
+  },
+  {
+   "grid": "mx-recall",
+   "id": "mx-no-owner-effect-handler-effect-direct-none-pk-call-inner-phantom",
+   "adr": "ADR 1125",
+   "hazard": "unread-module",
+   "recover": "owed until a fact proves the unread module shares no page with the handler or cannot reach the listener API (open-work: ADR 1125 F8, the realm is the program)"
+  },
+  {
+   "grid": "mx-recall",
+   "id": "mx-no-owner-effect-handler-effect-direct-none-pk-call-phantom",
+   "adr": "ADR 1125",
+   "hazard": "unread-module",
+   "recover": "owed until a fact proves the unread module shares no page with the handler or cannot reach the listener API (open-work: ADR 1125 F8, the realm is the program)"
+  },
+  {
+   "grid": "mx-recall",
+   "id": "mx-no-owner-effect-handler-render-direct-none-pk-call-inner-phantom",
+   "adr": "ADR 1125",
+   "hazard": "unread-module",
+   "recover": "owed until a fact proves the unread module shares no page with the handler or cannot reach the listener API (open-work: ADR 1125 F8, the realm is the program)"
+  },
+  {
+   "grid": "mx-recall",
+   "id": "mx-no-owner-effect-handler-render-direct-none-pk-call-phantom",
+   "adr": "ADR 1125",
+   "hazard": "unread-module",
+   "recover": "owed until a fact proves the unread module shares no page with the handler or cannot reach the listener API (open-work: ADR 1125 F8, the realm is the program)"
+  },
+  {
+   "grid": "mx-census",
+   "id": "mx-sync-node-received-async-dny-formdata-submit-effect-direct-none",
+   "adr": "ADR 1125",
+   "hazard": "code-from-string|JavascriptUrl",
+   "recover": "owed: a `javascript:` URL whose code is proven inert (`void 0`) is not read by the sink scan"
+  },
+  {
+   "grid": "mx-census",
+   "id": "mx-no-owner-boundary-tbl-reflect-apply-h-errored-direct-none",
+   "adr": "ADR 1125",
+   "hazard": "proxy|Reflect",
+   "recover": "recovered in ADR 1133: Reflect.apply/construct/get/has only call or read, so only a writing member (defineProperty, set, setPrototypeOf, deleteProperty) or a key reader (ownKeys) is a hazard; an unknown Reflect member stays one"
+  },
+  {
+   "grid": "mx-census",
+   "id": "mx-no-owner-boundary-tbl-reflect-apply-h-loading-direct-none",
+   "adr": "ADR 1125",
+   "hazard": "proxy|Reflect",
+   "recover": "recovered in ADR 1133: Reflect.apply/construct/get/has only call or read, so only a writing member (defineProperty, set, setPrototypeOf, deleteProperty) or a key reader (ownKeys) is a hazard; an unknown Reflect member stays one"
+  },
+  {
+   "grid": "mx-census",
+   "id": "mx-no-owner-cleanup-tbl-reflect-apply-h-x-direct-none",
+   "adr": "ADR 1125",
+   "hazard": "proxy|Reflect",
+   "recover": "recovered in ADR 1133: Reflect.apply/construct/get/has only call or read, so only a writing member (defineProperty, set, setPrototypeOf, deleteProperty) or a key reader (ownKeys) is a hazard; an unknown Reflect member stays one"
+  },
+  {
+   "grid": "mx-census",
+   "id": "mx-no-owner-context-tbl-reflect-apply-h-x-direct-none",
+   "adr": "ADR 1125",
+   "hazard": "proxy|Reflect",
+   "recover": "recovered in ADR 1133: Reflect.apply/construct/get/has only call or read, so only a writing member (defineProperty, set, setPrototypeOf, deleteProperty) or a key reader (ownKeys) is a hazard; an unknown Reflect member stays one"
+  },
+  {
+   "grid": "mx-census",
+   "id": "mx-no-owner-effect-tbl-reflect-apply-h-effect-direct-none",
+   "adr": "ADR 1125",
+   "hazard": "proxy|Reflect",
+   "recover": "recovered in ADR 1133: Reflect.apply/construct/get/has only call or read, so only a writing member (defineProperty, set, setPrototypeOf, deleteProperty) or a key reader (ownKeys) is a hazard; an unknown Reflect member stays one"
+  },
+  {
+   "grid": "mx-census",
+   "id": "mx-no-owner-effect-tbl-reflect-apply-h-render-direct-none",
+   "adr": "ADR 1125",
+   "hazard": "proxy|Reflect",
+   "recover": "recovered in ADR 1133: Reflect.apply/construct/get/has only call or read, so only a writing member (defineProperty, set, setPrototypeOf, deleteProperty) or a key reader (ownKeys) is a hazard; an unknown Reflect member stays one"
+  },
+  {
+   "grid": "mx-census",
+   "id": "mx-settled-cleanup-unowned-tbl-reflect-apply-h-x-direct-none",
+   "adr": "ADR 1125",
+   "hazard": "proxy|Reflect",
+   "recover": "recovered in ADR 1133: Reflect.apply/construct/get/has only call or read, so only a writing member (defineProperty, set, setPrototypeOf, deleteProperty) or a key reader (ownKeys) is a hazard; an unknown Reflect member stays one"
+  },
+  {
+   "grid": "mx-census",
+   "id": "mx-sync-node-received-async-tbl-reflect-apply-h-memo-direct-none",
+   "adr": "ADR 1125",
+   "hazard": "proxy|Reflect",
+   "recover": "recovered in ADR 1133: Reflect.apply/construct/get/has only call or read, so only a writing member (defineProperty, set, setPrototypeOf, deleteProperty) or a key reader (ownKeys) is a hazard; an unknown Reflect member stays one"
+  },
+  {
+   "grid": "mx-census",
+   "id": "mx-sync-node-received-async-tbl-json-stringify-h-effect-direct-none",
+   "adr": "ADR 1125",
+   "hazard": "key-reader|JSON.stringify",
+   "recover": "owed: a replacer that calls none of the values it is given, or a walked value that is no element, is not proven by any fact yet (open-work: ADR 1125 N4 narrowings)"
+  },
+  {
+   "grid": "mx-census",
+   "id": "mx-sync-node-received-async-tbl-promiselike-then-h-effect-direct-none",
+   "adr": "ADR 1125",
+   "hazard": "coercion-hook|then",
+   "recover": "recovered in ADR 1133 if the facts' `contained` mark on a hook defined on a fresh object literal is honoured by the delivery scan (Fable round 2 N4's narrowing); otherwise owed"
+  }
+ ]
+}
