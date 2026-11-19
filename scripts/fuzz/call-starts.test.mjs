@@ -249,8 +249,8 @@ describe("callStarts", () => {
       const stack = withStarts([{ line: 2, column: 26 }, { line: 4, column: 3 }], frameStarts(source));
       const row = (line, column) => ({ rule: "strict-read-untracked", kind: "uncertifiable", line, column });
       expect(withheldAtStack(row(4, 11), stack, () => false)).toBe(true);
-      // The other statement's read (`st.x` at 4:22, its property at 4:25) is not this frame's.
-      for (const column of [17, 22, 25]) expect(withheldAtStack(row(4, column), stack, () => false), String(column)).toBe(false);
+      // The other statement's `void` and read (`st.x` at 4:23, its property at 4:26) are not this frame's.
+      for (const column of [18, 23, 26]) expect(withheldAtStack(row(4, column), stack, () => false), String(column)).toBe(false);
     });
   });
   it("finds the statement of a position on a line of several", () => {
