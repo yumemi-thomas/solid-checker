@@ -395,6 +395,16 @@ pub(crate) fn census(lookup: &SemanticLookup<'_>) -> Vec<CensusRow> {
             blockers,
         });
     }
+    // ADR 1089 part E round 2: the per-question answer of the stored-handler question, one row per file whose realm holds a hazard.
+    for (path, (at, why)) in lookup.stored_handler_reach() {
+        rows.push(CensusRow {
+            path: path.clone(),
+            start: 0,
+            end: 0,
+            kind: "stored-handler-hazard".into(),
+            blockers: vec![format!("{why}|{at}")],
+        });
+    }
     let all: BTreeSet<&str> = files.iter().map(|file| file.path.as_str()).collect();
     let (mut blockers, _) = summarize(&all);
     blockers.insert(
@@ -567,7 +577,10 @@ pub(crate) fn stored_handler_hazard(
             return hit;
         }
     }
-    if !ast.code_sinks.is_empty() {
+    if ast.code_sinks.iter().any(|sink| {
+        !(sink.kind == solid_facts::ast::CodeSinkKind::StringTimer
+            && promise_resolve_timer(lookup, file, sink.at))
+    }) {
         return Some("code-from-string");
     }
     if ast.computed_keys.iter().any(|key| {
@@ -655,6 +668,58 @@ pub(crate) fn stored_handler_hazard(
         return Some("unread-module");
     }
     None
+}
+
+/// Whether the timer call at `call` is handed the resolve function of a `Promise` executor written in place
+/// (`new Promise((done) => setTimeout(done, ms))`): its callback is the executor's first parameter, never written, and the executor is
+/// the first argument of a construction whose callee the type facts resolve to the standard `PromiseConstructor`. The standard
+/// constructor hands its executor a function; a replaced `Promise` is a write the premise sites already list (a global write or a
+/// prototype route).
+fn promise_resolve_timer(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    call: solid_facts::core::Span,
+) -> bool {
+    let ast = &file.ast;
+    let Some(timer) = ast.calls.iter().find(|candidate| candidate.span == call) else {
+        return false;
+    };
+    let Some(callback) = timer.arguments.first().filter(|argument| !argument.spread) else {
+        return false;
+    };
+    let Some(declaration) = ast.reference_declaration(ast.peel_ts_sugar_span(callback.span)) else {
+        return false;
+    };
+    // The parameter is never assigned.
+    if ast.assignments.iter().any(|assignment| {
+        ast.reference_declaration(ast.peel_ts_sugar_span(assignment.target)) == Some(declaration)
+    }) {
+        return false;
+    }
+    let Some(executor) = ast.functions.iter().find(|function| {
+        function.parameters.first().is_some_and(|parameter| {
+            parameter.shape == solid_facts::ast::BindingShape::Identifier
+                && parameter
+                    .names
+                    .first()
+                    .is_some_and(|name| name.span == declaration)
+        })
+    }) else {
+        return false;
+    };
+    ast.calls.iter().any(|construction| {
+        construction.construct
+            && construction.arguments.first().is_some_and(|argument| {
+                !argument.spread && ast.peel_ts_sugar_span(argument.span) == executor.span
+            })
+            && lookup
+                .resolved_callee_call(file, construction.callee)
+                .and_then(|resolved| resolved.declaration.as_ref())
+                .is_some_and(|declaration| {
+                    declaration.standard_library
+                        && declaration.qualified_name.as_ref() == "PromiseConstructor.construct"
+                })
+    })
 }
 
 /// Whether `source` has a `for (` whose head, up to its first `;` or `)`, holds ` in ` (a superset of `for … in`).

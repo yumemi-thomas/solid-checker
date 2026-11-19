@@ -21,3 +21,4 @@ the same install from their parent directory.
   - `variants/listener-patch`: `EventTarget.prototype.addEventListener` replaced (F2; a prototype route, a listener-API write).
   - `variants/escaped-key`: `el["_\x24\x24click"]` (F3; the key's cooked value holds `$$`).
   - `variants/define-setter`: `Object.defineProperty(Element.prototype, "_$$" + "click", …)` (F4; a prototype route).
+- `variants/string-timer`: a timer handed a value no fact proves a function (code from a string): the row stays. `main.tsx`'s `pause` (a Promise executor's resolve as the timer callback) is no hazard.
