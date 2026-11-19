@@ -4471,6 +4471,7 @@ rc.21's own `@solidjs/web` attaches none.
 - corpus delta (rc.21 frozen, 34 projects): +223 SC1002 uncertifiable rows in each mode (first version: +2,220), 0 removed, 0 violations moved; by kind: `instanceof` 149, arithmetic 18, template substitution 16, relational 13, `in` 11, `+` 11, `delete` 4, `++`/`--` 1;
 - fixture `after-await-operators`: a row at each object operand, none at `===`, `typeof`, `!`, a number counter or a string substitution;
 - the cost on fixtures is named rises.
+
 <a id="adr-1121"></a>
 ## ADR 1121 — A store member read in a body-called helper is carried for a projection and a wrapped receiver
 **The gap** (Fable review of ADR 1107, F2 and F3; main eed2f3621). A store's member read in a helper the component body calls (`const r = () => { void store.v; }; r();`) is ended where it is written as placed elsewhere (`MemberPlacedElsewhere`), on the interprocedural summaries carrying it to `r()`. Two shapes had no summary and so no row of any rule, while rc.21 warns STRICT_READ_UNTRACKED: a store a primitive returns whole (`const store = createProjection(...)`), or a hook returns whole, never entered `summary_source_symbols` (only tuple slots and accessors did); and a receiver under a TypeScript wrapper (`(store as S).v`, `store!.v`, `(store satisfies S).v`) never matched, since the summary compared the member's unpeeled object with the reference span. The same reads in the body were violations.
