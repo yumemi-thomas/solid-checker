@@ -259,7 +259,9 @@ export function callStarts(source, fileName = "App.tsx") {
     // binary's start (`"a" + o` is framed at `"a"`), the row on the coerced operand.
     else if (ts.isBinaryExpression(node) && [ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.AsteriskToken, ts.SyntaxKind.SlashToken, ts.SyntaxKind.PercentToken,
       ts.SyntaxKind.LessThanToken, ts.SyntaxKind.LessThanEqualsToken, ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.GreaterThanEqualsToken].includes(node.operatorToken.kind) && !runsItself(node.left)) {
-      for (const operand of [node.left, node.right]) calls.push([node.getStart(file), node.getStart(file) + 1, operand.getStart(file), rootOf(operand).getStart(file)]);
+      // Only an operand that may be an object (a name, `this`, an object or array literal): a literal or another operator's result coerces nothing.
+      const object = (operand) => { const inner = unwrap(operand); return ts.isIdentifier(inner) || inner.kind === ts.SyntaxKind.ThisKeyword || ts.isObjectLiteralExpression(inner) || ts.isArrayLiteralExpression(inner); };
+      for (const operand of [node.left, node.right].filter(object)) calls.push([node.getStart(file), node.getStart(file) + 1, operand.getStart(file), rootOf(operand).getStart(file)]);
     }
     // A destructuring reads its properties: V8's frame is on the binding, the row on the pattern.
     else if (ts.isBindingElement(node)) { let pattern = node.parent; while (ts.isBindingElement(pattern.parent)) pattern = pattern.parent.parent; calls.push([node.getStart(file), node.getEnd(), pattern.getStart(file), pattern.getStart(file)]); }
