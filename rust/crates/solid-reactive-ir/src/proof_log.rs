@@ -328,6 +328,10 @@ pub(crate) enum PremiseKind {
     /// (`suppress_findings_owned_by_enabled_rules`, ADR 0511). The proof gate confirms it from the final list (an SC5001 violation at the span), as it does for
     /// `SetterGuardThrowsFirst` (ADR 0982): SC5001 does not credit the strict-read code, so this premise is what lets the drop end the site.
     PendingThrowsFirst,
+    /// ADR 1107: the finding is a destructured slot's read, tagged for its pattern's SC1003 row, and that row stands in the final list over
+    /// the slot (the slot reads' verdict folded into it). The proof gate confirms it from the final list (a `no-destructure` verdict whose span
+    /// contains the slot's).
+    DestructureFolded,
     /// The site is in a function that returns JSX and is also handed to code
     /// that may call it as a plain function.
     UndecidedComponent,
@@ -585,6 +589,8 @@ pub enum DropPass {
     /// ADR 0949: a style rule's finding in a package's source is dropped, not handed to the project
     /// (`package-style-not-project`): it is no claim about what the project's code does at run time.
     PackageStyleNotProject,
+    /// ADR 1107: a destructured slot's read folds into its pattern's SC1003 row.
+    DestructureFold,
 }
 
 impl DropPass {
@@ -606,6 +612,7 @@ impl DropPass {
             Self::RuntimeConfiguration => "RuntimeConfiguration",
             Self::EqualFinding => "EqualFinding",
             Self::PackageStyleNotProject => "PackageStyleNotProject",
+            Self::DestructureFold => "DestructureFold",
         }
     }
 
@@ -630,6 +637,7 @@ impl DropPass {
                 PremiseKind::DependencySourceRoot,
                 PremiseKind::PackageStyleNotProject,
             ],
+            Self::DestructureFold => &[PremiseKind::DestructureFolded],
         }
     }
 }
@@ -1310,6 +1318,7 @@ mod tests {
             DropPass::RuntimeConfiguration,
             DropPass::EqualFinding,
             DropPass::PackageStyleNotProject,
+            DropPass::DestructureFold,
         ];
         let mut names = std::collections::BTreeSet::new();
         for pass in passes {

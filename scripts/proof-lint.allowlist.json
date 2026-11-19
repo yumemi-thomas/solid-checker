@@ -491,8 +491,8 @@
     },
     "rust/crates/solid-reactive-ir/src/findings.rs": {
       "finding-filter": {
-        "count": 1,
-        "why": "`findings.dedup()` after the total ordering removes only a finding equal in every field (id, rule, kind, message, location, evidence) to its neighbour: the same row twice"
+        "count": 2,
+        "why": "`findings.dedup()` after the total ordering removes only a finding equal in every field (id, rule, kind, message, location, evidence) to its neighbour: the same row twice; `fold_destructure_findings` (ADR 1107) removes only the slot reads tagged `fold_into` and pushes for each pattern one SC1003 row in their place, a violation if any slot read is one, else an obligation: no verdict leaves the report"
       }
     },
     "rust/crates/solid-reactive-ir/src/hosts.rs": {

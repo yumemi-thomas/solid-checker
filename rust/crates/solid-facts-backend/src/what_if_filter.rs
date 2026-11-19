@@ -96,6 +96,7 @@ mod tests {
             related_locations: Vec::new(),
             evidence: Vec::new(),
             fixes: Vec::new(),
+            fold_into: None,
         }
     }
 

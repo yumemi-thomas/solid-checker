@@ -2556,6 +2556,38 @@ impl LocalAccessContext<'_, '_> {
         for member in &file.ast.members {
             self.discover_member(file, member, &allowed, &mut result, &mut seen);
         }
+        // ADR 1107: a store's destructure SC1003 hands over (`delegated_destructure_slots`) reads each slot as a member: the
+        // member read `store.a` at the slot, placed as any other (summaries, carriers, windows).
+        for binding in &file.ast.bindings {
+            let Some(identifier) = binding.initializer_identifier.as_ref() else {
+                continue;
+            };
+            let is_store = self
+                .entities
+                .get(&location(file.path.shared(), identifier.span))
+                .is_some_and(|symbol| {
+                    self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store)
+                });
+            if !is_store {
+                continue;
+            }
+            let Some(slots) =
+                crate::static_rules::delegated_destructure_slots(self.lookup, file, binding)
+            else {
+                continue;
+            };
+            for slot in slots {
+                let member = solid_facts::ast::MemberFact {
+                    span: slot,
+                    object: identifier.span,
+                    property: slot,
+                };
+                // Round 2 (P1): every slot shares the store identifier as its receiver, which `seen` keys on; each slot is
+                // its own Get, so each gets its own set (`{ then, v }` read only `then`).
+                let mut slot_seen = HashSet::default();
+                self.discover_member(file, &member, &allowed, &mut result, &mut slot_seen);
+            }
+        }
         self.discover_spreads(file, &allowed, &mut result);
         self.discover_whole_store_reads(file, &allowed, &mut result);
         self.discover_caught_reads(file, &allowed, &mut result);
@@ -9438,7 +9470,18 @@ pub(crate) fn store_head_get(
     dialect: &dyn solid_dialect::Dialect,
 ) -> StoreHeadGet {
     let Some(mut head) = file.ast.member_at(span) else {
-        return StoreHeadGet::Undecided("the store Get's key is not a known string");
+        // ADR 1107: a destructure's shorthand slot (`const { v } = store`) is the Get of its static key, read once.
+        let slot = file.ast.bindings.iter().find_map(|binding| {
+            binding
+                .object_slots
+                .iter()
+                .find(|slot| slot.plain_identifier_key && slot.local.span == span)
+        });
+        return match slot.map(|slot| slot.property.as_str()) {
+            Some(key) if dialect.store_key_may_skip_strict_read(key) => StoreHeadGet::Exempt,
+            Some(_) => StoreHeadGet::Warns,
+            None => StoreHeadGet::Undecided("the store Get's key is not a known string"),
+        };
     };
     while let Some(inner) = file.ast.member_at(file.ast.peel_ts_sugar_span(head.object)) {
         head = inner;

@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1107: a store destructure in an effect's apply, in a function nested in a ref callback, in a function handed by name to createMemo and called by the body, with a default and with a rest element. Chrome reports STRICT_READ_UNTRACKED at each; SC1003 is a violation at each but HandedAndCalled, where it is uncertifiable. Round 2: a sub-pattern binding no name (`{ a: {} }`, `{ items: [] }`), a sibling sub-pattern in a helper, `{ then, v }` in an apply and a quoted key all warn."
+}
