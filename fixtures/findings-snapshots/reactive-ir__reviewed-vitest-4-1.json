@@ -46,6 +46,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 810,
+      "end": 821,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -98,6 +109,17 @@
       "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
       "start": 952,
       "end": 974,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/reviewed-vitest-4-1/a.test.ts",
+      "start": 959,
+      "end": 968,
       "fixes": 0
     },
     {

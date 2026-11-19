@@ -4365,6 +4365,10 @@ fn converting_operators_list_every_converting_expression() {
         "void (d == e);\n",
         "let n = 0; n++;\n",
         "void { [k]: 1 };\n",
+        "o.t = d; o.u = 1;\n",
+        "class K { [k]() {} }\n",
+        "const { [k]: x } = o;\n",
+        "({ [k]: s } = o);\n",
         "void (d === e); void (d instanceof e); void !d; void typeof d; void o[\"x\"]; void (1 + 2);\n",
     );
     let facts = super::extract("converting.ts", source).unwrap();
@@ -4377,6 +4381,7 @@ fn converting_operators_list_every_converting_expression() {
         texts,
         [
             "\"\" + d", "d < e", "+d", "s += d", "o[k]", "k in o", "d == e", "n++", "[k]: 1",
+            "o.t = d", "k", "k", "k",
         ]
     );
 }
