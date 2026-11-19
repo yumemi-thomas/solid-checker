@@ -1,4 +1,5 @@
 import { merge, omit } from "solid-js";
+import type { JSX } from "@solidjs/web";
 import * as Solid from "solid-js";
 
 // ADR 1129: a `merge`/`omit` view of a component's own props, spread onto an
@@ -14,10 +15,10 @@ type Attrs = {
   title?: string;
   class?: string;
   innerHTML?: string;
-  children?: unknown;
+  children?: JSX.Element;
   onClick?: () => void;
 };
-type ButtonProps = { variant?: "primary" | "plain"; type?: string; onClick?: () => void; children?: unknown };
+type ButtonProps = { variant?: "primary" | "plain"; type?: string; onClick?: () => void; children?: JSX.Element };
 
 // Proved: defaults by `merge`, the rest by `omit` (the cheatsheet's Props
 // helpers): no caller writes a content key or a listener.

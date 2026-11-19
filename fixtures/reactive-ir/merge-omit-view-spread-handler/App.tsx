@@ -1,4 +1,5 @@
 import { createRenderEffect, createSignal, merge, omit } from "solid-js";
+import type { JSX } from "@solidjs/web";
 
 // ADR 1129 in a closed program (`.solid-checker/runtime.json`), where an
 // exact handler's owner is decided: the function a caller writes under a
@@ -7,7 +8,7 @@ import { createRenderEffect, createSignal, merge, omit } from "solid-js";
 
 const [count, setCount] = createSignal(0);
 
-type Props = { variant?: "primary" | "plain"; onPointerDown?: () => void; children?: unknown };
+type Props = { variant?: "primary" | "plain"; onPointerDown?: () => void; children?: JSX.Element };
 
 function Trigger(props: Props) {
   const merged = merge({ variant: "plain" as const }, props);
