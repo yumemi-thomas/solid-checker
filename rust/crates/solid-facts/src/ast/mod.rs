@@ -71,8 +71,8 @@ use thiserror::Error;
 /// key, `computed`, `has_default`, `nested`, `local`), and whether a pattern ends in a rest element (`pattern_rest`).
 /// 101 (ADR 1120): the places that may break the plain-program premise (`premise_sites`).
 /// 102 (ADR 1114 families 2-4): every identifier reference's position by its parent node (`reference_positions`).
-/// 104 (ADR 1114 family 3; 103 is ADR 1125's): every operator expression that converts an operand (`converting_operators`).
-pub const AST_FACTS_SCHEMA: u32 = 104;
+/// 103 (ADR 1114 family 3): every operator expression that converts an operand (`converting_operators`).
+pub const AST_FACTS_SCHEMA: u32 = 103;
 
 mod argument_completion;
 mod code_sinks;
