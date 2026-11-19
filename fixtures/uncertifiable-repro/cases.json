@@ -2593,7 +2593,7 @@
   {
    "id": "callback-in-options-object",
    "kind": "uncertifiable",
-   "project": "sc1001",
+   "project": "sc1001-computed-key",
    "files": [
     "src/options-object.tsx"
    ],
@@ -4222,7 +4222,7 @@
   {
    "id": "props-object-assign",
    "kind": "uncertifiable",
-   "project": "sc1001",
+   "project": "sc1001-key-reader",
    "files": [
     "src/props-object-assign.tsx"
    ],
@@ -16650,7 +16650,7 @@
   {
    "id": "clean-omit-rest",
    "kind": "clean",
-   "project": "sc1001",
+   "project": "sc1001-computed-key",
    "files": [
     "src/clean-omit-rest.tsx"
    ],

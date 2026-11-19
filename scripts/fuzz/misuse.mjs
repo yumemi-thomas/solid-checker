@@ -236,7 +236,7 @@ const DENIED_LEGAL = ["dny-legal-keydown", "dny-legal-click", "dny-legal-pointer
 const DENIED_OTHER = ["dny-blur-spread", "dny-typo-event", "dny-blur-dynamic", "dny-portal-dispose", "dny-load-append", "dny-load-for", "dny-load-show", "dny-unmount-flush-body", "dny-unmount-flush-root", "dny-insert-body", "dny-renamed-prop", "dny-shared-fn", "dny-chain-click"];
 /** ADR 1125: the Fable review of ADR 1089 E round 2 (G1, G3, G6) and round 1's F2 on main's event-callback read proof: each runs the
  * handler of an element's `onScroll` from an effect's apply other than by a delivery that sets `window.event`. */
-const DELIVERY_BREAKERS = ["evt-apply-event-replaced", "evt-apply-listener-patch", "evt-apply-fake-node", "evt-apply-shadow-concat"];
+const DELIVERY_BREAKERS = ["evt-apply-event-replaced", "evt-apply-listener-patch", "evt-apply-fake-node", "evt-apply-shadow-concat", "evt-apply-stored-values", "evt-apply-shadow-arrow-body", "evt-apply-shadow-valueof"];
 const DENIED_CONTEXTS = [...Object.keys(DENIED), ...Object.keys(DISPOSALS), ...DENIED_OTHER];
 /** `flush()` in a denied handler, with no dispatch in the program (`a04`, `b03`, `b09`): SC2008. */
 const DENIED_FLUSH = ["dny-flush-unmount", "dny-flush-load", "dny-flush-popover"];
@@ -1961,6 +1961,41 @@ function inContext(context, stmts, kit) {
       const attach = expr(domExpr(`(document.createElement("div") as unknown as Record<string, (init: ShadowRootInit) => ShadowRoot>)["attach" + "Shadow"]({ mode: "open" }).appendChild(${el} as HTMLElement)`));
       const fire = expr(domExpr(`(${el} as HTMLElement).dispatchEvent(new Event("scroll"))`));
       return { body: [made, attach, expr(prim("effect", fn([ret(num(1))]), { apply: fn([fire]) }))], view: [] };
+    }
+    // ADR 1125, Fable round 1 F1: a reader of the element's own values takes Solid's stored delegated handler (`_$$click`) and the
+    // apply calls it with no event.
+    case "evt-apply-stored-values": {
+      const el = kit.name("el");
+      const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onClick", undriven: true })));
+      const run = expr(domExpr(`for (const value of Object.values(${el} as object)) if (typeof value === "function") (value as (event: Event) => void)(new Event("click"))`));
+      return { body: [made, expr(prim("effect", fn([ret(num(1))]), { apply: fn([run]) }))], view: [] };
+    }
+    // F3: the shadow root attached through an arrow's expression body under a key built at run time (`join`, which no fact decodes).
+    case "evt-apply-shadow-arrow-body": {
+      const el = kit.name("el"), host = kit.name("host"), pick = kit.name("pick");
+      const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onScroll", undriven: true })));
+      const attach = [
+        decl(host, domExpr('document.createElement("div")')),
+        decl(pick, domExpr(`(key: string) => (${host} as unknown as Record<string, (init: { mode: "open" }) => Node>)[key]`)),
+        expr(domExpr(`${pick}(["attach", "Shadow"].join("")).call(${host}, { mode: "open" }).appendChild(${el} as HTMLElement)`)),
+      ];
+      const fire = expr(domExpr(`(${el} as HTMLElement).dispatchEvent(new Event("scroll"))`));
+      return { body: [made, ...attach, expr(prim("effect", fn([ret(num(1))]), { apply: fn([fire]) }))], view: [] };
+    }
+    // F4: a replaced `Function.prototype.valueOf` gets the value a unary minus converts as `this`: it attaches the shadow root.
+    case "evt-apply-shadow-valueof": {
+      const el = kit.name("el"), plain = kit.name("plain"), slot = kit.name("slot");
+      const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onScroll", undriven: true })));
+      const hook = [
+        decl(plain, domExpr("Function.prototype.valueOf")),
+        decl(slot, domExpr("{ host: undefined as HTMLElement | undefined, root: undefined as Node | undefined }")),
+        expr(domExpr(`Function.prototype.valueOf = function (this: (init: { mode: "open" }) => Node) { const at = ${slot}.host; if (at) { ${slot}.host = undefined; ${slot}.root = this.call(at, { mode: "open" }); } return ${plain}.call(this); }`)),
+        expr(domExpr(`${slot}.host = document.createElement("div")`)),
+        expr(domExpr(`void -(${slot}.host as unknown as Record<string, number>)[["attach", "Shadow"].join("")]`)),
+        expr(domExpr(`${slot}.root?.appendChild(${el} as HTMLElement)`)),
+      ];
+      const fire = expr(domExpr(`(${el} as HTMLElement).dispatchEvent(new Event("scroll"))`));
+      return { body: [made, ...hook, expr(prim("effect", fn([ret(num(1))]), { apply: fn([fire]) }))], view: [] };
     }
     // ADR 0639: `flush()`'s guard takes no event, and the dispatch that reaches it may sit in a helper or on `window`.
     case "evt-apply-helper-dispatch": {

@@ -2275,17 +2275,17 @@ fn props_container_and_callback_creation_do_not_prove_nested_behavior() {
         .cloned()
         .collect::<Vec<_>>();
     let reads = findings_for_rule(&props, "strict-read-untracked");
-    assert_eq!(reads.len(), 1, "{props:#?}");
-    // ADR 0199: `Handler` invokes the prop only inside a `<button>` click
-    // handler, so both callback-prop literals run on dispatch and report
-    // nothing. The consumers that leave such a read uncertifiable are
-    // pinned by `forwarded-event-prop`. ADR 1125: `External.tsx` loads a module
-    // the build does not read, but no entry's realm holds it with this file.
+    // ADR 1125: `External.tsx` loads a module the build does not read, which may replace the listener API; no fact proves it never shares a page with this file (Fable round 1, F8), so no handler of this program
+    // is proven to run only as a delivery: the reads in handlers are obligations (five), and the eager component-body read keeps its
+    // violation. ADR 0199's proof (the callback-prop literals run on dispatch and report nothing) holds where delivery is intact:
+    // pinned by `forwarded-event-prop`.
+    assert_eq!(reads.len(), 6, "{props:#?}");
     for line in [10, 15] {
         assert!(
-            !reads
+            reads
                 .iter()
-                .any(|read| read["primaryLocation"]["line"] == line),
+                .filter(|read| read["primaryLocation"]["line"] == line)
+                .all(|read| read["kind"] == "uncertifiable"),
             "{reads:#?}"
         );
     }
