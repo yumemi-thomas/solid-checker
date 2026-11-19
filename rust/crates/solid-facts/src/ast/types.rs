@@ -352,7 +352,7 @@ pub struct AstFacts {
     /// trap for `in`; `Symbol.hasInstance` and a proxy's `getPrototypeOf` trap for `instanceof`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub relation_operators: Vec<RelationOperatorFact>,
-    /// Every identifier reference's position by its parent node, sorted by span (ADR 1114 families 2-4; schema bump pending): the site
+    /// Every identifier reference's position by its parent node, sorted by span (facts schema 100, ADR 1114 families 2-4): the site
     /// universe classifies every reference of a reactive source by it, with no default.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reference_positions: Vec<ReferencePositionFact>,
