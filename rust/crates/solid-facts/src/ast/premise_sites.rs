@@ -288,7 +288,37 @@ pub(super) fn premise_sites<'a>(semantic: &Semantic<'a>, resolve: bool) -> Vec<P
                         Some(Expression::ObjectExpression(_))
                     )
                 {
-                    sites.add(call.span, PremiseClause::ObjectAssign, "*");
+                    // ADR 1125: the keys written are the sources'. Sources that are all object literals with literal keys (no spread)
+                    // write those keys only, each checked as a written key; anything else may write any key.
+                    let literal_keys =
+                        call.arguments
+                            .iter()
+                            .skip(1)
+                            .try_fold(Vec::new(), |mut keys, argument| {
+                                let Some(Expression::ObjectExpression(source)) =
+                                    argument.as_expression().map(peel_ts_sugar)
+                                else {
+                                    return None;
+                                };
+                                for property in &source.properties {
+                                    let oxc_ast::ast::ObjectPropertyKind::ObjectProperty(property) =
+                                        property
+                                    else {
+                                        return None;
+                                    };
+                                    keys.push(kernel_key(&property.key)?);
+                                }
+                                Some(keys)
+                            });
+                    match literal_keys {
+                        Some(keys) => {
+                            for key in keys {
+                                sites.key(call.span, &key);
+                                sites.written(call.span, &key);
+                            }
+                        }
+                        None => sites.add(call.span, PremiseClause::ObjectAssign, "*"),
+                    }
                 }
             }
             AstKind::StringLiteral(literal) => {
@@ -1057,8 +1087,56 @@ mod tests {
         assert_eq!(sinks("setTimeout.call(null, \"code\");"), 1);
         assert_eq!(sinks("setTimeout(() => 1, 0);"), 0);
         assert_eq!(
+            sinks("let t: ReturnType<typeof setTimeout> | undefined; t = setTimeout(() => 1, 0);"),
+            0,
+            "a type query"
+        );
+        assert_eq!(sinks("const ok = typeof setTimeout === \"function\";"), 0);
+        assert_eq!(
             sinks("el.ownerDocument.defaultView!.setTimeout(() => 1, 0);"),
             0
+        );
+        // ADR 1125: a global `new Promise` executor's first two parameters are functions; anything else may be a string.
+        assert_eq!(
+            sinks("const pause = (ms: number) => new Promise((done) => setTimeout(done, ms));"),
+            0,
+            "the resolver"
+        );
+        assert_eq!(
+            sinks("new Promise(function (ok, fail) { setTimeout(fail, 0); });"),
+            0
+        );
+        assert_eq!(
+            sinks("new Promise((a, b, c) => setTimeout(c, 0));"),
+            1,
+            "a third parameter"
+        );
+        assert_eq!(
+            sinks("new Promise((done = \"x\") => setTimeout(done, 0));"),
+            1,
+            "a default"
+        );
+        assert_eq!(
+            sinks("new Promise((done) => { done = \"x\"; setTimeout(done, 0); });"),
+            1,
+            "written"
+        );
+        assert_eq!(
+            sinks(
+                "class Promise { constructor(f: any) {} } new Promise((done: any) => setTimeout(done, 0));"
+            ),
+            1,
+            "a local Promise"
+        );
+        assert_eq!(
+            sinks("const run = (done: any) => setTimeout(done, 0); new Promise(run);"),
+            1,
+            "an executor not written in place"
+        );
+        assert_eq!(
+            sinks("new Promise((done) => [1].forEach((d: any) => setTimeout(d, 0)));"),
+            1,
+            "an inner function's parameter"
         );
     }
 

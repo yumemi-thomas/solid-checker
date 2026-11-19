@@ -1851,6 +1851,12 @@ pub struct ComputedKeyFact {
     /// The constant strings the key may be, sorted (a proven key with none is not listed).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub texts: Vec<CompactString>,
+    /// ADR 1125: a `Member` read whose value is provably neither called nor kept: it reaches, through parentheses, casts, `??`/`||`/`&&` and a
+    /// conditional's arms, only an operand of a unary operator, of a binary one other than `instanceof`, a test, a computed member's key or a discarded
+    /// statement. Such a value runs no method of its own (a coercion runs only methods some other site wired in, which that site's facts list). False:
+    /// anything else, the fail-closed default.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub value_inert: bool,
 }
 
 /// What a premise site may do to the plain-program premise (ADR 1120): the clause it falls under.

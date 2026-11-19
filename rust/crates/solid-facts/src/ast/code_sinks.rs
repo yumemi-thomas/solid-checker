@@ -178,7 +178,20 @@ impl<'a> Sinks<'_, 'a> {
         // `setTimeout.call(null, "code")`, `Reflect.apply(setTimeout, …)`) may be handed a string.
         if TIMERS.contains(&identifier.name.as_str())
             && (!self.resolve || self.symbol_of(identifier).is_none())
-            && !matches!(self.semantic.nodes().parent_kind(id), AstKind::CallExpression(call) if call.callee.span() == identifier.span)
+            // A type position (`ReturnType<typeof setTimeout>`) and `typeof setTimeout` run nothing.
+            && !identifier
+                .reference_id
+                .get()
+                .is_some_and(|reference| self.semantic.scoping().get_reference(reference).is_type())
+            && !matches!(
+                self.semantic.nodes().parent_kind(id),
+                AstKind::CallExpression(call) if call.callee.span() == identifier.span
+            )
+            && !matches!(
+                self.semantic.nodes().parent_kind(id),
+                AstKind::UnaryExpression(unary) if unary.operator == UnaryOperator::Typeof
+            )
+            && !matches!(self.semantic.nodes().parent_kind(id), AstKind::TSTypeQuery(_))
         {
             self.add(identifier.span, CodeSinkKind::StringTimer);
         }
@@ -402,11 +415,45 @@ impl<'a> Sinks<'_, 'a> {
                                 )
                             })
                     }
+                    // ADR 1125: the first or second parameter of an executor written as the first argument of `new Promise(..)`, the
+                    // global, is the resolving function the constructor hands it (a replaced global `Promise` is a delivery hazard).
+                    AstKind::FormalParameter(parameter) => {
+                        parameter.initializer.is_none()
+                            && matches!(parameter.pattern, BindingPattern::BindingIdentifier(_))
+                            && self.promise_executor_parameter(
+                                scoping.symbol_declaration(symbol),
+                                parameter.span,
+                            )
+                    }
                     _ => false,
                 }
             }
             _ => false,
         }
+    }
+
+    /// Whether the parameter at `id` (span `at`) is the first or second of a function written as the first argument of `new Promise(..)`, where
+    /// `Promise` is the global (no binding of the program's).
+    fn promise_executor_parameter(&self, id: NodeId, at: oxc_span::Span) -> bool {
+        let nodes = self.semantic.nodes();
+        let parameters = nodes.parent_id(id);
+        let function = nodes.parent_id(parameters);
+        let (span, params) = match nodes.kind(function) {
+            AstKind::ArrowFunctionExpression(arrow) => (arrow.span, &arrow.params),
+            AstKind::Function(function) if !function.is_declaration() => {
+                (function.span, &function.params)
+            }
+            _ => return false,
+        };
+        if !params.items.iter().take(2).any(|item| item.span == at) {
+            return false;
+        }
+        nodes.ancestor_kinds(function).take(4).any(|kind| {
+            matches!(kind, AstKind::NewExpression(new)
+                if new.arguments.first().is_some_and(|first| first.span() == span)
+                    && matches!(peel_ts_sugar(&new.callee), Expression::Identifier(callee)
+                        if callee.name == "Promise" && self.symbol_of(callee).is_none()))
+        })
     }
 
     /// Whether the expression is a literal whose markup holds no script, event attribute or `javascript:` URL.

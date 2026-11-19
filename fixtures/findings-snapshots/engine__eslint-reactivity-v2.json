@@ -424,17 +424,6 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "warning",
-      "path": "fixtures/engine/eslint-reactivity-v2/component-props-event.tsx",
-      "start": 88,
-      "end": 99,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -1049,11 +1038,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "handler-dispatch-unproven",
+      "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/leaf-reexport-flush.tsx",
       "start": 84,
-      "end": 91,
+      "end": 93,
       "fixes": 0
     },
     {

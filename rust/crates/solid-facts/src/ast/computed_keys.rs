@@ -452,6 +452,7 @@ fn push_fact(
     site: ComputedKeySite,
     read: oxc_span::Span,
     proof: Option<Proof>,
+    value_inert: bool,
 ) {
     let (proven, texts) = match proof {
         Some(proof) if proof.texts.is_empty() => return,
@@ -470,7 +471,54 @@ fn push_fact(
         site,
         proven,
         texts,
+        value_inert,
     });
+}
+
+/// ADR 1125: whether the value of the expression at `node` is provably neither called nor kept ([`ComputedKeyFact::value_inert`]).
+fn value_inert(semantic: &Semantic<'_>, node: NodeId) -> bool {
+    let nodes = semantic.nodes();
+    let mut child = node;
+    loop {
+        let parent = nodes.parent_id(child);
+        if parent == child {
+            return false;
+        }
+        let child_span = nodes.kind(child).span();
+        match nodes.kind(parent) {
+            // The value passes through: judge the parent's own position.
+            AstKind::ParenthesizedExpression(_)
+            | AstKind::TSAsExpression(_)
+            | AstKind::TSSatisfiesExpression(_)
+            | AstKind::TSNonNullExpression(_)
+            | AstKind::TSTypeAssertion(_)
+            | AstKind::LogicalExpression(_) => child = parent,
+            AstKind::ConditionalExpression(conditional) => {
+                if conditional.test.span() == child_span {
+                    return true;
+                }
+                child = parent;
+            }
+            AstKind::UnaryExpression(unary) => return unary.operator != UnaryOperator::Delete,
+            AstKind::BinaryExpression(binary) => {
+                return binary.operator != BinaryOperator::Instanceof;
+            }
+            AstKind::IfStatement(statement) => return statement.test.span() == child_span,
+            AstKind::WhileStatement(statement) => return statement.test.span() == child_span,
+            AstKind::DoWhileStatement(statement) => return statement.test.span() == child_span,
+            AstKind::ForStatement(statement) => {
+                return statement
+                    .test
+                    .as_ref()
+                    .is_some_and(|test| test.span() == child_span);
+            }
+            AstKind::ComputedMemberExpression(member) => {
+                return member.expression.span() == child_span;
+            }
+            AstKind::ExpressionStatement(_) => return true,
+            _ => return false,
+        }
+    }
 }
 
 /// Every read under a computed key that nothing proves is a number, a symbol or a plain non-text value, in source order of the read: see [`ComputedKeyFact`].
@@ -489,18 +537,37 @@ pub(super) fn computed_keys(semantic: &Semantic<'_>, resolve: bool) -> Vec<Compu
                 if literal_property_key(&member.expression).is_none() =>
             {
                 let proof = prover.expression(&member.expression, 0);
-                push_fact(&mut facts, ComputedKeySite::Member, member.span, proof);
+                let inert = value_inert(semantic, node.id());
+                push_fact(
+                    &mut facts,
+                    ComputedKeySite::Member,
+                    member.span,
+                    proof,
+                    inert,
+                );
             }
             AstKind::BindingProperty(property) if property.computed => {
                 if let Some(key) = property.key.as_expression() {
                     let proof = prover.expression(key, 0);
-                    push_fact(&mut facts, ComputedKeySite::Pattern, property.span, proof);
+                    push_fact(
+                        &mut facts,
+                        ComputedKeySite::Pattern,
+                        property.span,
+                        proof,
+                        false,
+                    );
                 }
             }
             AstKind::AssignmentTargetPropertyProperty(property) if property.computed => {
                 if let Some(key) = property.name.as_expression() {
                     let proof = prover.expression(key, 0);
-                    push_fact(&mut facts, ComputedKeySite::Pattern, property.span, proof);
+                    push_fact(
+                        &mut facts,
+                        ComputedKeySite::Pattern,
+                        property.span,
+                        proof,
+                        false,
+                    );
                 }
             }
             AstKind::CallExpression(call) if is_reflect_get(&prover, call) => {
@@ -517,7 +584,13 @@ pub(super) fn computed_keys(semantic: &Semantic<'_>, resolve: bool) -> Vec<Compu
                         .as_expression()
                         .and_then(|key| prover.expression(key, 0)),
                 };
-                push_fact(&mut facts, ComputedKeySite::ReflectGet, call.span, proof);
+                push_fact(
+                    &mut facts,
+                    ComputedKeySite::ReflectGet,
+                    call.span,
+                    proof,
+                    false,
+                );
             }
             _ => {}
         }

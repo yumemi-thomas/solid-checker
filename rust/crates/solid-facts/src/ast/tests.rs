@@ -4273,3 +4273,45 @@ const [...all] = list;"#;
     assert!(facts.bindings[2].array_slots.is_empty() && !facts.bindings[2].pattern_rest);
     assert!(facts.bindings[3].pattern_rest);
 }
+
+#[test]
+fn a_computed_read_whose_value_only_feeds_operators_and_tests_is_inert() {
+    // ADR 1125: a value that only meets an operator, a test, a key or a discarded statement runs no method of its own; any other position may call
+    // it or keep it (an element's `attachShadow` read under a key nothing proves), and so may `instanceof` and `delete`.
+    let source = "declare const a: any, k: any, el: any; \
+        const n = (a[k] ?? 9) - 1; if (a[k]) {} const t = typeof a[k]; const b = a[a[k]]; a[k]; const c = a[k] ? 1 : 2; \
+        const f = a[k]; el[k]({ mode: 'open' }); use(a[k]); const m = (a[k] as any) || 0; const i = x instanceof a[k]; delete a[k];";
+    let inert = extract("keys.ts", source)
+        .unwrap()
+        .computed_keys
+        .iter()
+        .map(|fact| {
+            (
+                source[fact.read.start as usize..fact.read.end as usize].to_string(),
+                fact.value_inert,
+            )
+        })
+        .collect::<Vec<_>>();
+    let expected = [
+        ("a[k]", true),
+        ("a[k]", true),
+        ("a[k]", true),
+        ("a[a[k]]", false),
+        ("a[k]", true),
+        ("a[k]", true),
+        ("a[k]", true),
+        ("a[k]", false),
+        ("el[k]", false),
+        ("a[k]", false),
+        ("a[k]", false),
+        ("a[k]", false),
+        ("a[k]", false),
+    ];
+    assert_eq!(
+        inert,
+        expected
+            .iter()
+            .map(|(text, inert)| (text.to_string(), *inert))
+            .collect::<Vec<_>>()
+    );
+}
