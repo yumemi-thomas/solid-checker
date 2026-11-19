@@ -269,7 +269,24 @@ fn resolve_with_iteration_veto<'a>(
             .initializer
             .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == call.span)
     })?;
-    let bindings = selected(tuple_iteration_veto, outer, &returned)?;
+    Some(CallbackReturn {
+        bindings: called_slots(lookup, file, outer, &returned, tuple_iteration_veto)?,
+        created,
+        primitive: Some(primitive),
+    })
+}
+
+/// The names `outer` binds from `returned`, each one a slot the catalogue
+/// gives a role, when every one is unwritten, unexported, has an entity, and
+/// is read only as the callee of a call (no alias can carry it elsewhere).
+fn called_slots(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    outer: &BindingFact,
+    returned: &ReturnSummary,
+    tuple_iteration_veto: bool,
+) -> Option<Vec<(Span, ReturnSummary)>> {
+    let bindings = selected(tuple_iteration_veto, outer, returned)?;
     for (declaration, returned) in &bindings {
         if !matches!(returned.kind.as_str(), "accessor" | "setter" | "plain")
             || binding_written(file, *declaration)
@@ -299,9 +316,205 @@ fn resolve_with_iteration_veto<'a>(
             return None;
         }
     }
+    Some(bindings)
+}
+
+/// ADR 1123: the arm's id. `SOLID_CHECKER_IR_ABLATE_SILENCE=context-provided-tuple`
+/// switches it off (a measurement only: the gate's ablation identity).
+pub(crate) const CONTEXT_PROVIDED_TUPLE: &str = "context-provided-tuple";
+
+/// ADR 1123: `const [get, set] = useContext(Ctx)` where the one value `Ctx`
+/// can hold is the fresh tuple of one `createSignal` call. The consumer's
+/// slots are then that signal's accessor and setter, as a direct creation's
+/// are (the slots' own symbols are the identity, as [`resolve`]'s are).
+///
+/// What proves it, all in `file` (an unexported binding is reachable from no
+/// other module; a direct `eval` anywhere refuses):
+/// - `Ctx` is an unwritten, unexported `const` initialized by the dialect's
+///   `createContext` with no argument: no default, so a read under no
+///   provider throws (`ContextNotFoundError`) and returns nothing;
+/// - every reference of `Ctx` is the tag of the one provider element
+///   `<Ctx value={…}>` (no spread, one `value`), or the argument of a
+///   dialect `useContext` call that an array pattern destructures (so no
+///   holder of the shared tuple can replace a slot);
+/// - the provider's value is the `createSignal` call itself, or an
+///   unwritten, unexported `const` it initializes whose one reference is
+///   that value;
+/// - the slots are read only as callees ([`called_slots`]), and nothing in
+///   the program may mutate the iteration protocol the patterns use.
+pub(super) fn context_provided_tuple<'a>(
+    lookup: &'a SemanticLookup<'_>,
+    file: &'a FileFacts,
+    call: &CallFact,
+) -> Option<CallbackReturn<'a>> {
+    if lookup.primitive_at_call(file, call.span) != Some(Primitive::UseContext)
+        || !context_read(lookup, file, call)
+        || crate::site_accounting::ablated_id(CONTEXT_PROVIDED_TUPLE)
+        || lookup.array_slots_withdrawn()
+        || lookup.program_has_eval()
+    {
+        return None;
+    }
+    let argument = file.ast.peel_ts_sugar_span(call.arguments[0].span);
+    let context = sole_reference_binding(file, argument)?;
+    let created_context = file.ast.call_at(context.call_initializer?)?;
+    if context
+        .initializer
+        .map(|value| file.ast.peel_ts_sugar_span(value))
+        != Some(created_context.span)
+        || created_context.construct
+        || !created_context.arguments.is_empty()
+        || lookup.primitive_at_call(file, created_context.span) != Some(Primitive::CreateContext)
+    {
+        return None;
+    }
+    let declaration = context.names[0].span;
+    let mut provider = None;
+    for reference in references(file, declaration) {
+        if let Some(element) = file.ast.jsx_elements.iter().find(|element| {
+            element.member_object.is_none()
+                && (element.name.span == reference || element.closing_name == Some(reference))
+        }) {
+            if provider
+                .is_some_and(|seen: &solid_facts::ast::JsxElementFact| seen.span != element.span)
+            {
+                return None;
+            }
+            provider = Some(element);
+            continue;
+        }
+        // A read the result of which an array pattern takes apart at once.
+        let destructured = file.ast.calls.iter().any(|read| {
+            read.arguments.len() == 1
+                && file.ast.peel_ts_sugar_span(read.arguments[0].span) == reference
+                && lookup.primitive_at_call(file, read.span) == Some(Primitive::UseContext)
+                && context_read(lookup, file, read)
+                && file.ast.bindings.iter().any(|binding| {
+                    binding.shape == BindingShape::Array
+                        && binding.call_initializer == Some(read.span)
+                        && binding
+                            .initializer
+                            .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == read.span)
+                })
+        });
+        if !destructured {
+            return None;
+        }
+    }
+    let provider = provider?;
+    let mut values = provider.attributes.iter().filter(|attribute| {
+        attribute.namespace.is_none() && file.source_text(attribute.local_name) == Some("value")
+    });
+    let value = values.next()?;
+    if values.next().is_some() || !provider.spreads.is_empty() || value.runtime_type_escape {
+        return None;
+    }
+    let value = file.ast.peel_ts_sugar_span(value.expression?);
+    let created_span = if file.ast.call_at(value).is_some() {
+        value
+    } else {
+        let held = sole_reference_binding(file, value)?;
+        let initializer = file.ast.peel_ts_sugar_span(held.initializer?);
+        if held.call_initializer != Some(initializer)
+            || references(file, held.names[0].span).ne(std::iter::once(value))
+        {
+            return None;
+        }
+        initializer
+    };
+    let created = file.ast.call_at(created_span)?;
+    if created.construct
+        || !file.ast.straight_line_calls.contains(&created.span)
+        || created.arguments.iter().any(|argument| argument.spread)
+        || lookup
+            .resolved_callee_call(file, created.callee)
+            .is_some_and(|resolved| resolved.validity == typefacts::ResolvedCallValidity::Recovery)
+    {
+        return None;
+    }
+    let primitive = lookup.primitive_at_call(file, created.span)?;
+    if !lookup.dialect.returns_reactive_tuple(primitive) {
+        return None;
+    }
+    let slot = |index| {
+        lookup
+            .dialect
+            .reactive_result_slot(primitive, ResultSlot::TupleItem(index))
+            .map(|role| ReturnSummary {
+                kind: match role {
+                    ReactiveRole::Accessor => "accessor",
+                    ReactiveRole::Setter => "setter",
+                }
+                .into(),
+                label: "context provided source".into(),
+                ..ReturnSummary::default()
+            })
+    };
+    let returned = ReturnSummary {
+        kind: "tuple".into(),
+        elements: vec![Some(slot(0)?), Some(slot(1)?)],
+        ..ReturnSummary::default()
+    };
+    let outer = file.ast.bindings.iter().find(|binding| {
+        binding.shape == BindingShape::Array
+            && binding.call_initializer == Some(call.span)
+            && binding
+                .initializer
+                .is_some_and(|value| file.ast.peel_ts_sugar_span(value) == call.span)
+    })?;
     Some(CallbackReturn {
-        bindings,
+        bindings: called_slots(lookup, file, outer, &returned, false)?,
         created,
         primitive: Some(primitive),
     })
+}
+
+/// A plain call of the context read with one argument, no spread.
+fn context_read(lookup: &SemanticLookup<'_>, file: &FileFacts, call: &CallFact) -> bool {
+    !call.construct
+        && file.ast.straight_line_calls.contains(&call.span)
+        && call.arguments.len() == 1
+        && !call.arguments[0].spread
+        && lookup
+            .resolved_callee_call(file, call.callee)
+            .is_none_or(|resolved| resolved.validity != typefacts::ResolvedCallValidity::Recovery)
+}
+
+/// The `const` of one name, in `file`, that the identifier reference at `span`
+/// reads, when nothing writes it and no export (or a script's global scope)
+/// publishes it.
+fn sole_reference_binding(file: &FileFacts, span: Span) -> Option<&BindingFact> {
+    if !file
+        .ast
+        .identifiers
+        .iter()
+        .any(|identifier| identifier.span == span && identifier.role == IdentifierRole::Reference)
+    {
+        return None;
+    }
+    let declaration = file.ast.reference_declaration(span)?;
+    let binding = file
+        .ast
+        .bindings
+        .iter()
+        .find(|binding| binding.names.iter().any(|name| name.span == declaration))?;
+    (binding.immutable
+        && binding.shape == BindingShape::Identifier
+        && binding.names.len() == 1
+        && !binding_written(file, declaration)
+        && !crate::execution_role::flow_binding_exported(file, declaration)
+        && !crate::indexes::binding_exported(file, declaration))
+    .then_some(binding)
+}
+
+/// Every identifier reference in `file` whose declaration is `declaration`.
+fn references(file: &FileFacts, declaration: Span) -> impl Iterator<Item = Span> + '_ {
+    file.ast
+        .identifiers
+        .iter()
+        .filter(move |identifier| {
+            identifier.role == IdentifierRole::Reference
+                && file.ast.reference_declaration(identifier.span) == Some(declaration)
+        })
+        .map(|identifier| identifier.span)
 }

@@ -63,6 +63,9 @@
 //! Not followed, named in `docs/open-work.md`: `this` handed from inside a class (a class's functions are handed whole), an instance a framework builds, and a value that
 //! reaches a package through a global (`globalThis.x = f` with a hand-off the program does not spell).
 
+/// ADR 1123: the id `SOLID_CHECKER_IR_ABLATE_SILENCE` names to switch [`UnreadPackageHandOff::provider_child`] off (a measurement only).
+pub(crate) const CONTEXT_PROVIDER_CHILDREN: &str = "context-provider-children";
+
 mod callers;
 mod holders;
 mod object_prototype;
@@ -1950,6 +1953,12 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         if is_intrinsic_tag(file, element) || self.dynamic_string_tag(file, element) {
             return false;
         }
+        // ADR 1123: a context provider reads its children in place (`createRoot(() => { setContext(provider, props.value); return children(() =>
+        // props.children); })`, the dialect's reading of `createContext`): a child expression runs where the provider is created, which `element_created_in`
+        // answered. Only a child: the `value` it stores reaches every consumer, and a prop or spread goes on as any component's.
+        if self.provider_child(file, element, at) {
+            return false;
+        }
         let receiver = self.element_receiver(file, index, element);
         if self.receiver_hands(file, receiver, walk) {
             return true;
@@ -1964,6 +1973,18 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             });
         }
         false
+    }
+
+    /// ADR 1123: whether `at` is in a child of `element`, a context provider of the dialect's own form (the context object as the tag, no member), whose tag
+    /// resolves exactly to a binding the dialect's `createContext` initializes.
+    fn provider_child(&self, file: &'a FileFacts, element: &JsxElementFact, at: Span) -> bool {
+        element.member_object.is_none()
+            && self.lookup.dialect.context_provider_member().is_none()
+            && element.children.iter().any(|child| child.contains(at))
+            && !crate::site_accounting::ablated_id(CONTEXT_PROVIDER_CHILDREN)
+            && self
+                .lookup
+                .is_context_reference(file.path.as_str(), element.name.span)
     }
 
     /// Whether what the receiver does with the value hands it to a package.
@@ -2711,6 +2732,14 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         };
         // A `use:name` directive is the one namespaced attribute whose local name the binder resolves to a declaration (`directive_binding`), and a call of the function the
         // name resolves to with the attribute's value as its accessor: argument 1.
+        // ADR 1123: an element written as a context provider's child is created where the provider reads its children, in place: where the provider is created. A
+        // child of any other kind (a function, a value) goes on below as any component's.
+        if element.children.contains(&at)
+            && ast.jsx_elements.iter().any(|child| child.span == at)
+            && self.provider_child(file, element, at)
+        {
+            return Some(self.element_created_in(file, element.span, walk));
+        }
         let directive = |attribute: &&JsxAttributeFact| attribute.directive_binding.is_some();
         let mut placed = false;
         for attribute in element.attributes.iter().filter(directive) {
