@@ -204,17 +204,6 @@
       "fixes": 0
     },
     {
-      "rule": "jsx-no-duplicate-props",
-      "code": "SC8003",
-      "kind": "uncertifiable",
-      "blocker": "spread-content-unproven",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/omit-view-props-root/App.tsx",
-      "start": 1803,
-      "end": 1832,
-      "fixes": 0
-    },
-    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -234,17 +223,6 @@
       "path": "fixtures/reactive-ir/omit-view-props-root/App.tsx",
       "start": 1810,
       "end": 1819,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "blocker": "handler-spread-unresolved",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/omit-view-props-root/App.tsx",
-      "start": 1814,
-      "end": 1818,
       "fixes": 0
     },
     {
