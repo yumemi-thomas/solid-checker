@@ -245,44 +245,80 @@ fn jsx_no_duplicate_props<'a, 'b>(
     // Only `innerHTML` beside a child with nothing to render: nothing is lost.
     let no_loss =
         child == ChildContent::Blank && used.len() == 2 && has_inner_html && !has_children_prop;
-    let mut open_sources = Vec::new();
-    let mut open_spread_at = None;
-    let mut any_key = false;
-    for spread in &element.spreads {
-        let keys = spread_content_keys(file, spread.argument, keys);
-        match keys {
-            SpreadKeys::Closed => continue,
-            SpreadKeys::Declared(keys) => open_sources.extend(keys),
-            SpreadKeys::Any => any_key = true,
+    // Each spread's keys, and (where ADR 1129's view proof answered) what they
+    // were without it.
+    let answers = element
+        .spreads
+        .iter()
+        .map(|spread| (spread, spread_content_keys(file, spread.argument, keys)))
+        .collect::<Vec<_>>();
+    let verdict_of = |by_view: bool| {
+        let mut open_sources = Vec::new();
+        let mut open_spread_at = None;
+        let mut any_key = false;
+        for (spread, (with_view, without_view)) in &answers {
+            let keys = if by_view {
+                with_view
+            } else {
+                without_view.as_ref().unwrap_or(with_view)
+            };
+            match keys {
+                SpreadKeys::Closed => continue,
+                SpreadKeys::Declared(keys) => open_sources.extend(keys.iter().copied()),
+                SpreadKeys::Any => any_key = true,
+            }
+            open_spread_at = Some(spread.span.start);
         }
-        open_spread_at = Some(spread.span.start);
-    }
-    // A spread that may rewrite a source after it may take the value away.
-    let rewritten = open_spread_at.is_some_and(|at| {
-        element.attributes.iter().any(|attribute| {
-            attribute.span.start < at && CONTENT_ATTRIBUTES.contains(&text(file, attribute.name))
-        })
-    });
-    let verdict = if proven && !rewritten {
-        Some(None)
-    } else {
-        let spread_competes = any_key || {
-            let sources = CONTENT_ATTRIBUTES
-                .into_iter()
-                .filter(|name| written(name) || open_sources.contains(name))
-                .collect::<Vec<_>>();
-            !open_sources.is_empty()
-                && (sources.len() + usize::from(has_children) > 1)
-                && sources != ["children"]
-        };
-        if spread_competes {
-            Some(Some(crate::blockers::SPREAD_CONTENT_UNPROVEN))
-        } else if used.len() > 1 && !only_the_children_pair && !no_loss {
-            Some(Some(crate::blockers::CONTENT_SOURCE_VALUE_UNPROVEN))
+        // A spread that may rewrite a source after it may take the value away.
+        let rewritten = open_spread_at.is_some_and(|at| {
+            element.attributes.iter().any(|attribute| {
+                attribute.span.start < at
+                    && CONTENT_ATTRIBUTES.contains(&text(file, attribute.name))
+            })
+        });
+        if proven && !rewritten {
+            Some(None)
         } else {
-            None
+            let spread_competes = any_key || {
+                let sources = CONTENT_ATTRIBUTES
+                    .into_iter()
+                    .filter(|name| written(name) || open_sources.contains(name))
+                    .collect::<Vec<_>>();
+                !open_sources.is_empty()
+                    && (sources.len() + usize::from(has_children) > 1)
+                    && sources != ["children"]
+            };
+            if spread_competes {
+                Some(Some(crate::blockers::SPREAD_CONTENT_UNPROVEN))
+            } else if used.len() > 1 && !only_the_children_pair && !no_loss {
+                Some(Some(crate::blockers::CONTENT_SOURCE_VALUE_UNPROVEN))
+            } else {
+                None
+            }
         }
     };
+    let verdict = verdict_of(true);
+    // ADR 1129 (review F4): the proof is named at a spread only where it removed
+    // the element's uncertifiable row: open without the view's keys, and no
+    // longer uncertifiable with them.
+    if answers
+        .iter()
+        .any(|(_, (_, without_view))| without_view.is_some())
+        && matches!(verdict_of(false), Some(Some(_)))
+        && !matches!(verdict, Some(Some(_)))
+    {
+        for (spread, _) in answers
+            .iter()
+            .filter(|(_, (_, without_view))| without_view.is_some())
+        {
+            crate::proof_log::silent(
+                "SC8003",
+                &crate::location(file.path.shared(), spread.argument),
+                crate::object_members::VIEW_SPREAD_PROOF,
+                &[],
+            );
+        }
+    }
     if let Some(blocker) = verdict {
         let message = if blocker == Some(crate::blockers::SPREAD_CONTENT_UNPROVEN) {
             "A spread here may carry `children`, `innerHTML`, `innerText` or `textContent`, and \
@@ -404,6 +440,8 @@ enum SpreadKeys {
     Any,
 }
 
+/// One spread's keys, and when ADR 1129's view proof narrowed them, the keys
+/// without it (the second answer).
 fn spread_content_keys<'a, 'b>(
     file: &FileFacts,
     argument: Span,
@@ -411,7 +449,7 @@ fn spread_content_keys<'a, 'b>(
         impl Fn(Span) -> Option<&'a [Arc<str>]>,
         impl Fn(Span) -> Option<&'b [Arc<str>]>,
     >,
-) -> SpreadKeys {
+) -> (SpreadKeys, Option<SpreadKeys>) {
     if let Some(properties) = super::direct_object_literal_properties(file, argument)
         && properties.iter().all(|property| !property.computed)
         && !file
@@ -420,7 +458,7 @@ fn spread_content_keys<'a, 'b>(
             .iter()
             .any(|spread| argument.contains(spread.span))
     {
-        return SpreadKeys::Closed;
+        return (SpreadKeys::Closed, None);
     }
     let content = |keys: &[Arc<str>]| {
         CONTENT_ATTRIBUTES
@@ -430,21 +468,18 @@ fn spread_content_keys<'a, 'b>(
     };
     let declared = (sets.declared)(argument).map(content);
     if declared.as_ref().is_some_and(Vec::is_empty) {
-        return SpreadKeys::Closed;
+        return (SpreadKeys::Closed, None);
     }
     // ADR 1129, asked only where the declared keys left the spread open: the
     // view proof's keys are every key the spread object may own on any run,
     // so a content key outside them is not there. Both sets over-approximate
     // the runtime keys, so their intersection does too.
+    let without_view = declared
+        .clone()
+        .map_or(SpreadKeys::Any, SpreadKeys::Declared);
     let Some(view) = (sets.view)(argument).map(content) else {
-        return declared.map_or(SpreadKeys::Any, SpreadKeys::Declared);
+        return (without_view, None);
     };
-    crate::proof_log::silent(
-        "SC8003",
-        &crate::location(file.path.shared(), argument),
-        crate::object_members::VIEW_SPREAD_PROOF,
-        &[],
-    );
     let keys = match declared {
         Some(declared) => view
             .into_iter()
@@ -452,11 +487,12 @@ fn spread_content_keys<'a, 'b>(
             .collect(),
         None => view,
     };
-    if keys.is_empty() {
+    let with_view = if keys.is_empty() {
         SpreadKeys::Closed
     } else {
         SpreadKeys::Declared(keys)
-    }
+    };
+    (with_view, Some(without_view))
 }
 
 /// The events the 1.x compiler delegates by default, byte-faithful to
