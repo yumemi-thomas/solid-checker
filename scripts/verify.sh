@@ -472,6 +472,9 @@ node scripts/guard/base.mjs
 bun scripts/ir-read-lint.mjs
 # A ratchet on the code shapes that decide a silence without a fact (ADR 0933, phase B).
 bun scripts/proof-lint.mjs
+# ADR 1120: the premise's standard-member table is current, and the kernel's K1 allow-list runs no hook in Node.
+node scripts/kernel/standard-members.mjs --check
+node scripts/kernel-oracle.mjs
 
 step ""
 summarize

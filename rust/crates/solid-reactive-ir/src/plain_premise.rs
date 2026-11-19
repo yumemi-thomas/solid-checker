@@ -13,7 +13,7 @@
 //! An entry's realm is its closure over static value imports, export-froms and literal loads among the analysed files: test and story
 //! files are entries of their own, so the tooling they load does not count against the application's entry (Fable's tier 2).
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use solid_facts::FileFacts;
 use solid_facts::ast::{CodeSinkKind, ComputedKeySite, PremiseClause};
@@ -107,7 +107,7 @@ fn asset_kind(specifier: &str) -> Option<bool> {
 
 /// The analysed files of the package a resolved path lies in (`…/node_modules/<name>/…`, a scoped name being two segments), matched
 /// by `/node_modules/<name>/` anywhere in their path (a store layout's real path included); `None` when the build reads none.
-fn package_files(resolved: &str, program: &HashSet<&str>) -> Option<Vec<String>> {
+fn package_files(resolved: &str, program: &BTreeSet<&str>) -> Option<Vec<String>> {
     let (_, rest) = resolved.rsplit_once("/node_modules/")?;
     let mut segments = rest.split('/');
     let first = segments.next()?;
@@ -128,7 +128,7 @@ fn package_files(resolved: &str, program: &HashSet<&str>) -> Option<Vec<String>>
 
 /// The loads of a file. The bundler's own resolution answers when the host obtained it (ADR 0220; a missing row is unknown, never
 /// TypeScript's); without it, TypeScript's attested resolution, where a declaration file is no runtime module.
-fn loads(lookup: &SemanticLookup<'_>, file: &FileFacts, program: &HashSet<&str>) -> Vec<Load> {
+fn loads(lookup: &SemanticLookup<'_>, file: &FileFacts, program: &BTreeSet<&str>) -> Vec<Load> {
     let runtime = lookup.runtime_resolutions();
     let imports = lookup.resolved_imports();
     let resolve = |declaration: solid_facts::core::Span,
@@ -200,7 +200,7 @@ fn loads(lookup: &SemanticLookup<'_>, file: &FileFacts, program: &HashSet<&str>)
 fn file_hazards(
     lookup: &SemanticLookup<'_>,
     file: &FileFacts,
-    program: &HashSet<&str>,
+    program: &BTreeSet<&str>,
 ) -> Vec<Hazard> {
     let mut hazards = Vec::new();
     for site in &file.ast.premise_sites {
@@ -255,10 +255,10 @@ fn is_package(path: &str) -> bool {
 /// The census rows (module docs).
 pub(crate) fn census(lookup: &SemanticLookup<'_>) -> Vec<CensusRow> {
     let files = lookup.files();
-    let program: HashSet<&str> = files.iter().map(|file| file.path.as_str()).collect();
-    let mut edges: HashMap<&str, Vec<String>> = HashMap::new();
-    let mut loaded: HashSet<String> = HashSet::new();
-    let mut hazards: HashMap<&str, Vec<Hazard>> = HashMap::new();
+    let program: BTreeSet<&str> = files.iter().map(|file| file.path.as_str()).collect();
+    let mut edges: BTreeMap<&str, Vec<String>> = BTreeMap::new();
+    let mut loaded: BTreeSet<String> = BTreeSet::new();
+    let mut hazards: BTreeMap<&str, Vec<Hazard>> = BTreeMap::new();
     for file in files {
         let targets: Vec<String> = loads(lookup, file, &program)
             .into_iter()

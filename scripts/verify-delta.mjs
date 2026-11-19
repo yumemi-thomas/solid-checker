@@ -429,17 +429,8 @@ export const ROWS = [
     owner: "the Solid 2 rules crate (analysis only)",
     checks: ["dialects-process", ...FINDING_GATES, "wasm-compile"],
   },
-  // ADR 1120: the kernel and its oracle. Rows match longest-first and alone, so a kernel file keeps its crate's checks and adds the oracle.
-  {
-    prefix: "rust/crates/solid-facts/src/kernel.rs",
-    owner: "the inertness kernel, syntax half (ADR 1120)",
-    checks: ["facts-lib", ...FINDING_GATES, "wasm-compile", "kernel-oracle"],
-  },
-  {
-    prefix: "rust/crates/solid-reactive-ir/src/kernel.rs",
-    owner: "the inertness kernel, IR half (ADR 1120)",
-    checks: ["ir-lib", "backend-process", "write-walk-strategies", ...FINDING_GATES, "ir-read-lint", "proof-lint", "ir-edit-fuzz", "wasm-compile", "kernel-oracle"],
-  },
+  // ADR 1120: the kernel's oracle and the premise's table generator. A kernel source change selects its crate's row; run the oracle
+  // (`node scripts/kernel-oracle.mjs`) with it.
   {
     prefix: "scripts/kernel/",
     owner: "the premise's standard-member table generator (ADR 1120)",
@@ -660,6 +651,8 @@ export function planFor(paths) {
     ),
     ...[...FINDING_GATES, "repro-budget"].filter((id) => selected.has(id)),
     ...["ir-read-lint", "proof-lint", "ir-tools-test", "proof-tools-test", "ir-edit-fuzz", "fuzz-tests"].filter((id) => selected.has(id)),
+    // ADR 1120: the premise's table and the kernel's oracle.
+    ...["standard-members", "kernel-oracle"].filter((id) => selected.has(id)),
     // Separate workspace; its tests drive the producer built above.
     ...["typefacts"].filter((id) => selected.has(id)),
     ...["differential-harness"].filter((id) => selected.has(id)),
@@ -879,6 +872,9 @@ export const LANES = {
   // The IR edit fuzz drives the debug checker's daemon, like the gates; the
   // read lint and the IR tool tests build nothing.
   "ir-edit-fuzz": "gates",
+  // ADR 1120: the oracle builds and runs one solid-facts test in rust/target; the table check builds nothing.
+  "kernel-oracle": "rust",
+  "standard-members": "preflight",
   "ir-read-lint": "preflight",
   "proof-lint": "preflight",
   "ir-tools-test": "preflight",
