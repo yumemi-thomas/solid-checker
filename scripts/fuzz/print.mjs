@@ -850,9 +850,12 @@ function render(program, instrument) {
       : component.mount === "for" ? (used.add("For"), [`<For each={[1]}>`, `${INDENT}{() => ${wrapped.join("")}}`, `</For>`])
       : wrapped);
     if (source === "prop-spread") out.push(`function M${index + 1}(props: ${component.name}Props) {`, `${INDENT}return <${component.name} {...props} />;`, "}", "");
-    const created = tupled.length ? tupled.flatMap((sig) => [`${INDENT}const ${sig.name}t = createSignal(${sig.init});`, ...(source === "context-tuple-two" ? [`${INDENT}const ${sig.name}o = createSignal(${sig.init});`] : [])])
+    // `context-tuple-fn` (the review of ADR 1123, F1): the async memo's value through the function form, a derived signal.
+    const created = tupled.length ? tupled.flatMap((sig) => source === "context-tuple-fn" ? [`${INDENT}const ${sig.name}a = createMemo(async () => 1);`, `${INDENT}const ${sig.name}t = createSignal(() => ${sig.name}a());`]
+      : [`${INDENT}const ${sig.name}t = createSignal(${sig.init});`, ...(source === "context-tuple-two" ? [`${INDENT}const ${sig.name}o = createSignal(${sig.init});`] : [])])
       : source ? component.signals.filter((sig) => component.sourced.includes(sig.name)).map((sig) => `${INDENT}${signalLine(sig)}`) : [];
     if (tupled.length) used.add("createSignal");
+    if (source === "context-tuple-fn" && tupled.length) used.add("createMemo");
     if (source === "async-value-member") out.push(`const ui${index + 1} = { ${component.name} };`, "");
     // A wrapper mount's component (mounts.mjs WRAP_MOUNTS) sits at module scope above its parent.
     if (parts?.module) out.push(...parts.module);
@@ -1039,7 +1042,7 @@ function sourcedSignals(component, signals) {
 }
 
 /** ADR 1123: a tuple source (misuse.mjs SOURCE_AXES `tuple`), and the context of one signal's tuple. */
-const tupleSource = (source) => source === "context-tuple" || source === "context-tuple-two";
+const tupleSource = (source) => source === "context-tuple" || source === "context-tuple-two" || source === "context-tuple-fn";
 const tupleContext = (sig) => `T${sig.name}Ctx`;
 
 function sourceParameter(component, signals) {
@@ -1057,7 +1060,7 @@ function sourcePrelude(component, signals, used) {
     case "context": case "async-context": used.add("useContext"); return ["const ctx = useContext(ValCtx);"];
     case "context-destructured": used.add("useContext"); return [`const { ${keys()} } = useContext(ValCtx);`];
     // ADR 1123: each signal's tuple from its own context.
-    case "context-tuple": case "context-tuple-two": used.add("useContext"); return component.sourced.map((name) => signals.get(name)).map((sig) => `const [${sig.name}, ${sig.setter}] = useContext(${tupleContext(sig)});`);
+    case "context-tuple": case "context-tuple-two": case "context-tuple-fn": used.add("useContext"); return component.sourced.map((name) => signals.get(name)).map((sig) => `const [${sig.name}${sig.setter ? `, ${sig.setter}` : ""}] = useContext(${tupleContext(sig)});`);
     case "module-hook": case "module-default-hook": return [`const { ${keys()} } = useVals();`];
     case "module-hook-member": return ["const vals = useVals();"];
     case "module-hook-direct": return [`const ${keys()} = useVals();`];
@@ -1116,6 +1119,8 @@ function helperImportLine(helper) {
 function sourceTypeNames(component, signals) {
   const { source } = component;
   if (!source || source.startsWith("module") || source.startsWith("package")) return [];
+  // ADR 1123: a tuple source's context names both slot types, whatever the signal's own keys (an async memo's are `Accessor` only).
+  if (tupleSource(source)) return ["Accessor", "Setter"];
   return [...new Set(sourceKeys(component, signals).flatMap(([, type]) => type.match(/\b(Accessor|Setter|StoreSetter|SourceAccessor)\b/g) ?? []))];
 }
 

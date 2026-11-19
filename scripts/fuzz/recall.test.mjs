@@ -72,6 +72,9 @@ describe("every axis value crosses the base grid", () => {
     expect(text("context-tuple")).toMatch(/const \[(\w+), (\w+)\] = useContext\(T\1Ctx\);/);
     expect(text("context-tuple").match(/<T\w+Ctx value=/g)).toHaveLength(1);
     expect(text("context-tuple-two").match(/<T\w+Ctx value=/g)).toHaveLength(2);
+    // The review's F1: the function form over an async memo, for an async template's memos only.
+    const fnText = generateShape({ seed: 1 }, { code: "ASYNC_OUTSIDE_LOADING_BOUNDARY", context: "jsx" }, { binding: "direct", layer: "none", source: "context-tuple-fn" }, 0).built.files["App.tsx"];
+    expect(fnText).toMatch(/const (\w+)a = createMemo\(async \(\) => 1\);\n\s*const \1t = createSignal\(\(\) => \1a\(\)\);/);
   });
   it("a callback form only in a context whose site is in a primitive's callback", () => {
     for (const cell of cellList({ recall: true })) {
