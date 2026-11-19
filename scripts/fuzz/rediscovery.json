@@ -34142,5 +34142,14 @@
   "code": "UNTRACKED_READ_AFTER_AWAIT",
   "ids": ["mx-untracked-read-after-await-js-tostring-x-direct-none", "mx-untracked-read-after-await-js-toprim-x-direct-none", "mx-untracked-read-after-await-js-hasinst-x-direct-none", "mx-untracked-read-after-await-js-tostring-plus-x-direct-none", "mx-untracked-read-after-await-js-hasinst-const-x-direct-none"],
   "rediscovered": "`focus.mjs --codes UNTRACKED_READ_AFTER_AWAIT --grids mx-recall --ids` with the release checker of bundle u 6e26187f1 (same analysis): the judge before this change false-clean on all five, after it recall-gap; the other 15 js-* cells unchanged"
+ },
+ {
+  "finding": "ADR 1123 (in-branch, never on main): the first build recorded a context tuple's slots as a callback's result (phase 1, no summary source), so a read in a helper the body calls (`const dir1 = () => { r1(); return () => {}; }; <p ref={dir1()} />`) certified clean where Chrome reports STRICT_READ_UNTRACKED",
+  "found": "`focus.mjs --codes STRICT_READ_UNTRACKED --grids mx-recall` on the new `context-tuple` source cells (head 87c778afb)",
+  "fixed": "ADR 1123 (`push_context_tuple_sources`: the slots are recorded as a direct creation's array pattern, the accessor a summary source of phase 0)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": ["mx-strict-read-untracked-ref-factory-body-signal-direct-none-s-context-tuple"],
+  "rediscovered": "87c778afb false-clean on it (1 of the 212 mx-recall STRICT tuple programs); 1418a3cde agree, and no false clean or false positive on any of the 1,054 tuple programs of mx-recall and lg-recall"
  }
 ]

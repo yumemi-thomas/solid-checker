@@ -63,6 +63,16 @@ describe("every axis value crosses the base grid", () => {
     for (const form of CALLBACK_FORMS) expect(seen).toContain(`cb:${form}`);
     for (const source of SOURCE_AXES.files) expect(seen).toContain(`s:${source}`);
   });
+  it("ADR 1123: the tuple sources take plain signals on the direct binding with no layer, and their twin adds an outer provider", () => {
+    const tuple = cellList({ recall: true }).flatMap((cell) => recallShapes(cell.code, cell.context, FULL).filter((shape) => SOURCE_AXES.tuple.includes(shape.source)));
+    expect(tuple.length).toBeGreaterThan(0);
+    expect(tuple.every((shape) => shape.binding === "direct" && shape.layer === "none")).toBe(true);
+    const cell = { code: "STRICT_READ_UNTRACKED", context: "body" };
+    const text = (source) => generateShape({ seed: 1 }, cell, { variant: "signal", binding: "direct", layer: "none", source }, 0).built.files["App.tsx"];
+    expect(text("context-tuple")).toMatch(/const \[(\w+), (\w+)\] = useContext\(T\1Ctx\);/);
+    expect(text("context-tuple").match(/<T\w+Ctx value=/g)).toHaveLength(1);
+    expect(text("context-tuple-two").match(/<T\w+Ctx value=/g)).toHaveLength(2);
+  });
   it("a callback form only in a context whose site is in a primitive's callback", () => {
     for (const cell of cellList({ recall: true })) {
       const callbacks = recallShapes(cell.code, cell.context, FULL).filter((shape) => shape.callback);
