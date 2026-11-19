@@ -34182,5 +34182,18 @@
    "mx-strict-read-untracked-evt-apply-stored-stringify-spread-signal-direct-none"
   ],
   "rediscovered": "focus on the three contexts' mx-recall programs (6,450): 122120032 4,254 false cleans (1,418 per context) and 108 false positives (36 per context); FIXED here (0 and 0)"
+ },
+ {
+  "finding": "ADR 1125 head d40e3f3cd reported missing-context-provider (CONTEXT_NOT_FOUND) at `useContext` in a JSX handler where Chrome rc.21 throws NO_OWNER_CONTEXT: the dispatch veto made the handler possibly-owned, and the provider claim counted that possibility as an owned run",
+  "found": "#296 smoke-census (run 44606315559): 13 false positives, mx-census CONTEXT_NOT_FOUND in the evt-apply-* delivery breakers, tbl-json-stringify-h and tbl-reflect-apply-h",
+  "fixed": "ADR 1125 (#296): competing_checks: a context-provider requirement in a JSX handler whose ownerless proof the dispatch veto withholds is uncertifiable (earlier_check_throws): a delivery runs it with no owner, where NO_OWNER_CONTEXT throws first",
+  "grid": "mx-census",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-evt-apply-event-replaced-x-direct-none",
+   "mx-context-not-found-evt-apply-stored-values-x-direct-none",
+   "mx-context-not-found-tbl-reflect-apply-h-x-direct-none"
+  ],
+  "rediscovered": "focus on the 16 false-positive ids of the run (mx-census CONTEXT_NOT_FOUND): d40e3f3cd 13 false positives plus the 3 known open (dny-flush-*, scripts/fuzz/open-defects.json); FIXED here (13 not-fired, the 3 known open unchanged)"
  }
 ]

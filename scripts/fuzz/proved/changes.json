@@ -90,6 +90,9 @@
     "lg-store-write-outside-setter-handler-in-setter-alias-handoff-reflect-module-barrel"
    ],
    "adr": "ADR 1125",
+   "kind": "fix",
+   "witness": "mx-strict-read-untracked-evt-apply-event-replaced-signal-direct-none (and fixtures/reactive-ir/event-dispatch-shadow/variants/event-replaced): Chrome rc.21 warns STRICT_READ_UNTRACKED at a handler read the removed proof certified, the handler run with no event after `globalThis.event` is replaced (ADR 1125 G1; rediscovery row in scripts/fuzz/rediscovery.json)",
+   "collateral": 4,
    "why": "ADR 1125 (#296 smoke, run 44606315559): App.tsx uses `Reflect` (`Reflect.apply`: proxy|Reflect); event delivery is not proven intact, so the dispatch veto withholds the handler's event proofs (owner, read, flush, listener, apply) and the verdict is uncertifiable (fail closed). Hazard per program from the blocker census (event-delivery-hazard) on d40e3f3cd. recovered in ADR 1133: Reflect.apply/construct/get/has only call or read, so only a writing member (defineProperty, set, setPrototypeOf, deleteProperty) or a key reader (ownKeys) is a hazard; an unknown Reflect member stays one."
   },
   {
@@ -101,6 +104,9 @@
     "lg-strict-read-untracked-tbl-reflect-apply-h-memo-direct-none"
    ],
    "adr": "ADR 1125",
+   "kind": "fix",
+   "witness": "mx-strict-read-untracked-evt-apply-event-replaced-signal-direct-none (and fixtures/reactive-ir/event-dispatch-shadow/variants/event-replaced): Chrome rc.21 warns STRICT_READ_UNTRACKED at a handler read the removed proof certified, the handler run with no event after `globalThis.event` is replaced (ADR 1125 G1; rediscovery row in scripts/fuzz/rediscovery.json)",
+   "collateral": 4,
    "why": "ADR 1125 (#296 smoke, run 44606315559): App.tsx uses `Reflect` (`Reflect.apply`: proxy|Reflect); event delivery is not proven intact, so the dispatch veto withholds the handler's event proofs (owner, read, flush, listener, apply) and the verdict is uncertifiable (fail closed). Hazard per program from the blocker census (event-delivery-hazard) on d40e3f3cd. recovered in ADR 1133: Reflect.apply/construct/get/has only call or read, so only a writing member (defineProperty, set, setPrototypeOf, deleteProperty) or a key reader (ownKeys) is a hazard; an unknown Reflect member stays one."
   },
   {
@@ -112,6 +118,9 @@
     "lg-strict-read-untracked-tbl-json-stringify-h-memo-direct-none"
    ],
    "adr": "ADR 1125",
+   "kind": "fix",
+   "witness": "mx-strict-read-untracked-evt-apply-event-replaced-signal-direct-none (and fixtures/reactive-ir/event-dispatch-shadow/variants/event-replaced): Chrome rc.21 warns STRICT_READ_UNTRACKED at a handler read the removed proof certified, the handler run with no event after `globalThis.event` is replaced (ADR 1125 G1; rediscovery row in scripts/fuzz/rediscovery.json)",
+   "collateral": 4,
    "why": "ADR 1125 (#296 smoke, run 44606315559): App.tsx calls `JSON.stringify` with a replacer (key-reader JSON.stringify), which is handed every own enumerable value of every object it walks, Solid's stored handler included; event delivery is not proven intact, so the dispatch veto withholds the handler's event proofs (owner, read, flush, listener, apply) and the verdict is uncertifiable (fail closed). Hazard per program from the blocker census (event-delivery-hazard) on d40e3f3cd. owed: a replacer that calls none of the values it is given, or a walked value that is no element, is not proven by any fact yet (open-work: ADR 1125 N4 narrowings)."
   },
   {
@@ -123,6 +132,9 @@
     "mx-settled-cleanup-unowned-handler-x-destructured-handoff-reflect-module-star"
    ],
    "adr": "ADR 1125",
+   "kind": "fix",
+   "witness": "mx-strict-read-untracked-evt-apply-event-replaced-signal-direct-none (and fixtures/reactive-ir/event-dispatch-shadow/variants/event-replaced): Chrome rc.21 warns STRICT_READ_UNTRACKED at a handler read the removed proof certified, the handler run with no event after `globalThis.event` is replaced (ADR 1125 G1; rediscovery row in scripts/fuzz/rediscovery.json)",
+   "collateral": 4,
    "why": "ADR 1125 (#296 smoke, run 44606315559): App.tsx uses `Reflect` (`Reflect.apply`: proxy|Reflect); event delivery is not proven intact, so the dispatch veto withholds the handler's event proofs (owner, read, flush, listener, apply) and the verdict is recall-gap (fail closed). Hazard per program from the blocker census (event-delivery-hazard) on d40e3f3cd. recovered in ADR 1133: Reflect.apply/construct/get/has only call or read, so only a writing member (defineProperty, set, setPrototypeOf, deleteProperty) or a key reader (ownKeys) is a hazard; an unknown Reflect member stays one."
   },
   {
@@ -142,6 +154,9 @@
     "mx-no-owner-effect-handler-render-direct-none-pk-call-phantom"
    ],
    "adr": "ADR 1125",
+   "kind": "fix",
+   "witness": "mx-strict-read-untracked-evt-apply-event-replaced-signal-direct-none (and fixtures/reactive-ir/event-dispatch-shadow/variants/event-replaced): Chrome rc.21 warns STRICT_READ_UNTRACKED at a handler read the removed proof certified, the handler run with no event after `globalThis.event` is replaced (ADR 1125 G1; rediscovery row in scripts/fuzz/rediscovery.json)",
+   "collateral": 12,
    "why": "ADR 1125 (#296 smoke, run 44606315559): App.tsx loads a package the build does not read (the `pk-call-phantom` layer's uninstalled package: unread-module); event delivery is not proven intact, so the dispatch veto withholds the handler's event proofs (owner, read, flush, listener, apply) and the verdict is recall-gap (fail closed). Hazard per program from the blocker census (event-delivery-hazard) on d40e3f3cd. owed until a fact proves the unread module shares no page with the handler or cannot reach the listener API (open-work: ADR 1125 F8, the realm is the program)."
   },
   {
@@ -150,6 +165,9 @@
     "mx-sync-node-received-async-dny-formdata-submit-effect-direct-none"
    ],
    "adr": "ADR 1125",
+   "kind": "fix",
+   "witness": "mx-strict-read-untracked-evt-apply-event-replaced-signal-direct-none (and fixtures/reactive-ir/event-dispatch-shadow/variants/event-replaced): Chrome rc.21 warns STRICT_READ_UNTRACKED at a handler read the removed proof certified, the handler run with no event after `globalThis.event` is replaced (ADR 1125 G1; rediscovery row in scripts/fuzz/rediscovery.json)",
+   "collateral": 1,
    "why": "ADR 1125 (#296 smoke, run 44606315559): App.tsx writes a literal `javascript:` URL (`<form action=\"javascript:void 0\">`: code-from-string JavascriptUrl); event delivery is not proven intact, so the dispatch veto withholds the handler's event proofs (owner, read, flush, listener, apply) and the verdict is recall-gap (fail closed). Hazard per program from the blocker census (event-delivery-hazard) on d40e3f3cd. owed: a `javascript:` URL whose code is proven inert (`void 0`) is not read by the sink scan."
   },
   {
@@ -165,6 +183,9 @@
     "mx-sync-node-received-async-tbl-reflect-apply-h-memo-direct-none"
    ],
    "adr": "ADR 1125",
+   "kind": "fix",
+   "witness": "mx-strict-read-untracked-evt-apply-event-replaced-signal-direct-none (and fixtures/reactive-ir/event-dispatch-shadow/variants/event-replaced): Chrome rc.21 warns STRICT_READ_UNTRACKED at a handler read the removed proof certified, the handler run with no event after `globalThis.event` is replaced (ADR 1125 G1; rediscovery row in scripts/fuzz/rediscovery.json)",
+   "collateral": 8,
    "why": "ADR 1125 (#296 smoke, run 44606315559): App.tsx uses `Reflect` (`Reflect.apply`: proxy|Reflect); event delivery is not proven intact, so the dispatch veto withholds the handler's event proofs (owner, read, flush, listener, apply) and the verdict is recall-gap (fail closed). Hazard per program from the blocker census (event-delivery-hazard) on d40e3f3cd. recovered in ADR 1133: Reflect.apply/construct/get/has only call or read, so only a writing member (defineProperty, set, setPrototypeOf, deleteProperty) or a key reader (ownKeys) is a hazard; an unknown Reflect member stays one."
   },
   {
@@ -173,6 +194,9 @@
     "mx-sync-node-received-async-tbl-json-stringify-h-effect-direct-none"
    ],
    "adr": "ADR 1125",
+   "kind": "fix",
+   "witness": "mx-strict-read-untracked-evt-apply-event-replaced-signal-direct-none (and fixtures/reactive-ir/event-dispatch-shadow/variants/event-replaced): Chrome rc.21 warns STRICT_READ_UNTRACKED at a handler read the removed proof certified, the handler run with no event after `globalThis.event` is replaced (ADR 1125 G1; rediscovery row in scripts/fuzz/rediscovery.json)",
+   "collateral": 1,
    "why": "ADR 1125 (#296 smoke, run 44606315559): App.tsx calls `JSON.stringify` with a replacer (key-reader JSON.stringify), which is handed every own enumerable value of every object it walks, Solid's stored handler included; event delivery is not proven intact, so the dispatch veto withholds the handler's event proofs (owner, read, flush, listener, apply) and the verdict is recall-gap (fail closed). Hazard per program from the blocker census (event-delivery-hazard) on d40e3f3cd. owed: a replacer that calls none of the values it is given, or a walked value that is no element, is not proven by any fact yet (open-work: ADR 1125 N4 narrowings)."
   },
   {
@@ -181,6 +205,9 @@
     "mx-sync-node-received-async-tbl-promiselike-then-h-effect-direct-none"
    ],
    "adr": "ADR 1125",
+   "kind": "fix",
+   "witness": "mx-strict-read-untracked-evt-apply-event-replaced-signal-direct-none (and fixtures/reactive-ir/event-dispatch-shadow/variants/event-replaced): Chrome rc.21 warns STRICT_READ_UNTRACKED at a handler read the removed proof certified, the handler run with no event after `globalThis.event` is replaced (ADR 1125 G1; rediscovery row in scripts/fuzz/rediscovery.json)",
+   "collateral": 1,
    "why": "ADR 1125 (#296 smoke, run 44606315559): App.tsx defines a `then` method on an object literal (coercion-hook then), which an await or a promise resolution calls with the object as `this`; event delivery is not proven intact, so the dispatch veto withholds the handler's event proofs (owner, read, flush, listener, apply) and the verdict is recall-gap (fail closed). Hazard per program from the blocker census (event-delivery-hazard) on d40e3f3cd. recovered in ADR 1133 if the facts' `contained` mark on a hook defined on a fresh object literal is honoured by the delivery scan (Fable round 2 N4's narrowing); otherwise owed."
   }
  ]

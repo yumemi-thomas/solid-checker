@@ -151,6 +151,7 @@ pub(crate) fn mark(
                     .iter()
                     .any(|read| same_call(read, &requirement.location))
                     || later_render_apply_run_only(&requirement.location, lookup)
+                    || in_handler_the_veto_may_leave_unowned(&requirement.location, lookup)
             }
             OwnerRequirementOperation::ContextRead => false,
             operation => {
@@ -321,9 +322,18 @@ fn every_run_refused(site: &Location, anchors: &[&Location], lookup: &SemanticLo
 /// effect's apply may deliver an event to a listener in a shadow tree. That delivery runs the handler inside the apply's effect-callback
 /// window, where the guard throws PRIMITIVE_IN_EFFECT_CALLBACK first, and nothing orders another delivery's run before it.
 fn in_handler_an_apply_may_deliver_in_shadow(site: &Location, lookup: &SemanticLookup<'_>) -> bool {
-    if !lookup.apply_delivery_in_shadow_possible() {
-        return false;
-    }
+    lookup.apply_delivery_in_shadow_possible() && in_jsx_handler(site, lookup)
+}
+
+/// ADR 1125 (#296 smoke census): a context read in a JSX handler whose ownerless proof the dispatch veto withholds. A delivery runs
+/// the handler with no owner, where Solid throws `NO_OWNER_CONTEXT` before it looks for a provider; an owned run is only the veto's
+/// possibility (an apply under an owned flush, a call the scan cannot rule out), so `ContextNotFoundError` is not proven.
+fn in_handler_the_veto_may_leave_unowned(site: &Location, lookup: &SemanticLookup<'_>) -> bool {
+    lookup.synchronous_event_dispatch_present() && in_jsx_handler(site, lookup)
+}
+
+/// Whether `site` sits in the value of a JSX handler attribute (`onScroll`, `onclick`, `on:scroll`).
+fn in_jsx_handler(site: &Location, lookup: &SemanticLookup<'_>) -> bool {
     let Some(file) = lookup.file_by_path(site.path.as_ref()) else {
         return false;
     };
