@@ -9,6 +9,7 @@
 //     [--grids mx-base,mx-src,mx-combo,lg-base,lg-src,lg-combo] [--seed 1] [--out <dir>] [--runtime-diff <per stratum>]
 //     [--oracle-axes code,context,outcome] [--smoke [--sample 0.015] [--sample-seed <n>]] [-- <grid args>]
 //     [--split-codes] [--prune-cases] [--grid-timeout <minutes>] [--heap-mb <MiB>] [--role-log [--roles-against <roles.json>]] [--recall-full]
+//     [--proof-log]   (ADR 1114: the proof gate over each grid's programs, folded to <grid>/proof-hits.jsonl)
 //     [--scratch <dir>] [--sample-big <fraction> [--sample-codes A,B] [--sample-big-seed N] [--sample-big-min K]] [--warm-checker]
 //     [--boundary open|closed|both] [--entry namespace|named]
 //     [--budget-ms 1000] [--budget-mb 500] [--idle-stretch-s 10] [--perf-against <earlier run dir> [--perf-threshold 0.2]]
@@ -46,6 +47,7 @@
 // `--perf-threshold` worse, or runs that are not comparable, need a look. SOLID_CHECKER_FUZZ_PERF=0 records none of it.
 // The loop's oracle sample is stratified by code, context and outcome (every outcome of every context in real Chrome); the full run's
 // by code, context, source, mount and outcome (runtime-diff.mjs DEFAULT_DIFF_AXES), many more programs. `--oracle-axes` picks.
+import { foldProofDir, hitCounts } from "./proof-fold.mjs";
 import { spawnSync } from "node:child_process";
 import { Worker } from "node:worker_threads";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statfsSync, writeFileSync } from "node:fs";
@@ -251,7 +253,8 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     const limit = String(Math.min(HOST_LIMIT, cores));
     return ["--concurrency", limit, "--workers", limit, "--chrome-concurrency", limit];
   };
-  export const hostArgs = (options = {}) => [...hostLimits(options), "--fast-host", "chrome", "--chrome-pages", "reuse", "--chrome-clock", "virtual-time", "--executor", "rust", ...(options.noWarmChecker ? ["--no-warm-checker"] : options.warmChecker ? ["--warm-checker"] : [])];
+  // ADR 1114: the proof log is exact for a one-shot check only (proof_log.rs), so `--proof-log` runs every check one-shot.
+export const hostArgs = (options = {}) => [...hostLimits(options), "--fast-host", "chrome", "--chrome-pages", "reuse", "--chrome-clock", "virtual-time", "--executor", "rust", ...(options.noWarmChecker || options.proofLog ? ["--no-warm-checker"] : options.warmChecker ? ["--warm-checker"] : [])];
 
   /** The lines focus prints before it starts: each grid's program count for the run's codes, and what a sample keeps of it. */
   export function plannedLines({ grids, codes, full = false, sample, sampleBig }) {
@@ -272,7 +275,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     for (let index = 0; index < own.length; index += 2) {
       const key = own[index].replace(/^--/, "").replace(/-([a-z])/g, (_, c) => c.toUpperCase());
       if (key === "smoke") { options.smoke = true; options.codes ??= "all"; index -= 1; continue; }
-      if (key === "allCores" || key === "splitCodes" || key === "pruneCases" || key === "roleLog" || key === "recallFull" || key === "recallLean" || key === "warmChecker" || key === "noWarmChecker") { options[key] = true; index -= 1; continue; }
+      if (key === "allCores" || key === "splitCodes" || key === "pruneCases" || key === "roleLog" || key === "proofLog" || key === "recallFull" || key === "recallLean" || key === "warmChecker" || key === "noWarmChecker") { options[key] = true; index -= 1; continue; }
       if (!["cover", "coverSeed", "coverGrids", "smokeLeg", "oracleCap", "codes", "grids", "seed", "out", "runtimeDiff", "oracleAxes", "sample", "sampleSeed", "checkerBin", "typefacts", "gridTimeout", "heapMb", "rolesAgainst", "scratch", "sampleBig", "sampleCodes", "sampleBigSeed", "sampleBigMin", "budgetMs", "budgetMb", "idleStretchS", "perfAgainst", "perfThreshold", "shard", "boundary", "entry"].includes(key) || own[index + 1] === undefined) throw new Error(`focus.mjs: unknown or empty option ${own[index]}`);
       options[key] = own[index + 1];
     }
@@ -424,7 +427,15 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       // On the output's disk even with a scratch directory: it grows to gigabytes and would fill the scratch's tmpfs.
       const roles = options.roleLog ? roleLogPath(unit.dir) : null;
       if (roles) { mkdirSync(dirname(roles), { recursive: true }); rmSync(roles, { force: true }); }
-      const env = roles ? { ...process.env, SOLID_CHECKER_IR_ROLE_LOG: roles } : process.env;
+      // ADR 1114: the proof gate over the unit's programs: a directory of one log per one-shot checker process, folded once the grid
+      // ran (proof-fold.mjs) into `<unit>/proof-hits.jsonl`, the logs removed as they are read.
+      const proofs = options.proofLog ? `${unit.dir}.proof` : null;
+      if (proofs) { rmSync(proofs, { recursive: true, force: true }); mkdirSync(proofs, { recursive: true }); }
+      const env = {
+        ...process.env,
+        ...(roles ? { SOLID_CHECKER_IR_ROLE_LOG: roles } : {}),
+        ...(proofs ? { SOLID_CHECKER_IR_PROOF_LOG: proofs } : {}),
+      };
       // A unit with none of the sampled codes runs whole without the flag (its report then says nothing of a sample).
       const unitSampled = sampled.length && (options.gridSampleAll !== undefined || !unit.codes || unit.codes.some((code) => sampleCodes.includes(code))) ? sampled : [];
       const run = runGridProcess(join(here, script), ["--seed", options.seed, "--grid", ...shape, ...select, ...unitSampled, ...shardArgs, ...budgetArgs, ...recallArgs, "--out", unit.dir, ...(unitScratch ? ["--scratch", unitScratch] : []), ...tools, ...unitHost, ...options.extra], { logPath, timeoutMs: Number(options.gridTimeout ?? 120) * 60_000, heapMb: heap, env });
@@ -437,6 +448,12 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
       const counted = read.partial !== undefined ? `STOPPED, ${total} programs judged before` : `${total} programs`;
       console.log(`  ${unit.label.padEnd(8)} ${String(seconds).padStart(4)}s  ${counted} ${JSON.stringify(outcomes)}  ${summary}`);
       if (gridSample) { console.log(`           ${sampleLine(gridSample)}`); sampledUnits.push(unit.label); }
+      if (proofs) {
+        const folded = foldProofDir(proofs);
+        mkdirSync(unit.dir, { recursive: true });
+        writeFileSync(join(unit.dir, "proof-hits.jsonl"), folded.hits.map((hit) => JSON.stringify(hit)).join("\n") + (folded.hits.length ? "\n" : ""));
+        console.log(`           proof gate: ${folded.logs} logs, ${folded.programs} programs, ${folded.hits.length} hits ${JSON.stringify(hitCounts(folded.hits))}`);
+      }
       const log = existsSync(logPath) ? readFileSync(logPath, "utf8") : "";
       attention.push(...unitProblems(unit.label, { run, grid: read, total, log, logPath, timeoutMinutes: options.gridTimeout ?? 120 }));
       if (emptyByDesign({ run, grid: read, total })) console.log(`           no programs: the grid has none for ${unit.codes ? unit.codes.join(",") : "these codes"}${gridShard ? ` in shard ${gridShard.index}/${gridShard.count}` : ""}`);
