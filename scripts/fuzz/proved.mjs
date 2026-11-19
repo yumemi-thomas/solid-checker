@@ -80,7 +80,7 @@ export function readLedgerFiles(dir = PROVED_DIR) {
 }
 
 /** The files of the proved directory that are not a grid's ledger. */
-export const NOT_LEDGERS = new Set(["changes.json", "owed.json"]);
+export const NOT_LEDGERS = new Set(["changes.json", "owed.json", "textbook.json"]);
 
 /** Every grid's ledger in `dir` as the ids it holds (keyed entries and unkeyed ids; not the retired): `Map(grid -> Set(ids))`. The cover asks for these programs. */
 export function readLedger(dir = PROVED_DIR) {

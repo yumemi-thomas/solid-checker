@@ -1,1 +1,7 @@
-{ "note": "Our idiom: a todo list in a store, rendered with For, added and toggled through the store setter.", "steps": [] }
+{
+  "note": "Our idiom: a todo list in a store, rendered with For, added and toggled through the store setter.",
+  "steps": [],
+  "mount": [
+    "Todos"
+  ]
+}

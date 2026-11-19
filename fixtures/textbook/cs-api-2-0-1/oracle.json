@@ -1,1 +1,7 @@
-{ "note": "Cheatsheet APIs documented for Solid 2.0.1 (createDeferred, affects/refresh): probes whether rc.21 has them.", "steps": [] }
+{
+  "note": "Cheatsheet APIs documented for Solid 2.0.1 (createDeferred, affects/refresh): probes whether rc.21 has them.",
+  "steps": [],
+  "mount": [
+    "Rows"
+  ]
+}

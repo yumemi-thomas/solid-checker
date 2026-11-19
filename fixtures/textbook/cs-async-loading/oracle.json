@@ -1,1 +1,7 @@
-{ "note": "Cheatsheet Async, in our own words: an async memo read under Loading, with isPending for a refetch.", "steps": [] }
+{
+  "note": "Cheatsheet Async, in our own words: an async memo read under Loading, with isPending for a refetch.",
+  "steps": [],
+  "mount": [
+    "UserCard"
+  ]
+}

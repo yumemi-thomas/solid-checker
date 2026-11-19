@@ -1,1 +1,7 @@
-{ "note": "solidjs/templates solid-v2/basic/src/components/Counter.tsx at e8524a7fb2c2b9ab2da3c68b7829c0632f627dbc (solid-js ^2.0.0), verbatim; App.tsx re-exports its default export by name for the oracle page.", "steps": [] }
+{
+  "note": "solidjs/templates solid-v2/basic/src/components/Counter.tsx at e8524a7fb2c2b9ab2da3c68b7829c0632f627dbc (solid-js ^2.0.0), verbatim, as App.tsx, mounted as the default export.",
+  "steps": [],
+  "mount": [
+    "default"
+  ]
+}

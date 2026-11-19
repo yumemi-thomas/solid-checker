@@ -17,6 +17,8 @@
 //      its ADR, and `owed` may fall, never rise, and an entry never goes (it falls to 0); docs/open-work.md names each ADR that still owes with "owed".
 //   6. (ADR 1118) the ledgers are keyed (`entries`: [key, id]; `ids`: unkeyed; `retired`: churned entries): a key, an id or a retired key held at the
 //      base is held at the head (an entry may move to `retired`, an id into an entry), never dropped.
+//   7. (ADR 1118) the textbook tier (scripts/fuzz/proved/textbook.json, scripts/fuzz/textbook.mjs): a program of the base stays; with the same
+//      bytes (hash), it stays certified if it was and its uncertifiable keys (`u`) only shrink. New bytes are a re-admission, checked by textbook.mjs.
 // No base is a failure, never a pass (COUNT_BASE=<rev> names one). A base with no scripts/fuzz/proved at all is the change that introduces it.
 //
 // Recording an intended change: append the changes row after adding the ADR; `node scripts/fuzz/proved.mjs record --from <run>` adds ids to a
@@ -93,6 +95,20 @@ export function owedProblems({ head, base, changes, baseChanges, decisions, open
     if (row.owed > 0 && !openWork.split("\n").some((line) => line.includes(`ADR ${number}`) && /owed/i.test(line))) problems.push(`proved owed.json: ADR ${number} owes ${row.owed} and no line of docs/open-work.md names it with "owed"`);
   }
   for (const number of before.keys()) if (!after.has(number)) problems.push(`proved owed.json: the entry of ADR ${number} is gone (an entry falls to 0, it never goes)`);
+  return problems;
+}
+
+/** The textbook tier against its base (ADR 1118): `head`, `base` the parsed textbook.json. */
+export function textbookProblems({ head, base }) {
+  const problems = [];
+  for (const [name, was] of Object.entries(base.programs ?? {})) {
+    const now = head.programs?.[name];
+    if (!now) { problems.push(`proved textbook.json: ${name} is gone: a textbook program never leaves the tier`); continue; }
+    if (now.hash !== was.hash) continue;
+    if (was.certified && !now.certified) problems.push(`proved textbook.json: ${name} was certified and is not: a lost proof is named in changes.json, never recorded`);
+    const added = (now.u ?? []).filter((key) => !(was.u ?? []).includes(key));
+    if (added.length) problems.push(`proved textbook.json: ${name} gained ${added.length} uncertifiable key(s) (${added[0]}): the list only shrinks`);
+  }
   return problems;
 }
 
@@ -175,6 +191,8 @@ function main(argv) {
   const parse = (files, name) => { const found = files.find(([n]) => n === name); return found ? JSON.parse(found[1]) : { rows: [] }; };
   problems.push(...changesProblems({ head: parse(headFiles, "changes.json"), base: parse(baseFiles, "changes.json"), decisions, ledgers: headLedgers }));
   problems.push(...ledgerProblems({ head: headLedgers, base: baseLedgers }));
+  const textbookOf = (files) => { const found = files.find(([n]) => n === "textbook.json"); return found ? JSON.parse(found[1]) : { programs: {} }; };
+  problems.push(...textbookProblems({ head: textbookOf(headFiles), base: textbookOf(baseFiles) }));
   problems.push(...owedProblems({ head: parse(headFiles, "owed.json"), base: parse(baseFiles, "owed.json"), changes: parse(headFiles, "changes.json"), baseChanges: parse(baseFiles, "changes.json"), decisions, openWork: read("docs/open-work.md") }));
   // The corpus guard's naming file (scripts/guard/corpus.mjs) is held the same way here, where no corpus is needed: append-only, new rows with their ADR.
   const baseCorpus = git("show", `${revision}:${CORPUS_CHANGES}`);

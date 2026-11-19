@@ -1,1 +1,7 @@
-{ "note": "Our idiom: a Button component that merges default props and forwards the rest to the element.", "steps": [] }
+{
+  "note": "Our idiom: a Button component that merges default props and forwards the rest to the element.",
+  "steps": [],
+  "mount": [
+    "Toolbar"
+  ]
+}

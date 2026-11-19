@@ -53,6 +53,12 @@ describe("mainSourceFor (ADR 0501)", () => {
     expect(main).toContain("mounted.has(name)");
     expect(main).toContain("async function exercise()");
   });
+  it("mounts a default export as DefaultExport (ADR 1118: the official templates' App.tsx exports its component by default)", () => {
+    const main = mainSourceFor(JSON.stringify({ mount: ["default"] }), "export default function App() {\n  return <div />;\n}\n");
+    expect(main).toContain('import { default as DefaultExport } from "./App";');
+    expect(main).toContain('render(() => <DefaultExport />, host("default"));');
+    expect(main).not.toContain("import * as mod");
+  });
   it("leaves the namespace loop out when the mount names every export it would enter (ADR 1089), and keeps it otherwise", () => {
     const oracle = JSON.stringify({ mount: ["C1"] });
     const app = 'export function C1() {\n  return <div />;\n}\nexport const helper = 1;\n';

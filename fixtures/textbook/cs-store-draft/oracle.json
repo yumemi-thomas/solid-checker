@@ -1,1 +1,7 @@
-{ "note": "Cheatsheet Stores, in our own words: draft-first store setters, one mutating and one returning a filtered list.", "steps": [] }
+{
+  "note": "Cheatsheet Stores, in our own words: draft-first store setters, one mutating and one returning a filtered list.",
+  "steps": [],
+  "mount": [
+    "Tags"
+  ]
+}

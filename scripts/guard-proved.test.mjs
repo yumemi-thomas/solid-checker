@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 
-import { changesProblems, ledgerProblems, ledgersOf, knownProblems, owedProblems } from "./guard/proved.mjs";
+import { changesProblems, ledgerProblems, ledgersOf, knownProblems, owedProblems, textbookProblems } from "./guard/proved.mjs";
 
 // ADR 1012: the proved-verdict ledger and its naming file are held against the base, on in-memory files.
 const decisions = '<a id="adr-1012"></a>\n## ADR 1012 — x\n<a id="adr-0803"></a>\n## ADR 0803 — y\n';
@@ -138,4 +138,14 @@ test("ledger files: a file names its own grid and lists its ids sorted and disti
   const unsorted = [];
   ledgersOf([["mx-recall.json", JSON.stringify({ grid: "mx-recall", ids: ["b", "a"] })]], unsorted);
   assert.match(unsorted[0], /ids are not sorted/);
+});
+
+test("textbook.json (ADR 1118): a program stays; with the same bytes it stays certified and its uncertifiable keys only shrink", () => {
+  const base = { programs: { a: { hash: "h1", certified: true, u: [] }, b: { hash: "h2", certified: false, u: ["k1", "k2"] } } };
+  assert.deepEqual(textbookProblems({ head: { programs: { a: base.programs.a, b: { hash: "h2", certified: false, u: ["k1"] } } }, base }), []);
+  assert.match(textbookProblems({ head: { programs: { a: base.programs.a } }, base })[0], /b is gone/);
+  assert.match(textbookProblems({ head: { programs: { a: { hash: "h1", certified: false, u: [] }, b: base.programs.b } }, base })[0], /was certified and is not/);
+  assert.match(textbookProblems({ head: { programs: { a: base.programs.a, b: { hash: "h2", certified: false, u: ["k1", "k2", "k3"] } } }, base })[0], /gained 1 uncertifiable key/);
+  // new bytes are a re-admission, which textbook.mjs checks with the checker
+  assert.deepEqual(textbookProblems({ head: { programs: { a: base.programs.a, b: { hash: "h3", certified: false, u: ["k9"] } } }, base }), []);
 });

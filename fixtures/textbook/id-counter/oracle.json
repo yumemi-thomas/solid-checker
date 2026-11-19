@@ -1,1 +1,7 @@
-{ "note": "Our idiom: a counter with increment and reset.", "steps": [] }
+{
+  "note": "Our idiom: a counter with increment and reset.",
+  "steps": [],
+  "mount": [
+    "Counter"
+  ]
+}

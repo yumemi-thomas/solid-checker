@@ -1,1 +1,7 @@
-{ "note": "Cheatsheet Form inputs, in our own words: a controlled text input and checkbox bound to signals.", "steps": [] }
+{
+  "note": "Cheatsheet Form inputs, in our own words: a controlled text input and checkbox bound to signals.",
+  "steps": [],
+  "mount": [
+    "Controlled"
+  ]
+}

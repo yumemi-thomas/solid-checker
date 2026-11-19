@@ -1,1 +1,7 @@
-{ "note": "Cheatsheet Refs and directives, in our own words: an element ref, a directive factory with a two-phase setup, and layout work in onSettled.", "steps": [] }
+{
+  "note": "Cheatsheet Refs and directives, in our own words: an element ref, a directive factory with a two-phase setup, and layout work in onSettled.",
+  "steps": [],
+  "mount": [
+    "Focused"
+  ]
+}
