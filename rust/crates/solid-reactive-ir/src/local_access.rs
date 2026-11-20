@@ -6119,6 +6119,32 @@ impl LocalAccessContext<'_, '_> {
     /// handed to by name, whose run ADR 0563's predicate decides.
     /// A function a primitive holds in an options bundle (an effect's `error`
     /// arm), or a tag this walk follows to its template: both have a place.
+    /// ADR 1130: whether a direct call of the function around `span` (through any binding it has, ADR 1127) runs where an
+    /// untracked read reports, or where nothing places it: the read runs there with the call's role.
+    fn named_calls_report(
+        &self,
+        file: &solid_facts::FileFacts,
+        span: solid_facts::core::Span,
+        allowed: &[solid_facts::core::Span],
+    ) -> bool {
+        let Some(function) = containing_ast_function(&file.ast, span) else {
+            return true;
+        };
+        crate::execution_role::function_called_by_name(file, function, self.lookup)
+            .into_iter()
+            .any(|call| {
+                let role = crate::execution_role::read_execution_role(
+                    file,
+                    call,
+                    allowed,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                );
+                role.reports_untracked_read() || role == ExecutionRole::Unknown
+            })
+    }
+
     fn placed_elsewhere(
         &self,
         file: &solid_facts::FileFacts,
@@ -7996,8 +8022,16 @@ impl LocalAccessContext<'_, '_> {
                 || (nested && handed_to_unknown_code(file, member.span, self.lookup))
                 || escapes
             {
-                if crate::execution_role::named_at_tracked_position(file, member.span, self.lookup)
-                {
+                // ADR 1130: the tracked position is every way into the function only with its direct calls placed where no
+                // untracked read reports: a store's read is carried to no row at a call the summaries do not place (an action
+                // step's `f()`, `createEffect(f, …); f()` in an apply), so such a call leaves the read unplaced here.
+                let tracked = crate::execution_role::named_at_tracked_position(
+                    file,
+                    member.span,
+                    self.lookup,
+                );
+                let calls_report = tracked && self.named_calls_report(file, member.span, allowed);
+                if tracked && !calls_report {
                     result.ends.end_with(
                         file,
                         member.span,
@@ -8014,7 +8048,11 @@ impl LocalAccessContext<'_, '_> {
                 // Only a component prop's read: the summaries carry a store's or an accessor's read of such a literal to the call.
                 let handed_literal = self.prop_sources.contains_key(symbol)
                     && handed_anonymous_literal(file, member.span, self.lookup);
-                if !(unplaced || handed_literal || placed_nowhere(file, member.span, self.lookup)) {
+                if !(calls_report
+                    || unplaced
+                    || handed_literal
+                    || placed_nowhere(file, member.span, self.lookup))
+                {
                     let ends_before = result.ends.len();
                     result.ends.end_with(
                         file,
@@ -8041,7 +8079,9 @@ impl LocalAccessContext<'_, '_> {
                     || {
                         format!(
                             "cause|read-unknown|member|{}",
-                            if handed_literal {
+                            if calls_report {
+                                "tracked-also-called"
+                            } else if handed_literal {
                                 "handed-literal"
                             } else if gate_refuses {
                                 "gate-refuses"

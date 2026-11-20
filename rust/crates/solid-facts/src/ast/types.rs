@@ -311,6 +311,14 @@ pub struct AstFacts {
     /// is this checker's to report.
     #[serde(default)]
     pub coercive_operands: Vec<CoerciveOperandFact>,
+    /// Every operator expression that converts an operand to a primitive or a property key, by span, sorted (facts schema 103, ADR 1114 family 3; the
+    /// expression, where V8 places the conversion, not the operand), when that operand is no literal: both sides of `==`, `!=`, the
+    /// relational, arithmetic, shift and bitwise binaries and `+`; the left of `in`; the operand of unary `+`, `-`, `~` and of `++`/`--`; both sides of a
+    /// compound assignment that is not logical; and a computed key that is no literal (a member, an object or class property). An object there runs its
+    /// `Symbol.toPrimitive`, `valueOf` or `toString`, which a package may have written on a built-in's prototype. `===`, `!==`, `instanceof`, `!`,
+    /// `typeof`, `void` and `delete` convert nothing. A template's substitutions are [`AstFacts::template_literals`]'.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub converting_operators: Vec<Span>,
     /// Every operand span of an operator that applies ToPrimitive to it, by
     /// span, sorted: the binary and compound-assignment operators the Type
     /// Facts producer's `coercingBinaryOperators` lists (arithmetic, the four
@@ -356,6 +364,10 @@ pub struct AstFacts {
     /// trap for `in`; `Symbol.hasInstance` and a proxy's `getPrototypeOf` trap for `instanceof`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub relation_operators: Vec<RelationOperatorFact>,
+    /// Every identifier reference's position by its parent node, sorted by span (facts schema 102, ADR 1114 families 2-4): the site
+    /// universe classifies every reference of a reactive source by it, with no default.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reference_positions: Vec<ReferencePositionFact>,
     #[serde(default)]
     pub assignments: Vec<AssignmentFact>,
     /// Exact simple assignment targets, including destructuring leaves,
@@ -2006,6 +2018,136 @@ pub enum CoerciveOperandKind {
     LooseEquality,
 }
 
+/// The position of one identifier reference ([`AstFacts::reference_positions`], ADR 1114 families 2-4): `span` the reference, `at` the
+/// outermost transparent wrapper around it (`x as T`, `x!`), the expression the position holds.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReferencePositionFact {
+    pub span: Span,
+    pub at: Span,
+    pub position: ReferencePosition,
+}
+
+/// Where a reference's value goes, by its parent node: closed, one variant per slot (`reference_positions.rs` matches every Oxc node kind).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum ReferencePosition {
+    /// The callee of a call: `x()`.
+    Callee,
+    /// An argument of a call (`index` its position; `u32::MAX` if no argument matched).
+    Argument { index: u32 },
+    /// The callee of `new`.
+    NewCallee,
+    /// An argument of `new`.
+    NewArgument { index: u32 },
+    /// The tag of a tagged template: ``x`...` `` (a call).
+    TaggedTemplateTag,
+    /// An expression of a template literal: `${x}` (a string coercion).
+    TemplateExpression,
+    /// The object of a member access: `x.a`, `x[k]`, `x.#p`.
+    MemberObject,
+    /// The key of a computed member: `o[x]`.
+    ComputedKey,
+    /// The target of an assignment: `x = v` (`compound`: `x += v` also reads it).
+    AssignmentTarget { compound: bool },
+    /// The value of an assignment (`pattern`: the target is a destructuring pattern, `({ a } = x)`).
+    AssignmentValue { pattern: bool },
+    /// The operand of `++`/`--`.
+    UpdateOperand,
+    /// A name a destructuring assignment writes: `[x] = v`, `({ a: x } = v)`.
+    PatternTarget,
+    /// A declarator's initializer (`pattern`: the declarator destructures it, `const { a } = x`).
+    Initializer { pattern: bool },
+    /// A default value: of a binding or assignment pattern, or of a parameter (`function f(a = x)`).
+    PatternDefault,
+    /// A computed key: of an object literal, a pattern, a class member.
+    PropertyKey,
+    /// The value of an object literal property (`shorthand`: `{ x }`).
+    PropertyValue { shorthand: bool },
+    /// A class field's or accessor's initializer.
+    ClassFieldValue,
+    /// A spread: `...x` in an array, an object or a call.
+    Spread,
+    /// An element of an array literal.
+    ArrayElement,
+    /// `return x`.
+    Return,
+    /// A concise arrow's body: `() => x`.
+    ArrowBody,
+    /// `yield x`.
+    Yield,
+    /// `await x`.
+    Await,
+    /// `throw x`.
+    Throw,
+    /// `typeof x`.
+    Typeof,
+    /// `void x`.
+    Void,
+    /// `delete x` (on a bare name).
+    Delete,
+    /// The operand of `!`, `-`, `+`, `~`.
+    UnaryOperand,
+    /// An operand of a binary operator.
+    BinaryOperand,
+    /// The right operand of `#p in x`.
+    PrivateIn,
+    /// An operand of `&&`, `||`, `??`.
+    LogicalOperand,
+    /// The test of `?:`.
+    ConditionalTest,
+    /// A branch of `?:`.
+    ConditionalBranch,
+    /// An element of a comma sequence (`last`: its value is the sequence's).
+    Sequence { last: bool },
+    /// An expression statement's expression (its value is dropped).
+    Statement,
+    /// The test of `if`, `while`, `do`, `for`.
+    Test,
+    /// A `for` statement's expression initializer.
+    ForInit,
+    /// A `for` statement's update.
+    ForUpdate,
+    /// The iterated object of `for-in` or `for-of`.
+    ForInOfSource,
+    /// The name `for-in` or `for-of` assigns.
+    ForInOfTarget,
+    /// The discriminant of `switch`.
+    SwitchDiscriminant,
+    /// The test of a `case`.
+    CaseTest,
+    /// The object of `with`.
+    WithObject,
+    /// A JSX expression container: a child or an attribute value.
+    JsxExpression,
+    /// A JSX spread attribute or child.
+    JsxSpread,
+    /// A JSX element's tag: `<X>`.
+    JsxTag,
+    /// The object of a JSX member tag: `<X.Y>`.
+    JsxMemberObject,
+    /// A local name of `export { x }`.
+    ExportSpecifier,
+    /// `export default x`.
+    ExportDefault,
+    /// A class's heritage: `class C extends x`.
+    ClassExtends,
+    /// A decorator's expression.
+    Decorator,
+    /// The specifier or options of a dynamic `import()`.
+    ImportSource,
+    /// `export = x`.
+    TsExport,
+    /// An enum member's initializer.
+    EnumInitializer,
+    /// `import a = x.y`: an alias of a runtime value.
+    TsImportAlias,
+    /// A TypeScript type position: erased, nothing runs.
+    TypeOnly,
+    /// A parent that holds no reference as a direct child in valid code: named per node kind, never a default.
+    Other,
+}
+
 /// An `in` or `instanceof` binary ([`AstFacts::relation_operators`]).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -2626,11 +2768,13 @@ impl AstFacts {
             object_get_shapes: Vec::new(),
             template_literals: Vec::new(),
             coercive_operands: Vec::new(),
+            converting_operators: Vec::new(),
             coercing_operands: Vec::new(),
             primitive_results: Vec::new(),
             iterated_operands: Vec::new(),
             key_probed_operands: Vec::new(),
             relation_operators: Vec::new(),
+            reference_positions: Vec::new(),
             assignments: Vec::new(),
             write_targets: Vec::new(),
             deleted_targets: Vec::new(),

@@ -106,6 +106,56 @@ describe("callStarts", () => {
     // A left operand that runs code frames itself: its frame is not the operator's.
     expect(at(4, 7)).not.toContainEqual({ line: 4, column: 13 });
   });
+  // ADR 1117c: the 1117b ranges stand for a row only where nothing else in them can frame there.
+  describe("the 1117b ranges only where nothing else frames there (ADR 1117c)", () => {
+    const head = "const o = {}; const p = {}; const jv: unknown = {}; const a = { b: 1 }; const K = {} as any;\n";
+    const lines = (...body) => callStarts(head + body.join("\n") + "\n");
+    it("keeps 1117b's cells: an inert left operand's frame stands for the instanceof", () => {
+      const at = lines("void ({} instanceof K);", "const b = {} instanceof K; void b;", "if (jv instanceof K) void 0;", "jv instanceof K;", "void ([0, jv] instanceof K);", "void ({ x: jv, o } instanceof K);",
+        "function h(q: unknown) { return q instanceof K; }");
+      expect(at(2, 9)).toContainEqual({ line: 2, column: 7 });
+      expect(at(3, 12)).toContainEqual({ line: 3, column: 11 });
+      expect(at(4, 5)).toContainEqual({ line: 4, column: 5 });
+      expect(at(4, 8)).toContainEqual({ line: 4, column: 5 });
+      expect(at(5, 2)).toContainEqual({ line: 5, column: 1 });
+      expect(at(6, 12)).toContainEqual({ line: 6, column: 7 });
+      expect(at(7, 20)).toContainEqual({ line: 7, column: 7 });
+      expect(at(8, 34)).toContainEqual({ line: 8, column: 33 });
+    });
+    it("gives no instanceof range to a left operand holding a member read, a call, a global or a spread", () => {
+      const at = lines("void ([a.b] instanceof K);", "void ({ x: a.b } instanceof K);", "void ((a.b || {}) instanceof K);", "void ([g] instanceof K);", "void ({ a: g } instanceof K);",
+        "void ([0, a.b] instanceof K);", "void ([f()] instanceof K);", "void ([...xs] instanceof K);", "void ({ [jv as string]: 1 } instanceof K);");
+      const binary = { column: 7 };
+      for (const [line, columns] of [[2, [8, 9, 10, 11, 13]], [3, [8, 12, 13, 14, 16]], [4, [8, 9, 10, 12, 15]], [5, [8, 9]], [6, [9, 12]], [7, [8, 11, 13]], [8, [8, 9]], [9, [8, 11]], [10, [8, 10]]]) {
+        for (const column of columns) expect(at(line, column)).not.toContainEqual({ line, ...binary });
+      }
+      // The member read keeps its own row: the access's start.
+      expect(at(2, 10)).toContainEqual({ line: 2, column: 8 });
+      expect(at(3, 14)).toContainEqual({ line: 3, column: 12 });
+    });
+    it("takes a coercing binary's start to its right operand only after a primitive literal", () => {
+      const at = lines('void ("a" + o);', 'f("a" + o);', 'void ("a" + g);', "void (g + o);", "void (p + o);", "void (p + o + g);", "void ({} + o);", "void `${o}` + g;");
+      expect(at(2, 7)).toContainEqual({ line: 2, column: 13 });
+      expect(at(3, 3)).toContainEqual({ line: 3, column: 9 });
+      expect(at(4, 7)).toContainEqual({ line: 4, column: 13 });
+      // The left operand's own frame is at the same start: a global's getter, an object's coercion, an inner binary's.
+      expect(at(5, 7)).toEqual([{ line: 5, column: 7 }]);
+      expect(at(6, 7)).toEqual([{ line: 6, column: 7 }]);
+      expect(at(7, 7)).toEqual([{ line: 7, column: 7 }]);
+      expect(at(8, 7)).toEqual([{ line: 8, column: 7 }]);
+      expect(at(9, 1)).toEqual([{ line: 9, column: 1 }]);
+    });
+    it("takes a template's wrapper to its substitutions only where the wrapper starts no larger expression", () => {
+      const at = lines("void `${o}`;", "void typeof `${o}`;", "void `${o}` + g;", "void `${o}`, g;", "const s = void `${o}`;");
+      expect(at(2, 1)).toContainEqual({ line: 2, column: 9 });
+      expect(at(3, 1)).toContainEqual({ line: 3, column: 16 });
+      expect(at(4, 1)).toEqual([{ line: 4, column: 1 }]);
+      expect(at(5, 1)).toEqual([{ line: 5, column: 1 }]);
+      expect(at(6, 11)).toContainEqual({ line: 6, column: 19 });
+      // The template's own start still stands for its substitution, as on main.
+      expect(at(4, 6)).toContainEqual({ line: 4, column: 9 });
+    });
+  });
   it("takes a frame at `in` to its right operand, and a tagged call's template to its tag", () => {
     const at = callStarts('v = "v" in s1;\nhf`x`;');
     expect(at(1, 5)).toContainEqual({ line: 1, column: 12 });

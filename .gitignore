@@ -1417,6 +1417,10 @@ packages/wasm/owned/
 !fixtures/reactive-ir/fresh-target-definer-shadowed/node_modules/**
 !fixtures/reactive-ir/index-key-open/node_modules/
 !fixtures/reactive-ir/index-key-open/node_modules/**
+!fixtures/reactive-ir/disabled-handler-owner/node_modules/
+!fixtures/reactive-ir/disabled-handler-owner/node_modules/**
+!fixtures/reactive-ir/disabled-handler-owner-enabled/node_modules/
+!fixtures/reactive-ir/disabled-handler-owner-enabled/node_modules/**
 !fixtures/reactive-ir/rc21-listener-bare-global/node_modules/
 !fixtures/reactive-ir/rc21-listener-bare-global/node_modules/**
 !fixtures/reactive-ir/rc21-listener-bare-shadowed/node_modules/
@@ -1944,3 +1948,11 @@ packages/wasm/owned/
 !fixtures/reactive-ir/event-dispatch-shadow/variants/key-reader-optional/node_modules/**
 !fixtures/reactive-ir/event-dispatch-shadow/variants/stringify-spread/node_modules/
 !fixtures/reactive-ir/event-dispatch-shadow/variants/stringify-spread/node_modules/**
+!fixtures/reactive-ir/action-in-owned-scope-prototype-sites/node_modules/
+!fixtures/reactive-ir/action-in-owned-scope-prototype-sites/node_modules/**
+!fixtures/runtime-oracle/package-prototype-sites/node_modules/
+!fixtures/runtime-oracle/package-prototype-sites/node_modules/**
+!fixtures/reactive-ir/action-in-owned-scope-prototype-iteration/node_modules/
+!fixtures/reactive-ir/action-in-owned-scope-prototype-iteration/node_modules/**
+!fixtures/runtime-oracle/package-prototype-iteration/node_modules/
+!fixtures/runtime-oracle/package-prototype-iteration/node_modules/**

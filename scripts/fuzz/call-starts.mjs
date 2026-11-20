@@ -179,6 +179,42 @@ export function callStarts(source, fileName = "App.tsx") {
   };
   /** An expression that frames itself (ADR 1117b): a call, `new`, tagged template or member read, through parentheses and casts. */
   const runsItself = (expression) => { const inner = unwrap(expression); return ts.isCallExpression(inner) || ts.isNewExpression(inner) || ts.isTaggedTemplateExpression(inner) || ts.isPropertyAccessExpression(inner) || ts.isElementAccessExpression(inner); };
+  // ADR 1117c: what the 1117b ranges below may stand for. A binding declared in a scope around the use (a parameter, a `const`, `let` or `var` statement, a function, class or
+  // enum, an import, a `for` head, a `catch`): reading it runs no code (modules are strict, no `with`). An undeclared name is a global, which a getter may back.
+  const bindingNames = (name) => (ts.isIdentifier(name) ? [name.text] : ts.isObjectBindingPattern(name) || ts.isArrayBindingPattern(name) ? name.elements.flatMap((element) => (ts.isBindingElement(element) ? bindingNames(element.name) : [])) : []);
+  const declaredIn = (scope, name) => {
+    const statements = ts.isSourceFile(scope) || ts.isBlock(scope) || ts.isModuleBlock(scope) || ts.isCaseClause(scope) || ts.isDefaultClause(scope) ? scope.statements : [];
+    for (const statement of statements) {
+      if (ts.isVariableStatement(statement) && statement.declarationList.declarations.some((declaration) => bindingNames(declaration.name).includes(name))) return true;
+      if ((ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement) || ts.isEnumDeclaration(statement)) && statement.name?.text === name) return true;
+      const clause = ts.isImportDeclaration(statement) ? statement.importClause : null;
+      if (clause && (clause.name?.text === name || (clause.namedBindings && (ts.isNamespaceImport(clause.namedBindings) ? [clause.namedBindings] : clause.namedBindings.elements).some((element) => element.name.text === name)))) return true;
+    }
+    if (ts.isFunctionLike(scope) && scope.parameters?.some((parameter) => bindingNames(parameter.name).includes(name))) return true;
+    if ((ts.isForStatement(scope) || ts.isForOfStatement(scope) || ts.isForInStatement(scope)) && scope.initializer && ts.isVariableDeclarationList(scope.initializer) && scope.initializer.declarations.some((declaration) => bindingNames(declaration.name).includes(name))) return true;
+    return ts.isCatchClause(scope) && !!scope.variableDeclaration && bindingNames(scope.variableDeclaration.name).includes(name);
+  };
+  const isLocal = (identifier) => { for (let scope = identifier.parent; scope; scope = scope.parent) if (declaredIn(scope, identifier.text)) return true; return false; };
+  /** A primitive literal: evaluating or coercing it runs nothing. */
+  const isPrimitiveLiteral = (expression) => {
+    const value = unwrap(expression);
+    return ts.isStringLiteral(value) || ts.isNumericLiteral(value) || ts.isBigIntLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value)
+      || [ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.FalseKeyword, ts.SyntaxKind.NullKeyword].includes(value.kind);
+  };
+  /**
+   * ADR 1117c: an `instanceof` left operand whose evaluation runs no code: built only of primitive literals, declared bindings, and array and object literals of those
+   * (no spread, computed key, accessor or method), through parentheses and casts. `{}`, `jv`, `[0, jv]` and `{ a: jv }` are; `[a.b]`, `{ x: a.b }`, `(a.b || {})`,
+   * `[g]` (a global), `[f()]` and `[...xs]` are not.
+   */
+  const evaluatesInert = (expression) => {
+    const value = unwrap(expression);
+    if (isPrimitiveLiteral(value)) return true;
+    if (ts.isIdentifier(value)) return isLocal(value);
+    if (ts.isArrayLiteralExpression(value)) return value.elements.every((element) => ts.isOmittedExpression(element) || (!ts.isSpreadElement(element) && evaluatesInert(element)));
+    if (ts.isObjectLiteralExpression(value)) return value.properties.every((property) => (ts.isPropertyAssignment(property) && !ts.isComputedPropertyName(property.name) && evaluatesInert(property.initializer))
+      || (ts.isShorthandPropertyAssignment(property) && !property.objectAssignmentInitializer && isLocal(property.name)));
+    return false;
+  };
   const visit = (node) => {
     forwarding(node);
     let callee = null;
@@ -241,27 +277,37 @@ export function callStarts(source, fileName = "App.tsx") {
     else if (ts.isSpreadElement(node) || ts.isSpreadAssignment(node)) calls.push([node.expression.getStart(file), node.expression.getEnd(), node.getStart(file), rootOf(node.expression).getStart(file)]);
     // A template coerces its substitutions natively: V8's frame is the template's, the row on the substitution. ADR 1117b: inside a `void`, `typeof`, unary
     // or parenthesized operand the compiled program maps no position at the template, so the frame comes back at the outermost of those wrappers
-    // (`void `${o}`;` is framed at `void`): that position stands for the substitutions too.
+    // (`void `${o}`;` is framed at `void`): that position stands for the substitutions too. ADR 1117c: not where the wrapper starts a larger expression
+    // (``void `${o}` + g`` is `(void `${o}`) + g`, whose coercion of g is framed at the same `void`): there the position is the substitutions' or the other operation's.
     else if (ts.isTemplateExpression(node)) {
       let outer = node;
       while (ts.isParenthesizedExpression(outer.parent) || ts.isVoidExpression(outer.parent) || ts.isTypeOfExpression(outer.parent) || ts.isPrefixUnaryExpression(outer.parent)
         || ts.isAsExpression(outer.parent) || ts.isSatisfiesExpression(outer.parent) || ts.isNonNullExpression(outer.parent)) outer = outer.parent;
+      const shared = !ts.isExpressionStatement(outer.parent) && outer.parent.getStart(file) === outer.getStart(file);
       for (const span of node.templateSpans) {
         calls.push([node.getStart(file), node.head.getEnd(), span.expression.getStart(file), rootOf(span.expression).getStart(file)]);
-        if (outer !== node) calls.push([outer.getStart(file), outer.getStart(file) + 1, span.expression.getStart(file), rootOf(span.expression).getStart(file)]);
+        if (outer !== node && !shared) calls.push([outer.getStart(file), outer.getStart(file) + 1, span.expression.getStart(file), rootOf(span.expression).getStart(file)]);
       }
     }
     // ADR 1117b: `instanceof` calls the right operand's `Symbol.hasInstance` (or walks a proxy's prototype) natively; V8's frame is within the left
     // operand (`{} instanceof K` maps one column into the `{}`), the row at the binary's start.
-    // Not where the left operand runs code of its own (a call, `new`, tagged template or member read frames itself).
-    else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.InstanceOfKeyword && !runsItself(node.left)) calls.push([node.getStart(file), node.right.getStart(file), node.getStart(file), node.getStart(file)]);
+    // ADR 1117c: only where evaluating the left operand runs no code (`evaluatesInert`). The range is every position from the binary's start to the right operand's, the
+    // whole left operand. Why it cannot claim an unrelated row: a frame maps to the last source position at or before the operation that ran, so a frame in the range
+    // comes from code run while the left operand or the operator was evaluated. An inert left runs none: a literal builds a value, and a declared binding's read calls
+    // nothing. The right operand starts after the range, so its own getter or call frames outside it. That leaves the operator: `Symbol.hasInstance`'s lookup and call,
+    // or the prototype walk (a proxy's `getPrototypeOf`), which is what the row at the binary's start is about. Any left that may run code (a member read anywhere in it,
+    // a call, `new`, tag, global, spread, computed key, another operator) gets no range: its frame stays where it is, so a getter read in `[a.b]` keeps the access's own
+    // row and never takes the instanceof's. 1117b tested only the whole left operand (`runsItself`), which left `[a.b]`, `{ x: a.b }`, `(a.b || {})` and `[g]`.
+    else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.InstanceOfKeyword && evaluatesInert(node.left)) calls.push([node.getStart(file), node.right.getStart(file), node.getStart(file), node.getStart(file)]);
     // ADR 1117b: an arithmetic or relational operator coerces both operands natively (`valueOf`, `toString`, `Symbol.toPrimitive`); V8's frame is the
     // binary's start (`"a" + o` is framed at `"a"`), the row on the coerced operand.
     else if (ts.isBinaryExpression(node) && [ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.AsteriskToken, ts.SyntaxKind.SlashToken, ts.SyntaxKind.PercentToken,
       ts.SyntaxKind.LessThanToken, ts.SyntaxKind.LessThanEqualsToken, ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.GreaterThanEqualsToken].includes(node.operatorToken.kind) && !runsItself(node.left)) {
       // Only an operand that may be an object (a name, `this`, an object or array literal): a literal or another operator's result coerces nothing.
+      // ADR 1117c: the right operand only after a primitive literal (`"a" + o`). The binary's start is the left operand's: a global left's getter (`g + o`), a left
+      // object's own coercion (`p + o`), or an inner operation (`p + o + g`, `void x + g`) is framed there too, so the frame would say neither which operand nor which row.
       const object = (operand) => { const inner = unwrap(operand); return ts.isIdentifier(inner) || inner.kind === ts.SyntaxKind.ThisKeyword || ts.isObjectLiteralExpression(inner) || ts.isArrayLiteralExpression(inner); };
-      for (const operand of [node.left, node.right].filter(object)) calls.push([node.getStart(file), node.getStart(file) + 1, operand.getStart(file), rootOf(operand).getStart(file)]);
+      for (const operand of [node.left, ...(isPrimitiveLiteral(node.left) ? [node.right] : [])].filter(object)) calls.push([node.getStart(file), node.getStart(file) + 1, operand.getStart(file), rootOf(operand).getStart(file)]);
     }
     // A destructuring reads its properties: V8's frame is on the binding, the row on the pattern.
     else if (ts.isBindingElement(node)) { let pattern = node.parent; while (ts.isBindingElement(pattern.parent)) pattern = pattern.parent.parent; calls.push([node.getStart(file), node.getEnd(), pattern.getStart(file), pattern.getStart(file)]); }

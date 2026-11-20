@@ -3,7 +3,7 @@
   {
    "adr": "ADR 1125",
    "owed": 19,
-   "why": "#296 smoke and smoke-census: 40 true proofs withheld beside the false ones, each named in changes.json; ADR 1133 recovered 21 (Reflect.apply 20: Reflect is a hazard only for writing members and key readers; the then on an object literal 1: a contained hook is no delivery hazard). Still owed: an uninstalled package (unread-module) 12, JSON.stringify with a replacer (key-reader) 5, a literal javascript: URL 2 (docs/open-work.md, ADR 1125 owed and N4)."
+   "why": "#296 smoke and smoke-census: 40 true proofs withheld beside the false ones, each named in changes.json; ADR 1133 recovered 21 (Reflect.apply 20: Reflect is a hazard only for writing members and key readers; the then on an object literal 1: a contained hook is no delivery hazard). Still owed: an uninstalled package (unread-module) 12, JSON.stringify with a replacer (key-reader) 5, a literal javascript: URL 2 (docs/open-work.md, ADR 1125 owed and N4). Not counted in owed (they are not in the proved ledger), but owed back too: the shadow-delivery owner bit, 5 (mx-no-owner-{cleanup,boundary-loading,boundary-errored,context}-evt-apply-dispatch-shadow-*-direct-none and mx-settled-cleanup-unowned-evt-apply-dispatch-shadow-x-direct-none, smoke-census of #296), owed back via ADR 1133 — delivery uncertainty must not withhold missing-owner."
   }
  ]
 }

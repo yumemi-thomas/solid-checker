@@ -1,0 +1,5 @@
+# named-fn-expr-calls
+
+**Claim (ADR 1127).** A named function expression (`const cb = function inner() {}`) is entered through the binding holding it as well as through its own name (`write_roles::entry_bindings`, the entry census's list). A call through `cb` reaches the function's summary (`interproc` indexes the node under both symbols), so a read the function makes is classified at the call, as for an arrow; and ADR 1111's direct-call check (`function_called_by_name`) lists calls through both names.
+
+Violation at the call: `ArrowPlain` (control), `NamedPlain`, `NamedSameName` (`function cb`), `NamedLet`, `NamedEffect`, `NamedRenderEffect`, and the helper call in `NamedHelper`; also at the body call of `NamedMemo` and `NamedSettled`, whose callback position is uncertifiable (the callback is also called by name). Uncertifiable: `NamedRecursive` (a self call through `inner`). Clean: `NamedHandler`, `NamedMemoOnly`, `NamedUncalled`. Main left the named-expression calls clean. Chrome (`runtime-oracle/named-fn-expr-calls`): STRICT_READ_UNTRACKED at each reported read, quiet at the three clean components. Stub: `named-callback-escaped-entry`'s.
