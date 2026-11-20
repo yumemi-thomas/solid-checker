@@ -234,7 +234,10 @@ when every one, through any name the function is entered by (ADR 1127), is a JSX
 site with literal keys, and for an `omit` view no file or loaded package may
 replace `Array.prototype.includes` (ADR 1129): its listener keys hold
 the function literals the callers (or the view's literals) write there, which join
-the owner graph as handlers, and no other value. Unknown holders,
+the owner graph as handlers, and no other value; on a form control that writes
+`disabled`, holds another spread, or whose view may own `disabled`, the handlers
+stay unresolved, since a delegated handler of a disabled control never runs
+(ADR 1134). Unknown holders,
 getters, generators and unaudited web spread keys retain internal obligations. These placements obey
 the synchronous-dispatch veto above; no unresolved target proves a violation.
 

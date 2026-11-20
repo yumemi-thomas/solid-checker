@@ -36931,5 +36931,11 @@
    "lg-strict-read-untracked-dny-legal-mount-disabled-store-render-effect-carried-direct-none"
   ],
   "rediscovered": "focus lg-recall --contexts dny-legal-mount-disabled (69 programs), release builds, without the pending-fix entry: main 71d12830e has 4 unexecuted-violation rows (missing-owner violation at line 8) and needs a look; this build gives them handler-on-disabled-control (uncertifiable) and nothing needs a look"
+ },
+ {
+  "finding": "ADR 1129 with ADR 1134 (W3, merge of main fbb44e89c): the view proof resolved the listener a merge/omit view spreads onto a control disabled from mount (`<button disabled {...merge({ onClick: () => createRenderEffect(...) }, props)} />`), so the handler became an SC4001 missing-owner violation; rc.21's assignProp delegates a spread's onClick and eventHandler skips a disabled node, so the handler never runs. 1134's pass reads only a handler in the control's own on-attribute with no spread. Never on main (main keeps handler-spread-unresolved U there)",
+  "found": "W3's probe of the 1134 interaction on the branch head 766599cce (release)",
+  "fixed": "ADR 1129 (object_members/memo.rs SpreadTargetsAt: under delegated_handler_skips_disabled_node, a view's handlers on a disableable control that writes disabled, holds another spread, or whose view may own disabled stay unresolved; disabled_handlers::view_spread_may_meet_disabled)",
+  "outside": "the generator writes no listener in a view's own literal: cbp-view hands the site's function from the caller, which stays SC4001 owner-varies-by-caller U on every build, disabled or not, and no context puts a view spread on a disabled control, so no generated program reaches the false violation for fuzz-focus to judge. Pinned instead: fixture merge-omit-view-spread-handler (DefaultedOff, KeyedOff handler-spread-unresolved U on the fix, DefaultedOff V on 766599cce; DefaultedOn V on both)"
  }
 ]
