@@ -96,6 +96,9 @@ pub(crate) const CREATION_THROWS_FIRST: &str = "creation-throws-first";
 /// ADR 1134: an owner obligation written in a delegated handler of a form control disabled from mount that nothing is seen to
 /// enable: the dispatcher skips the handler, so no run of it is proven.
 pub(crate) const HANDLER_ON_DISABLED_CONTROL: &str = "handler-on-disabled-control";
+/// ADR 1140: an owner obligation written in an event handler of an intrinsic element that a later source of the element may
+/// supply under the same key: the runtime's spread skips the earlier source's key, so the handler is never attached.
+pub(crate) const HANDLER_KEY_OVERRIDDEN: &str = "handler-key-overridden";
 pub(crate) const DESTRUCTURE_ROOT_UNPROVEN: &str = "destructure-root-unproven";
 pub(crate) const CAUGHT_READ_UNPROVEN: &str = "caught-read-unproven";
 pub(crate) const ASYNC_PROVENANCE_UNPROVEN: &str = "async-provenance-unproven";
@@ -348,7 +351,9 @@ pub(crate) fn for_write(write: &crate::ReactiveWrite) -> &'static str {
 }
 
 pub(crate) const fn for_owner(requirement: &crate::OwnerRequirement) -> &'static str {
-    if requirement.handler_on_disabled_control {
+    if requirement.handler_key_overridden {
+        HANDLER_KEY_OVERRIDDEN
+    } else if requirement.handler_on_disabled_control {
         HANDLER_ON_DISABLED_CONTROL
     } else if requirement.earlier_check_throws {
         // ADR 1052.

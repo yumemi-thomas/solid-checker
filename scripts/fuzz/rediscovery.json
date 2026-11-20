@@ -40689,5 +40689,27 @@
   "grid": "mx-recall",
   "code": "STRICT_READ_UNTRACKED",
   "outside": "the Type Facts producer answers every call of a program that type-checks, so no generated program has a call with no resolved-call record; this is the three checks made alike, not a shape a program can spell"
+ },
+ {
+  "finding": "ADR 1140: an SC4001 missing-owner violation at createEffect/createRenderEffect in a literal-spread onClick that a later attribute, a later spread or a later onClick={undefined} of the same element overrides: rc.21 @solidjs/web collectProps skips a key a later source has, so the handler is never attached and Chrome is quiet (a false positive on main)",
+  "found": "coordinator report (live false positive on main a64fc92ad); generator contexts dny-legal-spread-overridden-{attr,spread,undefined} (misuse.mjs SPREAD_OVERRIDDEN)",
+  "fixed": "ADR 1140 (owner_discovery: an overridden spread handler takes MayBeUnowned; overridden_handlers.rs names the obligation handler-key-overridden)",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-dny-legal-spread-overridden-attr-store-effect-called-direct-none",
+   "lg-strict-read-untracked-dny-legal-spread-overridden-attr-store-effect-carried-direct-none",
+   "lg-strict-read-untracked-dny-legal-spread-overridden-attr-store-effect-named-called-direct-none",
+   "lg-strict-read-untracked-dny-legal-spread-overridden-attr-store-render-effect-carried-direct-none",
+   "lg-strict-read-untracked-dny-legal-spread-overridden-spread-store-effect-called-direct-none",
+   "lg-strict-read-untracked-dny-legal-spread-overridden-spread-store-effect-carried-direct-none",
+   "lg-strict-read-untracked-dny-legal-spread-overridden-spread-store-effect-named-called-direct-none",
+   "lg-strict-read-untracked-dny-legal-spread-overridden-spread-store-render-effect-carried-direct-none",
+   "lg-strict-read-untracked-dny-legal-spread-overridden-undefined-store-effect-called-direct-none",
+   "lg-strict-read-untracked-dny-legal-spread-overridden-undefined-store-effect-carried-direct-none",
+   "lg-strict-read-untracked-dny-legal-spread-overridden-undefined-store-effect-named-called-direct-none",
+   "lg-strict-read-untracked-dny-legal-spread-overridden-undefined-store-render-effect-carried-direct-none"
+  ],
+  "rediscovered": "focus lg-recall --contexts dny-legal-spread-overridden-{attr,spread,undefined} (207 programs), debug builds: main a64fc92ad has 12 unexecuted-violation rows (missing-owner violation at line 8) and needs a look; this build gives them handler-key-overridden (uncertifiable) and nothing needs a look"
  }
 ]

@@ -419,6 +419,7 @@ Known false-positive shapes left open (fire today, wanted gone):
 ## 4. Open questions and live approximations
 
 Live false positive, found by ADR 1132's twin (2026-11-20, not fixed, reported): SC4001 `missing-owner` is a violation at `createEffect` in the handler of a control disabled by its own JSX from mount (`<button disabled onClick={…}>`), which no event reaches (lg-recall `dny-legal-mount-disabled` × the four store-effect variants; Chrome `runtime-oracle/handler-effect-driven` `MountDisabled` quiet). Held `pending-fix` in `scripts/fuzz/unexecuted-known.json` and `known-static` in the Chrome case; ADR 1134 (Mac 22) makes it uncertifiable.
+Accepted trade (ADR 1140, recall only): a handler that a later source of its intrinsic element may supply under its key is an SC4001 obligation (`handler-key-overridden`); a later spread the checker cannot read (an unresolved value, an open declared type) demotes the earlier handler even where it never holds the key, and a row in a spread-literal handler declared in another file than its element is uncertifiable without that name.
 
 Open after ADR 1141 (kept as violations by ruling, possibly false positives): a delegated handler on a control disabled from mount beside a spread whose own keys are not proven (`{...props}`, a call's value, `Object.freeze({…})`, a literal another file's `const` holds), or held by such a spread; Chrome may be quiet there, but a key set nothing proves may hold `disabled: false`.
 

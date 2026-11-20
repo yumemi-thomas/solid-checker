@@ -247,12 +247,15 @@ const DISPOSALS = { "dny-dispose-body": "body", "dny-dispose-memo": "memo", "dny
 /** The same triggers on an event of the measured list: nothing delivers it, and it keeps the proof. */
 // ADR 1132 (review F6): `dny-legal-mount-disabled`, the click control disabled by its own JSX from mount: no event ever reaches its handler, so a
 // violation there is no "wrong if it runs" (legal.mjs `undrivenHandlerSite` refuses it) and stays a look.
+// ADR 1140: `dny-legal-spread-overridden-*`, the click handler written in a literal spread that a later attribute, a later spread or a later
+// `onClick={undefined}` of the same element overrides: rc.21's spread skips a key a later source has, so the handler is never attached.
+const SPREAD_OVERRIDDEN = { "dny-legal-spread-overridden-attr": "onClick={() => {}}", "dny-legal-spread-overridden-spread": "{...{ onClick: () => {} }}", "dny-legal-spread-overridden-undefined": "onClick={undefined}" };
 // ADR 1129 round 2 (N1): `dny-legal-view-later`, a child that spreads `merge({ onClick: <site> }, props)` onto its button and writes its own
 // `onClick` after the spread: rc.21's `spread` skips a key a later source has, so the view literal's handler is never attached (the click runs
 // the later one).
 // ADR 1141: `dny-legal-mount-disabled-spread`, the same control with a spread of proven keys beside its handler (`{...{ title: "t" }}`): the
 // compiler hands both to rc.21's `spread`, whose `assignProp` delegates `onClick` to the same dispatcher.
-const DENIED_LEGAL = ["dny-legal-keydown", "dny-legal-click", "dny-legal-pointer", "dny-legal-project-click", "dny-blur-lowercase", "dny-legal-mount-disabled", "dny-legal-view-later", "dny-legal-mount-disabled-spread"];
+const DENIED_LEGAL = ["dny-legal-keydown", "dny-legal-click", "dny-legal-pointer", "dny-legal-project-click", "dny-blur-lowercase", "dny-legal-mount-disabled", "dny-legal-view-later", "dny-legal-mount-disabled-spread", ...Object.keys(SPREAD_OVERRIDDEN)];
 const DENIED_OTHER = ["dny-blur-spread", "dny-typo-event", "dny-blur-dynamic", "dny-portal-dispose", "dny-load-append", "dny-load-for", "dny-load-show", "dny-unmount-flush-body", "dny-unmount-flush-root", "dny-insert-body", "dny-renamed-prop", "dny-shared-fn", "dny-chain-click"];
 /** ADR 1125: the Fable review of ADR 1089 E round 2 (G1, G3, G6) and round 1's F2 on main's event-callback read proof: each runs the
  * handler of an element's `onScroll` from an effect's apply other than by a delivery that sets `window.event`. */
@@ -1787,6 +1790,7 @@ function deniedContextOf(context, stmts, kit, b) {
   if (context === "dny-blur-lowercase") { const h = kit.name("f"); return { body: [decl(h, fn(stmts)), ...laterRoot(kit, [`${el}.focus()`], `${el}.disabled = true`)], view: [button(b, [], { on: "onKeyDown", attrs: `{...{ onblur: ${h} }}` })] }; }
   if (context === "dny-legal-project-click") return { body: laterRoot(kit, [], "({ click() { return 1; } }).click()"), view: [button(b, stmts)] };
   if (context === "dny-legal-mount-disabled") return { body: [], view: [button(b, stmts, { tag: "button", on: "onClick", attrs: "disabled" })] };
+  if (SPREAD_OVERRIDDEN[context]) return { body: [], view: [button(b, stmts, { tag: "button", on: "onClick", spread: true, post: SPREAD_OVERRIDDEN[context] })] };
   if (context === "dny-legal-view-later") {
     const m = kit.name("m");
     const kid = decl("ViewKid", fn([decl(m, prim("mergeOn", fn(stmts), { key: "onClick", source: "p0" })),

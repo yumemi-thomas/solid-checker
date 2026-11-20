@@ -265,6 +265,7 @@ fn a_census_gap_makes_an_owner_requirement_uncertifiable_not_a_violation() {
         report: true,
         earlier_check_throws: false,
         handler_on_disabled_control: false,
+        handler_key_overridden: false,
     };
 
     let ordinary = Finding::for_owner_requirement(

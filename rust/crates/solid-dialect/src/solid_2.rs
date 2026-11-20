@@ -2686,6 +2686,15 @@ impl Dialect for Solid2 {
             && DELEGATED.contains(&key[2..].to_ascii_lowercase().as_str())
     }
 
+    /// Source: rc.21 `@solidjs/web` `dist/web.dev.js` (integrity `sha512-1E9dvR3/+5fQTI3oxxACBX2Rg4rezXgrljerhWDHR5uQZ04p5Z8qXROI7dIDJKyANtsnLKYbM2OyI/p/FmjGUA==`).
+    /// The compiler hands an element that has a spread to `spread` (875) with its spreads and attributes as one array of sources in
+    /// source order (`<b {...{ onClick: f }} onClick={g}>` is `spread(el, [{ onClick: f }, { onClick: g }], true)`); `collectSources`
+    /// (952) reads them with `collectProps` (980), which skips a key when `sourceHas` finds it in any later source (986), whatever its
+    /// value (`undefined` too). Measured in Chrome (runtime-oracle `overridden-spread-handler`).
+    fn spread_skips_key_a_later_source_has(&self) -> bool {
+        true
+    }
+
     /// Source: rc.21 `@solidjs/signals` `dist/dev.js`. `createStore` (9742) returns `createStore$1`'s `[proxy, setter]` (6885-6921) or
     /// `createStoreDerived`'s `[store, f => storeSetter(store, f)]` (7920-7922); either setter is `fn => storeSetter(proxy, fn)`, and
     /// `storeSetter` (6819) calls `fn(proxy)` with the store's own proxy, the `wrap` (4700) proxy over a new `{}`/`[]` (`createTarget`).
