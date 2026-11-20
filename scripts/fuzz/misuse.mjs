@@ -446,6 +446,18 @@ const WHOLE_STORE_READS = {
   // deferred arm answered before ADR 1111's check).
   "store-effect-carried": { reads: true, imports: ["createEffect"], text: (o) => `{ const f = () => ${o}.v; createEffect(f, () => {}); [f].forEach((g) => g()); }` },
   "store-render-effect-carried": { reads: true, imports: ["createRenderEffect"], text: (o) => `{ const f = () => ${o}.v; createRenderEffect(f, () => {}); [f].forEach((g) => g()); }` },
+  // ADR 1124 round 2 (review U1): the callback a named function expression, carried through the `const` holding it (or its same name).
+  "store-byname-named-carried": { reads: true, imports: ["createMemo"], text: (o) => `{ const f = function inner() { return ${o}.v; }; createMemo(f); [f].forEach((g) => g()); }` },
+  "store-settled-named-carried": { reads: true, imports: ["onSettled"], text: (o) => `{ const f = function inner() { void ${o}.v; }; onSettled(f); [f].forEach((g) => g()); }` },
+  "store-effect-named-carried": { reads: true, imports: ["createEffect"], text: (o) => `{ const f = function inner() { return ${o}.v; }; createEffect(f, () => {}); [f].forEach((g) => g()); }` },
+  "store-render-effect-named-carried": { reads: true, imports: ["createRenderEffect"], text: (o) => `{ const f = function inner() { return ${o}.v; }; createRenderEffect(f, () => {}); [f].forEach((g) => g()); }` },
+  "store-byname-same-carried": { reads: true, imports: ["createMemo"], text: (o) => `{ const f = function f() { return ${o}.v; }; createMemo(f); [f].forEach((g) => g()); }` },
+  // ADR 1124: the twins of the forEach-carried entry, which stay no call of the callback: `map`, a non-literal receiver, a parameter
+  // passed on, a parameter reassigned.
+  "store-byname-mapped": { reads: true, imports: ["createMemo"], text: (o) => `{ const f = () => ${o}.v; createMemo(f); [f].map((g) => g()); }` },
+  "store-byname-list": { reads: true, imports: ["createMemo"], text: (o) => `{ const f = () => ${o}.v; createMemo(f); const l = [f]; l.forEach((g) => g()); }` },
+  "store-byname-passed": { reads: true, imports: ["createMemo"], text: (o) => `{ const f = () => ${o}.v; createMemo(f); [f].forEach((g) => { queueMicrotask(g); }); }` },
+  "store-byname-reassigned": { reads: true, imports: ["createMemo"], text: (o) => `{ const f = () => ${o}.v; createMemo(f); [f].forEach((g) => { g = () => 0; g(); }); }` },
   "store-settled-called": { reads: true, imports: ["onSettled"], text: (o) => `{ const f = () => { void ${o}.v; }; onSettled(f); f(); }` },
   // ADR 1127: a named function expression called through the `const` holding it; the call graph keyed it by its own name only,
   // so the call reached no summary and the read was clean (also through ADR 1111's direct-call check).
@@ -470,6 +482,12 @@ const WHOLE_STORE_READS = {
   "store-proto-member": { reads: true, text: (o) => `(() => { const t: any = { a: 1 }; t.__proto__ = ${o}; return t.v; })()` },
   "store-proto-computed": { text: (o) => `(({ ["__proto__"]: ${o} }) as any).v` },
   "store-proto-shorthand": { text: (o) => `((__proto__: unknown) => ({ __proto__ } as any).v)(${o})` },
+  // ADR 1138: a store tuple held whole (`const st = createStore(…)`). `st[0]` is the proxy and `st[1]` the setter: an index of the
+  // tuple is no store Get (rc.21 silent; main reported SC1001 at each), and only `st[0].v` warns.
+  "store-tuple-element": { imports: ["createStore"], text: () => `{ const st = createStore({ v: 1 }); void st[0]; }` },
+  "store-tuple-setter": { imports: ["createStore"], text: () => `{ const st = createStore({ v: 1 }); void st[1]; }` },
+  "store-tuple-handed": { imports: ["createStore"], text: () => `{ const st = createStore({ v: 1 }); const e = st[0]; void e; }` },
+  "store-tuple-get": { reads: true, imports: ["createStore"], text: () => `{ const st = createStore({ v: 1 }); void st[0].v; }` },
 };
 const WHOLE_STORE_WARNING = Object.keys(WHOLE_STORE_READS).filter((form) => WHOLE_STORE_READS[form].reads);
 const WHOLE_STORE_SILENT = Object.keys(WHOLE_STORE_READS).filter((form) => !WHOLE_STORE_READS[form].reads);

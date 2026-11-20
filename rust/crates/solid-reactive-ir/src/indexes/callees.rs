@@ -437,8 +437,10 @@ impl<'a> SemanticLookup<'a> {
         file: &FileFacts,
         callee: Span,
     ) -> Option<&'a ResolvedCall> {
+        // ADR 1137: the string-code veto is left out here: a standard call the resolution above declines was declined by the impostor or the
+        // reached-patch veto, never by string code, so asking it changes no answer.
         self.resolved_callee_call(file, callee).or_else(|| {
-            self.standard_call_withheld(file, callee)
+            (self.impostor_withheld(file, callee) || self.reached_patch_withheld(file, callee))
                 .then(|| {
                     resolved_callee_call_in(
                         file,
@@ -468,8 +470,23 @@ impl<'a> SemanticLookup<'a> {
     /// it, or a write some chain reaches may have replaced any member. Either
     /// way its rows stand at their sites, uncertain; only the first has an
     /// impostor's row. A patch that names this member is ADR 0781's.
+    ///
+    /// ADR 1137: so does code built from a string the program holds (`eval`, `new Function`, a string timer: ADR 0801's census): it may replace any
+    /// standard member, which no census of the program's text can see (the review of ADR 1124, round 2, N1: `Array.prototype.forEach` replaced by
+    /// `(0, eval)("…")` ran a carried callback later, and the inline `[1].forEach(() => base())` was silent too).
     pub(crate) fn standard_call_withheld(&self, file: &FileFacts, callee: Span) -> bool {
-        self.impostor_withheld(file, callee) || self.reached_patch_withheld(file, callee)
+        self.impostor_withheld(file, callee)
+            || self.reached_patch_withheld(file, callee)
+            || self.string_code_patch_withheld(file, callee)
+    }
+
+    /// ADR 1137: whether the standard call at `callee` may run a member code built from a string replaced: some analyzed file builds code from a string
+    /// (a direct `eval`, a call resolved to `eval` or the `Function` constructor, or [`crate::base::Hazard::StringCode`]'s other spellings).
+    pub(crate) fn string_code_patch_withheld(&self, file: &FileFacts, callee: Span) -> bool {
+        (self.hazard_present(crate::base::Hazard::Eval)
+            || self.hazard_present(crate::base::Hazard::CodeEvaluatingCall)
+            || self.hazard_present(crate::base::Hazard::StringCode))
+            && self.resolved_standard_call_name(file, callee).is_some()
     }
 
     /// ADR 0876: whether a write some chain reaches may have replaced the
@@ -485,6 +502,22 @@ impl<'a> SemanticLookup<'a> {
         .is_some_and(|name| {
             crate::base::contributions::reached_patch(name, &|hazard| self.hazard_present(hazard))
         })
+    }
+
+    /// ADR 1114 family 3 slice G (round-2 review N4): whether the standard call at `callee` is of a member a loaded package, whatever it reaches,
+    /// writes by that name on a built-in's prototype (`then` of `Promise.then`).
+    pub(crate) fn package_written_standard_call(&self, file: &FileFacts, callee: Span) -> bool {
+        let Some(reach) = self.package_reach else {
+            return false;
+        };
+        self.resolved_standard_call_name(file, callee)
+            .is_some_and(|name| {
+                let member = name.rsplit_once('.').map_or(name, |(_, member)| member);
+                reach
+                    .prototype_writers
+                    .get(member)
+                    .is_some_and(|roots| !roots.is_empty())
+            })
     }
 
     /// The standard function the call at `callee` resolves to, before any veto.

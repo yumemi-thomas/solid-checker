@@ -1,0 +1,156 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-tuple-held-whole/App.tsx",
+      "start": 222,
+      "end": 229,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-tuple-held-whole/App.tsx",
+      "start": 392,
+      "end": 401,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-tuple-held-whole/App.tsx",
+      "start": 536,
+      "end": 539,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-tuple-held-whole/App.tsx",
+      "start": 761,
+      "end": 782,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "store-key-undecided",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-tuple-held-whole/App.tsx",
+      "start": 796,
+      "end": 801,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/store-tuple-held-whole/App.tsx",
+      "start": 816,
+      "end": 819,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/store-tuple-held-whole/App.tsx",
+      "start": 816,
+      "end": 819,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/store-tuple-held-whole/App.tsx",
+      "start": 816,
+      "end": 819,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-tuple-held-whole/App.tsx",
+      "start": 816,
+      "end": 817,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "store-key-undecided",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-tuple-held-whole/App.tsx",
+      "start": 1002,
+      "end": 1007,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "store-key-undecided",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-tuple-held-whole/App.tsx",
+      "start": 1016,
+      "end": 1021,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/store-tuple-held-whole/App.tsx",
+      "start": 1082,
+      "end": 1089,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/store-tuple-held-whole/App.tsx",
+      "start": 1082,
+      "end": 1089,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/store-tuple-held-whole/App.tsx",
+      "start": 1082,
+      "end": 1089,
+      "fixes": 0
+    }
+  ]
+}

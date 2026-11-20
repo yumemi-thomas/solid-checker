@@ -74,7 +74,9 @@ use thiserror::Error;
 /// 103 (ADR 1114 family 3): every operator expression that converts an operand (`converting_operators`).
 /// 104 (ADR 1125): premise sites read computed keys by their proven texts, a definer's key argument, and key readers (`KeyReader`); timers named
 /// by alias or reached through any object are code sinks.
-pub const AST_FACTS_SCHEMA: u32 = 104;
+/// 105 (ADR 1114 family 3 slice G): `converting_operators` also lists an assignment's value to a member and the computed keys of class
+/// methods and binding/assignment patterns.
+pub const AST_FACTS_SCHEMA: u32 = 105;
 
 mod argument_completion;
 mod code_sinks;

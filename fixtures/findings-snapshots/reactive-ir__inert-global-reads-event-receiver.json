@@ -7,6 +7,17 @@
       "kind": "uncertifiable",
       "blocker": "package-may-call-action",
       "severity": "error",
+      "path": "fixtures/reactive-ir/inert-global-reads/packages/event-receiver/src/index.ts",
+      "start": 290,
+      "end": 300,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
       "path": "fixtures/reactive-ir/inert-global-reads/variants/event-receiver/App.tsx",
       "start": 206,
       "end": 215,
