@@ -121,6 +121,7 @@ fn catalog_prose_program() -> Program {
             through_dependency_entry: solid_reactive_ir::DependencyEntry::Call,
             report: true,
             earlier_check_throws: false,
+            handler_on_disabled_control: false,
         }],
         async_reads: vec![AsyncRead {
             provenance_open: false,

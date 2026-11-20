@@ -93,6 +93,9 @@ pub(crate) const COMPUTE_RETURN_UNPROVEN: &str = "compute-return-unproven";
 /// ADR 1020: a returned compute closure may create the node in an ownerless effect apply, where
 /// PRIMITIVE_IN_EFFECT_CALLBACK precedes the result probe; SYNC_NODE_RECEIVED_ASYNC is unproven.
 pub(crate) const CREATION_THROWS_FIRST: &str = "creation-throws-first";
+/// ADR 1134: an owner obligation written in a delegated handler of a form control disabled from mount that nothing is seen to
+/// enable: the dispatcher skips the handler, so no run of it is proven.
+pub(crate) const HANDLER_ON_DISABLED_CONTROL: &str = "handler-on-disabled-control";
 pub(crate) const DESTRUCTURE_ROOT_UNPROVEN: &str = "destructure-root-unproven";
 pub(crate) const CAUGHT_READ_UNPROVEN: &str = "caught-read-unproven";
 pub(crate) const ASYNC_PROVENANCE_UNPROVEN: &str = "async-provenance-unproven";
@@ -345,7 +348,9 @@ pub(crate) fn for_write(write: &crate::ReactiveWrite) -> &'static str {
 }
 
 pub(crate) const fn for_owner(requirement: &crate::OwnerRequirement) -> &'static str {
-    if requirement.earlier_check_throws {
+    if requirement.handler_on_disabled_control {
+        HANDLER_ON_DISABLED_CONTROL
+    } else if requirement.earlier_check_throws {
         // ADR 1052.
         if matches!(
             requirement.operation,
