@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 
-import { identity, keySpan, moves, namingLines, siteCodes, unnamedUp } from "./monotone.mjs";
+import { collectPrograms, identity, keySpan, moves, namingLines, siteCodes, unnamedUp } from "./monotone.mjs";
 
 // ADR 1118: a proof change moves a (site, code) only up, from U to clean or to V.
 const root = "/p";
@@ -48,4 +48,17 @@ test("M2b: an up move must be named, in its file on an overlapping span, by a de
   assert.deepEqual(unnamedUp(up, lines, new Set(["callee_roles.new-arm", "after_await_accounting.account.new-reason"])).map((move) => move.site), ["App.tsx@60-64|SC1001", "Other.tsx@10-13|SC1001"]);
   // an arm the change does not name explains nothing
   assert.equal(unnamedUp(up.slice(0, 1), lines, new Set(["callee_roles.other"])).length, 1);
+});
+
+test("collectPrograms: every set's programs in the order the sets were named, however many a set holds", async () => {
+  // A whole grid is hundreds of thousands of programs (lg-recall: 744,797); `push(...programs)` of that many overflows the stack, so the sets are concatenated by a loop.
+  const big = Array.from({ length: 750_000 }, (_, at) => ({ id: `grid/${at}` }));
+  const loaded = [];
+  const programs = await collectPrograms(["grid:big", "textbook"], async (set) => { loaded.push(set); return set === "grid:big" ? big : [{ id: "textbook/a" }, { id: "textbook/b" }]; });
+  assert.deepEqual(loaded, ["grid:big", "textbook"]);
+  assert.equal(programs.length, 750_002);
+  assert.equal(programs[0].id, "grid/0");
+  assert.equal(programs[749_999].id, "grid/749999");
+  assert.deepEqual(programs.slice(-2).map((program) => program.id), ["textbook/a", "textbook/b"]);
+  assert.deepEqual(await collectPrograms([], async () => { throw new Error("no set, no load"); }), []);
 });
