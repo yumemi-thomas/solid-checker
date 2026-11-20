@@ -1,0 +1,49 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation-eval/App.tsx",
+      "start": 394,
+      "end": 412,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation-eval/App.tsx",
+      "start": 394,
+      "end": 412,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation-eval/App.tsx",
+      "start": 588,
+      "end": 600,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation-eval/App.tsx",
+      "start": 588,
+      "end": 600,
+      "fixes": 0
+    }
+  ]
+}

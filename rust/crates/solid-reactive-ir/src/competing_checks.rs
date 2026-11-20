@@ -333,6 +333,12 @@ fn creation_an_apply_may_deliver_in_shadow(
     if !lookup.apply_delivery_in_shadow_possible() {
         return false;
     }
+    // Bundle j smoke (ADR 1139): the reach is the code a shadow delivery from an apply may run, so it is asked only where such a delivery is
+    // possible; elsewhere (the delivery premise broken with no apply dispatch, a listener object, an `eval`) the creation counts only when it is
+    // written in a JSX handler, as before ADR 1139.
+    if !lookup.apply_dispatch_into_shadow_possible() {
+        return in_jsx_handler(site, lookup);
+    }
     match reach.get_or_init(|| shadow_reach(lookup)) {
         ShadowReach::Unbounded => true,
         ShadowReach::Functions(functions) => {
