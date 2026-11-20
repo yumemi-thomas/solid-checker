@@ -32,12 +32,12 @@
 
 use std::sync::OnceLock;
 
-use solid_facts::FileFacts;
 use solid_facts::ast::{
     ComputedKeySite, ExportKind, ImportKind, JsxAttributeValueKind, JsxElementFact,
     ModuleLoadConsumer,
 };
 use solid_facts::core::Span;
+use solid_facts::{FileFacts, SpecifierAttestation};
 
 use crate::ExecutionRole;
 use crate::indexes::SemanticLookup;
@@ -312,8 +312,9 @@ fn file_retype_hazard(lookup: &SemanticLookup<'_>, file: &FileFacts) -> Option<&
 /// has not audited is unknown and taken to write, so a subpath a later release adds withdraws the proof until it is audited. A named import names its export whatever the
 /// local alias is, and takes a writer only where the dialect lists that export (or all of them, for the frames tier that rewrites the children it finds); a default or
 /// namespace import exposes every export; `export … from` and `export * from` hand them on to every importer; an `import()` or a `require()` reaches the exports its consumer
-/// names, and all when it escapes unnamed. An import that erases (`import type`) takes nothing. A function of the same name that the program declares is no import: the
-/// proof is not refused by a name.
+/// names, and all when it escapes unnamed. A specifier that is no runtime package's by name but resolves into a file of one (a relative path into `node_modules`, a `paths`
+/// alias) reaches that file by a name no audit lists, so it is unknown too: the build's attested resolution says where it lands. An import that erases (`import type`) takes
+/// nothing. A function of the same name that the program declares is no import: the proof is not refused by a name.
 fn takes_runtime_writer(lookup: &SemanticLookup<'_>, file: &FileFacts) -> bool {
     use solid_dialect::ElementWrites;
     let dialect = lookup.dialect;
@@ -343,6 +344,20 @@ fn takes_runtime_writer(lookup: &SemanticLookup<'_>, file: &FileFacts) -> bool {
         |module: &str| matches!(answer(module), Some(Some(ElementWrites::Any) | None));
     let holds = |module: &str| may(module, None);
     let exact = |module: &str, export: Option<&str>| may(module, export);
+    // A specifier that is no runtime package's by name but resolves into a file of one (a relative path into `node_modules`, a `paths` alias) reaches that file by a
+    // name no audit lists: unknown, and taken as writing. The resolution is the build's attested one; an unattested specifier is the delivery premise's unread module.
+    let imports = lookup.resolved_imports();
+    let reaches_runtime_file = |at: Span, module: &str| {
+        answer(module).is_none()
+            && imports.is_some_and(|imports| {
+                match imports.specifier(file.path.as_str(), at, module) {
+                    SpecifierAttestation::Attested(row) => {
+                        is_dialect_runtime(row.resolved_path.as_ref(), packages)
+                    }
+                    SpecifierAttestation::Unattested => false,
+                }
+            })
+    };
     let ast = &file.ast;
     let imported = ast
         .imports
@@ -404,7 +419,32 @@ fn takes_runtime_writer(lookup: &SemanticLookup<'_>, file: &FileFacts) -> bool {
                 None => true,
             },
         });
-    imported || imported_equals || re_exported || loaded
+    let reached = ast
+        .imports
+        .iter()
+        .filter(|import| !import.type_only)
+        .any(|import| reaches_runtime_file(import.span, import.module.as_str()))
+        || ast
+            .import_equals
+            .iter()
+            .filter(|import| !import.type_only)
+            .any(|import| reaches_runtime_file(import.span, import.module.as_str()))
+        || ast
+            .exports
+            .iter()
+            .filter(|export| !export.type_only)
+            .any(|export| {
+                export
+                    .module
+                    .as_deref()
+                    .is_some_and(|module| reaches_runtime_file(export.span, module))
+            })
+        || ast.module_loads.iter().any(|load| {
+            load.specifier
+                .as_deref()
+                .is_some_and(|module| reaches_runtime_file(load.span, module))
+        });
+    imported || imported_equals || re_exported || loaded || reached
 }
 
 /// Whether the member written at `target` (an assignment, update, destructuring or iteration target, or a deleted operand) may be the property `type`: its name

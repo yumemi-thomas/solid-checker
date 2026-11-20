@@ -1239,6 +1239,129 @@ fn project_files(files: &[(&str, &str)]) -> ProjectFacts {
     facts
 }
 
+/// [`project_files`], with the build's attested resolution of the listed specifiers: `(importer, specifier text, resolved path)`, each found as the quoted literal
+/// in the importer's source.
+fn project_files_resolved(
+    files: &[(&str, &str)],
+    resolutions: &[(&str, &str, &str)],
+) -> ProjectFacts {
+    let mut facts = project_files(files);
+    let mut index = solid_facts::AttestedImportIndex::default();
+    for (importer, source) in files {
+        let rows = resolutions
+            .iter()
+            .filter(|(path, _, _)| path == importer)
+            .map(|(_, text, resolved)| {
+                let at = ['"', '\'']
+                    .iter()
+                    .find_map(|quote| source.find(&format!("{quote}{text}{quote}")))
+                    .expect("the specifier is written in the source");
+                solid_facts::AttestedImport {
+                    span: Span::new(
+                        u32::try_from(at).unwrap(),
+                        u32::try_from(at + text.len() + 2).unwrap(),
+                    ),
+                    text: (*text).into(),
+                    resolution: if resolved.is_empty() {
+                        solid_facts::ImportResolution::Unresolved
+                    } else {
+                        solid_facts::ImportResolution::NodeModules
+                    },
+                    resolved_path: (*resolved).into(),
+                    included_path: "".into(),
+                    symlink_path: "".into(),
+                    extension: ".js".into(),
+                    package_name: None,
+                    package_version: None,
+                    package_manifest: None,
+                    resolver_package_name: None,
+                    resolver_package_version: None,
+                }
+            })
+            .collect::<Vec<_>>();
+        index.insert_file(*importer, rows);
+    }
+    facts.resolved_imports = Some(index);
+    facts
+}
+
+/// ADR 1148 (round 1): a specifier that is no runtime package's by name but resolves into a file of one (a relative path into `node_modules`, a `paths` alias) reaches that
+/// file by a name no audit lists, so it is unknown and taken as writing; a specifier that resolves anywhere else is read as the program's own or a dependency's source.
+#[test]
+fn the_retype_veto_follows_a_specifier_into_a_runtime_file() {
+    let veto = |source: &str, specifier: &str, resolved: &str| {
+        let facts = project_files_resolved(
+            &[("proj/app.tsx", source)],
+            &[("proj/app.tsx", specifier, resolved)],
+        );
+        let store = crate::base::memo::build::MemoStore::new(true, true);
+        memo_build(&facts, &store, &[], |lookup| {
+            lookup.element_retype_possible()
+        })
+        .0
+    };
+    let frames = "proj/node_modules/@solidjs/web/frames/dist/client.js";
+    for (source, specifier) in [
+        (
+            "import { createFrame } from './node_modules/@solidjs/web/frames/dist/client.js';\nexport const f = createFrame;",
+            "./node_modules/@solidjs/web/frames/dist/client.js",
+        ),
+        (
+            "import { createFrame } from '@frames/client';\nexport const f = createFrame;",
+            "@frames/client",
+        ),
+        (
+            "import '@frames/client';\nexport const f = 1;",
+            "@frames/client",
+        ),
+        (
+            "export { createFrame } from '@frames/client';",
+            "@frames/client",
+        ),
+        ("export * from '@frames/client';", "@frames/client"),
+        (
+            "export async function f() { return import('@frames/client'); }",
+            "@frames/client",
+        ),
+        (
+            "export const f = require('@frames/client');",
+            "@frames/client",
+        ),
+        (
+            "import frames = require('@frames/client');\nexport const f = frames;",
+            "@frames/client",
+        ),
+    ] {
+        assert!(veto(source, specifier, frames), "{source}");
+    }
+    // Resolved anywhere else, the import is no runtime's: the program's own file, a dependency's (read as source), a runtime package's own audited specifier, or no
+    // resolution at all (the delivery premise's unread module).
+    for (source, specifier, resolved) in [
+        (
+            "import { x } from './local.js';\nexport const f = x;",
+            "./local.js",
+            "proj/local.js",
+        ),
+        (
+            "import { x } from './node_modules/dep/index.js';\nexport const f = x;",
+            "./node_modules/dep/index.js",
+            "proj/node_modules/dep/index.js",
+        ),
+        (
+            "import { render } from '@solidjs/web';\nexport const f = render;",
+            "@solidjs/web",
+            "proj/node_modules/@solidjs/web/dist/web.js",
+        ),
+        (
+            "import { x } from '@frames/client';\nexport const f = x;",
+            "@frames/client",
+            "",
+        ),
+    ] {
+        assert!(!veto(source, specifier, resolved), "{source}");
+    }
+}
+
 /// ADR 1148: the retype veto reads every file the program runs, a dependency's source as the project's, and not the dialect's own runtime packages.
 #[test]
 fn the_retype_veto_reads_the_dependencies_the_program_runs() {

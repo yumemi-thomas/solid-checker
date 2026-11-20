@@ -2160,6 +2160,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/change-attr-node-control/node_modules/**
 !fixtures/reactive-ir/change-retyped-frames/node_modules/
 !fixtures/reactive-ir/change-retyped-frames/node_modules/**
+!fixtures/reactive-ir/change-retyped-frames-alias/node_modules/
+!fixtures/reactive-ir/change-retyped-frames-alias/node_modules/**
 !fixtures/reactive-ir/change-dispatch-veto/node_modules/
 !fixtures/reactive-ir/change-dispatch-veto/node_modules/**
 !fixtures/reactive-ir/change-delivery-hazard/node_modules/
