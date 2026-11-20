@@ -12,3 +12,5 @@
 The row of a function handed on stands at the call that receives it (`[…].forEach(reRun)`), where a throw has its project frame.
 
 `node_modules/fz-*` are **not** published bytes: each is written for this fixture, a manifest, a declaration file and the module the closure walk reads. `node_modules/solid-js` and `@solidjs/*` are the manifests of `action-in-owned-scope-unread-packages`; `.solid-checker/runtime.json` closes the program boundary.
+
+**ADR 1114 family 3 slice E.** Where a loaded package writes a built-in's prototype and may reach a Solid action, every operation that may run a written member is uncertifiable (`package-may-call-action:<reach>:prototype-<kind>`): a member call whatever its declaration, a call, constructor or tag the library declares or nothing resolves, a converting operator, a template substitution, an array pattern, `await`, `using` and a JSX value. A twin above called silent that makes such an operation in an owned scope under such a writer is uncertifiable now; a twin in a handler stays silent.

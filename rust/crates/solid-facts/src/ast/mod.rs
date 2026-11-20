@@ -70,7 +70,9 @@ use thiserror::Error;
 /// 100 (ADR 1122): every property of an object binding pattern with its key by value (`object_properties`: the parser's
 /// key, `computed`, `has_default`, `nested`, `local`), and whether a pattern ends in a rest element (`pattern_rest`).
 /// 101 (ADR 1120): the places that may break the plain-program premise (`premise_sites`).
-pub const AST_FACTS_SCHEMA: u32 = 101;
+/// 102 (ADR 1114 families 2-4): every identifier reference's position by its parent node (`reference_positions`).
+/// 103 (ADR 1114 family 3): every operator expression that converts an operand (`converting_operators`).
+pub const AST_FACTS_SCHEMA: u32 = 103;
 
 mod argument_completion;
 mod code_sinks;
@@ -87,6 +89,7 @@ mod module_requests;
 mod premise_sites;
 mod primitive_completion;
 mod proxy_get_forward;
+mod reference_positions;
 mod span_index;
 mod suppression;
 mod unconditional_calls;

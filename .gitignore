@@ -1928,3 +1928,11 @@ packages/wasm/owned/
 !fixtures/reactive-ir/event-dispatch-shadow/node_modules/**
 !fixtures/reactive-ir/after-await-forin/node_modules/
 !fixtures/reactive-ir/after-await-forin/node_modules/**
+!fixtures/reactive-ir/action-in-owned-scope-prototype-sites/node_modules/
+!fixtures/reactive-ir/action-in-owned-scope-prototype-sites/node_modules/**
+!fixtures/runtime-oracle/package-prototype-sites/node_modules/
+!fixtures/runtime-oracle/package-prototype-sites/node_modules/**
+!fixtures/reactive-ir/action-in-owned-scope-prototype-iteration/node_modules/
+!fixtures/reactive-ir/action-in-owned-scope-prototype-iteration/node_modules/**
+!fixtures/runtime-oracle/package-prototype-iteration/node_modules/
+!fixtures/runtime-oracle/package-prototype-iteration/node_modules/**

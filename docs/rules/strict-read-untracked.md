@@ -370,7 +370,7 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   is a call of the function, and a read it makes is reported there as for an
   arrow (`fixtures/reactive-ir/named-fn-expr-calls`).
 
-- **An effect compute also called by name (ADR 1128).** A store read in a
+- **An effect compute also called by name (ADR 1130).** A store read in a
   function named as an effect's compute is silent there only when no direct
   call of the function runs where untracked reads are reported or where
   nothing places it; otherwise it is `function-run-unplaced`

@@ -65,7 +65,8 @@ const RUN_CLAIMING_RULES = ["pending-async-unsuspendable-read"];
  * Judges one legal program at its site.
  * @param {{ code: string, site: object, typecheck: object, checker: object, runtime: object, plan?: object }} input
  */
-export function judgeLegal({ code, site, typecheck: typed, checker: whole, runtime, plan, atSite: siteScoped = false, evaluated = false }) {
+export function judgeLegal({ code, site, typecheck: typed, checker: whole, runtime, plan, atSite: siteScoped = false, evaluated = false, reachable = false }) {
+  // ADR 1132: `reachable` is the program's App.tsx lines when its site sits in a handler a user can reach (`undrivenHandlerSite`), else false.
   const checker = splitChecker(whole);
   // A program tsc rejects is no evidence, but a checker violation on the rejected code is surfaced (tsc-overlap.mjs).
   if (typed && typed.ok === false) return typedAwayVerdict({ typed, checker, region: regionOf(site), rules: codeRules[code] ?? [] });
@@ -123,7 +124,12 @@ export function judgeLegal({ code, site, typecheck: typed, checker: whole, runti
   const ran = hitCount(runtime.hits ?? null, site.hit);
   if (ran === null) return { outcome: "disturbed", detail: { ...detail, why: "no hit ledger" } };
   // A site that never ran is unexecuted, a run-claiming rule's violation too (review 4c; ADR 0504's review had scored it a false positive).
-  if (ran === 0 && !(evaluated && contradicted.some((finding) => RUN_CLAIMING_RULES.includes(finding.rule)))) return { outcome: "unexecuted", detail };
+  // ADR 1132: a site in a handler a user can reach (`undrivenHandlerSite`) whose every violation is of a `REACHABLE_RULES` rule other than the
+  // cell's own is the reading of "wrong if it runs" (the owner's reachability ruling), held as `reachable` (codes.mjs `unexecutedViolation`
+  // asks no look for it); any other violation there keeps its look.
+  const substantiated = Array.isArray(reachable) && contradicted.every((finding) => !(codeRules[code] ?? []).includes(finding.rule)
+    && REACHABLE_RULES[finding.rule]?.creation.test(reachable[finding.line - 1] ?? "") && !REACHABLE_OTHER_CALLS.test(reachable[finding.line - 1] ?? ""));
+  if (ran === 0 && !(evaluated && contradicted.some((finding) => RUN_CLAIMING_RULES.includes(finding.rule)))) return { outcome: "unexecuted", detail: substantiated ? { ...detail, reachable: "undriven-handler" } : detail };
   return { outcome: "false-positive", detail: { ...detail, rules: [...new Set(contradicted.map((finding) => finding.rule))] } };
 }
 
@@ -147,6 +153,53 @@ export function evaluatedDead(program, built, site) {
   return regionOf(site).flatMap((line) => carrierLines(text, line)).some((line) => LITERAL_DEAD.test(lines[line - 1] ?? ""));
 }
 
+/** ADR 1132: attribute text that takes an element out of delivery from its mount: a disabled or inert control, or a spread that may. */
+const MOUNT_DISABLED = /\b(?:disabled|inert)\b|\.\.\./;
+
+/**
+ * ADR 1132: the contexts whose control is enabled from its mount until the context's own timer disables it (misuse.mjs `DENIED_LEGAL`,
+ * `laterRoot`), with the tag and event each mounts. Other `TAKEN_AWAY` contexts mean their trigger to fire the handler: a counter of 0 there
+ * is a harness look, not reachability (review F3).
+ */
+const REACHABLE_CONTEXTS = { "dny-legal-click": ["button", "onClick"], "dny-legal-keydown": ["input", "onKeyDown"], "dny-legal-pointer": ["button", "onPointerDown"] };
+
+/**
+ * ADR 1132 (review F1, round 2 N1): the rules whose violation in such a handler is the reading of "wrong if it runs", each narrowed to the
+ * creations a driven twin substantiates in Chrome (runtime-oracle `handler-effect-driven`: NO_OWNER_EFFECT at a handler's `createEffect`,
+ * `Driven`, and `createRenderEffect`, `DrivenRender`): the violation's line must call one, and no other primitive (`createMemo`,
+ * `onSettled` and the rest keep the look). Never a rule of the cell's own code: that code is legal at the site by construction.
+ */
+export const REACHABLE_RULES = { "missing-owner": { creation: /\bcreate(?:Render)?Effect\(/ } };
+const REACHABLE_OTHER_CALLS = /\b(?:createMemo|createProjection|createOptimistic(?:Store)?|createTrackedEffect|createReaction|createRoot|createOwner|createSignal|createStore|createContext|useContext|onSettled|onCleanup|runWithOwner|action|resolve|untrack|flush)\(/;
+
+/**
+ * ADR 1132: whether the program's one site use (review F4: by identity, so a combination program, which holds several, never is) sits in the
+ * handler of the control a `REACHABLE_CONTEXTS` context mounts: a top-level element of the component's view (no `Show` or branch around it,
+ * review F3), with the context's tag and event, marked `undriven`, and no `disabled`, `inert` or spread attribute. Such a handler is
+ * reachable: a user can deliver the event from mount until the timer.
+ */
+export function undrivenHandlerSite(program) {
+  const uses = [];
+  const collect = (tree) => {
+    if (Array.isArray(tree)) { for (const item of tree) collect(item); return; }
+    if (tree === null || typeof tree !== "object") return;
+    if (tree.k === "use" && tree.site) uses.push(tree);
+    for (const value of Object.values(tree)) collect(value);
+  };
+  collect(program?.components ?? []);
+  if (uses.length !== 1) return false;
+  const holds = (tree) => {
+    if (Array.isArray(tree)) return tree.some(holds);
+    if (tree === null || typeof tree !== "object") return false;
+    return tree === uses[0] || Object.values(tree).some(holds);
+  };
+  return (program?.components ?? []).some((component) => {
+    const pair = REACHABLE_CONTEXTS[component.misuse?.context];
+    return pair !== undefined && Array.isArray(component.view) && component.view.some((node) => node?.k === "button" && node.undriven === true
+      && (node.tag ?? "button") === pair[0] && node.on === pair[1] && !MOUNT_DISABLED.test(String(node.attrs ?? "")) && holds(node.handler));
+  });
+}
+
 /**
  * Judges a legal program: at its site, or, for a combination program (`--combine`, misuse.mjs `buildCombo`), at every use, each with
  * its own code (every use there is legal), taking the worst; `detail.sites` lists each use's outcome.
@@ -155,12 +208,12 @@ export function judgeLegalProgram({ built, program, ...input }) {
   const uses = built.sites.filter((site) => site.code);
   const combo = uses.some((site) => site.primary);
   const site = siteOf(built);
-  const verdict = combo ? judgeUses(built, uses, { ...input, program }) : judgeLegal({ ...input, site, evaluated: evaluatedDead(program, built, site) });
+  const verdict = combo ? judgeUses(built, uses, { ...input, program }) : judgeLegal({ ...input, site, evaluated: evaluatedDead(program, built, site), reachable: undrivenHandlerSite(program) && String(built.files?.["App.tsx"] ?? "").split("\n") });
   return withOffSite(verdict, combo ? uses : [siteOf(built)], { built, program, ...input });
 }
 
 function judgeUses(built, uses, input) {
-  const verdicts = uses.map((site) => ({ site, ...judgeLegal({ ...input, code: site.code, site, atSite: true, evaluated: evaluatedDead(input.program, built, site) }) }));
+  const verdicts = uses.map((site) => ({ site, ...judgeLegal({ ...input, code: site.code, site, atSite: true, evaluated: evaluatedDead(input.program, built, site), reachable: undrivenHandlerSite(input.program) && String(built.files?.["App.tsx"] ?? "").split("\n") }) }));
   const worst = verdicts.reduce((a, b) => (WORST_FIRST.indexOf(b.outcome) < WORST_FIRST.indexOf(a.outcome) ? b : a));
   return { outcome: worst.outcome, detail: { ...worst.detail, at: worst.site.line, code: worst.site.code, sites: verdicts.map((v) => `${v.site.code}@${v.site.line}:${v.outcome}`) } };
 }

@@ -338,6 +338,17 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/action-in-owned-scope-walk/App.tsx",
+      "start": 5470,
+      "end": 5479,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-walk/App.tsx",
       "start": 5616,
       "end": 5635,
       "fixes": 0
@@ -549,6 +560,39 @@
       "path": "fixtures/reactive-ir/action-in-owned-scope-walk/App.tsx",
       "start": 6495,
       "end": 6510,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-walk/App.tsx",
+      "start": 6495,
+      "end": 6510,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-walk/App.tsx",
+      "start": 6527,
+      "end": 6537,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-walk/App.tsx",
+      "start": 6541,
+      "end": 6558,
       "fixes": 0
     },
     {

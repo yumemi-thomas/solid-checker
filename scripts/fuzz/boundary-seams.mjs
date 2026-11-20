@@ -104,6 +104,7 @@ export const SEAMS = [
 
 /** Deferral comments that name no second check, each with the reason. Grouped by file where the reason is the same. */
 export const NOT_SEAMS = [
+  { file: "rust/crates/solid-facts/src/ast/reference_positions.rs", match: /a reference anywhere else was left to the value-use census/, reason: "the fact's own history (ADR 1114): why it names every position; the fact is one table, and the site universe reads it" },
   { file: "rust/crates/solid-dialect/src/dialect.rs", match: /window belongs to the \*call position\*|the answer belongs to the release that implements the guard/, reason: "the dialect interface's own documentation: which call position or release an answer is for; one table, not two checks" },
   { file: "rust/crates/solid-dialect/src/semantics.rs", match: /only one of them is answered by this word alone/, reason: "wording of two dialect questions" },
   { file: "rust/crates/solid-dialect/src/solid_2.rs", match: /`createEffect` defers to the attribution answer/, reason: "one dialect table: one primitive takes another row's answer" },
