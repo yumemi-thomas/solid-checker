@@ -3240,7 +3240,11 @@ impl<'l, 'a> Census<'l, 'a> {
                             consumer.binding,
                             (
                                 consumer.root,
-                                consumer.actions.into_iter().map(|(_, local)| local).collect(),
+                                consumer
+                                    .actions
+                                    .into_iter()
+                                    .map(|(_, local)| local)
+                                    .collect(),
                             ),
                         )
                     })

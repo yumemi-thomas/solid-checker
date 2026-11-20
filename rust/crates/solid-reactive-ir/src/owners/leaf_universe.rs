@@ -155,11 +155,13 @@ pub(super) fn silences(
         .map(|file| (file.path.as_str(), file))
         .collect();
     // ADR 1147: the owner codes' question: a child of an exact context provider runs under the provider's children memo, wherever it is read.
-    let unread = crate::package_hand_off::UnreadPackageHandOff::for_owner_questions(lookup, &by_path);
+    let unread =
+        crate::package_hand_off::UnreadPackageHandOff::for_owner_questions(lookup, &by_path);
     let no_leaf_opener = !lookup.project_opens_leaf_scope();
     let logging = crate::proof_log::enabled();
     // ADR 1147: under the proof log only, the question without the owner arm, to name the arm where a site ends that it alone let through (monotone.mjs M2b).
-    let plain = logging.then(|| crate::package_hand_off::UnreadPackageHandOff::new(lookup, &by_path));
+    let plain =
+        logging.then(|| crate::package_hand_off::UnreadPackageHandOff::new(lookup, &by_path));
     // ADR 1031: the path id of each listed file, for a getter answered at reads written in another file.
     let pids: std::collections::HashMap<&str, PathId> = files
         .iter()
@@ -300,14 +302,19 @@ pub(super) fn silences(
                     Some(Ok((silence, premises))) => {
                         // ADR 1147: the arm names itself where the question without it declines (a package may run the code).
                         if let Some(plain) = &plain
-                            && asked_at.iter().any(|(at_file, at)| plain.may_run(at_file, *at))
+                            && asked_at
+                                .iter()
+                                .any(|(at_file, at)| plain.may_run(at_file, *at))
                         {
                             crate::proof_log::decision(
                                 "owner-call",
                                 file.path.as_str(),
                                 site,
                                 crate::ExecutionRole::Unknown,
-                                Some((crate::callback_return::CONTEXT_PROVIDER_CHILDREN_OWNED, false)),
+                                Some((
+                                    crate::callback_return::CONTEXT_PROVIDER_CHILDREN_OWNED,
+                                    false,
+                                )),
                                 &[crate::callback_return::CONTEXT_PROVIDER_CHILDREN_OWNED],
                                 Some(false),
                             );

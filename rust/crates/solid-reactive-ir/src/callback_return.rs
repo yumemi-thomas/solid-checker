@@ -346,7 +346,10 @@ pub(crate) fn exact_context_provider(
     let Some(context) = sole_reference_binding(file, element.name.span) else {
         return false;
     };
-    let Some(created) = context.call_initializer.and_then(|call| file.ast.call_at(call)) else {
+    let Some(created) = context
+        .call_initializer
+        .and_then(|call| file.ast.call_at(call))
+    else {
         return false;
     };
     context
@@ -433,7 +436,10 @@ fn provided_store_tuple(
         || binding_written(file, declaration)
         || crate::execution_role::flow_binding_exported(file, declaration)
         || crate::indexes::binding_exported(file, declaration)
-        || context.initializer.map(|value| ast.peel_ts_sugar_span(value)) != Some(created_context.span)
+        || context
+            .initializer
+            .map(|value| ast.peel_ts_sugar_span(value))
+            != Some(created_context.span)
         || created_context.construct
         || !created_context.arguments.is_empty()
         || !exactly_resolved(lookup, file, created_context.callee)
@@ -464,7 +470,9 @@ fn provided_store_tuple(
                 && binding.immutable
                 && !binding.pattern_rest
                 && binding.call_initializer == Some(read.span)
-                && binding.initializer.is_some_and(|value| ast.peel_ts_sugar_span(value) == read.span)
+                && binding
+                    .initializer
+                    .is_some_and(|value| ast.peel_ts_sugar_span(value) == read.span)
         })?;
         readers.push(index);
     }
@@ -478,7 +486,11 @@ fn provided_store_tuple(
         return None;
     }
     let value = ast.peel_ts_sugar_span(value_attribute.expression?);
-    let literal_span = if ast.array_literal_elements.iter().any(|array| array.span == value) {
+    let literal_span = if ast
+        .array_literal_elements
+        .iter()
+        .any(|array| array.span == value)
+    {
         value
     } else {
         let held = sole_reference_binding(file, value)?;
@@ -488,7 +500,10 @@ fn provided_store_tuple(
         }
         initializer
     };
-    let literal = ast.array_literal_elements.iter().find(|array| array.span == literal_span)?;
+    let literal = ast
+        .array_literal_elements
+        .iter()
+        .find(|array| array.span == literal_span)?;
     if literal.elements.is_empty()
         || literal.elements.len() > 2
         || literal
@@ -498,7 +513,11 @@ fn provided_store_tuple(
     {
         return None;
     }
-    let (_root, created) = store_root(lookup, file, ast.peel_ts_sugar_span(literal.elements[0].span))?;
+    let (_root, created) = store_root(
+        lookup,
+        file,
+        ast.peel_ts_sugar_span(literal.elements[0].span),
+    )?;
     let actions = match literal.elements.get(1) {
         Some(element) => action_object(lookup, file, ast.peel_ts_sugar_span(element.span))?,
         None => Vec::new(),
@@ -517,24 +536,34 @@ fn provided_store_tuple(
 
 /// ADR 1147: the declaration of the store root the identifier at `reference` reads: slot 0 of an unwritten `const` array pattern a `createStore` call initializes,
 /// resolved exactly.
-fn store_root(lookup: &SemanticLookup<'_>, file: &FileFacts, reference: Span) -> Option<(Span, Span)> {
+fn store_root(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    reference: Span,
+) -> Option<(Span, Span)> {
     let ast = &file.ast;
-    if !ast
-        .identifiers
-        .iter()
-        .any(|identifier| identifier.span == reference && identifier.role == IdentifierRole::Reference)
-    {
+    if !ast.identifiers.iter().any(|identifier| {
+        identifier.span == reference && identifier.role == IdentifierRole::Reference
+    }) {
         return None;
     }
     let declaration = ast.reference_declaration(reference)?;
     let binding = ast.bindings.iter().find(|binding| {
         binding.shape == BindingShape::Array
-            && binding.array_slots.first().and_then(Option::as_ref).map(|name| name.span) == Some(declaration)
+            && binding
+                .array_slots
+                .first()
+                .and_then(Option::as_ref)
+                .map(|name| name.span)
+                == Some(declaration)
     })?;
     let created = ast.call_at(binding.call_initializer?)?;
     (binding.immutable
         && !binding_written(file, declaration)
-        && binding.initializer.map(|value| ast.peel_ts_sugar_span(value)) == Some(created.span)
+        && binding
+            .initializer
+            .map(|value| ast.peel_ts_sugar_span(value))
+            == Some(created.span)
         && !created.construct
         && lookup.primitive_at_call(file, created.span) == Some(Primitive::CreateStore)
         && exactly_resolved(lookup, file, created.callee))
@@ -623,30 +652,39 @@ fn action_object(
     span: Span,
 ) -> Option<Vec<(String, Span, Span)>> {
     let ast = &file.ast;
-    let shape = ast.object_get_shapes.iter().find(|shape| shape.span == span)?;
+    let shape = ast
+        .object_get_shapes
+        .iter()
+        .find(|shape| shape.span == span)?;
     if !shape.closed || ast.spreads.iter().any(|spread| span.contains(spread.span)) {
         return None;
     }
     let direct = |inner: Span| {
         span.contains(inner)
             && inner != span
-            && !ast
-                .object_properties
-                .iter()
-                .any(|property| property.span != inner && property.span.contains(inner) && span.contains(property.span))
-            && !ast
-                .object_get_shapes
-                .iter()
-                .any(|other| other.span != span && span.contains(other.span) && other.span.contains(inner))
+            && !ast.object_properties.iter().any(|property| {
+                property.span != inner
+                    && property.span.contains(inner)
+                    && span.contains(property.span)
+            })
+            && !ast.object_get_shapes.iter().any(|other| {
+                other.span != span && span.contains(other.span) && other.span.contains(inner)
+            })
     };
     let mut actions: Vec<(String, Span, Span)> = Vec::new();
-    for property in ast.object_properties.iter().filter(|property| direct(property.span)) {
+    for property in ast
+        .object_properties
+        .iter()
+        .filter(|property| direct(property.span))
+    {
         let key = file.source_text(property.key)?;
         if property.computed
             || !property.data
             || property.method
             || property.runtime_type_escape
-            || !key.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '$')
+            || !key
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '_' || c == '$')
             || actions.iter().any(|(seen, _, _)| seen == key)
         {
             return None;
@@ -654,7 +692,10 @@ fn action_object(
         let held = ast.peel_ts_sugar_span(property.value);
         let binding = sole_local_binding(file, held)?;
         let initializer = ast.peel_ts_sugar_span(binding.initializer?);
-        let function = ast.functions.iter().find(|function| function.span == initializer)?;
+        let function = ast
+            .functions
+            .iter()
+            .find(|function| function.span == initializer)?;
         if !lookup.function_value_is_current(file, function) {
             return None;
         }
@@ -699,7 +740,11 @@ fn store_tuple_consumer(
     let mut root = None;
     let mut locals = Vec::new();
     let mut named = 0;
-    for element in ast.pattern_elements.iter().filter(|element| element.pattern == binding.pattern) {
+    for element in ast
+        .pattern_elements
+        .iter()
+        .filter(|element| element.pattern == binding.pattern)
+    {
         if element.assignment || element.default.is_some() {
             return None;
         }
@@ -712,7 +757,11 @@ fn store_tuple_consumer(
                 named += 1;
             }
             solid_facts::ast::PatternSlot::Index(1) => {
-                for inner in ast.pattern_elements.iter().filter(|inner| inner.pattern == element.target) {
+                for inner in ast
+                    .pattern_elements
+                    .iter()
+                    .filter(|inner| inner.pattern == element.target)
+                {
                     let solid_facts::ast::PatternSlot::Key(key) = &inner.slot else {
                         return None;
                     };
@@ -720,13 +769,16 @@ fn store_tuple_consumer(
                         || inner.default.is_some()
                         || !binding.names.iter().any(|name| name.span == inner.target)
                         || !actions.iter().any(|(action, _, _)| action == key.as_str())
-                        || locals.iter().any(|(seen, _): &(String, Span)| seen == key.as_str())
+                        || locals
+                            .iter()
+                            .any(|(seen, _): &(String, Span)| seen == key.as_str())
                     {
                         return None;
                     }
                     // The local is only called: never written, handed on or read as a value.
                     let only_called = references(file, inner.target).all(|reference| {
-                        ast.calls_with_peeled_callee(reference).any(|call| !call.construct)
+                        ast.calls_with_peeled_callee(reference)
+                            .any(|call| !call.construct)
                     });
                     if !only_called {
                         return None;
