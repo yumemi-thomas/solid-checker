@@ -1937,7 +1937,7 @@ function inContext(context, stmts, kit) {
         "evt-body-dispatch-reflect": `Reflect.apply(EventTarget.prototype.dispatchEvent, ${el} as HTMLElement, [new Event("scroll")])`,
         "evt-body-dispatch-reflect-get": `(Reflect.get(${el} as HTMLElement, "dispatchEvent") as (event: Event) => boolean).call(${el} as HTMLElement, new Event("scroll"))`,
         "evt-body-dispatch-built-key": `((${el} as unknown) as Record<string, (event: Event) => boolean>)["dispatch" + "Event"].call(${el} as HTMLElement, new Event("scroll"))`,
-        "evt-body-dispatch-pattern": `const { dispatchEvent: send } = ${el} as HTMLElement; send.call(${el} as HTMLElement, new Event("scroll"))`,
+        "evt-body-dispatch-pattern": `let send!: (event: Event) => boolean; ({ dispatchEvent: send } = ${el} as HTMLElement); send.call(${el} as HTMLElement, new Event("scroll"))`,
       }[context]));
       return { body: [made, fire], view: [] };
     }
@@ -2072,9 +2072,10 @@ function inContext(context, stmts, kit) {
     case "evt-rerun-href-entity": case "evt-rerun-open-pattern": {
       const el = kit.name("el"), t = signal(kit.name("t"), 1, "src");
       const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onScroll", undriven: true })));
-      const frame = kit.name("frame"), link = kit.name("link"), loc = kit.name("loc");
+      const frame = kit.name("frame"), loc = kit.name("loc");
       const js = '"java" + "script:" + "void (globalThis.event = undefined)"';
-      const attached = [decl(link, domExpr('document.createElement("a")')), expr(domExpr(`document.body.appendChild(${link})`))];
+      const form = kit.name("form");
+      const formed = [decl(form, domExpr('document.createElement("form")')), expr(domExpr(`document.body.appendChild(${form})`))];
       const sinks = {
         "evt-rerun-js-url": [expr(domExpr(`location.href = ${js}`))],
         "evt-rerun-srcdoc": [decl(frame, domExpr('document.createElement("iframe")')),
@@ -2085,10 +2086,12 @@ function inContext(context, stmts, kit) {
         "evt-rerun-reflect-script": [expr(domExpr('const script = Reflect.apply(document.createElement, document, ["script"]) as HTMLScriptElement; script.text = "globalThis.event = undefined"; document.head.append(script)'))],
         // F5: the navigation runs the script when it is taken, a task after the body.
         "evt-rerun-location-alias": [decl(loc, domExpr("document.location")), expr(domExpr(`${loc}.assign(${js})`))],
-        "evt-rerun-href-built-key": [...attached, expr(domExpr(`(${link} as unknown as Record<string, string>)["hr" + "ef"] = ${js}`)), expr(domExpr(`${link}.click()`))],
-        "evt-rerun-attribute-node": [...attached, expr(domExpr(`${link}.setAttribute("href", "/x")`)), expr(domExpr(`${link}.getAttributeNode("href")!.value = ${js}`)), expr(domExpr(`${link}.click()`))],
-        "evt-rerun-href-entity": [expr(domExpr(`document.body.insertAdjacentHTML("beforeend", '<a id="sc-link" href="&#106;avascript:void (globalThis.event = undefined)">x</a>')`)),
-          expr(domExpr('(document.getElementById("sc-link") as HTMLAnchorElement).click()'))],
+        // A form's `action` is a navigation URL a `submit()` takes (a method, not a dispatched event: the census sees no dispatch), so the anchor's own
+        // `click()` (a written dispatch the head already declines) is left out.
+        "evt-rerun-href-built-key": [...formed, expr(domExpr(`(${form} as unknown as Record<string, string>)["act" + "ion"] = ${js}`)), expr(domExpr(`${form}.submit()`))],
+        "evt-rerun-attribute-node": [...formed, expr(domExpr(`${form}.setAttribute("action", "/x")`)), expr(domExpr(`${form}.getAttributeNode("action")!.value = ${js}`)), expr(domExpr(`${form}.submit()`))],
+        "evt-rerun-href-entity": [expr(domExpr(`document.body.insertAdjacentHTML("beforeend", '<form id="sc-form" action="&#106;avascript:void (globalThis.event = undefined)"></form>')`)),
+          expr(domExpr('(document.getElementById("sc-form") as HTMLFormElement).submit()'))],
         "evt-rerun-open-pattern": [expr(domExpr(`const { open: send } = window; send(${js}, "_self")`))],
       };
       const sink = sinks[context];
