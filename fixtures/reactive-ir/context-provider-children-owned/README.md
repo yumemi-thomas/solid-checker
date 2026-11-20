@@ -15,8 +15,10 @@ answered: the stack is whoever reads the memo, and the flush and after-await acc
   `ImportedApp` (another module's context).
 - Negative, the stack codes (rows stay): `FlushStoredApp` (the review's k11: a flush in the child, the provider's value stored and handed to the unread
   component), `FlushInnerApp` (k9: the same one component down).
-- Negative, the graph still decides: `LeafApp` (the provider created in a tracked effect: the child's entry has a leaf bit) and `HandlerApp` (created in a
-  handler: an unowned entry, SC6002 declines).
+- Negative, the graph still decides: `LeafApp` (the provider created in a tracked effect: the element's own SC3001 violation stands) and `ApplyApp`
+  (created in an effect's apply: an entry with no owner on the apply's stack, SC6002 declines).
+- `HandlerApp` (created in a handler) is no negative: the role engine places a handler off every effect's apply and the entry has no leaf bit, so once the
+  hand-off places the child its rows end on main's own facts.
 
 Stub: `context-provider-children-refusals`'s, plus `onCleanup`, `createTrackedEffect` and `flush` from the published rc.21 typings. Chrome: the runtime-oracle
 case `context-provider-children-owned` (the owner codes quiet where a package reads the provider's value in a tracked effect or an effect's apply).

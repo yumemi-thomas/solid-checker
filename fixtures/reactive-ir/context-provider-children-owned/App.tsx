@@ -1,4 +1,4 @@
-import { createContext, createMemo, createTrackedEffect, flush, onCleanup } from "solid-js";
+import { createContext, createEffect, createMemo, createTrackedEffect, flush, onCleanup } from "solid-js";
 import { SharedContext } from "./ctx";
 
 // ADR 1147, arm 1 (`context-provider-children-owned`): rc.21's provider is
@@ -130,7 +130,8 @@ export function LeafApp() {
   return <i />;
 }
 
-// Negative: the provider created in a handler (an unowned entry): the child's SC6002 answer still declines.
+// Not a negative: the provider created in a handler. The role engine places a handler off every effect's apply and the entry has no leaf bit, so the
+// child's rows end on main's own facts once the hand-off places it (rc.21 would run it, if the memo were read, under the memo's owner).
 function HandlerKid() {
   createMemo(() => 1);
   return <i />;
@@ -147,4 +148,23 @@ export function HandlerApp() {
       }}
     />
   );
+}
+
+// Negative: the provider created in an effect's apply (an entry with no owner, on the apply's stack): the child's SC6002 answer still declines.
+function ApplyKid() {
+  createMemo(() => 1);
+  return <i />;
+}
+export function ApplyApp() {
+  createEffect(
+    () => 0,
+    () => {
+      void (
+        <C value={1}>
+          <ApplyKid />
+        </C>
+      );
+    },
+  );
+  return <i />;
 }

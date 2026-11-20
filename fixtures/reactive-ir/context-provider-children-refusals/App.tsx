@@ -7,6 +7,8 @@ import { SharedContext } from "./ctx";
 // keeps its child creation's rows (SC3001, SC6002: uncertifiable), as any component's children do, `ReturnedApp` and `NestedApp` included
 // (the arm certified those two). These cases are the redo's acceptance set (docs/open-work.md): a transitive placement may certify the
 // first two only; each other case must keep its rows. Each child creates a memo, so where its creation runs is a question.
+// ADR 1147 (arm 1): a creation is an owner code, which the provider's children memo answers wherever it is read, so the arm ends the child rows of
+// every case but the F2 ones (no exact provider); the stack codes (a flush) are the redo's question here (README).
 
 const C = createContext<number>();
 
