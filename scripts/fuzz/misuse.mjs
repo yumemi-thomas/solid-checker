@@ -240,7 +240,9 @@ const DISPOSALS = { "dny-dispose-body": "body", "dny-dispose-memo": "memo", "dny
 // ADR 1129 round 2 (N1): `dny-legal-view-later`, a child that spreads `merge({ onClick: <site> }, props)` onto its button and writes its own
 // `onClick` after the spread: rc.21's `spread` skips a key a later source has, so the view literal's handler is never attached (the click runs
 // the later one).
-const DENIED_LEGAL = ["dny-legal-keydown", "dny-legal-click", "dny-legal-pointer", "dny-legal-project-click", "dny-blur-lowercase", "dny-legal-mount-disabled", "dny-legal-view-later"];
+// ADR 1141: `dny-legal-mount-disabled-spread`, the same control with a spread of proven keys beside its handler (`{...{ title: "t" }}`): the
+// compiler hands both to rc.21's `spread`, whose `assignProp` delegates `onClick` to the same dispatcher.
+const DENIED_LEGAL = ["dny-legal-keydown", "dny-legal-click", "dny-legal-pointer", "dny-legal-project-click", "dny-blur-lowercase", "dny-legal-mount-disabled", "dny-legal-view-later", "dny-legal-mount-disabled-spread"];
 const DENIED_OTHER = ["dny-blur-spread", "dny-typo-event", "dny-blur-dynamic", "dny-portal-dispose", "dny-load-append", "dny-load-for", "dny-load-show", "dny-unmount-flush-body", "dny-unmount-flush-root", "dny-insert-body", "dny-renamed-prop", "dny-shared-fn", "dny-chain-click"];
 /** ADR 1125: the Fable review of ADR 1089 E round 2 (G1, G3, G6) and round 1's F2 on main's event-callback read proof: each runs the
  * handler of an element's `onScroll` from an effect's apply other than by a delivery that sets `window.event`. */
@@ -1755,7 +1757,7 @@ function laterRoot(kit, prep, trigger, solid, web) {
  */
 const TAKEN_AWAY = new Set(["dny-blur-disabled", "dny-blur-replace", "dny-focusout-replace", "dny-change-typed", "dny-blur-select-remove",
   ...Object.keys(DISPOSALS), "dny-unmount-flush-body", "dny-unmount-flush-root", "dny-insert-body", "dny-shared-fn", "dny-chain-click",
-  "dny-flush-unmount", "dny-blur-spread", "dny-blur-dynamic", "dny-portal-dispose", "dny-blur-lowercase", "dny-legal-keydown", "dny-legal-click", "dny-legal-pointer", "dny-legal-mount-disabled"]);
+  "dny-flush-unmount", "dny-blur-spread", "dny-blur-dynamic", "dny-portal-dispose", "dny-blur-lowercase", "dny-legal-keydown", "dny-legal-click", "dny-legal-pointer", "dny-legal-mount-disabled", "dny-legal-mount-disabled-spread"]);
 function undriven(tree, id) {
   if (Array.isArray(tree)) { for (const item of tree) undriven(item, id); return; }
   if (tree === null || typeof tree !== "object") return;
@@ -1779,6 +1781,7 @@ function deniedContextOf(context, stmts, kit, b) {
       ret(jsxExpr(button(b, [], { on: "onClick", attrs: `{...${m}}` })))], { params: [bareParam("{ onClick?: () => void }", false)] }));
     return { body: [kid], view: [mounted(kit.name("v"), domExpr("<ViewKid />"))] };
   }
+  if (context === "dny-legal-mount-disabled-spread") return { body: [], view: [button(b, stmts, { tag: "button", on: "onClick", attrs: 'disabled {...{ title: "t" }}' })] };
   const legal = { "dny-legal-keydown": { tag: "input", on: "onKeyDown" }, "dny-legal-click": { tag: "button", on: "onClick" }, "dny-legal-pointer": { tag: "button", on: "onPointerDown" } }[context];
   if (legal) return { body: laterRoot(kit, [`${el}.focus()`], `${el}.disabled = true`), view: [button(b, stmts, legal)] };
   const spec = DENIED[context];
