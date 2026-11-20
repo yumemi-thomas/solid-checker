@@ -141,6 +141,8 @@ pub(crate) fn mark(
         })
         .map(|requirement| requirement.location.clone())
         .collect();
+    // ADR 1139: the code a JSX handler may run, computed once and only where an apply may deliver into a shadow tree.
+    let shadow_reach_memo = std::cell::OnceCell::new();
     for requirement in &mut program.missing_owners {
         if requirement.uncertain || !requirement.report {
             continue;
@@ -161,7 +163,7 @@ pub(crate) fn mark(
                         .any(|guarded| same_call(guarded, &requirement.location))
                         || in_slot_called_only_in_applies(&requirement.location, true, lookup)
                         // ADR 1115 part 2: the apply's delivery to a shadow-tree listener runs the creation in the effect-callback window.
-                        || in_handler_an_apply_may_deliver_in_shadow(&requirement.location, lookup)))
+                        || creation_an_apply_may_deliver_in_shadow(&requirement.location, &shadow_reach_memo, lookup)))
                     || leaf_refused
                         .iter()
                         .any(|refused| same_call(refused, &requirement.location))
@@ -227,7 +229,7 @@ pub(crate) fn mark(
             || prop_runs_only_in_owned_leaf(&violation.location, settled_gates, lookup)
             || refused_at_mount_else_handlers(&violation.location, settled_gates, lookup)
             || listener_detached_in_owned_leaf(&violation.location, settled_gates, lookup)
-            || in_handler_an_apply_may_deliver_in_shadow(&violation.location, lookup)
+            || creation_an_apply_may_deliver_in_shadow(&violation.location, &shadow_reach_memo, lookup)
         {
             violation.uncertain = true;
             violation.analysis_context = crate::blockers::with_detail(
@@ -318,11 +320,163 @@ fn every_run_refused(site: &Location, anchors: &[&Location], lookup: &SemanticLo
 /// `createRenderEffect`'s), and it is no completion site of that apply (`completion_sites`: an earlier `return`, `throw`,
 /// `break` or `continue`, or a branch, may skip it). The owned first run may never reach it; every later run meets the
 /// effect-callback guard (a creation) or the owner check (a context read) first. `false` for anything else.
-/// ADR 1115 part 2: the creation is written in an intrinsic element's `on*` handler (any function inside the attribute's value), and an
-/// effect's apply may deliver an event to a listener in a shadow tree. That delivery runs the handler inside the apply's effect-callback
-/// window, where the guard throws PRIMITIVE_IN_EFFECT_CALLBACK first, and nothing orders another delivery's run before it.
-fn in_handler_an_apply_may_deliver_in_shadow(site: &Location, lookup: &SemanticLookup<'_>) -> bool {
-    lookup.apply_delivery_in_shadow_possible() && in_jsx_handler(site, lookup)
+/// ADR 1115 part 2, widened by ADR 1139: an effect's apply may deliver an event to a listener in a shadow tree. That delivery runs a
+/// JSX handler inside the apply's effect-callback window, where the guard throws PRIMITIVE_IN_EFFECT_CALLBACK at a creation first,
+/// and nothing orders another delivery's run before it. The creation need not be written in the handler: a helper, a closure or an
+/// IIFE the handler runs creates there too ([`ShadowReach`]). ADR 1125 left the owner bit to cover these; the owner bit now leaves
+/// delivery alone, so the check is this one.
+fn creation_an_apply_may_deliver_in_shadow(
+    site: &Location,
+    reach: &std::cell::OnceCell<ShadowReach>,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    if !lookup.apply_delivery_in_shadow_possible() {
+        return false;
+    }
+    match reach.get_or_init(|| shadow_reach(lookup)) {
+        ShadowReach::Unbounded => true,
+        ShadowReach::Functions(functions) => {
+            let (Ok(start), Ok(end)) =
+                (u32::try_from(site.start_byte), u32::try_from(site.end_byte))
+            else {
+                return true;
+            };
+            let span = solid_facts::core::Span::new(start, end);
+            functions.iter().any(|(path, function)| {
+                path.as_str() == site.path.as_ref() && function.contains(span)
+            })
+        }
+    }
+}
+
+/// The code a JSX handler may run on its own stack: the handler attribute values (every function written in one), and the functions
+/// they hand on or call, transitively. Per call in the reach:
+/// - an argument that is no function literal (those are inside the reach already) and not proven non-callable is followed to the
+///   function it names; one nothing names may be any function;
+/// - a Solid primitive's call adds nothing more (its callbacks are its arguments);
+/// - a callee that is a value a primitive returned (an accessor, a setter: a `const` bound to the primitive's call, its tuple slots)
+///   may run the callbacks handed to that call (a memo's compute runs where its accessor is read), so their code joins the reach;
+/// - any other callee is followed to the function it resolves to; one that resolves to none may run any function.
+/// "Any function" is [`ShadowReach::Unbounded`].
+enum ShadowReach {
+    Unbounded,
+    Functions(Vec<(String, solid_facts::core::Span)>),
+}
+
+fn shadow_reach(lookup: &SemanticLookup<'_>) -> ShadowReach {
+    let mut reached: Vec<(String, solid_facts::core::Span)> = Vec::new();
+    for file in lookup.files() {
+        for element in &file.ast.jsx_elements {
+            for attribute in &element.attributes {
+                let handler = attribute.namespace.is_some()
+                    || file
+                        .source_text(attribute.local_name)
+                        .is_some_and(|name| name.len() > 2 && name.starts_with("on"));
+                if let (true, Some(value)) = (handler, attribute.value) {
+                    reached.push((file.path.to_string(), value));
+                }
+            }
+        }
+    }
+    let mut next = 0;
+    while next < reached.len() {
+        let (path, region) = reached[next].clone();
+        next += 1;
+        let Some(file) = lookup.file_by_path(&path) else {
+            return ShadowReach::Unbounded;
+        };
+        for call in file
+            .ast
+            .calls
+            .iter()
+            .filter(|call| region.contains(call.span))
+        {
+            let mut found = Vec::new();
+            if !handed_functions(file, &call.arguments, lookup, &mut found) {
+                return ShadowReach::Unbounded;
+            }
+            if lookup.primitive_at_call(file, call.span).is_none() {
+                if let Some((target_file, function)) = lookup
+                    .function_called_at(file.path.as_str(), call.callee)
+                    .or_else(|| lookup.object_member_function(file, call.callee))
+                {
+                    found.push((target_file.path.to_string(), function.span));
+                } else if let Some((binding_file, initializer)) =
+                    primitive_value_initializer(file, call.callee, lookup)
+                {
+                    found.push((binding_file.path.to_string(), initializer.span));
+                    if !handed_functions(binding_file, &initializer.arguments, lookup, &mut found) {
+                        return ShadowReach::Unbounded;
+                    }
+                } else {
+                    return ShadowReach::Unbounded;
+                }
+            }
+            for target in found {
+                if !reached.contains(&target) {
+                    reached.push(target);
+                }
+            }
+        }
+    }
+    ShadowReach::Functions(reached)
+}
+
+/// The functions `arguments` hand on that are not written in them (see [`ShadowReach`]), pushed to `found`; false when one may be a
+/// function nothing names.
+fn handed_functions(
+    file: &solid_facts::FileFacts,
+    arguments: &[solid_facts::ast::ArgumentFact],
+    lookup: &SemanticLookup<'_>,
+    found: &mut Vec<(String, solid_facts::core::Span)>,
+) -> bool {
+    use solid_facts::ast::ArgumentValueKind;
+    for argument in arguments {
+        if matches!(
+            argument.value,
+            ArgumentValueKind::Function
+                | ArgumentValueKind::AsyncFunction
+                | ArgumentValueKind::Undefined
+                | ArgumentValueKind::Null
+        ) || (!argument.spread && argument.runtime_value_kind.is_proven_noncallable())
+        {
+            continue;
+        }
+        match lookup
+            .function_called_at(file.path.as_str(), argument.span)
+            .or_else(|| lookup.object_member_function(file, argument.span))
+        {
+            Some((target_file, function)) => {
+                found.push((target_file.path.to_string(), function.span))
+            }
+            None => return false,
+        }
+    }
+    true
+}
+
+/// The primitive call a `const` called at `callee` is bound to (a `createSignal` tuple, a `createMemo` accessor): the callee is a value
+/// that primitive returned.
+fn primitive_value_initializer<'a>(
+    file: &solid_facts::FileFacts,
+    callee: solid_facts::core::Span,
+    lookup: &SemanticLookup<'a>,
+) -> Option<(&'a solid_facts::FileFacts, &'a solid_facts::ast::CallFact)> {
+    let callee = file.ast.peel_ts_sugar_span(callee);
+    let (binding_file, binding, _) = lookup.binding_at_reference(file.path.as_str(), callee)?;
+    if !binding.immutable {
+        return None;
+    }
+    let initializer = binding_file
+        .ast
+        .peel_ts_sugar_span(binding.call_initializer?);
+    let call = binding_file
+        .ast
+        .calls
+        .iter()
+        .find(|call| call.span == initializer)?;
+    lookup.primitive_at_call(binding_file, call.span)?;
+    Some((binding_file, call))
 }
 
 /// ADR 1125 (#296 smoke census): a context read in a JSX handler whose ownerless proof the delivery premise withholds. A delivery runs
