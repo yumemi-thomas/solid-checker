@@ -56,6 +56,7 @@ enum Mode {
 
 /// ADR 0860: an open position the walk goes on from, once the reference's own
 /// walk has ended, so its answer and rows stay what they were.
+#[derive(Clone)]
 struct Escape<'a> {
     file: &'a FileFacts,
     at: Span,
@@ -65,6 +66,7 @@ struct Escape<'a> {
 }
 
 /// ADR 1104: a walk past a carrier, run once every [`Escape`] walk of the reference has ended.
+#[derive(Clone)]
 enum Late<'a> {
     Escape(Escape<'a>),
     /// The uses of a declared name, in a mode past an escape.
@@ -1034,15 +1036,26 @@ impl<'l, 'a> Census<'l, 'a> {
             self.callback_parameters(file, call, mode);
         }
         self.escapes.clear();
-        // ADR 1128: these walks queue late walks and rows as the earlier ones do (ADR 1104). They are this start's: run on these walks'
-        // memo, as the earlier ones ran on theirs, and before the start ends. Left queued they were run by whichever start the worker
-        // took next, under that start's source and memo, so a verdict depended on the order the workers claimed the starts in.
+        // ADR 1128: these walks queue late walks and rows as the earlier ones do (ADR 1104). They are this start's, and run before it ends:
+        // left queued they were run by whichever start the worker took next, under that start's source and memo, so a verdict depended on
+        // the order the workers claimed the starts in. They run twice, once per memo, and keep the rows of both: on these walks' memo a late
+        // walk stops at every position the withheld walks already answered, and a walk of theirs that ran past the budget answered some
+        // without having explored what lies past them, so a late walk there reaches fewer open uses than one on the start's own memo, which
+        // explores them again under a budget of its own (app-game: 13 uses that only the second reaches, none that only the first does).
+        let late = self.late.clone();
         self.run_late();
         let past = self.uses.split_off(before);
         self.escaped_uses.extend(past);
         let late_rows = std::mem::take(&mut self.late_rows);
         self.escaped_uses.extend(late_rows);
         self.walked = walked;
+        self.late = late;
+        let before = self.uses.len();
+        self.run_late();
+        let again = self.uses.split_off(before);
+        self.escaped_uses.extend(again);
+        let late_rows = std::mem::take(&mut self.late_rows);
+        self.escaped_uses.extend(late_rows);
     }
 
     /// ADR 0860: an open position past which the walk goes on as an escaped
