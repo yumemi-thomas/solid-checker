@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1153, the review: a callback the fallback hands to a timer (`setTimeout(release, 0)`) or a promise (`.then(run)`) runs later with no owner: NO_OWNER_CLEANUP at each `onCleanup`. The owner edge makes the fallback's own owner known, so the checker's row there moves from uncertifiable (main: covered-uncertifiable) to a true SC4001 violation (covered-violation); the ablated build keeps the main row."
+}

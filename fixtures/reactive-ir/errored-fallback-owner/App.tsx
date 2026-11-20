@@ -212,6 +212,39 @@ function Shadowed() {
   );
 }
 
+// Moves to a violation (the review of ADR 1153): a callback the fallback hands to a timer or a promise runs later with no owner, which the edge now knows, so its `onCleanup` is a true
+// SC4001 violation where main kept an uncertifiable row (Chrome rc.21: NO_OWNER_CLEANUP, fixtures/runtime-oracle/errored-fallback-deferred, covered-violation).
+function releaseLater() {
+  onCleanup(() => {});
+}
+function Deferred() {
+  return (
+    <Errored
+      fallback={() => {
+        setTimeout(releaseLater, 0);
+        return <p>deferred</p>;
+      }}
+    >
+      <Broken />
+    </Errored>
+  );
+}
+function DeferredThen() {
+  return (
+    <Errored
+      fallback={() => {
+        const run = () => {
+          onCleanup(() => {});
+        };
+        Promise.resolve().then(run);
+        return <p>then</p>;
+      }}
+    >
+      <Broken />
+    </Errored>
+  );
+}
+
 function Host() {
   createEffect(
     () => 0,
@@ -237,6 +270,8 @@ function App() {
       <Conditional flag={true} />
       <NamedSelf />
       <Nested />
+      <Deferred />
+      <DeferredThen />
       <UserComponent />
       <Shadowed />
       <Host />

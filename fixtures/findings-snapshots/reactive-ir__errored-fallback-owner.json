@@ -250,6 +250,48 @@
       "start": 5955,
       "end": 5964,
       "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/errored-fallback-owner/App.tsx",
+      "start": 6439,
+      "end": 6448,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/errored-fallback-owner/App.tsx",
+      "start": 6439,
+      "end": 6448,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/errored-fallback-owner/App.tsx",
+      "start": 6767,
+      "end": 6776,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/errored-fallback-owner/App.tsx",
+      "start": 6767,
+      "end": 6776,
+      "fixes": 0
     }
   ]
 }

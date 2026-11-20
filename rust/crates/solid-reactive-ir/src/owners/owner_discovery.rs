@@ -980,6 +980,7 @@ pub(crate) fn discover_owner_file(
     // written in place as a prop's whole value (`Errored`'s `fallback`), runs in
     // a computation the tag creates under an owner of its own, whoever owns the
     // tag (rc.21 `createBoundary`'s `fallback(b)`), like the function child above.
+    let mut prop_functions = Vec::new();
     if !crate::site_accounting::ablated_id(CONTROL_FLOW_PROP_FUNCTION) {
         for element in &file.ast.jsx_elements {
             for function in control_flow_prop_functions(file, element, lookup) {
@@ -989,6 +990,7 @@ pub(crate) fn discover_owner_file(
                     CONTROL_FLOW_PROP_FUNCTION,
                     &[],
                 );
+                prop_functions.push(function);
                 edges.push(SymbolicOwnerEdge {
                     source: None,
                     target: OwnerTarget::LocalSpan(function),
@@ -1020,6 +1022,34 @@ pub(crate) fn discover_owner_file(
             context_argument: None,
             in_parameter_list: list_site(site.anchor),
         });
+    }
+    // ADR 1153: an edge out of such a function hands the owner the function now has to the function it names. A callback the function defers (`setTimeout(release, 0)`,
+    // `Promise.resolve().then(run)`) runs later with no owner: unknown while the function's own owner was, a true SC4001 violation now. The callee lies outside the function's span, and
+    // ADR 1118's M2b asks the proof log which arm moved a row, so the arm is named at the callee. Write-only: nothing reads it back.
+    for edge in &edges {
+        let Some(source) = &edge.source else { continue };
+        if source.path != file.path.as_str()
+            || !prop_functions
+                .iter()
+                .any(|function| function.contains(source.span))
+        {
+            continue;
+        }
+        let callee = match &edge.target {
+            OwnerTarget::LocalSpan(span) => Some((file.path.shared(), *span)),
+            OwnerTarget::Symbol(symbol) => lookup
+                .function_for_symbol(symbol.as_str())
+                .map(|(callee, function)| (callee.path.shared(), function.span)),
+            OwnerTarget::Function(..) => None,
+        };
+        if let Some((path, span)) = callee {
+            crate::proof_log::silent(
+                "SC4001",
+                &crate::location(path, span),
+                CONTROL_FLOW_PROP_FUNCTION,
+                &[],
+            );
+        }
     }
     CachedOwnerFile {
         source_hash: file.source_hash.clone(),
