@@ -167,12 +167,14 @@
  "causeOwners": {
   "R-alias-owner": "R1f",
   "R-alias-call": "R1f",
-  "R-call-arg": "R1f"
+  "R-call-arg": "R1f",
+  "ADR 1142: a carried handler's NO_OWNER_CONTEXT certified beside a proved CONTEXT_NOT_FOUND (secondary false clean)": "Mac 20b"
  },
  "owners": {
   "mx-census/mx-context-not-found-dny-flush-load-x-direct-none": "Mac 23",
   "mx-census/mx-context-not-found-dny-flush-popover-x-direct-none": "Mac 23",
-  "mx-census/mx-context-not-found-dny-flush-unmount-x-direct-none": "Mac 23"
+  "mx-census/mx-context-not-found-dny-flush-unmount-x-direct-none": "Mac 23",
+  "mx-census/mx-context-not-found-barm-carried-handler-x-direct-none": "Mac 20b"
  },
  "corpusBlockers": [],
  "ratchet": {
@@ -186,7 +188,8 @@
   "causes": {
    "R-unplaced": 8,
    "R-halted": 2,
-   "false-positive": 3
+   "false-positive": 3,
+   "ADR 1142: a carried handler's NO_OWNER_CONTEXT certified beside a proved CONTEXT_NOT_FOUND (secondary false clean)": 1
   }
  }
 }
