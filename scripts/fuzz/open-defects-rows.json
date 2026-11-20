@@ -5,7 +5,6 @@
  "stopUnchecked": [],
  "grids": {
   "mx-census": {
-   "mx-context-not-found-barm-carried-handler-x-direct-none": {"outcome":"secondary-false-clean","cause":"ADR 1142: a carried handler's NO_OWNER_CONTEXT certified beside a proved CONTEXT_NOT_FOUND (secondary false clean)","owner":"Mac 20b"},
    "mx-context-not-found-dny-flush-load-x-direct-none": {"outcome":"false-positive","cause":"false-positive","owner":"Mac 23"},
    "mx-context-not-found-dny-flush-popover-x-direct-none": {"outcome":"false-positive","cause":"false-positive","owner":"Mac 23"},
    "mx-context-not-found-dny-flush-unmount-x-direct-none": {"outcome":"false-positive","cause":"false-positive","owner":"Mac 23"},

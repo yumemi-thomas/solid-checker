@@ -95,8 +95,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
-      "start": 1175,
-      "end": 1187,
+      "start": 1144,
+      "end": 1156,
       "fixes": 0
     },
     {
@@ -106,8 +106,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
-      "start": 1175,
-      "end": 1187,
+      "start": 1144,
+      "end": 1156,
       "fixes": 0
     },
     {
@@ -116,8 +116,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
-      "start": 1356,
-      "end": 1368,
+      "start": 1325,
+      "end": 1337,
       "fixes": 0
     },
     {
@@ -127,8 +127,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
-      "start": 1356,
-      "end": 1368,
+      "start": 1325,
+      "end": 1337,
       "fixes": 0
     },
     {
@@ -137,8 +137,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
-      "start": 1508,
-      "end": 1520,
+      "start": 1494,
+      "end": 1506,
       "fixes": 0
     },
     {
@@ -148,8 +148,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
-      "start": 1508,
-      "end": 1520,
+      "start": 1494,
+      "end": 1506,
       "fixes": 0
     },
     {
@@ -158,8 +158,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
-      "start": 1678,
-      "end": 1690,
+      "start": 1612,
+      "end": 1624,
       "fixes": 0
     },
     {
@@ -169,29 +169,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
-      "start": 1678,
-      "end": 1690,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
-      "start": 1796,
-      "end": 1808,
-      "fixes": 0
-    },
-    {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
-      "start": 1796,
-      "end": 1808,
+      "start": 1612,
+      "end": 1624,
       "fixes": 0
     }
   ]
