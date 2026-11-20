@@ -258,7 +258,10 @@ const DELIVERY_BREAKERS = ["evt-apply-event-replaced", "evt-apply-listener-patch
   // document. (`execCommand("insertHTML")` is a sink too but has no context: any `execCommand` call makes the handler `function-run-unplaced` while a program
   // dispatches, so no program is a rediscovery; the fixture `exec-command` and the unit tests hold it.)
   "evt-rerun-attributes-named-item", "evt-rerun-attributes-by-name", "evt-rerun-attributes-by-index", "evt-rerun-attributes-alias", "evt-rerun-set-named-item",
-  "evt-rerun-window-alias-open", "evt-rerun-window-alias-location", "evt-rerun-document-alias-create-element", "evt-rerun-dom-parser"];
+  "evt-rerun-window-alias-open", "evt-rerun-window-alias-location", "evt-rerun-document-alias-create-element", "evt-rerun-dom-parser",
+  // ADR 1133 round 2 (Fable review of e43c5d469, N1): the collection reached under a key nothing proves (a call's result, so K4 read `.action` as a plain data
+  // key and the unproven read as inert) and under a key built from pieces.
+  "evt-rerun-attributes-unproven-key", "evt-rerun-attributes-built-key"];
 /** ADR 1133: a body dispatch the census cannot see as written: `dispatchEvent` called through `.call` or `Reflect.apply`; round 1 (F1, F3): through
  * `Reflect.get`, under a key the program builds, and taken out of the element by a pattern. */
 const DISPATCH_HANDED_ON = ["evt-body-dispatch-call", "evt-body-dispatch-reflect", "evt-body-dispatch-reflect-get", "evt-body-dispatch-built-key", "evt-body-dispatch-pattern"];
@@ -2079,12 +2082,13 @@ function inContext(context, stmts, kit) {
     // ADR 1133 round 1, adjacent spellings.
     case "evt-rerun-attributes-named-item": case "evt-rerun-attributes-by-name": case "evt-rerun-attributes-by-index": case "evt-rerun-attributes-alias":
     case "evt-rerun-set-named-item": case "evt-rerun-window-alias-open": case "evt-rerun-window-alias-location":
-    case "evt-rerun-document-alias-create-element": case "evt-rerun-dom-parser": {
+    case "evt-rerun-document-alias-create-element": case "evt-rerun-dom-parser":
+    case "evt-rerun-attributes-unproven-key": case "evt-rerun-attributes-built-key": {
       const el = kit.name("el"), t = signal(kit.name("t"), 1, "src");
       const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onScroll", undriven: true })));
       const frame = kit.name("frame"), loc = kit.name("loc");
       const js = '"java" + "script:" + "void (globalThis.event = undefined)"';
-      const form = kit.name("form"), attrs = kit.name("attrs"), node = kit.name("node"), host = kit.name("host"), win = kit.name("win");
+      const form = kit.name("form"), attrs = kit.name("attrs"), node = kit.name("node"), host = kit.name("host"), win = kit.name("win"), keyOf = kit.name("keyOf");
       const formed = [decl(form, domExpr('document.createElement("form")')), expr(domExpr(`document.body.appendChild(${form})`))];
       const sinks = {
         "evt-rerun-js-url": [expr(domExpr(`location.href = ${js}`))],
@@ -2109,6 +2113,11 @@ function inContext(context, stmts, kit) {
         "evt-rerun-attributes-by-name": [...formed, expr(domExpr(`${form}.setAttribute("action", "/x")`)), expr(domExpr(`(${form}.attributes as unknown as Record<string, Attr>).action.value = ${js}`)), expr(domExpr(`${form}.submit()`))],
         "evt-rerun-attributes-by-index": [...formed, expr(domExpr(`${form}.setAttribute("action", "/x")`)), expr(domExpr(`${form}.attributes[0].value = ${js}`)), expr(domExpr(`${form}.submit()`))],
         "evt-rerun-attributes-alias": [...formed, expr(domExpr(`${form}.setAttribute("action", "/x")`)), expr(domExpr(`const ${attrs} = ${form}.attributes as unknown as Record<string, Attr>; ${attrs}.action.value = ${js}`)), expr(domExpr(`${form}.submit()`))],
+        // Round 2 (N1): the same node under a key the program does not spell (a call's result) or builds; `submit()` takes the URL.
+        "evt-rerun-attributes-unproven-key": [...formed, expr(domExpr(`${form}.setAttribute("action", "/x")`)), decl(keyOf, domExpr('(): string => ["attri", "butes"].join("")')),
+          expr(domExpr(`(${form} as unknown as Record<string, Record<string, Attr>>)[${keyOf}()].action.value = ${js}`)), expr(domExpr(`${form}.submit()`))],
+        "evt-rerun-attributes-built-key": [...formed, expr(domExpr(`${form}.setAttribute("action", "/x")`)),
+          expr(domExpr(`(${form} as unknown as Record<string, Record<string, Attr>>)["attri" + "butes"].action.value = ${js}`)), expr(domExpr(`${form}.submit()`))],
         "evt-rerun-set-named-item": [...formed, expr(domExpr(`const ${node} = document.createAttribute("action"); ${node}.value = ${js}; ${form}.attributes.setNamedItem(${node})`)), expr(domExpr(`${form}.submit()`))],
         // `open`, `location` and `createElement` out of a `const` alias of the window or the document, as the written pattern's.
         "evt-rerun-window-alias-open": [expr(domExpr(`const ${win} = window; const { open: send } = ${win}; send(${js}, "_self")`))],

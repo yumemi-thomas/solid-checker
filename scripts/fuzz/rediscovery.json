@@ -37122,5 +37122,17 @@
   "found": "the author's probe v6 (sc-scratch mac21b/p1133 cases2)",
   "fixed": "ADR 1133 round 1, adjacent spellings: `execCommand` is a markup sink unless its command is fixed and not `insertHTML` or its markup is inert, and a navigation sink for `createLink` unless its URL is proven",
   "outside": "a program that dispatches an event to a handler and reaches an `execCommand` call is already withheld (`function-run-unplaced`: the dispatch census reads `execCommand` as a delivering call, `dny-input-exec`), so no grid program is certified by the round-1 build; a program with no dispatch never runs the handler, so Chrome cannot show the false clean (the context `evt-rerun-exec-command` was recall-gap in 2,096 of 2,258 programs on both builds and was removed). The sink is held by `fixtures/reactive-ir/event-delivery-spellings/variants/exec-command` (the round-1 build certified it, the hardened build does not) and the unit test `an_attribute_node_by_the_collection_or_a_global_behind_an_alias_is_a_code_sink`"
+ },
+ {
+  "finding": "ADR 1133's round-1 final build (e43c5d469) certified a read in a handler run with no event after a `javascript:` URL set through the attribute node of `action`, reached by `form[key()].action` where `key()` returns `attributes` (K4 read `action` as a plain data key and the unproven read as inert) or by `form[\"attri\" + \"butes\"]` (a built key the literal-key test did not read) (N1)",
+  "found": "the Fable round-2 review of ADR 1133 (coord-land/review-1133-r2.md, probes review-1133/cases v11, v12, v26, v27, v29, v34), N1",
+  "fixed": "ADR 1133 round 2: K4's plain data key rejects a name an attribute may have (a URL slot, `srcdoc`, `on…`) and `attributes`; the collection under a key a proof gives the text `attributes` is the collection",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-evt-rerun-attributes-unproven-key-signal-direct-none",
+   "mx-strict-read-untracked-evt-rerun-attributes-built-key-signal-direct-none"
+  ],
+  "rediscovered": "focus on the two contexts' mx-recall programs (STRICT_READ_UNTRACKED and REACTIVE_WRITE_IN_OWNED_SCOPE 4,516): the round-1 final build 2,972 false cleans; FIXED here (0)"
  }
 ]
