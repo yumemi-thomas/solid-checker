@@ -277,7 +277,7 @@ pub(crate) fn package_name(path: &str) -> Option<&str> {
     }
 }
 
-fn is_package(path: &str) -> bool {
+pub(crate) fn is_package(path: &str) -> bool {
     path.contains("/node_modules/")
 }
 

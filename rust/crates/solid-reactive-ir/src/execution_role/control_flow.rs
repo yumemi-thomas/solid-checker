@@ -129,7 +129,7 @@ pub(crate) fn control_flow_execution_role(
     if owner.span != callback.span {
         // A nested handler of an event the DOM also delivers on its own
         // (`onLoad`), as `execution_role.denied-event` says in a body (ADR 0780).
-        if super::in_denied_handler(file, span) {
+        if super::in_denied_handler(lookup, file, span) {
             return Some(role_arm!(
                 "control_flow.control_flow_execution_role.denied-event",
                 ExecutionRole::Unknown

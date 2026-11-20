@@ -154,6 +154,9 @@ pub(super) trait FlowWorld<'a> {
     fn lookup(&self) -> Option<&SemanticLookup<'a>> {
         None
     }
+    /// [`handler_event_denied`](crate::execution_role::handler_event_denied) at the handler `callback` of `file`. The program half of ADR 1148's permit is a
+    /// whole-program answer, which each world reads its own way: the lookup asks it, the memo world records the read.
+    fn handler_event_denied(&self, file: &'a solid_facts::FileFacts, callback: Span) -> bool;
 }
 
 /// The walk over the build's lookup, unrecorded: for a nested evaluation
@@ -253,6 +256,10 @@ impl<'a> FlowWorld<'a> for LookupFlow<'_, 'a> {
 
     fn lookup(&self) -> Option<&SemanticLookup<'a>> {
         Some(self.lookup)
+    }
+
+    fn handler_event_denied(&self, file: &'a solid_facts::FileFacts, callback: Span) -> bool {
+        crate::execution_role::handler_event_denied(self.lookup, file, callback)
     }
 }
 

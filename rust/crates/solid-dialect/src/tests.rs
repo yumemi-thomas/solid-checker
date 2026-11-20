@@ -309,6 +309,9 @@ impl Dialect for Silent {
     fn ecosystem_scopes(&self) -> &'static [&'static str] {
         &[]
     }
+    fn runtime_module_element_writes(&self, _specifier: &str) -> Option<ElementWrites> {
+        None
+    }
     fn primitive(&self, _name: &str) -> Option<Primitive> {
         None
     }
@@ -567,6 +570,119 @@ fn module_ownership_follows_the_dialects_package_layout() {
     assert!(!two.owns_module("solid-js/store"));
     assert!(two.owns_module("@solidjs/web"));
     assert!(two.owns_module("solid-js"));
+}
+
+/// ADR 1148: every subpath the pinned rc.21 runtime packages export (`exports/solid_v2_runtime_subpaths.txt`, held against the installed packages by
+/// `scripts/fuzz/runtime-exports.test.mjs`) has an audited answer, so a release that adds one fails here until it is audited, and an import of a subpath no
+/// release was audited for is unknown (`None`) at run time.
+#[test]
+fn every_exported_runtime_subpath_is_audited() {
+    let two = &Solid2 as &dyn Dialect;
+    let mut specifiers = Vec::new();
+    for line in include_str!("exports/solid_v2_runtime_subpaths.txt").lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let specifier = match line.split(' ').collect::<Vec<_>>().as_slice() {
+            ["pin", _, _] => continue,
+            [package, "."] => (*package).to_string(),
+            [package, subpath] => {
+                format!("{package}/{}", subpath.trim_start_matches("./")).replace('*', "x")
+            }
+            _ => panic!("a line is `<package> <subpath>` or `pin <package> <version>`: {line}"),
+        };
+        assert!(
+            two.runtime_module_element_writes(&specifier).is_some(),
+            "{specifier} is exported by the pinned runtime and not audited"
+        );
+        specifiers.push(specifier);
+    }
+    assert!(specifiers.len() >= 20, "{specifiers:?}");
+    let writes = |specifier: &str| two.runtime_module_element_writes(specifier);
+    // The root and the two JSX runtimes (one file) export the writers that take their name from the caller; the others are audited as none or any.
+    let writers = ElementWrites::Exports(&[
+        "assign",
+        "setAttribute",
+        "setAttributeNS",
+        "setProperty",
+        "setStatefulProperty",
+        "spread",
+    ]);
+    for specifier in [
+        "@solidjs/web",
+        "@solidjs/web/jsx-runtime",
+        "@solidjs/web/jsx-dev-runtime",
+    ] {
+        assert_eq!(writes(specifier), Some(writers), "{specifier}");
+    }
+    // The frames tier morphs the children it finds with the server's attributes (`frames/dist/wire.js` `morphAttributes`), `type` included.
+    for specifier in specifiers
+        .iter()
+        .filter(|s| s.starts_with("@solidjs/web/frames"))
+    {
+        assert_eq!(writes(specifier), Some(ElementWrites::Any), "{specifier}");
+    }
+    for specifier in [
+        "solid-js",
+        "solid-js/internal",
+        "solid-js/refresh",
+        "@solidjs/signals",
+        "@solidjs/web/storage",
+        "@solidjs/web/serialization",
+        "@solidjs/web/server-functions/client",
+        "@solidjs/web/types/jsx.d.ts",
+    ] {
+        assert_eq!(writes(specifier), Some(ElementWrites::None), "{specifier}");
+    }
+    // A subpath no release was audited for, a name this dialect does not own and a deep path into a package are unknown, never "no writers".
+    for specifier in [
+        "@solidjs/web/new-tier",
+        "@solidjs/web/frames/new-tier",
+        "@solidjs/web/dist/web.js",
+        "solid-js/web",
+        "@solidjs/signals/dist/dev.js",
+        "@solidjs/router",
+        "some-lib",
+    ] {
+        assert_eq!(writes(specifier), None, "{specifier}");
+    }
+}
+
+/// ADR 1148: each export the dialect names as a writer by a caller-chosen name is a value export of `@solidjs/web` in the audited export table, so the list
+/// cannot name a symbol the table does not hold; and a dialect that says nothing is unknown.
+#[test]
+fn the_runtime_writers_are_audited_value_exports() {
+    let two = &Solid2 as &dyn Dialect;
+    let Some(ElementWrites::Exports(names)) = two.runtime_module_element_writes("@solidjs/web")
+    else {
+        panic!("the root names its writers");
+    };
+    for export in names {
+        let exported = crate::exports::modules(
+            crate::exports::solid_v2_solidjs_web::VALUES,
+            crate::exports::solid_v2_solidjs_web::TYPES,
+            export,
+            crate::exports::Position::Value,
+        );
+        assert!(exported.contains(&"@solidjs/web"), "{export}: {exported:?}");
+    }
+    // The ordinary imports are no writers: a component, a render call, a fixed-property writer.
+    for export in [
+        "render",
+        "For",
+        "Show",
+        "className",
+        "style",
+        "insert",
+        "template",
+    ] {
+        assert!(!names.contains(&export), "{export}");
+    }
+    assert_eq!(
+        (&Silent as &dyn Dialect).runtime_module_element_writes("@solidjs/web"),
+        None
+    );
 }
 
 /// Four of the five control-flow components were shared with 1.x; the

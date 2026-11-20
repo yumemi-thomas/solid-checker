@@ -395,6 +395,17 @@ fn computed_may_register(file: &FileFacts) -> bool {
     })
 }
 
+/// Whether the file writes, with an escape, a word that names a registering member, handler property or key ([`solid_facts::ast::AstFacts::escaped_words`], facts
+/// schema 107, ADR 1148 round 2): `\u0061ddEventListener`, `"\u0066ocus"`, `o\u006efocus` decode to the names a scan of the source text cannot see. Every scan above
+/// compares a cooked value, so a name in a position a fact keys is read decoded already; this asks the same of the facts that list the escaped spellings themselves,
+/// so an escaped name in a position no scan above reads (a word in a longer text, a template piece, a key of a table the program builds) still ends the proof.
+fn escaped_word_registers(file: &FileFacts) -> bool {
+    file.ast
+        .escaped_words
+        .iter()
+        .any(|word| registers_by_name(word))
+}
+
 /// Whether the file declares a member named `focus` that is, or may be, a function: a class member (any kind, static too), an object
 /// literal member, or an assignment to one.
 fn defines_focus(file: &FileFacts) -> bool {
@@ -718,6 +729,7 @@ pub(crate) fn program_may_run_code_on_focus(lookup: &SemanticLookup<'_>) -> bool
                 || code_may_listen(file)
                 || defines_focus(file)
                 || computed_may_register(file)
+                || escaped_word_registers(file)
                 || takes_registrar(dialect, file, &attested)
                 || crate::plain_premise::loads_unscanned_code(lookup, file, &program, &|module| {
                     runtime_answer(dialect, module).is_some()
@@ -1052,6 +1064,34 @@ mod tests {
             assert_eq!(
                 code_may_listen(&facts(source)) || computed_may_register(&facts(source)),
                 listens,
+                "{source}"
+            );
+        }
+    }
+
+    /// ADR 1148 round 2's facts (`escaped_words`): a word written with an escape is asked decoded, in any position.
+    #[test]
+    fn a_word_written_with_an_escape_that_names_a_registering_member_ends_the_proof_wherever_it_stands()
+     {
+        for (source, registers) in [
+            ("const n = '\\u0061ddEventListener';", true),
+            ("const n = `\\u0061ddEventListener`;", true),
+            ("const n = 'call \\u0061ddEventListener here';", true),
+            ("class A { static \\u0066ocus() {} }", true),
+            ("const o = { \\u006fnfocus: 1 };", true),
+            ("const t = { k: `\\u0069nnerHTML` };", true),
+            ("const t = { k: `x \\u0069nnerHTML` };", true),
+            ("const m = 'set\\u0041ttribute';", true),
+            // An escape that decodes to no registering word, and no escape at all.
+            ("const n = 'a\\nb';", false),
+            ("console.log('Press a key\\n');", false),
+            ("const n = '\\u0063lick';", false),
+            ("const n = 'addEventListener';", false),
+            ("el.addEventListener('keydown', f);", false),
+        ] {
+            assert_eq!(
+                escaped_word_registers(&facts(source)),
+                registers,
                 "{source}"
             );
         }
