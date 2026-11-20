@@ -23,6 +23,13 @@ thread_local! {
 fn sink() -> Option<&'static Mutex<std::fs::File>> {
     SINK.get_or_init(|| {
         let path = std::env::var_os("SOLID_CHECKER_F4_CENSUS").filter(|path| !path.is_empty())?;
+        // A directory gets one file per process (a corpus run's checkers never share a file).
+        let path = std::path::PathBuf::from(path);
+        let path = if path.is_dir() {
+            path.join(format!("f4-{}.jsonl", std::process::id()))
+        } else {
+            path
+        };
         std::fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -104,8 +111,10 @@ pub(super) fn note(
         "complete": complete,
         "calls": at_calls,
     });
+    let mut text = line.to_string();
+    text.push('\n');
     if let Ok(mut file) = sink.lock() {
-        let _ = writeln!(file, "{line}");
+        let _ = file.write_all(text.as_bytes());
     }
 }
 
