@@ -18,8 +18,8 @@ use oxc_semantic::{AstNodes, NodeId, Scoping};
 use oxc_span::{GetSpan, Span};
 
 use super::{
-    constant_declarator, declarator_of, key_name, literal_specifier, names_global, only_inspected,
-    parent_past_wrappers,
+    KEY_DEPTH, Keys, constant_declarator, declarator_of, key_name, key_of, literal_specifier,
+    names_global, only_inspected, parent_past_wrappers,
 };
 
 /// How many bindings deep an alias of the global object is followed to its uses (`const a = globalThis; const b = a; b.x`).
@@ -30,15 +30,18 @@ const ALIAS_DEPTH: u8 = 3;
 /// - `pattern`: the initializer of an object pattern of static keys and no rest (`const { customElements } = globalThis`): a read of those names;
 /// - `pattern-open`: of any other pattern (a rest element, a computed key, a nested pattern, an array pattern);
 /// - `alias[<uses>]`: the initializer of a binding nothing reassigns, exports or declares again, with the kinds of use it has, sorted and distinct (`member`,
-///   `pattern`, `pattern-open`, `computed`, `inspected`, `coerced`, `regexp-arg`, `argument`, `new`, `callee`, `return`, `assign`, `store`, `spread`, `valueOf`, `other`; the
-///   uses of an alias of the alias are its own); `alias-open`: a binding the scan does not follow (reassigned, exported, declared again, a script's top-level `var`, past
-///   the depth);
+///   `pattern`, `pattern-open`, `computed-symbol`, `computed-inert`, `computed-names`, `computed`, `inspected`, `coerced`, `regexp-arg`, `hop-read`, `argument`, `new`, `callee`, `return`,
+///   `export`, `assign`, `store`, `spread`, `valueOf`, `other`; the uses of an alias of the alias are its own); `alias-open`: a binding the scan does not follow
+///   (reassigned, exported, declared again, a script's top-level `var`, past the depth);
 /// - `member:<name>`: the object of a static member read (`(view.defaultView || window).innerHeight`, `(a || self).document`);
-/// - `computed-read`: the object of a computed member read by a key the syntax does not fix;
-/// - `argument:<callee>`, `new:<callee>`, `callee`, `spread`: an argument of a call or a construction (named by the callee as it is spelled: `fill`, `Object.assign`,
-///   `RegExp`), the function called, an element of an argument spread;
-/// - `return`, `assign` (the right of an assignment), `store` (a property value, an array element, a class field), `inspected` (a value only looked at), `coerced` (a
-///   template substitution, a `+`, a relational or bitwise operand), `other`.
+/// - `computed-read:<key>><result>`: the object of a computed member read by a key the syntax does not fix: `<key>` is `symbol` (a symbol names no global), `names` (the
+///   names the file's constants decide, one of them perhaps a name of the global object) or `unknown`; `<result>` is what is done with the value read (a shape, with
+///   the names of a call's callee and a construction's left out: `callee`, `member:prototype`, `argument`, `inspected`, …);
+/// - `argument:<callee>[~read|~open]`, `new:<callee>`, `callee`, `spread`: an argument of a call or a construction (named by the callee as it is spelled: `fill`,
+///   `Object.assign`, `RegExp`), the function called, an element of an argument spread. `~read` says the callee is a function of this file whose parameter only reads the
+///   value (a member, a pattern, a comparison, a coercion, or hands it on to such a function), `~open` that it is one that does more; no mark, any other callee;
+/// - `return`, `export` (an `export default` of it), `assign` (the right of an assignment), `store` (a property value, an array element, a class field), `inspected` (a
+///   value only looked at), `coerced` (a template substitution, a `+`, a relational or bitwise operand), `other`.
 ///
 /// A `branch:` prefix says the value reached the parent through one of the pass-on operands.
 pub(super) fn use_shape(
@@ -140,7 +143,12 @@ fn consumer(
             if is_at(&call.callee, span) {
                 "callee".to_owned()
             } else {
-                format!("argument:{}", callee_name(&call.callee))
+                let name = callee_name(&call.callee);
+                match local_hop(scoping, nodes, call, span, script, depth) {
+                    Some(true) => format!("argument:{name}~read"),
+                    Some(false) => format!("argument:{name}~open"),
+                    None => format!("argument:{name}"),
+                }
             }
         }
         AstKind::NewExpression(new) => {
@@ -154,9 +162,29 @@ fn consumer(
             format!("member:{}", member.property.name)
         }
         AstKind::ComputedMemberExpression(member) if is_at(&member.object, span) => {
-            "computed-read".to_owned()
+            let key = match key_of(scoping, nodes, &member.expression, KEY_DEPTH) {
+                Keys::Symbol => "symbol",
+                Keys::Names(_) => "names",
+                Keys::Unknown => "unknown",
+            };
+            // What is done with the value read: the shape of the member expression itself, without the callee a call names.
+            let result = if depth == 0 {
+                "other".to_owned()
+            } else {
+                let shape = shape_at(scoping, nodes, parent, script, depth - 1);
+                let shape = shape.strip_prefix("branch:").unwrap_or(&shape);
+                match shape {
+                    _ if shape.starts_with("argument:") => "argument".to_owned(),
+                    _ if shape.starts_with("new:") => "new".to_owned(),
+                    _ if shape.starts_with("alias[") => "alias".to_owned(),
+                    _ if shape.starts_with("computed-read:") => "computed-read".to_owned(),
+                    _ => shape.to_owned(),
+                }
+            };
+            format!("computed-read:{key}>{result}")
         }
         AstKind::ReturnStatement(_) => "return".to_owned(),
+        AstKind::ExportDefaultDeclaration(_) => "export".to_owned(),
         AstKind::ExpressionStatement(_) => {
             // The body of an arrow function written as an expression returns its value.
             let body = nodes.parent_id(parent);
@@ -244,13 +272,104 @@ fn use_kind(shape: &str) -> String {
     match shape {
         // `valueOf` hands the global object back (the scan's own rule for a member of it).
         "member:valueOf" => "valueOf".to_owned(),
-        "computed-read" => "computed".to_owned(),
+        _ if shape.starts_with("computed-read:symbol>") => "computed-symbol".to_owned(),
+        _ if shape.ends_with(">inspected") || shape.ends_with(">coerced") => {
+            "computed-inert".to_owned()
+        }
+        _ if shape.starts_with("computed-read:names>") => "computed-names".to_owned(),
+        _ if shape.starts_with("computed-read:") => "computed".to_owned(),
         "argument:RegExp" | "new:RegExp" => "regexp-arg".to_owned(),
         _ if shape.starts_with("member:") => "member".to_owned(),
+        _ if shape.starts_with("argument:") && shape.ends_with("~read") => "hop-read".to_owned(),
         _ if shape.starts_with("argument:") => "argument".to_owned(),
         _ if shape.starts_with("new:") => "new".to_owned(),
         _ => shape.to_owned(),
     }
+}
+
+/// Whether a call hands the value at `span` to a function of this file whose parameter only reads it: `Some(true)` when the callee is a name of a function (a declaration, or
+/// a `const` bound to a function expression) that nothing reassigns, and every use of the parameter the value is bound to reads a member, binds a pattern, is looked at,
+/// is coerced or given to `RegExp`, or hands it on to such a function; `Some(false)` when it is a function of this file that does more (or the parameter cannot be
+/// followed); `None` when the callee is no function of this file.
+fn local_hop(
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+    call: &oxc_ast::ast::CallExpression<'_>,
+    span: Span,
+    script: bool,
+    depth: u8,
+) -> Option<bool> {
+    let Expression::Identifier(callee) = call.callee.get_inner_expression() else {
+        return None;
+    };
+    let symbol = scoping
+        .get_reference(callee.reference_id.get()?)
+        .symbol_id()?;
+    if scoping.symbol_is_mutated(symbol) {
+        return None;
+    }
+    let parameters = match nodes.kind(scoping.symbol_declaration(symbol)) {
+        AstKind::Function(function) => &function.params,
+        AstKind::VariableDeclarator(declarator) => {
+            match declarator.init.as_ref()?.get_inner_expression() {
+                Expression::ArrowFunctionExpression(arrow) => &arrow.params,
+                Expression::FunctionExpression(function) => &function.params,
+                _ => return None,
+            }
+        }
+        _ => return None,
+    };
+    let index = call.arguments.iter().position(|argument| {
+        argument
+            .as_expression()
+            .is_some_and(|expression| is_at(expression, span))
+    })?;
+    // A spread before the argument shifts the parameters; one function gets the value as a rest element or a pattern: neither is followed.
+    if call.arguments[..index]
+        .iter()
+        .any(|argument| argument.as_expression().is_none())
+    {
+        return Some(false);
+    }
+    let Some(BindingPattern::BindingIdentifier(binding)) = parameters
+        .items
+        .get(index)
+        .map(|parameter| &parameter.pattern)
+    else {
+        return Some(false);
+    };
+    let parameter = binding.symbol_id.get()?;
+    if depth == 0 || scoping.symbol_is_mutated(parameter) {
+        return Some(false);
+    }
+    Some(scoping.get_resolved_references(parameter).all(|reference| {
+        let shape = shape_at(scoping, nodes, reference.node_id(), script, depth - 1);
+        let shape = shape.strip_prefix("branch:").unwrap_or(&shape);
+        match shape
+            .strip_prefix("alias[")
+            .and_then(|rest| rest.strip_suffix(']'))
+        {
+            Some(uses) => uses.split(',').all(is_read_kind),
+            None => is_read_kind(&use_kind(shape)),
+        }
+    }))
+}
+
+/// Whether a kind of use (see [`use_kind`]) only reads the value: a member, a pattern, a look at it, a coercion, a `RegExp` argument, a symbol-keyed read, or a hop into a
+/// function that does.
+fn is_read_kind(kind: &str) -> bool {
+    kind.is_empty()
+        || matches!(
+            kind,
+            "member"
+                | "pattern"
+                | "inspected"
+                | "coerced"
+                | "regexp-arg"
+                | "computed-symbol"
+                | "computed-inert"
+                | "hop-read"
+        )
 }
 
 /// The callee of a call as it is spelled, for a class: an identifier, `object.member` of two names, or `?`.
@@ -486,7 +605,45 @@ mod tests {
         );
         has("new RegExp(self);", "escape:self/new:RegExp");
         has("export const o = { w: window };", "escape:window/store");
-        has("export const v = window[k];", "escape:window/computed-read");
+        has(
+            "export const v = window[k];",
+            "escape:window/computed-read:unknown>alias-open",
+        );
+        has(
+            "export const v = () => window[k]();",
+            "escape:window/computed-read:unknown>callee",
+        );
+        has(
+            "export const v = (k) => String(globalThis[Symbol.for('x')]);",
+            "escape:globalThis/computed-read:symbol>argument",
+        );
+        has(
+            "export const v = (k) => window[k] + 1;",
+            "escape:window/computed-read:unknown>coerced",
+        );
+        // A bare `export default globalThis;` names a reference the semantic analysis calls a possible type: the scan does not see it (named in the M0 report).
+        has("export default (globalThis);", "escape:globalThis/export");
+    }
+
+    #[test]
+    fn a_function_of_the_file_that_only_reads_its_parameter_is_followed_one_hop() {
+        // chai's `truncate(source, n)`: the parameter is only measured and sliced.
+        has(
+            "function truncate(s, n) { return s.length > n ? 'x' : 'y'; } export const f = (v) => truncate(v.source, 8);",
+            "escape:source/argument:truncate~read@param",
+        );
+        has(
+            "const show = (s) => other(s); export const f = (v) => show(v.source);",
+            "escape:source/argument:show~open@param",
+        );
+        has(
+            "export const f = (v) => imported(v.source);",
+            "escape:source/argument:imported@param",
+        );
+        has(
+            "function t(s) { return `${s}`; } export const f = (v) => { const x = v.source; return t(x); };",
+            "escape:source/alias[hop-read]@param",
+        );
     }
 
     #[test]
