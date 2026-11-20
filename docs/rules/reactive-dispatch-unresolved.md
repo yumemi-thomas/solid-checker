@@ -233,8 +233,9 @@ a parameter, a destructured hook or a call result, a member of a field,
 parameter or element access, an inherited or twice-declared method, a project
 constructor, a reassigned `let` function and a synchronous DOM dispatcher
 (`showModal()`, `blur()`, `click()`, and an element's `focus()` unless the whole
-program holds no listener for what a focus move delivers and nothing that stands
-in for `focus`: ADR 1151), optional or not (ADR 0439).
+program (its packages, the dialect's registrars it imports and its page's HTML
+included) holds no listener for what a focus move delivers and nothing that
+stands in for `focus`: ADR 1151), optional or not (ADR 0439).
 
 ## How it is proven
 

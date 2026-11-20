@@ -37,3 +37,38 @@ Chrome (`scripts/runtime-oracle.mjs --cases fixtures/reactive-ir --only leaf-foc
 fixtures/reactive-ir/leaf-focus-no-listener/variants`): the main case is quiet; every variant with a listener or a stand-in reports
 `CLEANUP_IN_FORBIDDEN_SCOPE` (the listener's `onCleanup`, on the stack of the leaf callback's `focus()`) and is covered by the kept SC9012.
 Stubs: `solid-js.d.ts` declares the three primitives and the intrinsic elements; `tsc` accepts every case against the real rc.21 packages.
+
+## Round 1 (the Opus review of 35704e13e, FIX-FIRST)
+
+The v1 census read the syntax of a few spellings and did not follow the runtime's registration helpers; Chrome rc.21 confirmed four false cleans and three more
+were inferred. Every case is a variant below, with the registration route it names; each keeps its SC9012 at the call (the quiet controls are proved), and the
+reviewed build had **no** SC9012 at the call for the ones marked `old`. Every name is compared by its decoded value (the coordinator's item from ADR 1148's round 2:
+`\u0061ddEventListener`, `"\u0066ocus"`, `o\u006efocus`), and the escaped spellings are variants too.
+
+- The runtime's registrars (`@solidjs/web`, by the dialect's per-specifier audit `runtime_module_listener_registrations`): `runtime-add-event` (F1, old),
+  `runtime-add-event-delegated` (F2, old: `addEvent(el, "focusin", h, true)` with `delegateEvents`), `runtime-set-property` (old), `runtime-set-attribute` (F7,
+  inferred, old), `runtime-template` (F6, inferred, old), `runtime-spread`, `runtime-frames` (old: the frames tier is audited as `any`), `runtime-path-alias` (the quiet
+  `click` call by a `paths` alias into the runtime's file: unknown, taken as registering) and the control `runtime-add-event-quiet` (the same quiet call by the
+  runtime's own specifier: every call passes a constant outside the focus list, so it is proved).
+- Computed keys and spreads: `computed-add` (F3, old: `const add = "addEventListener"; el[add]("focus", h)`), `computed-unproven-key`, `dynamic-spread` (F4, old: a spread onto
+  `Dynamic` that `Object.fromEntries` fills with `onFocus`).
+- Markup: `jsx-inner-html` (F5, inferred, old), `jsx-inner-html-escaped` (old: `o\u006efocus` in the string), the control `jsx-inner-html-quiet` (a constant with no event
+  attribute and no script: proved).
+- Global writes (our own findings): `global-onfocus` (old), `global-onchange-logical` (`onchange ??= h`, old), `global-escaped-onfocus` (old).
+- Installed packages: `package-typed` (a package imported by name resolves to its declaration file; its runtime source is no analysed file), `package-computed` (the
+  package's source is read, and registers by a computed key).
+- Escaped spellings: `escaped-method-name`, `-string`, `-template` (`addEventListener`), `escaped-event-name`, `-template` (`"\u0066ocus"`), `escaped-on-property`,
+  `-string`, `escaped-handler-key`, `escaped-document-listener`, `escaped-bare-listener` (old: the bare global's name was compared as source text), `escaped-focus-member`
+  (`f\u006fcus`), and the control `escaped-quiet-event` (`"\u006beydown"` is no focus-family event: proved).
+- `oracle-add-event`, `oracle-add-event-delegated`, `oracle-computed-add`, `oracle-dynamic-spread` are the reviewer's four Chrome-verified cases with the handler in a
+  package (`fz-handler`, the reviewer's `pr-h`): the only App frame on the stack is the `focus()` line, so only the finding there covers Chrome's diagnostic. The
+  oracle reports `unproven-clean` for the reviewed build and `covered-uncertifiable` for this one (`node scripts/runtime-oracle.mjs --cases
+  fixtures/reactive-ir/leaf-focus-no-listener/variants --only oracle-add-event,oracle-add-event-delegated,oracle-computed-add,oracle-dynamic-spread`). The other variants
+  write the handler in `App.tsx`, where its own rows (SC3001, SC4001) cover the diagnostic at its `onCleanup`; their snapshots hold the row at the call.
+- The page (`../leaf-focus-page-*`, top-level fixtures: a project's HTML is read from its whole tree): `clean` (the page's only script is the program's module entry:
+  proved), `inline-handler`, `body-handler`, `inline-script`, `extra-script`, `second-module` and `unread` (an element host discovery's grammar does not read) each
+  withhold the proof. A project with no HTML is the closed world (the main case).
+
+The stubs of the `@solidjs/web` variants declare the registrars byte-faithfully to `types/client.d.ts` of `@solidjs/web@2.0.0-rc.21`, except `Dynamic` (the stub
+declares no `JSX.Element`); the runtime oracle types every case against the real packages. The `runtime-path-alias` stand-in `web.js` is written for the fixture, not the
+published bytes: the dialect answers by the module the build resolves to, and the runtime's own files are not read.

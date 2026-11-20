@@ -91,11 +91,17 @@ since a listener it reaches may call `onCleanup`; so does an optional
 `getContext`. An element's `focus()` (`x.focus()`, `x?.focus()`, no argument
 or data only) is the one exception: it delivers `focus`, `focusin`, `blur`,
 `focusout` and `change` (measured in Chrome), so where the whole program,
-packages included, holds no listener for any of them (a JSX handler or spread
-on an intrinsic element, an `addEventListener` that is not a literal other
-type, an `on<event>` property) and nothing that stands in for `focus` (a
-class or object member named `focus`, a replaced standard member), it runs no
-project code and the call is no obligation (ADR 1151, `focus_delivery`).
+packages included, holds no listener for any of them (a JSX handler or any JSX
+spread, an `addEventListener` that is not a literal other type, an `on<event>`
+property or a global write of one, a computed member nothing proves is another
+name, a registrar of the dialect's runtime such as `addEvent`, `setProperty`,
+`spread` or `template` unless every call passes a constant outside the focus
+list, markup or code built from a string, a package the build does not read,
+a project page with a script or an inline handler no analysed file holds) and
+nothing that stands in for `focus` (a class or object member named `focus`, a
+replaced standard member), it runs no project code and the call is no
+obligation (ADR 1151, `focus_delivery`). Every name is compared by its decoded
+value: `\u0061ddEventListener` and `"\u0066ocus"` are the names they spell.
 
 `onSettled` becomes a leaf owner only when its call is proven owner-backed.
 Out-of-band calls enqueue a plain callback and remain outside this rule; an
