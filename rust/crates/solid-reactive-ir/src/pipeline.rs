@@ -1445,10 +1445,77 @@ where
     parallel_balanced_results_from(64, items, analyze)
 }
 
+/// The order [`parallel_balanced_with_state_from`] claims its items in, when
+/// `SOLID_CHECKER_IR_CLAIM_ORDER` names one (ADR 1128). Its contract is that
+/// an item's answer does not depend on which worker ran it or what that
+/// worker ran before, and which items share a state otherwise follows the
+/// scheduler: a breach shows in one run in some number. This makes a breach
+/// reproducible without a scheduler, on one worker as on many: `reverse`,
+/// `rotate:<n>` (the claims start at item `n` and wrap) or `shuffle:<seed>`
+/// (one fixed permutation per length and seed) claim the items in that order
+/// instead of the input's. It changes which items share a state, never an
+/// answer, and the results still come back in input order.
+fn claim_permutation(len: usize) -> Option<Vec<usize>> {
+    #[derive(Clone, Copy)]
+    enum ClaimOrder {
+        Reverse,
+        Rotate(usize),
+        Shuffle(u64),
+    }
+    static ORDER: std::sync::OnceLock<Option<ClaimOrder>> = std::sync::OnceLock::new();
+    let order = (*ORDER.get_or_init(|| {
+        let value = std::env::var("SOLID_CHECKER_IR_CLAIM_ORDER").ok()?;
+        let value = value.trim();
+        if value.is_empty() || value == "forward" {
+            return None;
+        }
+        let order = if value == "reverse" {
+            Some(ClaimOrder::Reverse)
+        } else if let Some(count) = value.strip_prefix("rotate:") {
+            count.parse().ok().map(ClaimOrder::Rotate)
+        } else if let Some(seed) = value.strip_prefix("shuffle:") {
+            seed.parse().ok().map(ClaimOrder::Shuffle)
+        } else {
+            None
+        };
+        // A misspelled order would have a determinism check compare a run with itself.
+        assert!(
+            order.is_some(),
+            "SOLID_CHECKER_IR_CLAIM_ORDER is `forward`, `reverse`, `rotate:<n>` or `shuffle:<seed>`, not `{value}`"
+        );
+        order
+    }))?;
+    Some(match order {
+        ClaimOrder::Reverse => (0..len).rev().collect(),
+        ClaimOrder::Rotate(count) => {
+            let count = count % len.max(1);
+            (0..len).map(|claim| (claim + count) % len).collect()
+        }
+        ClaimOrder::Shuffle(seed) => {
+            // Fisher-Yates over splitmix64: the same permutation on every platform.
+            let mut state = seed ^ u64::try_from(len).unwrap_or(u64::MAX);
+            let mut next = || {
+                state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+                let mut mixed = state;
+                mixed = (mixed ^ (mixed >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+                mixed = (mixed ^ (mixed >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+                mixed ^ (mixed >> 31)
+            };
+            let mut order = (0..len).collect::<Vec<_>>();
+            for at in (1..len).rev() {
+                let pick = next() % u64::try_from(at + 1).unwrap_or(u64::MAX);
+                order.swap(at, usize::try_from(pick).unwrap_or(0));
+            }
+            order
+        }
+    })
+}
+
 /// [`parallel_balanced_results`] with a state each worker builds once
 /// (`init`) and carries from item to item: per-build caches whose answers
 /// depend on the build alone, so an item's result does not depend on which
-/// worker ran it or what it ran before. Without threads, or for a short
+/// worker ran it or what it ran before (ADR 1128 checks it: the claims can
+/// be reordered, [`claim_permutation`]). Without threads, or for a short
 /// slice, one state runs the items in order on the caller's thread.
 #[allow(clippy::disallowed_methods)]
 pub(crate) fn parallel_balanced_with_state<T, S, R, I, F>(
@@ -1483,27 +1550,39 @@ where
 {
     let limit = available_analysis_workers();
     let workers = limit.min(items.len());
+    let order = claim_permutation(items.len());
     if workers <= 1 || items.len() < threshold.max(2) {
         let mut state = init();
-        return items.iter().map(|item| analyze(&mut state, item)).collect();
+        let Some(order) = order else {
+            return items.iter().map(|item| analyze(&mut state, item)).collect();
+        };
+        let mut results = (0..items.len()).map(|_| None).collect::<Vec<_>>();
+        for index in order {
+            results[index] = Some(analyze(&mut state, &items[index]));
+        }
+        return results
+            .into_iter()
+            .map(|result| result.expect("every item is claimed once"))
+            .collect();
     }
     let next = std::sync::atomic::AtomicUsize::new(0);
     let recording = WorkerContext::of_caller();
     std::thread::scope(|scope| {
         let handles = (0..workers)
             .map(|_| {
-                let (init, analyze, next) = (&init, &analyze, &next);
+                let (init, analyze, next, order) = (&init, &analyze, &next, &order);
                 scope.spawn(move || {
                     let _limit = AnalysisWorkerLimit::enter(limit);
                     on_worker(recording, || {
                         let mut state = init();
                         let mut done = Vec::new();
                         loop {
-                            let index = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                            let Some(item) = items.get(index) else {
+                            let claim = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            if claim >= items.len() {
                                 break;
-                            };
-                            done.push((index, analyze(&mut state, item)));
+                            }
+                            let index = order.as_ref().map_or(claim, |order| order[claim]);
+                            done.push((index, analyze(&mut state, &items[index])));
                         }
                         done
                     })

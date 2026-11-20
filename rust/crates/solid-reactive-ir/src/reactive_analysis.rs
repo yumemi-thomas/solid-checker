@@ -516,27 +516,64 @@ pub(crate) fn collect_project<'facts>(
             )
             .with_member_writes(Box::new(move |file| member_writes.decided(file)))
         },
-        |census, start| match start {
-            CensusStart::Reference(symbol, reference) => {
-                let store =
-                    ctx.source_kinds.get(*symbol) == Some(&crate::ReactiveSourceKind::Store);
-                let props = ctx.prop_sources.contains_key(*symbol);
-                let root = props || store;
-                let pending = ctx.async_sources.contains(*symbol);
-                if root {
-                    census.root_start(reference, pending, props && !store)
-                } else {
-                    census.callable_start(reference, ctx.accessors.contains_key(*symbol), pending)
-                }
+        |census, start| {
+            // DIAG-1128 (temporary): the state a census of its own would start with.
+            if crate::value_use::diag1128::fresh("exported") {
+                census.diag_set_exported(crate::attribution::ExportedCallers::new(
+                    ctx.semantic_lookup,
+                    ctx.aliases,
+                    ctx.symbols_by_root,
+                ));
             }
-            CensusStart::Created {
-                file,
-                call,
-                store,
-                tuple,
-            } => census.created_start(file, *call, *store, *tuple),
+            if crate::value_use::diag1128::fresh("member") {
+                let member_writes = upstream_compat::MemberWrites::new(ctx);
+                census.diag_set_member_writes(Box::new(move |file| member_writes.decided(file)));
+            }
+            let answer = match start {
+                CensusStart::Reference(symbol, reference) => {
+                    let store =
+                        ctx.source_kinds.get(*symbol) == Some(&crate::ReactiveSourceKind::Store);
+                    let props = ctx.prop_sources.contains_key(*symbol);
+                    let root = props || store;
+                    let pending = ctx.async_sources.contains(*symbol);
+                    if root {
+                        census.root_start(reference, pending, props && !store)
+                    } else {
+                        census.callable_start(
+                            reference,
+                            ctx.accessors.contains_key(*symbol),
+                            pending,
+                        )
+                    }
+                }
+                CensusStart::Created {
+                    file,
+                    call,
+                    store,
+                    tuple,
+                } => census.created_start(file, *call, *store, *tuple),
+            };
+            if std::env::var("SOLID_CHECKER_CENSUS_DIAG").is_ok_and(|value| value == "verbose")
+                && let Some(left) = census.diag_leftover()
+            {
+                let who = match start {
+                    CensusStart::Reference(symbol, reference) => format!(
+                        "reference {}:{}-{} symbol={}",
+                        reference.path,
+                        reference.start_byte,
+                        reference.end_byte,
+                        symbol.as_str()
+                    ),
+                    CensusStart::Created { file, call, .. } => {
+                        format!("created {}:{}-{}", file.path.as_str(), call.start, call.end)
+                    }
+                };
+                eprintln!("census-left {who} {left}");
+            }
+            answer
         },
     );
+    crate::value_use::diag1128::report();
     let census_obligation =
         |callee: &str, location: typefacts::Location, blocker: &str| crate::StaticDefect {
             kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {

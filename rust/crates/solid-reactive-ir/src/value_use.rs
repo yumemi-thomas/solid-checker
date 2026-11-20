@@ -22,6 +22,61 @@ use crate::blockers;
 use crate::indexes::SemanticLookup;
 use crate::runtime_semantics::RuntimeArgumentBehavior;
 
+/// DIAG-1128 (temporary): what the census carries from one start to the next, counted, and the
+/// experiments that cut or mend it, chosen by environment variable.
+pub(crate) mod diag1128 {
+    use std::sync::{
+        OnceLock,
+        atomic::{AtomicU64, Ordering},
+    };
+    pub(crate) static STARTS: AtomicU64 = AtomicU64::new(0);
+    pub(crate) static LATE_STARTS: AtomicU64 = AtomicU64::new(0);
+    pub(crate) static LATE_ITEMS: AtomicU64 = AtomicU64::new(0);
+    pub(crate) static LATE_ROW_STARTS: AtomicU64 = AtomicU64::new(0);
+    pub(crate) static LATE_ROWS: AtomicU64 = AtomicU64::new(0);
+    pub(crate) static OTHER_STARTS: AtomicU64 = AtomicU64::new(0);
+
+    fn named(variable: &'static str, cell: &'static OnceLock<Vec<String>>) -> &'static [String] {
+        cell.get_or_init(|| {
+            std::env::var(variable)
+                .map(|value| value.split(',').map(str::to_owned).collect())
+                .unwrap_or_default()
+        })
+    }
+
+    /// `SOLID_CHECKER_CENSUS_FRESH=late,files,keys,allowed,writes,exported,member|all`.
+    pub(crate) fn fresh(component: &str) -> bool {
+        static FRESH: OnceLock<Vec<String>> = OnceLock::new();
+        named("SOLID_CHECKER_CENSUS_FRESH", &FRESH)
+            .iter()
+            .any(|name| name == component || name == "all")
+    }
+
+    /// `SOLID_CHECKER_CENSUS_FIX=drain`.
+    pub(crate) fn fix(variant: &str) -> bool {
+        static FIX: OnceLock<Vec<String>> = OnceLock::new();
+        named("SOLID_CHECKER_CENSUS_FIX", &FIX)
+            .iter()
+            .any(|name| name == variant)
+    }
+
+    pub(crate) fn report() {
+        if std::env::var_os("SOLID_CHECKER_CENSUS_DIAG").is_none() {
+            return;
+        }
+        let get = |counter: &AtomicU64| counter.load(Ordering::Relaxed);
+        eprintln!(
+            "census-diag starts={} late_starts={} late_items={} late_row_starts={} late_rows={} other_starts={}",
+            get(&STARTS),
+            get(&LATE_STARTS),
+            get(&LATE_ITEMS),
+            get(&LATE_ROW_STARTS),
+            get(&LATE_ROWS),
+            get(&OTHER_STARTS)
+        );
+    }
+}
+
 /// ADR 1104 (1b): how deep a primitive proof of a call's result looks (the after-await accounting's bound).
 const PRIMITIVE_DEPTH: usize = 4;
 
@@ -565,6 +620,46 @@ impl<'l, 'a> Census<'l, 'a> {
     /// across starts (`files`, `allowed`, `decided_writes`, `keys`, the
     /// exported-callers graph) answer from the build alone.
     fn begin_start(&mut self) {
+        // DIAG-1128 (temporary): what a start inherits from the one before it.
+        {
+            use std::sync::atomic::Ordering::Relaxed;
+            diag1128::STARTS.fetch_add(1, Relaxed);
+            if !self.late.is_empty() {
+                diag1128::LATE_STARTS.fetch_add(1, Relaxed);
+                diag1128::LATE_ITEMS.fetch_add(self.late.len() as u64, Relaxed);
+            }
+            if !self.late_rows.is_empty() {
+                diag1128::LATE_ROW_STARTS.fetch_add(1, Relaxed);
+                diag1128::LATE_ROWS.fetch_add(self.late_rows.len() as u64, Relaxed);
+            }
+            if self.parameter_hops != 0
+                || self.return_hops != 0
+                || !self.escapes.is_empty()
+                || !self.past_withheld.is_empty()
+                || !self.uses.is_empty()
+                || !self.escaped_uses.is_empty()
+                || !self.reached.is_empty()
+                || self.cut
+            {
+                diag1128::OTHER_STARTS.fetch_add(1, Relaxed);
+            }
+            if diag1128::fresh("late") {
+                self.late.clear();
+                self.late_rows.clear();
+            }
+            if diag1128::fresh("files") {
+                self.files.clear();
+            }
+            if diag1128::fresh("keys") {
+                self.keys.clear();
+            }
+            if diag1128::fresh("allowed") {
+                self.allowed.clear();
+            }
+            if diag1128::fresh("writes") {
+                self.decided_writes.clear();
+            }
+        }
         debug_assert_eq!(self.parameter_hops, 0, "a hop outlived its start");
         debug_assert_eq!(self.return_hops, 0, "a hop outlived its start");
         debug_assert!(self.escapes.is_empty() && self.past_withheld.is_empty());
@@ -577,6 +672,53 @@ impl<'l, 'a> Census<'l, 'a> {
         self.walked.clear();
         self.steps = 0;
         self.hop_starts.clear();
+    }
+
+    /// DIAG-1128 (temporary): replaces the exported-callers graph, as a census of its own would
+    /// start with.
+    pub(crate) fn diag_set_exported(
+        &mut self,
+        exported: crate::attribution::ExportedCallers<'l, 'a>,
+    ) {
+        self.exported = exported;
+    }
+
+    /// DIAG-1128 (temporary): what the start just walked left queued, for the one that follows it.
+    pub(crate) fn diag_leftover(&self) -> Option<String> {
+        if self.late.is_empty() && self.late_rows.is_empty() {
+            return None;
+        }
+        let at = |file: &FileFacts, span: Span| {
+            format!("{}:{}-{}", file.path.as_str(), span.start, span.end)
+        };
+        let late = self
+            .late
+            .iter()
+            .map(|late| match late {
+                Late::Escape(escape) => format!("escape@{}", at(escape.file, escape.at)),
+                Late::Name(file, span, _) => format!("name@{}", at(file, *span)),
+                Late::Position(file, span, _) => format!("position@{}", at(file, *span)),
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        let rows = self
+            .late_rows
+            .iter()
+            .map(|(location, blocker)| {
+                format!(
+                    "{}:{}-{} {blocker}",
+                    location.path, location.start_byte, location.end_byte
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        Some(format!("late=[{late}] late_rows=[{rows}]"))
+    }
+
+    /// DIAG-1128 (temporary): replaces the member-writes closure and what it decided.
+    pub(crate) fn diag_set_member_writes(&mut self, member_writes: MemberWrites<'l>) {
+        self.member_writes = member_writes;
+        self.decided_writes.clear();
     }
 
     /// The answer of the start just walked, taken out of the census.
@@ -773,6 +915,16 @@ impl<'l, 'a> Census<'l, 'a> {
         let late_rows = std::mem::take(&mut self.late_rows);
         self.escaped_uses.extend(late_rows);
         self.run_past_withheld();
+        // DIAG-1128 (temporary variant): the late walks and rows the past-withheld walks placed
+        // belong to this start.
+        if diag1128::fix("drain") {
+            let before = self.uses.len();
+            self.run_late();
+            let escaped = self.uses.split_off(before);
+            self.escaped_uses.extend(escaped);
+            let late_rows = std::mem::take(&mut self.late_rows);
+            self.escaped_uses.extend(late_rows);
+        }
     }
 
     /// ADR 1104: the late walks, on one budget of their own; one that runs past it leaves a row where it stopped, and the
@@ -961,8 +1113,16 @@ impl<'l, 'a> Census<'l, 'a> {
             self.callback_parameters(file, call, mode);
         }
         self.escapes.clear();
+        // DIAG-1128 (temporary variant): the late walks these walks queued, on their memo.
+        if diag1128::fix("drain-in") {
+            self.run_late();
+        }
         let past = self.uses.split_off(before);
         self.escaped_uses.extend(past);
+        if diag1128::fix("drain-in") {
+            let late_rows = std::mem::take(&mut self.late_rows);
+            self.escaped_uses.extend(late_rows);
+        }
         self.walked = walked;
     }
 
