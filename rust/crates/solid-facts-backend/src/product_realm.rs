@@ -588,6 +588,55 @@ fn script_run_differs(line: &str) -> Option<String> {
     commands.iter().find_map(|words| vite_run_differs(words))
 }
 
+/// The script runners whose commands run a script of a `package.json` by name (`npm run build`, `pnpm build`, `yarn build`, `bun run build`).
+const SCRIPT_RUNNERS: [&str; 4] = ["npm", "pnpm", "yarn", "bun"];
+
+/// Whether the commands of `line` run one of `names` through a script runner, and the words that follow the name (the runner hands them to the script).
+fn runs_script_with(line: &str, names: &BTreeSet<String>) -> Option<bool> {
+    let Some(commands) = script_commands(line) else {
+        // A line this reader cannot split: it counts as running a script and forwarding arguments when it names a runner and one of the scripts.
+        let words = line
+            .split(|c: char| !(c.is_alphanumeric() || "-_.:@".contains(c)))
+            .collect::<Vec<_>>();
+        return (words.iter().any(|word| SCRIPT_RUNNERS.contains(word))
+            && words.iter().any(|word| names.contains(*word)))
+        .then_some(true);
+    };
+    let mut found = None;
+    for words in commands {
+        let Some(runner) = words.iter().position(|word| SCRIPT_RUNNERS.contains(word)) else {
+            continue;
+        };
+        if let Some(at) = words[runner + 1..]
+            .iter()
+            .position(|word| names.contains(*word))
+        {
+            let forwarded = words.len() > runner + 1 + at + 1;
+            found = Some(found.unwrap_or(false) || forwarded);
+        }
+    }
+    found
+}
+
+/// The names of the scripts of one `package.json` that run `vite`, directly or by running another of them (`"ci": "npm run build"`).
+fn scripts_running_vite(scripts: &serde_json::Map<String, serde_json::Value>) -> BTreeSet<String> {
+    let mut names = BTreeSet::<String>::new();
+    loop {
+        let before = names.len();
+        for (name, line) in scripts {
+            let Some(line) = line.as_str() else { continue };
+            if !names.contains(name)
+                && (mentions_vite(line) || runs_script_with(line, &names).is_some())
+            {
+                names.insert(name.clone());
+            }
+        }
+        if names.len() == before {
+            return names;
+        }
+    }
+}
+
 /// The first `package.json` script of the chain whose run of `vite` is not the plain build of the project directory (see [`vite_run_differs`]): the build it runs
 /// reads a configuration, or a project, that this reader does not.
 fn script_selecting_vite_config(directory: &Path) -> Option<String> {
@@ -604,8 +653,17 @@ fn script_selecting_vite_config(directory: &Path) -> Option<String> {
         else {
             continue;
         };
+        let vite_scripts = scripts_running_vite(scripts);
         for (name, command) in scripts {
-            if let Some(why) = command.as_str().and_then(script_run_differs) {
+            let forwarded = |line: &str| {
+                runs_script_with(line, &vite_scripts)
+                    .filter(|forwarded| *forwarded)
+                    .map(|_| "it forwards arguments to a script that runs vite".to_owned())
+            };
+            if let Some(why) = command
+                .as_str()
+                .and_then(|line| script_run_differs(line).or_else(|| forwarded(line)))
+            {
                 return Some(format!(
                     "{}: the script `{name}` runs vite other than plainly in the project directory: {why}",
                     dir.join("package.json").display()
@@ -1877,6 +1935,51 @@ mod tests {
         ] {
             assert!(script_run_differs(line).is_none(), "{line}");
         }
+        // Arguments a script forwards to one that runs vite (`npm run build -- --config x`) are vite's: a `--config`, a root, a mode, whatever follows.
+        let scripts = |json: &str| -> serde_json::Map<String, serde_json::Value> {
+            serde_json::from_str(json).unwrap()
+        };
+        let forwards = |json: &str| -> Vec<String> {
+            let scripts = scripts(json);
+            let names = scripts_running_vite(&scripts);
+            scripts
+                .iter()
+                .filter_map(|(name, line)| {
+                    let line = line.as_str()?;
+                    (script_run_differs(line)
+                        .or_else(|| {
+                            runs_script_with(line, &names)
+                                .filter(|forwarded| *forwarded)
+                                .map(|_| String::new())
+                        })
+                        .is_some())
+                    .then(|| name.clone())
+                })
+                .collect()
+        };
+        assert_eq!(
+            forwards(r#"{ "build": "vite build", "prod": "npm run build -- --config x.ts" }"#),
+            ["prod"]
+        );
+        assert_eq!(
+            forwards(r#"{ "a": "vite", "b": "npm run a", "c": "npm run b -- --config y.ts" }"#),
+            ["c"]
+        );
+        assert_eq!(
+            forwards(r#"{ "build": "vite build", "ci": "pnpm build --mode staging" }"#),
+            ["ci"]
+        );
+        assert_eq!(
+            forwards(r#"{ "build": "vite build", "x": "npm run build -- \"--config\" y.ts" }"#),
+            ["x"]
+        );
+        // Plain calls, other scripts, and what runs no vite forward nothing to it.
+        assert!(
+            forwards(
+                r#"{ "build": "vite build", "ci": "pnpm build", "all": "eslint . && npm run build && yarn test", "test": "vitest run", "t2": "npm run test -- --coverage" }"#
+            )
+            .is_empty()
+        );
         let root = scratch("vite-select");
         let project = root.join("app");
         write(
