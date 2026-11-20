@@ -205,6 +205,13 @@ export const CHECKS = {
       ],
     ],
   },
+  // ADR 1128: the verdict determinism script's own tests (the gate itself is a process test of the backend crate and the script's runs).
+  "determinism-script": {
+    command: [
+      "bun", "packages/cli/node_modules/vitest/vitest.mjs", "run",
+      "--config", "packages/cli/vitest.config.mjs", "scripts/determinism-check.test.mjs",
+    ],
+  },
   "repro-causes": {
     command: [
       "bun", "scripts/uncertifiable-causes.mjs", "--repro", "fixtures/uncertifiable-repro",
@@ -469,6 +476,11 @@ export const ROWS = [
     prefix,
     owner: "the reproduction set's budget gate",
     checks: ["repro-budget"],
+  })),
+  ...["scripts/determinism-check.mjs", "scripts/determinism-check.test.mjs"].map((prefix) => ({
+    prefix,
+    owner: "the verdict determinism script (ADR 1128); it runs a checker build, so only its own tests",
+    checks: ["determinism-script"],
   })),
   {
     prefix: "scripts/uncertifiable-causes.mjs",
@@ -791,7 +803,7 @@ export function planFor(paths, { pins = processTestPins() } = {}) {
     ),
     ...[...pinned].sort(),
     ...["test-what-if"].filter((id) => selected.has(id)),
-    ...[...FINDING_GATES, "repro-budget"].filter((id) => selected.has(id)),
+    ...[...FINDING_GATES, "repro-budget", "determinism-script"].filter((id) => selected.has(id)),
     ...["ir-read-lint", "proof-lint", "ir-tools-test", "proof-tools-test", "ir-edit-fuzz", "fuzz-tests"].filter((id) => selected.has(id)),
     // ADR 1120: the premise's table and the kernel's oracle.
     ...["standard-members", "kernel-oracle"].filter((id) => selected.has(id)),
@@ -1013,6 +1025,7 @@ export const LANES = {
   "proof-gate": "gates",
   "repro-causes": "gates",
   "repro-budget": "gates",
+  "determinism-script": "gates",
   // The IR edit fuzz drives the debug checker's daemon, like the gates; the
   // read lint and the IR tool tests build nothing.
   "ir-edit-fuzz": "gates",
