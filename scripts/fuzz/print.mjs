@@ -608,7 +608,10 @@ function render(program, instrument) {
       case "button": {
         const tag = item.tag ?? "button";
         // ADR 1140: `spread` writes the handler in a literal spread (`{...{ onClick: () => … }}`), `post` attributes after it.
-        const handler = `() => ${block(item.handler, depth, entryFor(item, "handler"))}`;
+        // ADR 1139: `async` writes an async handler whose body awaits first.
+        const handler = item.async
+          ? `async () => ${block(item.handler, depth, entryFor(item, "handler"), ["await Promise.resolve();"])}`
+          : `() => ${block(item.handler, depth, entryFor(item, "handler"))}`;
         const on = item.on ?? "onClick";
         const open = `${ind(depth)}<${tag} data-act="${item.id}"${item.attrs ? ` ${item.attrs}` : ""} ${item.spread ? `{...{ ${on}: ${handler} }}` : `${on}={${handler}}`}${item.post ? ` ${item.post}` : ""}`;
         return [tag === "input" || tag === "iframe" || tag === "Dynamic" ? `${open} />` : `${open}>go</${tag}>`];
