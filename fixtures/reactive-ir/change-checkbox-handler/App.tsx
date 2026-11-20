@@ -1,6 +1,6 @@
 import { For, createSignal, createStore } from "solid-js";
 
-// ADR 1146: a `change` handler of a literal checkbox or radio is delivered by its click activation alone, so its body runs on the host's stack with no
+// ADR 1148: a `change` handler of a literal checkbox or radio is delivered by its click activation alone, so its body runs on the host's stack with no
 // owner: the setter, and a flow row's `index()` read, are legal there.
 export function Controlled() {
   const [done, setDone] = createSignal(false);

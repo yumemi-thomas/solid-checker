@@ -1,23 +1,30 @@
-//! ADR 1146: a `change` handler of a literal checkbox or radio input keeps the host-delivery proof.
+//! ADR 1148: a `change` handler of a literal checkbox or radio input keeps the host-delivery proof.
 //!
 //! ADR 0642 keeps `change` out of [`crate::runtime_semantics::event_keeps_delivery_proof`]: a text control (and a select) delivers it by a state change with no
 //! call to name, whatever makes the focused element leave (`blur()`, a move, a removal, `disabled = true`, Solid's own unmount), on the stack of whatever made
 //! it. So a handler of `change` may run inside an owned scope, and the placement of its body is unknown (`execution_role.denied-event`).
 //!
 //! A checkbox or a radio is delivered `change` by its click activation only. Measured in Chrome 148 (the runtime oracle's headless shell 1223; the scenarios and
-//! their events are in `docs/decisions.md`, ADR 1146): a user's click, the Space key (a checkbox) and the arrow keys (a radio group) deliver `click`, `input` and
+//! their events are in `docs/decisions.md`, ADR 1148): a user's click, the Space key (a checkbox) and the arrow keys (a radio group) deliver `click`, `input` and
 //! `change` on the host's stack; `el.click()`, `label.click()` and `dispatchEvent(new MouseEvent("click"))` deliver them synchronously inside the call, and
-//! `dispatchEvent(new Event("change"))` delivers the one event; nothing else does. A write of `checked`, `form.reset()`, `blur()`, `focus()` elsewhere, `remove()`,
-//! `replaceWith()` and `disabled = true` on the focused control deliver no `change`. Every deliverer is the host (an empty stack) or a call the dispatch census
+//! `dispatchEvent(new Event("change"))` delivers the one event; nothing else does. A write of `checked` delivers nothing, and `form.reset()`, `blur()`, `focus()`
+//! elsewhere, `remove()` and `disabled = true` after a click deliver no `change` beyond the click's own. Every deliverer is the host (an empty stack) or a call the dispatch census
 //! already counts (`HTMLElement.click`, `EventTarget.dispatchEvent`: [`crate::runtime_semantics::delivers_synchronously`]), exactly as for `click`, so the veto that
 //! withholds a `click` handler's proofs where a dispatch may deliver inside an owned scope (ADR 1125) withholds this one's too.
 //!
 //! That holds only for a control that stays a checkbox or a radio. Retyped to text (`type = "text"`, `setAttribute("type", …)`, `removeAttribute("type")`) the same
-//! element delivers `change` at `blur()`, `remove()`, `focus()` elsewhere and the rest, synchronously, as a text control does (measured), and then its handler may
-//! run anywhere. So the proof asks, of the element: an intrinsic `<input>` with one plain `type` attribute that is the string `checkbox` or `radio`, no spread, no
+//! element delivers `change` as a text control does: at the user's Tab, and synchronously inside a `remove()` or a `focus()` elsewhere (measured: `type = "text"` and
+//! Tab, `setAttribute` and `remove()`, `removeAttribute` and `focus()`), and then its handler may run anywhere. So the proof asks, of the element: an intrinsic `<input>` with one plain `type` attribute that is the string `checkbox` or `radio`, no spread, no
 //! `ref`, no `is`, and no namespaced attribute that can write the control (`use:`, `prop:`, `attr:`, `bool:`); and of the program: that delivery is intact (no
 //! Proxy, `Reflect`, `with`, `Object.assign` onto a value not made in place, definer or code built from a string: ADR 1125's premise, which these would break) and
-//! that no project file may write an element's `type` ([`program_may_retype`]). Installed code does not retype an element it was not handed (ADR 0300).
+//! that no file the program runs may write an element's `type` ([`retype_hazard`]): a project file or a dependency's source, since a dependency needs no element handed
+//! to it (`document.querySelectorAll("input").forEach((i) => { i.type = "text"; })`). A dependency whose source the program does not hold is the delivery premise's unread
+//! module. The dialect's own runtime packages are not read (ADR 0027: the dialect states what its runtime does; its writes of a property are the compiler's, on elements
+//! whose `type` is dynamic or spread); the exports of theirs that write by a name are the dialect's answer ([`solid_dialect::Dialect::element_property_writers`]), asked of
+//! every other file as exact imported symbols, never by spelling. Code outside the analyzed program is the kind of premise ADR 0300 states.
+//!
+//! `SOLID_CHECKER_CHANGE_CENSUS=<file|dir>` records, per project that holds such a handler, the two program answers, the delivery premise's first hazard and the first
+//! place that may retype (a measurement; it moves no verdict).
 //!
 //! The permit sits in [`crate::execution_role::handler_event_denied`], read by every consumer of a handler's event, and ablating it
 //! (`SOLID_CHECKER_IR_ABLATE_ARM=change_delivery.checkable-input-activation`, or the same id as a silence) denies `change` again, as before. Each decision that
@@ -26,7 +33,10 @@
 use std::sync::OnceLock;
 
 use solid_facts::FileFacts;
-use solid_facts::ast::{ComputedKeySite, JsxAttributeValueKind, JsxElementFact};
+use solid_facts::ast::{
+    ComputedKeySite, ExportKind, ImportKind, JsxAttributeValueKind, JsxElementFact,
+    ModuleLoadConsumer,
+};
 use solid_facts::core::Span;
 
 use crate::ExecutionRole;
@@ -39,9 +49,13 @@ pub(crate) const ACTIVATION_ONLY: &str = "change_delivery.checkable-input-activa
 /// The values of a `type` attribute whose control a `change` reaches by click activation alone.
 const CHECKABLE_TYPES: [&str; 2] = ["checkbox", "radio"];
 
-/// The names of the DOM's attribute API, whose mention anywhere in a project file may retype a control (`el.setAttribute("type", …)`, an alias, a pattern
-/// key, `el.attributes.getNamedItem("type").value = …`): a program that spells one is no program whose controls keep their type.
-const ATTRIBUTE_API: [&str; 16] = [
+/// The DOM's own names, whose mention anywhere in the program (a project file or a dependency's source) may retype a control: the DOM's attribute API
+/// (`el.setAttribute("type", …)`, an alias, a pattern key, `el.attributes.getNamedItem("type").value = …`) and the accessor lookups, which hand out the `type`
+/// setter itself (`HTMLInputElement.prototype.__lookupSetter__("type").call(el, "text")`). A program that spells one is no program whose controls keep their type. A
+/// spelling is matched, never a symbol: the platform's methods are reached through values the types may not name (`any`), so a veto by spelling is the fail-closed
+/// reading, and it can only withdraw the proof. The dialect's own exports are not in this list: they are matched as the exact imported symbols they are
+/// ([`takes_runtime_writer`]).
+const ATTRIBUTE_API: [&str; 20] = [
     "setAttribute",
     "setAttributeNS",
     "removeAttribute",
@@ -58,6 +72,10 @@ const ATTRIBUTE_API: [&str; 16] = [
     "setNamedItem",
     "removeNamedItem",
     "removeNamedItemNS",
+    "__lookupGetter__",
+    "__lookupSetter__",
+    "__defineGetter__",
+    "__defineSetter__",
 ];
 
 /// Whether the permit is on: not ablated (as an arm, for the monotone gate's M2b, or as a silence).
@@ -93,7 +111,10 @@ pub(crate) fn checkable_change_handler(file: &FileFacts, callback: Span) -> bool
 /// The program half of the permit: delivery is intact and no project file may write an element's `type`, and the permit is not ablated. Names the arm in the
 /// decision it answers.
 pub(crate) fn program_keeps_control_types(lookup: &SemanticLookup<'_>) -> bool {
-    if !enabled() || !lookup.event_delivery_intact() || lookup.element_retype_possible() {
+    let intact = lookup.event_delivery_intact();
+    let retype = lookup.element_retype_possible();
+    census(lookup, intact, retype);
+    if !enabled() || !intact || retype {
         return false;
     }
     let _ = role_arm!(
@@ -101,6 +122,76 @@ pub(crate) fn program_keeps_control_types(lookup: &SemanticLookup<'_>) -> bool {
         ExecutionRole::EventCallback
     );
     true
+}
+
+/// `SOLID_CHECKER_CHANGE_CENSUS=<file|dir>` appends one line per project that asks the program half (it has a literal checkbox or radio with a `change` handler): how
+/// many such handlers it holds and the two answers, with the delivery premise's first hazard where it fails. A measurement: it moves no verdict.
+fn census(lookup: &SemanticLookup<'_>, intact: bool, retype: bool) {
+    use std::io::Write as _;
+    use std::sync::Mutex;
+    static SEEN: Mutex<Vec<usize>> = Mutex::new(Vec::new());
+    let Some(target) =
+        std::env::var_os("SOLID_CHECKER_CHANGE_CENSUS").filter(|target| !target.is_empty())
+    else {
+        return;
+    };
+    let at = std::ptr::from_ref(lookup) as usize;
+    {
+        let mut seen = SEEN
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if seen.contains(&at) {
+            return;
+        }
+        seen.push(at);
+    }
+    let candidates = lookup
+        .files()
+        .iter()
+        .filter(|file| !crate::plain_premise::is_package(file.path.as_str()))
+        .map(|file| {
+            file.ast
+                .jsx_elements
+                .iter()
+                .filter(|element| {
+                    checkable_input(file, element)
+                        && element.attributes.iter().any(|attribute| {
+                            file.source_text(attribute.name).is_some_and(is_change)
+                        })
+                })
+                .count()
+        })
+        .sum::<usize>();
+    let project = lookup
+        .files()
+        .first()
+        .map(|file| file.path.to_string())
+        .unwrap_or_default();
+    let hazard = crate::indexes::event_delivery::delivery_hazard_reason(lookup)
+        .map(|(path, why, key)| serde_json::json!({ "path": path, "why": why, "key": key }));
+    let retype_hazard =
+        retype_hazard(lookup).map(|(path, why)| serde_json::json!({ "path": path, "why": why }));
+    let line = serde_json::json!({
+        "changeDelivery": {
+            "project": project,
+            "candidates": candidates,
+            "deliveryIntact": intact,
+            "deliveryHazard": hazard,
+            "retypePossible": retype,
+            "retypeHazard": retype_hazard,
+        },
+    });
+    let mut path = std::path::PathBuf::from(target);
+    if path.is_dir() {
+        path = path.join(format!("change-{}.jsonl", std::process::id()));
+    }
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        let _ = writeln!(file, "{line}");
+    }
 }
 
 /// An intrinsic `<input>` with exactly one plain `type` attribute, the string `checkbox` or `radio`, and nothing that can retype or hand out the control: no
@@ -147,25 +238,147 @@ fn checkable_input(file: &FileFacts, element: &JsxElementFact) -> bool {
     checkable
 }
 
-/// Whether any project file may write the `type` of an element: a write whose key is `type`, or is a computed one no proof narrows away from it
-/// ([`write_may_be_type`]), or a file that spells a name of the DOM's attribute API ([`ATTRIBUTE_API`]). Installed code is not read (ADR 0300): it does not retype an
-/// element it was not handed. The reflective routes (`Object.assign`, `defineProperty`, `Reflect.set`, `with`, code from a string) are the delivery premise's, asked
-/// beside this answer.
+/// Whether any file the program runs may write the `type` of an element ([`retype_hazard`]).
 pub(crate) fn program_may_retype(lookup: &SemanticLookup<'_>) -> bool {
+    retype_hazard(lookup).is_some()
+}
+
+/// The first place that may write the `type` of an element, as its file and what it does: a write whose key is `type`, or is a computed one no proof narrows away from it
+/// ([`write_may_be_type`]) (`type-write`); a spelling of a name of the DOM's attribute API or of an accessor lookup ([`ATTRIBUTE_API`]) (`spelled-name`); a computed key that
+/// folds to such a name (`el["set" + "Attribute"]("type", "text")`: the name is spelled nowhere, the key's proof names it) (`folded-name`); or one of the dialect's runtime
+/// writers taken into the file as the exact symbol it is ([`takes_runtime_writer`]) (`runtime-writer`). A dialect that does not name its writers
+/// ([`solid_dialect::Dialect::element_property_writers`]) is unknown, and every program may retype (`writers-unknown`, no file).
+///
+/// Every file of the program is read, a dependency's source as the project's: a dependency needs no element handed to it (`document.querySelectorAll("input").forEach((i)
+/// => { i.type = "text"; })`), and a library setter (`$(el).prop("type", "text")`) is a computed write in the library's own source. A dependency whose source the program
+/// does not hold is the delivery premise's unread module (ADR 1125), which withholds the proof beside this answer. The files of the dialect's own runtime packages
+/// ([`solid_dialect::Dialect::primitive_defining_packages`]) are not read (ADR 0027: the dialect states what its runtime does): their writes of a property are the
+/// compiler's, on elements whose `type` is dynamic or spread, and that is no checkable input here ([`checkable_input`]); their exports that write by a name are the dialect's
+/// answer, asked of every other file. The ecosystem packages (`@solidjs/router`, …) are consumers of the runtime, not part of it, and are read like any other. The reflective
+/// routes (`Object.assign` onto an element it was handed, `defineProperty`, `Reflect.set`, `with`, a key reader, code from a string) are the delivery premise's, asked beside
+/// this answer.
+pub(crate) fn retype_hazard(lookup: &SemanticLookup<'_>) -> Option<(String, &'static str)> {
+    let Some(writers) = lookup.dialect.element_property_writers() else {
+        return Some((String::new(), "writers-unknown"));
+    };
+    let runtime = lookup.dialect.primitive_defining_packages();
     lookup
         .files()
         .iter()
-        .filter(|file| !crate::plain_premise::is_package(file.path.as_str()))
-        .any(|file| {
-            let ast = &file.ast;
-            ast.write_targets
+        .filter(|file| !is_dialect_runtime(file.path.as_str(), runtime))
+        .find_map(|file| file_retype_hazard(file, writers).map(|why| (file.path.to_string(), why)))
+}
+
+/// Whether `path` is a file of one of the dialect's own runtime packages (`…/node_modules/@solidjs/web/…`).
+fn is_dialect_runtime(path: &str, runtime: &[&str]) -> bool {
+    crate::plain_premise::package_name(path).is_some_and(|name| runtime.contains(&name))
+}
+
+/// What in `file` may write the `type` of an element, if anything ([`retype_hazard`]).
+fn file_retype_hazard(file: &FileFacts, writers: &[(&str, &str)]) -> Option<&'static str> {
+    let ast = &file.ast;
+    if ast
+        .write_targets
+        .iter()
+        .chain(&ast.deleted_targets)
+        .any(|target| write_may_be_type(file, *target))
+    {
+        return Some("type-write");
+    }
+    if ATTRIBUTE_API
+        .iter()
+        .any(|name| spells_word(&file.source, name))
+    {
+        return Some("spelled-name");
+    }
+    if ast.computed_keys.iter().any(|key| {
+        key.texts
+            .iter()
+            .any(|text| ATTRIBUTE_API.contains(&text.as_str()))
+    }) {
+        return Some("folded-name");
+    }
+    takes_runtime_writer(file, writers).then_some("runtime-writer")
+}
+
+/// Whether `file` takes one of the dialect's runtime writers into the program, by the exact pair `(module, export)` ([`solid_dialect::Dialect::element_property_writers`]).
+/// A named import names its export whatever the local alias is; a default or namespace import of a module that holds a writer exposes them all; `export … from` and
+/// `export * from` such a module hand them on to every importer; an `import()` or a `require()` of it reaches the ones its consumer names, and all when it escapes unnamed.
+/// An import that erases (`import type`) takes nothing. A function of the same name that the program declares is no import: the proof is not refused by a name.
+fn takes_runtime_writer(file: &FileFacts, writers: &[(&str, &str)]) -> bool {
+    let holds = |module: &str| writers.iter().any(|(owner, _)| *owner == module);
+    let names = |module: &str, export: &str| {
+        writers
+            .iter()
+            .any(|(owner, name)| *owner == module && *name == export)
+    };
+    // An export no fact names exactly may be any of the module's: a module that holds a writer is taken as holding it.
+    let exact = |module: &str, export: Option<&str>| match export {
+        Some(export) => names(module, export),
+        None => holds(module),
+    };
+    let ast = &file.ast;
+    let imported = ast
+        .imports
+        .iter()
+        .filter(|import| !import.type_only)
+        .flat_map(|import| {
+            import
+                .bindings
                 .iter()
-                .chain(&ast.deleted_targets)
-                .any(|target| write_may_be_type(file, *target))
-                || ATTRIBUTE_API
-                    .iter()
-                    .any(|name| spells_word(&file.source, name))
+                .filter(|binding| !binding.type_only)
+                .map(move |binding| (import.module.as_str(), binding))
         })
+        .any(|(module, binding)| match binding.kind {
+            ImportKind::Named => exact(module, binding.imported.as_deref()),
+            ImportKind::Default | ImportKind::Namespace => holds(module),
+            // `import "m"` binds nothing: it loads the module for its effects, and a writer is reached through a binding.
+            ImportKind::SideEffect => false,
+        });
+    let imported_equals = ast
+        .import_equals
+        .iter()
+        .any(|import| !import.type_only && holds(import.module.as_str()));
+    let re_exported = ast
+        .exports
+        .iter()
+        .filter(|export| !export.type_only)
+        .filter_map(|export| {
+            Some((
+                export,
+                export.module.as_deref().filter(|module| holds(module))?,
+            ))
+        })
+        .any(|(export, module)| {
+            export.kind == ExportKind::All
+                || export.namespace.is_some()
+                || export
+                    .specifiers
+                    .iter()
+                    .filter(|specifier| !specifier.type_only)
+                    .any(|specifier| {
+                        let name = file
+                            .source_text(specifier.local.span)
+                            .and_then(solid_facts::kernel::cooked_key);
+                        exact(module, name.as_deref())
+                    })
+        });
+    let loaded = ast
+        .module_loads
+        .iter()
+        .any(|load| match load.specifier.as_deref() {
+            // A computed specifier may name any module: a delivery hazard already, and no file may be taken to avoid a writer.
+            None => true,
+            Some(module) if !holds(module) => false,
+            Some(module) => match &load.consumer {
+                Some(ModuleLoadConsumer::Members { names }) => {
+                    names.iter().any(|name| exact(module, Some(name)))
+                }
+                Some(ModuleLoadConsumer::Lazy { export, .. }) => exact(module, Some(export)),
+                None => true,
+            },
+        });
+    imported || imported_equals || re_exported || loaded
 }
 
 /// Whether the member written at `target` (an assignment, update, destructuring or iteration target, or a deleted operand) may be the property `type`: its name
@@ -299,12 +512,15 @@ mod tests {
             "<input type={'checkbox'} onChange={() => {}} />",
             "<input type=\"checkbox\" type=\"text\" onChange={() => {}} />",
             "<input type=\"checkbox\" {...p} onChange={() => {}} />",
+            "<input {...p} type=\"checkbox\" onChange={() => {}} />",
+            "<input type=\"checkbox\" onChange={() => {}} {...p} />",
             "<input type=\"checkbox\" ref={r} onChange={() => {}} />",
             "<input type=\"checkbox\" is=\"x-box\" onChange={() => {}} />",
             "<input type=\"checkbox\" use:d onChange={() => {}} />",
             "<input type=\"checkbox\" prop:type=\"text\" onChange={() => {}} />",
             "<input type=\"checkbox\" attr:type=\"text\" onChange={() => {}} />",
             "<input type=\"checkbox\" bool:disabled={true} onChange={() => {}} />",
+            "<input type=\"checkbox\" bool:type={true} onChange={() => {}} />",
             // Another event.
             "<input type=\"checkbox\" onInput={() => {}} />",
             "<input type=\"checkbox\" onClick={() => {}} />",

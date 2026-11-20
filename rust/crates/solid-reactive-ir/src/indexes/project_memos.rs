@@ -359,10 +359,11 @@ whole_program! {
 }
 
 whole_program! {
-    /// ADR 1146: whether any project file may write the `type` of an element (a
-    /// write under that key, a computed key no proof narrows away from it, or a
-    /// spelling of the DOM's attribute API), which withdraws the `change`
-    /// proof of a literal checkbox or radio.
+    /// ADR 1148: whether any project file may write the `type` of an element (a
+    /// write under that key, a computed key no proof narrows away from it, a
+    /// spelling of the DOM's attribute API or of an accessor lookup, or a
+    /// computed key that folds to one of those names), which withdraws the
+    /// `change` proof of a literal checkbox or radio.
     RetypeVeto, 51, retype_veto, "retype_veto", bool,
     cycle: true,
     direct: |lookup| crate::change_delivery::program_may_retype(lookup),

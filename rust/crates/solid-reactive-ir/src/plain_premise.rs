@@ -253,7 +253,7 @@ fn file_hazards(
 }
 
 /// The package a file of `node_modules` belongs to (a scoped name being two segments).
-fn package_name(path: &str) -> Option<&str> {
+pub(crate) fn package_name(path: &str) -> Option<&str> {
     let (_, rest) = path.rsplit_once("/node_modules/")?;
     let first = rest.split('/').next()?;
     if first.starts_with('@') {

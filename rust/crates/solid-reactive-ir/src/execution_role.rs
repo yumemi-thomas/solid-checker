@@ -327,7 +327,7 @@ pub(crate) fn handler_event_denied_by_name(file: &solid_facts::FileFacts, callba
     })
 }
 
-/// [`handler_event_denied_by_name`], and ADR 1146: a `change` handler of a literal
+/// [`handler_event_denied_by_name`], and ADR 1148: a `change` handler of a literal
 /// checkbox or radio keeps the proof too ([`crate::change_delivery`]), where the
 /// program keeps the control's type.
 pub(crate) fn handler_event_denied(

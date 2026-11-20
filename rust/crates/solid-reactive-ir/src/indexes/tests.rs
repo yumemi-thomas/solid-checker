@@ -1121,7 +1121,7 @@ fn the_any_file_vetoes_follow_what_the_project_writes() {
     assert!(iterator.4 && !iterator.5);
 }
 
-/// ADR 1146: whether any project file may write the `type` of an element.
+/// ADR 1148: whether any project file may write the `type` of an element.
 #[test]
 fn the_retype_veto_follows_what_the_project_writes() {
     let veto = |source: &str| {
@@ -1170,10 +1170,156 @@ fn the_retype_veto_follows_what_the_project_writes() {
     ] {
         assert!(veto(source), "{source}");
     }
+    // The accessor lookups hand out the `type` setter itself; a name a computed key folds to is spelled nowhere, and the key's proof names it.
+    for source in [
+        "export function f(el: any) { (HTMLInputElement.prototype as any).__lookupSetter__('type').call(el, 'text'); }",
+        "export function f(el: any) { const g = (HTMLInputElement.prototype as any).__lookupGetter__; return g; }",
+        "export function f(el: any) { el['set' + 'Attribute']('type', 'text'); }",
+        "export function f(el: any) { const name = 'remove' + 'Attribute'; el[name]('type'); }",
+        "export function f(el: any) { const { ['set' + 'Attribute']: set } = el; set.call(el, 'type', 'text'); }",
+        "export function f(el: any, c: boolean) { el[c ? 'setAttribute' : 'focus']('type', 'text'); }",
+    ] {
+        assert!(veto(source), "{source}");
+    }
+    // A folded key that names an API's reader, or an unrelated method, retypes nothing.
+    for source in [
+        "export function f(el: any) { return el['get' + 'Attribute']('type'); }",
+        "export function f(el: any) { const name = 'fo' + 'cus'; el[name](); }",
+    ] {
+        assert!(!veto(source), "{source}");
+    }
     // A longer identifier is no such name.
     assert!(!veto(
         "export function mySetAttribute() { return 1; }\nexport const attributesList = [];"
     ));
+}
+
+/// A project of several files, each `(path, source)`: a dependency's source is one of them when its path lies under `node_modules`.
+fn project_files(files: &[(&str, &str)]) -> ProjectFacts {
+    let mut facts = project("");
+    let generation = Generation::new(1).unwrap();
+    facts.files = files
+        .iter()
+        .map(|&(path, source)| FileFacts {
+            generation,
+            path: SourcePath::new(path).unwrap(),
+            source_hash: SourceHash::of(source),
+            source: Arc::from(source),
+            ast: Arc::new(solid_facts::ast::extract(path, source).unwrap()),
+            compiler: Arc::new(ExecutionMap {
+                compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
+                source_hash: SourceHash::of(source),
+                semantic_model: Default::default(),
+                tracked_regions: Vec::new(),
+                untracked_regions: Vec::new(),
+                discarded_regions: Vec::new(),
+                ownership_regions: Vec::new(),
+                callback_roles: Vec::new(),
+                jsx_operations: Vec::new(),
+            }),
+        })
+        .collect();
+    facts
+}
+
+/// ADR 1148: the retype veto reads every file the program runs, a dependency's source as the project's, and not the dialect's own runtime packages.
+#[test]
+fn the_retype_veto_reads_the_dependencies_the_program_runs() {
+    let veto = |files: &[(&str, &str)]| {
+        let facts = project_files(files);
+        let store = crate::base::memo::build::MemoStore::new(true, true);
+        memo_build(&facts, &store, &[], |lookup| {
+            lookup.element_retype_possible()
+        })
+        .0
+    };
+    let app = ("proj/app.tsx", "export const App = () => 1;");
+    // A dependency needs no element handed to it: it retypes what it queries, writes through a name it is given, or calls the attribute API.
+    for source in [
+        "export function retypeAll() { document.querySelectorAll('input').forEach((i) => { i.type = 'text'; }); }",
+        "export function f(el) { el.setAttribute('type', 'text'); }",
+        "export function f(el) { el['set' + 'Attribute']('type', 'text'); }",
+        "export const prop = (el, name, value) => { el[name] = value; };",
+        "export class Field { constructor(type) { this.type = type; } }",
+    ] {
+        assert!(
+            veto(&[app, ("proj/node_modules/dep/index.js", source)]),
+            "{source}"
+        );
+    }
+    // An ecosystem package is a consumer of the runtime, read like any other.
+    assert!(veto(&[
+        app,
+        (
+            "proj/node_modules/@solidjs/router/dist/index.js",
+            "export function f(el) { el.setAttribute('aria-current', 'page'); }"
+        )
+    ]));
+    // A dependency that writes nothing of the kind leaves the answer to the project.
+    assert!(!veto(&[
+        app,
+        (
+            "proj/node_modules/dep/index.js",
+            "export const double = (n) => n * 2;"
+        )
+    ]));
+    // The dialect's own runtime packages are not read, by their name at any depth of a store layout.
+    let runtime = "export function setAttribute(node, name, value) { node.setAttribute(name, value); }\nexport function assignProp(node, prop, value) { node[prop] = value; }";
+    for path in [
+        "proj/node_modules/@solidjs/web/dist/web.js",
+        "proj/node_modules/.pnpm/@solidjs+web@2.0.0-rc.21/node_modules/@solidjs/web/dist/web.js",
+        "proj/node_modules/@solidjs/signals/dist/index.js",
+        "proj/node_modules/solid-js/dist/solid.js",
+    ] {
+        assert!(!veto(&[app, (path, runtime)]), "{path}");
+    }
+    // The dialect's runtime exports that write under a name the caller gives are matched as exact imported symbols, in a project file and in a dependency: an alias,
+    // a namespace or default import of the module, a re-export, an `export *`, a dynamic import that names one or escapes, a `require`, an `import = require`.
+    for source in [
+        "import { setProperty } from '@solidjs/web';\nexport function f(el: HTMLInputElement) { setProperty(el, 'type', 'text'); }",
+        "import { setProperty as sp } from '@solidjs/web';\nexport function f(el: HTMLInputElement) { sp(el, 'type', 'text'); }",
+        "import { setStatefulProperty as put } from '@solidjs/web';\nexport const f = put;",
+        "import { spread } from '@solidjs/web';\nexport function f(el: HTMLInputElement) { spread(el, { type: 'text' }); }",
+        "import { assign } from '@solidjs/web';\nexport const f = assign;",
+        "import { setAttributeNS } from '@solidjs/web';\nexport const f = setAttributeNS;",
+        "import * as web from '@solidjs/web';\nexport function f(el: HTMLInputElement) { web.assign(el, { a: 1 }); }",
+        "import web from '@solidjs/web';\nexport const f = web;",
+        "export { setProperty } from '@solidjs/web';",
+        "export { setProperty as sp } from '@solidjs/web';",
+        "export * from '@solidjs/web';",
+        "export * as web from '@solidjs/web';",
+        "export async function f(el: HTMLInputElement) { const { setProperty } = await import('@solidjs/web'); setProperty(el, 'type', 'text'); }",
+        "export async function f() { return (await import('@solidjs/web')).spread; }",
+        "export async function f() { return import('@solidjs/web'); }",
+        "export const web = require('@solidjs/web');",
+        "import web = require('@solidjs/web');\nexport const f = web;",
+    ] {
+        assert!(veto(&[("proj/app.tsx", source)]), "{source}");
+    }
+    assert!(veto(&[
+        app,
+        (
+            "proj/node_modules/dep/index.js",
+            "import { spread } from '@solidjs/web';\nexport const f = (el) => spread(el, { type: 'text' });"
+        )
+    ]));
+    // No import of a writer, whatever the names: the ordinary imports, a type import, a side-effect import, a module that is not the dialect's, and a function the program
+    // declares under a writer's name (the proof is not refused by a name).
+    for source in [
+        "import { render, For, Show, insert, template, className, style } from '@solidjs/web';\nexport const f = [render, For, Show, insert, template, className, style];",
+        "import { createSignal } from 'solid-js';\nexport const f = createSignal;",
+        "import type { setProperty } from '@solidjs/web';\nexport type F = typeof setProperty;",
+        "import { type spread, render } from '@solidjs/web';\nexport const f = render;",
+        "import '@solidjs/web';\nexport const f = 1;",
+        "import { setProperty } from 'some-lib';\nexport const f = setProperty;",
+        "import { setProperty } from './web';\nexport const f = setProperty;",
+        "export { render } from '@solidjs/web';",
+        "export async function f() { const { render } = await import('@solidjs/web'); return render; }",
+        "export function setProperty(counter: { count: number }, value: number) { counter.count = value; }\nexport function assign(a: number) { return a; }\nexport const spread = [1, 2];",
+        "export const spreadsheet = 1;\nexport const assigned = 2;\nexport function setPropertyName() { return 3; }",
+    ] {
+        assert!(!veto(&[("proj/app.tsx", source)]), "{source}");
+    }
 }
 
 /// ADR 0931: a `const` arrow is initialized at every run of a forwarder

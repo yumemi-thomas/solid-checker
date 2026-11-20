@@ -1,6 +1,6 @@
 import { For, createSignal, createStore } from "solid-js";
 
-// ADR 1146: a `change` handler of a literal checkbox or radio runs on the host's stack with no owner: setters and a row's `index()` read are legal
+// ADR 1148: a `change` handler of a literal checkbox or radio runs on the host's stack with no owner: setters and a row's `index()` read are legal
 // there, and the dev build is quiet at every site.
 export function Controlled() {
   const [done, setDone] = createSignal(false);

@@ -2727,7 +2727,7 @@ impl<'a> SemanticLookup<'a> {
             .get_or_init(|| self.whole_program_answer::<IntrinsicHandedToUnseen>())
     }
 
-    /// ADR 1146: some project file may write the `type` of an element
+    /// ADR 1148: some project file may write the `type` of an element
     /// ([`crate::change_delivery::program_may_retype`]).
     pub(crate) fn element_retype_possible(&self) -> bool {
         *self

@@ -593,6 +593,24 @@ impl Dialect for Solid2 {
         &["@solidjs/"]
     }
 
+    /// The exports of `@solidjs/web` that write a property or an attribute of the element
+    /// they are handed under a name the caller gives: `assignProp`'s callers `assign` and
+    /// `spread`, and the three single writers (rc.21 `dist/web.js`: `node[name] = value`,
+    /// `node.setAttribute(name, value)`, `node.setAttributeNS(ns, name, value)`). Each pair
+    /// is a row of [`crate::exports::solid_v2_solidjs_web::VALUES`], which a test holds.
+    /// The other exports write a fixed property (`className`, `style`), an event slot, a
+    /// child, or run what they are handed.
+    fn element_property_writers(&self) -> Option<&'static [(&'static str, &'static str)]> {
+        Some(&[
+            ("@solidjs/web", "assign"),
+            ("@solidjs/web", "setAttribute"),
+            ("@solidjs/web", "setAttributeNS"),
+            ("@solidjs/web", "setProperty"),
+            ("@solidjs/web", "setStatefulProperty"),
+            ("@solidjs/web", "spread"),
+        ])
+    }
+
     fn primitive(&self, name: &str) -> Option<Primitive> {
         static INDEX: crate::NameIndex = crate::NameIndex::new();
         lookup(&INDEX, &[TABLE], name).filter(|primitive| self.exports(*primitive))
