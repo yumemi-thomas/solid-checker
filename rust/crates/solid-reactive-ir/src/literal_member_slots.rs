@@ -651,8 +651,8 @@ fn literal_is_closed(file: &FileFacts, literal: Span, keys: Option<&DeclaringKey
 }
 
 /// Whether the member at `span` is written: assigned, updated, deleted or an
-/// iteration target.
-fn member_written(file: &FileFacts, span: Span) -> bool {
+/// iteration target (also ADR 1129's view-spread receiver census).
+pub(crate) fn member_written(file: &FileFacts, span: Span) -> bool {
     file.ast.write_targets.contains(&span)
         || file.ast.deleted_targets.contains(&span)
         || file.ast.iteration_targets.contains(&span)

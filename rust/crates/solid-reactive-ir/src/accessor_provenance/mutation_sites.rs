@@ -2680,6 +2680,52 @@ fn standard_member_intact(lookup: &SemanticLookup<'_>, qualified_name: &str) -> 
         && !crate::base::contributions::reached_patch(qualified_name, &hazard)
 }
 
+/// ADR 1129 (review F2): whether the standard member `qualified_name`
+/// (`Array.includes`) may not be the standard one where the program runs.
+/// A file of the program may replace it ([`standard_member_intact`]: a write
+/// of a member of its name on any receiver, by assignment, alias, definer,
+/// `Reflect.set` or `Object.assign`, a write a prototype chain reaches, a
+/// standard root handed to a writer; ADRs 0781, 0876, 0939), or an installed
+/// package the program loads that writes a member of its name on a built-in's
+/// prototype, or may under a key nothing decides, an unread closure included
+/// (ADR 1108's index, clear packages too: the member is replaced whether or
+/// not the writer reaches Solid). Solid's own packages are the premises the
+/// caller read from their bytes. Where the adapter reads no filesystem, any
+/// installed package an import resolves into may.
+pub(crate) fn standard_member_replaced(lookup: &SemanticLookup<'_>, qualified_name: &str) -> bool {
+    if !standard_member_intact(lookup, qualified_name) {
+        return true;
+    }
+    let member = qualified_name
+        .rsplit_once('.')
+        .map_or(qualified_name, |(_, member)| member);
+    // ADR 1129 round 2 (F2): the census above reads names; a writer under a key it does not decide (`Object.defineProperty(A["proto"
+    // + "type"], k, …)`) or a prototype reached in one file and written in another is any program file's premise site.
+    if crate::plain_premise::program_may_write_standard_member(lookup, member) {
+        return true;
+    }
+    let solid = lookup.dialect.primitive_defining_packages();
+    let dialect_root = |root: &str| {
+        solid
+            .iter()
+            .any(|name| root.ends_with(&format!("/node_modules/{name}")))
+    };
+    match lookup.package_reach() {
+        Some(index) => index.prototype_member_writers(member).any(|root| {
+            !(index
+                .name_of(root)
+                .is_some_and(|name| solid.contains(&name))
+                || dialect_root(root))
+        }),
+        None => lookup.resolved_imports().is_some_and(|imports| {
+            imports.iter().any(|(_, import)| {
+                solid_facts::package_reach::package_root_of(&import.resolved_path)
+                    .is_some_and(|root| !dialect_root(root))
+            })
+        }),
+    }
+}
+
 /// The function the value at `span` is: a name whose binding holds it now
 /// (review R19a). A member is no such name: its method may be overridden or
 /// written. A value a call made (`const h = make(() => {})`) holds no function

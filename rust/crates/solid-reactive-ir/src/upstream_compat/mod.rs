@@ -909,12 +909,21 @@ fn check_file(file: &FileFacts, context: &UpstreamCompatContext<'_>) -> FileDiag
     let mut defects = Vec::new();
     syntax::check_file(
         file,
-        |span| {
-            context
-                .lookup
-                .entity_at(file.path.as_str(), span)
-                .and_then(|entity| entity.declared_keys.as_deref())
-                .map(Vec::as_slice)
+        syntax::SpreadKeySets {
+            declared: |span| {
+                context
+                    .lookup
+                    .entity_at(file.path.as_str(), span)
+                    .and_then(|entity| entity.declared_keys.as_deref())
+                    .map(Vec::as_slice)
+            },
+            view: |span| {
+                context
+                    .lookup
+                    .spread_views()
+                    .get(&crate::location(file.path.shared(), span))
+                    .map(|(keys, _)| keys.as_slice())
+            },
         },
         &mut violations,
     );

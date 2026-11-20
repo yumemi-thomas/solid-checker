@@ -36907,6 +36907,18 @@
   "rediscovered": "focus on the 16 false-positive ids of the run (mx-census CONTEXT_NOT_FOUND): d40e3f3cd 13 false positives plus the 3 known open (dny-flush-*, scripts/fuzz/open-defects.json); FIXED here (13 not-fired, the 3 known open unchanged)"
  },
  {
+  "finding": "ADR 1129 review F1 (Fable, round 1): the merge/omit view-spread proof counted only the binding holding a named function expression as the component's caller, so a tag or a call through the function's own name (`const Row = function Inner(props) {… <Inner innerHTML=… /> …}`, `const Same = function Same`, `CalledInner({ … })`, `<ActInner onClick={boom} />`) added keys and listeners the proof never saw: SC8003 spread-content-unproven and SC4001 handler-spread-unresolved were certified clean",
+  "found": "Fable review of ADR 1129 round 0 (379f2f79e)",
+  "fixed": "ADR 1129 review round 1 (view_spread.rs component_names over write_roles::entry_bindings, ADR 1127)",
+  "outside": "the defect moves only the spread's own rows, and no runtime diagnostic covers them: rc.21 reports no content conflict (SC8003), and the function the own-name site hands the spread stays uncertifiable at its site on every build (SC4001 function-run-unplaced or owner-callers-unenumerated: probes self, same, call and selflit, a NO_OWNER_EFFECT createEffect reached through the own name, are U at the site on 379f2f79e and on the fix), so no generated program can show a false clean for fuzz-focus to judge. Pinned instead: fixture merge-omit-view-spread-entries (Row, Same, Called SC8003 U and Called, Act SC4001 U on the fix; clean on 379f2f79e; Plain, Quiet proved), Chrome quiet with no TypeScript error"
+ },
+ {
+  "finding": "ADR 1129 review F2 (Fable, round 1): rc.21's omit hides a key with hidden.includes(key), so a program that replaces Array.prototype.includes leaks the omitted key (`omit(props, \"children\")` beside innerHTML: children reach the element); round 0 certified it, and round 1's first fix (ADR 0314 member census and ADR 0292's prototype-text veto) still certified a definer through an alias (`const proto = Array.prototype; Object.defineProperty(proto, \"includes\", …)`) and a loaded package that writes Array.prototype.includes",
+  "found": "Fable review of ADR 1129 round 0 (379f2f79e); the alias and package forms by W3's re-check of the round-1 WIP (b4e1e6fa0)",
+  "fixed": "ADR 1129 review round 1 (view_spread.rs includes_may_be_replaced: the census memo StandardMemberReplaced over standard_member_intact, ADRs 0781/0876/0939, and PackageReachIndex::prototype_member_writers, ADR 1108's index unfiltered)",
+  "outside": "what leaks is a key no runtime diagnostic watches: the content conflict draws none in rc.21, and a listener omit hides that a replaced includes lets through runs a function the checker already holds uncertifiable at its site on every build (probe incl: `omit(merge({ type: \"button\" }, props), \"onClick\")` under a replaced includes, the NO_OWNER_EFFECT site SC4001 function-run-unplaced U on 379f2f79e and on the fix), so no generated program can show a false clean. Node on rc.21's dist/dev.js: Object.keys(omit({ children, label }, \"children\")) is [label] with the standard includes and [children, label] with the replaced one. Pinned instead: fixture merge-omit-view-spread-includes and variants alias, define, define-alias, package-writer (SC8003 U on the fix; clean on 379f2f79e; define-alias and package-writer clean on b4e1e6fa0) and read-only (clean on all), Chrome quiet with no TypeScript error"
+ },
+ {
   "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent at an operation that runs a member a package wrote on a built-in's prototype other than a member call the library declares: a call typed by a project interface or type literal under an any-name writer, a conversion by an operator (`\"\" + d`), a template substitution, `p.catch(f)` running `then`, a bare `dispatchEvent`, an accessor read, `new Set(it)`, `new URL(u)`",
   "found": "Fable review of ADR 1114 family 3 (A+C, round 1: F1-F4, F6) and pattern lane `pkgaction/proto-anyname-{interface,unknown-cast}`; Chrome-confirmed (review-f3 oracle)",
   "fixed": "ADR 1114 family 3 slice E (fail closed under a prototype writer: every member call, every library call, constructor and tag, every converting operator (facts schema 103 `converting_operators`), every array pattern, `await`, `using`, JSX values)",
@@ -40542,5 +40554,31 @@
    "lg-strict-read-untracked-body-store-tuple-handed-direct-module-helper"
   ],
   "rediscovered": "new variants store-tuple-element, -setter, -handed (misuse.mjs WHOLE_STORE_READS): `focus.mjs --codes STRICT_READ_UNTRACKED --grids lg-recall --boundary both --ids`, release builds: main dba9d3cee exits 1 (false-positive 12), ADR 1138 exits 0 (uncertifiable 12)"
+ },
+ {
+  "finding": "ADR 1129 with ADR 1134 (W3, merge of main fbb44e89c): the view proof resolved the listener a merge/omit view spreads onto a control disabled from mount (`<button disabled {...merge({ onClick: () => createRenderEffect(...) }, props)} />`), so the handler became an SC4001 missing-owner violation; rc.21's assignProp delegates a spread's onClick and eventHandler skips a disabled node, so the handler never runs. 1134's pass reads only a handler in the control's own on-attribute with no spread. Never on main (main keeps handler-spread-unresolved U there)",
+  "found": "W3's probe of the 1134 interaction on the branch head 766599cce (release)",
+  "fixed": "ADR 1129 (object_members/memo.rs SpreadTargetsAt: under delegated_handler_skips_disabled_node, a view's handlers on a disableable control that writes disabled, holds another spread, or whose view may own disabled stay unresolved; disabled_handlers::view_spread_may_meet_disabled)",
+  "outside": "the generator writes no listener in a view's own literal: cbp-view hands the site's function from the caller, which stays SC4001 owner-varies-by-caller U on every build, disabled or not, and no context puts a view spread on a disabled control, so no generated program reaches the false violation for fuzz-focus to judge. Pinned instead: fixture merge-omit-view-spread-handler (DefaultedOff, KeyedOff handler-spread-unresolved U on the fix, DefaultedOff V on 766599cce; DefaultedOn V on both)"
+ },
+ {
+  "finding": "ADR 1129 final review N1: a listener a merge/omit view's own literal holds (`<button {...merge({ onClick: () => { createRenderEffect(…) } }, props)} onClick={…}>`) was placed as the button's handler and its createEffect/createRenderEffect an SC4001 missing-owner violation, but the compiler hands rc.21's `spread` the element's sources as one array (`spread(el, [view, { onClick: … }])`) and `collectProps` skips a key a later source has (`undefined` included): the view's function is never attached, Chrome is quiet (a false positive under ADR 1018)",
+  "found": "Fable final review of ADR 1129 (N1), on 0e1d4ccea",
+  "fixed": "ADR 1129 round 2 (object_members/memo.rs SpreadTargetsAt `later_source_may_supply`: a later spread, or a later attribute named like one of the view's listener keys, leaves the view's handlers unresolved, handler-spread-unresolved)",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-dny-legal-view-later-store-effect-called-direct-none",
+   "lg-strict-read-untracked-dny-legal-view-later-store-effect-named-called-direct-none",
+   "lg-strict-read-untracked-dny-legal-view-later-store-effect-carried-direct-none",
+   "lg-strict-read-untracked-dny-legal-view-later-store-render-effect-carried-direct-none"
+  ],
+  "rediscovered": "new context dny-legal-view-later (misuse.mjs, prim mergeOn): `focus.mjs --codes STRICT_READ_UNTRACKED,REACTIVE_WRITE_IN_OWNED_SCOPE --grids lg-recall,mx-recall --contexts dny-legal-view-later` (72 programs), release builds: 0e1d4ccea exits 1 with these 4 unexecuted-violation rows (missing-owner violation at line 7, the button clicked, the site never run); the fix exits 0, nothing needs a look"
+ },
+ {
+  "finding": "ADR 1129 final review F2: an omit view proof rests on Array.prototype.includes (rc.21 `isHidden`), and the round-1 premise (the name census and ADR 1108's package index) still certified a program that replaces it by a definer under built keys (`Object.defineProperty(A[\"proto\" + \"type\"], k, …)`) or through a prototype reached in another file (`export const p = Object.getPrototypeOf([])`, written under a built key elsewhere)",
+  "found": "Fable final review of ADR 1129 (F2), on 0e1d4ccea; probes c1-c4 (W6)",
+  "fixed": "ADR 1129 round 2 (plain_premise::program_may_write_standard_member, asked by standard_member_replaced: any program file's prototype route, Proxy/Reflect, with, Object.assign, coercion hook, code sink, unproven computed key, a write under includes or an undecided key, or an unread module withholds the omit view)",
+  "outside": "what leaks is a key no runtime diagnostic watches: the content conflict draws none in rc.21, and a listener omit hides that a replaced includes lets through is a caller's function the checker holds uncertifiable at its site on every build (W3's probe incl, round 1), so no generated program can show a false clean for fuzz-focus to judge. Pinned instead: fixture merge-omit-view-spread-includes variants define-computed and cross-file (SC8003 spread-content-unproven U on the fix; clean on 0e1d4ccea), read-only still clean; Chrome quiet with no TypeScript error"
  }
 ]

@@ -228,7 +228,20 @@ declared return type, a union of such types; ADR 0436). The proof reads the
 declared type: an index signature, `any`, a generic or open union member, or a
 type the checker cannot enumerate keeps the obligation. A value typed
 `{ class?: string }` may carry more keys at run time (structural subtyping), and
-direct `eval` withholds the proof. Unknown holders,
+direct `eval` withholds the proof. A `merge`/`omit` view of a component's own
+props spread onto an intrinsic element is resolved from the component's callers
+when every one, through any name the function is entered by (ADR 1127), is a JSX
+site with literal keys, and for an `omit` view no file or loaded package may
+replace `Array.prototype.includes` (ADR 1129): its listener keys hold
+the function literals the callers (or the view's literals) write there, which join
+the owner graph as handlers, and no other value; on a form control that writes
+`disabled`, holds another spread, or whose view may own `disabled`, the handlers
+stay unresolved, since a delegated handler of a disabled control never runs
+(ADR 1134); so do they where a later spread or a later attribute of a listener
+key's name may supply that key, since rc.21's `spread` skips a key a later
+source has and the view's function is never attached. For `includes`, any
+program file's prototype route, reflective write or key nothing decides counts
+as a writer. Unknown holders,
 getters, generators and unaudited web spread keys retain internal obligations. These placements obey
 the synchronous-dispatch veto above; no unresolved target proves a violation.
 

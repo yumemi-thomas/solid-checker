@@ -1147,6 +1147,16 @@ packages/wasm/owned/
 !fixtures/reactive-ir/sc1001-helper-member/node_modules/**
 !fixtures/reactive-ir/merge-omit-view-props-call/node_modules/
 !fixtures/reactive-ir/merge-omit-view-props-call/node_modules/**
+!fixtures/reactive-ir/merge-omit-view-spread/node_modules/
+!fixtures/reactive-ir/merge-omit-view-spread/node_modules/**
+!fixtures/reactive-ir/merge-omit-view-spread-handler/node_modules/
+!fixtures/reactive-ir/merge-omit-view-spread-handler/node_modules/**
+!fixtures/reactive-ir/merge-omit-view-spread-entries/node_modules/
+!fixtures/reactive-ir/merge-omit-view-spread-entries/node_modules/**
+!fixtures/reactive-ir/merge-omit-view-spread-includes/node_modules/
+!fixtures/reactive-ir/merge-omit-view-spread-includes/node_modules/**
+!fixtures/reactive-ir/merge-omit-view-spread-includes/variants/package-writer/node_modules/
+!fixtures/reactive-ir/merge-omit-view-spread-includes/variants/package-writer/node_modules/**
 !fixtures/reactive-ir/handed-call-results/node_modules/
 !fixtures/reactive-ir/handed-call-results/node_modules/**
 !fixtures/reactive-ir/handed-net-guards/node_modules/

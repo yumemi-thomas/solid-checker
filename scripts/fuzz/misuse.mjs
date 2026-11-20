@@ -15,7 +15,7 @@
 import {
   walk, domExpr, listenExpr, signal, storeSignal, memoSignal, actionSignal, reactionSignal, asyncSignal, asyncDeclaredSignal, asyncMaybeSignal, storeAsyncSignal, storeRawSignal, storeClassSignal, storeOptSignal, storeNestedSignal, storeListSignal, storeLinkSignal, storeArraySignal, storeEmptySignal, storeShallowSignal, apiSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
   HANDOFF_FORMS, DEPTH_FORMS, CHAIN_FORMS, propEl, jsxExpr, button, child, attr, iter, show, forEach, refEl, flowEl, handlerExpr, FLOW_FORMS, flush, use, contain, ctl, member as memberOf, obj, jsx, createOwnerExpr, loadingView, asyncDepSignal,
-  CBP_CALLS, CBP_FORMS, cbProp, namedButton, mounted, setUpdater,
+  CBP_CALLS, CBP_FORMS, cbProp, namedButton, mounted, setUpdater, bareParam,
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
 import { RECALL_MOUNTS, WRAP_MOUNTS } from "./mounts.mjs";
@@ -91,7 +91,10 @@ export const SOURCE_AXES = {
   // `helpers.ts`'s default export. Not under `module`, so `--sources module` keeps its programs.
   // ADR 0934: a prop value read through a TypeScript wrapper on `props` (`(props as typeof props).w1`), which Type Facts keeps no
   // entity under (the binder resolves it).
-  files: ["module-barrel", "module-default-hook", "prop-value-cast"],
+  // ADR 1129: `prop-view-spread`, read through `merge({ extra: 1 }, props)` as `prop-merge` is, while the component also spreads
+  // `omit(props, <every key P1 passes>)` onto an intrinsic `<p>`: a view of its own props whose keys only its callers decide. The props type
+  // declares a content key and a listener (`innerHTML`, `onClick`), as `JSX.HTMLAttributes` does, so no declared key set closes the spread.
+  files: ["module-barrel", "module-default-hook", "prop-value-cast", "prop-view-spread"],
   // ADR 0940 (SC4002, CONTEXT_NOT_FOUND only: no other template has a context to bring): the context is an export of a dependency package, made with no default
   // (`fz-ctx`, package.mjs `contextPackageFiles`), read with no provider above. The checker reads the dependency's source to know it has no default.
   // ADR 0949: the same package's component a tag renders (`package-component`), its hook handed on by reference (`package-handed`) and its class (`package-holder`):
@@ -165,7 +168,7 @@ export function sourcedName(source, name) {
     case "prop": case "prop-spread": case "prop-value": case "async-prop": case "async-value": case "async-value-member": case "async-loading": return `props.${name}`;
     // ADR 0823: the read is a body destructure of the props object, written where the read is.
     case "async-value-dstr": return `(() => { const { ${name} } = props; return ${name}; })()`;
-    case "prop-merge": return `merged.${name}`;
+    case "prop-merge": case "prop-view-spread": return `merged.${name}`;
     case "prop-omit": return `rest.${name}`;
     case "context": case "async-context": return `ctx.${name}`;
     case "module-hook-member": return `vals.${name}`;
@@ -234,7 +237,10 @@ const DISPOSALS = { "dny-dispose-body": "body", "dny-dispose-memo": "memo", "dny
 /** The same triggers on an event of the measured list: nothing delivers it, and it keeps the proof. */
 // ADR 1132 (review F6): `dny-legal-mount-disabled`, the click control disabled by its own JSX from mount: no event ever reaches its handler, so a
 // violation there is no "wrong if it runs" (legal.mjs `undrivenHandlerSite` refuses it) and stays a look.
-const DENIED_LEGAL = ["dny-legal-keydown", "dny-legal-click", "dny-legal-pointer", "dny-legal-project-click", "dny-blur-lowercase", "dny-legal-mount-disabled"];
+// ADR 1129 round 2 (N1): `dny-legal-view-later`, a child that spreads `merge({ onClick: <site> }, props)` onto its button and writes its own
+// `onClick` after the spread: rc.21's `spread` skips a key a later source has, so the view literal's handler is never attached (the click runs
+// the later one).
+const DENIED_LEGAL = ["dny-legal-keydown", "dny-legal-click", "dny-legal-pointer", "dny-legal-project-click", "dny-blur-lowercase", "dny-legal-mount-disabled", "dny-legal-view-later"];
 const DENIED_OTHER = ["dny-blur-spread", "dny-typo-event", "dny-blur-dynamic", "dny-portal-dispose", "dny-load-append", "dny-load-for", "dny-load-show", "dny-unmount-flush-body", "dny-unmount-flush-root", "dny-insert-body", "dny-renamed-prop", "dny-shared-fn", "dny-chain-click"];
 /** ADR 1125: the Fable review of ADR 1089 E round 2 (G1, G3, G6) and round 1's F2 on main's event-callback read proof: each runs the
  * handler of an element's `onScroll` from an effect's apply other than by a delivery that sets `window.event`. */
@@ -993,9 +999,11 @@ const FLOW_PLACEMENT = {
  * Not cells: an effect in an apply (PRIMITIVE_IN_EFFECT_CALLBACK, not NO_OWNER_EFFECT) or in onSettled, a boundary in onSettled,
  * a pending read in JSX or onSettled for PENDING_ASYNC_UNTRACKED_READ (another code fires there, so neither misuse nor legal).
  */
-export const CBP_CONTEXTS = CBP_CALLS.flatMap((call) => CBP_FORMS.map((form) => (form === "inline" ? `cbp-${call}` : `cbp-${call}-${form}`)));
-// `attached` (CBP_CALLS): the child's intrinsic runs `props.run` itself as its click handler, as `handler` does through an arrow.
-const cbp = (...calls) => CBP_CONTEXTS.filter((context) => calls.flatMap((call) => (call === "handler" ? ["handler", "attached"] : [call])).includes(/^cbp-([a-z]+)/.exec(context)[1]));
+// `view` (ADR 1129) takes no `destructured` form: a destructured child has no props object to view.
+export const CBP_CONTEXTS = CBP_CALLS.flatMap((call) => CBP_FORMS.filter((form) => !(call === "view" && form === "destructured")).map((form) => (form === "inline" ? `cbp-${call}` : `cbp-${call}-${form}`)));
+// `attached` (CBP_CALLS): the child's intrinsic runs `props.run` itself as its click handler, as `handler` does through an arrow; `view`
+// (ADR 1129) hands it to the button's spread through a `merge`/`omit` view, so it runs there the same way.
+const cbp = (...calls) => CBP_CONTEXTS.filter((context) => calls.flatMap((call) => (call === "handler" ? ["handler", "attached", "view"] : [call])).includes(/^cbp-([a-z]+)/.exec(context)[1]));
 const CBP_PLACEMENT = {
   REACTIVE_WRITE_IN_OWNED_SCOPE: { misuse: cbp("body", "jsx"), legal: cbp("handler", "apply", "settled", "never") },
   ACTION_CALLED_IN_OWNED_SCOPE: { misuse: cbp("body", "jsx"), legal: cbp("handler", "apply", "settled", "never") },
@@ -1765,6 +1773,12 @@ function deniedContextOf(context, stmts, kit, b) {
   if (context === "dny-blur-lowercase") { const h = kit.name("f"); return { body: [decl(h, fn(stmts)), ...laterRoot(kit, [`${el}.focus()`], `${el}.disabled = true`)], view: [button(b, [], { on: "onKeyDown", attrs: `{...{ onblur: ${h} }}` })] }; }
   if (context === "dny-legal-project-click") return { body: laterRoot(kit, [], "({ click() { return 1; } }).click()"), view: [button(b, stmts)] };
   if (context === "dny-legal-mount-disabled") return { body: [], view: [button(b, stmts, { tag: "button", on: "onClick", attrs: "disabled" })] };
+  if (context === "dny-legal-view-later") {
+    const m = kit.name("m");
+    const kid = decl("ViewKid", fn([decl(m, prim("mergeOn", fn(stmts), { key: "onClick", source: "p0" })),
+      ret(jsxExpr(button(b, [], { on: "onClick", attrs: `{...${m}}` })))], { params: [bareParam("{ onClick?: () => void }", false)] }));
+    return { body: [kid], view: [mounted(kit.name("v"), domExpr("<ViewKid />"))] };
+  }
   const legal = { "dny-legal-keydown": { tag: "input", on: "onKeyDown" }, "dny-legal-click": { tag: "button", on: "onClick" }, "dny-legal-pointer": { tag: "button", on: "onPointerDown" } }[context];
   if (legal) return { body: laterRoot(kit, [`${el}.focus()`], `${el}.disabled = true`), view: [button(b, stmts, legal)] };
   const spec = DENIED[context];
