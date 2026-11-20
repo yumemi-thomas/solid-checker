@@ -97,6 +97,11 @@ export const CHECKS = {
       "cargo", TOOLCHAIN, "test", "--manifest-path", MANIFEST, "-p", "solid-reactive-ir", "--lib",
     ],
   },
+  // The dialect crate's own tests: the `Dialect` interface, the Solid 2 vocabulary, the audited package tables and the negative citation
+  // table, which re-derives a runtime file's digest from its bytes. The crates that depend on it have their own checks (the row's comment).
+  "dialect-lib": {
+    command: ["cargo", TOOLCHAIN, "test", "--manifest-path", MANIFEST, "-p", "solid-dialect", "--lib"],
+  },
   // ADR 0950: the what-if build's own tests (`make test-what-if`: the feature, its own target directory), the one place the feature may
   // be built; selected when a changed fixture is pinned by a test target that needs the feature (`what_if_process`).
   "test-what-if": {
@@ -210,6 +215,14 @@ export const CHECKS = {
     command: [
       "bun", "packages/cli/node_modules/vitest/vitest.mjs", "run",
       "--config", "packages/cli/vitest.config.mjs", "scripts/determinism-check.test.mjs",
+    ],
+  },
+  // This script's own tests: the mapping is what makes a plan trustworthy, so a change to it (or to its test) selects them rather than the
+  // full `make verify`, as the determinism script's tests do.
+  "verify-delta-script": {
+    command: [
+      "bun", "packages/cli/node_modules/vitest/vitest.mjs", "run",
+      "--config", "packages/cli/vitest.config.mjs", "scripts/verify-delta.test.mjs",
     ],
   },
   "repro-causes": {
@@ -404,8 +417,9 @@ export const FINDING_GATES = ["coverage", "repro-causes", "ownership-gate", "tsc
  * name fragment or regex: a row applies to a directory, exactly.
  */
 export const ROWS = [
-  // The three analysis-only rows (solid-facts, solid-reactive-ir, the v2 rules
-  // crate) select `wasm-compile` and never the WASM package build or parity:
+  // The four analysis-only rows (solid-facts, solid-reactive-ir, solid-dialect,
+  // the v2 rules crate) select `wasm-compile` and never the WASM package build
+  // or parity:
   // parity compares two builds of one analysis, so an edit confined to the
   // analysis moves both identically. Every other rust/ row, and anything
   // under packages/wasm, solid-checker-wasm, typefacts, apps/ or
@@ -426,12 +440,29 @@ export const ROWS = [
     owner: "solid-facts-backend process/diagnostics",
     checks: ["backend-process", "backend-staleness", "write-walk-strategies", ...FINDING_GATES, "ir-edit-fuzz"],
   },
-  // No `rust/crates/solid-dialect/` row, deliberately. The crate owns the
-  // shared `Dialect` interface that `solid-reactive-ir` and the dialect crate
-  // consume -- so a change there can move findings, break the IR library
-  // tests, and break the backend's process tests alike. Writing a row narrower
-  // than that blast radius is exactly the guess this script must not make, so
-  // the path is unmapped and escalates.
+  // `rust/crates/solid-dialect/` was left unmapped, deliberately: the crate owns the shared `Dialect` interface, so a row narrower than its blast
+  // radius is a guess, and a guess is what this script must not make. The row is the radius, read from the workspace's dependency graph
+  // (`cargo metadata`; the mapping test pins it): the crates that depend on it are solid-reactive-ir, solid-facts-backend and the v2 rules
+  // crate, and solid-checker-wasm through the backend. So a change selects the crate's own tests, each dependent's tests (`ir-lib`; the
+  // backend's process tests, its staleness tests and the write-walk comparison; the dialects process test the rules crate answers to), the
+  // gates that read findings, the daemon-against-one-shot edit fuzz, and the WASM compile check. It selects none of the IR's source lints
+  // (they read the IR crate's sources) and no solid-facts test (the facts crate does not depend on it). The crate is analysis only: it has no
+  // target-specific code, so a change moves the native and the WASM builds alike and `wasm-parity` is not selected, as for the other analysis crates.
+  {
+    prefix: "rust/crates/solid-dialect/",
+    owner: "solid-dialect (the Dialect interface, the Solid 2 vocabulary and its audited tables)",
+    checks: [
+      "dialect-lib",
+      "ir-lib",
+      "backend-process",
+      "backend-staleness",
+      "write-walk-strategies",
+      "dialects-process",
+      ...FINDING_GATES,
+      "ir-edit-fuzz",
+      "wasm-compile",
+    ],
+  },
   {
     prefix: "rust/dialects/",
     owner: "dialects at the process boundary",
@@ -476,6 +507,11 @@ export const ROWS = [
     prefix,
     owner: "the reproduction set's budget gate",
     checks: ["repro-budget"],
+  })),
+  ...["scripts/verify-delta.mjs", "scripts/verify-delta.test.mjs"].map((prefix) => ({
+    prefix,
+    owner: "the verify-delta mapping and its tests (a plan is only as good as its mapping; nothing else reads either file)",
+    checks: ["verify-delta-script"],
   })),
   ...["scripts/determinism-check.mjs", "scripts/determinism-check.test.mjs"].map((prefix) => ({
     prefix,
@@ -798,13 +834,13 @@ export function planFor(paths, { pins = processTestPins() } = {}) {
     ...(needsChecker ? ["build-debug"] : []),
     // Before the process tests: it rebuilds with the harness pins recomputed,
     // and everything after it should run against that binary.
-    ...["facts-lib", "ir-lib", "backend-process", "backend-staleness", "write-walk-strategies", "dialects-process"].filter((id) =>
+    ...["dialect-lib", "facts-lib", "ir-lib", "backend-process", "backend-staleness", "write-walk-strategies", "dialects-process"].filter((id) =>
       selected.has(id)
     ),
     ...[...pinned].sort(),
     ...["test-what-if"].filter((id) => selected.has(id)),
     ...[...FINDING_GATES, "repro-budget", "determinism-script"].filter((id) => selected.has(id)),
-    ...["ir-read-lint", "proof-lint", "ir-tools-test", "proof-tools-test", "ir-edit-fuzz", "fuzz-tests"].filter((id) => selected.has(id)),
+    ...["ir-read-lint", "proof-lint", "ir-tools-test", "proof-tools-test", "verify-delta-script", "ir-edit-fuzz", "fuzz-tests"].filter((id) => selected.has(id)),
     // ADR 1120: the premise's table and the kernel's oracle.
     ...["standard-members", "kernel-oracle"].filter((id) => selected.has(id)),
     // Separate workspace; its tests drive the producer built above.
@@ -1007,6 +1043,7 @@ export const LANES = {
   clippy: "lint",
   "wasm-compile": "lint",
   "build-debug": "rust",
+  "dialect-lib": "rust",
   "facts-lib": "rust",
   "ir-lib": "rust",
   "backend-process": "rust",
@@ -1036,6 +1073,7 @@ export const LANES = {
   "proof-lint": "preflight",
   "ir-tools-test": "preflight",
   "proof-tools-test": "preflight",
+  "verify-delta-script": "preflight",
   "guard-count": "preflight",
   "flip-tools": "preflight",
   "rule-pages": "rust",
