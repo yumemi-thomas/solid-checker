@@ -2648,6 +2648,23 @@ impl Dialect for Solid2 {
         true
     }
 
+    /// Source: rc.21 `@solidjs/web` `dist/web.dev.js` (the integrity above). `spread` (875) hands every key of its sources to `assignProp`
+    /// (1919): a key that is no namespace, starts `on` and an upper-case letter, is an event whose name is the rest in lower case, and
+    /// `DelegatedEvents.has(name)` (36: `beforeinput`, `click`, `dblclick`, `contextmenu`, `focusin`, `focusout`, `input`, `keydown`,
+    /// `keyup`, `mousedown`, `mousemove`, `mouseout`, `mouseover`, `mouseup`, `pointerdown`, `pointermove`, `pointerout`,
+    /// `pointerover`, `pointerup`, `touchend`, `touchmove`, `touchstart`) makes `addEvent(node, name, value, true)` store it on the
+    /// node for `eventHandler`. Only the release whose spread keys were read (`on` and an upper-case letter) answers.
+    fn spread_event_delegated(&self, key: &str) -> bool {
+        const DELEGATED: [&str; 22] = [
+            "beforeinput", "click", "dblclick", "contextmenu", "focusin", "focusout", "input", "keydown", "keyup", "mousedown",
+            "mousemove", "mouseout", "mouseover", "mouseup", "pointerdown", "pointermove", "pointerout", "pointerover",
+            "pointerup", "touchend", "touchmove", "touchstart",
+        ];
+        matches!(self.spread_event_keys, releases::SpreadEventKeys::OnUppercase)
+            && self.spread_key_is_event(key) == Some(true)
+            && DELEGATED.contains(&key[2..].to_ascii_lowercase().as_str())
+    }
+
     /// Source: rc.21 `@solidjs/signals` `dist/dev.js`. `createStore` (9742) returns `createStore$1`'s `[proxy, setter]` (6885-6921) or
     /// `createStoreDerived`'s `[store, f => storeSetter(store, f)]` (7920-7922); either setter is `fn => storeSetter(proxy, fn)`, and
     /// `storeSetter` (6819) calls `fn(proxy)` with the store's own proxy, the `wrap` (4700) proxy over a new `{}`/`[]` (`createTarget`).

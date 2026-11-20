@@ -1421,6 +1421,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/disabled-handler-owner/node_modules/**
 !fixtures/reactive-ir/disabled-handler-owner-enabled/node_modules/
 !fixtures/reactive-ir/disabled-handler-owner-enabled/node_modules/**
+!fixtures/reactive-ir/disabled-spread-handler-owner/node_modules/
+!fixtures/reactive-ir/disabled-spread-handler-owner/node_modules/**
 !fixtures/reactive-ir/rc21-listener-bare-global/node_modules/
 !fixtures/reactive-ir/rc21-listener-bare-global/node_modules/**
 !fixtures/reactive-ir/rc21-listener-bare-shadowed/node_modules/

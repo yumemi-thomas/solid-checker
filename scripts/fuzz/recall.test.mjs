@@ -312,6 +312,16 @@ describe("the store operations and the setup positions (recall only)", () => {
   });
 });
 
+// ADR 1141: a control disabled from mount with a spread of proven keys beside its delegated handler.
+describe("the disabled control with a spread (legal recall only)", () => {
+  it("dny-legal-mount-disabled-spread writes disabled, a literal spread and the site's onClick on one button", () => {
+    const cell = legalCells({ recall: true }).find((c) => c.code === "STRICT_READ_UNTRACKED" && c.context === "dny-legal-mount-disabled-spread");
+    expect(cell).toBeTruthy();
+    const app = generateLegal({ seed: 1 }, cell, recallLegalShapes(cell.code, cell.context)[0], 0).built.files["App.tsx"];
+    expect(app).toMatch(/<button data-act="b\d+" disabled \{\.\.\.\{ title: "t" \}\} onClick=\{\(\) => \{/);
+  });
+});
+
 describe("the callback props (recall only)", () => {
   const isCbp = (cell) => cell.context.startsWith("cbp-");
   it("are recall cells of the misuse and legal grids, never base cells", () => {
