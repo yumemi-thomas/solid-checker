@@ -363,7 +363,9 @@ pub(super) fn call_owner_edge(
     // owned-run throw). A caller that never runs resumes nothing. Not where
     // the function probes `getOwner()` at all: a guard around the call
     // (`if (getOwner()) run(…)`) skips it with no owner (as ADR 0493's climb).
-    if crate::execution_role::follows_dominating_await(file, site)
+    // ADR 1139 (N3): an async handler or callback written in JSX resumes the same way.
+    if (crate::execution_role::follows_dominating_await(file, site)
+        || crate::execution_role::follows_dominating_await_in_own_body(file, site))
         && !crate::owners::owning_function(&file.ast, site).is_some_and(|outer| {
             file.ast.calls.iter().any(|call| {
                 outer.span.contains(call.span)

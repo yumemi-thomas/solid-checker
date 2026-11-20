@@ -466,6 +466,28 @@ pub(crate) fn dominating_await_before(file: &solid_facts::FileFacts, span: Span)
         .or_else(|| for_await_body_suspension(file, span).filter(|suspension| own(*suspension)))
 }
 
+/// ADR 1139 (N3 of the Fable review of ADR 1125): [`follows_dominating_await`] for a site written in an async function that is itself
+/// written inside a JSX element (an `on…` handler, a prop callback). Only the JSX elements and tracked regions written inside that
+/// function keep a site off its continuation: the element around the function decides when the function runs, not where in it a site
+/// runs, so the code past a dominating `await` of the function's own body runs on its continuation, where no owner is current.
+/// [`continuation_function`] bounds the check by the whole file (ADR 0352's reads), which refuses any site under an element.
+pub(crate) fn follows_dominating_await_in_own_body(
+    file: &solid_facts::FileFacts,
+    span: Span,
+) -> bool {
+    let Some(function) = containing_ast_function(&file.ast, span)
+        .filter(|function| function.r#async && !function.generator)
+    else {
+        return false;
+    };
+    runs_with_its_function(file, span, function.span)
+        && file.ast.dominating_awaits.iter().any(|(awaited, region)| {
+            region.contains(span)
+                && containing_ast_function(&file.ast, *awaited)
+                    .is_some_and(|owner| owner.span == function.span)
+        })
+}
+
 /// ADR 1112: [`dominating_await_before`] without its `for await` fallback: an `await` written in the function that
 /// dominates `span`.
 fn follows_dominating_await_statement(file: &solid_facts::FileFacts, span: Span) -> bool {
