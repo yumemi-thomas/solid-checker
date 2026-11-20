@@ -2,6 +2,17 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/foreach-carrier/App.tsx",
+      "start": 513,
+      "end": 516,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -109,6 +120,17 @@
       "path": "fixtures/reactive-ir/foreach-carrier/App.tsx",
       "start": 721,
       "end": 722,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/foreach-carrier/App.tsx",
+      "start": 918,
+      "end": 921,
       "fixes": 0
     },
     {
@@ -1561,6 +1583,17 @@
       "path": "fixtures/reactive-ir/foreach-carrier/App.tsx",
       "start": 4327,
       "end": 4330,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/foreach-carrier/App.tsx",
+      "start": 4495,
+      "end": 4498,
       "fixes": 0
     },
     {

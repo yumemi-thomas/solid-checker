@@ -7710,6 +7710,102 @@
    "to": 171,
    "adr": "ADR 1114",
    "fact": "family 3 slice G (Fable review round 2, N1-N3, N5): under a package prototype writer, a member read, an object pattern and `in` under an any-name writer, a member assignment's value and a computed key of a class method or a pattern, a conversion whatever names its native path reads (the named default), and an async function's returned value are SC2002 sites: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-origins",
+   "key": "SC2002 package-may-call-action",
+   "from": 50,
+   "to": 61,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G and N4 (reads, member assignments, computed keys, the named default and async returns are sites under a package prototype writer), measured on main with ADR 1125: SC2002 package-may-call-action uncertifiable only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-prototype-iteration",
+   "key": "SC2002 package-may-call-action",
+   "from": 16,
+   "to": 17,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G and N4 (reads, member assignments, computed keys, the named default and async returns are sites under a package prototype writer), measured on main with ADR 1125: SC2002 package-may-call-action uncertifiable only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-prototype-sites",
+   "key": "SC2002 package-may-call-action",
+   "from": 37,
+   "to": 38,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G and N4 (reads, member assignments, computed keys, the named default and async returns are sites under a package prototype writer), measured on main with ADR 1125: SC2002 package-may-call-action uncertifiable only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-prototype-writer-shapes",
+   "key": "SC2002 package-may-call-action",
+   "from": 25,
+   "to": 27,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G and N4 (reads, member assignments, computed keys, the named default and async returns are sites under a package prototype writer), measured on main with ADR 1125: SC2002 package-may-call-action uncertifiable only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-prototype-writes",
+   "key": "SC2002 package-may-call-action",
+   "from": 16,
+   "to": 17,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G and N4 (reads, member assignments, computed keys, the named default and async returns are sites under a package prototype writer), measured on main with ADR 1125: SC2002 package-may-call-action uncertifiable only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-unread-packages",
+   "key": "SC2002 package-may-call-action",
+   "from": 43,
+   "to": 45,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G and N4 (reads, member assignments, computed keys, the named default and async returns are sites under a package prototype writer), measured on main with ADR 1125: SC2002 package-may-call-action uncertifiable only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-walk",
+   "key": "SC2002 package-may-call-action",
+   "from": 45,
+   "to": 49,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G and N4 (reads, member assignments, computed keys, the named default and async returns are sites under a package prototype writer), measured on main with ADR 1125: SC2002 package-may-call-action uncertifiable only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/dependency-value-flow",
+   "key": "SC2002 package-may-call-action",
+   "from": 50,
+   "to": 58,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G and N4 (reads, member assignments, computed keys, the named default and async returns are sites under a package prototype writer), measured on main with ADR 1125: SC2002 package-may-call-action uncertifiable only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper",
+   "key": "SC2002 package-may-call-action",
+   "from": 328,
+   "to": 337,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G and N4 (reads, member assignments, computed keys, the named default and async returns are sites under a package prototype writer), measured on main with ADR 1125: SC2002 package-may-call-action uncertifiable only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/route-components-destructured",
+   "key": "SC2002 package-may-call-action",
+   "from": 18,
+   "to": 19,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G and N4 (reads, member assignments, computed keys, the named default and async returns are sites under a package prototype writer), measured on main with ADR 1125: SC2002 package-may-call-action uncertifiable only, no violation or clean moved"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC2002 package-may-call-action",
+   "from": 501,
+   "to": 541,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G and N4 (reads, member assignments, computed keys, the named default and async returns are sites under a package prototype writer), measured on main with ADR 1125: SC2002 package-may-call-action uncertifiable only, no violation or clean moved"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc4001",
+   "key": "SC2002 package-may-call-action",
+   "from": 160,
+   "to": 171,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G and N4 (reads, member assignments, computed keys, the named default and async returns are sites under a package prototype writer), measured on main with ADR 1125: SC2002 package-may-call-action uncertifiable only, no violation or clean moved"
   }
  ]
 }
