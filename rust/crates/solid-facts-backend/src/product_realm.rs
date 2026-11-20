@@ -1567,7 +1567,7 @@ pub(crate) fn write_census(
             "reviewedHost".to_owned(),
             match host {
                 None => serde_json::Value::Null,
-                Some(Ok(host)) => serde_json::json!({ "roots": host.roots, "defines": host.defines }),
+                Some(Ok(host)) => serde_json::json!({ "roots": host.roots, "defines": host.defines, "members": host.members }),
                 Some(Err(reason)) => serde_json::json!({ "refused": reason }),
             },
         );
@@ -1629,9 +1629,10 @@ pub(crate) fn census(
 /// globals. Read on the published tarball (`vite-<version>.tgz`, sha512 integrity below) and run in Chrome (`scripts/probes/vite-dev-client`): beside the config's
 /// `define` keys (`env.mjs`, [`DEFINE_KEY`]), the client writes no built-in's prototype and no global but those `global_writes` name.
 pub(crate) struct ViteClient {
-    pub id: &'static str,
+    /// The release; the premise id is `vite-dev-client-<version>`.
     pub version: &'static str,
-    /// The tarball's integrity, as the lockfiles of the corpus installs record it.
+    /// The tarball's integrity, as the lockfiles of the corpus installs record it (read by the table's test only).
+    #[cfg_attr(not(test), allow(dead_code))]
     pub integrity: &'static str,
     /// Each pinned file below the package root and its digest.
     pub files: &'static [(&'static str, &'static str)],
@@ -1644,14 +1645,25 @@ pub(crate) struct ViteClient {
 /// ADR 1144: every reviewed release of Vite's dev client. A version, a patch or a file nobody read is no match: the package stays the writer its closure says.
 pub(crate) const VITE_CLIENTS: &[ViteClient] = &[
     ViteClient {
-        id: "vite-dev-client-8.3.0",
         version: "8.3.0",
         integrity: "sha512-lhZBVvEHefgE+HQZC9O7EBJgCU/nVzFNl7vkS4RE0APtWLP02/8QVIkQtzBxPquh7lq5/78NHipTj7ODQ6XuyQ==",
         files: &[
-            ("package.json", "0a75f2254630e11aa4fde386a2f883e2acc8430acc3fb5a833f25da264c62a16"),
-            ("dist/client/client.mjs", "d5a2258b7915fc2e70077dd20b63892e553b1ef4344c95621e226875f8897962"),
-            ("dist/client/env.mjs", "599a7191be77f077087cde291f7906fa751a794617f42d914f54991fe7bf434f"),
-            ("dist/client/bundledDevClient.mjs", "2a75e5d4b1cc47796064b68b62e0ab1fb1f6802c6e7118759db565aefeb2a44f"),
+            (
+                "package.json",
+                "0a75f2254630e11aa4fde386a2f883e2acc8430acc3fb5a833f25da264c62a16",
+            ),
+            (
+                "dist/client/client.mjs",
+                "d5a2258b7915fc2e70077dd20b63892e553b1ef4344c95621e226875f8897962",
+            ),
+            (
+                "dist/client/env.mjs",
+                "599a7191be77f077087cde291f7906fa751a794617f42d914f54991fe7bf434f",
+            ),
+            (
+                "dist/client/bundledDevClient.mjs",
+                "2a75e5d4b1cc47796064b68b62e0ab1fb1f6802c6e7118759db565aefeb2a44f",
+            ),
         ],
         // `setupForwardConsoleHandler`: `console[level] = (...args) => { original(...args); sendLog(level, args) }` for the forwarded levels (`error`, `warn` by
         // default; Chrome shows those two replaced).
@@ -1659,13 +1671,21 @@ pub(crate) const VITE_CLIENTS: &[ViteClient] = &[
         member_writes: &[("console", "error"), ("console", "warn")],
     },
     ViteClient {
-        id: "vite-dev-client-7.3.1",
         version: "7.3.1",
         integrity: "sha512-w+N7Hifpc3gRjZ63vYBXA56dvvRlNWRczTdmCBBa+CotUzAPf5b7YMdMR/8CQoeYE5LX3W4wj6RYTgonm1b9DA==",
         files: &[
-            ("package.json", "116af0821317eea464b9e69afda7c68b70b1caf51abe3218001b0e2175d3bed6"),
-            ("dist/client/client.mjs", "adc8d1d9bab80984e8f7136074af8ee8e6f63bcf8ee75d8950577e4bd73af23a"),
-            ("dist/client/env.mjs", "98339370fa9a7f50c9debe091db27248cbb7280e29cc9770d214e6dfa7b6f73a"),
+            (
+                "package.json",
+                "116af0821317eea464b9e69afda7c68b70b1caf51abe3218001b0e2175d3bed6",
+            ),
+            (
+                "dist/client/client.mjs",
+                "adc8d1d9bab80984e8f7136074af8ee8e6f63bcf8ee75d8950577e4bd73af23a",
+            ),
+            (
+                "dist/client/env.mjs",
+                "98339370fa9a7f50c9debe091db27248cbb7280e29cc9770d214e6dfa7b6f73a",
+            ),
         ],
         global_writes: &[],
         member_writes: &[],
@@ -1690,7 +1710,9 @@ fn define_key_admitted(key: &str) -> bool {
     key.len() > 4
         && key.starts_with("__")
         && key.ends_with("__")
-        && key.bytes().all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_')
+        && key
+            .bytes()
+            .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_')
         && key.as_bytes()[2].is_ascii_uppercase()
 }
 
@@ -1699,6 +1721,8 @@ fn define_key_admitted(key: &str) -> bool {
 pub(crate) struct ReviewedHost {
     pub roots: BTreeMap<String, String>,
     pub defines: BTreeSet<String>,
+    /// The own members the clients write (`console.error`), for the census.
+    pub members: BTreeSet<String>,
 }
 
 /// ADR 1144: whether Vite's dev client premise holds for the program in `directory`: the roots of `vite` it holds for, `None` where no package named `vite` is a
@@ -1724,13 +1748,22 @@ pub(crate) fn reviewed_host(
         .map(|(root, _)| root.clone())
         .filter(|root| {
             index.prototype_writers_any.contains(root)
-                || index.prototype_writers.values().any(|roots| roots.contains(root))
+                || index
+                    .prototype_writers
+                    .values()
+                    .any(|roots| roots.contains(root))
         })
         .collect::<BTreeSet<_>>();
     if vite_roots.is_empty() {
         return None;
     }
-    Some(reviewed_host_roots(directory, facts, runtime, index, &vite_roots))
+    Some(reviewed_host_roots(
+        directory,
+        facts,
+        runtime,
+        index,
+        &vite_roots,
+    ))
 }
 
 fn reviewed_host_roots(
@@ -1746,14 +1779,25 @@ fn reviewed_host_roots(
         return Err("the declared runtime is not a development build in a browser".to_owned());
     }
     for file in &facts.files {
-        if file.ast.module_loads.iter().any(|load| load.specifier.is_none()) {
-            return Err(format!("{} loads a module by a specifier it does not spell", file.path.as_str()));
+        if file
+            .ast
+            .module_loads
+            .iter()
+            .any(|load| load.specifier.is_none())
+        {
+            return Err(format!(
+                "{} loads a module by a specifier it does not spell",
+                file.path.as_str()
+            ));
         }
         if let Some((_, specifier)) = loads(file)
             .into_iter()
             .find(|(_, specifier)| *specifier == "vite" || specifier.starts_with("vite/"))
         {
-            return Err(format!("{} loads {specifier} at run time", file.path.as_str()));
+            return Err(format!(
+                "{} loads {specifier} at run time",
+                file.path.as_str()
+            ));
         }
     }
     for (root, name) in &index.names {
@@ -1766,18 +1810,26 @@ fn reviewed_host_roots(
         let Ok(manifest) = serde_json::from_str::<serde_json::Value>(&text) else {
             return Err(format!("{root}: the manifest does not parse"));
         };
-        if ["dependencies", "optionalDependencies", "peerDependencies"].iter().any(|field| {
-            manifest
-                .get(field)
-                .and_then(serde_json::Value::as_object)
-                .is_some_and(|names| names.contains_key("vite"))
-        }) {
-            return Err(format!("{name} depends on vite: it may load Vite's own code where the program runs"));
+        if ["dependencies", "optionalDependencies", "peerDependencies"]
+            .iter()
+            .any(|field| {
+                manifest
+                    .get(field)
+                    .and_then(serde_json::Value::as_object)
+                    .is_some_and(|names| names.contains_key("vite"))
+            })
+        {
+            return Err(format!(
+                "{name} depends on vite: it may load Vite's own code where the program runs"
+            ));
         }
     }
     let configs = vite_configs(directory)?;
     if configs.is_empty() {
-        return Err(format!("no Vite configuration from {} up to its workspace root names the build", directory.display()));
+        return Err(format!(
+            "no Vite configuration from {} up to its workspace root names the build",
+            directory.display()
+        ));
     }
     if let Some(script) = script_selecting_vite_config(directory) {
         return Err(script);
@@ -1786,18 +1838,25 @@ fn reviewed_host_roots(
     let mut served = BTreeSet::new();
     for path in &configs {
         let config_dir = path.parent().unwrap_or(directory);
-        let source = fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))?;
+        let source =
+            fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))?;
         let config = crate::host_config::parse_realm(path, &source)
             .map_err(|refusal| format!("{}: {}", path.display(), refusal.reason))?;
         if config.mode != crate::host_config::EntryMode::Html {
-            return Err(format!("{}: the Solid plugin's start mode is not read", path.display()));
+            return Err(format!(
+                "{}: the Solid plugin's start mode is not read",
+                path.display()
+            ));
         }
         for plugin in &config.plugins {
             if CONFIG_HELPERS.contains(&plugin.as_str()) {
                 continue;
             }
             if !SOLID_PLUGINS.contains(&plugin.as_str()) {
-                return Err(format!("{}: the plugin {plugin} is not Solid's, and its defines are not read", path.display()));
+                return Err(format!(
+                    "{}: the plugin {plugin} is not Solid's, and its defines are not read",
+                    path.display()
+                ));
             }
             plugin_pinned(config_dir, plugin)?;
             let installed = installed_package(config_dir, plugin)
@@ -1805,8 +1864,12 @@ fn reviewed_host_roots(
             let core = if plugin == "@solidjs/vite-plugin" {
                 installed
             } else {
-                installed_package(&installed, "@solidjs/vite-plugin")
-                    .ok_or_else(|| format!("{}: {plugin} resolves no @solidjs/vite-plugin", path.display()))?
+                installed_package(&installed, "@solidjs/vite-plugin").ok_or_else(|| {
+                    format!(
+                        "{}: {plugin} resolves no @solidjs/vite-plugin",
+                        path.display()
+                    )
+                })?
             };
             let version = fs::read(core.join("package.json"))
                 .ok()
@@ -1816,10 +1879,14 @@ fn reviewed_host_roots(
             let (_, keys) = SOLID_PLUGIN_DEFINES
                 .iter()
                 .find(|(listed, _)| *listed == version)
-                .ok_or_else(|| format!("@solidjs/vite-plugin {version}: its defines are not read"))?;
+                .ok_or_else(|| {
+                    format!("@solidjs/vite-plugin {version}: its defines are not read")
+                })?;
             for key in *keys {
                 if !define_key_admitted(key) {
-                    return Err(format!("@solidjs/vite-plugin {version} defines {key}, which may name an existing binding"));
+                    return Err(format!(
+                        "@solidjs/vite-plugin {version} defines {key}, which may name an existing binding"
+                    ));
                 }
                 defines.insert((*key).to_owned());
             }
@@ -1831,6 +1898,7 @@ fn reviewed_host_roots(
         );
     }
     let mut roots = BTreeMap::new();
+    let mut members = BTreeSet::new();
     for root in vite_roots {
         let real = real(root).ok_or_else(|| format!("{root} does not resolve"))?;
         if !served.contains(&real) {
@@ -1840,13 +1908,21 @@ fn reviewed_host_roots(
             .iter()
             .find(|client| {
                 client.files.iter().all(|(file, sha256)| {
-                    crate::reviewed_packages::digest_of(&real.join(file)).as_deref() == Some(*sha256)
+                    crate::reviewed_packages::digest_of(&real.join(file)).as_deref()
+                        == Some(*sha256)
                 })
             })
-            .ok_or_else(|| format!("{root}: no reviewed release of Vite's dev client matches the installed bytes"))?;
+            .ok_or_else(|| {
+                format!(
+                    "{root}: no reviewed release of Vite's dev client matches the installed bytes"
+                )
+            })?;
         let covered = |name: &str| {
             index.global_writers_any.contains(root)
-                || index.global_writers.get(name).is_some_and(|roots| roots.contains(root))
+                || index
+                    .global_writers
+                    .get(name)
+                    .is_some_and(|roots| roots.contains(root))
         };
         if let Some(name) = client
             .global_writes
@@ -1855,11 +1931,23 @@ fn reviewed_host_roots(
             .chain(defines.iter().map(String::as_str))
             .find(|name| !covered(name))
         {
-            return Err(format!("{root}: the client writes {name}, which the package's facts do not hold"));
+            return Err(format!(
+                "{root}: the client writes {name}, which the package's facts do not hold"
+            ));
         }
-        roots.insert(root.clone(), client.id.to_owned());
+        members.extend(
+            client
+                .member_writes
+                .iter()
+                .map(|(global, member)| format!("{global}.{member}")),
+        );
+        roots.insert(root.clone(), format!("vite-dev-client-{}", client.version));
     }
-    Ok(ReviewedHost { roots, defines })
+    Ok(ReviewedHost {
+        roots,
+        defines,
+        members,
+    })
 }
 
 #[cfg(test)]
@@ -1870,26 +1958,40 @@ mod tests {
     /// the fixture's README), and a release the table does not pin has no row.
     #[test]
     fn the_vite_client_rows_are_the_published_bytes_the_fixtures_copy() {
-        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/reactive-ir/vite-dev-client");
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../fixtures/reactive-ir/vite-dev-client");
         let copies = [
             ("8.3.0", fixture.join("node_modules/vite")),
             ("7.3.1", fixture.join("variants/vite-7/node_modules/vite")),
         ];
         assert_eq!(VITE_CLIENTS.len(), copies.len());
         for (version, copy) in copies {
-            let client = VITE_CLIENTS.iter().find(|client| client.version == version).unwrap();
-            let manifest: serde_json::Value = serde_json::from_slice(&fs::read(copy.join("package.json")).unwrap()).unwrap();
+            let client = VITE_CLIENTS
+                .iter()
+                .find(|client| client.version == version)
+                .unwrap();
+            let manifest: serde_json::Value =
+                serde_json::from_slice(&fs::read(copy.join("package.json")).unwrap()).unwrap();
             assert_eq!(manifest["version"], version);
+            assert!(client.integrity.starts_with("sha512-"));
             for (file, sha256) in client.files {
-                assert_eq!(crate::reviewed_packages::digest_of(&copy.join(file)).as_deref(), Some(*sha256), "{version} {file}");
+                assert_eq!(
+                    crate::reviewed_packages::digest_of(&copy.join(file)).as_deref(),
+                    Some(*sha256),
+                    "{version} {file}"
+                );
             }
         }
         // The mismatch twin changes one pinned file: no row matches it.
         let patched = fixture.join("variants/mismatch/node_modules/vite");
-        assert!(!VITE_CLIENTS.iter().any(|client| client
-            .files
-            .iter()
-            .all(|(file, sha256)| crate::reviewed_packages::digest_of(&patched.join(file)).as_deref() == Some(*sha256))));
+        assert!(
+            !VITE_CLIENTS
+                .iter()
+                .any(|client| client.files.iter().all(|(file, sha256)| {
+                    crate::reviewed_packages::digest_of(&patched.join(file)).as_deref()
+                        == Some(*sha256)
+                }))
+        );
     }
 
     /// ADR 1144: the rows match the corpus installs they were read from (`SOLID_CHECKER_VITE_CORPUS=<apps dir>` of the rc.21 corpus: helge-dev's vite 8.3.0
@@ -1904,9 +2006,16 @@ mod tests {
             ("8.3.0", apps.join("helge-dev/node_modules/vite")),
             ("7.3.1", apps.join("donegeon-client/web/node_modules/vite")),
         ] {
-            let client = VITE_CLIENTS.iter().find(|client| client.version == version).unwrap();
+            let client = VITE_CLIENTS
+                .iter()
+                .find(|client| client.version == version)
+                .unwrap();
             for (file, sha256) in client.files {
-                assert_eq!(crate::reviewed_packages::digest_of(&install.join(file)).as_deref(), Some(*sha256), "{version} {file}");
+                assert_eq!(
+                    crate::reviewed_packages::digest_of(&install.join(file)).as_deref(),
+                    Some(*sha256),
+                    "{version} {file}"
+                );
             }
         }
     }
