@@ -126,7 +126,7 @@ fn realm_silences(log: &Path) -> Vec<(String, u64, u64)> {
 }
 
 /// The product's own file of each fixture below, and the test file that imports it.
-const CLEARED: [(&str, &str, &str); 3] = [
+const CLEARED: [(&str, &str, &str); 2] = [
     // A page's module script (`index.html` names `/main.tsx`), the test setup loads the writers.
     ("product-realm-test-writer", "App.tsx", "app.test.tsx"),
     // A package's `exports` are the entries; no page.
@@ -134,12 +134,6 @@ const CLEARED: [(&str, &str, &str); 3] = [
         "product-realm-package-exports",
         "index.tsx",
         "index.test.tsx",
-    ),
-    // The dev client's package writes a prototype, and the build is a production one: the page does not load it.
-    (
-        "product-realm-dev-client-production",
-        "App.tsx",
-        "app.test.tsx",
     ),
 ];
 
@@ -207,7 +201,7 @@ fn a_site_only_a_test_loaded_writer_makes_is_cleared_by_a_typed_silence_and_drop
 }
 
 /// Fixtures where the realm is unknown, or the page loads a writer: nothing is cleared, and the realm's silence is not named.
-const KEPT: [(&str, &str); 6] = [
+const KEPT: [(&str, &str); 7] = [
     // A second page loads the writer and shares a module.
     ("product-realm-second-page", "App.tsx"),
     // A plugin the grammar knows by name, adding a load: a name proves nothing.
@@ -218,8 +212,10 @@ const KEPT: [(&str, &str); 6] = [
     ("product-realm-computed-load", "App.tsx"),
     // The page loads the named writer itself (the any-name writer only the setup loads).
     ("product-realm-product-writer", "App.tsx"),
-    // The dev client's package is a writer and the build is a development one: the page loads it.
+    // The package named `vite` is a writer, and Vite puts code in the page in either build: the dev client in a development one.
     ("product-realm-dev-client", "App.tsx"),
+    // The same in a production build, where the page gets Vite's `modulepreload` polyfill.
+    ("product-realm-dev-client-production", "App.tsx"),
 ];
 
 #[test]

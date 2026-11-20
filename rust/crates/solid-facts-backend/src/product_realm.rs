@@ -18,8 +18,9 @@
 //! - the closure of the entries over every `import`, `export … from`, literal `import()` and `require`, and `import x = require()`, by the attested resolution of each
 //!   specifier. A load by a computed specifier, `import.meta.glob`, a worker, a service worker, `new URL(…, import.meta.url)`, a specifier no row attests or that
 //!   resolves nowhere, a resolved file the program does not analyze (an asset and a JSON module excepted), and an entry the program does not hold end it;
-//! - the declared host: a browser target with a declared build. In a development build the page also loads the dev server's client, so the packages named `vite` and
-//!   the config's own imports are in the realm whatever the files import (a name kept is a writer kept: the direction that only narrows the change).
+//! - the declared host: a browser target with a declared build. Vite itself puts code in the page (the dev server's client in a development build, the
+//!   `modulepreload` polyfill in a production one), so the packages named `vite` and the config's own imports are in the realm whatever the files import, in either
+//!   build (a name kept is a writer kept: the direction that only narrows the change).
 //!
 //! Premises (`docs/decisions.md`, ADR 1145): the Solid plugin adds only Solid's own loads; `defineConfig` is the identity; the build is the Vite build the config
 //! describes; tests, stories and configs are not the product (the owner's ruling), so a product file's site is judged against what the page loads though a test loads
@@ -34,7 +35,7 @@ use solid_facts::core::Span;
 use solid_facts::package_reach::{PackageReachIndex, ProductWriters, package_root_of};
 use solid_facts::resolution::{ImportResolution, SpecifierAttestation};
 use solid_facts::{FileFacts, ProjectFacts};
-use solid_reactive_ir::{RuntimeBuild, RuntimeEnvironment, RuntimeTarget};
+use solid_reactive_ir::{RuntimeEnvironment, RuntimeTarget};
 
 /// One module the product's real entries name, and what named it.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -74,10 +75,8 @@ pub(crate) struct Known {
     pub files: BTreeSet<String>,
     /// The installed package roots the files load, each as the resolver gave it (a symlink path where there is one, the real path too).
     pub roots: BTreeSet<String>,
-    /// The package names whose roots the declared host loads in a development build.
+    /// The package names whose roots the page's host loads whatever the files import: Vite itself and the packages the Vite configs import.
     pub host_names: BTreeSet<String>,
-    /// Whether the declared build is a development build (the dev client is loaded).
-    pub development: bool,
 }
 
 /// The Solid plugin, by the specifier a config imports it from: the dialect's compile step. Its output loads Solid's own packages (the runtime, and in a development
@@ -160,15 +159,14 @@ pub(crate) fn read(directory: &Path, facts: &ProjectFacts, runtime: &RuntimeEnvi
             return Realm::Unknown(blockers);
         }
     };
-    let Some(build) = build.filter(|_| blockers.is_empty()) else {
+    if build.is_none() || !blockers.is_empty() {
         return Realm::Unknown(blockers);
-    };
+    }
     Realm::Known(Known {
         entries,
         files,
         roots,
         host_names,
-        development: build == RuntimeBuild::Development,
     })
 }
 
@@ -681,28 +679,32 @@ pub(crate) fn apply(realm: &Realm, index: &mut PackageReachIndex) {
         .iter()
         .filter_map(|root| real(root))
         .collect::<BTreeSet<_>>();
-    let host_roots = if known.development {
-        index
-            .names
-            .iter()
-            .filter(|(_, name)| known.host_names.contains(name.as_str()))
-            .map(|(root, _)| root.clone())
-            .collect::<BTreeSet<_>>()
-    } else {
-        BTreeSet::new()
-    };
+    let host_roots = index
+        .names
+        .iter()
+        .filter(|(_, name)| known.host_names.contains(name.as_str()))
+        .map(|(root, _)| root.clone())
+        .collect::<BTreeSet<_>>();
     let host_real = host_roots
         .iter()
         .filter_map(|root| real(root))
         .collect::<BTreeSet<_>>();
+    // Each writer root's real directory, asked once.
+    let real_of = index
+        .prototype_writers
+        .values()
+        .flatten()
+        .chain(index.prototype_writers_any.iter())
+        .map(|root| (root.clone(), real(root)))
+        .collect::<std::collections::HashMap<_, _>>();
     // A root counts as loaded by the realm when its spelling or its real directory is one the files load, the declared host loads it, or its directory cannot be
     // resolved (never a reason to drop a writer).
     let loaded = |root: &str| -> bool {
         if known.roots.contains(root) || host_roots.contains(root) {
             return true;
         }
-        match real(root) {
-            Some(real) => loaded_real.contains(&real) || host_real.contains(&real),
+        match real_of.get(root).and_then(Option::as_ref) {
+            Some(real) => loaded_real.contains(real) || host_real.contains(real),
             None => true,
         }
     };
@@ -771,7 +773,6 @@ pub(crate) fn census(realm: &Realm, index: &PackageReachIndex, project: &str) ->
                     "entries": known.entries.iter().map(|entry| serde_json::json!({ "path": entry.path, "source": entry.source })).collect::<Vec<_>>(),
                     "files": known.files.len(),
                     "roots": known.roots.len(),
-                    "development": known.development,
                     "hostNames": known.host_names,
                     "writersAny": index.prototype_writers_any.len(),
                     "writersAnyInProduct": product.map_or(0, |product| product.prototype_writers_any.len()),

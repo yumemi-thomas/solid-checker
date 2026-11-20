@@ -71,7 +71,7 @@
   "SC2002 function-unentered": 2,
   "SC2002 lazy-compute-unread": 1,
   "SC2002 package-finding-at-entry": 81,
-  "SC2002 package-may-call-action": 2675,
+  "SC2002 package-may-call-action": 2682,
   "SC2002 refused-creation-unrun": 1,
   "SC2003 binding-before-initialization": 2,
   "SC2003 build-constant-arm": 2,
