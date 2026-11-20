@@ -36907,6 +36907,20 @@
   "rediscovered": "new contexts pa-gprotoclear, pa-gprotoruntime (pa-shapes.mjs): `focus.mjs --codes ACTION_CALLED_IN_OWNED_SCOPE --grids mx-recall --boundary both --ids`, release builds: slice E 7db0f9ff0 exits 1 (false-clean 6), slice F exits 0 (recall-gap 6); oracle 6 compared, 0 behaviour"
  },
  {
+  "finding": "ADR 1134: an SC4001 missing-owner violation at createEffect/createRenderEffect in the delegated onClick of a <button disabled> disabled by its own JSX from mount and never enabled: rc.21 @solidjs/web eventHandler passes over a node whose disabled is true, so the handler never runs and Chrome is quiet (a false positive under ADR 1018)",
+  "found": "ADR 1132's twin context dny-legal-mount-disabled (Mac 20), held pending-fix in unexecuted-known.json",
+  "fixed": "ADR 1134 (disabled_handlers.rs: a delegated handler of a control disabled from mount gives the obligation handler-on-disabled-control)",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-dny-legal-mount-disabled-store-effect-called-direct-none",
+   "lg-strict-read-untracked-dny-legal-mount-disabled-store-effect-named-called-direct-none",
+   "lg-strict-read-untracked-dny-legal-mount-disabled-store-effect-carried-direct-none",
+   "lg-strict-read-untracked-dny-legal-mount-disabled-store-render-effect-carried-direct-none"
+  ],
+  "rediscovered": "focus lg-recall --contexts dny-legal-mount-disabled (69 programs), release builds, without the pending-fix entry: main 71d12830e has 4 unexecuted-violation rows (missing-owner violation at line 8) and needs a look; this build gives them handler-on-disabled-control (uncertifiable) and nothing needs a look"
+ },
+ {
   "finding": "ADR 1123 (in-branch, never on main): the first build recorded a context tuple's slots as a callback's result (phase 1, no summary source), so a read in a helper the body calls (`const dir1 = () => { r1(); return () => {}; }; <p ref={dir1()} />`) certified clean where Chrome reports STRICT_READ_UNTRACKED",
   "found": "`focus.mjs --codes STRICT_READ_UNTRACKED --grids mx-recall` on the new `context-tuple` source cells (head 87c778afb)",
   "fixed": "ADR 1123 (`push_context_tuple_sources`: the slots are recorded as a direct creation's array pattern, the accessor a summary source of phase 0)",
