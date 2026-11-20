@@ -56,6 +56,7 @@ enum Mode {
 
 /// ADR 0860: an open position the walk goes on from, once the reference's own
 /// walk has ended, so its answer and rows stay what they were.
+#[derive(Clone)]
 struct Escape<'a> {
     file: &'a FileFacts,
     at: Span,
@@ -65,6 +66,7 @@ struct Escape<'a> {
 }
 
 /// ADR 1104: a walk past a carrier, run once every [`Escape`] walk of the reference has ended.
+#[derive(Clone)]
 enum Late<'a> {
     Escape(Escape<'a>),
     /// The uses of a declared name, in a mode past an escape.
@@ -436,7 +438,8 @@ pub(crate) struct Census<'l, 'a> {
     /// ADR 0860: the open positions this reference's walk goes on from.
     escapes: Vec<Escape<'a>>,
     /// ADR 1104: the walks past a carrier this ADR adds (an escape, a `for…of` binding's name, a position), run after every
-    /// [`Self::escapes`] walk on a budget of their own, so the rows those walks placed stay what they were.
+    /// [`Self::escapes`] walk on a budget of their own, so the rows those walks placed stay what they were. ADR 1128: and after the walks
+    /// past a withheld call ([`Self::run_past_withheld`]), which queue them as well; a start ends with none left.
     late: Vec<Late<'a>>,
     /// ADR 1104: the rows this ADR's sites place during the earlier walks, kept out of [`Self::uses`] so that no walk's "no use
     /// below" answer moves; they join the escaped rows at the end.
@@ -563,27 +566,99 @@ impl<'l, 'a> Census<'l, 'a> {
     }
 
     /// Starts one start's walk from nothing this census walked before: a
-    /// start's answer is a function of the build and the start alone, so the
-    /// starts can be walked on any worker in any order. The caches kept
-    /// across starts (`files`, `allowed`, `decided_writes`, `keys`, the
-    /// exported-callers graph) answer from the build alone.
+    /// start's answer is a function of the build and the start alone (ADR 0909),
+    /// so the starts can be walked on any worker in any order (ADR 1128). Each
+    /// field of the census is one of three kinds, and the destructuring below
+    /// names them all (it has no `..`), so a new field has to be classed here:
+    ///
+    /// - the build: shared, read only;
+    /// - a cache kept across starts: it answers from the build alone, so what
+    ///   an earlier start filled is what this one would fill (`files`, `keys`,
+    ///   `allowed`, `decided_writes`, the exported-callers graph);
+    /// - the start's own state: empty or zero here, whatever the start before
+    ///   it walked. The entry point sets what the start is about (`carried`,
+    ///   `async_walk`, `props_root`, `package_value`) before it begins.
+    ///
+    /// A queue a start leaves is no other start's work. ADR 1128's leak was the
+    /// late walks and rows the walks past a withheld call queued: nothing ran
+    /// them, so the next start on the same worker did, under its own source and
+    /// memo, and which start that was depended on how the workers claimed the
+    /// starts. [`Self::run_escapes`] runs every queue and [`Self::end_start`]
+    /// fails closed where one is left, so none is found here: a build with
+    /// assertions says so, and one without drops it rather than run it as this
+    /// start's.
     fn begin_start(&mut self) {
-        debug_assert_eq!(self.parameter_hops, 0, "a hop outlived its start");
-        debug_assert_eq!(self.return_hops, 0, "a hop outlived its start");
-        debug_assert!(self.escapes.is_empty() && self.past_withheld.is_empty());
+        let Self {
+            lookup: _,
+            entities: _,
+            symbol_names: _,
+            sources: _,
+            resolved: _,
+            rows: _,
+            member_writes: _,
+            files: _,
+            keys: _,
+            decided_writes: _,
+            allowed: _,
+            exported: _,
+            carried: _,
+            props_root: _,
+            async_walk: _,
+            package_value: _,
+            walked,
+            steps,
+            hop_starts,
+            parameter_hops,
+            return_hops,
+            uses,
+            escaped_uses,
+            reached,
+            cut,
+            escapes,
+            past_withheld,
+            late,
+            late_rows,
+        } = self;
+        debug_assert_eq!(*parameter_hops, 0, "a hop outlived its start");
+        debug_assert_eq!(*return_hops, 0, "a hop outlived its start");
         debug_assert!(
-            self.uses.is_empty()
-                && self.escaped_uses.is_empty()
-                && self.reached.is_empty()
-                && !self.cut
+            escapes.is_empty()
+                && past_withheld.is_empty()
+                && late.is_empty()
+                && late_rows.is_empty(),
+            "walks queued by one start were left for the next"
         );
-        self.walked.clear();
-        self.steps = 0;
-        self.hop_starts.clear();
+        debug_assert!(uses.is_empty() && escaped_uses.is_empty() && reached.is_empty() && !*cut);
+        escapes.clear();
+        past_withheld.clear();
+        late.clear();
+        late_rows.clear();
+        walked.clear();
+        *steps = 0;
+        hop_starts.clear();
     }
 
     /// The answer of the start just walked, taken out of the census.
+    ///
+    /// ADR 1128: nothing a start queued outlives it. [`Self::run_escapes`] runs
+    /// or clears each queue, so one that is not empty here is work the start
+    /// owed and did not do: the start is cut (the caller files the budget row,
+    /// never a silence), the rows already placed stay its own, and the walks are
+    /// dropped, never left for the start that comes next on this worker.
     fn end_start(&mut self, open: Option<&'static str>) -> StartAnswer {
+        let owed = !self.escapes.is_empty()
+            || !self.past_withheld.is_empty()
+            || !self.late.is_empty()
+            || !self.late_rows.is_empty();
+        debug_assert!(!owed, "a start ended with walks still queued");
+        if owed {
+            self.escapes.clear();
+            self.past_withheld.clear();
+            self.late.clear();
+            let late_rows = std::mem::take(&mut self.late_rows);
+            self.escaped_uses.extend(late_rows);
+            self.cut = true;
+        }
         StartAnswer {
             open,
             cut: self.take_cut(),
@@ -964,9 +1039,26 @@ impl<'l, 'a> Census<'l, 'a> {
             self.callback_parameters(file, call, mode);
         }
         self.escapes.clear();
+        // ADR 1128: these walks queue late walks and rows as the earlier ones do (ADR 1104). They are this start's, and run before it ends:
+        // left queued they were run by whichever start the worker took next, under that start's source and memo, so a verdict depended on
+        // the order the workers claimed the starts in. They run twice, once per memo, and keep the rows of both: on these walks' memo a late
+        // walk stops at every position the withheld walks already answered, and a walk of theirs that ran past the budget answered some
+        // without having explored what lies past them, so a late walk there reaches fewer open uses than one on the start's own memo, which
+        // explores them again under a budget of its own (app-game: 13 uses that only the second reaches, none that only the first does).
+        let late = self.late.clone();
+        self.run_late();
         let past = self.uses.split_off(before);
         self.escaped_uses.extend(past);
+        let late_rows = std::mem::take(&mut self.late_rows);
+        self.escaped_uses.extend(late_rows);
         self.walked = walked;
+        self.late = late;
+        let before = self.uses.len();
+        self.run_late();
+        let again = self.uses.split_off(before);
+        self.escaped_uses.extend(again);
+        let late_rows = std::mem::take(&mut self.late_rows);
+        self.escaped_uses.extend(late_rows);
     }
 
     /// ADR 0860: an open position past which the walk goes on as an escaped
