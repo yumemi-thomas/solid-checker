@@ -1,5 +1,5 @@
 {
-  "status": "uncertifiable",
+  "status": "violation",
   "findings": [
     {
       "rule": "no-write-in-pure-computation",
@@ -8,8 +8,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/merge-omit-view-spread-handler/App.tsx",
-      "start": 905,
-      "end": 926,
+      "start": 927,
+      "end": 948,
       "fixes": 0
     },
     {
@@ -19,8 +19,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/merge-omit-view-spread-handler/App.tsx",
-      "start": 914,
-      "end": 921,
+      "start": 936,
+      "end": 943,
       "fixes": 0
     },
     {
@@ -30,19 +30,19 @@
       "blocker": "handler-spread-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/merge-omit-view-spread-handler/App.tsx",
-      "start": 1194,
-      "end": 1198,
+      "start": 1216,
+      "end": 1220,
       "fixes": 0
     },
     {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
-      "blocker": "owner-varies-by-caller",
+      "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/merge-omit-view-spread-handler/App.tsx",
-      "start": 1575,
-      "end": 1593,
+      "start": 1529,
+      "end": 1547,
       "fixes": 0
     },
     {
@@ -52,8 +52,95 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/merge-omit-view-spread-handler/App.tsx",
-      "start": 1575,
-      "end": 1593,
+      "start": 1529,
+      "end": 1547,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "handler-spread-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-spread-handler/App.tsx",
+      "start": 1617,
+      "end": 1623,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/merge-omit-view-spread-handler/App.tsx",
+      "start": 1786,
+      "end": 1804,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/merge-omit-view-spread-handler/App.tsx",
+      "start": 1786,
+      "end": 1804,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "handler-spread-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-spread-handler/App.tsx",
+      "start": 1865,
+      "end": 1871,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-spread-handler/App.tsx",
+      "start": 2067,
+      "end": 2085,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/merge-omit-view-spread-handler/App.tsx",
+      "start": 2067,
+      "end": 2085,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/merge-omit-view-spread-handler/App.tsx",
+      "start": 2529,
+      "end": 2547,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/merge-omit-view-spread-handler/App.tsx",
+      "start": 2529,
+      "end": 2547,
       "fixes": 0
     }
   ]
