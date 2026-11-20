@@ -365,6 +365,19 @@ impl SemanticLookup<'_> {
         self.dispatch_veto().4 && (self.shadow_roots_possible() || !self.event_delivery_intact())
     }
 
+    /// ADR 1139 (bundle j smoke): whether the program has an actual dispatch from an effect's apply and a listener may sit in a shadow tree. The
+    /// dispatch veto's answers are all true wherever the delivery premise is broken, an apply dispatch or not; this one asks for the dispatch
+    /// itself, so it holds only where a creation a handler reaches may run inside an apply's effect-callback window through a shadow delivery.
+    pub(crate) fn apply_dispatch_into_shadow_possible(&self) -> bool {
+        crate::base::reads::note(crate::base::reads::Section::DispatchVeto);
+        self.hazard_present(crate::base::Hazard::SynchronousDispatch)
+            && self
+                .event_dispatch_sites()
+                .iter()
+                .any(DispatchSite::delivers_in_effect_apply)
+            && self.shadow_roots_answer()
+    }
+
     /// ADR 1125: whether no analysed code may make a handler run other than as a DOM delivery that sets `window.event`
     /// ([`scan_delivery_hazard`]), scanned once per build.
     pub(crate) fn event_delivery_intact(&self) -> bool {
