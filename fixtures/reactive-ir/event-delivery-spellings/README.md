@@ -17,5 +17,8 @@ every spelling (the closest legal forms), and the read of `Light` stays proved.
 - Adjacent spellings (found by probing, not by the review): the attribute node out of the `attributes` collection (`attributes-*`),
   `execCommand("insertHTML")` (`exec-command`), `parseFromString` (`dom-parser`), and a window or a document behind a `const` alias (`window-alias-*`,
   `document-alias-create-element`).
+- Round 2 (N1): the attribute collection reached under a key the program does not spell or builds (`attributes-unproven-key*`,
+  `attributes-built-key`); K4 reads a member named like an attribute (`href`, `src`, `action`, `on…`) or `attributes` as no plain data
+  key. `data-href-unproven-key` is the accepted cost: a list's `href` under an unproven index is withheld.
 - F6 (`variants/plain-data-key-uses`, a legal project): K4 judges the key alone; a direct call, a call through a name and `.call` of a
   member under a plain data key are alike inert.

@@ -3272,6 +3272,7 @@ fn an_attribute_node_by_the_collection_or_a_global_behind_an_alias_is_a_code_sin
         a.attributes.getNamedItem('href')!.value = 'x'; a.attributes.getNamedItemNS(null, key); a.attributes.item(0); \
         a.attributes.href.value = 'x'; a.attributes['onclick'].value = 'x'; a.attributes[i].value = 'x'; a.attributes[0].value = 'x'; \
         const at = a.attributes; at.src.value = 'x'; \
+        a['attri' + 'butes'].href.value = 'x'; const built = a['attri' + 'butes']; built.action.value = 'x'; \
         a.attributes.setNamedItem(t); a.attributes.setNamedItemNS(t); \
         document.execCommand('insertHTML', false, html); document.execCommand('createLink', false, url); \
         document.execCommand(key, false, html); \
@@ -3292,6 +3293,8 @@ fn an_attribute_node_by_the_collection_or_a_global_behind_an_alias_is_a_code_sin
         ("a.attributes[i]", CodeSinkKind::NavigationUrl),
         ("a.attributes[0]", CodeSinkKind::NavigationUrl),
         ("at.src", CodeSinkKind::NavigationUrl),
+        ("a['attri' + 'butes'].href", CodeSinkKind::NavigationUrl),
+        ("built.action", CodeSinkKind::NavigationUrl),
         ("a.attributes.setNamedItem(t)", CodeSinkKind::EventAttribute),
         (
             "a.attributes.setNamedItemNS(t)",
@@ -3382,6 +3385,7 @@ fn an_attribute_node_by_the_collection_or_a_global_behind_an_alias_is_a_code_sin
     // dotted OpenTelemetry key), a literal node name, commands that write no markup or link, and the same names off other objects.
     let clean = "declare const a: any, item: any, props: any, span: any, p: any; \
         a.attributes.title; a.attributes.length; item.attributes['compass.message.ids']; span.attributes.attempt; \
+        a['attri' + 'bute'].href; item['attri' + 'butes'].title; \
         a.attributes.getNamedItem('title'); document.execCommand('copy'); document.execCommand('insertHTML', false, '<b>x</b>'); \
         document.execCommand('createLink', false, '/x'); const q = p; const { open } = q; const { write } = props; \
         const { title } = a.attributes; new DOMParser().parseFromString('<p>x</p>', 'text/html');";
@@ -4753,6 +4757,27 @@ fn a_computed_read_whose_value_only_feeds_operators_and_tests_is_inert() {
         inert,
         vec![
             true, true, false, false, true, false, false, false, false, true, true, true, false
+        ]
+    );
+}
+
+/// ADR 1133 (round 2 N1): the object of a member under a name a URL, an event handler or the attribute collection goes by is not inert: the
+/// unproven key may be `attributes`, and `el[key()].href` is then the attribute node of `href`, whose `value`, `textContent` or `nodeValue`
+/// sets the URL. A data field no attribute has (`done`, `label`, `title`, `data`) stays plain.
+#[test]
+fn a_member_under_an_attribute_name_is_no_plain_data_key() {
+    let source = "declare const a: any, k: any; void a[k].href; void a[k].src; void a[k].action; void a[k].formAction; void a[k].srcdoc; \
+        void a[k].onclick; void a[k].onClick; void a[k].attributes; void a[k].title; void a[k].label; void a[k].data; void a[k].done;";
+    let inert = extract("keys.ts", source)
+        .unwrap()
+        .computed_keys
+        .iter()
+        .map(|fact| fact.value_inert)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        inert,
+        vec![
+            false, false, false, false, false, false, false, false, true, true, true, true
         ]
     );
 }

@@ -2032,3 +2032,11 @@ packages/wasm/owned/
 !fixtures/reactive-ir/event-delivery-spellings/variants/document-alias-create-element/node_modules/**
 !fixtures/reactive-ir/event-delivery-spellings/variants/dom-parser/node_modules/
 !fixtures/reactive-ir/event-delivery-spellings/variants/dom-parser/node_modules/**
+!fixtures/reactive-ir/event-delivery-spellings/variants/attributes-unproven-key/node_modules/
+!fixtures/reactive-ir/event-delivery-spellings/variants/attributes-unproven-key/node_modules/**
+!fixtures/reactive-ir/event-delivery-spellings/variants/attributes-unproven-key-kept/node_modules/
+!fixtures/reactive-ir/event-delivery-spellings/variants/attributes-unproven-key-kept/node_modules/**
+!fixtures/reactive-ir/event-delivery-spellings/variants/attributes-built-key/node_modules/
+!fixtures/reactive-ir/event-delivery-spellings/variants/attributes-built-key/node_modules/**
+!fixtures/reactive-ir/event-delivery-spellings/variants/data-href-unproven-key/node_modules/
+!fixtures/reactive-ir/event-delivery-spellings/variants/data-href-unproven-key/node_modules/**

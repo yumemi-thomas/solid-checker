@@ -63,6 +63,7 @@ export function Neighbours() {
       void [titled, total, title, shown, parsed];
       // K4: a plain data key under an unknown key.
       (rows as any)[key()].done = true;
+      void (rows as any)[key()].label;
       void [name, kind, open, location];
     },
   );

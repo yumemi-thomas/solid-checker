@@ -79,7 +79,7 @@ use thiserror::Error;
 pub const AST_FACTS_SCHEMA: u32 = 105;
 
 mod argument_completion;
-mod code_sinks;
+pub(crate) mod code_sinks;
 mod completion_call_cover;
 mod component_value_flow;
 mod computed_keys;

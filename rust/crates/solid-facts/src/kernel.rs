@@ -405,9 +405,13 @@ pub fn cooked_key(text: &str) -> Option<String> {
 }
 
 /// ADR 1133: a key that names no standard function-valued member, prototype route, coercion or protocol hook, Solid private key,
-/// shadow-root spelling, nor a name the delivery premise watches (`event`, `Promise`, `__proto__`).
+/// shadow-root spelling, nor a name the delivery premise watches (`event`, `Promise`, `__proto__`). Round 2 (N1): nor an attribute a
+/// URL or an event handler lives in (`href`, `src`, `action`, `formAction`, `srcdoc`, `on…`: `el[key()].href` is the attribute node of
+/// `href` when the key is `attributes`, and writing its `value`, `textContent` or `nodeValue` sets the URL) nor the collection itself.
 fn plain_data_key(key: &str) -> bool {
-    !crate::ast::premise_sites::is_standard_member(key)
+    !crate::ast::code_sinks::attribute_name_is_unsafe(key)
+        && key != "attributes"
+        && !crate::ast::premise_sites::is_standard_member(key)
         && !crate::ast::premise_sites::PROTOTYPE_ROUTES.contains(&key)
         && !crate::ast::premise_sites::HOOK_KEYS.contains(&key)
         && !crate::ast::premise_sites::SHADOW_SPELLINGS.contains(&key)

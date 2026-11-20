@@ -54,7 +54,11 @@ const GLOBAL_OBJECTS: [&str; 7] = [
 /// ADR 1133 (F5): the names (attribute names and members, compared without case and after a namespace prefix such as `attr:`) whose value a
 /// navigation loads as a URL: a link's or a base's `href`, a frame's `src`, a form's `action` and a button's `formAction`, the
 /// window's `location`. A `javascript:` URL runs only when navigated to: `<object data>`, `<embed src>`, `<img src>` and `<script src>`
-/// fetch their resource, and fetching a `javascript:` URL is a network error (Fetch, scheme fetch), so `data` is no such name.
+/// fetch their resource, and fetching a `javascript:` URL is a network error (Fetch, scheme fetch), so `data` is no such name. Round 2
+/// measured it (Chrome 148, the fuzz oracle's headless shell 1223, `void (…)` so the document is kept): `<object data>` (a property, an
+/// attribute, set after insertion, with `type="text/html"`, parsed from markup), `<embed src>`, `<img src>`, `<link href>`, `<script src>` and a
+/// `<meta http-equiv="refresh">` run nothing; `<iframe src>`, `<a href>` clicked, `<form action>` submitted, `<button formaction>` and an
+/// SVG `<a href>` run it.
 const URL_NAMES: [&str; 5] = ["href", "src", "action", "formaction", "location"];
 
 /// Whether `name` (an attribute, a member or a key, with any `attr:`/`prop:`/`xlink:` prefix) names a URL slot or the `srcdoc` markup slot.
@@ -87,8 +91,9 @@ fn write_slot_of(name: &str) -> Option<Slot> {
 const ALIAS_HOPS: usize = 4;
 
 /// ADR 1133 (round 1, adjacent spellings): whether an attribute of this name, taken out of an `attributes` collection, may be written as a
-/// URL or an event handler: a URL slot's name, an `on…` name, or an index (the attribute at that position may have any name).
-fn attribute_name_is_unsafe(name: &str) -> bool {
+/// URL or an event handler: a URL slot's name, an `on…` name, or an index (the attribute at that position may have any name). Round 2
+/// (N1): K4's plain data key reads it too, because the collection is reached under a key the program may not spell (`el[key()].href`).
+pub(crate) fn attribute_name_is_unsafe(name: &str) -> bool {
     slot_of(name).is_some()
         || name
             .get(..2)
@@ -130,18 +135,33 @@ struct Sinks<'s, 'a> {
     semantic: &'s Semantic<'a>,
     resolve: bool,
     found: Vec<CodeSinkFact>,
+    /// ADR 1133 (round 2): the computed members whose key a proof gives the text `attributes` (`el["attri" + "butes"]`), which the
+    /// literal key test of [`Sinks::is_attributes`] does not see. Found before the scan: a member is met before the one it is the object of.
+    attribute_members: std::collections::HashSet<oxc_span::Span>,
 }
 
 /// The places a file runs code it builds, in source order (see the module's text), and whether it holds a `this` or `super` expression: code that may read a member through
 /// the object a function was called on. `resolve` is whether names are followed to their declarations (false when the binder reported errors).
 pub(super) fn code_sinks(semantic: &Semantic<'_>, resolve: bool) -> (Vec<CodeSinkFact>, bool) {
+    let mut keys = super::computed_keys::KeyProver::new(semantic, resolve);
+    let mut attribute_members = std::collections::HashSet::new();
+    for node in semantic.nodes().iter() {
+        if let AstKind::ComputedMemberExpression(member) = node.kind()
+            && literal_property_key(&member.expression).is_none()
+            && keys
+                .key(&member.expression)
+                .is_some_and(|(texts, _)| texts.iter().any(|text| text == "attributes"))
+        {
+            attribute_members.insert(member.span);
+        }
+    }
     let mut sinks = Sinks {
         semantic,
         resolve,
         found: Vec::new(),
+        attribute_members,
     };
     let mut uses_receiver = false;
-    let mut keys = super::computed_keys::KeyProver::new(semantic, resolve);
     for node in semantic.nodes().iter() {
         match node.kind() {
             AstKind::ThisExpression(_) | AstKind::Super(_) => uses_receiver = true,
@@ -1194,13 +1214,14 @@ impl<'a> Sinks<'_, 'a> {
         })
     }
 
-    /// Whether the expression is the `attributes` collection of an element: a member so named, by a static name or a literal key, or a
-    /// `const` alias of one.
+    /// Whether the expression is the `attributes` collection of an element: a member so named, by a static name, a literal key or a key a
+    /// proof gives the text (`el["attri" + "butes"]`), or a `const` alias of one.
     fn is_attributes(&self, expression: &'a Expression<'a>) -> bool {
         match self.through_aliases(expression) {
             Expression::StaticMemberExpression(member) => member.property.name == "attributes",
             Expression::ComputedMemberExpression(member) => {
                 literal_property_key(&member.expression).is_some_and(|key| key == "attributes")
+                    || self.attribute_members.contains(&member.span)
             }
             _ => false,
         }
