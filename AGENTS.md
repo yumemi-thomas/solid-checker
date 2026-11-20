@@ -87,7 +87,7 @@ and docs/decisions.md (live decisions by ADR number).
   commit (`BASE=<rev>` overrides), maps changed paths to their owning checks
   plus fmt, clippy, and manifest validation, and escalates any unmapped path to
   `make verify`.
-  Analysis-only paths (solid-facts, solid-reactive-ir, `rust/dialects/solid-v2/rules/`)
+  Analysis-only paths (solid-facts, solid-reactive-ir, solid-dialect, `rust/dialects/solid-v2/rules/`)
   get a seconds-long WASM compile check instead of the WASM package build and
   parity, which only `packages/wasm/` selects; `make verify` runs both.
 - IR reuse changes: `make ir-edit-fuzz` (random edits, daemon against one-shot, shadow

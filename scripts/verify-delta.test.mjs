@@ -5,7 +5,7 @@
 // this script could plausibly have.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "vitest";
@@ -51,6 +51,10 @@ test("each table row claims its own owner's paths", () => {
     ["rust/crates/solid-facts/src/lib.rs", ["facts-lib", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "proof-gate", "wasm-compile"]],
     ["rust/crates/solid-reactive-ir/src/rules/mod.rs", ["ir-lib", "backend-process", "write-walk-strategies", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "proof-gate", "ir-read-lint", "proof-lint", "ir-edit-fuzz", "wasm-compile"]],
     ["rust/dialects/solid-v2/rules/src/lib.rs", ["dialects-process", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "proof-gate", "wasm-compile"]],
+    [
+      "rust/crates/solid-dialect/src/lib.rs",
+      ["dialect-lib", "ir-lib", "backend-process", "backend-staleness", "write-walk-strategies", "dialects-process", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "proof-gate", "ir-edit-fuzz", "wasm-compile"],
+    ],
     ["rust/dialects/solid-v2/compiler/src/lib.rs", ["dialects-process", "coverage", "repro-causes", "ownership-gate", "tsc-oracle-gate", "obligation-audit", "witnesses", "proof-gate"]],
     [
       "rust/crates/solid-facts-backend/src/diagnostics.rs",
@@ -69,6 +73,8 @@ test("each table row claims its own owner's paths", () => {
     ["scripts/fuzz/focus.mjs", ["fuzz-tests"]],
     ["scripts/fuzz/roles.test.mjs", ["fuzz-tests"]],
     ["scripts/runtime-oracle.mjs", ["fuzz-tests"]],
+    ["scripts/verify-delta.mjs", ["verify-delta-script"]],
+    ["scripts/verify-delta.test.mjs", ["verify-delta-script"]],
   ];
   for (const [path, checks] of expected) {
     assert.deepEqual(classify(path)?.checks, checks, path);
@@ -132,6 +138,7 @@ test("a path that can move a finding selects every gate that reads findings", ()
     "rust/crates/solid-facts-backend/src/diagnostics.rs",
     "rust/dialects/solid-v2/rules/src/lib.rs",
     "rust/dialects/solid-v2/compiler/src/lib.rs",
+    "rust/crates/solid-dialect/src/dialect.rs",
     "apps/solid-typefacts/src/session.rs",
     "fixtures/tsc-oracle/rule-cases.json",
     "fixtures/obligation-cases/cases.json",
@@ -193,6 +200,7 @@ test("analysis-only changes get the WASM compile check, never the package build 
     "rust/crates/solid-reactive-ir/src/lib.rs",
     "rust/crates/solid-facts/src/lib.rs",
     "rust/dialects/solid-v2/rules/src/lib.rs",
+    "rust/crates/solid-dialect/src/lib.rs",
   ]) {
     const plan = planFor([path]);
     assert.ok(plan.checks.includes("wasm-compile"), path);
@@ -580,13 +588,14 @@ test("make verify skips WASM parity only for analysis-only or prose change sets"
   for (const paths of [
     ["rust/crates/solid-reactive-ir/src/pipeline.rs"],
     ["rust/crates/solid-facts/src/lib.rs", "rust/dialects/solid-v2/rules/src/lib.rs", "docs/decisions.md"],
+    ["rust/crates/solid-dialect/src/lib.rs", "rust/crates/solid-dialect/clippy.toml"],
   ]) {
     assert.equal(scope(...paths).run, false, paths.join(", "));
   }
   for (const paths of [
     // The WASM crate links the backend, so its changes keep parity.
     ["rust/crates/solid-reactive-ir/src/pipeline.rs", "rust/crates/solid-facts-backend/src/lib.rs"],
-    ["rust/crates/solid-dialect/src/lib.rs"],
+    ["rust/crates/solid-dialect/src/lib.rs", "rust/crates/solid-facts-backend/src/lib.rs"],
     ["rust/dialects/solid-v2/compiler/src/lib.rs"],
     ["fixtures/reactive-ir/a/App.tsx"],
     ["packages/wasm/src/index.mjs"],
@@ -610,6 +619,110 @@ test("each analysis crate whose changes skip WASM parity confines threads with t
       assert.ok(config.includes(`"${method}"`), `${row.prefix}clippy.toml must disallow ${method}`);
     }
   }
+});
+
+/**
+ * The workspace's crates: `{ name, directory, dependencies }` from `rust/Cargo.toml`'s members and each member's manifest (the names under its
+ * dependency tables; a line `name = ...` or `name.workspace = true`). A scan, not a TOML parser: the manifests here are flat.
+ */
+function workspaceCrates() {
+  const members = [...readFileSync(join(ROOT, "rust/Cargo.toml"), "utf8").match(/members\s*=\s*\[([^\]]*)\]/)[1].matchAll(/"([^"]+)"/g)].map((match) => match[1]);
+  return members.map((member) => {
+    const manifest = readFileSync(join(ROOT, "rust", member, "Cargo.toml"), "utf8");
+    const name = manifest.match(/^name\s*=\s*"([^"]+)"/m)[1];
+    const dependencies = new Set();
+    let table = "";
+    for (const line of manifest.split("\n")) {
+      const header = line.match(/^\[([^\]]+)\]/);
+      if (header) { table = header[1]; continue; }
+      if (!/(^|\.)(dependencies|dev-dependencies|build-dependencies)$/.test(table)) continue;
+      const entry = line.match(/^([A-Za-z0-9_-]+)\s*(=|\.)/);
+      if (entry) dependencies.add(entry[1]);
+    }
+    return { name, directory: `rust/${member}/`, dependencies };
+  });
+}
+
+// `rust/crates/solid-dialect/` was unmapped on purpose, because a row narrower than the crate's blast radius is a guess. The row is the radius, so it
+// is derived from the workspace's dependency graph and pinned to it: a crate that starts to depend on solid-dialect fails here until its own tests
+// are named in the row.
+test("the dialect row follows the workspace's dependency graph", () => {
+  const crates = workspaceCrates();
+  const direct = crates.filter((crate) => crate.dependencies.has("solid-dialect")).map((crate) => crate.name).sort();
+  // Each direct dependent's own tests, as the rows of its directory name them.
+  const ownTests = {
+    "solid-reactive-ir": ["ir-lib"],
+    "solid-facts-backend": ["backend-process", "backend-staleness", "write-walk-strategies"],
+    "solid-v2-rules": ["dialects-process"],
+  };
+  assert.deepEqual(direct, Object.keys(ownTests).sort(), "a crate that depends on solid-dialect needs its tests named here and in the row");
+  const row = classify("rust/crates/solid-dialect/src/lib.rs");
+  for (const [name, checks] of Object.entries(ownTests)) {
+    const dependent = crates.find((crate) => crate.name === name);
+    const own = classify(`${dependent.directory}src/lib.rs`);
+    for (const check of checks) {
+      assert.ok(row.checks.includes(check), `${name}'s ${check} must be in the dialect row`);
+      assert.ok(own.checks.includes(check), `${name}'s own row names ${check}`);
+    }
+  }
+  // The closure: what depends on a dependent depends on the dialect. Today only the WASM crate (through the backend), which the compile check covers.
+  const closure = new Set(direct);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const crate of crates) {
+      if (!closure.has(crate.name) && [...closure].some((name) => crate.dependencies.has(name))) { closure.add(crate.name); grew = true; }
+    }
+  }
+  assert.deepEqual([...closure].filter((name) => !(name in ownTests)).sort(), ["solid-checker-wasm"]);
+  assert.ok(row.checks.includes("wasm-compile") && !row.checks.includes("wasm-parity"));
+  // The crate's own tests, every gate that reads findings, and the daemon against the one-shot run; none of the facts crate's (it does not depend on this one).
+  for (const check of ["dialect-lib", ...FINDING_GATES, "ir-edit-fuzz"]) assert.ok(row.checks.includes(check), check);
+  assert.ok(!row.checks.includes("facts-lib"));
+  assert.ok(!crates.find((crate) => crate.name === "solid-facts").dependencies.has("solid-dialect"));
+  assert.deepEqual(CHECKS["dialect-lib"].command.slice(-3), ["-p", "solid-dialect", "--lib"]);
+});
+
+test("a change to the dialect crate runs its tests first, then the dependents' and the gates, without the WASM package", () => {
+  const plan = planFor(["rust/crates/solid-dialect/src/solid_2.rs", "rust/crates/solid-dialect/clippy.toml"]);
+  assert.equal(plan.full, false);
+  assert.deepEqual(plan.unmapped, []);
+  assert.deepEqual(plan.checks, [
+    "build-typefacts",
+    ...UNIVERSAL,
+    "build-debug",
+    "dialect-lib",
+    "ir-lib",
+    "backend-process",
+    "backend-staleness",
+    "write-walk-strategies",
+    "dialects-process",
+    ...FINDING_GATES,
+    "ir-edit-fuzz",
+    "wasm-compile",
+  ]);
+  assert.equal(scheduleFor(plan.checks).find((entry) => entry.check === "dialect-lib").lane, "rust");
+  assert.equal(wasmParityScope({ paths: ["rust/crates/solid-dialect/src/solid_2.rs"] }).run, false);
+  // The crate's thread lint is what lets its changes skip parity (the test above reads it for every such row).
+  assert.ok(existsSync(join(ROOT, "rust/crates/solid-dialect/clippy.toml")));
+});
+
+test("every entry of the Solid 2 dialect directory has a row, so a change there never escalates", () => {
+  const directory = "rust/dialects/solid-v2";
+  const entries = readdirSync(join(ROOT, directory));
+  assert.ok(entries.length >= 4);
+  for (const entry of entries) {
+    const path = statSync(join(ROOT, directory, entry)).isDirectory() ? `${directory}/${entry}/src/lib.rs` : `${directory}/${entry}`;
+    assert.ok(classify(path), `${path} has no row`);
+    assert.equal(planFor([path]).full, false, path);
+  }
+});
+
+test("a change to the mapping or to its test selects the test, never the full verify", () => {
+  const plan = planFor(["scripts/verify-delta.mjs", "scripts/verify-delta.test.mjs"]);
+  assert.equal(plan.full, false);
+  assert.deepEqual(plan.checks, ["build-typefacts", ...UNIVERSAL, "verify-delta-script"]);
+  assert.deepEqual(checkOf("verify-delta-script").command.slice(-1), ["scripts/verify-delta.test.mjs"]);
+  assert.equal(scheduleFor(["verify-delta-script"])[0].lane, "preflight");
 });
 
 // A process test that runs the checker on a fixture and asserts its rows moves with that fixture's snapshot: 1113 changed
