@@ -36972,5 +36972,19 @@
    "lg-strict-read-untracked-dny-legal-mount-disabled-store-render-effect-carried-direct-none"
   ],
   "rediscovered": "focus lg-recall --contexts dny-legal-mount-disabled (69 programs), release builds, without the pending-fix entry: main 71d12830e has 4 unexecuted-violation rows (missing-owner violation at line 8) and needs a look; this build gives them handler-on-disabled-control (uncertifiable) and nothing needs a look"
+ },
+ {
+  "finding": "ADR 1141: an SC4001 missing-owner violation at createEffect/createRenderEffect in the delegated handler of a <button disabled> disabled from mount that also holds a spread (`<button disabled {...{ title: \"t\" }} onClick={…}>`, ADR 1134's own `{...rest}` case, and a handler a spread literal supplies): the compiler hands the attributes and spreads to rc.21's `spread`, whose assignProp delegates onClick, and eventHandler passes over a disabled node, so the handler never runs and Chrome is quiet (a false positive under ADR 1018). ADR 1134 refused every control with a spread",
+  "found": "coordinator (2026-11-20), on main a64fc92ad",
+  "fixed": "ADR 1141 (disabled_handlers.rs spread_handler_of_disabled_control: every spread's own keys proven and none disabled, ref or namespaced; Dialect::spread_event_delegated)",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-dny-legal-mount-disabled-spread-store-effect-called-direct-none",
+   "lg-strict-read-untracked-dny-legal-mount-disabled-spread-store-effect-named-called-direct-none",
+   "lg-strict-read-untracked-dny-legal-mount-disabled-spread-store-effect-carried-direct-none",
+   "lg-strict-read-untracked-dny-legal-mount-disabled-spread-store-render-effect-carried-direct-none"
+  ],
+  "rediscovered": "new context dny-legal-mount-disabled-spread (misuse.mjs): `focus.mjs --codes STRICT_READ_UNTRACKED,REACTIVE_WRITE_IN_OWNED_SCOPE --grids lg-recall,mx-recall --contexts dny-legal-mount-disabled-spread` (72 programs), release builds: main a64fc92ad exits 1 with these 4 unexecuted-violation rows (missing-owner violation at line 8); this build exits 0 (handler-on-disabled-control), nothing needs a look"
  }
 ]
