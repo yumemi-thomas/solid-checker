@@ -3061,7 +3061,9 @@ fn string_code_spelled(view: &FileView<'_>) -> bool {
     let ast = &file.ast;
     let position = |span: Span| {
         ast.reference_positions
-            .binary_search_by_key(&(span.start, span.end), |fact| (fact.span.start, fact.span.end))
+            .binary_search_by_key(&(span.start, span.end), |fact| {
+                (fact.span.start, fact.span.end)
+            })
             .ok()
             .map(|found| ast.reference_positions[found].position)
     };
