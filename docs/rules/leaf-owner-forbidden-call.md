@@ -95,7 +95,7 @@ packages included, holds no listener for any of them (a JSX handler or spread
 on an intrinsic element, an `addEventListener` that is not a literal other
 type, an `on<event>` property) and nothing that stands in for `focus` (a
 class or object member named `focus`, a replaced standard member), it runs no
-project code and the call is no obligation (ADR 1147, `focus_delivery`).
+project code and the call is no obligation (ADR 1151, `focus_delivery`).
 
 `onSettled` becomes a leaf owner only when its call is proven owner-backed.
 Out-of-band calls enqueue a plain callback and remain outside this rule; an

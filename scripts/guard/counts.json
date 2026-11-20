@@ -4967,7 +4967,7 @@
    "key": "SC9012 leaf-callback-opaque",
    "from": 3,
    "to": 1,
-   "adr": "ADR 1147",
+   "adr": "ADR 1151",
    "proof": "rust/crates/solid-reactive-ir/src/focus_delivery.rs::program_may_run_code_on_focus",
    "fixtures": {
     "proved": "reactive-ir/leaf-scope-builtin-method",
@@ -4979,7 +4979,7 @@
    "key": "SC9012 leaf-callback-opaque",
    "from": 11,
    "to": 8,
-   "adr": "ADR 1147",
+   "adr": "ADR 1151",
    "proof": "rust/crates/solid-reactive-ir/src/focus_delivery.rs::program_may_run_code_on_focus",
    "fixtures": {
     "proved": "reactive-ir/leaf-scope-optional-dom",
@@ -4991,7 +4991,7 @@
    "key": "SC9012 value-in-carrier",
    "from": 1,
    "to": 0,
-   "adr": "ADR 1146",
+   "adr": "ADR 1150",
    "proof": "rust/crates/solid-reactive-ir/src/value_use.rs::untouched_target_read_is_plain",
    "fixtures": {
     "proved": "reactive-ir/static-api-unresolved",
@@ -5003,7 +5003,7 @@
    "key": "SC9012 value-in-carrier",
    "from": 6,
    "to": 4,
-   "adr": "ADR 1146",
+   "adr": "ADR 1150",
    "proof": "rust/crates/solid-reactive-ir/src/value_use.rs::untouched_target_read_is_plain",
    "fixtures": {
     "proved": "reactive-ir/static-api",

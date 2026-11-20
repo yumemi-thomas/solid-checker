@@ -650,11 +650,11 @@
     "rust/crates/solid-reactive-ir/src/focus_delivery.rs": {
       "default-on-missing": {
         "count": 1,
-        "why": "`jsx_may_listen`'s `is_none_or`: an attribute whose written name no fact reads is taken for a listener, so the answer is `may run code on a focus move`, which withholds the proof (ADR 1147); it never ends a row"
+        "why": "`jsx_may_listen`'s `is_none_or`: an attribute whose written name no fact reads is taken for a listener, so the answer is `may run code on a focus move`, which withholds the proof (ADR 1151); it never ends a row"
       },
       "name-only-match": {
         "count": 1,
-        "why": "`code_may_listen`'s bare `addEventListener`: a spelling of the registration API that no binding declares only WIDENS what the proof withholds (the call is quiet only as a direct call with a literal type outside the focus family); no row ends on the spelling (ADR 1147)"
+        "why": "`code_may_listen`'s bare `addEventListener`: a spelling of the registration API that no binding declares only WIDENS what the proof withholds (the call is quiet only as a direct call with a literal type outside the focus family); no row ends on the spelling (ADR 1151)"
       }
     },
     "rust/crates/solid-reactive-ir/src/hosts.rs": {

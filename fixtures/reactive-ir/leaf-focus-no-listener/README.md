@@ -1,4 +1,4 @@
-# leaf-focus-no-listener (ADR 1147)
+# leaf-focus-no-listener (ADR 1151)
 
 **Claim.** The leaf-scope walk refuses an element's `focus()` (ADR 0329): a focus move delivers `focus`, `focusin`, `blur`, `focusout` and
 `change` before it returns, and a listener for one runs on the stack of the leaf callback, under the leaf owner, where `onCleanup`, a flush

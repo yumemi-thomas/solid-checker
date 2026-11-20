@@ -2435,7 +2435,7 @@
    "ruleOptions": {},
    "presets": [],
    "enableRules": [],
-   "note": "TS2345 owns the key (`affects(accessor, key)` has no such overload). The value-use census no longer holds a row at `target` (ADR 1146): `affects` reads `$TARGET` and `$REFRESH` off the accessor and never calls it or hands it on, with or without a key, and the program has nothing that writes a prototype.",
+   "note": "TS2345 owns the key (`affects(accessor, key)` has no such overload). The value-use census no longer holds a row at `target` (ADR 1150): `affects` reads `$TARGET` and `$REFRESH` off the accessor and never calls it or hands it on, with or without a key, and the program has nothing that writes a prototype.",
    "expect": {
     "findings": [
      {

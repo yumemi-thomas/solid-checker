@@ -1,4 +1,4 @@
-//! ADR 1147: a `focus()` call that delivers to no project code.
+//! ADR 1151: a `focus()` call that delivers to no project code.
 //!
 //! The leaf-scope walk (`cleanup.rs`) refuses a `lib.dom` member that dispatches an event synchronously (ADR 0329): the listeners it
 //! delivers to run on the stack of the leaf callback, under the leaf owner, where a cleanup, a flush or a creation is refused. The

@@ -1,4 +1,4 @@
-// The measurement behind `focus_delivery.rs`'s event list (ADR 1147): which event types does `el.focus()` deliver before it returns, over
+// The measurement behind `focus_delivery.rs`'s event list (ADR 1151): which event types does `el.focus()` deliver before it returns, over
 // 18 moves? Every `on*` event type `window` has, and the legacy and composition names, are listened for in the capture phase on `window` and
 // `document` (and in a child frame); the moves are from nothing, from an edited input, into a textarea, button, contenteditable, a shadow
 // tree, a dialog, a frame and back, a closed `<details>`, a select, a popover (open, then focus outside), with `preventScroll`, and from a
