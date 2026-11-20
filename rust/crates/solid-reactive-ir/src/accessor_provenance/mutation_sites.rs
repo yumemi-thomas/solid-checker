@@ -2699,6 +2699,11 @@ pub(crate) fn standard_member_replaced(lookup: &SemanticLookup<'_>, qualified_na
     let member = qualified_name
         .rsplit_once('.')
         .map_or(qualified_name, |(_, member)| member);
+    // ADR 1129 round 2 (F2): the census above reads names; a writer under a key it does not decide (`Object.defineProperty(A["proto"
+    // + "type"], k, …)`) or a prototype reached in one file and written in another is any program file's premise site.
+    if crate::plain_premise::program_may_write_standard_member(lookup, member) {
+        return true;
+    }
     let solid = lookup.dialect.primitive_defining_packages();
     let dialect_root = |root: &str| {
         solid

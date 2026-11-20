@@ -49,6 +49,34 @@ function DefaultedOn(props: Props) {
   return <button {...merged} />;
 }
 
+// ADR 1129 round 2 (N1): the compiler hands `spread` the element's sources as
+// one array (`spread(el, [merged, { onClick: … }])`), and rc.21's `collectProps`
+// skips a key a later source has: the view literal's handler is never attached.
+// Each stays unresolved (an obligation), never a violation.
+function LaterAttr(props: Props) {
+  const merged = merge({ onClick: () => { createRenderEffect(() => count(), () => {}); } }, props);
+  return <button {...merged} onClick={() => setCount(count() + 1)} />;
+}
+
+// A later `undefined` is a key the later source has.
+function LaterUndefined(props: Props) {
+  const merged = merge({ onClick: () => { createRenderEffect(() => count(), () => {}); } }, props);
+  return <button {...merged} onClick={undefined} />;
+}
+
+// A later spread may hold the key (its keys are not read).
+function LaterSpread(props: Props) {
+  const merged = merge({ onClick: () => { createRenderEffect(() => count(), () => {}); } }, props);
+  return <button {...merged} {...more} />;
+}
+
+// Positive twin: the attribute comes first, so the view's later key wins and
+// its handler runs with no owner.
+function EarlierAttr(props: Props) {
+  const merged = merge({ onClick: () => { createRenderEffect(() => count(), () => {}); } }, props);
+  return <button onClick={() => setCount(count() + 1)} {...merged} />;
+}
+
 const more: Props = {};
 
 export function Page() {
@@ -68,6 +96,10 @@ export function Page() {
       <DefaultedOff />
       <KeyedOff disabled />
       <DefaultedOn />
+      <LaterAttr />
+      <LaterUndefined />
+      <LaterSpread />
+      <EarlierAttr />
       <Spreaded onPointerDown={() => setCount(count() + 1)} />
       <Spreaded {...more} />
     </div>

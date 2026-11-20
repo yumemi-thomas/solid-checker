@@ -8,7 +8,9 @@ The props type declares `textContent`, not `innerHTML`: the declared keys of `re
 - `variants/define`: `Object.defineProperty(Array.prototype, "includes", …)`: uncertifiable.
 - `variants/alias`: `const proto = Array.prototype; proto.includes = …`: uncertifiable.
 - `variants/define-alias`: `Object.defineProperty(proto, "includes", …)` through that alias, no `prototype` spelled at the call: uncertifiable (the round-1 census, ADR 0314 and ADR 0292's text test, certified it).
+- `variants/define-computed` (round 2, F2): `Object.defineProperty(A["proto" + "type"], key, …)` with `key` built by `join`: no name is spelled at the write, which the name census does not see; any program file's prototype route (ADR 1120's premise sites) withholds the proof: uncertifiable.
+- `variants/cross-file` (round 2, F2): `proto.ts` exports `Object.getPrototypeOf([])`, `writer.ts` defines a built key on it: uncertifiable.
 - `variants/package-writer`: `node_modules/fz-includes` (written for this fixture, not published bytes) replaces `Array.prototype.includes` where it loads and names no Solid package: uncertifiable.
 - `variants/read-only` (negative): `includes` is called, never written: `Leaky` is proved, clean.
 
-On 379f2f79e (ADR 1129 round 0) every replaced form was clean. Stubs and pinned sources as in `merge-omit-view-spread`; Chrome runs every variant (`scripts/runtime-oracle.mjs --cases fixtures/reactive-ir --only merge-omit-view-spread-includes`).
+On 379f2f79e (ADR 1129 round 0) every replaced form was clean; `define-computed` and `cross-file` were clean on 0e1d4ccea (round 1). Stubs and pinned sources as in `merge-omit-view-spread`; Chrome runs every variant (`scripts/runtime-oracle.mjs --cases fixtures/reactive-ir --only merge-omit-view-spread-includes`).

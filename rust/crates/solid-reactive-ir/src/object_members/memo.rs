@@ -797,6 +797,16 @@ impl Memo<BuildSchema> for SpreadTargetsAt {
                             {
                                 (None, Some((view.keys, false)))
                             }
+                            // ADR 1129 round 2 (N1): rc.21's `spread` takes the element's sources as one
+                            // array (`spread(el, [view, { onClick: g }])`), and `collectProps` skips a key a
+                            // later source has, `undefined` included: a listener a later spread or a later
+                            // attribute of the same name may supply is never attached.
+                            (None, Some(handlers))
+                                if !handlers.is_empty()
+                                    && later_source_may_supply(cx, file, element, spread, &view.keys) =>
+                            {
+                                (None, Some((view.keys, false)))
+                            }
                             (None, Some(handlers)) => (Some(handlers), Some((view.keys, true))),
                             (targets, _) => (targets, Some((view.keys, false))),
                         },
@@ -816,6 +826,36 @@ impl Memo<BuildSchema> for SpreadTargetsAt {
     fn implied((id, _): &SlotKey) -> Vec<Input> {
         own_inputs(*id)
     }
+}
+
+/// ADR 1129 round 2 (N1): whether a source written after `spread` on `element`
+/// may supply one of the view's listener keys: any later spread (its keys are
+/// not asked), or a later attribute whose name is such a key. rc.21's web
+/// `spread` (`collectProps` over the compiled source array) skips a key any
+/// later source has, so the view's function under it is never attached.
+fn later_source_may_supply(
+    cx: Cx<'_, '_, '_>,
+    file: &FileFacts,
+    element: &ast::JsxElementFact,
+    spread: &ast::JsxSpreadAttributeFact,
+    keys: &[Arc<str>],
+) -> bool {
+    let after = spread.span.end;
+    if element
+        .spreads
+        .iter()
+        .any(|other| other.span.start >= after)
+    {
+        return true;
+    }
+    element.attributes.iter().any(|attribute| {
+        attribute.span.start >= after
+            && file.source_text(attribute.name).is_some_and(|name| {
+                keys.iter().any(|key| {
+                    key.as_ref() == name && cx.dialect().spread_key_is_event(key) != Some(false)
+                })
+            })
+    })
 }
 
 /// ADR 0436: a spread argument that no exact object resolves still holds no

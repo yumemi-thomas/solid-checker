@@ -460,3 +460,44 @@ pub(crate) fn realm_holds_both(
     let all = lookup.files();
     all.iter().any(hazard) && all.iter().any(may_hold_handler)
 }
+
+/// ADR 1129 round 2 (F2): whether a project file of the program may write the standard member `member` on a built-in's prototype,
+/// by any route: a premise site that is a prototype route (`prototype`, `__proto__`, `constructor`, `getPrototypeOf`, a definer:
+/// a `["proto" + "type"]` key is cooked to it), Proxy or `Reflect`, `with`, `Object.assign` onto a value not made in place, a
+/// coercion hook or code under a key no literal names, a write under `member` or a key nothing names; code built from a string; a
+/// computed key nothing proves, or proven to be `member` or a prototype key; or a module the build does not read (an asset
+/// included: a bundler plugin may make it code). The realm is the
+/// program, as for ADR 1125's answers: a prototype reached in one file and handed to a writer in another (`Object.getPrototypeOf([])`
+/// exported, written under a computed key) needs no load between them. Installed packages are ADR 1108's index, asked by the caller.
+pub(crate) fn program_may_write_standard_member(lookup: &SemanticLookup<'_>, member: &str) -> bool {
+    let files = lookup.files();
+    let program: BTreeSet<&str> = files.iter().map(|file| file.path.as_str()).collect();
+    files
+        .iter()
+        .filter(|file| !is_package(file.path.as_str()))
+        .any(|file| {
+            file.ast.premise_sites.iter().any(|site| match site.clause {
+                PremiseClause::PrototypeRoute
+                | PremiseClause::ProxyOrReflect
+                | PremiseClause::With
+                | PremiseClause::ObjectAssign
+                | PremiseClause::CoercionHook => true,
+                PremiseClause::StandardKeyWrite | PremiseClause::GlobalWrite => {
+                    site.key == "*" || site.key == member
+                }
+                PremiseClause::Accessor
+                | PremiseClause::PrivateKey
+                | PremiseClause::ShadowRoot
+                | PremiseClause::KeyReader => false,
+            }) || !file.ast.code_sinks.is_empty()
+                || file.ast.computed_keys.iter().any(|key| {
+                    !key.proven
+                        || key.texts.iter().any(|text| {
+                            text.as_str() == member || PROTOTYPE_KEYS.contains(&text.as_str())
+                        })
+                })
+                || loads(lookup, file, &program)
+                    .iter()
+                    .any(|load| matches!(load, Load::Unread(_) | Load::Asset(_)))
+        })
+}
