@@ -2124,3 +2124,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/product-realm-solid-scope-dependency/node_modules/**
 !fixtures/reactive-ir/product-realm-solid-scope-inert/node_modules/
 !fixtures/reactive-ir/product-realm-solid-scope-inert/node_modules/**
+!fixtures/reactive-ir/census-claim-order/node_modules/
+!fixtures/reactive-ir/census-claim-order/node_modules/**
