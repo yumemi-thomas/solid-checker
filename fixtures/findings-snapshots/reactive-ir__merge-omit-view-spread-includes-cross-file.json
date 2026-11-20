@@ -1,0 +1,16 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "blocker": "spread-content-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/merge-omit-view-spread-includes/variants/cross-file/App.tsx",
+      "start": 417,
+      "end": 455,
+      "fixes": 0
+    }
+  ]
+}
