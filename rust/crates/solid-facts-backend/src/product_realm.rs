@@ -9,7 +9,9 @@
 //! - the entries: the module scripts of the `index.html` beside the project (host discovery's HTML grammar, which refuses a page with a classic script, an inline
 //!   module, an external URL or markup it does not read), and the runtime targets of the `package.json` beside it (`exports` without a pattern, `main`, `module`,
 //!   `browser`), each a file of the program; a program with neither is unknown;
-//! - the pages: any other HTML file of the project that can run code may share a module with the page, so it ends the read;
+//! - the pages: any other HTML file of the project that can run code may share a module with the page, so it ends the read. The directories listed are the project's
+//!   own (`listable`: the project directory and the directories up to a workspace root), never an ancestor above them, which the owned (WASM) host's input store
+//!   faults on where it holds a FIFO, a socket or a device; a listing that cannot be read or holds such an entry ends the read too (`listing`);
 //! - the bundler: some `vite.config.*` from the project directory up to its workspace root must name the build, and every one there must parse in the closed Vite
 //!   config grammar of host discovery (`host_config`, with the bundler's output naming options added) with no plugin but Solid's. The Solid plugin is the dialect's
 //!   compile step, and where the realm would narrow anything its installed closure must be one of ADR 0270's pins (a missing or unpinned plugin ends the read);
@@ -382,9 +384,7 @@ fn other_page(directory: &Path) -> Result<Option<PathBuf>, String> {
     let mut pending = vec![directory.to_owned()];
     let mut seen = 0_usize;
     while let Some(dir) = pending.pop() {
-        let listing = fs::read_dir(&dir).map_err(|error| format!("{}: {error}", dir.display()))?;
-        for entry in listing {
-            let entry = entry.map_err(|error| format!("{}: {error}", dir.display()))?;
+        for (path, name, kind) in listing(&dir)? {
             seen += 1;
             if seen > PAGE_SEARCH_LIMIT {
                 return Err(format!(
@@ -392,21 +392,24 @@ fn other_page(directory: &Path) -> Result<Option<PathBuf>, String> {
                     directory.display()
                 ));
             }
-            let path = entry.path();
-            let kind = entry
-                .file_type()
-                .map_err(|error| format!("{}: {error}", path.display()))?;
             if kind.is_dir() {
-                let name = entry.file_name();
                 if !PAGE_SEARCH_SKIPS.iter().any(|skip| name == *skip) {
                     pending.push(path);
                 }
             } else if path.extension().is_some_and(|extension| {
                 extension.eq_ignore_ascii_case("html") || extension.eq_ignore_ascii_case("htm")
             }) && path != own
-                && may_run_code(&path)?
             {
-                return Ok(Some(path));
+                // A link is read as what it names, and a read of anything but a regular file may block.
+                if kind.is_symlink() && !fs::metadata(&path).is_ok_and(|target| target.is_file()) {
+                    return Err(format!(
+                        "{} is a link to something that is no regular file",
+                        path.display()
+                    ));
+                }
+                if may_run_code(&path)? {
+                    return Ok(Some(path));
+                }
             }
         }
     }
@@ -446,21 +449,60 @@ fn exports_targets(value: &serde_json::Value, targets: &mut Vec<String>) -> Resu
 }
 
 /// The directories from `directory` up to its workspace root (the first holding a `.git`, a `pnpm-workspace.yaml` or a manifest with `workspaces`), at most eight.
+/// Whether `dir` is the root of a workspace: it holds a `.git`, a `pnpm-workspace.yaml`, or a `package.json` that declares `workspaces`.
+fn is_workspace_root(dir: &Path) -> bool {
+    dir.join(".git").exists()
+        || dir.join("pnpm-workspace.yaml").is_file()
+        || fs::read_to_string(dir.join("package.json"))
+            .ok()
+            .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+            .is_some_and(|package| package.get("workspaces").is_some())
+}
+
 fn chain(directory: &Path) -> Vec<PathBuf> {
     let mut found = Vec::new();
     for ancestor in directory.ancestors().take(8) {
         found.push(ancestor.to_owned());
-        if ancestor.join(".git").exists()
-            || ancestor.join("pnpm-workspace.yaml").is_file()
-            || fs::read_to_string(ancestor.join("package.json"))
-                .ok()
-                .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
-                .is_some_and(|package| package.get("workspaces").is_some())
-        {
+        if is_workspace_root(ancestor) {
             break;
         }
     }
     found
+}
+
+/// The directories of [`chain`] whose listing is the realm's to read: the project directory and, where the chain reaches a workspace root, the directories up to
+/// it. A chain that finds no root runs up through ancestors that are no part of the project (`/tmp`, a home directory), and such a directory may hold a FIFO, a
+/// socket or a device, which the owned (WASM) host's input store faults on, and the fault poisons the checker: those directories are asked about by name
+/// (`exists`, `is_file`) and never listed.
+fn listable(directory: &Path) -> Vec<PathBuf> {
+    let found = chain(directory);
+    if found.last().is_some_and(|last| is_workspace_root(last)) {
+        found
+    } else {
+        vec![directory.to_owned()]
+    }
+}
+
+/// The entries of `dir`: path, name and kind. A listing that cannot be read, or holds an entry that is no regular file, directory or link (a FIFO, a socket, a
+/// device), is no listing: the realm ends there, as an unobservable input does (a read of such an entry may block, and the owned host's store faults on it).
+fn listing(dir: &Path) -> Result<Vec<(PathBuf, std::ffi::OsString, fs::FileType)>, String> {
+    let entries = fs::read_dir(dir).map_err(|error| format!("{}: {error}", dir.display()))?;
+    let mut found = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("{}: {error}", dir.display()))?;
+        let path = entry.path();
+        let kind = entry
+            .file_type()
+            .map_err(|error| format!("{}: {error}", path.display()))?;
+        if !(kind.is_file() || kind.is_dir() || kind.is_symlink()) {
+            return Err(format!(
+                "{} is not a regular file, directory or link",
+                path.display()
+            ));
+        }
+        found.push((path, entry.file_name(), kind));
+    }
+    Ok(found)
 }
 
 /// Whether `name` is the name of a Vite configuration file other than the conventional `vite.config.<ext>` (`vite.config.prod.ts`, `vite.prod.config.js`,
@@ -711,6 +753,7 @@ fn script_selecting_vite_config(directory: &Path) -> Option<String> {
 /// The Vite configs of the chain, or why the chain is not read: another bundler's configuration, another Vite config file, or two Vite configs of one directory.
 fn vite_configs(directory: &Path) -> Result<Vec<PathBuf>, String> {
     let mut configs = Vec::new();
+    let listed = listable(directory);
     for dir in chain(directory) {
         for unread in UNREAD_CONFIGS {
             for extension in CONFIG_EXTENSIONS {
@@ -723,12 +766,13 @@ fn vite_configs(directory: &Path) -> Result<Vec<PathBuf>, String> {
                 }
             }
         }
-        if let Ok(listing) = fs::read_dir(&dir) {
-            for entry in listing.flatten() {
-                if entry.file_name().to_str().is_some_and(other_vite_config) {
+        // Only the project's own directories are listed (`listable`): an ancestor above the workspace is not the realm's to read.
+        if listed.contains(&dir) {
+            for (path, name, _) in listing(&dir)? {
+                if name.to_str().is_some_and(other_vite_config) {
                     return Err(format!(
                         "{} is another Vite configuration file: `vite --config` may select it",
-                        entry.path().display()
+                        path.display()
                     ));
                 }
             }
@@ -2147,6 +2191,142 @@ mod tests {
             "export default { plugins: [] };",
         );
         assert!(!kept(&project));
+    }
+
+    /// A FIFO at `path`; false where `mkfifo` is not installed (the tests that need one then pass vacuously).
+    #[cfg(unix)]
+    fn fifo(path: &Path) -> bool {
+        std::process::Command::new("mkfifo")
+            .arg(path)
+            .status()
+            .is_ok_and(|status| status.success())
+    }
+
+    /// The owned (WASM) host's input store faults on a directory that lists a FIFO, and the fault poisons the checker (CI's `/tmp` held one): the realm lists no
+    /// directory above the project's workspace.
+    #[cfg(unix)]
+    #[test]
+    fn a_fifo_above_the_project_is_never_listed() {
+        let top = scratch("fifo-above");
+        if !fifo(&top.join("pipe")) {
+            return;
+        }
+        let project = top.join("project");
+        write(&project, "package.json", r#"{ "private": true }"#);
+        write(
+            &project,
+            "vite.config.ts",
+            "export default { plugins: [] };",
+        );
+        // No workspace root: the chain runs up through `top`, which holds the FIFO, and only the project directory is listed. (A temporary directory inside a
+        // workspace is one: its listing is then the realm's, and a FIFO in it ends the read, as the next test holds.)
+        assert!(chain(&project).contains(&top));
+        if listable(&project) != vec![project.clone()] {
+            return;
+        }
+        assert!(bundler(&project).is_ok());
+        assert_eq!(other_page(&project), Ok(None));
+        // A directory above the workspace root is as little listed.
+        let above = scratch("fifo-above-root");
+        if !fifo(&above.join("pipe")) {
+            return;
+        }
+        let root = above.join("repo");
+        let nested = root.join("packages/app");
+        write(&nested, "package.json", r#"{ "private": true }"#);
+        write(&nested, "vite.config.ts", "export default { plugins: [] };");
+        write(
+            &root,
+            "package.json",
+            r#"{ "private": true, "workspaces": ["packages/*"] }"#,
+        );
+        assert_eq!(listable(&nested), chain(&nested));
+        assert!(!listable(&nested).contains(&above));
+        assert!(bundler(&nested).is_ok());
+    }
+
+    /// Where the realm does list (the project and its workspace), a listing that holds a FIFO, a socket or a device ends it, as does a read that would block.
+    #[cfg(unix)]
+    #[test]
+    fn a_fifo_in_the_project_or_its_workspace_ends_the_read() {
+        let top = scratch("fifo-inside");
+        let project = top.join("packages/app");
+        write(&project, "package.json", r#"{ "private": true }"#);
+        write(
+            &project,
+            "vite.config.ts",
+            "export default { plugins: [] };",
+        );
+        write(
+            &top,
+            "package.json",
+            r#"{ "private": true, "workspaces": ["packages/*"] }"#,
+        );
+        assert_eq!(listable(&project).len(), 3);
+        assert!(bundler(&project).is_ok());
+        let refused = |why: Result<(), String>| {
+            let why = why.unwrap_err();
+            assert!(
+                why.contains("is not a regular file, directory or link"),
+                "{why}"
+            );
+        };
+        // The workspace root's own listing.
+        if !fifo(&top.join("pipe")) {
+            return;
+        }
+        refused(bundler(&project).map(drop));
+        fs::remove_file(top.join("pipe")).unwrap();
+        assert!(bundler(&project).is_ok());
+        // The project directory.
+        assert!(fifo(&project.join("pipe")));
+        refused(bundler(&project).map(drop));
+        refused(other_page(&project).map(drop));
+        fs::remove_file(project.join("pipe")).unwrap();
+        // A directory under it, searched for a second page; a FIFO named like a page is never read.
+        write(&project, "src/main.ts", "export {};");
+        assert_eq!(other_page(&project), Ok(None));
+        assert!(fifo(&project.join("src/page.html")));
+        refused(other_page(&project).map(drop));
+        fs::remove_file(project.join("src/page.html")).unwrap();
+        // A link named like a page to a FIFO that is itself not listed: the link is followed to what it names, never read.
+        let outside = scratch("fifo-link");
+        if !fifo(&outside.join("pipe")) {
+            return;
+        }
+        std::os::unix::fs::symlink(outside.join("pipe"), project.join("src/link.html")).unwrap();
+        let why = other_page(&project).unwrap_err();
+        assert!(
+            why.contains("is a link to something that is no regular file"),
+            "{why}"
+        );
+    }
+
+    #[test]
+    fn the_directories_a_listing_reads_are_the_projects_and_its_workspaces() {
+        let top = scratch("listable");
+        let project = top.join("packages/app");
+        write(&project, "package.json", r#"{ "private": true }"#);
+        // A root names itself by `pnpm-workspace.yaml` (or `.git`, or `workspaces`), and the listing reaches it.
+        write(&top, "pnpm-workspace.yaml", "packages: ['packages/*']\n");
+        assert_eq!(
+            listable(&project),
+            vec![project.clone(), top.join("packages"), top.clone()]
+        );
+        // A root nearer than that one stops the chain there.
+        write(
+            &top.join("packages"),
+            "package.json",
+            r#"{ "workspaces": ["app"] }"#,
+        );
+        assert_eq!(
+            listable(&project),
+            vec![project.clone(), top.join("packages")]
+        );
+        // The chain holds eight directories: a root beyond them is no root in reach, and the project directory alone is listed.
+        let deep = top.join("a/b/c/d/e/f/g/h/i");
+        write(&deep, "package.json", r#"{ "private": true }"#);
+        assert_eq!(listable(&deep), vec![deep.clone()]);
     }
 
     #[test]
