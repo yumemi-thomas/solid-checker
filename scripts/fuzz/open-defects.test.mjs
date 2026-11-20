@@ -94,6 +94,8 @@ describe("the row ledger (ADR 0815, R23)", () => {
     const other = { ...row, id: "mx-a-2" };
     expect(gridStanding(list, other, "false-clean", { grid: "g", strict: true })).toBe(null);
     expect(gridStanding(list, other, "false-clean", { grid: "g" }).kind).toBe("unlisted");
+    // ADR 1146 (b): a certified false clean off the ledger fails the run whatever the sample.
+    expect(gridStanding(list, { ...other, detail: { certified: true } }, "false-clean", { grid: "g" })).toBe(null);
     expect(ledgerCovers(list, 7)).toBe(true);
     expect(ledgerCovers(list, 8)).toBe(false);
     expect(ledgerCovers({ rows: { complete: true } }, 8)).toBe(true);

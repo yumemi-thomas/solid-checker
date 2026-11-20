@@ -96,7 +96,8 @@ const JUDGED = ["agree", "clean", "uncertifiable", "recall-gap"];
  * - `moved`: listed, failing another way; `certified`: listed, and now a certified false clean it was not; `fixed`: listed, judged, no
  *   longer failing. Each fails the run;
  * - `unlisted`: failing, not listed, under an entry of that outcome, in a run the ledger does not cover (another sample seed). It is
- *   printed, not failed: `strict` (the ledger's seed, or a ledger that says `complete`) fails it, as any problem;
+ *   printed, not failed: `strict` (the ledger's seed, or a ledger that says `complete`) fails it, as any problem. A certified false clean
+ *   and a false positive are never `unlisted` (ADR 1146): they fail the run;
  * - null: no standing, so a problem fails the run.
  */
 export function gridStanding(list, row, problem, { grid, strict = false } = {}) {
@@ -109,7 +110,11 @@ export function gridStanding(list, row, problem, { grid, strict = false } = {}) 
       return { kind: "held", entry: { item: listed.cause } };
     }
     const entry = heldGridEntry(list, row, problem);
-    return entry && !strict ? { kind: "unlisted", entry } : null;
+    // ADR 1146 (b): a certified false clean or a false positive off the ledger is never only printed, whatever the run's sample: a family
+    // entry names a shape, not every program of it, and a new one of that shape (a STRICT_READ_UNTRACKED read certified where Chrome warns)
+    // must be listed by id or fixed.
+    const blocking = problem === "false-positive" || (problem === "false-clean" && row.detail?.certified === true);
+    return entry && !strict && !blocking ? { kind: "unlisted", entry } : null;
   }
   return listed && JUDGED.includes(row.outcome) ? { kind: "fixed", entry: { item: listed.cause } } : null;
 }
