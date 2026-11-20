@@ -2076,3 +2076,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/affects-target-untouched/node_modules/**
 !fixtures/reactive-ir/leaf-focus-no-listener/node_modules/
 !fixtures/reactive-ir/leaf-focus-no-listener/node_modules/**
+!fixtures/reactive-ir/leaf-focus-no-listener/variants/package-listener/node_modules/
+!fixtures/reactive-ir/leaf-focus-no-listener/variants/package-listener/node_modules/**

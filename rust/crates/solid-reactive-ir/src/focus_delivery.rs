@@ -230,3 +230,197 @@ pub(crate) fn log(file: &FileFacts, call: &solid_facts::ast::CallFact) {
         &[],
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use solid_facts::compiler::{COMPILER_FACTS_PROTOCOL, ExecutionMap};
+    use solid_facts::core::{Generation, SourceHash, SourcePath};
+    use std::sync::Arc;
+
+    fn facts(source: &str) -> FileFacts {
+        FileFacts {
+            generation: Generation::new(1).unwrap(),
+            path: SourcePath::new("app.tsx").unwrap(),
+            source_hash: SourceHash::of(source),
+            source: Arc::from(source),
+            ast: Arc::new(solid_facts::ast::extract("app.tsx", source).unwrap()),
+            compiler: Arc::new(ExecutionMap {
+                compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
+                source_hash: SourceHash::of(source),
+                semantic_model: Default::default(),
+                tracked_regions: Vec::new(),
+                untracked_regions: Vec::new(),
+                discarded_regions: Vec::new(),
+                ownership_regions: Vec::new(),
+                callback_roles: Vec::new(),
+                jsx_operations: Vec::new(),
+            }),
+        }
+    }
+
+    /// The events Chrome 148 delivered before `focus()` returned over the 18 moves of the probe (module docs): each is in the list a
+    /// census asks about, so a listener for it is one.
+    #[test]
+    fn every_event_a_focus_move_was_measured_to_deliver_is_one_a_listener_is_asked_about() {
+        for event in [
+            "focus",
+            "blur",
+            "focusin",
+            "focusout",
+            "domfocusin",
+            "domfocusout",
+            "change",
+            "compositionend",
+        ] {
+            assert!(EVENTS.contains(&event), "{event}");
+            assert!(names_listener(&format!("on{event}")), "{event}");
+        }
+    }
+
+    #[test]
+    fn a_handler_name_is_one_by_its_event_in_every_spelling_the_runtime_takes() {
+        for name in [
+            "onfocus",
+            "onFocus",
+            "onBlur",
+            "onFocusIn",
+            "onFocusOut",
+            "onChange",
+            "onInput",
+            "onCompositionEnd",
+            "on:focus",
+            "oncapture:blur",
+            "prop:onfocus",
+            "attr:onchange",
+        ] {
+            assert!(names_listener(name), "{name}");
+        }
+        for name in [
+            "onClick",
+            "onKeyDown",
+            "onScroll",
+            "onSubmit",
+            "on",
+            "onfoc",
+            "focus",
+            "change",
+            "class",
+            "ref",
+        ] {
+            assert!(!names_listener(name), "{name}");
+        }
+    }
+
+    #[test]
+    fn the_element_focus_declarations_are_the_two_names_lib_dom_gives_it() {
+        assert!(is_element_focus("HTMLOrSVGElement.focus"));
+        assert!(is_element_focus("HTMLOrSVGOrMathMLElement.focus"));
+        for name in [
+            "Window.focus",
+            "focus",
+            "HTMLElement.click",
+            "HTMLOrSVGElement.blur",
+        ] {
+            assert!(!is_element_focus(name), "{name}");
+        }
+    }
+
+    #[test]
+    fn jsx_listens_by_attribute_name_or_by_a_spread_onto_an_intrinsic_element() {
+        for (source, listens) in [
+            ("const a = <input onFocus={() => 1} />;", true),
+            ("const a = <input onBlur={() => 1} />;", true),
+            ("const a = <div onFocusIn={() => 1} />;", true),
+            ("const a = <Field onChange={() => 1} />;", true),
+            ("const a = <input onfocus=\"run()\" />;", true),
+            ("const a = <input {...p} />;", true),
+            ("const a = <Field {...p} />;", false),
+            (
+                "const a = <input onClick={() => 1} onKeyDown={() => 1} />;",
+                false,
+            ),
+            ("const a = <input value=\"x\" class=\"y\" />;", false),
+        ] {
+            assert_eq!(jsx_may_listen(&facts(source)), listens, "{source}");
+        }
+    }
+
+    #[test]
+    fn code_listens_by_a_registration_a_handler_property_or_a_key_of_one() {
+        for (source, listens) in [
+            ("el.addEventListener('focus', f);", true),
+            ("el.addEventListener('FOCUSIN', f);", true),
+            ("el.addEventListener(type, f);", true),
+            ("el.addEventListener('keydown', f);", false),
+            ("el.addEventListener('scroll', f, true);", false),
+            ("const add = el.addEventListener.bind(el);", true),
+            ("el['addEventListener']('focus', f);", true),
+            ("const { addEventListener } = el;", true),
+            ("el.onfocus = f;", true),
+            ("el['onchange'] = f;", true),
+            ("el.onclick = f;", false),
+            ("Object.assign(el, { onblur: f });", true),
+            ("Object.assign(el, { onclick: f });", false),
+            ("const o = { 'prop:onfocus': f };", true),
+            ("el.setAttribute('onfocus', 'run()');", true),
+            ("el.id = 'a';", false),
+            ("el.focus();", false),
+        ] {
+            assert_eq!(code_may_listen(&facts(source)), listens, "{source}");
+        }
+    }
+
+    #[test]
+    fn a_member_named_focus_is_a_stand_in_wherever_it_is_defined() {
+        for (source, defined) in [
+            ("class A extends HTMLElement { focus() {} }", true),
+            ("class A { static focus() {} }", true),
+            ("class A { get focus() { return 1; } }", true),
+            ("class A { focus = () => 1; }", true),
+            ("const o = { focus() {} };", true),
+            ("const o = { 'focus': () => 1 };", true),
+            ("const o = { get focus() { return 1; } };", true),
+            ("el.focus = f;", true),
+            ("el['focus'] = f;", true),
+            ("const o = { focus: 1 };", false),
+            ("class A { blur() {} }", false),
+            ("const o = { focused: () => 1 };", false),
+            ("el.focus();", false),
+        ] {
+            assert_eq!(defines_focus(&facts(source)), defined, "{source}");
+        }
+    }
+
+    #[test]
+    fn a_focus_call_is_the_proofs_shape_with_no_argument_or_data_only() {
+        for (source, shape) in [
+            ("el.focus();", true),
+            ("el?.focus();", true),
+            ("el!.focus();", true),
+            ("el.focus({ preventScroll: true });", true),
+            ("el.focus(null);", true),
+            // An identifier is an operand, `undefined` included: the proof asks nothing it cannot read.
+            ("el.focus(undefined);", false),
+            ("el.focus(options);", false),
+            ("el.focus({ get preventScroll() { return true; } });", false),
+            ("el.focus({ preventScroll });", false),
+            ("el.focus(...args);", false),
+            ("el.focus(read());", false),
+            ("focus();", false),
+            ("new el.focus();", false),
+        ] {
+            let file = facts(source);
+            let call = file
+                .ast
+                .calls
+                .iter()
+                .find(|call| {
+                    file.source_text(call.callee)
+                        .is_some_and(|text| text.ends_with("focus"))
+                })
+                .expect("the focus call");
+            assert_eq!(call_shape(&file, call), shape, "{source}");
+        }
+    }
+}

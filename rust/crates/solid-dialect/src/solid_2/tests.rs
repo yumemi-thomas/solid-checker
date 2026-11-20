@@ -1200,3 +1200,40 @@ fn flow_children_exclusion_is_three_literals_on_the_rc21_triple() {
         }
     }
 }
+
+#[test]
+fn refresh_and_affects_take_their_target_untouched_and_only_affects_reads_a_key_no_accessor_owns() {
+    let dialect = Solid2::default();
+    // rc.21 `refresh(target)` reads `target[$REFRESH]` (an own property); `affects(target)` reads `target[$TARGET]` first (no accessor
+    // owns it: a function value walks its prototype chain), then `target[$REFRESH]`.
+    for primitive in [Primitive::Refresh, Primitive::Affects] {
+        assert!(
+            dialect.argument_is_untouched_target(primitive, 0),
+            "{primitive:?}"
+        );
+        // The second argument of `affects(store, key)` is a key, and `refresh` ignores extra arguments: neither is a target.
+        assert!(
+            !dialect.argument_is_untouched_target(primitive, 1),
+            "{primitive:?}"
+        );
+    }
+    assert!(!dialect.argument_target_read_walks_prototypes(Primitive::Refresh, 0));
+    assert!(dialect.argument_target_read_walks_prototypes(Primitive::Affects, 0));
+    assert!(!dialect.argument_target_read_walks_prototypes(Primitive::Affects, 1));
+    // No other primitive takes a target untouched.
+    for primitive in [
+        Primitive::CreateMemo,
+        Primitive::CreateEffect,
+        Primitive::Untrack,
+        Primitive::OnSettled,
+    ] {
+        assert!(
+            !dialect.argument_is_untouched_target(primitive, 0),
+            "{primitive:?}"
+        );
+        assert!(
+            !dialect.argument_target_read_walks_prototypes(primitive, 0),
+            "{primitive:?}"
+        );
+    }
+}

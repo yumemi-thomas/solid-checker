@@ -324,17 +324,6 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "leaf-callback-opaque",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/leaf-scope-optional-dom/App.tsx",
-      "start": 3403,
-      "end": 3418,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
       "blocker": "prop-pending-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-scope-optional-dom/App.tsx",
@@ -415,30 +404,8 @@
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-scope-optional-dom/App.tsx",
-      "start": 4010,
-      "end": 4023,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "leaf-callback-opaque",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/leaf-scope-optional-dom/App.tsx",
       "start": 4246,
       "end": 4263,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "leaf-callback-opaque",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/leaf-scope-optional-dom/App.tsx",
-      "start": 4482,
-      "end": 4496,
       "fixes": 0
     },
     {
