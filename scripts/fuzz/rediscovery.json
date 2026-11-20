@@ -36972,5 +36972,19 @@
    "lg-strict-read-untracked-dny-legal-mount-disabled-store-render-effect-carried-direct-none"
   ],
   "rediscovered": "focus lg-recall --contexts dny-legal-mount-disabled (69 programs), release builds, without the pending-fix entry: main 71d12830e has 4 unexecuted-violation rows (missing-owner violation at line 8) and needs a look; this build gives them handler-on-disabled-control (uncertifiable) and nothing needs a look"
+ },
+ {
+  "finding": "ADR 1142: a read of a provider-free context in a function an effect's compute runs, which another entry carries on (`[f].forEach((g) => g())` in a click handler, a stored function, a project helper's parameter, an object member, an imported function), had SC4002's violation alone: Chrome also reports NO_OWNER_CONTEXT at the read (the click calls it with no owner), a certified false clean of SC4001's code. The owner emission's provider-free arm took the owned context the graph holds for every run; the arms for a read WITH a default asked the entry test (ADR 0868) already",
+  "found": "the fuzzer: mx-census CONTEXT_NOT_FOUND `barm-carried-handler` (ADR 1124 round 2's context; mx-context-not-found-barm-carried-handler-x-direct-none, secondary-false-clean on main a64fc92ad), reported by the coordinator; the routes beside it (stored, helper, member, imported) found reading the arm",
+  "fixed": "ADR 1142 (owner_emission.rs: the provider-free arm asks named_layer_entry_open and gives SC4001's owner-callers-unenumerated obligation beside SC4002's claim)",
+  "grid": "patterns",
+  "code": "NO_OWNER_CONTEXT",
+  "ids": [
+   "owner-entry/carried-handler",
+   "owner-entry/helper",
+   "owner-entry/stored"
+  ],
+  "rediscovered": "make fuzz-patterns (--only owner-entry/), release builds: main a64fc92ad has 3 false cleans (NO_OWNER_CONTEXT at carried-handler, helper and stored; member and imported are covered through an application frame of the stack), this build none. Census: focus --grids mx-census --contexts barm-carried-handler (1124 round 2's context, applied to main without committing it): main secondary-false-clean (NO_OWNER_CONTEXT false-clean-certified, findings missing-context-provider/violation@7 alone), this build recall-gap (missing-owner/uncertifiable@7 beside it) and nothing needs a look",
+  "outside": "the pattern lane holds the programs (scripts/fuzz/patterns/owner-entry); main's generators write the carried route only through ADR 1124 round 2's `barm-carried-handler` context, which is not on main: the census id joins this entry (and scripts/fuzz/smoke/mx-census.json) when that context does"
  }
 ]

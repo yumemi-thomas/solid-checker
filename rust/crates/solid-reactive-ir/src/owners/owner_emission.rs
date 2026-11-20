@@ -754,17 +754,71 @@ pub(super) fn emit_file(
         }
         if provider {
             arm = arm_id!("owner_emission.provider-free-read");
-            // ADR 0886: SC4002 takes this read because an owner is proven
-            // current on every run of it; that is SC4001's proof too, not
-            // SC4002's row (reviewer D34 keys on the rule).
-            emission.accounted.push((
-                candidate.operation_span,
-                if root_owned {
-                    ContextProof::SynchronousRegion
-                } else {
-                    ContextProof::OwnedContext
-                },
-            ));
+            // ADR 1142: the owned run is SC4002's claim, and it stands; but the
+            // owned context is the edges the graph holds (ADR 0868), and a layer
+            // around the read entered by a route none shows (a reference carried
+            // on by `[f].forEach((g) => g())`, stored, handed to a call nothing
+            // follows) may run it with no owner, where Solid throws
+            // `NO_OWNER_CONTEXT` before it looks for a provider. That run is
+            // SC4001's, an obligation beside the claim, as the two arms of this
+            // function that decide a read without a provider ask the same
+            // entry test (the region's above, the `!report` end below).
+            let entry_open = !probe_owned
+                && named_layer_entry_open(
+                    file,
+                    candidate.operation_span,
+                    candidate.providing_region,
+                    lookup,
+                    caller_unplaced,
+                );
+            if entry_open {
+                crate::role_log::owner(
+                    candidate.operation,
+                    path,
+                    candidate.operation_span,
+                    arm_id!("owner_emission.provider-free-entry-open"),
+                    context,
+                    false,
+                );
+                push_owner_requirement(
+                    &mut emission.requirements,
+                    &mut seen,
+                    candidate.operation,
+                    file,
+                    candidate.operation_span,
+                    OwnerRequirementStatus {
+                        uncertain: true,
+                        runtime_uncertain: false,
+                        caller_uncertain: true,
+                        unplaced_callback: false,
+                        conditional_owner: false,
+                        owner_varies_by_caller: false,
+                        later_run_unowned: false,
+                        component_uncertain: false,
+                        provider_open: false,
+                        default_unproven: false,
+                        owned_run_throws: false,
+                        after_await: false,
+                        after_yield: false,
+                        flight_error_unobserved: false,
+                        context_unaccounted: false,
+                        report: true,
+                    },
+                    lookup,
+                );
+            } else {
+                // ADR 0886: SC4002 takes this read because an owner is proven
+                // current on every run of it; that is SC4001's proof too, not
+                // SC4002's row (reviewer D34 keys on the rule).
+                emission.accounted.push((
+                    candidate.operation_span,
+                    if root_owned {
+                        ContextProof::SynchronousRegion
+                    } else {
+                        ContextProof::OwnedContext
+                    },
+                ));
+            }
         }
         let (operation, report_hit) = if provider {
             ("context-provider", true)
@@ -1532,6 +1586,8 @@ const ARM_ENDINGS: &[(&str, &str)] = &[
         "owner_emission.provider-free-read",
         "OwnedContext|SynchronousRegion",
     ),
+    // ADR 1142: the provider-free read's entry the graph shows no edge for ends in SC4001's obligation, beside SC4002's claim.
+    ("owner_emission.provider-free-entry-open", "row"),
     ("owner_emission.cleanup-no-function", "NoCleanupReturned"),
     ("owner_emission.cleanup-unresolved-call", "TscRejectedCall"),
     ("owner_emission.owned-run-throws", "row"),
