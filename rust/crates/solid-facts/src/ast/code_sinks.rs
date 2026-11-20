@@ -1077,7 +1077,11 @@ impl<'a> Sinks<'_, 'a> {
             "open" if !self.value_unused(id, span) => Some(CodeSinkKind::NavigationUrl),
             // `document.location`, `window.location`, `frame.contentWindow.location` kept or passed (`const loc = document.location;
             // loc.assign(url)`, `go(window.location)`): the location handed on, as the global name is.
-            "location" if !self.location_in_sight(id, span) => Some(CodeSinkKind::NavigationUrl),
+            "location"
+                if !self.location_in_sight(id, span) && !self.is_plain_local_object(object) =>
+            {
+                Some(CodeSinkKind::NavigationUrl)
+            }
             _ => call_spelled_sink(name),
         }
     }
@@ -1176,6 +1180,18 @@ impl<'a> Sinks<'_, 'a> {
             current = peel_ts_sugar(init);
         }
         current
+    }
+
+    /// ADR 1133 (round 1): whether `object` is a `const` binding of an object literal with no spread (`const window: any = {}`): a local plain
+    /// object is no window, and the real location reaches its `location` only through code that reads the real one, a sink where it reads it.
+    fn is_plain_local_object(&self, object: &'a Expression<'a>) -> bool {
+        let Expression::Identifier(identifier) = peel_ts_sugar(object) else {
+            return false;
+        };
+        self.const_init(identifier).is_some_and(|init| {
+            matches!(peel_ts_sugar(init), Expression::ObjectExpression(literal)
+                if literal.properties.iter().all(|property| matches!(property, oxc_ast::ast::ObjectPropertyKind::ObjectProperty(_))))
+        })
     }
 
     /// Whether the expression is the `attributes` collection of an element: a member so named, by a static name or a literal key, or a

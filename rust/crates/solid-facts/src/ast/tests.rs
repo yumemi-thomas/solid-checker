@@ -3246,6 +3246,23 @@ fn a_url_or_markup_spelling_the_first_cut_missed_is_a_code_sink() {
 }
 
 #[test]
+fn a_member_location_of_a_local_plain_object_is_no_window_but_any_other_receiver_may_be_one() {
+    // ADR 1133, round 1: `x.location` kept or passed is the window's location by another route unless `x` is a `const` object literal of the
+    // file with no spread (`const window: any = {}`): the real location reaches such an object only through code that reads it, a sink there.
+    let clean = "const local: any = {}; use(local.location); const holder: any = { location: 1, other: 2 }; use(holder.location);";
+    assert_eq!(code_sink_facts(clean), vec![]);
+    let source = "const spread: any = { ...window }; use(spread.location); function g(win: any) { use(win.location); } \
+        let l: any = {}; use(l.location);";
+    let listed = code_sink_facts(source);
+    for text in ["spread.location", "win.location", "l.location"] {
+        assert!(
+            has_sink(&listed, text, CodeSinkKind::NavigationUrl),
+            "{text}: {listed:?}"
+        );
+    }
+}
+
+#[test]
 fn an_attribute_node_by_the_collection_or_a_global_behind_an_alias_is_a_code_sink() {
     // ADR 1133, round 1 (adjacent spellings): the attribute nodes `getAttributeNode` gives out also come out of the `attributes` collection
     // (`getNamedItem(NS)`, `item`, a name a URL or a handler has, an index or a key nothing proves, a `const` alias of the collection),
