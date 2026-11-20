@@ -319,6 +319,45 @@ fn called_slots(
     Some(bindings)
 }
 
+/// ADR 1147: the owner arm's id. `SOLID_CHECKER_IR_ABLATE_SILENCE=context-provider-children-owned` switches it off (a measurement only).
+pub(crate) const CONTEXT_PROVIDER_CHILDREN_OWNED: &str = "context-provider-children-owned";
+
+/// ADR 1147: whether `element` is a dialect context provider whose children only the provider's own `children()` memo evaluates: rc.21's provider is
+/// `createRoot(() => { setContext(provider, props.value); return children(() => props.children); })`, so a child runs inside that memo's computation, whose
+/// owner is the memo (created under the provider's root) wherever and whenever the memo is read. The tag is the context object itself, by the tuple arm's test
+/// ([`sole_reference_binding`]: a `const` of one name, unwritten, unexported; the review of 1123's F2: a `let`, a written binding, a pattern's name or an import
+/// may hold another component), initialized by the dialect's `createContext` (any default: the default changes no provider), resolved exactly ([`exactly_resolved`]).
+/// The element has no spread and no `children` attribute (only its written children reach the memo), and the program has no direct `eval`.
+pub(crate) fn exact_context_provider(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+) -> bool {
+    if element.member_object.is_some()
+        || !element.spreads.is_empty()
+        || lookup.program_has_eval()
+        || element.attributes.iter().any(|attribute| {
+            attribute.namespace.is_some()
+                || file.source_text(attribute.local_name) == Some("children")
+        })
+    {
+        return false;
+    }
+    let Some(context) = sole_reference_binding(file, element.name.span) else {
+        return false;
+    };
+    let Some(created) = context.call_initializer.and_then(|call| file.ast.call_at(call)) else {
+        return false;
+    };
+    context
+        .initializer
+        .map(|value| file.ast.peel_ts_sugar_span(value))
+        == Some(created.span)
+        && !created.construct
+        && lookup.primitive_at_call(file, created.span) == Some(Primitive::CreateContext)
+        && exactly_resolved(lookup, file, created.callee)
+}
+
 /// ADR 1123: the arm's id. `SOLID_CHECKER_IR_ABLATE_SILENCE=context-provided-tuple`
 /// switches it off (a measurement only: the gate's ablation identity).
 pub(crate) const CONTEXT_PROVIDED_TUPLE: &str = "context-provided-tuple";
