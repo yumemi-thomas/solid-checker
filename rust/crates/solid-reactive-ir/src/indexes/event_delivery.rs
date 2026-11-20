@@ -370,12 +370,50 @@ impl SemanticLookup<'_> {
     /// itself, so it holds only where a creation a handler reaches may run inside an apply's effect-callback window through a shadow delivery.
     pub(crate) fn apply_dispatch_into_shadow_possible(&self) -> bool {
         crate::base::reads::note(crate::base::reads::Section::DispatchVeto);
-        self.hazard_present(crate::base::Hazard::SynchronousDispatch)
+        self.shadow_roots_answer() && self.apply_dispatch_possible()
+    }
+
+    /// The dispatch half of [`Self::apply_dispatch_into_shadow_possible`], failing closed: a dispatch site an effect's apply runs, or code
+    /// nothing reads that an apply may run (`eval`, a code-evaluating call, a module the build does not read anywhere), or a call in an
+    /// apply that names no project function, no Solid primitive and no standard call (a stored callback, a computed member, a package's
+    /// export), which may dispatch.
+    fn apply_dispatch_possible(&self) -> bool {
+        if self.hazard_present(crate::base::Hazard::Eval)
+            || self.hazard_present(crate::base::Hazard::CodeEvaluatingCall)
+        {
+            return true;
+        }
+        if self.hazard_present(crate::base::Hazard::SynchronousDispatch)
             && self
                 .event_dispatch_sites()
                 .iter()
                 .any(DispatchSite::delivers_in_effect_apply)
-            && self.shadow_roots_answer()
+        {
+            return true;
+        }
+        let Some(imports) = self.resolved_imports() else {
+            return true;
+        };
+        let program = self
+            .files()
+            .iter()
+            .map(|file| file.path.as_str())
+            .collect::<std::collections::HashSet<_>>();
+        self.files().iter().any(|file| {
+            reads_an_unread_module(self, imports, &program, file)
+                || file.ast.calls.iter().any(|call| {
+                    self.dispatch_in_effect_apply(file, call.span).is_some()
+                        && self.primitive_at_call(file, call.span).is_none()
+                        && self
+                            .function_called_at(file.path.as_str(), call.callee)
+                            .or_else(|| self.object_member_function(file, call.callee))
+                            .is_none()
+                        && self
+                            .resolved_callee_call(file, call.callee)
+                            .and_then(crate::runtime_semantics::standard_call_name)
+                            .is_none()
+                })
+        })
     }
 
     /// ADR 1125: whether no analysed code may make a handler run other than as a DOM delivery that sets `window.event`
@@ -1336,43 +1374,54 @@ pub(crate) fn scan_shadow_roots(lookup: &super::SemanticLookup<'_>) -> bool {
         {
             return true;
         }
-        let ast = &file.ast;
-        let unread = |at: solid_facts::core::Span, specifier: &str| {
-            if lookup.dialect.owns_module(specifier) {
-                return false;
-            }
-            match imports.specifier(file.path.as_str(), at, specifier) {
-                solid_facts::SpecifierAttestation::Attested(row) => {
-                    row.resolution == solid_facts::ImportResolution::Unresolved
-                        || !program.contains(row.resolved_path.as_ref())
-                }
-                solid_facts::SpecifierAttestation::Unattested => true,
-            }
-        };
-        ast.imports
-            .iter()
-            .filter(|import| !import.type_only)
-            .any(|import| unread(import.span, import.module.as_str()))
-            || ast
-                .exports
-                .iter()
-                .filter(|export| !export.type_only)
-                .any(|export| {
-                    export
-                        .module
-                        .as_deref()
-                        .is_some_and(|module| unread(export.span, module))
-                })
-            || ast
-                .module_loads
-                .iter()
-                .any(|load| match load.specifier.as_deref() {
-                    Some(specifier) => unread(load.span, specifier),
-                    // A load by a computed specifier may load anything.
-                    None => true,
-                })
+        reads_an_unread_module(lookup, imports, &program, file)
     };
     crate::plain_premise::realm_holds_both(lookup, &shadow, &may_hold_handler)
+}
+
+/// ADR 1139 (the narrowing's fail-closed half): whether `file` loads a module the build does not read (a value import, an export-from or a
+/// load that resolves outside the analysed files, unless the dialect owns it; a computed specifier may load anything): its code is unseen.
+fn reads_an_unread_module(
+    lookup: &super::SemanticLookup<'_>,
+    imports: &solid_facts::AttestedImportIndex,
+    program: &std::collections::HashSet<&str>,
+    file: &solid_facts::FileFacts,
+) -> bool {
+    let ast = &file.ast;
+    let unread = |at: solid_facts::core::Span, specifier: &str| {
+        if lookup.dialect.owns_module(specifier) {
+            return false;
+        }
+        match imports.specifier(file.path.as_str(), at, specifier) {
+            solid_facts::SpecifierAttestation::Attested(row) => {
+                row.resolution == solid_facts::ImportResolution::Unresolved
+                    || !program.contains(row.resolved_path.as_ref())
+            }
+            solid_facts::SpecifierAttestation::Unattested => true,
+        }
+    };
+    ast.imports
+        .iter()
+        .filter(|import| !import.type_only)
+        .any(|import| unread(import.span, import.module.as_str()))
+        || ast
+            .exports
+            .iter()
+            .filter(|export| !export.type_only)
+            .any(|export| {
+                export
+                    .module
+                    .as_deref()
+                    .is_some_and(|module| unread(export.span, module))
+            })
+        || ast
+            .module_loads
+            .iter()
+            .any(|load| match load.specifier.as_deref() {
+                Some(specifier) => unread(load.span, specifier),
+                // A load by a computed specifier may load anything.
+                None => true,
+            })
 }
 
 /// ADR 1125: the names under which a write may make a handler run outside a delivery, or make `window.event` no longer the event
