@@ -606,7 +606,10 @@ function render(program, instrument) {
       case "probe": return [`${ind(depth)}<output data-probe="${item.sig}">{${["store", "store-array", "store-empty", "store-shallow", "store-nested", "store-list", "store-link", "store-link-leaf", "optimistic-store", "projection", "store-then"].includes(signals.get(item.sig)?.kind) ? `${item.sig}.v` : `${item.sig}()`}}</output>`];
       case "button": {
         const tag = item.tag ?? "button";
-        const open = `${ind(depth)}<${tag} data-act="${item.id}"${item.attrs ? ` ${item.attrs}` : ""} ${item.on ?? "onClick"}={() => ${block(item.handler, depth, entryFor(item, "handler"))}}`;
+        // ADR 1140: `spread` writes the handler in a literal spread (`{...{ onClick: () => … }}`), `post` attributes after it.
+        const handler = `() => ${block(item.handler, depth, entryFor(item, "handler"))}`;
+        const on = item.on ?? "onClick";
+        const open = `${ind(depth)}<${tag} data-act="${item.id}"${item.attrs ? ` ${item.attrs}` : ""} ${item.spread ? `{...{ ${on}: ${handler} }}` : `${on}={${handler}}`}${item.post ? ` ${item.post}` : ""}`;
         return [tag === "input" || tag === "iframe" || tag === "Dynamic" ? `${open} />` : `${open}>go</${tag}>`];
       }
       case "hbutton": return [`${ind(depth)}<button data-act="${item.id}"${item.attrs ? ` ${item.attrs}` : ""} onClick={${item.tuple ? `[${expr(item.e, depth)}, 1]` : expr(item.e, depth)}}>go</button>`];
