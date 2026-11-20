@@ -3,6 +3,7 @@
 // close, and refused mounts. Native parity is `make wasm-parity`'s, not this
 // file's. The artifacts must be built (`bun run build`); a missing one fails.
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import * as nodeFs from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -63,6 +64,32 @@ const smokeFiles = {
   "tsconfig.json": '{ "compilerOptions": { "strict": true, "noEmit": true }, "files": ["App.ts"] }\n',
   "App.ts": "export const answer = 42;\n",
 };
+
+// The input store faults on a directory that lists a FIFO, a socket or a device, and the fault poisons the checker (CI's temporary directory held a FIFO). The
+// product realm (ADR 1145) walks the project's ancestors for a workspace root, so it may list nothing outside the project and its workspace: a FIFO beside the
+// project, and one two directories above it, fault nothing.
+test.skipIf(process.platform === "win32")("a directory checker lists no directory above its project: a FIFO there faults nothing", async () => {
+  const outer = nodeFs.realpathSync(nodeFs.mkdtempSync(join(tmpdir(), "owned-fifo-")));
+  try {
+    execFileSync("mkfifo", [join(outer, "pipe")]);
+    const top = join(outer, "top");
+    nodeFs.mkdirSync(top);
+    execFileSync("mkfifo", [join(top, "pipe")]);
+    const root = join(top, "project");
+    nodeFs.mkdirSync(root);
+    for (const [path, text] of Object.entries(smokeFiles)) nodeFs.writeFileSync(join(root, path), text);
+    const checker = await createOwnedChecker({ directory: root });
+    const answer = await checker.check({ projectId: `${root}/tsconfig.json` });
+    assert.equal(answer.ok, true, answer.error);
+    // A second check on the same checker: a fault would be sticky, so every later call would throw it again.
+    const again = await checker.check({ projectId: `${root}/tsconfig.json` });
+    assert.equal(again.ok, true, again.error);
+    assert.equal(again.json, answer.json);
+    await checker.close();
+  } finally {
+    nodeFs.rmSync(outer, { recursive: true, force: true });
+  }
+});
 
 test("a directory checker answers exactly as a mount of the same tree, refuses, and is reused", async () => {
   const { root, remove } = project(smokeFiles);

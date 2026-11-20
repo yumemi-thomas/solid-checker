@@ -212,6 +212,108 @@ pub struct PackageReachIndex {
     /// ADR 1061 (the blocker census, internal only): everything each root's closure holds, not only its verdict. Filled only where [`blocker_census`] is on;
     /// no analysis reads it for a verdict.
     pub census: BTreeMap<String, RootCensus>,
+    /// ADR 1145: where the product's real entries are known, the files they load and the prototype writers among what those files (and the declared host) load.
+    /// `None` is every site judged against every writer above, as before.
+    pub product: Option<ProductWriters>,
+}
+
+/// ADR 1145: the product realm of a program whose real entries are read from its build configuration (an HTML page's module scripts, a package's `exports`): the
+/// program's files the entries load (a closure over every static and literal load) and, of the packages that write a built-in's prototype, those the closure's
+/// files or the declared host load. A site in one of `files` runs in the product's realm, which no other entry's loads (a test, a script, a config) share, so it is
+/// judged against these writers only ([`PackageReachIndex::product_scope`]); a site anywhere else is judged against every writer, as every site was.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ProductWriters {
+    /// The program's files the entries load, by path.
+    pub files: BTreeSet<String>,
+    /// [`PackageReachIndex::prototype_writers`], kept where a package the product loads writes the name.
+    pub prototype_writers: BTreeMap<String, BTreeSet<String>>,
+    /// [`PackageReachIndex::prototype_writers_any`], kept where the product loads the package.
+    pub prototype_writers_any: BTreeSet<String>,
+    /// Whether the realm holds fewer writers than the index (a realm that keeps every writer changes no site).
+    pub narrows: bool,
+}
+
+/// ADR 1145: the prototype writers one site is judged against ([`PackageReachIndex::full_scope`], [`PackageReachIndex::product_scope`]): the index's, or the product
+/// realm's for a site in a file the product's entries load. The clear filter of every query is the index's own (`by_root`).
+#[derive(Clone, Copy, Debug)]
+pub struct WriterScope<'a> {
+    index: &'a PackageReachIndex,
+    named: &'a BTreeMap<String, BTreeSet<String>>,
+    any: &'a BTreeSet<String>,
+}
+
+impl<'a> WriterScope<'a> {
+    fn counts(&self, root: &str) -> bool {
+        self.index
+            .by_root
+            .get(root)
+            .is_none_or(|reach| !reach.is_clear())
+    }
+
+    /// Whether no package writes a built-in's prototype, by name or under a name nothing decides, in this scope (clear packages included).
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.named.is_empty() && self.any.is_empty()
+    }
+
+    /// [`PackageReachIndex::prototype_writers_by_name`] in this scope.
+    pub fn prototype_writers_by_name(&self, name: &str) -> impl Iterator<Item = &'a str> + 'a {
+        let scope = *self;
+        self.named
+            .get(name)
+            .into_iter()
+            .flatten()
+            .filter(move |root| scope.counts(root))
+            .map(String::as_str)
+    }
+
+    /// [`PackageReachIndex::prototype_writers_any_name`] in this scope.
+    pub fn prototype_writers_any_name(&self) -> impl Iterator<Item = &'a str> + 'a {
+        let scope = *self;
+        self.any
+            .iter()
+            .filter(move |root| scope.counts(root))
+            .map(String::as_str)
+    }
+
+    /// [`PackageReachIndex::prototype_writers_of_unspelled`] in this scope.
+    pub fn prototype_writers_of_unspelled(&self) -> impl Iterator<Item = &'a str> + 'a {
+        let scope = *self;
+        self.named
+            .values()
+            .flatten()
+            .chain(self.any.iter())
+            .filter(move |root| scope.counts(root))
+            .map(String::as_str)
+    }
+
+    /// [`PackageReachIndex::prototype_writers_of`] in this scope: the roots that write `name` by name (`true`) or may under a name nothing decides (`false`).
+    pub fn prototype_writers_of(&self, name: &str) -> impl Iterator<Item = (&'a str, bool)> + 'a {
+        let scope = *self;
+        let by_name = self.named.get(name);
+        let any = self
+            .any
+            .iter()
+            .filter(move |root| !by_name.is_some_and(|roots| roots.contains(*root)));
+        by_name
+            .into_iter()
+            .flatten()
+            .map(|root| (root, true))
+            .chain(any.map(|root| (root, false)))
+            .filter(move |(root, _)| scope.counts(root))
+            .map(|(root, named)| (root.as_str(), named))
+    }
+
+    /// The first package (by name, then by root) that writes a member by name and may reach a Solid action: the member and the root.
+    #[must_use]
+    pub fn first_named_writer(&self) -> Option<(&'a str, &'a str)> {
+        self.named.iter().find_map(|(name, roots)| {
+            roots
+                .iter()
+                .find(|root| self.counts(root))
+                .map(|root| (name.as_str(), root.as_str()))
+        })
+    }
 }
 
 /// ADR 1061: what the blocker census records of one root's closure.
@@ -235,6 +337,31 @@ pub fn blocker_census() -> bool {
 }
 
 impl PackageReachIndex {
+    /// ADR 1145: every prototype writer the index holds, the scope of a site the product realm does not cover (and of every site, where it is not used).
+    #[must_use]
+    pub fn full_scope(&self) -> WriterScope<'_> {
+        WriterScope {
+            index: self,
+            named: &self.prototype_writers,
+            any: &self.prototype_writers_any,
+        }
+    }
+
+    /// ADR 1145: the writers a site in the file at `path` is judged against where the product's entries load the file and the realm holds fewer writers than the
+    /// index; `None` where the site is judged against [`Self::full_scope`].
+    #[must_use]
+    pub fn product_scope(&self, path: &str) -> Option<WriterScope<'_>> {
+        let product = self
+            .product
+            .as_ref()
+            .filter(|product| product.narrows && product.files.contains(path))?;
+        Some(WriterScope {
+            index: self,
+            named: &product.prototype_writers,
+            any: &product.prototype_writers_any,
+        })
+    }
+
     /// The first package (by root) whose closure runs code the build does not see, and why; `None` where none does.
     #[must_use]
     pub fn unseen_code(&self) -> Option<(&str, &str)> {
@@ -682,6 +809,87 @@ mod tests {
             installed_spelling(Some(&index), "/p/node_modules/.store/x/package/dist/a.d.ts"),
             "/p/node_modules/@vitest/runner/dist/a.d.ts"
         );
+    }
+
+    // ADR 1145: a site in a file the product's entries load is judged against the realm's writers (only where the realm holds fewer than the index), every other
+    // site against all of them; a clear package is no writer in either.
+    #[test]
+    fn a_product_file_is_judged_against_the_realms_writers_and_any_other_against_every_writer() {
+        let reach = |clear: bool| {
+            if clear {
+                PackageReach::Clear
+            } else {
+                PackageReach::ReachesSolid { via: "x".into() }
+            }
+        };
+        let mut index = PackageReachIndex::default();
+        for (root, clear) in [("/n/page", false), ("/n/runner", false), ("/n/quiet", true)] {
+            index.by_root.insert(root.to_owned(), reach(clear));
+        }
+        index.prototype_writers.insert(
+            "reverse".to_owned(),
+            ["/n/page", "/n/runner", "/n/quiet"]
+                .map(str::to_owned)
+                .into(),
+        );
+        index
+            .prototype_writers
+            .insert("fill".to_owned(), ["/n/runner".to_owned()].into());
+        index.prototype_writers_any.insert("/n/runner".to_owned());
+        // No realm: every site is judged against every writer.
+        assert!(index.product_scope("/p/App.tsx").is_none());
+        let every = index.full_scope();
+        assert_eq!(
+            every.prototype_writers_by_name("fill").collect::<Vec<_>>(),
+            ["/n/runner"]
+        );
+        assert_eq!(
+            every
+                .prototype_writers_by_name("reverse")
+                .collect::<Vec<_>>(),
+            ["/n/page", "/n/runner"],
+            "a clear package is no writer"
+        );
+        assert_eq!(
+            every.prototype_writers_any_name().collect::<Vec<_>>(),
+            ["/n/runner"]
+        );
+        assert_eq!(every.first_named_writer(), Some(("fill", "/n/runner")));
+        // A realm that keeps only the page's writer.
+        index.product = Some(ProductWriters {
+            files: ["/p/App.tsx".to_owned()].into(),
+            prototype_writers: [("reverse".to_owned(), ["/n/page".to_owned()].into())].into(),
+            prototype_writers_any: BTreeSet::new(),
+            narrows: true,
+        });
+        let product = index
+            .product_scope("/p/App.tsx")
+            .expect("a file the entries load");
+        assert!(!product.is_empty());
+        assert_eq!(
+            product
+                .prototype_writers_by_name("reverse")
+                .collect::<Vec<_>>(),
+            ["/n/page"]
+        );
+        assert_eq!(product.prototype_writers_by_name("fill").count(), 0);
+        assert_eq!(product.prototype_writers_any_name().count(), 0);
+        assert_eq!(
+            product.prototype_writers_of("reverse").collect::<Vec<_>>(),
+            [("/n/page", true)]
+        );
+        assert_eq!(product.first_named_writer(), Some(("reverse", "/n/page")));
+        // A file the entries do not load keeps every writer, and so does a realm that narrows nothing.
+        assert!(index.product_scope("/p/App.test.tsx").is_none());
+        index.product.as_mut().unwrap().narrows = false;
+        assert!(index.product_scope("/p/App.tsx").is_none());
+        // A realm that holds no writer is empty.
+        index.product = Some(ProductWriters {
+            files: ["/p/App.tsx".to_owned()].into(),
+            narrows: true,
+            ..ProductWriters::default()
+        });
+        assert!(index.product_scope("/p/App.tsx").unwrap().is_empty());
     }
 
     #[test]

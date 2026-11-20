@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "jsx": "preserve",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "target": "ES2022",
+    "paths": { "fz-prealm-any": ["./shim.ts"] }
+  },
+  "include": ["*.ts", "*.tsx"],
+  "exclude": ["vite.config.ts"]
+}

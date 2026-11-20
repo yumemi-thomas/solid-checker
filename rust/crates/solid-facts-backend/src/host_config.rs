@@ -19,6 +19,19 @@ pub(super) enum EntryMode {
     ClientStart,
 }
 
+/// ADR 1145: how a config sets the Solid plugin's `diagnostics` option, which fronts a dev-serve bridge that loads the app's own `@solidjs/diagnostics` into the page:
+/// off only for the literal `false`, forced on by the literal `true`, and otherwise the plugin's own detection decides (its option `'auto'`). Ordered by how
+/// much of the bridge may run, so a conditional config takes the maximum of its branches.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(super) enum SolidDiagnostics {
+    /// No Solid plugin is called, or it is called with `diagnostics: false`.
+    Off,
+    /// The plugin decides (its detection of the package in the app's manifest): the option is absent or no boolean.
+    Auto,
+    /// `diagnostics: true`.
+    On,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct Config {
     pub mode: EntryMode,
@@ -31,6 +44,9 @@ pub(super) struct Config {
     pub default_extensions: bool,
     /// Either resolver may discover configs other than the analyzed project.
     pub tsconfig_paths: bool,
+    /// ADR 1145: Vite applies the tsconfig `paths` on every branch of the config (`resolve.tsconfigPaths` is the literal `true`). The product realm trusts a path
+    /// mapping only then, so a conditional config merges it with `&&` where `tsconfig_paths` (a host may find a config another branch does not) merges with `||`.
+    pub tsconfig_paths_every: bool,
     /// Package deduplication changes importer-relative lookup; default package
     /// load proofs are withheld until that resolver branch is implemented.
     pub package_dedupe: bool,
@@ -38,6 +54,8 @@ pub(super) struct Config {
     pub optimize_exclude: BTreeSet<String>,
     /// A lazy route manifest has no eager picked route-config dependencies.
     pub lazy_routes: bool,
+    /// The Solid plugin's `diagnostics` option (ADR 1145: the product realm keeps the diagnostics package's writers unless the bridge is off).
+    pub solid_diagnostics: SolidDiagnostics,
 }
 
 struct Bindings<'a> {
@@ -48,6 +66,9 @@ struct Bindings<'a> {
     directory: &'a Path,
     path_modules: BTreeSet<&'a str>,
     resolve_functions: BTreeSet<&'a str>,
+    /// ADR 1145: the product realm reads the same config to decide which plugins and entries a page loads, so a bundler's output naming options (which run in Node
+    /// while building and add no load to a page) are admitted. A host is never inferred from a config read this way.
+    realm: bool,
     refusal: &'a RefCell<ConfigRefusal>,
 }
 
@@ -222,6 +243,52 @@ fn data(value: &Expression<'_>, bindings: &Bindings<'_>) -> bool {
     }
 }
 
+/// ADR 1145: a bundler's options hold only `output` naming (`chunkFileNames`, `entryFileNames`, `assetFileNames`, `manualChunks`, `sourcemapFileNames`, `dir`), whose
+/// values may be callbacks: they run in Node while the bundle is built, so they add no load to a page. Anything else (`input`, `plugins`, `external`, a computed key, a
+/// spread, an accessor) may change what a page loads and is refused.
+fn output_options_only(value: &Expression<'_>) -> bool {
+    const OUTPUT: [&str; 6] = [
+        "chunkFileNames",
+        "entryFileNames",
+        "assetFileNames",
+        "manualChunks",
+        "sourcemapFileNames",
+        "dir",
+    ];
+    let Expression::ObjectExpression(options) = value.get_inner_expression() else {
+        return false;
+    };
+    options.properties.iter().all(|property| {
+        let ObjectPropertyKind::ObjectProperty(property) = property else {
+            return false;
+        };
+        let PropertyKey::StaticIdentifier(key) = &property.key else {
+            return false;
+        };
+        if key.name != "output"
+            || property.computed
+            || property.method
+            || property.kind != PropertyKind::Init
+        {
+            return false;
+        }
+        let Expression::ObjectExpression(output) = property.value.get_inner_expression() else {
+            return false;
+        };
+        output.properties.iter().all(|inner| {
+            let ObjectPropertyKind::ObjectProperty(inner) = inner else {
+                return false;
+            };
+            let name = match &inner.key {
+                PropertyKey::StaticIdentifier(key) => key.name.as_str(),
+                PropertyKey::StringLiteral(key) => key.value.as_str(),
+                _ => return false,
+            };
+            !inner.computed && inner.kind == PropertyKind::Init && OUTPUT.contains(&name)
+        })
+    })
+}
+
 fn plugin(
     call: &oxc_ast::ast::CallExpression<'_>,
     bindings: &Bindings<'_>,
@@ -257,6 +324,11 @@ fn plugin(
                 || ["ssr", "serverFunctions"].iter().any(|key|
                     fields.get(key).is_some_and(|value| !bool_value(value, false)))
             { return None; }
+            config.solid_diagnostics = match fields.get("diagnostics") {
+                Some(value) if bool_value(value, false) => SolidDiagnostics::Off,
+                Some(value) if bool_value(value, true) => SolidDiagnostics::On,
+                _ => SolidDiagnostics::Auto,
+            };
             if let Some(start) = fields.get("start") {
                 if bool_value(start, true) {
                     config.mode = EntryMode::ClientStart;
@@ -344,9 +416,11 @@ fn object(object: &ObjectExpression<'_>, bindings: &Bindings<'_>) -> Option<Conf
         aliases: BTreeMap::new(),
         default_extensions: true,
         tsconfig_paths: false,
+        tsconfig_paths_every: false,
         package_dedupe: false,
         optimize_exclude: BTreeSet::new(),
         lazy_routes: false,
+        solid_diagnostics: SolidDiagnostics::Off,
     };
     for (key, value) in fields {
         bindings.refusing(
@@ -413,7 +487,16 @@ fn object(object: &ObjectExpression<'_>, bindings: &Bindings<'_>) -> Option<Conf
             let Expression::ObjectExpression(options) = value.get_inner_expression() else {
                 return None;
             };
-            let options = properties(options)?;
+            let mut options = properties(options)?;
+            if key == "build" && bindings.realm {
+                for name in ["rollupOptions", "rolldownOptions"] {
+                    if let Some(value) = options.remove(name)
+                        && !output_options_only(value)
+                    {
+                        return None;
+                    }
+                }
+            }
             if key == "resolve"
                 && let Some(value) = options.get("dedupe")
             {
@@ -447,6 +530,13 @@ fn object(object: &ObjectExpression<'_>, bindings: &Bindings<'_>) -> Option<Conf
             {
                 config.default_extensions = false;
                 config.tsconfig_paths = true;
+            }
+            if key == "resolve"
+                && options
+                    .get("tsconfigPaths")
+                    .is_some_and(|value| bool_value(value, true))
+            {
+                config.tsconfig_paths_every = true;
             }
             if key == "resolve"
                 && let Some(value) = options.get("alias")
@@ -492,6 +582,8 @@ fn expression(value: &Expression<'_>, bindings: &Bindings<'_>) -> Option<Config>
             left.tailwind |= right.tailwind;
             left.default_extensions &= right.default_extensions;
             left.tsconfig_paths |= right.tsconfig_paths;
+            left.tsconfig_paths_every &= right.tsconfig_paths_every;
+            left.solid_diagnostics = left.solid_diagnostics.max(right.solid_diagnostics);
             left.package_dedupe |= right.package_dedupe;
             left.optimize_exclude.extend(right.optimize_exclude);
             Some(left)
@@ -518,6 +610,8 @@ fn statements(body: &[Statement<'_>], bindings: &Bindings<'_>) -> Option<Config>
             left.tailwind |= right.tailwind;
             left.default_extensions &= right.default_extensions;
             left.tsconfig_paths |= right.tsconfig_paths;
+            left.tsconfig_paths_every &= right.tsconfig_paths_every;
+            left.solid_diagnostics = left.solid_diagnostics.max(right.solid_diagnostics);
             left.package_dedupe |= right.package_dedupe;
             left.optimize_exclude.extend(right.optimize_exclude);
             Some(left)
@@ -532,14 +626,29 @@ pub(super) fn parse(path: &Path, source: &str) -> Option<Config> {
 }
 
 pub(super) fn parse_detailed(path: &Path, source: &str) -> Result<Config, ConfigRefusal> {
+    parse_in_mode(path, source, false)
+}
+
+/// ADR 1145: [`parse_detailed`] for the product realm: the same grammar, plus the bundler's output naming options under `build.rollupOptions` and
+/// `build.rolldownOptions`. The result is never a host's configuration.
+pub(super) fn parse_realm(path: &Path, source: &str) -> Result<Config, ConfigRefusal> {
+    parse_in_mode(path, source, true)
+}
+
+fn parse_in_mode(path: &Path, source: &str, realm: bool) -> Result<Config, ConfigRefusal> {
     let refusal = RefCell::new(ConfigRefusal {
         offset: 0,
         reason: "invalid Vite config syntax, source type, or program directive".into(),
     });
-    parse_grammar(path, source, &refusal).ok_or_else(|| refusal.into_inner())
+    parse_grammar(path, source, &refusal, realm).ok_or_else(|| refusal.into_inner())
 }
 
-fn parse_grammar(path: &Path, source: &str, refusal: &RefCell<ConfigRefusal>) -> Option<Config> {
+fn parse_grammar(
+    path: &Path,
+    source: &str,
+    refusal: &RefCell<ConfigRefusal>,
+    realm: bool,
+) -> Option<Config> {
     let allocator = Allocator::default();
     let parsed = Parser::new(&allocator, source, SourceType::from_path(path).ok()?).parse();
     if !parsed.errors.is_empty() || !parsed.program.directives.is_empty() {
@@ -553,6 +662,7 @@ fn parse_grammar(path: &Path, source: &str, refusal: &RefCell<ConfigRefusal>) ->
         directory: path.parent()?,
         path_modules: BTreeSet::new(),
         resolve_functions: BTreeSet::new(),
+        realm,
         refusal,
     };
     let mut names = BTreeSet::new();
