@@ -48,6 +48,9 @@ struct Bindings<'a> {
     directory: &'a Path,
     path_modules: BTreeSet<&'a str>,
     resolve_functions: BTreeSet<&'a str>,
+    /// ADR 1145: the product realm reads the same config to decide which plugins and entries a page loads, so a bundler's output naming options (which run in Node
+    /// while building and add no load to a page) are admitted. A host is never inferred from a config read this way.
+    realm: bool,
     refusal: &'a RefCell<ConfigRefusal>,
 }
 
@@ -220,6 +223,52 @@ fn data(value: &Expression<'_>, bindings: &Bindings<'_>) -> bool {
         }),
         _ => false,
     }
+}
+
+/// ADR 1145: a bundler's options hold only `output` naming (`chunkFileNames`, `entryFileNames`, `assetFileNames`, `manualChunks`, `sourcemapFileNames`, `dir`), whose
+/// values may be callbacks: they run in Node while the bundle is built, so they add no load to a page. Anything else (`input`, `plugins`, `external`, a computed key, a
+/// spread, an accessor) may change what a page loads and is refused.
+fn output_options_only(value: &Expression<'_>) -> bool {
+    const OUTPUT: [&str; 6] = [
+        "chunkFileNames",
+        "entryFileNames",
+        "assetFileNames",
+        "manualChunks",
+        "sourcemapFileNames",
+        "dir",
+    ];
+    let Expression::ObjectExpression(options) = value.get_inner_expression() else {
+        return false;
+    };
+    options.properties.iter().all(|property| {
+        let ObjectPropertyKind::ObjectProperty(property) = property else {
+            return false;
+        };
+        let PropertyKey::StaticIdentifier(key) = &property.key else {
+            return false;
+        };
+        if key.name != "output"
+            || property.computed
+            || property.method
+            || property.kind != PropertyKind::Init
+        {
+            return false;
+        }
+        let Expression::ObjectExpression(output) = property.value.get_inner_expression() else {
+            return false;
+        };
+        output.properties.iter().all(|inner| {
+            let ObjectPropertyKind::ObjectProperty(inner) = inner else {
+                return false;
+            };
+            let name = match &inner.key {
+                PropertyKey::StaticIdentifier(key) => key.name.as_str(),
+                PropertyKey::StringLiteral(key) => key.value.as_str(),
+                _ => return false,
+            };
+            !inner.computed && inner.kind == PropertyKind::Init && OUTPUT.contains(&name)
+        })
+    })
 }
 
 fn plugin(
@@ -413,7 +462,16 @@ fn object(object: &ObjectExpression<'_>, bindings: &Bindings<'_>) -> Option<Conf
             let Expression::ObjectExpression(options) = value.get_inner_expression() else {
                 return None;
             };
-            let options = properties(options)?;
+            let mut options = properties(options)?;
+            if key == "build" && bindings.realm {
+                for name in ["rollupOptions", "rolldownOptions"] {
+                    if let Some(value) = options.remove(name)
+                        && !output_options_only(value)
+                    {
+                        return None;
+                    }
+                }
+            }
             if key == "resolve"
                 && let Some(value) = options.get("dedupe")
             {
@@ -532,14 +590,29 @@ pub(super) fn parse(path: &Path, source: &str) -> Option<Config> {
 }
 
 pub(super) fn parse_detailed(path: &Path, source: &str) -> Result<Config, ConfigRefusal> {
+    parse_in_mode(path, source, false)
+}
+
+/// ADR 1145: [`parse_detailed`] for the product realm: the same grammar, plus the bundler's output naming options under `build.rollupOptions` and
+/// `build.rolldownOptions`. The result is never a host's configuration.
+pub(super) fn parse_realm(path: &Path, source: &str) -> Result<Config, ConfigRefusal> {
+    parse_in_mode(path, source, true)
+}
+
+fn parse_in_mode(path: &Path, source: &str, realm: bool) -> Result<Config, ConfigRefusal> {
     let refusal = RefCell::new(ConfigRefusal {
         offset: 0,
         reason: "invalid Vite config syntax, source type, or program directive".into(),
     });
-    parse_grammar(path, source, &refusal).ok_or_else(|| refusal.into_inner())
+    parse_grammar(path, source, &refusal, realm).ok_or_else(|| refusal.into_inner())
 }
 
-fn parse_grammar(path: &Path, source: &str, refusal: &RefCell<ConfigRefusal>) -> Option<Config> {
+fn parse_grammar(
+    path: &Path,
+    source: &str,
+    refusal: &RefCell<ConfigRefusal>,
+    realm: bool,
+) -> Option<Config> {
     let allocator = Allocator::default();
     let parsed = Parser::new(&allocator, source, SourceType::from_path(path).ok()?).parse();
     if !parsed.errors.is_empty() || !parsed.program.directives.is_empty() {
@@ -553,6 +626,7 @@ fn parse_grammar(path: &Path, source: &str, refusal: &RefCell<ConfigRefusal>) ->
         directory: path.parent()?,
         path_modules: BTreeSet::new(),
         resolve_functions: BTreeSet::new(),
+        realm,
         refusal,
     };
     let mut names = BTreeSet::new();

@@ -212,9 +212,14 @@ fn file_sites(
     let accessors_possible = ctx
         .package_reach
         .is_some_and(solid_facts::package_reach::PackageReachIndex::defines_global_accessors);
-    let prototype_writer_loaded = ctx
-        .package_reach
-        .is_some_and(|index| index.prototype_writers_of_unspelled().next().is_some());
+    // ADR 1145: where the product's entries load this file, the writers of the product's realm only.
+    let prototype_writer_loaded = ctx.package_reach.is_some_and(|index| {
+        index
+            .writer_scope(file.path.as_str())
+            .prototype_writers_of_unspelled()
+            .next()
+            .is_some()
+    });
     let mut push = |at: Span, callee: Span, entry: Entry, declaration: Option<DeclarationAt>| {
         let Some(declaration) = declaration else {
             return;
@@ -346,6 +351,7 @@ fn file_sites(
                         .then(|| {
                             prototype_read(
                                 ctx,
+                                file,
                                 &["toString", "valueOf", "join"],
                                 Some("[Symbol.toPrimitive]"),
                                 "tag",
@@ -373,6 +379,7 @@ fn file_sites(
                     Entry::Render,
                     prototype_read(
                         ctx,
+                        file,
                         &["cloneNode", "importNode"],
                         Some("[cloneNode]"),
                         "runtime-element",
@@ -657,9 +664,10 @@ fn file_sites(
     }
     // ADR 1108 part 2: what runs a method a package writes on a built-in's prototype without a call of it: a member of that name read for its value or handed on, an
     // object pattern that reads it, an iteration (a writer under any name may have written `Symbol.iterator` or `next`), a template literal (`toString`, `join`).
-    if ctx.package_reach.is_some_and(|index| {
-        !index.prototype_writers.is_empty() || !index.prototype_writers_any.is_empty()
-    }) {
+    if ctx
+        .package_reach
+        .is_some_and(|index| !index.writer_scope(file.path.as_str()).is_empty())
+    {
         for member in &file.ast.members {
             if !evaluated_member(file, member.span) {
                 continue;
@@ -671,7 +679,13 @@ fn file_sites(
                     Entry::Read,
                     // ADR 1114 family 3 slice G (round-2 review N1): an any-name writer may have defined an accessor of this name or installed a
                     // prototype (a Proxy) that traps the read.
-                    prototype_read(ctx, &[name.as_str()], Some(name.as_str()), "read-member"),
+                    prototype_read(
+                        ctx,
+                        file,
+                        &[name.as_str()],
+                        Some(name.as_str()),
+                        "read-member",
+                    ),
                 );
             }
         }
@@ -681,7 +695,13 @@ fn file_sites(
                     element.pattern,
                     element.pattern,
                     Entry::Read,
-                    prototype_read(ctx, &[name.as_str()], Some(name.as_str()), "read-pattern"),
+                    prototype_read(
+                        ctx,
+                        file,
+                        &[name.as_str()],
+                        Some(name.as_str()),
+                        "read-pattern",
+                    ),
                 );
             }
         }
@@ -691,7 +711,7 @@ fn file_sites(
                 operand,
                 operand,
                 Entry::Read,
-                prototype_read(ctx, &[], Some("[has]"), "in"),
+                prototype_read(ctx, file, &[], Some("[has]"), "in"),
             );
         }
         for &operand in &file.ast.iterated_operands {
@@ -699,7 +719,7 @@ fn file_sites(
                 operand,
                 operand,
                 Entry::Read,
-                prototype_read(ctx, &["next"], Some("[Symbol.iterator]"), "iteration"),
+                prototype_read(ctx, file, &["next"], Some("[Symbol.iterator]"), "iteration"),
             );
         }
         for template in &file.ast.template_literals {
@@ -718,6 +738,7 @@ fn file_sites(
                     Entry::Read,
                     prototype_read(
                         ctx,
+                        file,
                         &["toString", "valueOf", "join"],
                         Some("[Symbol.toPrimitive]"),
                         "template",
@@ -734,7 +755,13 @@ fn file_sites(
                 operand,
                 operand,
                 Entry::Read,
-                prototype_read(ctx, &conversion, Some("[Symbol.toPrimitive]"), "conversion"),
+                prototype_read(
+                    ctx,
+                    file,
+                    &conversion,
+                    Some("[Symbol.toPrimitive]"),
+                    "conversion",
+                ),
             );
         }
         for element in &file.ast.pattern_elements {
@@ -743,7 +770,7 @@ fn file_sites(
                     element.pattern,
                     element.pattern,
                     Entry::Read,
-                    prototype_read(ctx, &["next"], Some("[Symbol.iterator]"), "iteration"),
+                    prototype_read(ctx, file, &["next"], Some("[Symbol.iterator]"), "iteration"),
                 );
             }
         }
@@ -752,7 +779,7 @@ fn file_sites(
                 operand,
                 operand,
                 Entry::Read,
-                prototype_read(ctx, &["then"], Some("then"), "await"),
+                prototype_read(ctx, file, &["then"], Some("then"), "await"),
             );
         }
         // ADR 1114 family 3 slice G (round-2 review N5): an async function resolves its promise with what it returns, which reads the value's `then`.
@@ -779,7 +806,7 @@ fn file_sites(
                 argument,
                 argument,
                 Entry::Read,
-                prototype_read(ctx, &["then"], Some("then"), "async-return"),
+                prototype_read(ctx, file, &["then"], Some("then"), "async-return"),
             );
         }
         for &initializer in &file.ast.disposal_initializers {
@@ -787,7 +814,7 @@ fn file_sites(
                 initializer,
                 initializer,
                 Entry::Read,
-                prototype_read(ctx, &[], Some("[Symbol.dispose]"), "disposal"),
+                prototype_read(ctx, file, &[], Some("[Symbol.dispose]"), "disposal"),
             );
         }
         let jsx_values = file.ast.jsx_child_expressions.iter().copied().chain(
@@ -805,6 +832,7 @@ fn file_sites(
                 Entry::Read,
                 prototype_read(
                     ctx,
+                    file,
                     &conversion,
                     Some("[Symbol.toPrimitive]"),
                     "jsx-conversion",
@@ -2885,15 +2913,15 @@ fn prototype_written(
     if resolve != Resolve::Call {
         return None;
     }
-    let index = ctx.package_reach?;
+    let scope = ctx.package_reach?.writer_scope(file.path.as_str());
     let member = file.ast.member_at(file.ast.peel_ts_sugar_span(callee))?;
     let (name, root, named) = match member_key(file, member) {
         Key::Name(name) => {
-            let (root, named) = index.prototype_writers_of(&name).next()?;
+            let (root, named) = scope.prototype_writers_of(&name).next()?;
             (name, root, named)
         }
         Key::Unspelled => {
-            let root = index.prototype_writers_of_unspelled().next()?;
+            let root = scope.prototype_writers_of_unspelled().next()?;
             ("[…]".to_owned(), root, false)
         }
     };
@@ -2958,8 +2986,9 @@ fn prototype_call(
     file: &FileFacts,
     call: &solid_facts::ast::CallFact,
 ) -> Option<DeclarationAt> {
-    let index = ctx.package_reach?;
-    if index.prototype_writers.is_empty() && index.prototype_writers_any.is_empty() {
+    // ADR 1145: the writers of the product's realm where the product's entries load this file.
+    let scope = ctx.package_reach?.writer_scope(file.path.as_str());
+    if scope.is_empty() {
         return None;
     }
     let mut how = "member";
@@ -3073,7 +3102,7 @@ fn prototype_call(
         .collect::<Vec<_>>();
     names.extend(implicit);
     if let Some((at, name, root)) = names.iter().enumerate().find_map(|(at, name)| {
-        index
+        scope
             .prototype_writers_by_name(name)
             .next()
             .map(|root| (at, name, root))
@@ -3083,7 +3112,7 @@ fn prototype_call(
             path: format!("{PROTOTYPE_WRITE_PREFIX}{name}#{kind}:{root}"),
         });
     }
-    if unspelled && let Some(root) = index.prototype_writers_of_unspelled().next() {
+    if unspelled && let Some(root) = scope.prototype_writers_of_unspelled().next() {
         return Some(DeclarationAt {
             path: format!("{PROTOTYPE_WRITE_ANY_PREFIX}[…]#unspelled:{root}"),
         });
@@ -3091,7 +3120,7 @@ fn prototype_call(
     if !any {
         return None;
     }
-    if let Some(root) = index.prototype_writers_any_name().next() {
+    if let Some(root) = scope.prototype_writers_any_name().next() {
         return Some(DeclarationAt {
             path: format!(
                 "{PROTOTYPE_WRITE_ANY_PREFIX}{}#{any_kind}:{root}",
@@ -3102,17 +3131,7 @@ fn prototype_call(
     // ADR 1114 family 3 slice E (review F3): a name the table of implicit calls lacks is no proof. Where a package writes a member by name, any
     // call that may reach a built-in (a library function or constructor, a member call whatever its declaration) may run it (`p.catch(f)` runs
     // `then`, `JSON.stringify(d)` runs `toISOString`): a site naming the written member, unless a reviewed reading clears the callee (none yet).
-    let (written, root) = index.prototype_writers.iter().find_map(|(name, roots)| {
-        roots
-            .iter()
-            .find(|root| {
-                index
-                    .by_root
-                    .get(root.as_str())
-                    .is_none_or(|reach| !reach.is_clear())
-            })
-            .map(|root| (name, root))
-    })?;
+    let (written, root) = scope.first_named_writer()?;
     let kind = any_kind.strip_prefix("any-").unwrap_or(&any_kind);
     Some(DeclarationAt {
         path: format!("{PROTOTYPE_WRITE_PREFIX}{written}#named-{kind}:{root}"),
@@ -3138,13 +3157,15 @@ fn pattern_key_of(file: &FileFacts, callee: Span) -> Option<String> {
 /// `yield*`) runs `Symbol.iterator` and `next`, which a writer under any name may have written; a template literal runs `toString`, `valueOf` and an array's `join`.
 fn prototype_read(
     ctx: &AnalysisContext<'_>,
+    file: &FileFacts,
     names: &[&str],
     any_name: Option<&str>,
     kind: &str,
 ) -> Option<DeclarationAt> {
-    let index = ctx.package_reach?;
+    // ADR 1145: the writers of the product's realm where the product's entries load this file.
+    let scope = ctx.package_reach?.writer_scope(file.path.as_str());
     if let Some((name, root)) = names.iter().find_map(|name| {
-        index
+        scope
             .prototype_writers_by_name(name)
             .next()
             .map(|root| (*name, root))
@@ -3155,7 +3176,7 @@ fn prototype_read(
     }
     // `any_name`: the member the operation runs that a writer under any name may have written (`[Symbol.iterator]`, `[Symbol.toPrimitive]`).
     if let Some(member) = any_name
-        && let Some(root) = index.prototype_writers_any_name().next()
+        && let Some(root) = scope.prototype_writers_any_name().next()
     {
         return Some(DeclarationAt {
             path: format!("{PROTOTYPE_WRITE_ANY_PREFIX}{member}#{kind}:{root}"),
@@ -3164,17 +3185,7 @@ fn prototype_read(
     // ADR 1114 family 3 slice G (round-2 review N3): the names listed are what the operation asks first, not all its native path reads
     // (`Error.prototype.toString` reads `name` and `message`, `RegExp.prototype.toString` `source` and `flags`, the `flags` getter each flag).
     // Under a writer by name that may reach Solid, the operation is a site naming the written member, as a call is (slice E, F3).
-    let (written, root) = index.prototype_writers.iter().find_map(|(name, roots)| {
-        roots
-            .iter()
-            .find(|root| {
-                index
-                    .by_root
-                    .get(root.as_str())
-                    .is_none_or(|reach| !reach.is_clear())
-            })
-            .map(|root| (name, root))
-    })?;
+    let (written, root) = scope.first_named_writer()?;
     Some(DeclarationAt {
         path: format!("{PROTOTYPE_WRITE_PREFIX}{written}#named-{kind}:{root}"),
     })

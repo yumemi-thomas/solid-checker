@@ -376,6 +376,13 @@ pub fn package_inputs(
             })
         );
     }
+    // ADR 1145: the writers a program's product entries load, where its build configuration decides the entry set; every other program keeps every writer.
+    let mut reach = reach;
+    let realm = crate::product_realm::read(directory, facts, runtime);
+    if !crate::product_realm::ablated() {
+        crate::product_realm::apply(&realm, &mut reach);
+    }
+    crate::product_realm::write_census(&realm, &reach, directory);
     boundary.set_package_reach(reach);
     let inferred =
         crate::inferred_project_host_with_note(directory, runtime, dialect.vocabulary, facts)?;
