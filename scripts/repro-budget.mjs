@@ -31,7 +31,13 @@ export const BUDGETS = {
    * veto (ADR 0356): each veto site kind needs its own project, since one
    * unexcluded site holds every handler proof of its project (ADR 0446).
    */
-  projects: 11,
+  // ADR 1125 (Fable round 1): 11 -> 13. Event delivery and the shadow scan are whole-program premises, so a key reader
+  // (`props-object-assign`) or an unproven computed read whose value is kept (`clean-omit-rest`, `callback-in-options-object`) in a
+  // shared project withholds every handler proof of the other cases: they run as sc1001-key-reader and sc1001-computed-key.
+  // ADR 1133: 13 -> 14. A member named `open` read as a value is a navigation sink (it may be the window's `open`), so
+  // `handler-factory-options` (`<Show when={props.open}>`) and `read-in-context-value` (`open: () => props.open ?? false`) in the
+  // shared sc1001 project withheld every handler proof of the other cases: they run as sc1001-navigation-url.
+  projects: 14,
   /** Source files of one case: one, or two when the cause is cross-file. */
   filesPerCase: 2,
   /** Lines of one source file. */

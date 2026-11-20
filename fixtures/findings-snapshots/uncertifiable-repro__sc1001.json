@@ -299,28 +299,6 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc1001/src/handler-factory-options.tsx",
-      "start": 915,
-      "end": 938,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc1001/src/handler-factory-options.tsx",
-      "start": 976,
-      "end": 999,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-handler-frozen",
       "code": "SC1007",
       "kind": "uncertifiable",
@@ -483,39 +461,6 @@
       "path": "fixtures/uncertifiable-repro/sc1001/src/options-handed-to-project.tsx",
       "start": 1148,
       "end": 1156,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "callee-callback-timing",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc1001/src/options-object.tsx",
-      "start": 870,
-      "end": 880,
-      "fixes": 0
-    },
-    {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc1001/src/options-object.tsx",
-      "start": 902,
-      "end": 917,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "handed-member-dispatch",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc1001/src/options-object.tsx",
-      "start": 980,
-      "end": 991,
       "fixes": 0
     },
     {
@@ -940,50 +885,6 @@
       "kind": "uncertifiable",
       "blocker": "read-backing-unproven",
       "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc1001/src/props-object-assign.tsx",
-      "start": 262,
-      "end": 280,
-      "fixes": 0
-    },
-    {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc1001/src/props-object-assign.tsx",
-      "start": 333,
-      "end": 340,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "blocker": "owner-callers-unenumerated",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc1001/src/props-object-assign.tsx",
-      "start": 333,
-      "end": 340,
-      "fixes": 0
-    },
-    {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc1001/src/props-object-assign.tsx",
-      "start": 333,
-      "end": 340,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "read-backing-unproven",
-      "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc1001/src/props-object-member.tsx",
       "start": 273,
       "end": 284,
@@ -1122,17 +1023,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "read-after-await-unaccounted",
-      "severity": "error",
-      "path": "fixtures/uncertifiable-repro/sc1001/src/r-after-await-condition.tsx",
-      "start": 530,
-      "end": 540,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -1174,17 +1064,6 @@
       "path": "fixtures/uncertifiable-repro/sc1001/src/r-array-actions.tsx",
       "start": 630,
       "end": 644,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "callee-callback-timing",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc1001/src/r-context-state.tsx",
-      "start": 450,
-      "end": 460,
       "fixes": 0
     },
     {

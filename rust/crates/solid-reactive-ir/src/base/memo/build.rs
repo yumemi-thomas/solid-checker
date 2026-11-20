@@ -2094,14 +2094,29 @@ impl<'c, 'w> Ctx<'c, 'w, BuildSchema> {
                 // (ADR 0450): the hazard's probe, and while the hazard is
                 // present the memo that holds the classified veto. A cycle
                 // reads the whole program.
+                // ADR 1125: with no dispatch the veto is every proof withheld exactly where event delivery is not intact, so
+                // the reader records that answer's probe.
                 crate::base::reads::Section::DispatchVeto => {
-                    if self.hazard(crate::base::Hazard::SynchronousDispatch)
-                        && self
+                    if self.hazard(crate::base::Hazard::SynchronousDispatch) {
+                        if self
                             .memo::<crate::indexes::DispatchVetoAnswer>(&())
                             .is_err()
-                    {
-                        whole = true;
+                        {
+                            whole = true;
+                        }
+                    } else {
+                        let _ = self.probe(
+                            super::probes::Probe::EventDeliveryIntact,
+                            super::probes::PolledKey::Unit,
+                        );
                     }
+                }
+                // ADR 1125: the delivery answer, polled.
+                crate::base::reads::Section::EventDeliveryIntact => {
+                    let _ = self.probe(
+                        super::probes::Probe::EventDeliveryIntact,
+                        super::probes::PolledKey::Unit,
+                    );
                 }
                 crate::base::reads::Section::ReflectiveDefinition => {
                     let _ = self.hazard(crate::base::Hazard::ReflectiveDefinitionSpelling);

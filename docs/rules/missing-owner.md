@@ -111,7 +111,12 @@ An owned context is the edges the owner graph holds. A function the body calls a
 also assigns to a handler, stores, hands to a value-only argument, or writes to a
 member has another entry with no edge, so an owner operation in it is uncertifiable
 (`owner-callers-unenumerated`, ADR 0868). Only direct calls, inline runs and
-primitive positions, each from placed code, keep the proof.
+primitive positions, each from placed code, keep the proof. A read of a context with
+no default and no provider asks the same entry test: its owned run is
+[missing-context-provider](missing-context-provider.md)'s claim, and an entry with no edge
+(`[f].forEach((g) => g())` in a handler, a stored function, a helper's parameter) leaves this
+rule's obligation beside it (ADR 1142). A `forEach` in the body carries it the same way: the
+carried call is not followed, so where it runs is not placed.
 
 A function that returns JSX is no exception (ADR 0970): it is entered by renders
 alone only where every reference of its binding is a JSX tag. One a reference also
@@ -228,7 +233,20 @@ declared return type, a union of such types; ADR 0436). The proof reads the
 declared type: an index signature, `any`, a generic or open union member, or a
 type the checker cannot enumerate keeps the obligation. A value typed
 `{ class?: string }` may carry more keys at run time (structural subtyping), and
-direct `eval` withholds the proof. Unknown holders,
+direct `eval` withholds the proof. A `merge`/`omit` view of a component's own
+props spread onto an intrinsic element is resolved from the component's callers
+when every one, through any name the function is entered by (ADR 1127), is a JSX
+site with literal keys, and for an `omit` view no file or loaded package may
+replace `Array.prototype.includes` (ADR 1129): its listener keys hold
+the function literals the callers (or the view's literals) write there, which join
+the owner graph as handlers, and no other value; on a form control that writes
+`disabled`, holds another spread, or whose view may own `disabled`, the handlers
+stay unresolved, since a delegated handler of a disabled control never runs
+(ADR 1134); so do they where a later spread or a later attribute of a listener
+key's name may supply that key, since rc.21's `spread` skips a key a later
+source has and the view's function is never attached. For `includes`, any
+program file's prototype route, reflective write or key nothing decides counts
+as a writer. Unknown holders,
 getters, generators and unaudited web spread keys retain internal obligations. These placements obey
 the synchronous-dispatch veto above; no unresolved target proves a violation.
 
@@ -399,5 +417,7 @@ An indirect `onSettled` call (`f.bind(…)(…)`, `f.call`/`f.apply`, `(slot ||=
 
 Where a check Solid makes earlier at the same call is proven to throw, the owner check is never reached: an effect created in an effect's apply (SC6002 throws `PRIMITIVE_IN_EFFECT_CALLBACK` before `createEffect` reports `NO_OWNER_EFFECT`), and an operation a leaf owner refuses on another caller's run (SC3001 throws at mount and halts the system, so a handler's later unowned run never reports). The row is uncertifiable `creation-throws-first`, not a violation ([ADR 1052](../decisions.md#adr-1052)). A boundary reports `NO_OWNER_BOUNDARY` before it creates anything, so it keeps its violation in an apply.
 
-A handler Solid never calls is no run: an operation written in a delegated event handler (`onClick`, `onKeyDown`, `onPointerDown`, every event in rc.21's `DelegatedEvents`) of a `button`, `input`, `select`, `textarea`, `fieldset`, `optgroup` or `option` that is disabled from its mount (a bare `disabled` or `disabled={true}`, no spread, no `ref`), in a program that writes no `.disabled` member and calls no attribute writer, is uncertifiable `handler-on-disabled-control`, not a violation: the delegated dispatcher passes over a node whose `disabled` is true ([ADR 1134](../decisions.md#adr-1134)). A handler the compiler does not delegate (`onWheel`, `onScroll`) is the browser's listener and keeps its row, as does a `div` (`disabled` is no property of it) and a `disabled` that follows a signal.
+A handler Solid never calls is no run: an operation written in a delegated event handler (`onClick`, `onKeyDown`, `onPointerDown`, every event in rc.21's `DelegatedEvents`) of a `button`, `input`, `select`, `textarea`, `fieldset`, `optgroup` or `option` that is disabled from its mount (a bare `disabled` or `disabled={true}`, no spread, no `ref`), in a program that writes no `.disabled` member and calls no attribute writer, is uncertifiable `handler-on-disabled-control`, not a violation: the delegated dispatcher passes over a node whose `disabled` is true ([ADR 1134](../decisions.md#adr-1134)). A handler the compiler does not delegate (`onWheel`, `onScroll`) is the browser's listener and keeps its row, as does a `div` (`disabled` is no property of it) and a `disabled` that follows a signal. A control with spreads ([ADR 1141](../decisions.md#adr-1141)) is handed with its attributes to rc.21's `spread`, which delegates the same events: its handler (its own `on…` attribute, or a function a literal written in the spread holds, every listener key of which is delegated) is uncertifiable `handler-on-disabled-control` too when every spread's own keys are proven (a closed literal in place, or an unwritten `const` the spread resolution accepts) and none is `disabled`, `ref` or namespaced; a spread of unproven keys, or one that holds `disabled`, keeps the row.
 The same holds where a helper an effect's apply and another caller both run creates the effect (SC6002's `effect-owner-unproven`: the apply's run throws the guard and halts).
+
+A handler the element never attaches is no run either (ADR 1140): where an intrinsic element has a spread, rc.21's `spread` skips a key that a later source of the element has, so a literal-spread handler, or an attribute handler, that a later attribute, a later spread or a later `onClick={undefined}` may supply under its key is never installed. An owner row written in such a handler is the obligation `handler-key-overridden`, and a helper it calls has no proven-unowned run from it. A later spread proves it does not supply the key only as a closed object literal without it or with a complete declared key set without it.

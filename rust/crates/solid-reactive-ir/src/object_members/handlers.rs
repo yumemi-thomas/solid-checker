@@ -78,6 +78,26 @@ pub(crate) fn unresolved_handler_defects<'a>(
             }
             for spread in &element.spreads {
                 let key = location(file.path.shared(), spread.argument);
+                if let Some(Some(targets)) = lookup.spread_handler_targets().get(&key) {
+                    // ADR 1129: the handlers came from the view proof. The proof also names each
+                    // handler it placed, where an owner row of its body may now be decided.
+                    if lookup
+                        .spread_views()
+                        .get(&key)
+                        .is_some_and(|(_, by_view)| *by_view)
+                    {
+                        crate::proof_log::silent("SC4001", &key, super::VIEW_SPREAD_PROOF, &[]);
+                        for (path, span) in targets {
+                            crate::proof_log::silent(
+                                "SC4001",
+                                &location(path.as_str(), *span),
+                                super::VIEW_SPREAD_PROOF,
+                                &[],
+                            );
+                        }
+                    }
+                    continue;
+                }
                 if lookup.spread_handler_targets().get(&key) != Some(&None) {
                     continue;
                 }

@@ -250,6 +250,17 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/action-in-owned-scope-walk/App.tsx",
+      "start": 4969,
+      "end": 4982,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-walk/App.tsx",
       "start": 5046,
       "end": 5071,
       "fixes": 0
@@ -285,6 +296,17 @@
       "path": "fixtures/reactive-ir/action-in-owned-scope-walk/App.tsx",
       "start": 5128,
       "end": 5162,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-walk/App.tsx",
+      "start": 5147,
+      "end": 5161,
       "fixes": 0
     },
     {
@@ -316,6 +338,17 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/action-in-owned-scope-walk/App.tsx",
+      "start": 5376,
+      "end": 5394,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-walk/App.tsx",
       "start": 5399,
       "end": 5429,
       "fixes": 0
@@ -329,6 +362,17 @@
       "path": "fixtures/reactive-ir/action-in-owned-scope-walk/App.tsx",
       "start": 5433,
       "end": 5466,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-walk/App.tsx",
+      "start": 5452,
+      "end": 5465,
       "fixes": 0
     },
     {

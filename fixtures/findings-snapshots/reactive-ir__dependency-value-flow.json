@@ -173,6 +173,17 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/dependency-value-flow/App.tsx",
+      "start": 1063,
+      "end": 1078,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-value-flow/App.tsx",
       "start": 1089,
       "end": 1099,
       "fixes": 0
@@ -249,6 +260,17 @@
       "kind": "uncertifiable",
       "blocker": "package-value-read",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-value-flow/App.tsx",
+      "start": 1347,
+      "end": 1355,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
       "path": "fixtures/reactive-ir/dependency-value-flow/App.tsx",
       "start": 1347,
       "end": 1355,
@@ -351,6 +373,17 @@
       "path": "fixtures/reactive-ir/dependency-value-flow/App.tsx",
       "start": 1593,
       "end": 1606,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-value-flow/App.tsx",
+      "start": 1593,
+      "end": 1613,
       "fixes": 0
     },
     {
@@ -492,6 +525,17 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/dependency-value-flow/App.tsx",
+      "start": 2138,
+      "end": 2155,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-value-flow/App.tsx",
       "start": 2166,
       "end": 2176,
       "fixes": 0
@@ -513,6 +557,17 @@
       "kind": "uncertifiable",
       "blocker": "package-value-read",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-value-flow/App.tsx",
+      "start": 2439,
+      "end": 2460,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
       "path": "fixtures/reactive-ir/dependency-value-flow/App.tsx",
       "start": 2439,
       "end": 2460,
@@ -585,11 +640,33 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dependency-value-flow/App.tsx",
+      "start": 2651,
+      "end": 2663,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
       "blocker": "package-value-read",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-value-flow/App.tsx",
+      "start": 2713,
+      "end": 2728,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
       "path": "fixtures/reactive-ir/dependency-value-flow/App.tsx",
       "start": 2713,
       "end": 2728,
@@ -667,6 +744,17 @@
       "kind": "uncertifiable",
       "blocker": "package-value-read",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/dependency-value-flow/App.tsx",
+      "start": 3077,
+      "end": 3092,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
       "path": "fixtures/reactive-ir/dependency-value-flow/App.tsx",
       "start": 3077,
       "end": 3092,

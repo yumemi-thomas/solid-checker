@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1123, the review's F2 and F3: a provider element stored and read in a tracked effect (StoredApp), a pattern's name that createContext's defaultValue initializes (PatternApp) and a written let (WrittenApp), each holding a reader component that reads its children in a tracked effect, run a flushing child there: Chrome reports FLUSH_IN_TRACKED_QUEUE_CALLBACK at each, covered by SC3001 (covered-uncertifiable). With rc.21 read as source the build before round 1 kept these rows too; the arm's false clean needs an unread package's provider (fixture reactive-ir/context-provider-children-refusals)."
+}

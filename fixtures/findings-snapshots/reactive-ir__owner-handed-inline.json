@@ -74,8 +74,9 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
+      "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
+      "severity": "error",
       "path": "fixtures/reactive-ir/owner-handed-inline/App.tsx",
       "start": 1650,
       "end": 1659,
@@ -133,6 +134,17 @@
       "path": "fixtures/reactive-ir/owner-handed-inline/App.tsx",
       "start": 3030,
       "end": 3040,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-handed-inline/App.tsx",
+      "start": 3383,
+      "end": 3393,
       "fixes": 0
     },
     {

@@ -8303,8 +8303,16 @@ impl LocalAccessContext<'_, '_> {
         // A `then` head does not warn; a key solid-checker cannot spell
         // (a symbol, a dynamic expression) may not either. Review round
         // 1: a `then` Get is withheld only when its backing runs nothing.
+        // ADR 1138: a store tuple held whole; its Get is named as written (`st[0].v`).
+        let whole_tuple = self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store)
+            && self.store_tuple_held_whole(symbol, declaration);
         if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
-            match store_get_decision(file, member.span, declaration, self.lookup) {
+            let decision = if whole_tuple {
+                whole_store_tuple_get(file, member.span, self.lookup.dialect)
+            } else {
+                store_get_decision(file, member.span, declaration, self.lookup)
+            };
+            match decision {
                 StoreHeadGet::Warns => {}
                 StoreHeadGet::Exempt => {
                     result.ends.end_at(
@@ -8318,7 +8326,12 @@ impl LocalAccessContext<'_, '_> {
                 }
                 StoreHeadGet::Undecided(reason) => {
                     let key = (object.path.clone(), object.start_byte, object.end_byte);
-                    if execution.reports_untracked_read() && seen.insert(key) {
+                    // ADR 1138: a whole tuple's index in a function nothing places keeps its row too: what the element is handed
+                    // to is not followed, and no role there ends the site.
+                    if (execution.reports_untracked_read()
+                        || (whole_tuple && execution.reports_unplaced()))
+                        && seen.insert(key)
+                    {
                         result.dispatch_obligations.push(crate::StaticDefect {
                             kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
                                 callee: file
@@ -8354,7 +8367,7 @@ impl LocalAccessContext<'_, '_> {
             member,
             symbol,
             (name, declaration),
-            (execution, uncertain, prop_head),
+            (execution, uncertain, prop_head || whole_tuple),
             placed_at,
         );
         read.pending_open = pending_open;
@@ -8383,6 +8396,76 @@ impl LocalAccessContext<'_, '_> {
             execution,
             result,
         );
+    }
+
+    /// ADR 1138: whether the store source `symbol`, created at `declaration`, is a tuple primitive's result held whole
+    /// (`const st = createStore(…)`): then `st` is the tuple, `st[0]` the store proxy and `st[1]` its setter, and a Get on `st`
+    /// is an array index, no store Get. Only the direct creation holds a tuple whole: a hook's returned store is never one (a
+    /// tuple creation returned as it is is no returned source, ADR 0628), and an array slot 0 (`const [st] = …`) is the store.
+    /// The primitive is the symbol's, or the creation's when the symbol carries the creation's declaration (an effect's store
+    /// parameter). A tuple primitive's store whose declaration is neither of those shapes is taken as the tuple: undecided.
+    fn store_tuple_held_whole(&self, symbol: &SymbolId, declaration: &Location) -> bool {
+        let dialect = self.lookup.dialect;
+        let tuple_primitive = |primitive: solid_dialect::Primitive| {
+            dialect.returns_store(primitive) && dialect.returns_reactive_tuple(primitive)
+        };
+        let tuple = |symbol: &SymbolId| {
+            self.source_primitives
+                .get(symbol)
+                .and_then(|name| dialect.primitive(name.as_str()))
+                .is_some_and(tuple_primitive)
+        };
+        if !(tuple(symbol) || self.entities.get(declaration).is_some_and(tuple)) {
+            return false;
+        }
+        let at = |span: &solid_facts::core::Span| {
+            u64::from(span.start) == declaration.start_byte
+                && u64::from(span.end) == declaration.end_byte
+        };
+        let Some(file) = self.lookup.file_by_path(&declaration.path) else {
+            return true;
+        };
+        let slot = file.ast.bindings.iter().any(|binding| {
+            binding.shape == solid_facts::ast::BindingShape::Array
+                && binding
+                    .array_slots
+                    .first()
+                    .and_then(Option::as_ref)
+                    .is_some_and(|slot| at(&slot.span))
+        }) || file.ast.assignments.iter().any(|assignment| {
+            assignment
+                .array_slots
+                .first()
+                .and_then(|slot| slot.as_ref())
+                .is_some_and(at)
+        });
+        if slot {
+            return false;
+        }
+        // A hook's returned store: the binding's initializer is a call that creates no tuple itself.
+        let returned = file.ast.bindings.iter().any(|binding| {
+            binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.names.first().is_some_and(|name| at(&name.span))
+                && binding
+                    .call_initializer
+                    .and_then(|initializer| {
+                        self.lookup
+                            .ast_file_index(file.path.as_str())?
+                            .call_by_span(initializer)
+                    })
+                    .is_some_and(|call| {
+                        !crate::known_primitive(&crate::call_primitive_name_cached(
+                            self.lookup,
+                            file,
+                            call,
+                            self.entities,
+                            self.symbol_names,
+                            dialect,
+                        ))
+                        .is_some_and(tuple_primitive)
+                    })
+        });
+        !returned
     }
 
     fn member_read(
@@ -9552,6 +9635,70 @@ pub(crate) fn store_head_get(
             } else {
                 StoreHeadGet::Exempt
             }
+        }
+        Some(_) => StoreHeadGet::Warns,
+    }
+}
+
+/// ADR 1138: the Get decision on a store tuple held whole (`const st = createStore(…)`). `st[0]` is the store proxy, so in
+/// `st[0].v` the store's head Get is `.v`, decided as [`store_head_get`] decides a head; `st[0]` alone, `st[1]`, a dynamic
+/// index or a destructure of `st` is no store Get there, but what it hands on (`const o = st[0]`, then `o.v`) is not followed:
+/// undecided, never a violation and never a silent clean.
+pub(crate) fn whole_store_tuple_get(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    dialect: &dyn solid_dialect::Dialect,
+) -> StoreHeadGet {
+    const HANDED: &str = "the store tuple is held whole, and what its element is handed to is not followed to a store Get";
+    // The key a member Gets: a computed member's literal key (the facts'), or a name's cooked key (the kernel's, K3).
+    let key = |member: &solid_facts::ast::MemberFact| -> Option<String> {
+        if file
+            .ast
+            .computed_members
+            .binary_search(&member.span)
+            .is_ok()
+        {
+            file.ast
+                .literal_computed_members
+                .iter()
+                .find(|literal| literal.span == member.span)
+                .map(|literal| literal.key.to_string())
+        } else {
+            crate::kernel::property_key(file, member.property)
+        }
+    };
+    let Some(mut head) = file.ast.member_at(span) else {
+        return StoreHeadGet::Undecided(HANDED);
+    };
+    while let Some(inner) = file.ast.member_at(file.ast.peel_ts_sugar_span(head.object)) {
+        head = inner;
+    }
+    if key(head).as_deref() != Some("0") {
+        return StoreHeadGet::Undecided(HANDED);
+    }
+    let Some(get) = file
+        .ast
+        .members
+        .iter()
+        .find(|member| file.ast.peel_ts_sugar_span(member.object) == head.span)
+    else {
+        return StoreHeadGet::Undecided(HANDED);
+    };
+    let chained = file
+        .ast
+        .members
+        .iter()
+        .any(|member| file.ast.peel_ts_sugar_span(member.object) == get.span);
+    match key(get).as_deref() {
+        None => StoreHeadGet::Undecided(
+            "the store Get's key is not a known string; a symbol key or \"then\" does not warn",
+        ),
+        Some(key) if dialect.store_key_may_skip_strict_read(key) => {
+            StoreHeadGet::Undecided(if chained {
+                "the store Get's head key does not warn, and whether its value is a store proxy whose next Get does is not proven"
+            } else {
+                "the store Get's key \"then\" does not warn, but the property it reads is not proven to be data that runs nothing (a getter there reads on access)"
+            })
         }
         Some(_) => StoreHeadGet::Warns,
     }

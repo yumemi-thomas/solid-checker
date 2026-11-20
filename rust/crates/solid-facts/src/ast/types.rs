@@ -311,10 +311,11 @@ pub struct AstFacts {
     /// is this checker's to report.
     #[serde(default)]
     pub coercive_operands: Vec<CoerciveOperandFact>,
-    /// Every operator expression that converts an operand to a primitive or a property key, by span, sorted (facts schema 103, ADR 1114 family 3; the
+    /// Every operator expression that converts an operand to a primitive or a property key, by span, sorted (facts schema 103, ADR 1114 family 3; extended in 105 by slice G; the
     /// expression, where V8 places the conversion, not the operand), when that operand is no literal: both sides of `==`, `!=`, the
     /// relational, arithmetic, shift and bitwise binaries and `+`; the left of `in`; the operand of unary `+`, `-`, `~` and of `++`/`--`; both sides of a
-    /// compound assignment that is not logical; and a computed key that is no literal (a member, an object or class property). An object there runs its
+    /// compound assignment that is not logical; the value of any other assignment to a member (a native setter, a typed array element or `length` converts it,
+    /// slice G); and a computed key that is no literal (a member, an object property, a class method, a binding or assignment pattern's key). An object there runs its
     /// `Symbol.toPrimitive`, `valueOf` or `toString`, which a package may have written on a built-in's prototype. `===`, `!==`, `instanceof`, `!`,
     /// `typeof`, `void` and `delete` convert nothing. A template's substitutions are [`AstFacts::template_literals`]'.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -1824,6 +1825,10 @@ pub enum CodeSinkKind {
     JavascriptUrl,
     /// A global looked up by a name the program does not fix (`window[name]`).
     GlobalLookup,
+    /// ADR 1133 (F5): a URL a navigation or a frame loads (`href`, `src`, `action`, `formAction`, `data`, `location` by any route the syntax
+    /// names: a member write, a JSX attribute, `setAttribute`, an object literal's key, `location.assign`, `open`) that is not proven to be
+    /// no `javascript:` URL: a URL built at run time (`"java" + "script:" + …`) runs as code.
+    NavigationUrl,
 }
 
 /// A place a file runs code it builds as a string: see [`AstFacts::code_sinks`].
@@ -1863,6 +1868,12 @@ pub struct ComputedKeyFact {
     /// The constant strings the key may be, sorted (a proven key with none is not listed).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub texts: Vec<CompactString>,
+    /// ADR 1125: a `Member` read whose value is provably neither called nor kept: it reaches, through parentheses, casts, `??`/`||`/`&&` and a
+    /// conditional's arms, only an operand of a unary operator, of a binary one other than `instanceof`, a test, a computed member's key or a discarded
+    /// statement. Such a value runs no method of its own (a coercion runs only methods some other site wired in, which that site's facts list). False:
+    /// anything else, the fail-closed default.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub value_inert: bool,
 }
 
 /// What a premise site may do to the plain-program premise (ADR 1120): the clause it falls under.
@@ -1892,6 +1903,13 @@ pub enum PremiseClause {
     ShadowRoot,
     /// A `with` statement: a bare name may be any object's property.
     With,
+    /// ADR 1125 (G2): a standard reader of an object's own keys or values named in any position (`Object.values` handed to
+    /// `flatMap`, `const { entries } = Object`, `Object.keys.call(…)`), `JSON.stringify` with a replacer or handed on, a `for … in`.
+    KeyReader,
+    /// ADR 1133: a dispatcher (`dispatchEvent`, `click`) read as a value that may be called other than as a written dispatch call
+    /// (`el.dispatchEvent.call(el, e)`, `Reflect.apply(EventTarget.prototype.dispatchEvent, el, [e])`, an alias): the dispatch census
+    /// counts only calls spelled as dispatches.
+    DispatchHandedOn,
 }
 
 /// One place that may break the plain-program premise (ADR 1120, facts schema 101): its clause, its span and the key or name it

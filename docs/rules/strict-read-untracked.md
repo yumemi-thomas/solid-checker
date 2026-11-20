@@ -76,11 +76,16 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   makes the store (a `createStore` slot, a projection a primitive or a hook returns
   whole) and whatever TypeScript wraps the receiver (`as`, `!`, `satisfies`;
   ADR 1121).
+  A tuple held whole (`const st = createStore(…)`) is no store: only `st[0].k` is
+  its Get; `st[0]` alone, `st[1]` or a dynamic index is uncertifiable, since what the
+  element is handed to is not followed (ADR 1138).
   A function a primitive names by its binding (`createMemo(cb)`, `onClick={cb}`,
   `onSettled(cb)`) takes that position's role only when every reference to it is
   a position, a resolved call or a `const` alias accounted the same way; any other
   (`[cb].forEach((g) => g())`, a global store, a returned object) leaves the read
-  uncertifiable (ADR 1119).
+  uncertifiable (ADR 1119). A whole element of a spread-free array literal the standard
+  `forEach` runs through an only-called parameter is a call there, read as `cb()`
+  written at the `forEach` (ADR 1124).
 - **Plain assignment targets are writes, not reads.** `store.name = next` is
   diagnosed by `no-store-mutation-outside-setter` without also reporting `store.name` here.
   Only the member that *is* the written target is exempt: read-modify-write
@@ -164,6 +169,20 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   file); a function value is stored, not run, and stays unplaced. A prop in
   `value` follows its component's callers like any prop read
   (`fixtures/reactive-ir/provider-value-untracked`).
+- **A context read takes the one provider's signal tuple** ([ADR 1123](../decisions.md#adr-1123)).
+  `const [theme, setTheme] = useContext(Ctx)` follows the `createSignal` tuple that
+  `<Ctx value={…}>` stores: the two slots are that signal's accessor and setter, so
+  `theme()` read in a component body is a violation and one in an effect's compute is
+  clean (`fixtures/reactive-ir/context-signal-tuple`). It needs an unwritten, unexported
+  `const` context made by `createContext()` with no default and referenced only as the tag
+  of that one provider element (no spread, one `value`) or as the argument of such a
+  destructured read; a plain value signal as the provider's value (no function form, no
+  options); each slot read only as a callee; no direct `eval`; and a resolved record, not a
+  recovered one, for the context read and for both creations (a missing record refuses).
+  Anything else keeps its SC9012, uncertifiable (`context-signal-tuple-forms`, `-twins`).
+  The provider's *children* are not followed: a component rendered inside a provider is
+  any package component's child, so its creation rows stay uncertifiable (the withdrawn
+  children arm, `docs/open-work.md`).
 - **A closure a tracked scope builds is not run by it.** A read in a closure a
   memo or effect compute, or a tracked JSX expression, returns, stores or names
   (`const f = () => count(); return f`) is tracked only where a call runs the

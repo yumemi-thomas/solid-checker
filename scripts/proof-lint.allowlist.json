@@ -337,6 +337,14 @@
       "default-on-missing": {
         "count": 1,
         "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "ADR 1123: the provider element's attribute key `value` is JSX syntax (the dialect provider form's one prop), read from the attribute fact, not a binding or callee identified by spelling"
+      },
+      "primitive-name-match": {
+        "count": 3,
+        "why": "ADR 1123: the primitive comes from the exact call resolution (`primitive_at_call`, a resolved Solid export); the enum names which of the dialect's primitives the context arm takes (createContext, useContext), no name is matched"
       }
     },
     "rust/crates/solid-reactive-ir/src/carrier_runs.rs": {
@@ -381,6 +389,12 @@
       "silent-unmatched-slot": {
         "count": 1,
         "why": "pending-review"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/disabled_handlers.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "ADR 1129 beside ADR 1134: the spelling is a JSX attribute name (`disabled`), which is syntax the compiler reads by name, not a binding; the match only keeps a view spread's handlers unresolved (an obligation), never makes a clean or a violation"
       }
     },
     "rust/crates/solid-reactive-ir/src/effect_api.rs": {
@@ -717,8 +731,8 @@
     },
     "rust/crates/solid-reactive-ir/src/indexes/event_delivery.rs": {
       "default-on-missing": {
-        "count": 2,
-        "why": "ADR 1115 (scan_shadow_roots): no attested resolutions, or a load by a computed specifier, answers true (a listener may sit in a shadow tree: the read proof is withheld), the fail-closed side; one older hit pending-review"
+        "count": 3,
+        "why": "ADR 1115 (scan_shadow_roots) and ADR 1125 (delivery_hazard_reason): a load by a computed specifier answers true (a listener may sit in a shadow tree, or unread code may replace the listener API: the event proofs are withheld), the fail-closed side; one older hit pending-review"
       },
       "name-only-match": {
         "count": 3,
@@ -1013,6 +1027,12 @@
         "why": "`Object.freeze`: the receiver spelled `Object` is refused when `reference_declaration(receiver)` is some, so a shadowing binding is excluded and the global is what remains"
       }
     },
+    "rust/crates/solid-reactive-ir/src/overridden_handlers.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "ADR 1140 (spread_may_supply): a later spread whose value is neither a closed literal written in the spread nor of a complete declared key set may supply the key; answering yes there makes the earlier handler's owner row an obligation (handler-key-overridden), never a violation and never a clean"
+      }
+    },
     "rust/crates/solid-reactive-ir/src/owners.rs": {
       "default-on-missing": {
         "count": 1,
@@ -1191,8 +1211,8 @@
     },
     "rust/crates/solid-reactive-ir/src/package_action_calls.rs": {
       "default-on-missing": {
-        "count": 3,
-        "why": "polarity: yes means the value may be a function, which keeps the site (an uncertifiable SC2002 row, never a silence); a symbol with no declaration the compiler resolved, or a list of none, is a value nothing says is a type, so it stays a site. ADR 1114 family 3 slice E adds two with the same polarity: a tag no declaration resolves is taken as the library's (a site), and a writer root with no verdict is taken as not clear (a site)"
+        "count": 4,
+        "why": "polarity: yes means the value may be a function, which keeps the site (an uncertifiable SC2002 row, never a silence); a symbol with no declaration the compiler resolved, or a list of none, is a value nothing says is a type, so it stays a site. ADR 1114 family 3 slice E adds two with the same polarity: a tag no declaration resolves is taken as the library's (a site), and a writer root with no verdict is taken as not clear (a site); slice G adds one more: the named default in prototype_read takes a writer root with no verdict as not clear (a site)"
       },
       "private-judgment": {
         "count": 4,

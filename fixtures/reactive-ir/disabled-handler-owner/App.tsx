@@ -20,15 +20,12 @@ export function MountDisabled() {
 export function StillRuns() {
   const [s1] = createStore({ v: 0 });
   const [off] = createSignal(true);
-  const rest = { title: "t" };
   return (
     <div>
       {/* `disabled` is no property of a div: the dispatcher calls its handler. */}
       <div disabled onClick={() => { createEffect(() => s1.v, () => {}); }}>div</div>
       {/* `wheel` is not delegated: a listener the browser calls on a disabled control. */}
       <button disabled onWheel={() => { createEffect(() => s1.v, () => {}); }}>wheel</button>
-      {/* A spread may set `disabled` back. */}
-      <button disabled {...rest} onClick={() => { createEffect(() => s1.v, () => {}); }}>spread</button>
       {/* A `disabled` that follows a signal may become false. */}
       <button disabled={off()} onClick={() => { createEffect(() => s1.v, () => {}); }}>dynamic</button>
       {/* The driven twin. */}

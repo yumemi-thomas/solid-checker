@@ -368,6 +368,21 @@ impl PackageReachIndex {
             .map(|(root, named)| (root.as_str(), named))
     }
 
+    /// ADR 1129 (review F2): the roots of the installed packages whose closure writes a member `name` on a built-in's prototype, or may write one under a key nothing
+    /// decides (an unread closure included), clear or not: a premise that a standard method behaves as the library says fails wherever one is loaded, whether or not
+    /// the writer can reach Solid.
+    pub fn prototype_member_writers<'a>(
+        &'a self,
+        name: &str,
+    ) -> impl Iterator<Item = &'a str> + 'a {
+        self.prototype_writers
+            .get(name)
+            .into_iter()
+            .flatten()
+            .chain(self.prototype_writers_any.iter())
+            .map(String::as_str)
+    }
+
     /// ADR 1108 part 2: the roots of the installed packages that write `name` on a built-in's prototype by that name and may reach a Solid action (no any-name writer).
     pub fn prototype_writers_by_name<'a>(
         &'a self,

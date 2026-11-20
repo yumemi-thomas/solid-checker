@@ -72,10 +72,16 @@ use thiserror::Error;
 /// 101 (ADR 1120): the places that may break the plain-program premise (`premise_sites`).
 /// 102 (ADR 1114 families 2-4): every identifier reference's position by its parent node (`reference_positions`).
 /// 103 (ADR 1114 family 3): every operator expression that converts an operand (`converting_operators`).
-pub const AST_FACTS_SCHEMA: u32 = 103;
+/// 104 (ADR 1125): premise sites read computed keys by their proven texts, a definer's key argument, and key readers (`KeyReader`); timers named
+/// by alias or reached through any object are code sinks.
+/// 105 (ADR 1114 family 3 slice G): `converting_operators` also lists an assignment's value to a member and the computed keys of class
+/// methods and binding/assignment patterns.
+/// 106 (ADR 1133): a navigation URL not proven no `javascript:` URL and `srcdoc` markup are code sinks (`NavigationUrl`, `MarkupWrite`);
+/// `Object` handed on as a value is an `ObjectAssign` site, and `Object["assign"]` a key reader.
+pub const AST_FACTS_SCHEMA: u32 = 106;
 
 mod argument_completion;
-mod code_sinks;
+pub(crate) mod code_sinks;
 mod completion_call_cover;
 mod component_value_flow;
 mod computed_keys;
@@ -86,7 +92,7 @@ mod host_execution;
 mod inert_javascript;
 mod literal_array;
 mod module_requests;
-mod premise_sites;
+pub(crate) mod premise_sites;
 mod primitive_completion;
 mod proxy_get_forward;
 mod reference_positions;

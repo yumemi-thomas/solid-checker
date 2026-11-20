@@ -5048,6 +5048,2022 @@
    "fact": "round 2 (H2): a named callback also called by name is checked at every silent named-callback arm; helper-prop-read's read relabels from function-run-unplaced to callee-callback-timing"
   },
   {
+   "fixture": "reactive-ir/action-in-owned-scope-getters",
+   "key": "SC2002 package-may-call-action",
+   "from": 24,
+   "to": 25,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-globals",
+   "key": "SC2002 package-may-call-action",
+   "from": 11,
+   "to": 12,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-linked-package",
+   "key": "SC1001 package-value-read",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-linked-package",
+   "key": "SC2002 package-may-call-action",
+   "from": 3,
+   "to": 4,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-origins",
+   "key": "SC1001 package-value-read",
+   "from": 11,
+   "to": 12,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx holds a reader of own keys or values (key-reader assign), which may take Solid's stored handler and call it with no event. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-origins",
+   "key": "SC2002 package-may-call-action",
+   "from": 31,
+   "to": 33,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx holds a reader of own keys or values (key-reader assign), which may take Solid's stored handler and call it with no event. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-prototype-writer-shapes",
+   "key": "SC2002 package-may-call-action",
+   "from": 9,
+   "to": 10,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-prototype-writes",
+   "key": "SC2002 package-may-call-action",
+   "from": 4,
+   "to": 5,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-unread-packages",
+   "key": "SC2002 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx runs code built from a string (code sink StringTimer). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-unread-packages",
+   "key": "SC2002 package-may-call-action",
+   "from": 25,
+   "to": 26,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx runs code built from a string (code sink StringTimer). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-window-members",
+   "key": "SC2002 package-may-call-action",
+   "from": 3,
+   "to": 4,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-window-patterns",
+   "key": "SC2002 package-may-call-action",
+   "from": 4,
+   "to": 5,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/after-await-universe",
+   "key": "SC1001 function-run-unplaced",
+   "from": 24,
+   "to": 25,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx uses Proxy (proxy), which may intercept the listener API or the event global. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/after-await-universe",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx uses Proxy (proxy), which may intercept the listener API or the event global. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/async-call-prefix",
+   "key": "SC1001 function-run-unplaced",
+   "from": 4,
+   "to": 5,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx defines a coercion or protocol hook (coercion-hook *), which runs with the converted value as this. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/callback-props-reads",
+   "key": "SC1001 function-run-unplaced",
+   "from": 2,
+   "to": 5,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx runs code built from a string (code sink StringTimer). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/callee-callback-timing",
+   "key": "SC1001 function-run-unplaced",
+   "from": 2,
+   "to": 7,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): External.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/component-function-child",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx uses Reflect (proxy), which may intercept the listener API or the event global. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/context-read-package",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/context-read-package",
+   "key": "SC2002 package-may-call-action",
+   "from": 1,
+   "to": 4,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/context-read-package",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/context-read-package",
+   "key": "SC4002 provider-not-proven-above",
+   "from": 1,
+   "to": 3,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-context-getter",
+   "key": "SC2002 package-may-call-action",
+   "from": 17,
+   "to": 18,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-computed-delete",
+   "key": "SC2002 package-may-call-action",
+   "from": 19,
+   "to": 20,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-descriptor",
+   "key": "SC2002 package-may-call-action",
+   "from": 18,
+   "to": 19,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx calls a reflective definer (defineProperty). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-getter",
+   "key": "SC2002 package-may-call-action",
+   "from": 34,
+   "to": 35,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx holds a reader of own keys or values (key-reader assign), which may take Solid's stored handler and call it with no event. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-helper-delete",
+   "key": "SC2002 package-may-call-action",
+   "from": 18,
+   "to": 19,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx writes under a key nothing proves (delivery-key-write), which may replace the event global, the listener API or a node factory. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-package-write",
+   "key": "SC2002 package-may-call-action",
+   "from": 17,
+   "to": 18,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-spread",
+   "key": "SC2002 package-may-call-action",
+   "from": 19,
+   "to": 20,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-unseen-provider",
+   "key": "SC2002 package-may-call-action",
+   "from": 18,
+   "to": 19,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-integrity-visible-provider",
+   "key": "SC2002 package-may-call-action",
+   "from": 19,
+   "to": 20,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-object-escape",
+   "key": "SC2002 package-may-call-action",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-object-member",
+   "key": "SC2002 package-may-call-action",
+   "from": 2,
+   "to": 4,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-object-member",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-owner",
+   "key": "SC2002 package-may-call-action",
+   "from": 6,
+   "to": 22,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx runs code built from a string (code sink StringTimer). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-owner",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 0,
+   "to": 14,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx runs code built from a string (code sink StringTimer). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-owner",
+   "key": "SC4001 package-finding-at-entry",
+   "from": 7,
+   "to": 8,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx runs code built from a string (code sink StringTimer). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dispatch-and-copies",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx runs code built from a string (code sink StringTimer). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dispatch-and-copies",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx runs code built from a string (code sink StringTimer). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dispatch-and-copies",
+   "key": "SC2002 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx runs code built from a string (code sink StringTimer). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dispatch-and-copies",
+   "key": "SC5001 invocation-context-unproven",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx runs code built from a string (code sink StringTimer). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dispatch-and-copies",
+   "key": "SC5003 call-attributed-read",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx runs code built from a string (code sink StringTimer). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dispatch-and-copies",
+   "key": "SC9012 composite-callee-unresolved",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx runs code built from a string (code sink StringTimer). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/event-dispatch-shadow-shadow-creation",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "ADR 1125 owner bit: event delivery is intact, but App.tsx attaches a shadow root (ShadowRoot site attachShadow) and an effect's apply delivers an event, so a listener in the shadow tree may run inside the apply's effect-callback window and under its owner; the dispatch veto withholds the handler's owner proof",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off",
+   "key": "SC2008 handler-dispatch-unproven",
+   "from": 0,
+   "to": 28,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx uses Reflect (proxy), which may intercept the listener API or the event global. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-accessors",
+   "key": "SC2008 handler-dispatch-unproven",
+   "from": 0,
+   "to": 23,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx writes under `__proto__` (delivery-key-write), which may replace the event global, the listener API or a node factory. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-causes",
+   "key": "SC2008 handler-dispatch-unproven",
+   "from": 0,
+   "to": 49,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-flip",
+   "key": "SC2008 handler-dispatch-unproven",
+   "from": 0,
+   "to": 21,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-flip",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/forwarded-event-prop-eval-handler",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): the program uses eval (program_has_eval: code built from a string anywhere). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/fresh-stack-scheduler-read-role",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx runs code built from a string (code sink StringTimer). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/handed-net",
+   "key": "SC1001 function-run-unplaced",
+   "from": 1,
+   "to": 4,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): s8.tsx uses Reflect (proxy), which may intercept the listener API or the event global. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/impostor-host-intact",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx defines a coercion or protocol hook (coercion-hook *), which runs with the converted value as this. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/impostor-host-proto",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx calls a reflective definer (setPrototypeOf). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/impostor-receivers",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 7,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): Host.tsx writes under `addEventListener` (delivery-key-write), which may replace the event global, the listener API or a node factory. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/inferred-host-callback-invocation",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): src/main.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/invocation-flow",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): counterexamples.tsx calls a reflective definer (setPrototypeOf). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/invocation-flow",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): counterexamples.tsx calls a reflective definer (setPrototypeOf). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/invocation-flow",
+   "key": "SC9012 handed-member-dispatch",
+   "from": 7,
+   "to": 8,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): counterexamples.tsx calls a reflective definer (setPrototypeOf). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/invocation-flow",
+   "key": "SC9012 parameter-member-target-unresolved",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): counterexamples.tsx calls a reflective definer (setPrototypeOf). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/invocation-flow",
+   "key": "SC9012 withheld-object-member",
+   "from": 2,
+   "to": 4,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): counterexamples.tsx calls a reflective definer (setPrototypeOf). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/iteration-timer-handed-literal",
+   "key": "SC2001 function-run-unplaced",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx runs code built from a string (code sink StringTimer). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-bind-default",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): wire.ts runs code built from a string (code sink Eval). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-bind-reads-window",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): wire.ts runs code built from a string (code sink Eval). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-bind-returned-either",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): wire.ts runs code built from a string (code sink Eval). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-bind-written-parameter",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): wire.ts runs code built from a string (code sink Eval). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-composed-forof",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): wire.ts runs code built from a string (code sink Eval). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-composed-index",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): wire.ts defines a coercion or protocol hook (coercion-hook Symbol.iterator), which runs with the converted value as this. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-composed-path",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): wire.ts runs code built from a string (code sink Eval). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-composed-some",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): wire.ts runs code built from a string (code sink Eval). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-const-call-result-this",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): wire.ts runs code built from a string (code sink Eval). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-event-data-getter",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): wire.ts runs code built from a string (code sink Eval). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-event-data-window",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): wire.ts runs code built from a string (code sink Eval). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-event-value-called",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): wire.ts runs code built from a string (code sink Eval). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-let-single-arrow",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): wire.ts runs code built from a string (code sink StringTimer). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-listener-alias",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): wire.ts runs code built from a string (code sink Eval). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-listener-reads-target",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): wire.ts runs code built from a string (code sink Eval). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-object-listener",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): wire.ts defines a coercion or protocol hook (coercion-hook handleEvent), which runs with the converted value as this. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-path-find-open-key",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): wire.ts writes under a key nothing proves (delivery-key-write), which may replace the event global, the listener API or a node factory. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-path-find-patched",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): wire.ts defines a coercion or protocol hook (coercion-hook Symbol.iterator), which runs with the converted value as this. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/iteration-written-slots-handed-path-find-unguarded",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): wire.ts runs code built from a string (code sink Eval). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/lazy-default-consumer",
+   "key": "SC2002 package-may-call-action",
+   "from": 66,
+   "to": 67,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): Awaited.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/leaf-scope-helper-callback",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx runs code built from a string (code sink StringTimer). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/member-routes-after-await",
+   "key": "SC1001 function-run-unplaced",
+   "from": 20,
+   "to": 21,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx defines a coercion or protocol hook (coercion-hook toString), which runs with the converted value as this. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/object-member-import",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): negative.ts holds a reader of own keys or values (key-reader assign), which may take Solid's stored handler and call it with no event. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/owner-handed-inline",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx uses Reflect (proxy), which may intercept the listener API or the event global. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/owner-region-no-edge",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx runs code built from a string (code sink StringTimer). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/package-action-step",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/package-action-step",
+   "key": "SC2008 handler-dispatch-unproven",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/package-action-step-plain",
+   "key": "SC2008 handler-dispatch-unproven",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/package-owner-entries",
+   "key": "SC2002 package-may-call-action",
+   "from": 2,
+   "to": 6,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/package-owner-entries",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/package-owner-entries",
+   "key": "SC6002 package-finding-at-entry",
+   "from": 4,
+   "to": 5,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/package-return-producer",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): index.ts uses Proxy (proxy), which may intercept the listener API or the event global. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/package-write-entries",
+   "key": "SC2001 package-finding-at-entry",
+   "from": 4,
+   "to": 5,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/package-write-entries",
+   "key": "SC2002 package-may-call-action",
+   "from": 9,
+   "to": 10,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/pending-read-accounted",
+   "key": "SC1001 function-run-unplaced",
+   "from": 3,
+   "to": 6,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx holds a reader of own keys or values (key-reader keys), which may take Solid's stored handler and call it with no event. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/pending-read-accounted",
+   "key": "SC5001 invocation-context-unproven",
+   "from": 9,
+   "to": 11,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx holds a reader of own keys or values (key-reader keys), which may take Solid's stored handler and call it with no event. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/pending-read-accounted",
+   "key": "SC5001 source-pending-unproven",
+   "from": 1,
+   "to": 3,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx holds a reader of own keys or values (key-reader keys), which may take Solid's stored handler and call it with no event. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/pending-read-accounted",
+   "key": "SC5003 async-read-unaccounted",
+   "from": 4,
+   "to": 6,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx holds a reader of own keys or values (key-reader keys), which may take Solid's stored handler and call it with no event. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/pending-read-accounted",
+   "key": "SC5003 call-attributed-read",
+   "from": 8,
+   "to": 10,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx holds a reader of own keys or values (key-reader keys), which may take Solid's stored handler and call it with no event. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/pending-read-accounted",
+   "key": "SC9012 withheld-object-member",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx holds a reader of own keys or values (key-reader keys), which may take Solid's stored handler and call it with no event. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/phase-handed-by-name",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx uses Reflect (proxy), which may intercept the listener API or the event global. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/projection-writes",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx writes under a key nothing proves (delivery-key-write), which may replace the event global, the listener API or a node factory. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/prop-body-call-guard",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx uses Reflect (proxy), which may intercept the listener API or the event global. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/prop-callback-roles",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 5,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/prop-callback-roles",
+   "key": "SC2001 function-run-unplaced",
+   "from": 6,
+   "to": 11,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/prop-head-get",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx defines a coercion or protocol hook (coercion-hook then), which runs with the converted value as this. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/rc21-class-method-write",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx uses Reflect (proxy), which may intercept the listener API or the event global. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/rc21-class-method-write",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx uses Reflect (proxy), which may intercept the listener API or the event global. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/rc21-class-method-write",
+   "key": "SC9012 value-in-carrier",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx uses Reflect (proxy), which may intercept the listener API or the event global. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/rc21-flush-in-action-unplaced",
+   "key": "SC2002 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx defines a coercion or protocol hook (coercion-hook toString), which runs with the converted value as this. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/rc21-flush-in-action-unplaced",
+   "key": "SC2008 handler-dispatch-unproven",
+   "from": 0,
+   "to": 11,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx defines a coercion or protocol hook (coercion-hook toString), which runs with the converted value as this. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/rc21-whole-store-reads",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx uses Reflect (proxy), which may intercept the listener API or the event global. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/read-after-await-reach",
+   "key": "SC1001 function-run-unplaced",
+   "from": 62,
+   "to": 64,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx defines a coercion or protocol hook (coercion-hook then), which runs with the converted value as this. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/read-after-await-reach",
+   "key": "SC5003 pending-read-unresolved",
+   "from": 77,
+   "to": 79,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx defines a coercion or protocol hook (coercion-hook then), which runs with the converted value as this. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/read-after-await-reach",
+   "key": "SC9012 tuple-iteration-written",
+   "from": 321,
+   "to": 323,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx defines a coercion or protocol hook (coercion-hook then), which runs with the converted value as this. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/read-handed-by-name",
+   "key": "SC1001 function-run-unplaced",
+   "from": 8,
+   "to": 9,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx uses Reflect (proxy), which may intercept the listener API or the event global. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/root-callback-return",
+   "key": "SC9012 value-held-in-binding",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/route-config-use-action-function",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): Routes.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/route-config-use-action-function",
+   "key": "SC2002 package-may-call-action",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): Routes.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/route-config-use-action-kept",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): Routes.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/route-config-use-action-kept",
+   "key": "SC2002 package-may-call-action",
+   "from": 6,
+   "to": 9,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): Routes.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/router-params-use-action-alias",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx writes under a key nothing proves (delivery-key-write), which may replace the event global, the listener API or a node factory. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/router-params-use-action-alias",
+   "key": "SC2002 package-may-call-action",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx writes under a key nothing proves (delivery-key-write), which may replace the event global, the listener API or a node factory. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/router-params-use-action-apply",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx writes under a key nothing proves (delivery-key-write), which may replace the event global, the listener API or a node factory. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/router-params-use-action-apply",
+   "key": "SC2002 package-may-call-action",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx writes under a key nothing proves (delivery-key-write), which may replace the event global, the listener API or a node factory. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/router-params-use-action-function",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx writes under a key nothing proves (delivery-key-write), which may replace the event global, the listener API or a node factory. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/router-params-use-action-function",
+   "key": "SC2002 package-may-call-action",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx writes under a key nothing proves (delivery-key-write), which may replace the event global, the listener API or a node factory. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/router-params-use-action-imported",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/router-params-use-action-imported",
+   "key": "SC2002 package-may-call-action",
+   "from": 7,
+   "to": 8,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/router-params-use-action-imported-escaped",
+   "key": "SC1001 package-value-read",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/router-params-use-action-imported-escaped",
+   "key": "SC2002 package-may-call-action",
+   "from": 4,
+   "to": 5,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/router-params-use-action-imported-function",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/router-params-use-action-imported-function",
+   "key": "SC2002 package-may-call-action",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/router-params-use-action-imported-namespace",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/router-params-use-action-imported-namespace",
+   "key": "SC2002 package-may-call-action",
+   "from": 6,
+   "to": 7,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/router-params-use-action-imported-reexported",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/router-params-use-action-imported-reexported",
+   "key": "SC2002 package-may-call-action",
+   "from": 3,
+   "to": 4,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/router-params-use-action-kept",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/router-params-use-action-kept",
+   "key": "SC2002 package-may-call-action",
+   "from": 10,
+   "to": 13,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/router-params-use-action-namespace",
+   "key": "SC1001 package-value-read",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx writes under a key nothing proves (delivery-key-write), which may replace the event global, the listener API or a node factory. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/router-params-use-action-namespace",
+   "key": "SC2002 package-may-call-action",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx writes under a key nothing proves (delivery-key-write), which may replace the event global, the listener API or a node factory. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/rule-negatives",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): Sources.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/store-delete",
+   "key": "SC1001 function-run-unplaced",
+   "from": 11,
+   "to": 12,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx writes under a key nothing proves (delivery-key-write), which may replace the event global, the listener API or a node factory. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/store-element-flow",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 11,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx holds a reader of own keys or values (key-reader assign), which may take Solid's stored handler and call it with no event. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/store-element-flow",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx holds a reader of own keys or values (key-reader assign), which may take Solid's stored handler and call it with no event. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/store-element-flow",
+   "key": "SC9012 value-in-carrier",
+   "from": 5,
+   "to": 7,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx holds a reader of own keys or values (key-reader assign), which may take Solid's stored handler and call it with no event. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/store-for-head-write",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx holds a reader of own keys or values (key-reader for-in), which may take Solid's stored handler and call it with no event. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/store-operation-may-not-write",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 12,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx holds a reader of own keys or values (key-reader assign), which may take Solid's stored handler and call it with no event. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/store-operation-may-not-write",
+   "key": "SC9012 value-in-carrier",
+   "from": 3,
+   "to": 7,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx holds a reader of own keys or values (key-reader assign), which may take Solid's stored handler and call it with no event. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/store-standard-library-alias",
+   "key": "SC9012 value-in-carrier",
+   "from": 2,
+   "to": 4,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx holds a reader of own keys or values (key-reader assign), which may take Solid's stored handler and call it with no event. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/store-standard-library-writes",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 5,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx holds a reader of own keys or values (key-reader assign), which may take Solid's stored handler and call it with no event. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/store-standard-library-writes",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx holds a reader of own keys or values (key-reader assign), which may take Solid's stored handler and call it with no event. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/store-standard-library-writes",
+   "key": "SC9012 value-in-carrier",
+   "from": 18,
+   "to": 30,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx holds a reader of own keys or values (key-reader assign), which may take Solid's stored handler and call it with no event. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/store-strict-read-keys",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx defines a coercion or protocol hook (coercion-hook then), which runs with the converted value as this. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/store-sub-value-flow",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 18,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx holds a reader of own keys or values (key-reader entries), which may take Solid's stored handler and call it with no event. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/stored-throw-held-callbacks",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx runs code built from a string (code sink StringTimer). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/stored-throw-held-callbacks",
+   "key": "SC9012 withheld-object-member",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx runs code built from a string (code sink StringTimer). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-bun",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-bun",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-bun",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-node",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-node",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-node",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-node-suite-inline",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-suites-playwright-module",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-async-dispatch",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-async-dispatch",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-async-dispatch",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-exported",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-exported",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-exported",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-exported-barrel",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-exported-barrel",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-exported-barrel",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-literal-async-destructured",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-literal-async-destructured",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-literal-async-destructured",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-literal-test",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-literal-test",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-literal-test",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-open",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-open",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-open",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-passed-through",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-passed-through",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-passed-through",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-test-only",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-test-only",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-test-only",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-members",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-members",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-members",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-store",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-store",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-store",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-suite-scheduled",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest4",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest4",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest4",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/tuple-hazard-sites",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): the program uses eval (program_has_eval: code built from a string anywhere). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/tuple-hazard-sites-shadowed",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): separate.ts defines a coercion or protocol hook (coercion-hook Symbol.iterator), which runs with the converted value as this. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/tuple-hazard-sites-shadowed",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): separate.ts defines a coercion or protocol hook (coercion-hook Symbol.iterator), which runs with the converted value as this. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/unplaced-site-obligations",
+   "key": "SC2001 function-run-unplaced",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): PrimitiveValue.tsx uses Reflect (proxy), which may intercept the listener API or the event global. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/unplaced-site-obligations",
+   "key": "SC2005 function-run-unplaced",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): PrimitiveValue.tsx uses Reflect (proxy), which may intercept the listener API or the event global. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/value-flow-review",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx defines a coercion or protocol hook (coercion-hook *), which runs with the converted value as this. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/value-use-census",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): AtModule.tsx holds a reader of own keys or values (key-reader values), which may take Solid's stored handler and call it with no event. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/value-use-census",
+   "key": "SC9012 value-held-in-binding",
+   "from": 34,
+   "to": 35,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): AtModule.tsx holds a reader of own keys or values (key-reader values), which may take Solid's stored handler and call it with no event. The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/write-named-closure-in-root",
+   "key": "SC2002 function-run-unplaced",
+   "from": 2,
+   "to": 4,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx runs code built from a string (code sink StringTimer). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "uncertifiable-repro/open-program-packages-ui",
+   "key": "SC1001 function-run-unplaced",
+   "from": 1,
+   "to": 3,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): src/select.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "uncertifiable-repro/open-program-packages-ui",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): src/select.test.tsx loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC1001 function-run-unplaced",
+   "from": 10,
+   "to": 18,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): src/argument-of-package-listeners.ts loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC2002 package-may-call-action",
+   "from": 38,
+   "to": 42,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): src/argument-of-package-listeners.ts loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC5003 pending-read-unresolved",
+   "from": 64,
+   "to": 65,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): src/argument-of-package-listeners.ts loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC5008 pending-read-unresolved",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): src/argument-of-package-listeners.ts loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC9012 closed-parameter-member-dispatch",
+   "from": 3,
+   "to": 4,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): src/argument-of-package-listeners.ts loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC9012 listener-reach",
+   "from": 0,
+   "to": 6,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): src/argument-of-package-listeners.ts loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC9012 parameter-member-target-unresolved",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): src/argument-of-package-listeners.ts loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC9012 tuple-iteration-written",
+   "from": 164,
+   "to": 165,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): src/argument-of-package-listeners.ts loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC9012 withheld-object-member",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1125",
+   "fact": "event delivery not proven intact (event-delivery-hazard): src/argument-of-package-listeners.ts loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
+   "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
    "fixture": "reactive-ir/action-in-owned-scope-walk",
    "key": "SC2002 package-may-call-action",
    "from": 41,
@@ -5446,6 +7462,512 @@
    "to": 160,
    "adr": "ADR 1114",
    "fact": "family 3 slice F (Fable review round 1, F5): under a package prototype writer that may reach Solid no package is clear, and each JSX template root is a site under a writer of cloneNode/importNode, the methods the runtime clones it with: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-origins",
+   "key": "SC2002 package-may-call-action",
+   "from": 31,
+   "to": 50,
+   "adr": "ADR 1114",
+   "fact": "family 3 (fail closed under a package prototype writer) joined with ADR 1125 in bundle z: the calls 1125's delivery proofs now place are SC2002 package-may-call-action uncertifiable too; 38 rows, additions only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-prototype-writer-shapes",
+   "key": "SC2002 package-may-call-action",
+   "from": 9,
+   "to": 25,
+   "adr": "ADR 1114",
+   "fact": "family 3 (fail closed under a package prototype writer) joined with ADR 1125 in bundle z: the calls 1125's delivery proofs now place are SC2002 package-may-call-action uncertifiable too; 38 rows, additions only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-prototype-writes",
+   "key": "SC2002 package-may-call-action",
+   "from": 4,
+   "to": 16,
+   "adr": "ADR 1114",
+   "fact": "family 3 (fail closed under a package prototype writer) joined with ADR 1125 in bundle z: the calls 1125's delivery proofs now place are SC2002 package-may-call-action uncertifiable too; 38 rows, additions only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-unread-packages",
+   "key": "SC2002 package-may-call-action",
+   "from": 25,
+   "to": 43,
+   "adr": "ADR 1114",
+   "fact": "family 3 (fail closed under a package prototype writer) joined with ADR 1125 in bundle z: the calls 1125's delivery proofs now place are SC2002 package-may-call-action uncertifiable too; 38 rows, additions only, no violation or clean moved"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC2002 package-may-call-action",
+   "from": 38,
+   "to": 501,
+   "adr": "ADR 1114",
+   "fact": "family 3 (fail closed under a package prototype writer) joined with ADR 1125 in bundle z: the calls 1125's delivery proofs now place are SC2002 package-may-call-action uncertifiable too; 38 rows, additions only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-origins",
+   "key": "SC2002 package-may-call-action",
+   "from": 47,
+   "to": 50,
+   "adr": "ADR 1125",
+   "fact": "measured against main with ADR 1114 family 3: the calls 1125's delivery proofs place fall under family 3's fail-closed rule (SC2002 package-may-call-action uncertifiable); additions only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-prototype-iteration",
+   "key": "SC2002 package-may-call-action",
+   "from": 14,
+   "to": 16,
+   "adr": "ADR 1125",
+   "fact": "measured against main with ADR 1114 family 3: the calls 1125's delivery proofs place fall under family 3's fail-closed rule (SC2002 package-may-call-action uncertifiable); additions only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-prototype-sites",
+   "key": "SC2002 package-may-call-action",
+   "from": 35,
+   "to": 37,
+   "adr": "ADR 1125",
+   "fact": "measured against main with ADR 1114 family 3: the calls 1125's delivery proofs place fall under family 3's fail-closed rule (SC2002 package-may-call-action uncertifiable); additions only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-prototype-writer-shapes",
+   "key": "SC2002 package-may-call-action",
+   "from": 23,
+   "to": 25,
+   "adr": "ADR 1125",
+   "fact": "measured against main with ADR 1114 family 3: the calls 1125's delivery proofs place fall under family 3's fail-closed rule (SC2002 package-may-call-action uncertifiable); additions only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-prototype-writes",
+   "key": "SC2002 package-may-call-action",
+   "from": 14,
+   "to": 16,
+   "adr": "ADR 1125",
+   "fact": "measured against main with ADR 1114 family 3: the calls 1125's delivery proofs place fall under family 3's fail-closed rule (SC2002 package-may-call-action uncertifiable); additions only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-unread-packages",
+   "key": "SC2002 package-may-call-action",
+   "from": 41,
+   "to": 43,
+   "adr": "ADR 1125",
+   "fact": "measured against main with ADR 1114 family 3: the calls 1125's delivery proofs place fall under family 3's fail-closed rule (SC2002 package-may-call-action uncertifiable); additions only, no violation or clean moved"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC2002 package-may-call-action",
+   "from": 467,
+   "to": 501,
+   "adr": "ADR 1125",
+   "fact": "measured against main with ADR 1114 family 3: the calls 1125's delivery proofs place fall under family 3's fail-closed rule (SC2002 package-may-call-action uncertifiable); additions only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/after-await-library-patched",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1137",
+   "fact": "a timer handed a string (setTimeout(\"…\") or an object whose toString is the code) builds code from a string: every standard call is withheld, so a read placed through one is unplaced or an impostor's"
+  },
+  {
+   "fixture": "reactive-ir/read-after-await-purity",
+   "key": "SC1001 function-run-unplaced",
+   "from": 4,
+   "to": 10,
+   "adr": "ADR 1137",
+   "fact": "a timer handed a string (setTimeout(\"…\") or an object whose toString is the code) builds code from a string: every standard call is withheld, so a read placed through one is unplaced or an impostor's"
+  },
+  {
+   "fixture": "reactive-ir/read-after-await-purity",
+   "key": "SC1002 function-run-unplaced",
+   "from": 1,
+   "to": 5,
+   "adr": "ADR 1137",
+   "fact": "a timer handed a string (setTimeout(\"…\") or an object whose toString is the code) builds code from a string: every standard call is withheld, so a read placed through one is unplaced or an impostor's"
+  },
+  {
+   "fixture": "reactive-ir/read-after-await-purity",
+   "key": "SC1002 standard-member-impostor",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 1137",
+   "fact": "a timer handed a string (setTimeout(\"…\") or an object whose toString is the code) builds code from a string: every standard call is withheld, so a read placed through one is unplaced or an impostor's"
+  },
+  {
+   "fixture": "reactive-ir/read-after-await-purity",
+   "key": "SC2003 store-operation-may-not-write",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1137",
+   "fact": "a timer handed a string (setTimeout(\"…\") or an object whose toString is the code) builds code from a string: every standard call is withheld, so a read placed through one is unplaced or an impostor's"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-origins",
+   "key": "SC2002 package-may-call-action",
+   "from": 31,
+   "to": 58,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G (Fable review round 2, N1-N3, N5): under a package prototype writer, a member read, an object pattern and `in` under an any-name writer, a member assignment's value and a computed key of a class method or a pattern, a conversion whatever names its native path reads (the named default), and an async function's returned value are SC2002 sites: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-prototype-writer-shapes",
+   "key": "SC2002 package-may-call-action",
+   "from": 9,
+   "to": 25,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G (Fable review round 2, N1-N3, N5): under a package prototype writer, a member read, an object pattern and `in` under an any-name writer, a member assignment's value and a computed key of a class method or a pattern, a conversion whatever names its native path reads (the named default), and an async function's returned value are SC2002 sites: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-prototype-writes",
+   "key": "SC2002 package-may-call-action",
+   "from": 4,
+   "to": 15,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G (Fable review round 2, N1-N3, N5): under a package prototype writer, a member read, an object pattern and `in` under an any-name writer, a member assignment's value and a computed key of a class method or a pattern, a conversion whatever names its native path reads (the named default), and an async function's returned value are SC2002 sites: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-unread-packages",
+   "key": "SC2002 package-may-call-action",
+   "from": 25,
+   "to": 43,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G (Fable review round 2, N1-N3, N5): under a package prototype writer, a member read, an object pattern and `in` under an any-name writer, a member assignment's value and a computed key of a class method or a pattern, a conversion whatever names its native path reads (the named default), and an async function's returned value are SC2002 sites: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-walk",
+   "key": "SC2002 package-may-call-action",
+   "from": 41,
+   "to": 49,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G (Fable review round 2, N1-N3, N5): under a package prototype writer, a member read, an object pattern and `in` under an any-name writer, a member assignment's value and a computed key of a class method or a pattern, a conversion whatever names its native path reads (the named default), and an async function's returned value are SC2002 sites: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/dependency-value-flow",
+   "key": "SC2002 package-may-call-action",
+   "from": 19,
+   "to": 58,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G (Fable review round 2, N1-N3, N5): under a package prototype writer, a member read, an object pattern and `in` under an any-name writer, a member assignment's value and a computed key of a class method or a pattern, a conversion whatever names its native path reads (the named default), and an async function's returned value are SC2002 sites: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/inert-global-reads-any-receiver",
+   "key": "SC2002 package-may-call-action",
+   "from": 5,
+   "to": 6,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G (Fable review round 2, N1-N3, N5): under a package prototype writer, a member read, an object pattern and `in` under an any-name writer, a member assignment's value and a computed key of a class method or a pattern, a conversion whatever names its native path reads (the named default), and an async function's returned value are SC2002 sites: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/inert-global-reads-document-receiver",
+   "key": "SC2002 package-may-call-action",
+   "from": 5,
+   "to": 6,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G (Fable review round 2, N1-N3, N5): under a package prototype writer, a member read, an object pattern and `in` under an any-name writer, a member assignment's value and a computed key of a class method or a pattern, a conversion whatever names its native path reads (the named default), and an async function's returned value are SC2002 sites: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/inert-global-reads-event-receiver",
+   "key": "SC2002 package-may-call-action",
+   "from": 5,
+   "to": 6,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G (Fable review round 2, N1-N3, N5): under a package prototype writer, a member read, an object pattern and `in` under an any-name writer, a member assignment's value and a computed key of a class method or a pattern, a conversion whatever names its native path reads (the named default), and an async function's returned value are SC2002 sites: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper",
+   "key": "SC2002 package-may-call-action",
+   "from": 122,
+   "to": 337,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G (Fable review round 2, N1-N3, N5): under a package prototype writer, a member read, an object pattern and `in` under an any-name writer, a member assignment's value and a computed key of a class method or a pattern, a conversion whatever names its native path reads (the named default), and an async function's returned value are SC2002 sites: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/reviewed-vitest-4-1",
+   "key": "SC2002 package-may-call-action",
+   "from": 32,
+   "to": 34,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G (Fable review round 2, N1-N3, N5): under a package prototype writer, a member read, an object pattern and `in` under an any-name writer, a member assignment's value and a computed key of a class method or a pattern, a conversion whatever names its native path reads (the named default), and an async function's returned value are SC2002 sites: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/route-components-destructured",
+   "key": "SC2002 package-may-call-action",
+   "from": 0,
+   "to": 19,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G (Fable review round 2, N1-N3, N5): under a package prototype writer, a member read, an object pattern and `in` under an any-name writer, a member assignment's value and a computed key of a class method or a pattern, a conversion whatever names its native path reads (the named default), and an async function's returned value are SC2002 sites: uncertifiable only"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC2002 package-may-call-action",
+   "from": 38,
+   "to": 499,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G (Fable review round 2, N1-N3, N5): under a package prototype writer, a member read, an object pattern and `in` under an any-name writer, a member assignment's value and a computed key of a class method or a pattern, a conversion whatever names its native path reads (the named default), and an async function's returned value are SC2002 sites: uncertifiable only"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc4001",
+   "key": "SC2002 package-may-call-action",
+   "from": 43,
+   "to": 171,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G (Fable review round 2, N1-N3, N5): under a package prototype writer, a member read, an object pattern and `in` under an any-name writer, a member assignment's value and a computed key of a class method or a pattern, a conversion whatever names its native path reads (the named default), and an async function's returned value are SC2002 sites: uncertifiable only"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-origins",
+   "key": "SC2002 package-may-call-action",
+   "from": 50,
+   "to": 61,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G and N4 (reads, member assignments, computed keys, the named default and async returns are sites under a package prototype writer), measured on main with ADR 1125: SC2002 package-may-call-action uncertifiable only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-prototype-iteration",
+   "key": "SC2002 package-may-call-action",
+   "from": 16,
+   "to": 17,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G and N4 (reads, member assignments, computed keys, the named default and async returns are sites under a package prototype writer), measured on main with ADR 1125: SC2002 package-may-call-action uncertifiable only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-prototype-sites",
+   "key": "SC2002 package-may-call-action",
+   "from": 37,
+   "to": 38,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G and N4 (reads, member assignments, computed keys, the named default and async returns are sites under a package prototype writer), measured on main with ADR 1125: SC2002 package-may-call-action uncertifiable only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-prototype-writer-shapes",
+   "key": "SC2002 package-may-call-action",
+   "from": 25,
+   "to": 27,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G and N4 (reads, member assignments, computed keys, the named default and async returns are sites under a package prototype writer), measured on main with ADR 1125: SC2002 package-may-call-action uncertifiable only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-prototype-writes",
+   "key": "SC2002 package-may-call-action",
+   "from": 16,
+   "to": 17,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G and N4 (reads, member assignments, computed keys, the named default and async returns are sites under a package prototype writer), measured on main with ADR 1125: SC2002 package-may-call-action uncertifiable only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-unread-packages",
+   "key": "SC2002 package-may-call-action",
+   "from": 43,
+   "to": 45,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G and N4 (reads, member assignments, computed keys, the named default and async returns are sites under a package prototype writer), measured on main with ADR 1125: SC2002 package-may-call-action uncertifiable only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-walk",
+   "key": "SC2002 package-may-call-action",
+   "from": 45,
+   "to": 49,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G and N4 (reads, member assignments, computed keys, the named default and async returns are sites under a package prototype writer), measured on main with ADR 1125: SC2002 package-may-call-action uncertifiable only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/dependency-value-flow",
+   "key": "SC2002 package-may-call-action",
+   "from": 50,
+   "to": 58,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G and N4 (reads, member assignments, computed keys, the named default and async returns are sites under a package prototype writer), measured on main with ADR 1125: SC2002 package-may-call-action uncertifiable only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/package-access-helper",
+   "key": "SC2002 package-may-call-action",
+   "from": 328,
+   "to": 337,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G and N4 (reads, member assignments, computed keys, the named default and async returns are sites under a package prototype writer), measured on main with ADR 1125: SC2002 package-may-call-action uncertifiable only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/route-components-destructured",
+   "key": "SC2002 package-may-call-action",
+   "from": 18,
+   "to": 19,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G and N4 (reads, member assignments, computed keys, the named default and async returns are sites under a package prototype writer), measured on main with ADR 1125: SC2002 package-may-call-action uncertifiable only, no violation or clean moved"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC2002 package-may-call-action",
+   "from": 501,
+   "to": 541,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G and N4 (reads, member assignments, computed keys, the named default and async returns are sites under a package prototype writer), measured on main with ADR 1125: SC2002 package-may-call-action uncertifiable only, no violation or clean moved"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc4001",
+   "key": "SC2002 package-may-call-action",
+   "from": 160,
+   "to": 171,
+   "adr": "ADR 1114",
+   "fact": "family 3 slice G and N4 (reads, member assignments, computed keys, the named default and async returns are sites under a package prototype writer), measured on main with ADR 1125: SC2002 package-may-call-action uncertifiable only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/context-provider-open",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 1142",
+   "fact": "a provider-free context read (SC4002's claim) in a layer the ADR 0868 entry walk calls open (a function carried on by a forEach, stored, handed to a call, a member, a prop arrow, an exported component of an open program, a dynamic component, a generator layer, a reassigned let) gains SC4001's owner-callers-unenumerated obligation beside the claim; measured against main a64fc92ad, additions only, no violation or clean moved, corpus 0 rows"
+  },
+  {
+   "fixture": "reactive-ir/namespace-destructured-api",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 3,
+   "to": 4,
+   "adr": "ADR 1142",
+   "fact": "a provider-free context read (SC4002's claim) in a layer the ADR 0868 entry walk calls open (a function carried on by a forEach, stored, handed to a call, a member, a prop arrow, an exported component of an open program, a dynamic component, a generator layer, a reassigned let) gains SC4001's owner-callers-unenumerated obligation beside the claim; measured against main a64fc92ad, additions only, no violation or clean moved, corpus 0 rows"
+  },
+  {
+   "fixture": "reactive-ir/owner-callback-prop",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 2,
+   "to": 5,
+   "adr": "ADR 1142",
+   "fact": "a provider-free context read (SC4002's claim) in a layer the ADR 0868 entry walk calls open (a function carried on by a forEach, stored, handed to a call, a member, a prop arrow, an exported component of an open program, a dynamic component, a generator layer, a reassigned let) gains SC4001's owner-callers-unenumerated obligation beside the claim; measured against main a64fc92ad, additions only, no violation or clean moved, corpus 0 rows"
+  },
+  {
+   "fixture": "reactive-ir/owner-handed-inline",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1142",
+   "fact": "a provider-free context read (SC4002's claim) in a layer the ADR 0868 entry walk calls open (a function carried on by a forEach, stored, handed to a call, a member, a prop arrow, an exported component of an open program, a dynamic component, a generator layer, a reassigned let) gains SC4001's owner-callers-unenumerated obligation beside the claim; measured against main a64fc92ad, additions only, no violation or clean moved, corpus 0 rows"
+  },
+  {
+   "fixture": "reactive-ir/stored-throw-dynamic-mount",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 5,
+   "to": 15,
+   "adr": "ADR 1142",
+   "fact": "a provider-free context read (SC4002's claim) in a layer the ADR 0868 entry walk calls open (a function carried on by a forEach, stored, handed to a call, a member, a prop arrow, an exported component of an open program, a dynamic component, a generator layer, a reassigned let) gains SC4001's owner-callers-unenumerated obligation beside the claim; measured against main a64fc92ad, additions only, no violation or clean moved, corpus 0 rows"
+  },
+  {
+   "fixture": "reactive-ir/stored-throw-observation",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1142",
+   "fact": "a provider-free context read (SC4002's claim) in a layer the ADR 0868 entry walk calls open (a function carried on by a forEach, stored, handed to a call, a member, a prop arrow, an exported component of an open program, a dynamic component, a generator layer, a reassigned let) gains SC4001's owner-callers-unenumerated obligation beside the claim; measured against main a64fc92ad, additions only, no violation or clean moved, corpus 0 rows"
+  },
+  {
+   "fixture": "reactive-ir/stored-throw-portal",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1142",
+   "fact": "a provider-free context read (SC4002's claim) in a layer the ADR 0868 entry walk calls open (a function carried on by a forEach, stored, handed to a call, a member, a prop arrow, an exported component of an open program, a dynamic component, a generator layer, a reassigned let) gains SC4001's owner-callers-unenumerated obligation beside the claim; measured against main a64fc92ad, additions only, no violation or clean moved, corpus 0 rows"
+  },
+  {
+   "fixture": "reactive-ir/stored-throw-returned-param",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1142",
+   "fact": "a provider-free context read (SC4002's claim) in a layer the ADR 0868 entry walk calls open (a function carried on by a forEach, stored, handed to a call, a member, a prop arrow, an exported component of an open program, a dynamic component, a generator layer, a reassigned let) gains SC4001's owner-callers-unenumerated obligation beside the claim; measured against main a64fc92ad, additions only, no violation or clean moved, corpus 0 rows"
+  },
+  {
+   "fixture": "uncertifiable-repro/open-program-packages-ui",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 4,
+   "to": 5,
+   "adr": "ADR 1142",
+   "fact": "a provider-free context read (SC4002's claim) in a layer the ADR 0868 entry walk calls open (a function carried on by a forEach, stored, handed to a call, a member, a prop arrow, an exported component of an open program, a dynamic component, a generator layer, a reassigned let) gains SC4001's owner-callers-unenumerated obligation beside the claim; measured against main a64fc92ad, additions only, no violation or clean moved, corpus 0 rows"
+  },
+  {
+   "fixture": "reactive-ir/literal-argument-member-dispatch",
+   "key": "SC1001 function-run-unplaced",
+   "from": 11,
+   "to": 13,
+   "adr": "ADR 1133",
+   "fact": "event delivery not proven intact (event-delivery-hazard): nested-source.ts reads a member under a computed key nothing proves and keeps or calls the value (unproven-key, ADR 1133 F7): it may be any definer or Solid's stored handler. The dispatch veto withholds every event proof of the program's handlers",
+   "why": "fail-closed: code built from a string, or a definer or reader under an unproven key, may make a handler run with no event; the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/literal-argument-member-dispatch",
+   "key": "SC9012 parameter-member-target-unresolved",
+   "from": 24,
+   "to": 26,
+   "adr": "ADR 1133",
+   "fact": "event delivery not proven intact (event-delivery-hazard): nested-source.ts reads a member under a computed key nothing proves and keeps or calls the value (unproven-key, ADR 1133 F7): it may be any definer or Solid's stored handler. The dispatch veto withholds every event proof of the program's handlers",
+   "why": "fail-closed: code built from a string, or a definer or reader under an unproven key, may make a handler run with no event; the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/obligation-exclusion-boundary",
+   "key": "SC9012 parameter-member-target-unresolved",
+   "from": 3,
+   "to": 4,
+   "adr": "ADR 1133",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx reads a member under a computed key nothing proves and keeps or calls the value (unproven-key, ADR 1133 F7): it may be any definer or Solid's stored handler. The dispatch veto withholds every event proof of the program's handlers",
+   "why": "fail-closed: code built from a string, or a definer or reader under an unproven key, may make a handler run with no event; the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/obligation-exclusion-boundary",
+   "key": "SC9012 parameter-use-unmodeled",
+   "from": 21,
+   "to": 22,
+   "adr": "ADR 1133",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx reads a member under a computed key nothing proves and keeps or calls the value (unproven-key, ADR 1133 F7): it may be any definer or Solid's stored handler. The dispatch veto withholds every event proof of the program's handlers",
+   "why": "fail-closed: code built from a string, or a definer or reader under an unproven key, may make a handler run with no event; the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/rc21-created-anchor",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1133",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx writes `anchor.href = url` with a URL nothing proves is no `javascript:` URL (NavigationUrl, ADR 1133 F5). The dispatch veto withholds every event proof of the program's handlers",
+   "why": "fail-closed: code built from a string, or a definer or reader under an unproven key, may make a handler run with no event; the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/rc21-created-anchor",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1133",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx writes `anchor.href = url` with a URL nothing proves is no `javascript:` URL (NavigationUrl, ADR 1133 F5). The dispatch veto withholds every event proof of the program's handlers",
+   "why": "fail-closed: code built from a string, or a definer or reader under an unproven key, may make a handler run with no event; the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/rc21-created-anchor-listener",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1133",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx writes `anchor.href = url` with a URL nothing proves is no `javascript:` URL (NavigationUrl, ADR 1133 F5). The dispatch veto withholds every event proof of the program's handlers",
+   "why": "fail-closed: code built from a string, or a definer or reader under an unproven key, may make a handler run with no event; the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/rc21-created-anchor-listener",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1133",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx writes `anchor.href = url` with a URL nothing proves is no `javascript:` URL (NavigationUrl, ADR 1133 F5). The dispatch veto withholds every event proof of the program's handlers",
+   "why": "fail-closed: code built from a string, or a definer or reader under an unproven key, may make a handler run with no event; the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/rc21-created-anchor-removed",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1133",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx writes `anchor.href = url` with a URL nothing proves is no `javascript:` URL (NavigationUrl, ADR 1133 F5). The dispatch veto withholds every event proof of the program's handlers",
+   "why": "fail-closed: code built from a string, or a definer or reader under an unproven key, may make a handler run with no event; the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/rc21-created-anchor-removed",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1133",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx writes `anchor.href = url` with a URL nothing proves is no `javascript:` URL (NavigationUrl, ADR 1133 F5). The dispatch veto withholds every event proof of the program's handlers",
+   "why": "fail-closed: code built from a string, or a definer or reader under an unproven key, may make a handler run with no event; the new rows are uncertifiable, never violations"
   }
  ]
 }

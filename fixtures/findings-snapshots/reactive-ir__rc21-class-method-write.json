@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-class-method-write/App.tsx",
+      "start": 315,
+      "end": 332,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "violation",
@@ -9,6 +20,28 @@
       "path": "fixtures/reactive-ir/rc21-class-method-write/App.tsx",
       "start": 315,
       "end": 334,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-class-method-write/App.tsx",
+      "start": 579,
+      "end": 642,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-class-method-write/App.tsx",
+      "start": 652,
+      "end": 669,
       "fixes": 0
     },
     {
@@ -36,7 +69,7 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "value-to-unresolved-callee",
+      "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-class-method-write/App.tsx",
       "start": 893,
@@ -55,6 +88,28 @@
       "fixes": 0
     },
     {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/rc21-class-method-write/App.tsx",
+      "start": 1176,
+      "end": 1249,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-class-method-write/App.tsx",
+      "start": 1259,
+      "end": 1276,
+      "fixes": 0
+    },
+    {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
       "kind": "uncertifiable",
@@ -63,6 +118,17 @@
       "path": "fixtures/reactive-ir/rc21-class-method-write/App.tsx",
       "start": 1259,
       "end": 1278,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-class-method-write/App.tsx",
+      "start": 1563,
+      "end": 1580,
       "fixes": 0
     },
     {

@@ -392,6 +392,60 @@ fn decide_logged(
     role
 }
 
+/// ADR 1124 round 2: a question asked outside any decision (a tracked-position silence's entry census), `framed`, runs in a
+/// frame of its own at `span`; when it holds, `then` (the rest of the silence's conditions) runs after the frame closes, so its
+/// own decisions stay their own lines. With the log on, the frame is written as a `kind` decision only when both hold and a
+/// tagged arm noted into it, answering the role its last arm gave: the proof log names the arm the silence rests on. With a
+/// decision already open on this thread it adds no line: the arms join that decision, as before. Returns whether both hold.
+pub(crate) fn decide_if_armed(
+    kind: &'static str,
+    path: &str,
+    span: Span,
+    framed: impl FnOnce() -> bool,
+    then: impl FnOnce() -> bool,
+) -> bool {
+    if !enabled() {
+        return framed() && then();
+    }
+    let outermost = CURRENT.with(|current| {
+        let mut current = current.borrow_mut();
+        if current.is_some() {
+            return false;
+        }
+        *current = Some(Decision {
+            kind,
+            path: path.to_owned(),
+            span,
+            arms: Vec::new(),
+        });
+        true
+    });
+    if !outermost {
+        return framed() && then();
+    }
+    struct Close;
+    impl Drop for Close {
+        fn drop(&mut self) {
+            CURRENT.with(|current| current.borrow_mut().take());
+        }
+    }
+    let close = Close;
+    let held = framed();
+    let decision = CURRENT.with(|current| current.borrow_mut().take());
+    drop(close);
+    if !held {
+        return false;
+    }
+    let holds = then();
+    if holds
+        && let Some(decision) = decision
+        && let Some(&(_, role)) = decision.arms.last()
+    {
+        write_decision(&decision, role);
+    }
+    holds
+}
+
 /// Whether a final `role` of a `kind` decision is reported by no rule: a
 /// proven non-reporting role (not [`ExecutionRole::Unknown`], which is an
 /// obligation). `role` decisions feed both rule families, so they say nothing.
@@ -731,5 +785,16 @@ mod tests {
             decide("read", "/p", Span::new(0, 1), || ExecutionRole::Unreported),
             ExecutionRole::Unreported
         );
+        // ADR 1124 round 2: both conditions hold, or the answer is no; `then` runs only after `framed` held.
+        let span = Span::new(0, 1);
+        assert!(decide_if_armed("read", "/p", span, || true, || true));
+        assert!(!decide_if_armed("read", "/p", span, || true, || false));
+        assert!(!decide_if_armed(
+            "read",
+            "/p",
+            span,
+            || false,
+            || unreachable!("`then` after a refusal")
+        ));
     }
 }

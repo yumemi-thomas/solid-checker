@@ -1,0 +1,6 @@
+{
+  "note": "ADR 1123, the review of round 2 (N1): a provider element stored (StoredApp), in an array (ArrayApp), two components down (NestedApp) or under Show (ShowApp), handed to a package the build cannot analyse that reads `props.children` in a tracked effect, runs a flushing child expression there. Chrome reports FLUSH_IN_TRACKED_QUEUE_CALLBACK at each flush. The withdrawn provider-children arm tested where the provider element is written, not where its value goes: run alone, it ended the SC3001 and SC2006 rows at the flush of each program and SC2008 at the first two. Every row stays now. The verdict here is covered-uncertifiable on that build too (the oracle's own entry adds rows at the render), so this records Chrome's side of the redo's acceptance set; the checker-side pin is fixture reactive-ir/context-provider-children-refusals.",
+  "packages": [
+    "r1123-leaf"
+  ]
+}

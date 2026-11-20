@@ -1,0 +1,16 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/event-delivery-spellings/variants/json-destructured/App.tsx",
+      "start": 608,
+      "end": 615,
+      "fixes": 0
+    }
+  ]
+}

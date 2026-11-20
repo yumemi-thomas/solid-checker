@@ -1,0 +1,27 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/string-code-standard-patch/variants/function-timer/App.tsx",
+      "start": 542,
+      "end": 552,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/string-code-standard-patch/variants/function-timer/App.tsx",
+      "start": 542,
+      "end": 552,
+      "fixes": 0
+    }
+  ]
+}

@@ -10,8 +10,9 @@
 //! answers count apart, as resolved: a hook or accessor on a contained value (`PremiseSiteFact::contained`), and a computed key
 //! proven to be constant texts none of which is a prototype route or a private key.
 //!
-//! An entry's realm is its closure over static value imports, export-froms and literal loads among the analysed files: test and story
-//! files are entries of their own, so the tooling they load does not count against the application's entry (Fable's tier 2).
+//! The census groups files by entry (an entry's closure over static value imports, export-froms and literal loads among the analysed
+//! files). No proof uses that grouping: ADR 1125's delivery and shadow answers take the whole program as one realm
+//! ([`realm_holds_both`]), since no fact proves two analysed files never share a page.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -48,6 +49,8 @@ fn clause_name(clause: PremiseClause) -> &'static str {
         PremiseClause::PrivateKey => "private-key",
         PremiseClause::ShadowRoot => "shadow",
         PremiseClause::With => "with",
+        PremiseClause::KeyReader => "key-reader",
+        PremiseClause::DispatchHandedOn => "dispatch-handed-on",
     }
 }
 
@@ -63,6 +66,7 @@ fn sink_name(kind: CodeSinkKind) -> &'static str {
         CodeSinkKind::DynamicImport => "dynamic-import",
         CodeSinkKind::JavascriptUrl => "javascript-url",
         CodeSinkKind::GlobalLookup => "global-lookup",
+        CodeSinkKind::NavigationUrl => "navigation-url",
     }
 }
 
@@ -395,6 +399,35 @@ pub(crate) fn census(lookup: &SemanticLookup<'_>) -> Vec<CensusRow> {
             blockers,
         });
     }
+    // ADR 1125: the dispatch veto's answers, beside the two scans it reads.
+    let veto = lookup.dispatch_veto();
+    rows.push(CensusRow {
+        path: String::new(),
+        start: 0,
+        end: 0,
+        kind: "dispatch-veto".into(),
+        blockers: vec![format!(
+            "owner|{}|read|{}|flush|{}|listener|{}|apply|{}|shadow|{}|delivery-intact|{}|dispatch|{}",
+            veto.0,
+            veto.1,
+            veto.2,
+            veto.3,
+            veto.4,
+            lookup.shadow_roots_possible(),
+            lookup.event_delivery_intact(),
+            lookup.hazard_present(crate::base::Hazard::SynchronousDispatch)
+        )],
+    });
+    // ADR 1125: the first reason the program's event delivery is not proven intact.
+    if let Some((path, why, key)) = crate::indexes::event_delivery::delivery_hazard_reason(lookup) {
+        rows.push(CensusRow {
+            path,
+            start: 0,
+            end: 0,
+            kind: "event-delivery-hazard".into(),
+            blockers: vec![format!("{why}|{key}")],
+        });
+    }
     let all: BTreeSet<&str> = files.iter().map(|file| file.path.as_str()).collect();
     let (mut blockers, _) = summarize(&all);
     blockers.insert(
@@ -414,4 +447,61 @@ pub(crate) fn census(lookup: &SemanticLookup<'_>) -> Vec<CensusRow> {
         blockers,
     });
     rows
+}
+
+/// ADR 1125: whether the program holds both a file `hazard` answers yes for and a file that may register an event handler
+/// (`may_hold_handler`), anywhere among the analysed files: the files need not load each other.
+pub(crate) fn realm_holds_both(
+    lookup: &SemanticLookup<'_>,
+    hazard: &dyn Fn(&FileFacts) -> bool,
+    may_hold_handler: &dyn Fn(&FileFacts) -> bool,
+) -> bool {
+    // ADR 1125, Fable round 1 (F2, F8): no fact proves that two analysed files never share a page (a second script, a multi-input
+    // build, a test runner's setup files, `import.meta.glob`), and an import cycle may hold the entry. So the realm is the program:
+    // a hazard in any analysed file moves the proofs of every handler. Only the census rows ([`census`]) still group files by entry.
+    let all = lookup.files();
+    all.iter().any(hazard) && all.iter().any(may_hold_handler)
+}
+
+/// ADR 1129 round 2 (F2): whether a project file of the program may write the standard member `member` on a built-in's prototype,
+/// by any route: a premise site that is a prototype route (`prototype`, `__proto__`, `constructor`, `getPrototypeOf`, a definer:
+/// a `["proto" + "type"]` key is cooked to it), Proxy or `Reflect`, `with`, `Object.assign` onto a value not made in place, a
+/// coercion hook or code under a key no literal names, a write under `member` or a key nothing names; code built from a string; a
+/// computed key nothing proves, or proven to be `member` or a prototype key; or a module the build does not read (an asset
+/// included: a bundler plugin may make it code). The realm is the
+/// program, as for ADR 1125's answers: a prototype reached in one file and handed to a writer in another (`Object.getPrototypeOf([])`
+/// exported, written under a computed key) needs no load between them. Installed packages are ADR 1108's index, asked by the caller.
+pub(crate) fn program_may_write_standard_member(lookup: &SemanticLookup<'_>, member: &str) -> bool {
+    let files = lookup.files();
+    let program: BTreeSet<&str> = files.iter().map(|file| file.path.as_str()).collect();
+    files
+        .iter()
+        .filter(|file| !is_package(file.path.as_str()))
+        .any(|file| {
+            file.ast.premise_sites.iter().any(|site| match site.clause {
+                PremiseClause::PrototypeRoute
+                | PremiseClause::ProxyOrReflect
+                | PremiseClause::With
+                | PremiseClause::ObjectAssign
+                | PremiseClause::CoercionHook => true,
+                PremiseClause::StandardKeyWrite | PremiseClause::GlobalWrite => {
+                    site.key == "*" || site.key == member
+                }
+                // ADR 1133: a dispatcher read as a value (`DispatchHandedOn`) writes no member, as a key reader does not.
+                PremiseClause::Accessor
+                | PremiseClause::PrivateKey
+                | PremiseClause::ShadowRoot
+                | PremiseClause::KeyReader
+                | PremiseClause::DispatchHandedOn => false,
+            }) || !file.ast.code_sinks.is_empty()
+                || file.ast.computed_keys.iter().any(|key| {
+                    !key.proven
+                        || key.texts.iter().any(|text| {
+                            text.as_str() == member || PROTOTYPE_KEYS.contains(&text.as_str())
+                        })
+                })
+                || loads(lookup, file, &program)
+                    .iter()
+                    .any(|load| matches!(load, Load::Unread(_) | Load::Asset(_)))
+        })
 }

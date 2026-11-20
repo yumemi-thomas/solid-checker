@@ -13,7 +13,12 @@
 //! - markup written as a string that is not proven inert: an assignment to `innerHTML` or `outerHTML`, `insertAdjacentHTML`, `document.write`, `createContextualFragment` and
 //!   `setHTMLUnsafe` given anything but a literal that holds no script, no event attribute and no `javascript:` URL;
 //! - a load the program does not name as a module path: `import(x)` of a computed specifier, and one of a `data:`, `blob:`, `javascript:` or network URL;
-//! - a string literal that is a `javascript:` URL.
+//! - a string literal that is a `javascript:` URL (tabs and line breaks inside it, and leading spaces and controls, ignored as a URL parser does);
+//! - ADR 1133 (F5): a URL a navigation or a frame loads that is not proven to be no `javascript:` URL, and `srcdoc` markup not proven inert, by
+//!   every route the syntax names: a member write (`a.href = …`, `iframe.srcdoc = …`, `location = …`), a JSX attribute, `setAttribute`, an
+//!   object literal's key (a spread or `Object.assign` may set it), `location.assign`/`replace` and `open`. A value is proven when its leading
+//!   text is known and already differs from `javascript:` (`"/path/" + id`, `` `https://${host}` ``), or it is a literal, a `const` bound to
+//!   one of these, or `URL.createObjectURL(…)`. A class field so named is a key too (a spread copies an instance's own fields).
 //!
 //! A name is the global it names only when no binding of the file declares it; a callback is proven a function when it is a function or arrow written there, or a name that
 //! a function declaration or a `const` bound to one declares.
@@ -32,6 +37,9 @@ use super::extract_helpers::{literal_property_key, peel_ts_sugar};
 use super::{CodeSinkFact, CodeSinkKind};
 use crate::core::Span;
 
+/// The timers that run a string as code.
+const TIMERS: [&str; 4] = ["setTimeout", "setInterval", "setImmediate", "execScript"];
+
 /// The names of the global objects: a member of one is the global of that name.
 const GLOBAL_OBJECTS: [&str; 7] = [
     "globalThis",
@@ -43,32 +51,241 @@ const GLOBAL_OBJECTS: [&str; 7] = [
     "frames",
 ];
 
+/// ADR 1133 (F5): the names (attribute names and members, compared without case and after a namespace prefix such as `attr:`) whose value a
+/// navigation loads as a URL: a link's or a base's `href`, a frame's `src`, a form's `action` and a button's `formAction`, the
+/// window's `location`. A `javascript:` URL runs only when navigated to: `<object data>`, `<embed src>`, `<img src>` and `<script src>`
+/// fetch their resource, and fetching a `javascript:` URL is a network error (Fetch, scheme fetch), so `data` is no such name. Round 2
+/// measured it (Chrome 148, the fuzz oracle's headless shell 1223, `void (…)` so the document is kept): `<object data>` (a property, an
+/// attribute, set after insertion, with `type="text/html"`, parsed from markup), `<embed src>`, `<img src>`, `<link href>`, `<script src>` and a
+/// `<meta http-equiv="refresh">` run nothing; `<iframe src>`, `<a href>` clicked, `<form action>` submitted, `<button formaction>` and an
+/// SVG `<a href>` run it.
+const URL_NAMES: [&str; 5] = ["href", "src", "action", "formaction", "location"];
+
+/// Whether `name` (an attribute, a member or a key, with any `attr:`/`prop:`/`xlink:` prefix) names a URL slot or the `srcdoc` markup slot.
+fn slot_of(name: &str) -> Option<Slot> {
+    let local = name.rsplit(':').next().unwrap_or(name);
+    if local.eq_ignore_ascii_case("srcdoc") {
+        Some(Slot::Markup)
+    } else if URL_NAMES.iter().any(|url| local.eq_ignore_ascii_case(url)) {
+        Some(Slot::Url)
+    } else {
+        None
+    }
+}
+
+/// ADR 1133 (round 1 F5): the slots of a member written (`x.name = …`), which are [`slot_of`]'s and two more: the URL an SVG `<a>`'s
+/// animated `href` holds is written through `baseVal` (`a.href.baseVal = "javascript:…"`), and `protocol` rewrites the scheme of the
+/// URL an element holds (`a.href = "x:void 0"; a.protocol = "javascript"`). Neither is an attribute or a spread's key, so only a
+/// written member names them.
+fn write_slot_of(name: &str) -> Option<Slot> {
+    if name.eq_ignore_ascii_case("baseval") {
+        Some(Slot::Url)
+    } else if name.eq_ignore_ascii_case("protocol") {
+        Some(Slot::Scheme)
+    } else {
+        slot_of(name)
+    }
+}
+
+/// How many `const` aliases of a window, a document, a location or an `attributes` collection are followed (`const a = window; const b = a;`).
+const ALIAS_HOPS: usize = 4;
+
+/// ADR 1133 (round 1, adjacent spellings): whether an attribute of this name, taken out of an `attributes` collection, may be written as a
+/// URL or an event handler: a URL slot's name, an `on…` name, or an index (the attribute at that position may have any name). Round 2
+/// (N1): K4's plain data key reads it too, because the collection is reached under a key the program may not spell (`el[key()].href`).
+pub(crate) fn attribute_name_is_unsafe(name: &str) -> bool {
+    slot_of(name).is_some()
+        || name
+            .get(..2)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("on"))
+        || (!name.is_empty() && name.bytes().all(|byte| byte.is_ascii_digit()))
+}
+
+/// ADR 1133 (round 1 F2): the sinks `Sinks::call` matches by a call's spelling, by member name, and the kind each is. Such a function
+/// read as a value anywhere but as the callee of a call (`Reflect.apply(el.insertAdjacentHTML, el, […])`, `doc.write.call(doc, …)`,
+/// `const w = doc.write`) runs under a name no call spells, so it is the sink its name is. Round 1, adjacent spellings: `execCommand`
+/// (its `insertHTML` command parses markup into the document) and an attribute node set into the `attributes` collection.
+fn call_spelled_sink(name: &str) -> Option<CodeSinkKind> {
+    match name {
+        "insertAdjacentHTML"
+        | "write"
+        | "writeln"
+        | "createContextualFragment"
+        | "setHTMLUnsafe"
+        | "execCommand"
+        | "parseFromString"
+        | "parseHTMLUnsafe" => Some(CodeSinkKind::MarkupWrite),
+        "createElement" | "createElementNS" => Some(CodeSinkKind::ScriptElement),
+        "setAttributeNode" | "setAttributeNodeNS" | "setNamedItem" | "setNamedItemNS" => {
+            Some(CodeSinkKind::EventAttribute)
+        }
+        _ => None,
+    }
+}
+
+#[derive(Clone, Copy)]
+enum Slot {
+    Url,
+    Markup,
+    /// A URL's scheme (`protocol`): the value is a scheme, not a URL.
+    Scheme,
+}
+
 struct Sinks<'s, 'a> {
     semantic: &'s Semantic<'a>,
     resolve: bool,
     found: Vec<CodeSinkFact>,
+    /// ADR 1133 (round 2): the computed members whose key a proof gives the text `attributes` (`el["attri" + "butes"]`), which the
+    /// literal key test of [`Sinks::is_attributes`] does not see. Found before the scan: a member is met before the one it is the object of.
+    attribute_members: std::collections::HashSet<oxc_span::Span>,
 }
 
 /// The places a file runs code it builds, in source order (see the module's text), and whether it holds a `this` or `super` expression: code that may read a member through
 /// the object a function was called on. `resolve` is whether names are followed to their declarations (false when the binder reported errors).
 pub(super) fn code_sinks(semantic: &Semantic<'_>, resolve: bool) -> (Vec<CodeSinkFact>, bool) {
+    let mut keys = super::computed_keys::KeyProver::new(semantic, resolve);
+    let mut attribute_members = std::collections::HashSet::new();
+    for node in semantic.nodes().iter() {
+        if let AstKind::ComputedMemberExpression(member) = node.kind()
+            && literal_property_key(&member.expression).is_none()
+            && keys
+                .key(&member.expression)
+                .is_some_and(|(texts, _)| texts.iter().any(|text| text == "attributes"))
+        {
+            attribute_members.insert(member.span);
+        }
+    }
     let mut sinks = Sinks {
         semantic,
         resolve,
         found: Vec::new(),
+        attribute_members,
     };
     let mut uses_receiver = false;
     for node in semantic.nodes().iter() {
         match node.kind() {
             AstKind::ThisExpression(_) | AstKind::Super(_) => uses_receiver = true,
             AstKind::IdentifierReference(identifier) => sinks.reference(node.id(), identifier),
-            AstKind::CallExpression(call) => sinks.call(call),
+            AstKind::CallExpression(call) => sinks.call(call, &mut keys),
             AstKind::AssignmentExpression(assignment) => {
                 if writes_markup_property(&assignment.left)
                     && !sinks.inert_markup(&assignment.right)
                 {
                     sinks.add(assignment.span, CodeSinkKind::MarkupWrite);
                 }
+                // ADR 1133 (F5): `a.href = …`, `iframe.srcdoc = …`, `location = …`; round 1: a key the program builds is each of the
+                // texts a proof gives it (`a["hr" + "ef"] = …`).
+                let names: Vec<String> = match &assignment.left {
+                    AssignmentTarget::StaticMemberExpression(member) => {
+                        vec![member.property.name.to_string()]
+                    }
+                    AssignmentTarget::ComputedMemberExpression(member) => {
+                        match literal_property_key(&member.expression) {
+                            Some(key) => vec![key.to_string()],
+                            None => keys
+                                .key(&member.expression)
+                                .map(|(texts, _)| {
+                                    texts.into_iter().map(|text| text.to_string()).collect()
+                                })
+                                .unwrap_or_default(),
+                        }
+                    }
+                    AssignmentTarget::AssignmentTargetIdentifier(identifier)
+                        if identifier.name == "location"
+                            && sinks.symbol_of(identifier).is_none() =>
+                    {
+                        vec!["location".to_string()]
+                    }
+                    _ => Vec::new(),
+                };
+                // A built `innerHTML` key is the markup property as the literal key is.
+                if names
+                    .iter()
+                    .any(|name| matches!(name.as_str(), "innerHTML" | "outerHTML"))
+                    && !sinks.inert_markup(&assignment.right)
+                {
+                    sinks.add(assignment.span, CodeSinkKind::MarkupWrite);
+                }
+                // Only `=` and the logical assignments store the right side alone; `+=` appends to a value nothing here reads.
+                let stores = matches!(
+                    assignment.operator,
+                    oxc_syntax::operator::AssignmentOperator::Assign
+                        | oxc_syntax::operator::AssignmentOperator::LogicalOr
+                        | oxc_syntax::operator::AssignmentOperator::LogicalAnd
+                        | oxc_syntax::operator::AssignmentOperator::LogicalNullish
+                );
+                for slot in names.iter().filter_map(|name| write_slot_of(name)) {
+                    if !stores || !sinks.slot_value_proven(slot, &assignment.right) {
+                        sinks.add(assignment.span, slot.kind());
+                    }
+                }
+            }
+            AstKind::PropertyDefinition(property) => {
+                if let Some(slot) = crate::kernel::property_key_value(&property.key)
+                    .as_deref()
+                    .and_then(slot_of)
+                {
+                    let proven = property
+                        .value
+                        .as_ref()
+                        .is_none_or(|value| sinks.slot_value_proven(slot, value));
+                    if !proven {
+                        sinks.add(property.span, slot.kind());
+                    }
+                }
+            }
+            // ADR 1133 (F5): an object literal's key may reach an element (a JSX spread, `Object.assign(el, …)`, `spread`).
+            AstKind::ObjectProperty(property) => {
+                if let Some(slot) = crate::kernel::property_key_value(&property.key)
+                    .as_deref()
+                    .and_then(slot_of)
+                {
+                    let proven = property.kind == oxc_ast::ast::PropertyKind::Init
+                        && !property.method
+                        && sinks.slot_value_proven(slot, &property.value);
+                    if !proven {
+                        sinks.add(property.span, slot.kind());
+                    }
+                }
+            }
+            // ADR 1133 (round 1, adjacent spellings): an attribute node taken out of the `attributes` collection by a name a URL or an
+            // event handler has (`el.attributes.href.value = …`) is written in place, as `getAttributeNode`'s is.
+            AstKind::StaticMemberExpression(member)
+                if attribute_name_is_unsafe(member.property.name.as_str())
+                    && sinks.is_attributes(&member.object) =>
+            {
+                sinks.add(member.span, CodeSinkKind::NavigationUrl);
+            }
+            // ADR 1133 (F5): a navigation method read anywhere but as a call's callee (`const go = location.assign`, `window.open.call(…)`,
+            // `el.setAttribute.call(el, "href", url)`) may be handed a built URL; `open` is read as a value only where its value may be
+            // called or kept (`if (props.open)` reads a flag). Round 1: the sinks `Sinks::call` matches by a call's spelling
+            // (`insertAdjacentHTML`, `write`, `createElement`, …) read as a value run under a name no call spells (F2), a member named
+            // `location` kept or passed is the window's location by another route (F5), and an attribute node is written in place.
+            AstKind::StaticMemberExpression(member)
+                if sinks
+                    .member_value_sink(
+                        node.id(),
+                        member.span,
+                        &member.object,
+                        member.property.name.as_str(),
+                    )
+                    .is_some() =>
+            {
+                if let Some(kind) = sinks.member_value_sink(
+                    node.id(),
+                    member.span,
+                    &member.object,
+                    member.property.name.as_str(),
+                ) {
+                    sinks.add(member.span, kind);
+                }
+            }
+            // ADR 1125 (G5): a timer read as a member anywhere but as a call's callee (`const t = window.setTimeout`) may be handed a string.
+            AstKind::StaticMemberExpression(member)
+                if TIMERS.contains(&member.property.name.as_str())
+                    && !matches!(semantic.nodes().parent_kind(node.id()), AstKind::CallExpression(call) if call.callee.span() == member.span) =>
+            {
+                sinks.add(member.span, CodeSinkKind::StringTimer);
             }
             // `window.eval(..)`, `top.Function(..)`: the global read as a member, by its name.
             AstKind::StaticMemberExpression(member)
@@ -87,6 +304,53 @@ pub(super) fn code_sinks(semantic: &Semantic<'_>, resolve: bool) -> (Vec<CodeSin
                     }
                     _ => {}
                 }
+                // ADR 1133 (round 1 F2, F5): a member read as a value under a literal key, or under the texts a proof gives a key the
+                // program builds, is the sink its name is, as the static member (`el["insertAdjacentHTML"]`, `doc["wri" + "te"]`).
+                let names: Vec<String> = match literal_property_key(&member.expression) {
+                    Some(key) => vec![key.to_string()],
+                    None => keys
+                        .key(&member.expression)
+                        .map(|(texts, _)| texts.into_iter().map(|text| text.to_string()).collect())
+                        .unwrap_or_default(),
+                };
+                // Round 1, adjacent spellings: an attribute taken out of the `attributes` collection by a name no URL or handler has is
+                // no sink; by an index or a key nothing proves, it may be any attribute's.
+                if sinks.is_attributes(&member.object)
+                    && (names.is_empty() || names.iter().any(|name| attribute_name_is_unsafe(name)))
+                {
+                    sinks.add(member.span, CodeSinkKind::NavigationUrl);
+                }
+                for name in names {
+                    if let Some(kind) =
+                        sinks.member_value_sink(node.id(), member.span, &member.object, &name)
+                    {
+                        sinks.add(member.span, kind);
+                    }
+                }
+            }
+            // ADR 1133 (round 1 F2, F5): a pattern takes a member out under its key as a value (`const { write } = document`,
+            // `({ open: o } = window)`, `const { assign } = location`): the same sinks as the member read, where the source is the kind of
+            // object that has the member (a window, a document, the location), or the name is no other object's.
+            AstKind::BindingProperty(property) => {
+                sinks.pattern_member(
+                    node.id(),
+                    property.span,
+                    &property.key,
+                    property.computed,
+                    &mut keys,
+                );
+            }
+            AstKind::AssignmentTargetPropertyProperty(property) => {
+                sinks.pattern_member(
+                    node.id(),
+                    property.span,
+                    &property.name,
+                    property.computed,
+                    &mut keys,
+                );
+            }
+            AstKind::AssignmentTargetPropertyIdentifier(property) => {
+                sinks.pattern_sink(node.id(), property.span, property.binding.name.as_str());
             }
             AstKind::ImportExpression(import) => {
                 if !static_module_path(&import.source) {
@@ -120,6 +384,39 @@ impl<'a> Sinks<'_, 'a> {
             .and_then(|reference| self.semantic.scoping().get_reference(reference).symbol_id())
     }
 
+    /// Whether `object` is a `const` binding of an object literal that defines `name` itself (`const timers = { setTimeout() {} }`): the
+    /// member called is that literal's own, never a window's.
+    fn own_literal_member(&self, object: &'a Expression<'a>, name: &str) -> bool {
+        if !self.resolve {
+            return false;
+        }
+        let Expression::Identifier(identifier) = peel_ts_sugar(object) else {
+            return false;
+        };
+        let Some(symbol) = self.symbol_of(identifier) else {
+            return false;
+        };
+        let nodes = self.semantic.nodes();
+        let declaration = self.semantic.scoping().symbol_declaration(symbol);
+        let declarator = match nodes.kind(declaration) {
+            AstKind::VariableDeclarator(declarator) => declarator,
+            _ => match nodes.parent_kind(declaration) {
+                AstKind::VariableDeclarator(declarator) => declarator,
+                _ => return false,
+            },
+        };
+        declarator.kind == VariableDeclarationKind::Const
+            && declarator.id.is_binding_identifier()
+            && matches!(
+                declarator.init.as_ref().map(peel_ts_sugar),
+                Some(Expression::ObjectExpression(literal)) if literal.properties.iter().any(|property| matches!(
+                    property,
+                    oxc_ast::ast::ObjectPropertyKind::ObjectProperty(property)
+                        if !property.computed && property.key.static_name().is_some_and(|key| key == name)
+                ))
+            )
+    }
+
     /// Whether the expression is a global object (`window`, `globalThis`, …) that no binding of the file declares.
     fn is_global_object(&self, expression: &'a Expression<'a>) -> bool {
         matches!(
@@ -131,6 +428,45 @@ impl<'a> Sinks<'_, 'a> {
 
     /// `eval` and `Function`, by the reference to the global.
     fn reference(&mut self, id: NodeId, identifier: &'a IdentifierReference<'a>) {
+        // ADR 1133 (F5): the global `location` handed on (`const loc = location; loc.assign(url)`) and the global `open` read as a value.
+        if matches!(identifier.name.as_str(), "location" | "open")
+            && (!self.resolve || self.symbol_of(identifier).is_none())
+            && !identifier
+                .reference_id
+                .get()
+                .is_some_and(|reference| self.semantic.scoping().get_reference(reference).is_type())
+        {
+            let in_sight = if identifier.name == "open" {
+                matches!(self.semantic.nodes().parent_kind(id), AstKind::CallExpression(call) if call.callee.span() == identifier.span)
+                    || self.value_unused(id, identifier.span)
+            } else {
+                self.location_in_sight(id, identifier.span)
+            };
+            if !in_sight {
+                self.add(identifier.span, CodeSinkKind::NavigationUrl);
+            }
+        }
+        // ADR 1125 (G5): a global timer named anywhere but as the callee of a call (`const later = setTimeout`,
+        // `setTimeout.call(null, "code")`, `Reflect.apply(setTimeout, …)`) may be handed a string.
+        if TIMERS.contains(&identifier.name.as_str())
+            && (!self.resolve || self.symbol_of(identifier).is_none())
+            // A type position (`ReturnType<typeof setTimeout>`) and `typeof setTimeout` run nothing.
+            && !identifier
+                .reference_id
+                .get()
+                .is_some_and(|reference| self.semantic.scoping().get_reference(reference).is_type())
+            && !matches!(
+                self.semantic.nodes().parent_kind(id),
+                AstKind::CallExpression(call) if call.callee.span() == identifier.span
+            )
+            && !matches!(
+                self.semantic.nodes().parent_kind(id),
+                AstKind::UnaryExpression(unary) if unary.operator == UnaryOperator::Typeof
+            )
+            && !matches!(self.semantic.nodes().parent_kind(id), AstKind::TSTypeQuery(_))
+        {
+            self.add(identifier.span, CodeSinkKind::StringTimer);
+        }
         let kind = match identifier.name.as_str() {
             "eval" => CodeSinkKind::Eval,
             "Function" => CodeSinkKind::FunctionConstructor,
@@ -167,29 +503,52 @@ impl<'a> Sinks<'_, 'a> {
         }
     }
 
-    fn call(&mut self, call: &'a CallExpression<'a>) {
+    fn call(
+        &mut self,
+        call: &'a CallExpression<'a>,
+        keys: &mut super::computed_keys::KeyProver<'_, 'a>,
+    ) {
         let callee = peel_ts_sugar(&call.callee);
-        // The name the callee calls, and the object it is a member of (a global object or any other).
-        let (name, object): (Option<String>, Option<&'a Expression<'a>>) = match callee {
+        // The names the callee calls, and the object it is a member of (a global object or any other).
+        let (names, object): (Vec<String>, Option<&'a Expression<'a>>) = match callee {
             Expression::Identifier(identifier) if self.symbol_of(identifier).is_none() => {
-                (Some(identifier.name.to_string()), None)
+                (vec![identifier.name.to_string()], None)
             }
             Expression::StaticMemberExpression(member) => {
-                (Some(member.property.name.to_string()), Some(&member.object))
+                (vec![member.property.name.to_string()], Some(&member.object))
             }
             Expression::ComputedMemberExpression(member) => (
-                literal_property_key(&member.expression).map(|key| key.to_string()),
+                match literal_property_key(&member.expression) {
+                    Some(key) => vec![key.to_string()],
+                    // ADR 1133 (round 1 F2): a key the program builds is each of the texts a proof gives it, as the literal would be
+                    // (`el["insert" + "AdjacentHTML"](…)`).
+                    None => keys
+                        .key(&member.expression)
+                        .map(|(texts, _)| texts.into_iter().map(|text| text.to_string()).collect())
+                        .unwrap_or_default(),
+                },
                 Some(&member.object),
             ),
-            _ => (None, None),
+            _ => (Vec::new(), None),
         };
-        let Some(name) = name else {
-            return;
-        };
-        let global_call = object.is_none_or(|object| self.is_global_object(object));
-        match name.as_str() {
-            // A timer given anything but a proven function runs a string.
-            "setTimeout" | "setInterval" | "setImmediate" | "execScript" if global_call => {
+        for name in names {
+            self.call_named(call, &name, object);
+        }
+    }
+
+    /// The sink a call of the member (or global) `name` is: [`Self::call`]'s match, once per name the callee may call.
+    fn call_named(
+        &mut self,
+        call: &'a CallExpression<'a>,
+        name: &str,
+        object: Option<&'a Expression<'a>>,
+    ) {
+        match name {
+            // A timer given anything but a proven function runs a string. ADR 1125 (G5): on any receiver, not only a global object
+            // spelled (`document.defaultView?.setTimeout("…")`): a member so named may be the window's.
+            "setTimeout" | "setInterval" | "setImmediate" | "execScript"
+                if !object.is_some_and(|object| self.own_literal_member(object, name)) =>
+            {
                 let proven = call
                     .arguments
                     .first()
@@ -213,7 +572,63 @@ impl<'a> Sinks<'_, 'a> {
                     self.add(call.span, CodeSinkKind::ScriptElement);
                 }
             }
-            "setAttribute" | "setAttributeNS" | "setAttributeNode" if object.is_some() => {
+            // ADR 1133 (round 1 F5): the attribute node of a URL or event attribute is written in place (`.value = …`), with no call
+            // that names the value: an attribute node of any name the program does not fix is a sink, one of a literal name only where
+            // that name is neither a URL slot nor an event handler. Adjacent spellings: the same node out of the `attributes`
+            // collection (`getNamedItem(NS)`, `item(index)`), and one set into it (`setNamedItem(NS)`, below).
+            "getAttributeNode" | "getAttributeNodeNS" | "getNamedItem" | "getNamedItemNS"
+                if object.is_some() =>
+            {
+                let at = if name.ends_with("NS") { 1 } else { 0 };
+                if !self.argument_is_benign_text(call, at, |attribute| {
+                    slot_of(attribute).is_none()
+                        && !attribute
+                            .get(..2)
+                            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("on"))
+                }) {
+                    self.add(call.span, CodeSinkKind::NavigationUrl);
+                }
+            }
+            "item" if object.is_some_and(|object| self.is_attributes(object)) => {
+                self.add(call.span, CodeSinkKind::NavigationUrl);
+            }
+            // `document.execCommand("insertHTML", false, markup)` parses the markup into the document as `insertAdjacentHTML` does, and
+            // `"createLink"` makes an anchor of its URL; a command the program does not fix may be either.
+            "execCommand" if object.is_some() => {
+                let command = call
+                    .arguments
+                    .first()
+                    .and_then(Argument::as_expression)
+                    .and_then(literal_text);
+                let is = |wanted: &str| {
+                    command
+                        .as_deref()
+                        .is_none_or(|command| command.eq_ignore_ascii_case(wanted))
+                };
+                let value = call.arguments.get(2).and_then(Argument::as_expression);
+                if is("insertHTML") && !value.is_some_and(|markup| self.inert_markup(markup)) {
+                    self.add(call.span, CodeSinkKind::MarkupWrite);
+                }
+                if is("createLink") && !value.is_some_and(|url| self.url_proven(url, 0)) {
+                    self.add(call.span, CodeSinkKind::NavigationUrl);
+                }
+            }
+            // `new DOMParser().parseFromString(markup, type)` and `Document.parseHTMLUnsafe(markup)` parse markup into a document whose nodes
+            // a program moves into the live one, where an event attribute runs: the markup is written as `innerHTML`'s is.
+            "parseFromString" | "parseHTMLUnsafe" if object.is_some() => {
+                if !call
+                    .arguments
+                    .first()
+                    .and_then(Argument::as_expression)
+                    .is_some_and(|markup| self.inert_markup(markup))
+                {
+                    self.add(call.span, CodeSinkKind::MarkupWrite);
+                }
+            }
+            "setAttribute" | "setAttributeNS" | "setAttributeNode" | "setAttributeNodeNS"
+            | "setNamedItem" | "setNamedItemNS"
+                if object.is_some() =>
+            {
                 let at = if name == "setAttributeNS" { 1 } else { 0 };
                 // An attribute set as text is code when it is an event handler; a name the program does not name may be one.
                 if !self.argument_is_benign_text(call, at, |attribute| {
@@ -223,7 +638,30 @@ impl<'a> Sinks<'_, 'a> {
                 }) {
                     self.add(call.span, CodeSinkKind::EventAttribute);
                 }
+                // ADR 1133 (F5): `setAttribute("href", url)`, `setAttribute("srcdoc", markup)`.
+                if let Some(slot) = call
+                    .arguments
+                    .get(at)
+                    .and_then(Argument::as_expression)
+                    .and_then(literal_text)
+                    .as_deref()
+                    .and_then(slot_of)
+                    && !call
+                        .arguments
+                        .get(at + 1)
+                        .and_then(Argument::as_expression)
+                        .is_some_and(|value| self.slot_value_proven(slot, value))
+                {
+                    self.add(call.span, slot.kind());
+                }
             }
+            // ADR 1133 (F5): `location.assign(url)`, `location.replace(url)`: a navigation.
+            "assign" | "replace" if object.is_some_and(|object| self.is_location(object)) => {
+                self.navigation_argument(call, 0);
+            }
+            // `open(url)`, `window.open(url)`, on any receiver (a window may have any name); a method's first argument proven
+            // no `javascript:` URL (`xhr.open("GET", …)`) is none.
+            "open" => self.navigation_argument(call, 0),
             "insertAdjacentHTML" if object.is_some() => {
                 if !call
                     .arguments
@@ -289,6 +727,29 @@ impl<'a> Sinks<'_, 'a> {
 
     /// A JSX attribute written as a native event handler (`onclick`, `onerror`, all lower case) whose value is no function written there.
     fn jsx_attribute(&mut self, attribute: &'a JSXAttribute<'a>) {
+        // ADR 1133 (F5): `<a href={…}>`, `<iframe srcdoc={…}>`, `attr:href`, `xlink:href`, on any element (a component may forward it).
+        let full = match &attribute.name {
+            JSXAttributeName::Identifier(name) => name.name.to_string(),
+            JSXAttributeName::NamespacedName(name) => {
+                format!("{}:{}", name.namespace.name, name.name.name)
+            }
+        };
+        if let Some(slot) = slot_of(&full) {
+            let proven = match &attribute.value {
+                None => true,
+                Some(JSXAttributeValue::StringLiteral(literal)) => {
+                    slot_text_proven(slot, literal.value.as_str())
+                }
+                Some(JSXAttributeValue::ExpressionContainer(container)) => container
+                    .expression
+                    .as_expression()
+                    .is_some_and(|value| self.slot_value_proven(slot, value)),
+                Some(_) => false,
+            };
+            if !proven {
+                self.add(attribute.span, slot.kind());
+            }
+        }
         let JSXAttributeName::Identifier(name) = &attribute.name else {
             return;
         };
@@ -349,6 +810,16 @@ impl<'a> Sinks<'_, 'a> {
                                 )
                             })
                     }
+                    // ADR 1125: the first or second parameter of an executor written as the first argument of `new Promise(..)`, the
+                    // global, is the resolving function the constructor hands it (a replaced global `Promise` is a delivery hazard).
+                    AstKind::FormalParameter(parameter) => {
+                        parameter.initializer.is_none()
+                            && matches!(parameter.pattern, BindingPattern::BindingIdentifier(_))
+                            && self.promise_executor_parameter(
+                                scoping.symbol_declaration(symbol),
+                                parameter.span,
+                            )
+                    }
                     _ => false,
                 }
             }
@@ -356,9 +827,440 @@ impl<'a> Sinks<'_, 'a> {
         }
     }
 
+    /// Whether the parameter at `id` (span `at`) is the first or second of a function written as the first argument of `new Promise(..)`, where
+    /// `Promise` is the global (no binding of the program's).
+    fn promise_executor_parameter(&self, id: NodeId, at: oxc_span::Span) -> bool {
+        let nodes = self.semantic.nodes();
+        let parameters = nodes.parent_id(id);
+        let function = nodes.parent_id(parameters);
+        let (span, params) = match nodes.kind(function) {
+            AstKind::ArrowFunctionExpression(arrow) => (arrow.span, &arrow.params),
+            AstKind::Function(function) if !function.is_declaration() => {
+                (function.span, &function.params)
+            }
+            _ => return false,
+        };
+        if !params.items.iter().take(2).any(|item| item.span == at) {
+            return false;
+        }
+        nodes.ancestor_kinds(function).take(4).any(|kind| {
+            matches!(kind, AstKind::NewExpression(new)
+                if new.arguments.first().is_some_and(|first| first.span() == span)
+                    && matches!(peel_ts_sugar(&new.callee), Expression::Identifier(callee)
+                        if callee.name == "Promise" && self.symbol_of(callee).is_none()))
+        })
+    }
+
     /// Whether the expression is a literal whose markup holds no script, event attribute or `javascript:` URL.
     fn inert_markup(&self, expression: &'a Expression<'a>) -> bool {
         literal_text(expression).is_some_and(|text| markup_is_inert(&text))
+    }
+
+    /// ADR 1133 (F5): whether the value stored in a slot runs no code: a URL proven no `javascript:` URL, or markup proven inert.
+    fn slot_value_proven(&self, slot: Slot, value: &'a Expression<'a>) -> bool {
+        match slot {
+            Slot::Url => self.url_proven(value, 0),
+            Slot::Markup => self.inert_markup(value),
+            Slot::Scheme => self.scheme_proven(value),
+        }
+    }
+
+    /// Whether a URL value is proven to be no `javascript:` URL: its leading text is known and differs from `javascript:` (as a URL parser
+    /// reads it), a non-text literal, a branch of which every arm is proven, a `const` bound to one of these, or `URL.createObjectURL(…)`
+    /// (a `blob:` URL).
+    fn url_proven(&self, value: &'a Expression<'a>, depth: usize) -> bool {
+        self.text_proven(value, depth, false)
+    }
+
+    /// ADR 1133 (round 1 F5): whether the value stored in a URL's `protocol` is proven to be no `javascript` scheme: a non-text value, or
+    /// a text known whole that is none (the setter reads the scheme up to a `:`). A text that is not known whole may be finished into one.
+    fn scheme_proven(&self, value: &'a Expression<'a>) -> bool {
+        self.text_proven(value, 0, true)
+    }
+
+    /// [`Self::url_proven`] and [`Self::scheme_proven`]: one walk of the value's forms, the text test being the slot's.
+    fn text_proven(&self, value: &'a Expression<'a>, depth: usize, scheme: bool) -> bool {
+        if depth > 8 {
+            return false;
+        }
+        match peel_ts_sugar(value) {
+            Expression::NumericLiteral(_)
+            | Expression::BooleanLiteral(_)
+            | Expression::NullLiteral(_)
+            | Expression::BigIntLiteral(_)
+            | Expression::RegExpLiteral(_) => true,
+            Expression::Identifier(identifier)
+                if identifier.name == "undefined" && self.symbol_of(identifier).is_none() =>
+            {
+                true
+            }
+            Expression::ConditionalExpression(conditional) => {
+                self.text_proven(&conditional.consequent, depth + 1, scheme)
+                    && self.text_proven(&conditional.alternate, depth + 1, scheme)
+            }
+            Expression::LogicalExpression(logical) => {
+                self.text_proven(&logical.left, depth + 1, scheme)
+                    && self.text_proven(&logical.right, depth + 1, scheme)
+            }
+            Expression::Identifier(identifier) => self
+                .const_init(identifier)
+                .is_some_and(|init| self.text_proven(init, depth + 1, scheme)),
+            Expression::CallExpression(call) => matches!(
+                peel_ts_sugar(&call.callee),
+                Expression::StaticMemberExpression(member)
+                    if member.property.name == "createObjectURL"
+                        && matches!(peel_ts_sugar(&member.object), Expression::Identifier(url)
+                            if url.name == "URL" && self.symbol_of(url).is_none())
+            ),
+            _ => self.leading_text(value, depth).is_some_and(|text| {
+                if scheme {
+                    self.whole_text(value) && !is_javascript_scheme(&text)
+                } else if self.whole_text(value) {
+                    !may_be_javascript_url(&text)
+                } else {
+                    url_text_differs(&text)
+                }
+            }),
+        }
+    }
+
+    /// The text a string value is known to start with: a literal's whole text, a template's first part, the left operand's of a `+`.
+    fn leading_text(&self, value: &'a Expression<'a>, depth: usize) -> Option<String> {
+        if depth > 8 {
+            return None;
+        }
+        match peel_ts_sugar(value) {
+            Expression::StringLiteral(literal) if !literal.lone_surrogates => {
+                Some(literal.value.to_string())
+            }
+            Expression::TemplateLiteral(template) => template
+                .quasis
+                .first()
+                .and_then(|quasi| quasi.value.cooked.as_ref())
+                .map(|text| text.to_string()),
+            Expression::BinaryExpression(binary)
+                if binary.operator == oxc_syntax::operator::BinaryOperator::Addition =>
+            {
+                // Text known in full on the left runs on into the right: `"java" + "script:"`.
+                let left = self.leading_text(&binary.left, depth + 1)?;
+                if self.whole_text(&binary.left) {
+                    let right = self
+                        .leading_text(&binary.right, depth + 1)
+                        .unwrap_or_default();
+                    Some(left + &right)
+                } else {
+                    Some(left)
+                }
+            }
+            Expression::Identifier(identifier) => self
+                .const_init(identifier)
+                .and_then(|init| self.leading_text(init, depth + 1)),
+            _ => None,
+        }
+    }
+
+    /// Whether the value's text is known in full (a literal, a template with no substitution, a `+` of such texts).
+    fn whole_text(&self, value: &'a Expression<'a>) -> bool {
+        match peel_ts_sugar(value) {
+            Expression::StringLiteral(_) => true,
+            Expression::TemplateLiteral(template) => template.expressions.is_empty(),
+            Expression::BinaryExpression(binary)
+                if binary.operator == oxc_syntax::operator::BinaryOperator::Addition =>
+            {
+                self.whole_text(&binary.left) && self.whole_text(&binary.right)
+            }
+            _ => false,
+        }
+    }
+
+    /// The initializer of a `const` binding identifier that nothing redeclares.
+    fn const_init(&self, identifier: &IdentifierReference<'_>) -> Option<&'a Expression<'a>> {
+        if !self.resolve {
+            return None;
+        }
+        let symbol = self.symbol_of(identifier)?;
+        let scoping = self.semantic.scoping();
+        if !scoping.symbol_redeclarations(symbol).is_empty() {
+            return None;
+        }
+        let nodes = self.semantic.nodes();
+        let declaration = scoping.symbol_declaration(symbol);
+        let AstKind::VariableDeclarator(declarator) = nodes.kind(declaration) else {
+            return None;
+        };
+        if declarator.kind != VariableDeclarationKind::Const
+            || !declarator.id.is_binding_identifier()
+        {
+            return None;
+        }
+        declarator.init.as_ref()
+    }
+
+    /// Whether the expression is the window's `location`: the global, or a member so named of anything, or a `const` alias of one.
+    fn is_location(&self, object: &'a Expression<'a>) -> bool {
+        match self.through_aliases(object) {
+            Expression::Identifier(identifier) => {
+                identifier.name == "location" && self.symbol_of(identifier).is_none()
+            }
+            Expression::StaticMemberExpression(member) => member.property.name == "location",
+            Expression::ComputedMemberExpression(member) => {
+                literal_property_key(&member.expression).is_some_and(|key| key == "location")
+            }
+            _ => false,
+        }
+    }
+
+    /// A navigation to argument `index` of a call: a sink unless the URL is proven no `javascript:` URL (no argument navigates nowhere).
+    fn navigation_argument(&mut self, call: &'a CallExpression<'a>, index: usize) {
+        let proven = match call.arguments.get(index) {
+            None => true,
+            Some(argument) => argument
+                .as_expression()
+                .is_some_and(|value| self.url_proven(value, 0)),
+        };
+        if !proven {
+            self.add(call.span, CodeSinkKind::NavigationUrl);
+        }
+    }
+
+    /// Whether the global `location` at `span` is used where nothing else can call its `assign` or `replace`: the object of a member, a
+    /// destructuring's source (a detached method throws), the target of a write (the write's own test reads the value), `typeof`, an
+    /// operand of an operator or a template (they read it as text).
+    fn location_in_sight(&self, id: NodeId, span: oxc_span::Span) -> bool {
+        match self.semantic.nodes().parent_kind(id) {
+            AstKind::StaticMemberExpression(member) => member.object.span() == span,
+            AstKind::ComputedMemberExpression(member) => member.object.span() == span,
+            AstKind::VariableDeclarator(declarator) => {
+                matches!(declarator.id, BindingPattern::ObjectPattern(_))
+            }
+            AstKind::AssignmentExpression(assignment) => assignment.left.span() == span,
+            AstKind::UnaryExpression(_)
+            | AstKind::BinaryExpression(_)
+            | AstKind::TemplateLiteral(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Whether the value at `span` is only tested or compared: a condition, `!`, `typeof`, a comparison, a template, or the left of `&&`/`||`
+    /// in a condition is read as a flag or as text, never called or kept.
+    fn value_unused(&self, id: NodeId, span: oxc_span::Span) -> bool {
+        let nodes = self.semantic.nodes();
+        match nodes.parent_kind(id) {
+            AstKind::IfStatement(statement) => statement.test.span() == span,
+            AstKind::WhileStatement(statement) => statement.test.span() == span,
+            AstKind::ConditionalExpression(conditional) => conditional.test.span() == span,
+            AstKind::UnaryExpression(unary) => matches!(
+                unary.operator,
+                UnaryOperator::LogicalNot | UnaryOperator::Typeof | UnaryOperator::Void
+            ),
+            AstKind::BinaryExpression(binary) => {
+                binary.operator.is_equality() || binary.operator.is_compare()
+            }
+            AstKind::TemplateLiteral(_) => true,
+            // `String(x.open)`, `Boolean(x.open)`, `Number(x.open)`: the global converts the value, it calls no function it is given.
+            AstKind::CallExpression(call) => {
+                call.arguments.len() == 1
+                    && call.arguments[0].span() == span
+                    && matches!(peel_ts_sugar(&call.callee), Expression::Identifier(callee)
+                        if matches!(callee.name.as_str(), "String" | "Boolean" | "Number") && self.symbol_of(callee).is_none())
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether the member at `span` is written (`x.open = …`): the write stores a value, it reads none.
+    fn is_write_target(&self, id: NodeId, span: oxc_span::Span) -> bool {
+        matches!(self.semantic.nodes().parent_kind(id), AstKind::AssignmentExpression(assignment) if assignment.left.span() == span)
+    }
+
+    /// ADR 1133 (round 1 F2, F5): the sink a member named `name` is where it is read as a value, by every spelling of the member (a
+    /// static one, a literal or proven computed key): a function that runs under a name no call spells, or the window's location by
+    /// another route. `None` where the member is the callee of a call (`Self::call_named`'s) or the target of a write (the
+    /// assignment's), or where its value is no sink.
+    fn member_value_sink(
+        &self,
+        id: NodeId,
+        span: oxc_span::Span,
+        object: &'a Expression<'a>,
+        name: &str,
+    ) -> Option<CodeSinkKind> {
+        if matches!(self.semantic.nodes().parent_kind(id), AstKind::CallExpression(call) if call.callee.span() == span)
+            || self.is_write_target(id, span)
+        {
+            return None;
+        }
+        match name {
+            "assign" | "replace" if self.is_location(object) => Some(CodeSinkKind::NavigationUrl),
+            // An attribute node of a URL or event attribute is written in place (`getAttributeNode("href").value = …`).
+            "setAttribute" | "setAttributeNS" | "getAttributeNode" | "getAttributeNodeNS"
+            | "getNamedItem" | "getNamedItemNS" => Some(CodeSinkKind::NavigationUrl),
+            "open" if !self.value_unused(id, span) => Some(CodeSinkKind::NavigationUrl),
+            // `document.location`, `window.location`, `frame.contentWindow.location` kept or passed (`const loc = document.location;
+            // loc.assign(url)`, `go(window.location)`): the location handed on, as the global name is.
+            "location"
+                if !self.location_in_sight(id, span) && !self.is_plain_local_object(object) =>
+            {
+                Some(CodeSinkKind::NavigationUrl)
+            }
+            _ => call_spelled_sink(name),
+        }
+    }
+
+    /// A pattern's property under the key it names: a name or literal, or the texts a proof gives a computed key (one nothing proves is
+    /// `computed_keys`' and refuses the program).
+    fn pattern_member(
+        &mut self,
+        id: NodeId,
+        at: oxc_span::Span,
+        key: &'a oxc_ast::ast::PropertyKey<'a>,
+        computed: bool,
+        keys: &mut super::computed_keys::KeyProver<'_, 'a>,
+    ) {
+        match crate::kernel::property_key_value(key) {
+            Some(text) => self.pattern_sink(id, at, &text),
+            None if computed => {
+                if let Some((texts, _)) = key
+                    .as_expression()
+                    .and_then(|expression| keys.key(expression))
+                {
+                    for text in texts {
+                        self.pattern_sink(id, at, &text);
+                    }
+                }
+            }
+            None => {}
+        }
+    }
+
+    /// A member taken out of an object by a pattern is read as a value and kept in a name no scan follows: the sink its name is. A name
+    /// only one kind of object has (`insertAdjacentHTML`, `setAttribute`, `getAttributeNode`) is a sink whatever the source; a name
+    /// every kind of object has (`open`, `write`, `assign`: a component's `open` prop) only where the source is the object that has it
+    /// as a sink: a window, a document, the location.
+    fn pattern_sink(&mut self, id: NodeId, at: oxc_span::Span, name: &str) {
+        let source = self.pattern_source(id);
+        let kind = match name {
+            "setAttribute" | "setAttributeNS" | "getAttributeNode" | "getAttributeNodeNS"
+            | "getNamedItem" | "getNamedItemNS" => Some(CodeSinkKind::NavigationUrl),
+            "insertAdjacentHTML"
+            | "createContextualFragment"
+            | "setHTMLUnsafe"
+            | "setAttributeNode"
+            | "setAttributeNodeNS"
+            | "setNamedItem"
+            | "setNamedItemNS"
+            | "execCommand"
+            | "parseFromString"
+            | "parseHTMLUnsafe" => call_spelled_sink(name),
+            "write" | "writeln" | "createElement" | "createElementNS"
+                if source.is_some_and(|source| self.is_document(source)) =>
+            {
+                call_spelled_sink(name)
+            }
+            "open" | "location" if source.is_some_and(|source| self.is_window(source)) => {
+                Some(CodeSinkKind::NavigationUrl)
+            }
+            "assign" | "replace" if source.is_some_and(|source| self.is_location(source)) => {
+                Some(CodeSinkKind::NavigationUrl)
+            }
+            // An attribute node out of the `attributes` collection by a URL or handler name (`const { href } = el.attributes`).
+            _ if attribute_name_is_unsafe(name)
+                && source.is_some_and(|source| self.is_attributes(source)) =>
+            {
+                Some(CodeSinkKind::NavigationUrl)
+            }
+            _ => None,
+        };
+        if let Some(kind) = kind {
+            self.add(at, kind);
+        }
+    }
+
+    /// The expression an object pattern takes members out of, where the pattern is a declarator's name or an assignment's target.
+    fn pattern_source(&self, property: NodeId) -> Option<&'a Expression<'a>> {
+        let nodes = self.semantic.nodes();
+        let owner = nodes.parent_id(nodes.parent_id(property));
+        match nodes.kind(owner) {
+            AstKind::VariableDeclarator(declarator) => declarator.init.as_ref(),
+            AstKind::AssignmentExpression(assignment) => Some(&assignment.right),
+            _ => None,
+        }
+    }
+
+    /// ADR 1133 (round 1, adjacent spellings): the expression a `const` alias stands for (`const w = window`, then `w`), through at most
+    /// [`ALIAS_HOPS`] bindings; the expression itself where it is no such alias (a `let`, a parameter, a binding written elsewhere).
+    fn through_aliases(&self, expression: &'a Expression<'a>) -> &'a Expression<'a> {
+        let mut current = peel_ts_sugar(expression);
+        for _ in 0..ALIAS_HOPS {
+            let Expression::Identifier(identifier) = current else {
+                break;
+            };
+            let Some(init) = self.const_init(identifier) else {
+                break;
+            };
+            current = peel_ts_sugar(init);
+        }
+        current
+    }
+
+    /// ADR 1133 (round 1): whether `object` is a `const` binding of an object literal with no spread (`const window: any = {}`): a local plain
+    /// object is no window, and the real location reaches its `location` only through code that reads the real one, a sink where it reads it.
+    fn is_plain_local_object(&self, object: &'a Expression<'a>) -> bool {
+        let Expression::Identifier(identifier) = peel_ts_sugar(object) else {
+            return false;
+        };
+        self.const_init(identifier).is_some_and(|init| {
+            matches!(peel_ts_sugar(init), Expression::ObjectExpression(literal)
+                if literal.properties.iter().all(|property| matches!(property, oxc_ast::ast::ObjectPropertyKind::ObjectProperty(_))))
+        })
+    }
+
+    /// Whether the expression is the `attributes` collection of an element: a member so named, by a static name, a literal key or a key a
+    /// proof gives the text (`el["attri" + "butes"]`), or a `const` alias of one.
+    fn is_attributes(&self, expression: &'a Expression<'a>) -> bool {
+        match self.through_aliases(expression) {
+            Expression::StaticMemberExpression(member) => member.property.name == "attributes",
+            Expression::ComputedMemberExpression(member) => {
+                literal_property_key(&member.expression).is_some_and(|key| key == "attributes")
+                    || self.attribute_members.contains(&member.span)
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether the expression is a window: a global object that no binding declares, or a member named for one (`doc.defaultView`,
+    /// `frame.contentWindow`, `w.opener`), or a `const` alias of one.
+    fn is_window(&self, expression: &'a Expression<'a>) -> bool {
+        let expression = self.through_aliases(expression);
+        match expression {
+            Expression::Identifier(_) => self.is_global_object(expression),
+            Expression::StaticMemberExpression(member) => matches!(
+                member.property.name.as_str(),
+                "window"
+                    | "defaultView"
+                    | "contentWindow"
+                    | "opener"
+                    | "parent"
+                    | "top"
+                    | "self"
+                    | "frames"
+            ),
+            _ => false,
+        }
+    }
+
+    /// Whether the expression is a document: the global, or a member named for one (`el.ownerDocument`, `frame.contentDocument`), or a
+    /// `const` alias of one.
+    fn is_document(&self, expression: &'a Expression<'a>) -> bool {
+        match self.through_aliases(expression) {
+            Expression::Identifier(identifier) => {
+                identifier.name == "document" && self.symbol_of(identifier).is_none()
+            }
+            Expression::StaticMemberExpression(member) => matches!(
+                member.property.name.as_str(),
+                "document" | "ownerDocument" | "contentDocument"
+            ),
+            _ => false,
+        }
     }
 }
 
@@ -408,10 +1310,80 @@ fn static_module_path(source: &Expression<'_>) -> bool {
     })
 }
 
+/// The text a URL parser reads: leading spaces and C0 controls dropped, and every tab and line break removed.
+fn url_text(text: &str) -> String {
+    text.trim_start_matches(|c: char| c <= ' ')
+        .chars()
+        .filter(|c| !matches!(c, '\t' | '\n' | '\r'))
+        .collect()
+}
+
 fn is_javascript_url(text: &str) -> bool {
-    text.trim_start()
+    url_text(text)
         .get(..11)
         .is_some_and(|prefix| prefix.eq_ignore_ascii_case("javascript:"))
+}
+
+/// ADR 1133 (F5): whether a URL's known leading text already differs from `javascript:` (so no text after it can make one).
+///
+/// Round 1 (F5): a character reference decodes to any text where an HTML parser reads it (a JSX attribute's string, markup), and Oxc keeps
+/// a JSX attribute's references undecoded, so an `&` among the bytes the scheme would take (`&#106;avascript:`) says nothing: what it
+/// stands for is unknown.
+fn url_text_differs(leading: &str) -> bool {
+    let text = url_text(leading);
+    for (byte, expected) in text.bytes().zip(b"javascript:".iter()) {
+        if byte == b'&' {
+            return false;
+        }
+        if !byte.eq_ignore_ascii_case(expected) {
+            return true;
+        }
+    }
+    // Every known byte agrees with the scheme (or none is known): a whole `javascript:` prefix runs, a shorter one may be finished by
+    // what follows.
+    false
+}
+
+/// ADR 1133 (round 1 F5): whether a text known whole may be a `javascript:` URL: it is one, or an `&` stands among the bytes the scheme
+/// would take (a character reference may decode to any of them, [`url_text_differs`]).
+fn may_be_javascript_url(text: &str) -> bool {
+    let text = url_text(text);
+    for (index, expected) in b"javascript:".iter().enumerate() {
+        match text.as_bytes().get(index) {
+            None => return false,
+            Some(b'&') => return true,
+            Some(byte) if !byte.eq_ignore_ascii_case(expected) => return false,
+            Some(_) => {}
+        }
+    }
+    true
+}
+
+/// ADR 1133 (round 1 F5): whether a text is the `javascript` scheme as `protocol`'s setter reads it: the characters up to a `:` (a URL
+/// parser's own trimming and tab and line break removal first).
+fn is_javascript_scheme(text: &str) -> bool {
+    url_text(text)
+        .split(':')
+        .next()
+        .is_some_and(|scheme| scheme.eq_ignore_ascii_case("javascript"))
+}
+
+/// Whether a slot's literal text runs no code.
+fn slot_text_proven(slot: Slot, text: &str) -> bool {
+    match slot {
+        Slot::Url => !may_be_javascript_url(text),
+        Slot::Markup => markup_is_inert(text),
+        Slot::Scheme => !is_javascript_scheme(text),
+    }
+}
+
+impl Slot {
+    fn kind(self) -> CodeSinkKind {
+        match self {
+            Slot::Url | Slot::Scheme => CodeSinkKind::NavigationUrl,
+            Slot::Markup => CodeSinkKind::MarkupWrite,
+        }
+    }
 }
 
 /// Whether markup written as a string holds no script, no event attribute and no `javascript:` URL. Text with no tag in it is inert.
@@ -434,6 +1406,15 @@ fn markup_is_inert(markup: &str) -> bool {
     .iter()
     .any(|marker| lower.contains(marker))
     {
+        return false;
+    }
+    // Round 1 (F5): a URL parser drops tabs and line breaks (`java<tab>script:`), and an HTML parser decodes character references in an
+    // attribute's value (`&#106;avascript:`), which the substring test above reads as text.
+    let squeezed = lower
+        .chars()
+        .filter(|c| !matches!(c, '\t' | '\n' | '\r'))
+        .collect::<String>();
+    if squeezed.contains("javascript:") || attribute_values_hold_references(markup) {
         return false;
     }
     // An attribute named `on…`: `on`, letters, optional space, `=`, after a space, a quote or a slash.
@@ -462,4 +1443,75 @@ fn markup_is_inert(markup: &str) -> bool {
         }
     }
     true
+}
+
+/// ADR 1133 (round 1 F5): whether an attribute of a start tag in `markup` has a value with an `&` in it. An HTML parser decodes character
+/// references in a value (`href="&#106;avascript:…"`, `src="jav&Tab;ascript:…"`), and not in a tag's or an attribute's name or in the
+/// text between tags, so a reference there is a value no text test reads. A tag is read as the parser reads one: a name, then names
+/// with an optional `=` and a value that is quoted (to its quote) or bare (to a space or `>`).
+fn attribute_values_hold_references(markup: &str) -> bool {
+    let bytes = markup.as_bytes();
+    let mut at = 0;
+    while at < bytes.len() {
+        if bytes[at] != b'<' || !bytes.get(at + 1).is_some_and(u8::is_ascii_alphabetic) {
+            at += 1;
+            continue;
+        }
+        at += 1;
+        while at < bytes.len() && !matches!(bytes[at], b' ' | b'\t' | b'\n' | b'\r' | b'/' | b'>') {
+            at += 1;
+        }
+        loop {
+            while at < bytes.len() && (bytes[at].is_ascii_whitespace() || bytes[at] == b'/') {
+                at += 1;
+            }
+            if at >= bytes.len() {
+                return false;
+            }
+            if bytes[at] == b'>' {
+                at += 1;
+                break;
+            }
+            while at < bytes.len()
+                && !matches!(bytes[at], b' ' | b'\t' | b'\n' | b'\r' | b'=' | b'>' | b'/')
+            {
+                at += 1;
+            }
+            while at < bytes.len() && bytes[at].is_ascii_whitespace() {
+                at += 1;
+            }
+            if bytes.get(at) != Some(&b'=') {
+                continue;
+            }
+            at += 1;
+            while at < bytes.len() && bytes[at].is_ascii_whitespace() {
+                at += 1;
+            }
+            let start = at;
+            match bytes.get(at) {
+                Some(&quote @ (b'"' | b'\'')) => {
+                    at += 1;
+                    let start = at;
+                    while at < bytes.len() && bytes[at] != quote {
+                        at += 1;
+                    }
+                    if bytes[start..at].contains(&b'&') {
+                        return true;
+                    }
+                    at += 1;
+                }
+                Some(_) => {
+                    while at < bytes.len() && !bytes[at].is_ascii_whitespace() && bytes[at] != b'>'
+                    {
+                        at += 1;
+                    }
+                    if bytes[start..at].contains(&b'&') {
+                        return true;
+                    }
+                }
+                None => return false,
+            }
+        }
+    }
+    false
 }

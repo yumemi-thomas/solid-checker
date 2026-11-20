@@ -669,7 +669,9 @@ fn file_sites(
                     member.span,
                     member.span,
                     Entry::Read,
-                    prototype_read(ctx, &[name.as_str()], None, "read-member"),
+                    // ADR 1114 family 3 slice G (round-2 review N1): an any-name writer may have defined an accessor of this name or installed a
+                    // prototype (a Proxy) that traps the read.
+                    prototype_read(ctx, &[name.as_str()], Some(name.as_str()), "read-member"),
                 );
             }
         }
@@ -679,9 +681,18 @@ fn file_sites(
                     element.pattern,
                     element.pattern,
                     Entry::Read,
-                    prototype_read(ctx, &[name.as_str()], None, "read-pattern"),
+                    prototype_read(ctx, &[name.as_str()], Some(name.as_str()), "read-pattern"),
                 );
             }
+        }
+        // ADR 1114 family 3 slice G (round-2 review N1): `k in o` asks `o`'s prototype chain, which a Proxy an any-name writer installed traps.
+        for &operand in &file.ast.key_probed_operands {
+            push(
+                operand,
+                operand,
+                Entry::Read,
+                prototype_read(ctx, &[], Some("[has]"), "in"),
+            );
         }
         for &operand in &file.ast.iterated_operands {
             push(
@@ -742,6 +753,33 @@ fn file_sites(
                 operand,
                 Entry::Read,
                 prototype_read(ctx, &["then"], Some("then"), "await"),
+            );
+        }
+        // ADR 1114 family 3 slice G (round-2 review N5): an async function resolves its promise with what it returns, which reads the value's `then`.
+        let async_returns = file
+            .ast
+            .returns
+            .iter()
+            .filter_map(|ret| ret.argument)
+            .filter(|&argument| {
+                file.ast
+                    .innermost_function_containing(argument)
+                    .is_some_and(|function| function.r#async)
+            })
+            .chain(
+                file.ast
+                    .functions
+                    .iter()
+                    .filter(|function| function.r#async && function.expression_body)
+                    .map(|function| function.body),
+            )
+            .collect::<Vec<_>>();
+        for argument in async_returns {
+            push(
+                argument,
+                argument,
+                Entry::Read,
+                prototype_read(ctx, &["then"], Some("then"), "async-return"),
             );
         }
         for &initializer in &file.ast.disposal_initializers {
@@ -3116,10 +3154,29 @@ fn prototype_read(
         });
     }
     // `any_name`: the member the operation runs that a writer under any name may have written (`[Symbol.iterator]`, `[Symbol.toPrimitive]`).
-    let member = any_name?;
-    let root = index.prototype_writers_any_name().next()?;
+    if let Some(member) = any_name
+        && let Some(root) = index.prototype_writers_any_name().next()
+    {
+        return Some(DeclarationAt {
+            path: format!("{PROTOTYPE_WRITE_ANY_PREFIX}{member}#{kind}:{root}"),
+        });
+    }
+    // ADR 1114 family 3 slice G (round-2 review N3): the names listed are what the operation asks first, not all its native path reads
+    // (`Error.prototype.toString` reads `name` and `message`, `RegExp.prototype.toString` `source` and `flags`, the `flags` getter each flag).
+    // Under a writer by name that may reach Solid, the operation is a site naming the written member, as a call is (slice E, F3).
+    let (written, root) = index.prototype_writers.iter().find_map(|(name, roots)| {
+        roots
+            .iter()
+            .find(|root| {
+                index
+                    .by_root
+                    .get(root.as_str())
+                    .is_none_or(|reach| !reach.is_clear())
+            })
+            .map(|root| (name, root))
+    })?;
     Some(DeclarationAt {
-        path: format!("{PROTOTYPE_WRITE_ANY_PREFIX}{member}#{kind}:{root}"),
+        path: format!("{PROTOTYPE_WRITE_PREFIX}{written}#named-{kind}:{root}"),
     })
 }
 

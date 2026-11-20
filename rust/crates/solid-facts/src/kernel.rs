@@ -6,6 +6,9 @@
 //!   build instead of passing. What syntax cannot settle comes back as operand obligations for the IR half
 //!   (`solid_reactive_ir::kernel`): an identifier must name a binding (a global may be an accessor of the global object), and an
 //!   operand a coercing operator converts must be proved primitive.
+//! - **K4** [`value_inert`]: is an expression's value provably neither called nor kept (it only meets operators, tests, keys or a
+//!   discarded statement), or is it only the object of a member under a plain data key (ADR 1133: any use of that member is the
+//!   program's own code, which the scans read)?
 //! - **K3** [`cooked_key`]: the exact property key a key's source text denotes, from the parser's cooked value (escapes decoded,
 //!   numbers canonical), never from trimmed text.
 //!
@@ -399,6 +402,90 @@ pub fn cooked_key(text: &str) -> Option<String> {
         return literal_key_value(property.key.as_expression()?);
     }
     property_key_value(&property.key)
+}
+
+/// ADR 1133: a key that names no standard function-valued member, prototype route, coercion or protocol hook, Solid private key,
+/// shadow-root spelling, nor a name the delivery premise watches (`event`, `Promise`, `__proto__`). Round 2 (N1): nor an attribute a
+/// URL or an event handler lives in (`href`, `src`, `action`, `formAction`, `srcdoc`, `on…`: `el[key()].href` is the attribute node of
+/// `href` when the key is `attributes`, and writing its `value`, `textContent` or `nodeValue` sets the URL) nor the collection itself.
+fn plain_data_key(key: &str) -> bool {
+    !crate::ast::code_sinks::attribute_name_is_unsafe(key)
+        && key != "attributes"
+        && !crate::ast::premise_sites::is_standard_member(key)
+        && !crate::ast::premise_sites::PROTOTYPE_ROUTES.contains(&key)
+        && !crate::ast::premise_sites::HOOK_KEYS.contains(&key)
+        && !crate::ast::premise_sites::SHADOW_SPELLINGS.contains(&key)
+        && !key.contains("$$")
+        && !key.starts_with("_$")
+        && !matches!(key, "event" | "Promise" | "__proto__")
+}
+
+/// K4 (ADR 1125): whether the value of the expression at `node` is provably neither called nor kept ([`crate::ast::ComputedKeyFact::value_inert`]).
+pub(crate) fn value_inert(
+    semantic: &oxc_semantic::Semantic<'_>,
+    node: oxc_semantic::NodeId,
+) -> bool {
+    use oxc_ast::AstKind;
+    let nodes = semantic.nodes();
+    let mut child = node;
+    loop {
+        let parent = nodes.parent_id(child);
+        if parent == child {
+            return false;
+        }
+        let child_span = nodes.kind(child).span();
+        match nodes.kind(parent) {
+            // The value passes through: judge the parent's own position.
+            AstKind::ParenthesizedExpression(_)
+            | AstKind::TSAsExpression(_)
+            | AstKind::TSSatisfiesExpression(_)
+            | AstKind::TSNonNullExpression(_)
+            | AstKind::TSTypeAssertion(_)
+            | AstKind::LogicalExpression(_) => child = parent,
+            AstKind::ConditionalExpression(conditional) => {
+                if conditional.test.span() == child_span {
+                    return true;
+                }
+                child = parent;
+            }
+            AstKind::UnaryExpression(unary) => return unary.operator != UnaryOperator::Delete,
+            AstKind::BinaryExpression(binary) => {
+                return binary.operator != BinaryOperator::Instanceof;
+            }
+            AstKind::IfStatement(statement) => return statement.test.span() == child_span,
+            AstKind::WhileStatement(statement) => return statement.test.span() == child_span,
+            AstKind::DoWhileStatement(statement) => return statement.test.span() == child_span,
+            AstKind::ForStatement(statement) => {
+                return statement
+                    .test
+                    .as_ref()
+                    .is_some_and(|test| test.span() == child_span);
+            }
+            AstKind::ComputedMemberExpression(member) => {
+                return member.expression.span() == child_span;
+            }
+            // ADR 1133 (#296 textbook; round 1 F6): the value only as the object of a member read, written or called under a plain
+            // data key (`draft[index()].done = …`, `el[key()].run`, `el[key()].run(e)`): no standard function-valued name, prototype
+            // route, hook, private key, shadow spelling or delivery name, so what the member holds is something the program put
+            // there (every platform function, Solid's stored handler and every reader has such a name), and what the program then
+            // does with it is code the scans read. The rule is the key's alone: a first cut also asked that the member not be
+            // called, which held a direct call and let `const f = el[key()].run; f(e)` and `.run.call(…)` pass for the same member.
+            AstKind::StaticMemberExpression(member) => {
+                return member.object.span() == child_span
+                    && plain_data_key(member.property.name.as_str());
+            }
+            // An arrow's expression body is an expression statement in Oxc's tree: its value is the arrow's return (F3).
+            AstKind::ExpressionStatement(_) => {
+                let body = nodes.parent_id(parent);
+                let arrow = nodes.parent_id(body);
+                return !matches!(
+                    (nodes.kind(body), nodes.kind(arrow)),
+                    (AstKind::FunctionBody(_), AstKind::ArrowFunctionExpression(function)) if function.expression
+                );
+            }
+            _ => return false,
+        }
+    }
 }
 
 #[cfg(test)]

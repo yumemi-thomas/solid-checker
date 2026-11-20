@@ -2,6 +2,17 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 661,
+      "end": 671,
+      "fixes": 0
+    },
+    {
       "rule": "missing-context-provider",
       "code": "SC4002",
       "kind": "uncertifiable",
@@ -67,6 +78,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 1265,
+      "end": 1275,
+      "fixes": 0
+    },
+    {
       "rule": "missing-context-provider",
       "code": "SC4002",
       "kind": "uncertifiable",
@@ -89,6 +111,17 @@
       "fixes": 0
     },
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 1497,
+      "end": 1507,
+      "fixes": 0
+    },
+    {
       "rule": "missing-context-provider",
       "code": "SC4002",
       "kind": "uncertifiable",
@@ -97,6 +130,17 @@
       "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
       "start": 1497,
       "end": 1507,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 1670,
+      "end": 1680,
       "fixes": 0
     },
     {
@@ -111,10 +155,10 @@
       "fixes": 0
     },
     {
-      "rule": "missing-context-provider",
-      "code": "SC4002",
+      "rule": "missing-owner",
+      "code": "SC4001",
       "kind": "uncertifiable",
-      "blocker": "computation-error-unobserved",
+      "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
       "start": 1892,
@@ -128,8 +172,41 @@
       "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 1892,
+      "end": 1902,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
       "start": 2082,
       "end": 2092,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 2082,
+      "end": 2092,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 2263,
+      "end": 2273,
       "fixes": 0
     },
     {
@@ -177,10 +254,10 @@
       "fixes": 0
     },
     {
-      "rule": "missing-context-provider",
-      "code": "SC4002",
+      "rule": "missing-owner",
+      "code": "SC4001",
       "kind": "uncertifiable",
-      "blocker": "computation-error-unobserved",
+      "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
       "start": 2467,
@@ -194,8 +271,41 @@
       "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 2467,
+      "end": 2477,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
       "start": 2651,
       "end": 2661,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "computation-error-unobserved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 2651,
+      "end": 2661,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/stored-throw-dynamic-mount/App.tsx",
+      "start": 2905,
+      "end": 2915,
       "fixes": 0
     },
     {

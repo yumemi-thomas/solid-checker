@@ -63,6 +63,17 @@
       "start": 1079,
       "end": 1088,
       "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/projection-writes/App.tsx",
+      "start": 1157,
+      "end": 1193,
+      "fixes": 0
     }
   ]
 }

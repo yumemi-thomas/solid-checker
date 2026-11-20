@@ -150,6 +150,7 @@ census_tables! {
     result_access: ResultAccessAnswered = 90;
     component_spans: ComponentSpansOf = 91;
     call_result_symbols: FileCallResultSymbols = 92;
+    standard_member_replaced: StandardMemberReplaced = 93;
 }
 
 /// A memo over a lookup table not yet ported: its whole computation is one
@@ -382,6 +383,15 @@ adapter! {
     PrototypeWriteVeto: () => bool, "census_prototype_write_veto",
     cycle: true,
     |lookup, _table, _key| crate::interproc::accessor_provenance::reflective_prototype_write(lookup)
+}
+
+adapter! {
+    /// ADR 1129 (review F2): whether the standard member a qualified name
+    /// names (`Array.includes`) may have been replaced where the program runs
+    /// ([`crate::interproc::accessor_provenance::standard_member_replaced`]).
+    StandardMemberReplaced: Arc<str> => bool, "census_standard_member_replaced",
+    cycle: true,
+    |lookup, _table, qualified| crate::interproc::accessor_provenance::standard_member_replaced(lookup, qualified)
 }
 
 adapter! {

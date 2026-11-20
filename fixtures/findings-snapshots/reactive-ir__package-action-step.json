@@ -16,11 +16,22 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-action-step/App.tsx",
       "start": 378,
       "end": 383,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-action-step/App.tsx",
+      "start": 480,
+      "end": 486,
       "fixes": 0
     }
   ]

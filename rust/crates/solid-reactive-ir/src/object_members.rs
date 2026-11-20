@@ -20,7 +20,10 @@ mod assigned;
 pub(crate) use assigned::{AssignedAnswer, AssignedMembersAnswer, PrototypeOwnerAt};
 #[path = "object_members/memo.rs"]
 mod memo;
+#[path = "object_members/view_spread.rs"]
+mod view_spread;
 pub(crate) use memo::{LiteralReceivers, ObjectMemberTargets, ReceiverClosed, SpreadTargetsAt};
+pub(crate) use view_spread::PROOF as VIEW_SPREAD_PROOF;
 
 pub(crate) type Targets = HashMap<Location, (String, Span)>;
 
@@ -43,15 +46,19 @@ pub(crate) fn index(lookup: &SemanticLookup<'_>) -> Targets {
 }
 
 /// What every intrinsic element's spread argument supplies, assembled from
-/// the per-slot [`SpreadTargetsAt`] answers (ADR 0358).
-pub(crate) fn spread_index(lookup: &SemanticLookup<'_>) -> SpreadTargets {
+/// the per-slot [`SpreadTargetsAt`] answers (ADR 0358), with the keys ADR
+/// 1129's `merge`/`omit` view proof gives a spread (a later slot of a path
+/// overwrites an earlier one in both).
+pub(crate) fn spread_index(lookup: &SemanticLookup<'_>) -> (SpreadTargets, SpreadViews) {
     let world = lookup.memo_world();
     let mut spreads = HashMap::default();
+    let mut views = HashMap::default();
     for (slot, file) in lookup.file_slots().iter().enumerate() {
         let key = lookup.memo_slot_of(slot);
-        for (argument, targets) in world.answer::<SpreadTargetsAt>(&key) {
+        for (argument, targets, view) in world.answer::<SpreadTargetsAt>(&key) {
+            let at = location(file.path.shared(), argument);
             spreads.insert(
-                location(file.path.shared(), argument),
+                at.clone(),
                 targets.map(|targets| {
                     targets
                         .into_iter()
@@ -59,10 +66,22 @@ pub(crate) fn spread_index(lookup: &SemanticLookup<'_>) -> SpreadTargets {
                         .collect()
                 }),
             );
+            match view {
+                Some(view) => {
+                    views.insert(at, view);
+                }
+                None => {
+                    views.remove(&at);
+                }
+            }
         }
     }
-    spreads
+    (spreads, views)
 }
+
+/// ADR 1129: per intrinsic element's spread argument, the keys a `merge`/`omit`
+/// view proof gives it and whether its handlers came from that proof.
+pub(crate) type SpreadViews = HashMap<Location, (Vec<std::sync::Arc<str>>, bool)>;
 
 fn references(file: &FileFacts) -> HashSet<Span> {
     file.ast
@@ -728,17 +747,30 @@ fn enclosing_function(file: &FileFacts, span: Span) -> Option<Span> {
 /// the enclosing scope's and are the same either way (ADR 0581); `eval` and
 /// an escape stay refused for every function.
 pub(crate) fn receiver_inert(file: &FileFacts, function: &ast::FunctionFact) -> bool {
-    let receiver_spellings: &[&str] = if function.kind == ast::FunctionKind::Arrow {
+    !function.generator
+        && !receiver_spelled(
+            file,
+            function.span,
+            function.kind == ast::FunctionKind::Arrow,
+        )
+}
+
+/// Whether the code at `span` may reach the receiver or the arguments of the
+/// call that runs it, [`receiver_inert`]'s spellings: `eval` and an escape
+/// always, and unless the code runs as an arrow's (`lexical`), `this`,
+/// `arguments` and `super` as well (ADR 1129: the getter the compiler builds
+/// for a JSX attribute or child sees the props object as `this`). Unreadable
+/// text may spell anything.
+pub(crate) fn receiver_spelled(file: &FileFacts, span: Span, lexical: bool) -> bool {
+    let spellings: &[&str] = if lexical {
         &["eval", "\\"]
     } else {
         &["this", "arguments", "eval", "super", "\\"]
     };
-    !function.generator
-        && file.source_text(function.span).is_some_and(|text| {
-            !receiver_spellings
-                .iter()
-                .any(|spelling| text.contains(spelling))
-        })
+    // Spelled unless the text is read and holds none of them.
+    !file
+        .source_text(span)
+        .is_some_and(|text| !spellings.iter().any(|spelling| text.contains(spelling)))
 }
 
 #[cfg(test)]

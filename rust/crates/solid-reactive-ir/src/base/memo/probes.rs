@@ -73,6 +73,8 @@ pub(crate) enum Probe {
     /// The dialect primitives the project names (`Section::ProjectPrimitives`'
     /// value), sorted. Unit.
     ProjectPrimitives,
+    /// ADR 1125: whether event delivery is intact (`Section::EventDeliveryIntact`'s value). Unit.
+    EventDeliveryIntact,
     /// The symbol an entity or, failing one, a resolved call's declaration
     /// names at a span of a file (`ProjectIndexes::method_symbol`). FileSpan.
     DeclarationSymbolAt,

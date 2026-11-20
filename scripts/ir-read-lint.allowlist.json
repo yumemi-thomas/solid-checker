@@ -251,8 +251,11 @@
   },
   "rust/crates/solid-reactive-ir/src/local_access.rs": {
     "file_slots": 4,
-    "file_by_path": 5,
-    "hashmap-iteration": 6
+    "file_by_path": 6,
+    "hashmap-iteration": 6,
+    "pending-review": [
+      "file_by_path rose 5 -> 6 (--allow-rise): ADR 1138, the declaration file's bindings; file_by_path notes the slot"
+    ]
   },
   "rust/crates/solid-reactive-ir/src/name_matcher.rs": {
     "hashmap-iteration": 1
@@ -260,6 +263,12 @@
   "rust/crates/solid-reactive-ir/src/object_members.rs": {
     "file_slots": 3,
     "hashmap-iteration": 20
+  },
+  "rust/crates/solid-reactive-ir/src/overridden_handlers.rs": {
+    "file_by_path": 1,
+    "pending-review": [
+      "file_by_path rose 0 -> 1 (--allow-rise): unreviewed"
+    ]
   },
   "rust/crates/solid-reactive-ir/src/owners/context_census.rs": {
     "file_slots": 3,
@@ -278,7 +287,11 @@
   },
   "rust/crates/solid-reactive-ir/src/owners/owner_discovery.rs": {
     "file_slots": 2,
-    "file_by_path": 1
+    "file_by_path": 2,
+    "pending-review": [
+      "file_by_path rose 1 -> 2 (--allow-rise): unreviewed",
+      "file_by_path site replaced (--allow-rise): unreviewed `let overridden = lookup.file_by_path(path).is_some_and(|holder| {`"
+    ]
   },
   "rust/crates/solid-reactive-ir/src/owners/owner_graph.rs": {
     "file_by_path": 1

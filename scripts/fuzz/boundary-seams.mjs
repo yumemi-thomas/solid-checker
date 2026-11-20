@@ -100,6 +100,13 @@ export const SEAMS = [
     case: "a parameter forwarded into a result-access position, whose body is the caller's, and a spread argument",
     gap: "no pair yet: the case needs a helper whose parameter is forwarded into `createMemo`'s result-access position by one caller and a visible body by another",
   },
+  {
+    id: "dispatcher-by-key",
+    sites: [{ file: "rust/crates/solid-facts/src/ast/premise_sites.rs", match: /literal is the census's own, and a dispatcher is handed on only where its value is kept/ }],
+    between: ["the dispatch census (the written dispatches of a body, `dispatchEvent` and `click` read by their name or literal key, ADR 1125)", "the delivery scan (`premise_sites` `DispatchHandedOn`, ADR 1133)"],
+    case: "a dispatcher read under a key the program builds (`el[\"dispatch\" + \"Event\"].call(el, e)`), taken out of the element by a pattern (`({ dispatchEvent: d } = el)`) or handed back by `Reflect.get`: the census reads only a written name or literal, so the scan treats the dispatcher under any other key as handed on",
+    fixtures: ["reactive-ir/event-delivery-spellings/variants/dispatch-built-key", "reactive-ir/event-delivery-spellings/variants/dispatch-assignment-pattern", "reactive-ir/event-delivery-spellings/variants/reflect-get-dispatch"],
+  },
 ];
 
 /** Deferral comments that name no second check, each with the reason. Grouped by file where the reason is the same. */

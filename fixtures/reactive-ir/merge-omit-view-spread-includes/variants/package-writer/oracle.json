@@ -1,0 +1,4 @@
+{
+  "note": "ADR 1129 review F2: a loaded package replaces Array.prototype.includes; omit's hidden key leaks.",
+  "packages": ["fz-includes"]
+}

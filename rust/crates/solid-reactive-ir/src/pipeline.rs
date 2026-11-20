@@ -1025,6 +1025,8 @@ pub(crate) fn build_with_analysis_inputs_measured_incremental(
     crate::competing_checks::mark(&mut program, &settled_gates, semantic_lookup);
     // ADR 1134: an owner violation in a delegated handler of a control disabled for its whole life.
     crate::disabled_handlers::mark(&mut program, semantic_lookup);
+    // ADR 1140: an owner row in a handler a later source of its element overrides.
+    crate::overridden_handlers::mark(&mut program, semantic_lookup);
     // ADR 0947: the typed blocker of each row a veto formula holds, over the final rows.
     (program.blocked_by, program.hazards) =
         crate::blocked_by::typed_blockers(&program, semantic_lookup);
