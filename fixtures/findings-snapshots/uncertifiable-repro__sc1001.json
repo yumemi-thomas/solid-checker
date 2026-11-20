@@ -299,28 +299,6 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc1001/src/handler-factory-options.tsx",
-      "start": 915,
-      "end": 938,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc1001/src/handler-factory-options.tsx",
-      "start": 976,
-      "end": 999,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-handler-frozen",
       "code": "SC1007",
       "kind": "uncertifiable",
@@ -1086,17 +1064,6 @@
       "path": "fixtures/uncertifiable-repro/sc1001/src/r-array-actions.tsx",
       "start": 630,
       "end": 644,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "callee-callback-timing",
-      "severity": "warning",
-      "path": "fixtures/uncertifiable-repro/sc1001/src/r-context-state.tsx",
-      "start": 450,
-      "end": 460,
       "fixes": 0
     },
     {

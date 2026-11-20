@@ -26,7 +26,7 @@ use crate::core::Span;
 const STANDARD_MEMBERS: &str = include_str!("standard_members.txt");
 
 /// The prototype routes, by name.
-const PROTOTYPE_ROUTES: [&str; 13] = [
+pub(crate) const PROTOTYPE_ROUTES: [&str; 13] = [
     "prototype",
     "__proto__",
     "constructor",
@@ -43,7 +43,7 @@ const PROTOTYPE_ROUTES: [&str; 13] = [
 ];
 
 /// The string-keyed coercion and protocol hooks.
-const HOOK_KEYS: [&str; 6] = [
+pub(crate) const HOOK_KEYS: [&str; 6] = [
     "toString",
     "valueOf",
     "toJSON",
@@ -74,7 +74,7 @@ const DEFINERS: [(&str, usize); 4] = [
 ];
 
 /// ADR 1115's spellings.
-const SHADOW_SPELLINGS: [&str; 9] = [
+pub(crate) const SHADOW_SPELLINGS: [&str; 9] = [
     "attachShadow",
     "shadowRoot",
     "ShadowRoot",
@@ -118,21 +118,50 @@ pub(super) fn premise_sites<'a>(semantic: &Semantic<'a>, resolve: bool) -> Vec<P
             AstKind::WithStatement(statement) => {
                 sites.add(statement.span, PremiseClause::With, "with")
             }
-            AstKind::IdentifierReference(identifier) => sites.reference(identifier),
+            AstKind::IdentifierReference(identifier) => {
+                // ADR 1133 (#296 owed): `Reflect.apply`, `Reflect.construct` only call what they are given; `Reflect.get` and
+                // `Reflect.has` read the key they are given, which is checked as a key when a literal or proven texts name it.
+                let reflect_reads = identifier.name == "Reflect"
+                    && sites.global(identifier)
+                    && sites.reflect_member_reads_only(node.id(), identifier.span, &mut keys);
+                sites.reference(identifier, reflect_reads);
+                // ADR 1133 (F6): `Object` handed on as a value (`const O = Object`, `const { assign } = Object`, `f(Object)`) may be
+                // called as `Object.assign` by any name; only a member read, a call or `new`, `instanceof` and `typeof` keep it in sight.
+                if identifier.name == "Object"
+                    && sites.global(identifier)
+                    && !sites.object_in_sight(node.id(), identifier.span)
+                {
+                    sites.add(identifier.span, PremiseClause::ObjectAssign, "*");
+                }
+            }
             AstKind::ForInStatement(statement) => {
                 sites.add(statement.span, PremiseClause::KeyReader, "for-in")
             }
             AstKind::StaticMemberExpression(member) => {
                 let key = member.property.name.as_str();
                 // ADR 1125 (G2): a standard reader of own keys or values, named in any position (a call, a value handed on, `.call`).
-                if let Expression::Identifier(object) = peel_ts_sugar(&member.object)
-                    && sites.global(object)
-                    && ((object.name == "Object" && KEY_READERS.contains(&key))
-                        || (object.name == "JSON"
+                if (sites.names_object(&member.object) && KEY_READERS.contains(&key))
+                    || matches!(peel_ts_sugar(&member.object), Expression::Identifier(object) if sites.global(object)
+                        && (object.name == "JSON"
                             && key == "stringify"
                             && !sites.is_callee(node.id(), member.span)))
                 {
                     sites.add(member.span, PremiseClause::KeyReader, key);
+                }
+                // ADR 1133: a dispatcher read as a value (`el.dispatchEvent.call(…)`, `Reflect.apply(….dispatchEvent, …)`, an alias).
+                if matches!(key, "dispatchEvent" | "click")
+                    && sites.value_kept(node.id(), member.span)
+                {
+                    sites.add(member.span, PremiseClause::DispatchHandedOn, key);
+                }
+                // ADR 1133 (F6): `globalThis.Reflect`, `window.Proxy`, and `globalThis.Object` handed on, are the globals by another route.
+                if matches!(key, "Proxy" | "Reflect") {
+                    sites.add(member.span, PremiseClause::ProxyOrReflect, key);
+                }
+                if matches!(key, "Object" | "constructor")
+                    && !sites.object_in_sight(node.id(), member.span)
+                {
+                    sites.add(member.span, PremiseClause::ObjectAssign, "*");
                 }
                 sites.key(member.span, key);
                 if sites.is_write(node.id(), member.span) {
@@ -156,15 +185,17 @@ pub(super) fn premise_sites<'a>(semantic: &Semantic<'a>, resolve: bool) -> Vec<P
                 // ADR 1125 (Fable round 2, N1): a reader spelled by a computed key (`Object["values"]`, `Object?.["values"]`,
                 // `JSON["stringify"]`) is the reader; a key proven to be texts is checked against each, and a key nothing proves may be
                 // any reader.
-                if let Expression::Identifier(object) = peel_ts_sugar(&member.object)
-                    && matches!(object.name.as_str(), "Object" | "JSON")
-                    && sites.global(object)
+                // ADR 1133 (N2): `globalThis.Object["values"]` too (`names_object`).
+                let readers: Option<&[&str]> = if sites.names_object(&member.object) {
+                    Some(&KEY_READERS)
+                } else if matches!(peel_ts_sugar(&member.object), Expression::Identifier(object)
+                    if object.name == "JSON" && sites.global(object))
                 {
-                    let readers: &[&str] = if object.name == "Object" {
-                        &KEY_READERS
-                    } else {
-                        &["stringify"]
-                    };
+                    Some(&["stringify"])
+                } else {
+                    None
+                };
+                if let Some(readers) = readers {
                     let texts = match literal_property_key(&member.expression) {
                         Some(key) => Some(vec![key.to_string()]),
                         None => keys.key(&member.expression).map(|(texts, _)| {
@@ -183,6 +214,12 @@ pub(super) fn premise_sites<'a>(semantic: &Semantic<'a>, resolve: bool) -> Vec<P
                 }
                 // An unproven key is the `computed_keys` fact's; a literal one is checked as a name.
                 if let Some(key) = literal_property_key(&member.expression) {
+                    // ADR 1133: `el["dispatchEvent"]` read as a value, as the static member.
+                    if matches!(key.as_str(), "dispatchEvent" | "click")
+                        && sites.value_kept(node.id(), member.span)
+                    {
+                        sites.add(member.span, PremiseClause::DispatchHandedOn, &key);
+                    }
                     sites.key(member.span, &key);
                     if sites.is_write(node.id(), member.span) {
                         sites.written(member.span, &key);
@@ -280,6 +317,10 @@ pub(super) fn premise_sites<'a>(semantic: &Semantic<'a>, resolve: bool) -> Vec<P
             AstKind::BindingProperty(property) => {
                 if let Some(key) = kernel_key(&property.key) {
                     sites.key(property.span, &key);
+                    // ADR 1133: `const { dispatchEvent } = el` takes the dispatcher out (`dispatchEvent.call(el, e)`).
+                    if matches!(key.as_str(), "dispatchEvent" | "click") {
+                        sites.add(property.span, PremiseClause::DispatchHandedOn, &key);
+                    }
                     // ADR 1125 (G2): `const { entries } = Object` takes a reader out by name (whatever the object: fail closed).
                     if KEY_READERS.contains(&key.as_str()) {
                         sites.add(property.span, PremiseClause::KeyReader, &key);
@@ -307,9 +348,7 @@ pub(super) fn premise_sites<'a>(semantic: &Semantic<'a>, resolve: bool) -> Vec<P
                 }
                 if let Expression::StaticMemberExpression(callee) = peel_ts_sugar(&call.callee)
                     && callee.property.name == "assign"
-                    && let Expression::Identifier(object) = peel_ts_sugar(&callee.object)
-                    && object.name == "Object"
-                    && sites.global(object)
+                    && sites.names_object(&callee.object)
                     && !matches!(
                         call.arguments
                             .first()
@@ -468,20 +507,24 @@ impl<'a> Sites<'_, 'a> {
             }
             _ => return false,
         };
-        // An export declaration holds the binding (`export const h = …`, `export class K`).
-        let mut up = owner;
-        loop {
-            let parent = nodes.parent_id(up);
-            if parent == up {
-                break;
-            }
-            match nodes.kind(parent) {
-                AstKind::ExportNamedDeclaration(_) | AstKind::ExportDefaultDeclaration(_) => {
-                    return false;
+        // An export declaration holds the binding (`export const h = …`, `export class K`): the declaration's own parent, not any
+        // ancestor (ADR 1133: a `const` in an exported function's body is no export).
+        let declaration = match nodes.kind(owner) {
+            AstKind::Class(_) => owner,
+            _ => {
+                // The literal's `const` declarator, then its declaration.
+                let mut up = nodes.parent_id(owner);
+                while !matches!(nodes.kind(up), AstKind::VariableDeclarator(_)) {
+                    up = nodes.parent_id(up);
                 }
-                AstKind::Program(_) => break,
-                _ => up = parent,
+                nodes.parent_id(up)
             }
+        };
+        if matches!(
+            nodes.parent_kind(declaration),
+            AstKind::ExportNamedDeclaration(_) | AstKind::ExportDefaultDeclaration(_)
+        ) {
+            return false;
         }
         if nodes.iter().any(|node| {
             matches!(node.kind(), AstKind::ThisExpression(_) | AstKind::Super(_))
@@ -521,12 +564,12 @@ impl<'a> Sites<'_, 'a> {
                 .is_none()
     }
 
-    fn reference(&mut self, identifier: &IdentifierReference<'a>) {
+    fn reference(&mut self, identifier: &IdentifierReference<'a>, reflect_reads: bool) {
         let name = identifier.name.as_str();
         if !self.global(identifier) {
             return;
         }
-        if matches!(name, "Proxy" | "Reflect") {
+        if name == "Proxy" || (name == "Reflect" && !reflect_reads) {
             self.add(identifier.span, PremiseClause::ProxyOrReflect, name);
         }
         if SHADOW_SPELLINGS.contains(&name) {
@@ -662,6 +705,119 @@ impl<'a> Sites<'_, 'a> {
             })
     }
 
+    /// ADR 1133 (F6, N2): whether the expression may be the global `Object`: the name no binding declares, a member so named of anything
+    /// (`globalThis.Object`, `window.Object`: fail closed on the receiver), or any value's `constructor`.
+    fn names_object(&self, expression: &Expression<'_>) -> bool {
+        match peel_ts_sugar(expression) {
+            Expression::Identifier(object) => object.name == "Object" && self.global(object),
+            // N2: any value's `constructor` may be `Object` (`({}).constructor.values(el)`).
+            Expression::StaticMemberExpression(member) => {
+                matches!(member.property.name.as_str(), "Object" | "constructor")
+            }
+            _ => false,
+        }
+    }
+
+    /// ADR 1133 (F6): whether the global `Object` (or a value's `constructor`) at `span` is used where no other name can take
+    /// `Object.assign` from it: the object of a member read under a key a literal names (the member's own test sees `assign`), the callee
+    /// of a call or `new`, the right side of `instanceof`, an operand of an equality, or the operand of `typeof`. TypeScript's wrappers and parentheses are no use (`(Object as any)[k]`): fail closed.
+    fn object_in_sight(&self, id: NodeId, span: oxc_span::Span) -> bool {
+        match self.semantic.nodes().parent_kind(id) {
+            AstKind::StaticMemberExpression(member) => member.object.span() == span,
+            AstKind::ComputedMemberExpression(member) => {
+                member.object.span() == span && literal_property_key(&member.expression).is_some()
+            }
+            AstKind::CallExpression(call) => call.callee.span() == span,
+            AstKind::NewExpression(new) => new.callee.span() == span,
+            AstKind::BinaryExpression(binary) => {
+                (binary.operator == oxc_syntax::operator::BinaryOperator::Instanceof
+                    && binary.right.span() == span)
+                    // `x.constructor === Object`: a comparison reads no member.
+                    || binary.operator.is_equality()
+            }
+            AstKind::UnaryExpression(unary) => unary.operator == UnaryOperator::Typeof,
+            _ => false,
+        }
+    }
+
+    /// ADR 1133 (#296 owed): whether the global `Reflect` at `span` is the object of a call of a member that only calls or reads:
+    /// `Reflect.apply(f, t, args)` and `Reflect.construct(F, args)` call a function value the program names elsewhere (its own
+    /// read is checked there); `Reflect.get(o, k)` and `Reflect.has(o, k)` read key `k`, which is checked as a read key (a route, a
+    /// private key, a spelling) when a literal or proven texts name it. Any other member (`defineProperty`, `set`, `setPrototypeOf`,
+    /// `deleteProperty`, `ownKeys`, …), a member read but not called, a computed member, or a key nothing proves: fail closed.
+    fn reflect_member_reads_only(
+        &mut self,
+        id: NodeId,
+        span: oxc_span::Span,
+        keys: &mut super::computed_keys::KeyProver<'_, 'a>,
+    ) -> bool {
+        let nodes = self.semantic.nodes();
+        let AstKind::StaticMemberExpression(member) = nodes.parent_kind(id) else {
+            return false;
+        };
+        if member.object.span() != span {
+            return false;
+        }
+        let member_id = nodes.parent_id(id);
+        let AstKind::CallExpression(call) = nodes.parent_kind(member_id) else {
+            return false;
+        };
+        if call.callee.span() != member.span {
+            return false;
+        }
+        match member.property.name.as_str() {
+            "apply" | "construct" => true,
+            "get" | "has" => {
+                let Some(key) = call
+                    .arguments
+                    .get(1)
+                    .and_then(|argument| argument.as_expression())
+                else {
+                    return false;
+                };
+                if call.arguments.iter().any(|argument| argument.is_spread()) {
+                    return false;
+                }
+                let texts: Vec<String> = match literal_property_key(key) {
+                    Some(text) => vec![text.to_string()],
+                    None => match keys.key(key) {
+                        Some((texts, _)) => {
+                            texts.into_iter().map(|text| text.to_string()).collect()
+                        }
+                        None => return false,
+                    },
+                };
+                for text in texts {
+                    self.key(call.span, &text);
+                }
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// ADR 1133: whether the value read at `span` may be called or kept other than by a call written on it: anything but the callee
+    /// of a call, the target of a write, the operand of `typeof`, `!` or `void`, an equality's operand, a condition's test or a
+    /// template's part.
+    fn value_kept(&self, id: NodeId, span: oxc_span::Span) -> bool {
+        match self.semantic.nodes().parent_kind(id) {
+            AstKind::CallExpression(call) => call.callee.span() != span,
+            AstKind::AssignmentExpression(assignment) => assignment.left.span() != span,
+            AstKind::UnaryExpression(unary) => !matches!(
+                unary.operator,
+                UnaryOperator::Typeof
+                    | UnaryOperator::LogicalNot
+                    | UnaryOperator::Void
+                    | UnaryOperator::Delete
+            ),
+            AstKind::BinaryExpression(binary) => !binary.operator.is_equality(),
+            AstKind::IfStatement(statement) => statement.test.span() != span,
+            AstKind::ConditionalExpression(conditional) => conditional.test.span() != span,
+            AstKind::TemplateLiteral(_) => false,
+            _ => true,
+        }
+    }
+
     /// Whether the member at `span` is the callee of a call (`x.m(…)`).
     fn is_callee(&self, id: NodeId, span: oxc_span::Span) -> bool {
         matches!(self.semantic.nodes().parent_kind(id), AstKind::CallExpression(call) if call.callee.span() == span)
@@ -752,6 +908,135 @@ mod tests {
 
     fn has(source: &str, clause: PremiseClause, key: &str) -> bool {
         sites(source).iter().any(|(c, k)| *c == clause && k == key)
+    }
+
+    #[test]
+    fn a_hook_on_a_literal_in_an_exported_function_is_contained_and_an_exported_binding_is_not() {
+        let contained = |source: &str| {
+            crate::ast::extract("case.tsx", source)
+                .unwrap()
+                .premise_sites
+                .iter()
+                .filter(|site| site.clause == PremiseClause::CoercionHook)
+                .map(|site| site.contained)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            contained(
+                "export function C() { const t = { then: (cb: () => void) => cb() } as unknown as PromiseLike<void>; t.then(() => {}); }"
+            ),
+            vec![true]
+        );
+        assert_eq!(
+            contained("export const t = { then: (cb: () => void) => cb() }; t.then(() => {});"),
+            vec![false]
+        );
+        assert_eq!(
+            contained(
+                "export function C() { const t = { then: (cb: () => void) => cb() }; return t; }"
+            ),
+            vec![false]
+        );
+    }
+
+    #[test]
+    fn a_dispatcher_handed_on_is_listed_and_a_written_dispatch_or_a_narrow_reflect_is_not() {
+        for source in [
+            "declare const el: any; el.dispatchEvent.call(el, new Event(\"x\"));",
+            "declare const el: any; Reflect.apply(EventTarget.prototype.dispatchEvent, el, [new Event(\"x\")]);",
+            "declare const el: any; const d = el[\"dispatchEvent\"];",
+            "declare const el: any; const { dispatchEvent } = el;",
+            "declare const el: any; const c = el.click.bind(el);",
+        ] {
+            assert!(
+                sites(source)
+                    .iter()
+                    .any(|(clause, _)| *clause == PremiseClause::DispatchHandedOn),
+                "{source}"
+            );
+        }
+        let written = "declare const el: any; el.dispatchEvent(new Event(\"x\")); el?.click(); if (el.click) {}";
+        assert!(
+            !sites(written)
+                .iter()
+                .any(|(clause, _)| *clause == PremiseClause::DispatchHandedOn),
+            "{written}"
+        );
+        // #296: `Reflect.apply`, `Reflect.construct` and `Reflect.get`/`has` under a literal key are no Reflect hazard; the key read is a key.
+        for source in [
+            "declare const f: any; Reflect.apply(f, null, []);",
+            "declare const F: any; Reflect.construct(F, []);",
+            "declare const o: any; Reflect.get(o, \"x\"); Reflect.has(o, \"y\");",
+        ] {
+            assert!(
+                !has(source, PremiseClause::ProxyOrReflect, "Reflect"),
+                "{source}"
+            );
+        }
+        assert!(has(
+            "declare const el: any; Reflect.get(el, \"_$$click\");",
+            PremiseClause::PrivateKey,
+            "_$$click"
+        ));
+        for source in [
+            "declare const o: any, k: string; Reflect.get(o, k);",
+            "declare const o: any; Reflect.set(o, \"x\", 1);",
+            "declare const o: any; Reflect.ownKeys(o);",
+            "const R = Reflect;",
+            "declare const o: any; const g = Reflect.get; g(o, \"x\");",
+            "declare const o: any, m: string; (Reflect as any)[m](o);",
+        ] {
+            assert!(
+                has(source, PremiseClause::ProxyOrReflect, "Reflect"),
+                "{source}"
+            );
+        }
+    }
+
+    #[test]
+    fn object_handed_on_is_object_assign_and_routes_through_members_are_the_globals() {
+        // ADR 1133 (F6): `Object` kept or handed on may be called as `Object.assign` by any name.
+        for source in [
+            "const O = Object; O.assign(globalThis, { event: undefined });",
+            "declare const f: any; f(Object);",
+            "const O = (Object as any);",
+            "const O = globalThis.Object;",
+        ] {
+            assert!(has(source, PremiseClause::ObjectAssign, "*"), "{source}");
+        }
+        assert!(has(
+            "declare const a: any, b: any; globalThis.Object.assign(a, b);",
+            PremiseClause::ObjectAssign,
+            "*"
+        ));
+        assert!(has(
+            "const put = Object[\"assign\"];",
+            PremiseClause::KeyReader,
+            "assign"
+        ));
+        assert!(has(
+            "globalThis.Reflect.set(globalThis, \"event\", undefined);",
+            PremiseClause::ProxyOrReflect,
+            "Reflect"
+        ));
+        // N2: a value's `constructor` may be `Object`.
+        assert!(has(
+            "declare const el: any; ({}).constructor.values(el);",
+            PremiseClause::KeyReader,
+            "values"
+        ));
+        assert!(has(
+            "declare const el: any; const C = el.constructor; C.assign(globalThis, {});",
+            PremiseClause::ObjectAssign,
+            "*"
+        ));
+        for source in [
+            "declare const x: any; Object.freeze(x); const t = typeof Object; const i = x instanceof Object; Object(x); new Object();",
+            "declare const x: any; const plain = x.constructor === Object; const n = x.constructor.name;",
+            "declare const x: any; const k = Object[\"freeze\"](x);",
+        ] {
+            assert!(!has(source, PremiseClause::ObjectAssign, "*"), "{source}");
+        }
     }
 
     #[test]

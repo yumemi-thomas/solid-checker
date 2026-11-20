@@ -50,6 +50,7 @@ fn clause_name(clause: PremiseClause) -> &'static str {
         PremiseClause::ShadowRoot => "shadow",
         PremiseClause::With => "with",
         PremiseClause::KeyReader => "key-reader",
+        PremiseClause::DispatchHandedOn => "dispatch-handed-on",
     }
 }
 
@@ -65,6 +66,7 @@ fn sink_name(kind: CodeSinkKind) -> &'static str {
         CodeSinkKind::DynamicImport => "dynamic-import",
         CodeSinkKind::JavascriptUrl => "javascript-url",
         CodeSinkKind::GlobalLookup => "global-lookup",
+        CodeSinkKind::NavigationUrl => "navigation-url",
     }
 }
 

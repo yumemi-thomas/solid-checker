@@ -3056,6 +3056,68 @@ fn a_neighbour_of_a_code_sink_that_runs_no_built_code_is_not_one() {
 }
 
 #[test]
+fn a_navigation_url_not_proven_and_srcdoc_markup_are_code_sinks() {
+    // ADR 1133 (F5): a `javascript:` URL built at run time runs when navigated to, by every route the syntax names.
+    let source = "declare const el: any, url: string, html: string, w: any; \
+        location.href = 'java' + 'script:' + 'x'; el.href = url; location = url as any; el.src = `${url}`; \
+        el.srcdoc = html; el.setAttribute('HREF', url); el.setAttribute('srcdoc', html); \
+        location.assign(url); window.location.replace(url); open(url); w.open(url); \
+        const go = location.assign; const loc = location; const o = { href: url }; class K { src = url; } \
+        const a = <a href={url} />; const f = <iframe srcdoc={html} />; const x = <a attr:href={url} />; \
+        const tab = 'java\tscript:x';";
+    let listed = code_sink_facts(source);
+    let kinds = |kind: CodeSinkKind| {
+        listed
+            .iter()
+            .filter(|(_, listed)| *listed == kind)
+            .map(|(text, _)| text.as_str())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        kinds(CodeSinkKind::NavigationUrl),
+        vec![
+            "location.href = 'java' + 'script:' + 'x'",
+            "el.href = url",
+            "location = url as any",
+            "el.src = `${url}`",
+            "el.setAttribute('HREF', url)",
+            "location.assign(url)",
+            "window.location.replace(url)",
+            "open(url)",
+            "w.open(url)",
+            "location.assign",
+            "location",
+            "href: url",
+            "src = url;",
+            "href={url}",
+            "attr:href={url}",
+        ]
+    );
+    assert_eq!(
+        kinds(CodeSinkKind::MarkupWrite),
+        vec![
+            "el.srcdoc = html",
+            "el.setAttribute('srcdoc', html)",
+            "srcdoc={html}"
+        ]
+    );
+    assert_eq!(kinds(CodeSinkKind::JavascriptUrl), vec!["'java\tscript:x'"]);
+}
+
+#[test]
+fn a_navigation_url_whose_leading_text_is_no_javascript_scheme_is_no_code_sink() {
+    // ADR 1133 (F5): known leading text that already differs from `javascript:`, a `blob:` URL, a branch of proven arms, a `const` of one,
+    // inert `srcdoc` markup, a method's literal first argument, a flag test of `open`, and `location` read as text or destructured.
+    let source = "declare const el: any, url: string, cond: boolean, blob: Blob, xhr: any, dialog: any, props: any; \
+        el.href = '/path/' + url; el.href = `https://${url}`; el.src = URL.createObjectURL(blob); el.href = cond ? '/a' : '#b'; \
+        const base = '/x/'; el.href = base + url; el.href = ''; el.data = url; \
+        el.srcdoc = '<p>hi</p>'; el.setAttribute('href', '/x'); xhr.open('GET', url); dialog.open(); if (props.open) {} \
+        const n = location.href.length; const { pathname } = location; const t = `${location}`; \
+        const a = <a href=\"/x\" />; const b = <a href={'/x/' + url} />;";
+    assert_eq!(code_sink_facts(source), vec![]);
+}
+
+#[test]
 fn a_native_event_attribute_of_jsx_is_a_code_sink_unless_a_function_is_written_there() {
     let source = "declare const handler: any; \
         const a = <img onerror=\"x()\" />; const b = <div onclick={handler} />; const c = <div onclick={() => {}} />; const d = <div onClick={handler} on:click={handler} />;";
@@ -4326,5 +4388,19 @@ fn a_computed_read_whose_value_only_feeds_operators_and_tests_is_inert() {
         inert,
         vec![false, true],
         "the arrow body returns it; the statement discards it"
+    );
+    // ADR 1133: the object of a plain data key read or written, never called (`draft[index()].done = …`), is inert; a standard name, a
+    // route, a hook, a private key, `event`, or a call of the member is not.
+    let members = "declare const a: any, k: any; a[k].done = !a[k].done; a[k].push(1); a[k].addEventListener; a[k].done(); \
+        a[k].prototype; a[k].then; a[k]._$$click; a[k].event;";
+    let inert = extract("keys.ts", members)
+        .unwrap()
+        .computed_keys
+        .iter()
+        .map(|fact| fact.value_inert)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        inert,
+        vec![true, true, false, false, false, false, false, false, false]
     );
 }

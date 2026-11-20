@@ -72,7 +72,9 @@ use thiserror::Error;
 /// 101 (ADR 1120): the places that may break the plain-program premise (`premise_sites`).
 /// 102 (ADR 1125): premise sites read computed keys by their proven texts, a definer's key argument, and key readers (`KeyReader`); timers named
 /// by alias or reached through any object are code sinks.
-pub const AST_FACTS_SCHEMA: u32 = 102;
+/// 104 (ADR 1133; 1114 holds 102 and 1125 103 on main): a navigation URL not proven no `javascript:` URL and `srcdoc` markup are code sinks (`NavigationUrl`, `MarkupWrite`);
+/// `Object` handed on as a value is an `ObjectAssign` site, and `Object["assign"]` a key reader.
+pub const AST_FACTS_SCHEMA: u32 = 104;
 
 mod argument_completion;
 mod code_sinks;
@@ -86,7 +88,7 @@ mod host_execution;
 mod inert_javascript;
 mod literal_array;
 mod module_requests;
-mod premise_sites;
+pub(crate) mod premise_sites;
 mod primitive_completion;
 mod proxy_get_forward;
 mod span_index;

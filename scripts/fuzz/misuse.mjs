@@ -238,7 +238,14 @@ const DENIED_OTHER = ["dny-blur-spread", "dny-typo-event", "dny-blur-dynamic", "
  * handler of an element's `onScroll` from an effect's apply other than by a delivery that sets `window.event`. */
 const DELIVERY_BREAKERS = ["evt-apply-event-replaced", "evt-apply-listener-patch", "evt-apply-fake-node", "evt-apply-shadow-concat", "evt-apply-stored-values", "evt-apply-shadow-arrow-body", "evt-apply-shadow-valueof",
   // Fable round 2, N1: the same reader by a computed key, an optional computed key, and `JSON.stringify` handed its replacer by a spread.
-  "evt-apply-stored-values-computed", "evt-apply-stored-values-optional", "evt-apply-stored-stringify-spread"];
+  "evt-apply-stored-values-computed", "evt-apply-stored-values-optional", "evt-apply-stored-stringify-spread",
+  // ADR 1133 (Fable review of 1125, F5-F7): code from a built `javascript:` URL or `srcdoc` markup, `Object.assign` by another name, and
+  // Solid's stored handler read under a key nothing proves.
+  "evt-rerun-js-url", "evt-rerun-srcdoc", "evt-apply-object-alias", "evt-apply-object-member", "evt-apply-stored-unproven-key",
+  // ADR 1133 (Fable round 2 of 1125, N2): the reader through an alias of `Object` and through a value's `constructor`.
+  "evt-apply-stored-values-alias", "evt-apply-stored-values-constructor"];
+/** ADR 1133: a body dispatch the census cannot see as written: `dispatchEvent` called through `.call` or `Reflect.apply`. */
+const DISPATCH_HANDED_ON = ["evt-body-dispatch-call", "evt-body-dispatch-reflect"];
 const DENIED_CONTEXTS = [...Object.keys(DENIED), ...Object.keys(DISPOSALS), ...DENIED_OTHER];
 /** `flush()` in a denied handler, with no dispatch in the program (`a04`, `b03`, `b09`): SC2008. */
 const DENIED_FLUSH = ["dny-flush-unmount", "dny-flush-load", "dny-flush-popover"];
@@ -533,7 +540,7 @@ const JSX_ER = ["view", "prop", "slot", "children", "slotcall", "childcall", "sl
 export const SPEC = {
   // Past an await (rc.17 fast runtime, 2026-11-03): no write reports in an async function the body calls, its loop, `for await` or
   // `finally`, an async memo or effect compute, or a handler's async function (ADR 0610).
-  REACTIVE_WRITE_IN_OWNED_SCOPE: { legal: ["handler", "timer", "then", "micro", "effect-apply", "async"], recallContexts: [...OWNER_LIFETIME, ...FALSE_CLEAN_CONTEXTS, "memo-shared", "evt-body-dispatch", "evt-apply-owned-flush", ...DENIED_CONTEXTS, ...firesAt("body", "memo", "compute", "untrack"), ...listenersAt("body"), ...RENDER_DRAINS],
+  REACTIVE_WRITE_IN_OWNED_SCOPE: { legal: ["handler", "timer", "then", "micro", "effect-apply", "async"], recallContexts: [...OWNER_LIFETIME, ...FALSE_CLEAN_CONTEXTS, "memo-shared", "evt-body-dispatch", ...DISPATCH_HANDED_ON, "evt-apply-owned-flush", ...DENIED_CONTEXTS, ...firesAt("body", "memo", "compute", "untrack"), ...listenersAt("body"), ...RENDER_DRAINS],
     recallLegal: [...EVENT_LEGAL, ...RENDER_LEGAL, ...ASYNC_CONTROL, "memo-async", "effect-async", "memo-async-loop", "memo-async-for-await", "memo-async-finally", "effect-async-loop", "effect-async-for-await", "effect-async-finally", ...HANDLER_ASYNC],
     variants: ["signal", "store", "refresh"], contexts: OWNED_PURE, bindings: ["direct", "alias", "destructured", "wrapper"],
     setup: (variant, name) => [variant === "store" ? storeSignal(name("w"), 0) : variant === "refresh" ? memoSignal(name("m")) : API_KINDS[variant] ? apiSignal(name("w"), 0, API_KINDS[variant]) : signal(name("w"), 0, "probe")],
@@ -600,7 +607,7 @@ export const SPEC = {
   },
   // `settled`: an async memo read after it settled (ADR 0511 review: probe pending-async/hook-shared-instance, rc.17 warns this code in an
   // apply, no pending throw), through the module-scope hook result beside the body's own call.
-  STRICT_READ_UNTRACKED: { legal: ["memo", "effect-compute", "render-compute", "jsx", "jsx-helper", "untrack"], recallContexts: ["evt-body-dispatch", "evt-apply-dispatch-shadow", ...DELIVERY_BREAKERS, ...firesAt("body"), ...listenersAt("body"), ...DENIED_CONTEXTS.filter((context) => !context.startsWith("dny-unmount-flush") && !["dny-dispose-memo", "dny-dispose-compute", "dny-dispose-untrack"].includes(context))], recallLegal: [...EVENT_LEGAL, ...ZERO_READS, "handed-flush"],
+  STRICT_READ_UNTRACKED: { legal: ["memo", "effect-compute", "render-compute", "jsx", "jsx-helper", "untrack"], recallContexts: ["evt-body-dispatch", ...DISPATCH_HANDED_ON, "evt-apply-dispatch-shadow", ...DELIVERY_BREAKERS, ...firesAt("body"), ...listenersAt("body"), ...DENIED_CONTEXTS.filter((context) => !context.startsWith("dny-unmount-flush") && !["dny-dispose-memo", "dny-dispose-compute", "dny-dispose-untrack"].includes(context))], recallLegal: [...EVENT_LEGAL, ...ZERO_READS, "handed-flush"],
     // `settled` is a grid variant (never drawn at random, so random programs and combinations' extras keep theirs) and a legal one.
     variants: ["signal", "memo"], gridVariants: ["settled"], legalVariants: ["signal", "memo", "settled"],
     contexts: ["body", "effect-apply", "root", "render-apply"], bindings: ["direct", "alias", "destructured", "wrapper"],
@@ -1901,6 +1908,15 @@ function inContext(context, stmts, kit) {
     case "micro": return { body: [expr(prim("micro", fn(stmts)))], view: [] };
     case "handler": case "creates-in-handler": return { body: [], view: [button(kit.name("b"), stmts)] };
     // EVENT_CONTEXTS: a listener the program dispatches to itself, and work a handler or an apply schedules.
+    case "evt-body-dispatch-call": case "evt-body-dispatch-reflect": {
+      // The element's own `onScroll` (no delegation), the dispatch in the component body: the handler runs on the body's stack.
+      const el = kit.name("el");
+      const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onScroll", undriven: true })));
+      const fire = expr(domExpr(context === "evt-body-dispatch-call"
+        ? `(${el} as HTMLElement).dispatchEvent.call(${el} as HTMLElement, new Event("scroll"))`
+        : `Reflect.apply(EventTarget.prototype.dispatchEvent, ${el} as HTMLElement, [new Event("scroll")])`));
+      return { body: [made, fire], view: [] };
+    }
     case "evt-body-dispatch": case "evt-apply-dispatch": case "evt-handler-dispatch": {
       const el = kit.name("el");
       const made = [decl(el, domExpr('document.createElement("button")')), expr(listenExpr(el, "click", fn(stmts)))];
@@ -1966,15 +1982,19 @@ function inContext(context, stmts, kit) {
     }
     // ADR 1125, Fable round 1 F1: a reader of the element's own values takes Solid's stored delegated handler (`_$$click`) and the
     // apply calls it with no event.
-    case "evt-apply-stored-values": case "evt-apply-stored-values-computed": case "evt-apply-stored-values-optional": case "evt-apply-stored-stringify-spread": {
+    case "evt-apply-stored-values": case "evt-apply-stored-values-computed": case "evt-apply-stored-values-optional": case "evt-apply-stored-stringify-spread":
+    case "evt-apply-stored-values-alias": case "evt-apply-stored-values-constructor": {
       const el = kit.name("el");
       const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onClick", undriven: true })));
       const call = (value) => `if (typeof ${value} === "function") (${value} as (event: Event) => void)(new Event("click"))`;
-      const reader = { "evt-apply-stored-values": "Object.values", "evt-apply-stored-values-computed": 'Object["values"]', "evt-apply-stored-values-optional": '(Object as typeof Object)?.["values"]' }[context];
+      const alias = kit.name("O");
+      const reader = { "evt-apply-stored-values": "Object.values", "evt-apply-stored-values-computed": 'Object["values"]', "evt-apply-stored-values-optional": '(Object as typeof Object)?.["values"]',
+        "evt-apply-stored-values-alias": `${alias}.values`, "evt-apply-stored-values-constructor": "(({}).constructor as ObjectConstructor).values" }[context];
+      const aliased = context === "evt-apply-stored-values-alias" ? [decl(alias, domExpr("Object"))] : [];
       const run = expr(domExpr(reader
         ? `for (const value of ${reader}(${el} as object)) ${call("value")}`
         : `JSON.stringify(...([${el}, (_key: string, value: unknown) => { ${call("value")}; return value; }] as [object, (key: string, value: unknown) => unknown]))`));
-      return { body: [made, expr(prim("effect", fn([ret(num(1))]), { apply: fn([run]) }))], view: [] };
+      return { body: [...aliased, made, expr(prim("effect", fn([ret(num(1))]), { apply: fn([run]) }))], view: [] };
     }
     // F3: the shadow root attached through an arrow's expression body under a key built at run time (`join`, which no fact decodes).
     case "evt-apply-shadow-arrow-body": {
@@ -2002,6 +2022,39 @@ function inContext(context, stmts, kit) {
       ];
       const fire = expr(domExpr(`(${el} as HTMLElement).dispatchEvent(new Event("scroll"))`));
       return { body: [made, ...hook, expr(prim("effect", fn([ret(num(1))]), { apply: fn([fire]) }))], view: [] };
+    }
+    // ADR 1133 (F5): a `javascript:` URL built by concatenation (no literal is one) replaces `globalThis.event` when the navigation
+    // runs, a task after the body; `srcdoc` markup built the same way runs its script when the frame loads. The apply dispatches again
+    // after a button writes what its compute reads, by then with no event.
+    case "evt-rerun-js-url": case "evt-rerun-srcdoc": {
+      const el = kit.name("el"), t = signal(kit.name("t"), 1, "src");
+      const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onScroll", undriven: true })));
+      const frame = kit.name("frame");
+      const sink = context === "evt-rerun-js-url"
+        ? [expr(domExpr('location.href = "java" + "script:" + "void (globalThis.event = undefined)"'))]
+        : [decl(frame, domExpr('document.createElement("iframe")')),
+           expr(domExpr(`${frame}.srcdoc = "<scr" + "ipt>parent.event = undefined</scr" + "ipt>"`)),
+           expr(domExpr(`document.body.appendChild(${frame})`))];
+      const fire = expr(domExpr(`(${el} as HTMLElement).dispatchEvent(new Event("scroll"))`));
+      return { body: [made, ...sink, expr(prim("effect", fn([ret(read(t.name))]), { apply: fn([fire]) }))], view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t] };
+    }
+    // ADR 1133 (F6): `Object.assign` called through an alias of `Object`, or through `globalThis.Object`, replaces `globalThis.event`.
+    case "evt-apply-object-alias": case "evt-apply-object-member": {
+      const el = kit.name("el"), o = kit.name("O");
+      const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onScroll", undriven: true })));
+      const replace = context === "evt-apply-object-alias"
+        ? [decl(o, domExpr("Object")), expr(domExpr(`${o}.assign(globalThis, { event: undefined })`))]
+        : [expr(domExpr("globalThis.Object.assign(globalThis, { event: undefined })"))];
+      const fire = expr(domExpr(`(${el} as HTMLElement).dispatchEvent(new Event("scroll"))`));
+      return { body: [...replace, made, expr(prim("effect", fn([ret(num(1))]), { apply: fn([fire]) }))], view: [] };
+    }
+    // ADR 1133 (F7): Solid's stored delegated handler (`_$$click`) read under a key built at run time, which no private-key test
+    // reads; the apply calls it with no event.
+    case "evt-apply-stored-unproven-key": {
+      const el = kit.name("el");
+      const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onClick", undriven: true })));
+      const run = expr(domExpr(`(${el} as unknown as Record<string, (event: Event) => void>)[["_", "$", "$", "click"].join("")](new Event("click"))`));
+      return { body: [made, expr(prim("effect", fn([ret(num(1))]), { apply: fn([run]) }))], view: [] };
     }
     // ADR 0639: `flush()`'s guard takes no event, and the dispatch that reaches it may sit in a helper or on `window`.
     case "evt-apply-helper-dispatch": {

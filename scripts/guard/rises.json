@@ -7062,6 +7062,96 @@
    "adr": "ADR 1125",
    "fact": "event delivery not proven intact (event-delivery-hazard): src/argument-of-package-listeners.ts loads a module the build does not read (unread-module: a value import, export-from or load that resolves outside the analysed files). The dispatch veto withholds every event proof (owner, read, flush, listener, apply) of the program's handlers",
    "why": "fail-closed: a handler may run other than as a DOM delivery that sets window.event (Chrome rc.21 warns at such runs); the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/literal-argument-member-dispatch",
+   "key": "SC1001 function-run-unplaced",
+   "from": 11,
+   "to": 13,
+   "adr": "ADR 1133",
+   "fact": "event delivery not proven intact (event-delivery-hazard): nested-source.ts reads a member under a computed key nothing proves and keeps or calls the value (unproven-key, ADR 1133 F7): it may be any definer or Solid's stored handler. The dispatch veto withholds every event proof of the program's handlers",
+   "why": "fail-closed: code built from a string, or a definer or reader under an unproven key, may make a handler run with no event; the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/literal-argument-member-dispatch",
+   "key": "SC9012 parameter-member-target-unresolved",
+   "from": 24,
+   "to": 26,
+   "adr": "ADR 1133",
+   "fact": "event delivery not proven intact (event-delivery-hazard): nested-source.ts reads a member under a computed key nothing proves and keeps or calls the value (unproven-key, ADR 1133 F7): it may be any definer or Solid's stored handler. The dispatch veto withholds every event proof of the program's handlers",
+   "why": "fail-closed: code built from a string, or a definer or reader under an unproven key, may make a handler run with no event; the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/obligation-exclusion-boundary",
+   "key": "SC9012 parameter-member-target-unresolved",
+   "from": 3,
+   "to": 4,
+   "adr": "ADR 1133",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx reads a member under a computed key nothing proves and keeps or calls the value (unproven-key, ADR 1133 F7): it may be any definer or Solid's stored handler. The dispatch veto withholds every event proof of the program's handlers",
+   "why": "fail-closed: code built from a string, or a definer or reader under an unproven key, may make a handler run with no event; the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/obligation-exclusion-boundary",
+   "key": "SC9012 parameter-use-unmodeled",
+   "from": 21,
+   "to": 22,
+   "adr": "ADR 1133",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx reads a member under a computed key nothing proves and keeps or calls the value (unproven-key, ADR 1133 F7): it may be any definer or Solid's stored handler. The dispatch veto withholds every event proof of the program's handlers",
+   "why": "fail-closed: code built from a string, or a definer or reader under an unproven key, may make a handler run with no event; the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/rc21-created-anchor",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1133",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx writes `anchor.href = url` with a URL nothing proves is no `javascript:` URL (NavigationUrl, ADR 1133 F5). The dispatch veto withholds every event proof of the program's handlers",
+   "why": "fail-closed: code built from a string, or a definer or reader under an unproven key, may make a handler run with no event; the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/rc21-created-anchor",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1133",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx writes `anchor.href = url` with a URL nothing proves is no `javascript:` URL (NavigationUrl, ADR 1133 F5). The dispatch veto withholds every event proof of the program's handlers",
+   "why": "fail-closed: code built from a string, or a definer or reader under an unproven key, may make a handler run with no event; the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/rc21-created-anchor-listener",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1133",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx writes `anchor.href = url` with a URL nothing proves is no `javascript:` URL (NavigationUrl, ADR 1133 F5). The dispatch veto withholds every event proof of the program's handlers",
+   "why": "fail-closed: code built from a string, or a definer or reader under an unproven key, may make a handler run with no event; the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/rc21-created-anchor-listener",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1133",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx writes `anchor.href = url` with a URL nothing proves is no `javascript:` URL (NavigationUrl, ADR 1133 F5). The dispatch veto withholds every event proof of the program's handlers",
+   "why": "fail-closed: code built from a string, or a definer or reader under an unproven key, may make a handler run with no event; the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/rc21-created-anchor-removed",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1133",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx writes `anchor.href = url` with a URL nothing proves is no `javascript:` URL (NavigationUrl, ADR 1133 F5). The dispatch veto withholds every event proof of the program's handlers",
+   "why": "fail-closed: code built from a string, or a definer or reader under an unproven key, may make a handler run with no event; the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/rc21-created-anchor-removed",
+   "key": "SC2001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1133",
+   "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx writes `anchor.href = url` with a URL nothing proves is no `javascript:` URL (NavigationUrl, ADR 1133 F5). The dispatch veto withholds every event proof of the program's handlers",
+   "why": "fail-closed: code built from a string, or a definer or reader under an unproven key, may make a handler run with no event; the new rows are uncertifiable, never violations"
   }
  ]
 }

@@ -403,6 +403,18 @@ pub fn cooked_key(text: &str) -> Option<String> {
     property_key_value(&property.key)
 }
 
+/// ADR 1133: a key that names no standard function-valued member, prototype route, coercion or protocol hook, Solid private key,
+/// shadow-root spelling, nor a name the delivery premise watches (`event`, `Promise`, `__proto__`).
+fn plain_data_key(key: &str) -> bool {
+    !crate::ast::premise_sites::is_standard_member(key)
+        && !crate::ast::premise_sites::PROTOTYPE_ROUTES.contains(&key)
+        && !crate::ast::premise_sites::HOOK_KEYS.contains(&key)
+        && !crate::ast::premise_sites::SHADOW_SPELLINGS.contains(&key)
+        && !key.contains("$$")
+        && !key.starts_with("_$")
+        && !matches!(key, "event" | "Promise" | "__proto__")
+}
+
 /// K4 (ADR 1125): whether the value of the expression at `node` is provably neither called nor kept ([`crate::ast::ComputedKeyFact::value_inert`]).
 pub(crate) fn value_inert(
     semantic: &oxc_semantic::Semantic<'_>,
@@ -446,6 +458,23 @@ pub(crate) fn value_inert(
             }
             AstKind::ComputedMemberExpression(member) => {
                 return member.expression.span() == child_span;
+            }
+            // ADR 1133 (#296 textbook): the value only as the object of a member read or written under a plain data key
+            // (`draft[index()].done = …`), never called: no standard function-valued name, prototype route, hook, private key,
+            // shadow spelling or delivery name, so the member can hold no definer or handler that a visible write did not put there.
+            AstKind::StaticMemberExpression(member) => {
+                if member.object.span() != child_span {
+                    return false;
+                }
+                let key = member.property.name.as_str();
+                let called = matches!(
+                    nodes.parent_kind(parent),
+                    AstKind::CallExpression(call) if call.callee.span() == member.span
+                ) || matches!(
+                    nodes.parent_kind(parent),
+                    AstKind::TaggedTemplateExpression(_)
+                );
+                return !called && plain_data_key(key);
             }
             // An arrow's expression body is an expression statement in Oxc's tree: its value is the arrow's return (F3).
             AstKind::ExpressionStatement(_) => {

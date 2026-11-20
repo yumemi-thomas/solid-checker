@@ -34195,5 +34195,33 @@
    "mx-context-not-found-tbl-reflect-apply-h-x-direct-none"
   ],
   "rediscovered": "focus on the 16 false-positive ids of the run (mx-census CONTEXT_NOT_FOUND): d40e3f3cd 13 false positives plus the 3 known open (dny-flush-*, scripts/fuzz/open-defects.json); FIXED here (13 not-fired, the 3 known open unchanged)"
+ },
+ {
+  "finding": "ADR 1125 head d40e3f3cd (and main's event proofs) certified a read in a handler run with no event when the code that breaks delivery is: (F5) a `javascript:` URL built by concatenation, or `srcdoc` markup built the same way; (F6) `Object.assign` through `globalThis.Object`; (N2) the key reader through an alias of `Object` or a value's `constructor`; (F7) Solid's stored handler read under a key built at run time",
+  "found": "the Fable review of ADR 1125 (coord-land/review-1125.md F5-F7, review-1125-r2.md N2; probes p12, p13, p1c, p3, q2, q3, q1f, q4)",
+  "fixed": "ADR 1133: `NavigationUrl` code sinks and `srcdoc` markup writes; `Object`, `X.Object` and `X.constructor` handed on are `ObjectAssign` sites and readers read off them key readers; an unproven computed key whose value is not inert is a delivery hazard",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-evt-rerun-js-url-signal-direct-none",
+   "mx-strict-read-untracked-evt-rerun-srcdoc-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-object-alias-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-object-member-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-stored-unproven-key-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-stored-values-alias-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-stored-values-constructor-signal-direct-none"
+  ],
+  "rediscovered": "focus on the seven contexts' mx-recall programs (15,050): d40e3f3cd 6,714 false cleans (1,418 each for js-url, srcdoc, stored-unproven-key; 820 each for object-member, stored-values-alias, -constructor) and 180 false positives (36 each but js-url and srcdoc); evt-apply-object-alias fails there by its 36 false positives only (the literal's `event` key was already a write); FIXED here (0 and 0)"
+ },
+ {
+  "finding": "main and ADR 1125 (d40e3f3cd) certified a handler's write or read run by a dispatch the census cannot see as written: `el.dispatchEvent.call(el, e)` (main: a live false clean), and, once ADR 1133 narrows `Reflect`, `Reflect.apply(EventTarget.prototype.dispatchEvent, el, [e])`",
+  "found": "ADR 1133's review of the Reflect narrowing (#296 owed; probes sc-scratch mac21/a1133/cases r1, r2, r5)",
+  "fixed": "ADR 1133: a `dispatchEvent` or `click` read whose value is kept or called other than directly is a `DispatchHandedOn` premise site and a delivery hazard",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-evt-body-dispatch-call-signal-direct-none"
+  ],
+  "rediscovered": "focus on the two contexts' mx-recall programs (REACTIVE_WRITE_IN_OWNED_SCOPE, STRICT_READ_UNTRACKED; 8,136): d40e3f3cd 2,927 false cleans and 36 false positives; FIXED here (0 and 0)"
  }
 ]

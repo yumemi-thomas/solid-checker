@@ -1252,7 +1252,9 @@ fn local_member_dispatch_requires_only_tracked_exact_callers() {
     // ADR 0771: a tracked position decides reads. A prop's value may write
     // through the helper (patterns net/prop-std-method-tracked), so every
     // tracked caller keeps the obligation; an event or a timer does not.
-    assert_eq!(rows.len(), 17, "{rows:#?}");
+    // ADR 1133 (F7): `nested-source.ts` reads under a computed key nothing proves and keeps the value, so event delivery is not
+    // proven intact and the event-only callers keep it too.
+    assert_eq!(rows.len(), 19, "{rows:#?}");
     for (name, occurrence, unresolved) in [
         ("DirectTracked", 0, true),
         ("LocalTracked", 0, true),
@@ -1272,8 +1274,8 @@ fn local_member_dispatch_requires_only_tracked_exact_callers() {
         ("StoredCaller", 0, true),
         ("GetterDefaultCaller", 0, true),
         ("JsxDefaultCaller", 0, true),
-        ("LocalEvent", 0, false),
-        ("ChainedEvent", 0, false),
+        ("LocalEvent", 0, true),
+        ("ChainedEvent", 0, true),
         ("LocalTimer", 0, false),
         ("MixedEvent", 0, true),
         ("EventDefaultCaller", 0, true),

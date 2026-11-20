@@ -13,7 +13,12 @@
 //! - markup written as a string that is not proven inert: an assignment to `innerHTML` or `outerHTML`, `insertAdjacentHTML`, `document.write`, `createContextualFragment` and
 //!   `setHTMLUnsafe` given anything but a literal that holds no script, no event attribute and no `javascript:` URL;
 //! - a load the program does not name as a module path: `import(x)` of a computed specifier, and one of a `data:`, `blob:`, `javascript:` or network URL;
-//! - a string literal that is a `javascript:` URL.
+//! - a string literal that is a `javascript:` URL (tabs and line breaks inside it, and leading spaces and controls, ignored as a URL parser does);
+//! - ADR 1133 (F5): a URL a navigation or a frame loads that is not proven to be no `javascript:` URL, and `srcdoc` markup not proven inert, by
+//!   every route the syntax names: a member write (`a.href = …`, `iframe.srcdoc = …`, `location = …`), a JSX attribute, `setAttribute`, an
+//!   object literal's key (a spread or `Object.assign` may set it), `location.assign`/`replace` and `open`. A value is proven when its leading
+//!   text is known and already differs from `javascript:` (`"/path/" + id`, `` `https://${host}` ``), or it is a literal, a `const` bound to
+//!   one of these, or `URL.createObjectURL(…)`. A class field so named is a key too (a spread copies an instance's own fields).
 //!
 //! A name is the global it names only when no binding of the file declares it; a callback is proven a function when it is a function or arrow written there, or a name that
 //! a function declaration or a `const` bound to one declares.
@@ -46,6 +51,30 @@ const GLOBAL_OBJECTS: [&str; 7] = [
     "frames",
 ];
 
+/// ADR 1133 (F5): the names (attribute names and members, compared without case and after a namespace prefix such as `attr:`) whose value a
+/// navigation loads as a URL: a link's or a base's `href`, a frame's `src`, a form's `action` and a button's `formAction`, the
+/// window's `location`. A `javascript:` URL runs only when navigated to: `<object data>`, `<embed src>`, `<img src>` and `<script src>`
+/// fetch their resource, and fetching a `javascript:` URL is a network error (Fetch, scheme fetch), so `data` is no such name.
+const URL_NAMES: [&str; 5] = ["href", "src", "action", "formaction", "location"];
+
+/// Whether `name` (an attribute, a member or a key, with any `attr:`/`prop:`/`xlink:` prefix) names a URL slot or the `srcdoc` markup slot.
+fn slot_of(name: &str) -> Option<Slot> {
+    let local = name.rsplit(':').next().unwrap_or(name);
+    if local.eq_ignore_ascii_case("srcdoc") {
+        Some(Slot::Markup)
+    } else if URL_NAMES.iter().any(|url| local.eq_ignore_ascii_case(url)) {
+        Some(Slot::Url)
+    } else {
+        None
+    }
+}
+
+#[derive(Clone, Copy)]
+enum Slot {
+    Url,
+    Markup,
+}
+
 struct Sinks<'s, 'a> {
     semantic: &'s Semantic<'a>,
     resolve: bool,
@@ -72,6 +101,78 @@ pub(super) fn code_sinks(semantic: &Semantic<'_>, resolve: bool) -> (Vec<CodeSin
                 {
                     sinks.add(assignment.span, CodeSinkKind::MarkupWrite);
                 }
+                // ADR 1133 (F5): `a.href = …`, `iframe.srcdoc = …`, `location = …`. Only `=` and the logical assignments store the
+                // right side alone; `+=` appends to a value nothing here reads.
+                let name = match &assignment.left {
+                    AssignmentTarget::StaticMemberExpression(member) => {
+                        Some(member.property.name.to_string())
+                    }
+                    AssignmentTarget::ComputedMemberExpression(member) => {
+                        literal_property_key(&member.expression).map(|key| key.to_string())
+                    }
+                    AssignmentTarget::AssignmentTargetIdentifier(identifier)
+                        if identifier.name == "location"
+                            && sinks.symbol_of(identifier).is_none() =>
+                    {
+                        Some("location".to_string())
+                    }
+                    _ => None,
+                };
+                if let Some(slot) = name.as_deref().and_then(slot_of) {
+                    let stores = matches!(
+                        assignment.operator,
+                        oxc_syntax::operator::AssignmentOperator::Assign
+                            | oxc_syntax::operator::AssignmentOperator::LogicalOr
+                            | oxc_syntax::operator::AssignmentOperator::LogicalAnd
+                            | oxc_syntax::operator::AssignmentOperator::LogicalNullish
+                    );
+                    if !stores || !sinks.slot_value_proven(slot, &assignment.right) {
+                        sinks.add(assignment.span, slot.kind());
+                    }
+                }
+            }
+            AstKind::PropertyDefinition(property) => {
+                if let Some(slot) = crate::kernel::property_key_value(&property.key)
+                    .as_deref()
+                    .and_then(slot_of)
+                {
+                    let proven = property
+                        .value
+                        .as_ref()
+                        .is_none_or(|value| sinks.slot_value_proven(slot, value));
+                    if !proven {
+                        sinks.add(property.span, slot.kind());
+                    }
+                }
+            }
+            // ADR 1133 (F5): an object literal's key may reach an element (a JSX spread, `Object.assign(el, …)`, `spread`).
+            AstKind::ObjectProperty(property) => {
+                if let Some(slot) = crate::kernel::property_key_value(&property.key)
+                    .as_deref()
+                    .and_then(slot_of)
+                {
+                    let proven = property.kind == oxc_ast::ast::PropertyKind::Init
+                        && !property.method
+                        && sinks.slot_value_proven(slot, &property.value);
+                    if !proven {
+                        sinks.add(property.span, slot.kind());
+                    }
+                }
+            }
+            // ADR 1133 (F5): a navigation method read anywhere but as a call's callee (`const go = location.assign`, `window.open.call(…)`,
+            // `el.setAttribute.call(el, "href", url)`) may be handed a built URL; `open` is read as a value only where its value may be
+            // called or kept (`if (props.open)` reads a flag).
+            AstKind::StaticMemberExpression(member)
+                if !matches!(semantic.nodes().parent_kind(node.id()), AstKind::CallExpression(call) if call.callee.span() == member.span)
+                    && !sinks.is_write_target(node.id(), member.span)
+                    && match member.property.name.as_str() {
+                        "assign" | "replace" => sinks.is_location(&member.object),
+                        "setAttribute" | "setAttributeNS" => true,
+                        "open" => !sinks.value_unused(node.id(), member.span),
+                        _ => false,
+                    } =>
+            {
+                sinks.add(member.span, CodeSinkKind::NavigationUrl);
             }
             // ADR 1125 (G5): a timer read as a member anywhere but as a call's callee (`const t = window.setTimeout`) may be handed a string.
             AstKind::StaticMemberExpression(member)
@@ -174,6 +275,24 @@ impl<'a> Sinks<'_, 'a> {
 
     /// `eval` and `Function`, by the reference to the global.
     fn reference(&mut self, id: NodeId, identifier: &'a IdentifierReference<'a>) {
+        // ADR 1133 (F5): the global `location` handed on (`const loc = location; loc.assign(url)`) and the global `open` read as a value.
+        if matches!(identifier.name.as_str(), "location" | "open")
+            && (!self.resolve || self.symbol_of(identifier).is_none())
+            && !identifier
+                .reference_id
+                .get()
+                .is_some_and(|reference| self.semantic.scoping().get_reference(reference).is_type())
+        {
+            let in_sight = if identifier.name == "open" {
+                matches!(self.semantic.nodes().parent_kind(id), AstKind::CallExpression(call) if call.callee.span() == identifier.span)
+                    || self.value_unused(id, identifier.span)
+            } else {
+                self.location_in_sight(id, identifier.span)
+            };
+            if !in_sight {
+                self.add(identifier.span, CodeSinkKind::NavigationUrl);
+            }
+        }
         // ADR 1125 (G5): a global timer named anywhere but as the callee of a call (`const later = setTimeout`,
         // `setTimeout.call(null, "code")`, `Reflect.apply(setTimeout, …)`) may be handed a string.
         if TIMERS.contains(&identifier.name.as_str())
@@ -289,7 +408,30 @@ impl<'a> Sinks<'_, 'a> {
                 }) {
                     self.add(call.span, CodeSinkKind::EventAttribute);
                 }
+                // ADR 1133 (F5): `setAttribute("href", url)`, `setAttribute("srcdoc", markup)`.
+                if let Some(slot) = call
+                    .arguments
+                    .get(at)
+                    .and_then(Argument::as_expression)
+                    .and_then(literal_text)
+                    .as_deref()
+                    .and_then(slot_of)
+                    && !call
+                        .arguments
+                        .get(at + 1)
+                        .and_then(Argument::as_expression)
+                        .is_some_and(|value| self.slot_value_proven(slot, value))
+                {
+                    self.add(call.span, slot.kind());
+                }
             }
+            // ADR 1133 (F5): `location.assign(url)`, `location.replace(url)`: a navigation.
+            "assign" | "replace" if object.is_some_and(|object| self.is_location(object)) => {
+                self.navigation_argument(call, 0);
+            }
+            // `open(url)`, `window.open(url)`, on any receiver (a window may have any name); a method's first argument proven
+            // no `javascript:` URL (`xhr.open("GET", …)`) is none.
+            "open" => self.navigation_argument(call, 0),
             "insertAdjacentHTML" if object.is_some() => {
                 if !call
                     .arguments
@@ -355,6 +497,29 @@ impl<'a> Sinks<'_, 'a> {
 
     /// A JSX attribute written as a native event handler (`onclick`, `onerror`, all lower case) whose value is no function written there.
     fn jsx_attribute(&mut self, attribute: &'a JSXAttribute<'a>) {
+        // ADR 1133 (F5): `<a href={…}>`, `<iframe srcdoc={…}>`, `attr:href`, `xlink:href`, on any element (a component may forward it).
+        let full = match &attribute.name {
+            JSXAttributeName::Identifier(name) => name.name.to_string(),
+            JSXAttributeName::NamespacedName(name) => {
+                format!("{}:{}", name.namespace.name, name.name.name)
+            }
+        };
+        if let Some(slot) = slot_of(&full) {
+            let proven = match &attribute.value {
+                None => true,
+                Some(JSXAttributeValue::StringLiteral(literal)) => {
+                    slot_text_proven(slot, literal.value.as_str())
+                }
+                Some(JSXAttributeValue::ExpressionContainer(container)) => container
+                    .expression
+                    .as_expression()
+                    .is_some_and(|value| self.slot_value_proven(slot, value)),
+                Some(_) => false,
+            };
+            if !proven {
+                self.add(attribute.span, slot.kind());
+            }
+        }
         let JSXAttributeName::Identifier(name) = &attribute.name else {
             return;
         };
@@ -460,6 +625,209 @@ impl<'a> Sinks<'_, 'a> {
     fn inert_markup(&self, expression: &'a Expression<'a>) -> bool {
         literal_text(expression).is_some_and(|text| markup_is_inert(&text))
     }
+
+    /// ADR 1133 (F5): whether the value stored in a slot runs no code: a URL proven no `javascript:` URL, or markup proven inert.
+    fn slot_value_proven(&self, slot: Slot, value: &'a Expression<'a>) -> bool {
+        match slot {
+            Slot::Url => self.url_proven(value, 0),
+            Slot::Markup => self.inert_markup(value),
+        }
+    }
+
+    /// Whether a URL value is proven to be no `javascript:` URL: its leading text is known and differs from `javascript:` (as a URL parser
+    /// reads it), a non-text literal, a branch of which every arm is proven, a `const` bound to one of these, or `URL.createObjectURL(…)`
+    /// (a `blob:` URL).
+    fn url_proven(&self, value: &'a Expression<'a>, depth: usize) -> bool {
+        if depth > 8 {
+            return false;
+        }
+        match peel_ts_sugar(value) {
+            Expression::NumericLiteral(_)
+            | Expression::BooleanLiteral(_)
+            | Expression::NullLiteral(_)
+            | Expression::BigIntLiteral(_)
+            | Expression::RegExpLiteral(_) => true,
+            Expression::Identifier(identifier)
+                if identifier.name == "undefined" && self.symbol_of(identifier).is_none() =>
+            {
+                true
+            }
+            Expression::ConditionalExpression(conditional) => {
+                self.url_proven(&conditional.consequent, depth + 1)
+                    && self.url_proven(&conditional.alternate, depth + 1)
+            }
+            Expression::LogicalExpression(logical) => {
+                self.url_proven(&logical.left, depth + 1)
+                    && self.url_proven(&logical.right, depth + 1)
+            }
+            Expression::Identifier(identifier) => self
+                .const_init(identifier)
+                .is_some_and(|init| self.url_proven(init, depth + 1)),
+            Expression::CallExpression(call) => matches!(
+                peel_ts_sugar(&call.callee),
+                Expression::StaticMemberExpression(member)
+                    if member.property.name == "createObjectURL"
+                        && matches!(peel_ts_sugar(&member.object), Expression::Identifier(url)
+                            if url.name == "URL" && self.symbol_of(url).is_none())
+            ),
+            _ => self.leading_text(value, depth).is_some_and(|text| {
+                if self.whole_text(value) {
+                    !is_javascript_url(&text)
+                } else {
+                    url_text_differs(&text)
+                }
+            }),
+        }
+    }
+
+    /// The text a string value is known to start with: a literal's whole text, a template's first part, the left operand's of a `+`.
+    fn leading_text(&self, value: &'a Expression<'a>, depth: usize) -> Option<String> {
+        if depth > 8 {
+            return None;
+        }
+        match peel_ts_sugar(value) {
+            Expression::StringLiteral(literal) if !literal.lone_surrogates => {
+                Some(literal.value.to_string())
+            }
+            Expression::TemplateLiteral(template) => template
+                .quasis
+                .first()
+                .and_then(|quasi| quasi.value.cooked.as_ref())
+                .map(|text| text.to_string()),
+            Expression::BinaryExpression(binary)
+                if binary.operator == oxc_syntax::operator::BinaryOperator::Addition =>
+            {
+                // Text known in full on the left runs on into the right: `"java" + "script:"`.
+                let left = self.leading_text(&binary.left, depth + 1)?;
+                if self.whole_text(&binary.left) {
+                    let right = self
+                        .leading_text(&binary.right, depth + 1)
+                        .unwrap_or_default();
+                    Some(left + &right)
+                } else {
+                    Some(left)
+                }
+            }
+            Expression::Identifier(identifier) => self
+                .const_init(identifier)
+                .and_then(|init| self.leading_text(init, depth + 1)),
+            _ => None,
+        }
+    }
+
+    /// Whether the value's text is known in full (a literal, a template with no substitution, a `+` of such texts).
+    fn whole_text(&self, value: &'a Expression<'a>) -> bool {
+        match peel_ts_sugar(value) {
+            Expression::StringLiteral(_) => true,
+            Expression::TemplateLiteral(template) => template.expressions.is_empty(),
+            Expression::BinaryExpression(binary)
+                if binary.operator == oxc_syntax::operator::BinaryOperator::Addition =>
+            {
+                self.whole_text(&binary.left) && self.whole_text(&binary.right)
+            }
+            _ => false,
+        }
+    }
+
+    /// The initializer of a `const` binding identifier that nothing redeclares.
+    fn const_init(&self, identifier: &IdentifierReference<'_>) -> Option<&'a Expression<'a>> {
+        if !self.resolve {
+            return None;
+        }
+        let symbol = self.symbol_of(identifier)?;
+        let scoping = self.semantic.scoping();
+        if !scoping.symbol_redeclarations(symbol).is_empty() {
+            return None;
+        }
+        let nodes = self.semantic.nodes();
+        let declaration = scoping.symbol_declaration(symbol);
+        let AstKind::VariableDeclarator(declarator) = nodes.kind(declaration) else {
+            return None;
+        };
+        if declarator.kind != VariableDeclarationKind::Const
+            || !declarator.id.is_binding_identifier()
+        {
+            return None;
+        }
+        declarator.init.as_ref()
+    }
+
+    /// Whether the expression is the window's `location`: the global, or a member so named of anything.
+    fn is_location(&self, object: &'a Expression<'a>) -> bool {
+        match peel_ts_sugar(object) {
+            Expression::Identifier(identifier) => {
+                identifier.name == "location" && self.symbol_of(identifier).is_none()
+            }
+            Expression::StaticMemberExpression(member) => member.property.name == "location",
+            Expression::ComputedMemberExpression(member) => {
+                literal_property_key(&member.expression).is_some_and(|key| key == "location")
+            }
+            _ => false,
+        }
+    }
+
+    /// A navigation to argument `index` of a call: a sink unless the URL is proven no `javascript:` URL (no argument navigates nowhere).
+    fn navigation_argument(&mut self, call: &'a CallExpression<'a>, index: usize) {
+        let proven = match call.arguments.get(index) {
+            None => true,
+            Some(argument) => argument
+                .as_expression()
+                .is_some_and(|value| self.url_proven(value, 0)),
+        };
+        if !proven {
+            self.add(call.span, CodeSinkKind::NavigationUrl);
+        }
+    }
+
+    /// Whether the global `location` at `span` is used where nothing else can call its `assign` or `replace`: the object of a member, a
+    /// destructuring's source (a detached method throws), the target of a write (the write's own test reads the value), `typeof`, an
+    /// operand of an operator or a template (they read it as text).
+    fn location_in_sight(&self, id: NodeId, span: oxc_span::Span) -> bool {
+        match self.semantic.nodes().parent_kind(id) {
+            AstKind::StaticMemberExpression(member) => member.object.span() == span,
+            AstKind::ComputedMemberExpression(member) => member.object.span() == span,
+            AstKind::VariableDeclarator(declarator) => {
+                matches!(declarator.id, BindingPattern::ObjectPattern(_))
+            }
+            AstKind::AssignmentExpression(assignment) => assignment.left.span() == span,
+            AstKind::UnaryExpression(_)
+            | AstKind::BinaryExpression(_)
+            | AstKind::TemplateLiteral(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Whether the value at `span` is only tested or compared: a condition, `!`, `typeof`, a comparison, a template, or the left of `&&`/`||`
+    /// in a condition is read as a flag or as text, never called or kept.
+    fn value_unused(&self, id: NodeId, span: oxc_span::Span) -> bool {
+        let nodes = self.semantic.nodes();
+        match nodes.parent_kind(id) {
+            AstKind::IfStatement(statement) => statement.test.span() == span,
+            AstKind::WhileStatement(statement) => statement.test.span() == span,
+            AstKind::ConditionalExpression(conditional) => conditional.test.span() == span,
+            AstKind::UnaryExpression(unary) => matches!(
+                unary.operator,
+                UnaryOperator::LogicalNot | UnaryOperator::Typeof | UnaryOperator::Void
+            ),
+            AstKind::BinaryExpression(binary) => {
+                binary.operator.is_equality() || binary.operator.is_compare()
+            }
+            AstKind::TemplateLiteral(_) => true,
+            // `String(x.open)`, `Boolean(x.open)`, `Number(x.open)`: the global converts the value, it calls no function it is given.
+            AstKind::CallExpression(call) => {
+                call.arguments.len() == 1
+                    && call.arguments[0].span() == span
+                    && matches!(peel_ts_sugar(&call.callee), Expression::Identifier(callee)
+                        if matches!(callee.name.as_str(), "String" | "Boolean" | "Number") && self.symbol_of(callee).is_none())
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether the member at `span` is written (`x.open = …`): the write stores a value, it reads none.
+    fn is_write_target(&self, id: NodeId, span: oxc_span::Span) -> bool {
+        matches!(self.semantic.nodes().parent_kind(id), AstKind::AssignmentExpression(assignment) if assignment.left.span() == span)
+    }
 }
 
 /// The text a string literal or a template with no substitution is, under TypeScript's wrappers.
@@ -508,10 +876,46 @@ fn static_module_path(source: &Expression<'_>) -> bool {
     })
 }
 
+/// The text a URL parser reads: leading spaces and C0 controls dropped, and every tab and line break removed.
+fn url_text(text: &str) -> String {
+    text.trim_start_matches(|c: char| c <= ' ')
+        .chars()
+        .filter(|c| !matches!(c, '\t' | '\n' | '\r'))
+        .collect()
+}
+
 fn is_javascript_url(text: &str) -> bool {
-    text.trim_start()
+    url_text(text)
         .get(..11)
         .is_some_and(|prefix| prefix.eq_ignore_ascii_case("javascript:"))
+}
+
+/// ADR 1133 (F5): whether a URL's known leading text already differs from `javascript:` (so no text after it can make one).
+fn url_text_differs(leading: &str) -> bool {
+    let text = url_text(leading);
+    let scheme = b"javascript:";
+    // Every known byte agrees with the scheme (or none is known): a whole `javascript:` prefix runs, a shorter one may be finished by
+    // what follows.
+    text.bytes()
+        .zip(scheme.iter())
+        .any(|(byte, expected)| !byte.eq_ignore_ascii_case(expected))
+}
+
+/// Whether a slot's literal text runs no code.
+fn slot_text_proven(slot: Slot, text: &str) -> bool {
+    match slot {
+        Slot::Url => !is_javascript_url(text),
+        Slot::Markup => markup_is_inert(text),
+    }
+}
+
+impl Slot {
+    fn kind(self) -> CodeSinkKind {
+        match self {
+            Slot::Url => CodeSinkKind::NavigationUrl,
+            Slot::Markup => CodeSinkKind::MarkupWrite,
+        }
+    }
 }
 
 /// Whether markup written as a string holds no script, no event attribute and no `javascript:` URL. Text with no tag in it is inert.
