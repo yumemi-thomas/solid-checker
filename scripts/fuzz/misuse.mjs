@@ -465,6 +465,12 @@ const WHOLE_STORE_READS = {
   "store-proto-member": { reads: true, text: (o) => `(() => { const t: any = { a: 1 }; t.__proto__ = ${o}; return t.v; })()` },
   "store-proto-computed": { text: (o) => `(({ ["__proto__"]: ${o} }) as any).v` },
   "store-proto-shorthand": { text: (o) => `((__proto__: unknown) => ({ __proto__ } as any).v)(${o})` },
+  // ADR 1138: a store tuple held whole (`const st = createStore(…)`). `st[0]` is the proxy and `st[1]` the setter: an index of the
+  // tuple is no store Get (rc.21 silent; main reported SC1001 at each), and only `st[0].v` warns.
+  "store-tuple-element": { imports: ["createStore"], text: () => `{ const st = createStore({ v: 1 }); void st[0]; }` },
+  "store-tuple-setter": { imports: ["createStore"], text: () => `{ const st = createStore({ v: 1 }); void st[1]; }` },
+  "store-tuple-handed": { imports: ["createStore"], text: () => `{ const st = createStore({ v: 1 }); const e = st[0]; void e; }` },
+  "store-tuple-get": { reads: true, imports: ["createStore"], text: () => `{ const st = createStore({ v: 1 }); void st[0].v; }` },
 };
 const WHOLE_STORE_WARNING = Object.keys(WHOLE_STORE_READS).filter((form) => WHOLE_STORE_READS[form].reads);
 const WHOLE_STORE_SILENT = Object.keys(WHOLE_STORE_READS).filter((form) => !WHOLE_STORE_READS[form].reads);

@@ -8303,8 +8303,11 @@ impl LocalAccessContext<'_, '_> {
         // A `then` head does not warn; a key solid-checker cannot spell
         // (a symbol, a dynamic expression) may not either. Review round
         // 1: a `then` Get is withheld only when its backing runs nothing.
+        // ADR 1138: a store tuple held whole; its Get is named as written (`st[0].v`).
+        let whole_tuple = self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store)
+            && self.store_tuple_held_whole(symbol, declaration);
         if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
-            let decision = if self.store_tuple_held_whole(symbol, declaration) {
+            let decision = if whole_tuple {
                 whole_store_tuple_get(file, member.span, self.lookup.dialect)
             } else {
                 store_get_decision(file, member.span, declaration, self.lookup)
@@ -8359,7 +8362,7 @@ impl LocalAccessContext<'_, '_> {
             member,
             symbol,
             (name, declaration),
-            (execution, uncertain, prop_head),
+            (execution, uncertain, prop_head || whole_tuple),
             placed_at,
         );
         read.pending_open = pending_open;
@@ -8391,19 +8394,21 @@ impl LocalAccessContext<'_, '_> {
     }
 
     /// ADR 1138: whether the store source `symbol`, created at `declaration`, is a tuple primitive's result held whole
-    /// (`const st = createStore(…)`, or a hook returning that tuple): then `st` is the tuple, `st[0]` the store proxy and `st[1]`
-    /// its setter, and a Get on `st` is an array index, no store Get. The primitive is the symbol's, or the creation's when the
-    /// symbol carries the creation's declaration (an effect's store parameter). Only an array slot 0 at the declaration (`const
-    /// [st] = …`, `[st] = …`) is the store itself; anything else that holds a tuple primitive's store is taken as the tuple.
+    /// (`const st = createStore(…)`): then `st` is the tuple, `st[0]` the store proxy and `st[1]` its setter, and a Get on `st`
+    /// is an array index, no store Get. Only the direct creation holds a tuple whole: a hook's returned store is never one (a
+    /// tuple creation returned as it is is no returned source, ADR 0628), and an array slot 0 (`const [st] = …`) is the store.
+    /// The primitive is the symbol's, or the creation's when the symbol carries the creation's declaration (an effect's store
+    /// parameter). A tuple primitive's store whose declaration is neither of those shapes is taken as the tuple: undecided.
     fn store_tuple_held_whole(&self, symbol: &SymbolId, declaration: &Location) -> bool {
         let dialect = self.lookup.dialect;
+        let tuple_primitive = |primitive: solid_dialect::Primitive| {
+            dialect.returns_store(primitive) && dialect.returns_reactive_tuple(primitive)
+        };
         let tuple = |symbol: &SymbolId| {
             self.source_primitives
                 .get(symbol)
                 .and_then(|name| dialect.primitive(name.as_str()))
-                .is_some_and(|primitive| {
-                    dialect.returns_store(primitive) && dialect.returns_reactive_tuple(primitive)
-                })
+                .is_some_and(tuple_primitive)
         };
         if !(tuple(symbol) || self.entities.get(declaration).is_some_and(tuple)) {
             return false;
@@ -8429,7 +8434,33 @@ impl LocalAccessContext<'_, '_> {
                 .and_then(|slot| slot.as_ref())
                 .is_some_and(at)
         });
-        !slot
+        if slot {
+            return false;
+        }
+        // A hook's returned store: the binding's initializer is a call that creates no tuple itself.
+        let returned = file.ast.bindings.iter().any(|binding| {
+            binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.names.first().is_some_and(|name| at(&name.span))
+                && binding
+                    .call_initializer
+                    .and_then(|initializer| {
+                        self.lookup
+                            .ast_file_index(file.path.as_str())?
+                            .call_by_span(initializer)
+                    })
+                    .is_some_and(|call| {
+                        !crate::known_primitive(&crate::call_primitive_name_cached(
+                            self.lookup,
+                            file,
+                            call,
+                            self.entities,
+                            self.symbol_names,
+                            dialect,
+                        ))
+                        .is_some_and(tuple_primitive)
+                    })
+        });
+        !returned
     }
 
     fn member_read(
@@ -9640,11 +9671,13 @@ pub(crate) fn whole_store_tuple_get(
         None => StoreHeadGet::Undecided(
             "the store Get's key is not a known string; a symbol key or \"then\" does not warn",
         ),
-        Some(key) if dialect.store_key_may_skip_strict_read(key) => StoreHeadGet::Undecided(if chained {
-            "the store Get's head key does not warn, and whether its value is a store proxy whose next Get does is not proven"
-        } else {
-            "the store Get's key \"then\" does not warn, but the property it reads is not proven to be data that runs nothing (a getter there reads on access)"
-        }),
+        Some(key) if dialect.store_key_may_skip_strict_read(key) => {
+            StoreHeadGet::Undecided(if chained {
+                "the store Get's head key does not warn, and whether its value is a store proxy whose next Get does is not proven"
+            } else {
+                "the store Get's key \"then\" does not warn, but the property it reads is not proven to be data that runs nothing (a getter there reads on access)"
+            })
+        }
         Some(_) => StoreHeadGet::Warns,
     }
 }
@@ -9654,7 +9687,12 @@ fn member_key<'f>(
     file: &'f solid_facts::FileFacts,
     member: &solid_facts::ast::MemberFact,
 ) -> Option<&'f str> {
-    if file.ast.computed_members.binary_search(&member.span).is_ok() {
+    if file
+        .ast
+        .computed_members
+        .binary_search(&member.span)
+        .is_ok()
+    {
         file.ast
             .literal_computed_members
             .iter()
