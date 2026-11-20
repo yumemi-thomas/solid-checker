@@ -673,7 +673,7 @@ export const SPEC = {
   },
   // `settled`: an async memo read after it settled (ADR 0511 review: probe pending-async/hook-shared-instance, rc.17 warns this code in an
   // apply, no pending throw), through the module-scope hook result beside the body's own call.
-  STRICT_READ_UNTRACKED: { legal: ["memo", "effect-compute", "render-compute", "jsx", "jsx-helper", "untrack"], recallContexts: ["evt-body-dispatch", ...DISPATCH_HANDED_ON, "evt-apply-dispatch-shadow", ...DELIVERY_BREAKERS, ...firesAt("body"), ...listenersAt("body"), ...DENIED_CONTEXTS.filter((context) => !context.startsWith("dny-unmount-flush") && !["dny-dispose-memo", "dny-dispose-compute", "dny-dispose-untrack"].includes(context))], recallLegal: [...EVENT_LEGAL, ...ZERO_READS, "handed-flush"],
+  STRICT_READ_UNTRACKED: { legal: ["memo", "effect-compute", "render-compute", "jsx", "jsx-helper", "untrack"], recallContexts: ["evt-body-dispatch", ...DISPATCH_HANDED_ON, "evt-apply-dispatch-shadow", "evt-apply-dispatch-shadow-named", "evt-apply-dispatch-shadow-spread", ...DELIVERY_BREAKERS, ...firesAt("body"), ...listenersAt("body"), ...DENIED_CONTEXTS.filter((context) => !context.startsWith("dny-unmount-flush") && !["dny-dispose-memo", "dny-dispose-compute", "dny-dispose-untrack"].includes(context))], recallLegal: [...EVENT_LEGAL, ...ZERO_READS, "handed-flush"],
     // `settled` is a grid variant (never drawn at random, so random programs and combinations' extras keep theirs) and a legal one.
     variants: ["signal", "memo"], gridVariants: ["settled"], legalVariants: ["signal", "memo", "settled"],
     contexts: ["body", "effect-apply", "root", "render-apply"], bindings: ["direct", "alias", "destructured", "wrapper"],
@@ -702,7 +702,7 @@ export const SPEC = {
     setup: (variant, name) => [variant === "memo" ? memoSignal(name("m")) : ["settled", "latest", "is-pending"].includes(variant) ? asyncSignal(name("a")) : variant === "store-link" || variant?.startsWith("store-escaped") ? storeNestedSignal(name("s"), 0) : variant === "store-deep" || variant === "store-snapshot" || variant === "merge-plain" ? storeSignal(name("s"), 0) : variant === "store-raw-root" ? storeRawSignal(name("s"), 0) : variant === "latest-store" || variant === "is-pending-store" ? storeAsyncSignal(name("s"), 0) : variant === "declared" ? asyncDeclaredSignal(name("a")) : variant === "maybe-sync" ? asyncMaybeSignal(name("a")) : WHOLE_STORE_READS[variant] ? (WHOLE_STORE_READS[variant].projection ? (n, i) => apiSignal(n, i, "projection") : WHOLE_STORE_READS[variant].then ? (n, i) => apiSignal(n, i, "store-then") : WHOLE_STORE_READS[variant].nested ? storeNestedSignal : WHOLE_STORE_READS[variant].array ? storeArraySignal : WHOLE_STORE_READS[variant].empty ? storeEmptySignal : storeSignal)(name("s"), 0) : signal(name("r"), 3, "src")],
     call: (node, sigs) => (WHOLE_STORE_READS[node.variant] ? member(sigs[0].name, WHOLE_STORE_READS[node.variant].text, WHOLE_STORE_READS[node.variant].imports) : INSTALLED_GETS[node.variant] ? member(sigs[0].name, INSTALLED_GETS[node.variant]) : node.variant === "merge-plain" ? member(sigs[0].name, (o) => `merge(${o}, { b: 2 }).b`, ["merge"]) : node.variant === "store-raw-root" ? member(sigs[0].name, (o) => `${o}.v`) : node.variant === "latest-name" ? api("latest", sigs[0].name, { locals: true }) : node.variant === "is-pending-name" ? api("isPending", sigs[0].name, { locals: true }) : node.variant === "latest-store" ? api("latest", `() => ${sigs[0].name}.v`, { locals: true }) : node.variant === "is-pending-store" ? api("isPending", `() => ${sigs[0].name}.v`, { locals: true }) : node.variant === "store-escaped" ? member(sigs[0].name, (o) => `untrack(() => ${o}.a).v`, ["untrack"]) : node.variant === "store-escaped-leaf" ? member(sigs[0].name, (o) => `untrack(() => ${o}.v)`, ["untrack"]) : node.variant === "labelled" ? member(sigs[0].name, (o) => `untrack(() => ${o}(), "scope")`, ["untrack"]) : node.variant === "store-deep" ? api("deep", sigs[0].name, { locals: true }) : node.variant === "store-snapshot" ? api("snapshot", sigs[0].name, { locals: true }) : node.variant === "uncalled-arith" ? member(sigs[0].name, (o) => `${o} - 1`) : node.variant === "uncalled-index" ? member(sigs[0].name, (o) => `[1, 2][${o}]`) : node.variant === "store-link" ? member(sigs[0].name, (o) => `${o}.a`) : pendingRead(node, sigs)),
   },
-  NO_OWNER_CLEANUP: { legal: ["body", "memo", "effect-compute", "render-compute", "root"], recallLegal: [...RENDER_DRAINS, "zero-await-empty", "zero-await-var"], recallContexts: ASYNC_CONTROL, contexts: UNOWNED, bindings: BINDINGS, setup: () => [], call: () => api("onCleanup", "() => {}") },
+  NO_OWNER_CLEANUP: { legal: ["body", "memo", "effect-compute", "render-compute", "root"], recallLegal: [...RENDER_DRAINS, "zero-await-empty", "zero-await-var"], recallContexts: ASYNC_CONTROL, contexts: [...UNOWNED, "handler-await-helper-veto"], bindings: BINDINGS, setup: () => [], call: () => api("onCleanup", "() => {}") },
   // `reaction-track` (grid only): `track1(() => 1)` of a tracker `helpers.ts` creates at module scope. rc.17's tracker creates its
   // effect under the owner current at `createReaction` (`@solidjs/signals` dist/dev.js:2630-2651, `runWithOwner(owner, …)`): none
   // there, so every `track1()` warns, wherever it is called. `reaction-track-owned` (legal only): the tracker the component (or its
@@ -1986,6 +1986,13 @@ function inContext(context, stmts, kit) {
     case "then": return { body: [expr(prim("then", fn(stmts)))], view: [] };
     case "micro": return { body: [expr(prim("micro", fn(stmts)))], view: [] };
     case "handler": case "creates-in-handler": return { body: [], view: [button(kit.name("b"), stmts)] };
+    // ADR 1139 (N3 of the Fable review of ADR 1125): an inline async handler calls a helper past its own `await`, in a program that
+    // replaces `globalThis.event` (the delivery premise is broken, so the handler's own owner proof is withheld): the helper runs on the
+    // continuation, with no owner, however the handler is entered.
+    case "handler-await-helper-veto": {
+      const h = kit.name("f");
+      return { body: [expr(domExpr("globalThis.event = undefined")), decl(h, fn(stmts))], view: [button(kit.name("b"), [expr(call(ref(h)))], { async: true })] };
+    }
     // EVENT_CONTEXTS: a listener the program dispatches to itself, and work a handler or an apply schedules.
     case "evt-body-dispatch-call": case "evt-body-dispatch-reflect": case "evt-body-dispatch-reflect-get": case "evt-body-dispatch-built-key": case "evt-body-dispatch-pattern": {
       // The element's own `onScroll` (no delegation), the dispatch in the component body: the handler runs on the body's stack. Round 1 (F1, F3): the
@@ -2012,6 +2019,17 @@ function inContext(context, stmts, kit) {
     // ADR 1115: a detached element's `onScroll` (a listener on the element itself, not delegated) holds the site; the element is moved
     // into a shadow tree and an effect's apply dispatches the event. A listener in a shadow tree runs with `window.event` unset (rc.21
     // `dev-shared.js:5796, 5803`), so the apply's strict-read window, keyed on its queue's event, holds for the read: Chrome warns.
+    // ADR 1139 r1 (Opus review F1, F2): the same delivery to a handler the element names by its value (`onScroll={h}`, the body a `const`'s
+    // function) and to one a literal spread hands it (`{...{ onScroll: () => … }}`).
+    case "evt-apply-dispatch-shadow-named": case "evt-apply-dispatch-shadow-spread": {
+      const el = kit.name("el"), h = kit.name("f");
+      const named = context.endsWith("named");
+      const handler = named ? button(kit.name("b"), [], { tag: "div", on: "onScroll", undriven: true, value: h }) : button(kit.name("b"), stmts, { tag: "div", on: "onScroll", undriven: true, spread: true });
+      const made = decl(el, jsxExpr(handler));
+      const attach = expr(domExpr(`document.createElement("div").attachShadow({ mode: "open" }).appendChild(${el} as HTMLElement)`));
+      const fire = expr(domExpr(`(${el} as HTMLElement).dispatchEvent(new Event("scroll"))`));
+      return { body: [...(named ? [decl(h, fn(stmts))] : []), made, attach, expr(prim("effect", fn([ret(num(1))]), { apply: fn([fire]) }))], view: [] };
+    }
     case "evt-apply-dispatch-shadow": {
       const host = kit.name("host"), el = kit.name("el");
       // Detached: nothing can click it (`undriven`); the dispatch is the driver.
