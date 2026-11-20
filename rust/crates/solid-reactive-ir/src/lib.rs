@@ -54,6 +54,7 @@ mod development_feedback;
 mod directives;
 mod disabled_handlers;
 mod execution_paths;
+mod overridden_handlers;
 #[cfg(feature = "what-if")]
 pub mod what_if;
 pub use development_feedback::{
@@ -1588,6 +1589,10 @@ pub struct OwnerRequirement {
     /// nothing in the program is seen to enable: the runtime's dispatcher passes over a disabled node, so no run is proven.
     #[serde(default, skip_serializing_if = "is_false")]
     pub handler_on_disabled_control: bool,
+    /// ADR 1140: the operation is written in an event handler of an intrinsic element that a later source of the element (an
+    /// attribute or spread) may supply under the same key: the runtime's spread skips the earlier one, so no run is proven.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub handler_key_overridden: bool,
     /// ADR 0290: the operation is inside a package analyzed as source
     /// (ADR 0284), at this location, and this requirement stands at the
     /// project's call that runs it there, under the call's owner context.

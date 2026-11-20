@@ -146,28 +146,46 @@ pub(crate) fn discover_owner_file(
                 continue;
             };
             for (path, span) in targets {
+                // ADR 1140: the runtime's spread skips a key a later source of
+                // the element has, so a handler a later attribute or spread may
+                // supply under its key may never be attached: no proven run.
+                let overridden = lookup.file_by_path(path).is_some_and(|holder| {
+                    crate::overridden_handlers::literal_key_of(holder, *span).is_some_and(|name| {
+                        crate::overridden_handlers::later_source_may_supply(
+                            file,
+                            lookup,
+                            element,
+                            spread.span,
+                            name,
+                        )
+                    })
+                });
                 edges.push(SymbolicOwnerEdge {
                     source: None,
                     target: OwnerTarget::Function(path.clone(), *span),
                     // The key the literal holds it under names the event; a
                     // value no literal key names has no measured event.
-                    kind: match lookup.file_by_path(path).filter(|file| {
-                        file.ast.object_properties.iter().any(|property| {
-                            file.ast.peel_ts_sugar_span(property.value) == *span
-                                && file.source_text(property.key).is_some_and(|key| {
-                                    crate::runtime_semantics::event_keeps_delivery_proof(
-                                        key.trim_matches(['\'', '"']),
-                                    )
-                                })
-                        })
-                    }) {
-                        Some(file) => event_owner_edge(
-                            lookup,
-                            file.ast
-                                .function_at(*span)
-                                .is_some_and(|function| function.generator),
-                        ),
-                        None => OwnerEdgeKind::Conditional,
+                    kind: if overridden {
+                        OwnerEdgeKind::MayBeUnowned
+                    } else {
+                        match lookup.file_by_path(path).filter(|file| {
+                            file.ast.object_properties.iter().any(|property| {
+                                file.ast.peel_ts_sugar_span(property.value) == *span
+                                    && file.source_text(property.key).is_some_and(|key| {
+                                        crate::runtime_semantics::event_keeps_delivery_proof(
+                                            key.trim_matches(['\'', '"']),
+                                        )
+                                    })
+                            })
+                        }) {
+                            Some(file) => event_owner_edge(
+                                lookup,
+                                file.ast
+                                    .function_at(*span)
+                                    .is_some_and(|function| function.generator),
+                            ),
+                            None => OwnerEdgeKind::Conditional,
+                        }
                     },
                 });
             }
