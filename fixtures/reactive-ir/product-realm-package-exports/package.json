@@ -5,5 +5,10 @@
   "main": "index.tsx",
   "exports": {
     ".": "./index.tsx"
+  },
+  "scripts": {
+    "build": "vite build",
+    "watch": "vite build --watch --mode development",
+    "test": "vitest run"
   }
 }

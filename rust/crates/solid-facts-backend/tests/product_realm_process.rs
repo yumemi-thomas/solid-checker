@@ -126,7 +126,7 @@ fn realm_silences(log: &Path) -> Vec<(String, u64, u64)> {
 }
 
 /// The product's own file of each fixture below, and the test file that imports it.
-const CLEARED: [(&str, &str, &str); 2] = [
+const CLEARED: [(&str, &str, &str); 4] = [
     // A page's module script (`index.html` names `/main.tsx`), the test setup loads the writers.
     ("product-realm-test-writer", "App.tsx", "app.test.tsx"),
     // A package's `exports` are the entries; no page.
@@ -135,6 +135,14 @@ const CLEARED: [(&str, &str, &str); 2] = [
         "index.tsx",
         "index.test.tsx",
     ),
+    // tsconfig `paths` that the config has Vite apply: both resolve the specifier to the shim, so the page does not load the writer.
+    (
+        "product-realm-tsconfig-paths-applied",
+        "App.tsx",
+        "app.test.tsx",
+    ),
+    // The `?url` of an image is data, no module.
+    ("product-realm-asset-query", "App.tsx", "app.test.tsx"),
 ];
 
 #[test]
@@ -201,7 +209,7 @@ fn a_site_only_a_test_loaded_writer_makes_is_cleared_by_a_typed_silence_and_drop
 }
 
 /// Fixtures where the realm is unknown, or the page loads a writer: nothing is cleared, and the realm's silence is not named.
-const KEPT: [(&str, &str); 7] = [
+const KEPT: [(&str, &str); 16] = [
     // A second page loads the writer and shares a module.
     ("product-realm-second-page", "App.tsx"),
     // A plugin the grammar knows by name, adding a load: a name proves nothing.
@@ -216,6 +224,22 @@ const KEPT: [(&str, &str); 7] = [
     ("product-realm-dev-client", "App.tsx"),
     // The same in a production build, where the page gets Vite's `modulepreload` polyfill.
     ("product-realm-dev-client-production", "App.tsx"),
+    // The closure equals Vite's resolution, or the read ends (review round 1): a `.js` beside the `.ts` Vite ranks first,
+    ("product-realm-js-sibling", "App.tsx"),
+    // a package `imports` entry read under another condition set,
+    ("product-realm-subpath-imports", "App.tsx"),
+    // a tsconfig `customConditions`,
+    ("product-realm-custom-conditions", "App.tsx"),
+    // tsconfig `paths` Vite does not apply,
+    ("product-realm-tsconfig-paths", "App.tsx"),
+    // the `?url` of a script,
+    ("product-realm-url-script", "App.tsx"),
+    // another Vite config file, and a script that gives `vite` a `--config`,
+    ("product-realm-other-vite-config", "App.tsx"),
+    ("product-realm-vite-script-config", "App.tsx"),
+    // and a Solid plugin that is not an installed closure ADR 0270 pins (unpinned, and not installed).
+    ("product-realm-plugin-unpinned", "App.tsx"),
+    ("product-realm-plugin-missing", "App.tsx"),
 ];
 
 #[test]

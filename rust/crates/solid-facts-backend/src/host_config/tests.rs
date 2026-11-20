@@ -120,6 +120,54 @@ fn tsconfig_resolver_activity_is_conservative() {
     }
 }
 
+/// ADR 1145: the product realm trusts a tsconfig path mapping only where Vite applies it on every branch of the config, so a conditional config merges the flag with
+/// `&&` (where `tsconfig_paths`, which a host reads as "a resolver may find another config", merges with `||`) and only the literal `true` counts.
+#[test]
+fn tsconfig_paths_count_as_applied_only_on_every_branch() {
+    let path = Path::new("vite.config.ts");
+    for (source, every) in [
+        (
+            "export default {plugins:[],resolve:{tsconfigPaths:true}}",
+            true,
+        ),
+        ("export default {plugins:[]}", false),
+        (
+            "export default {plugins:[],resolve:{tsconfigPaths:false}}",
+            false,
+        ),
+        (
+            "export default {plugins:[],resolve:{tsconfigPaths:undefined}}",
+            false,
+        ),
+        (
+            "import {defineConfig} from 'vite'; export default defineConfig(({mode}) => ({plugins:[],resolve:{tsconfigPaths:mode}}))",
+            false,
+        ),
+        (
+            "import {defineConfig} from 'vite'; export default defineConfig(({mode}) => mode ? {plugins:[]} : {plugins:[],resolve:{tsconfigPaths:true}})",
+            false,
+        ),
+        (
+            "import {defineConfig} from 'vite'; export default defineConfig(({mode}) => mode ? {plugins:[],resolve:{tsconfigPaths:true}} : {plugins:[]})",
+            false,
+        ),
+        (
+            "import {defineConfig} from 'vite'; export default defineConfig(({mode}) => mode ? {plugins:[],resolve:{tsconfigPaths:true}} : {plugins:[],resolve:{tsconfigPaths:true}})",
+            true,
+        ),
+        (
+            "import paths from 'vite-tsconfig-paths'; export default {plugins:[paths()]}",
+            false,
+        ),
+    ] {
+        assert_eq!(
+            parse(path, source).unwrap().tsconfig_paths_every,
+            every,
+            "{source}"
+        );
+    }
+}
+
 #[test]
 fn package_resolver_controls_and_branch_exclusions_remain_closed() {
     let path = Path::new("vite.config.ts");

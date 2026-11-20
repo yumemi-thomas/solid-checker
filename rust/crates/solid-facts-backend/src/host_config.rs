@@ -31,6 +31,9 @@ pub(super) struct Config {
     pub default_extensions: bool,
     /// Either resolver may discover configs other than the analyzed project.
     pub tsconfig_paths: bool,
+    /// ADR 1145: Vite applies the tsconfig `paths` on every branch of the config (`resolve.tsconfigPaths` is the literal `true`). The product realm trusts a path
+    /// mapping only then, so a conditional config merges it with `&&` where `tsconfig_paths` (a host may find a config another branch does not) merges with `||`.
+    pub tsconfig_paths_every: bool,
     /// Package deduplication changes importer-relative lookup; default package
     /// load proofs are withheld until that resolver branch is implemented.
     pub package_dedupe: bool,
@@ -393,6 +396,7 @@ fn object(object: &ObjectExpression<'_>, bindings: &Bindings<'_>) -> Option<Conf
         aliases: BTreeMap::new(),
         default_extensions: true,
         tsconfig_paths: false,
+        tsconfig_paths_every: false,
         package_dedupe: false,
         optimize_exclude: BTreeSet::new(),
         lazy_routes: false,
@@ -507,6 +511,13 @@ fn object(object: &ObjectExpression<'_>, bindings: &Bindings<'_>) -> Option<Conf
                 config.tsconfig_paths = true;
             }
             if key == "resolve"
+                && options
+                    .get("tsconfigPaths")
+                    .is_some_and(|value| bool_value(value, true))
+            {
+                config.tsconfig_paths_every = true;
+            }
+            if key == "resolve"
                 && let Some(value) = options.get("alias")
             {
                 let Expression::ObjectExpression(aliases) = value.get_inner_expression() else {
@@ -550,6 +561,7 @@ fn expression(value: &Expression<'_>, bindings: &Bindings<'_>) -> Option<Config>
             left.tailwind |= right.tailwind;
             left.default_extensions &= right.default_extensions;
             left.tsconfig_paths |= right.tsconfig_paths;
+            left.tsconfig_paths_every &= right.tsconfig_paths_every;
             left.package_dedupe |= right.package_dedupe;
             left.optimize_exclude.extend(right.optimize_exclude);
             Some(left)
@@ -576,6 +588,7 @@ fn statements(body: &[Statement<'_>], bindings: &Bindings<'_>) -> Option<Config>
             left.tailwind |= right.tailwind;
             left.default_extensions &= right.default_extensions;
             left.tsconfig_paths |= right.tsconfig_paths;
+            left.tsconfig_paths_every &= right.tsconfig_paths_every;
             left.package_dedupe |= right.package_dedupe;
             left.optimize_exclude.extend(right.optimize_exclude);
             Some(left)

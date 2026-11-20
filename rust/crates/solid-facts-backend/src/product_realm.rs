@@ -12,9 +12,16 @@
 //! - the pages: any other HTML file of the project that can run code may share a module with the page, so it ends the read;
 //! - the bundler: some `vite.config.*` from the project directory up to its workspace root must name the build, and every one there must parse in the closed Vite
 //!   config grammar of host discovery (`host_config`, with the bundler's output naming options added) with no plugin but Solid's. The Solid plugin is the dialect's
-//!   compile step; no other plugin is trusted for what it is called, and none is read for what it does: its installed source is not proven to add no load, so it
-//!   ends the read. The config helper `defineConfig` only returns its argument (Vite's documented typing helper; its installed bytes are not read). A Vite alias, a
-//!   deduplicated package, the Solid plugin's start mode, any other bundler's configuration file in that chain and a second Vite config of one directory end it too;
+//!   compile step, and where the realm would narrow anything its installed closure must be one of ADR 0270's pins (a missing or unpinned plugin ends the read);
+//!   no other plugin is trusted for what it is called, and none is read for what it does, so it ends the read. The config helper `defineConfig` only returns its
+//!   argument (Vite's documented typing helper; its installed bytes are not read). A Vite alias, a deduplicated package, the Solid plugin's start mode, any other
+//!   bundler's configuration file in that chain, another Vite config file (`vite.config.prod.ts`), a second Vite config of one directory, and a `package.json`
+//!   script that gives `vite` a `--config` or a `--mode` end it too;
+//! - the resolution: the closure follows TypeScript's attested resolution and the page is built by Vite's, so the realm holds only where they agree. A relative
+//!   specifier is probed the way Vite does (its own `resolve.extensions` order, the `.js` to `.ts` swap, `index.*`) and must pick the file the attestation names; a
+//!   `#` specifier (package `imports`, read under other conditions by each), a root-absolute one, a tsconfig `customConditions`, `rootDirs` or `moduleSuffixes`, and
+//!   `paths` or `baseUrl` that Vite does not apply (no `resolve.tsconfigPaths`) end the read; a query on a script module or a package (`?url`, `?raw`, `?inline`: the
+//!   page may load or run what the string holds) ends it, and only a data file's query is no load;
 //! - the closure of the entries over every `import`, `export … from`, literal `import()` and `require`, and `import x = require()`, by the attested resolution of each
 //!   specifier. A load by a computed specifier, `import.meta.glob`, a worker, a service worker, `new URL(…, import.meta.url)`, a specifier no row attests or that
 //!   resolves nowhere, a resolved file the program does not analyze (an asset and a JSON module excepted), and an entry the program does not hold end it;
@@ -22,8 +29,9 @@
 //!   `modulepreload` polyfill in a production one), so the packages named `vite` and the config's own imports are in the realm whatever the files import, in either
 //!   build (a name kept is a writer kept: the direction that only narrows the change).
 //!
-//! Premises (`docs/decisions.md`, ADR 1145): the Solid plugin adds only Solid's own loads; `defineConfig` is the identity; the build is the Vite build the config
-//! describes; tests, stories and configs are not the product (the owner's ruling), so a product file's site is judged against what the page loads though a test loads
+//! Premises (`docs/decisions.md`, ADR 1145): the closure equals Vite's resolution wherever the read has not ended (the refusals above are where it can differ); the
+//! Solid plugin, an installed and pinned closure, adds only Solid's own loads; `defineConfig` is the identity; the build is the Vite build the config and the scripts
+//! describe; tests, stories and configs are not the product (the owner's ruling), so a product file's site is judged against what the page loads though a test loads
 //! the file with more; code outside the program shares the page with it as the package integrity premise (ADR 0300) already assumes.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
@@ -77,6 +85,22 @@ pub(crate) struct Known {
     pub roots: BTreeSet<String>,
     /// The package names whose roots the page's host loads whatever the files import: Vite itself and the packages the Vite configs import.
     pub host_names: BTreeSet<String>,
+    /// Each Solid plugin the configs import, by the directory of the config and the specifier: where the realm narrows anything, its installed closure is audited
+    /// against ADR 0270's pins ([`apply`]).
+    pub solid_plugins: Vec<(PathBuf, String)>,
+}
+
+/// What [`apply`] did with a realm.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum Applied {
+    /// No realm is decided: every site keeps every writer.
+    Unknown,
+    /// The realm holds every writer the program has: nothing changes.
+    Unchanged,
+    /// The realm holds fewer writers: the files its entries load are judged against them.
+    Narrowed,
+    /// The realm would narrow, and a Solid plugin it names is not an installed closure ADR 0270 pins: every site keeps every writer.
+    Refused(String),
 }
 
 /// The Solid plugin, by the specifier a config imports it from: the dialect's compile step. Its output loads Solid's own packages (the runtime, and in a development
@@ -110,7 +134,12 @@ const UNREAD_CONFIGS: [&str; 14] = [
 const CONFIG_EXTENSIONS: [&str; 6] = ["ts", "js", "mts", "mjs", "cts", "cjs"];
 
 /// The product realm of the program in `directory` (its project directory) under `runtime`: every stage is read, so an unknown realm names all that failed.
-pub(crate) fn read(directory: &Path, facts: &ProjectFacts, runtime: &RuntimeEnvironment) -> Realm {
+pub(crate) fn read(
+    directory: &Path,
+    project: &Path,
+    facts: &ProjectFacts,
+    runtime: &RuntimeEnvironment,
+) -> Realm {
     let mut blockers = Vec::<Blocker>::new();
     if runtime.target != Some(RuntimeTarget::Browser) {
         blockers.push(Blocker::new(
@@ -138,13 +167,22 @@ pub(crate) fn read(directory: &Path, facts: &ProjectFacts, runtime: &RuntimeEnvi
         )),
         Err(reason) => blockers.push(Blocker::new("pages", reason)),
     }
-    let host_names = match bundler(directory) {
-        Ok(names) => names,
+    let bundled = match bundler(directory) {
+        Ok(bundled) => bundled,
         Err(reason) => {
             blockers.push(Blocker::new("bundler", reason));
-            BTreeSet::new()
+            Bundled::default()
         }
     };
+    // The user's tsconfig (`project`; a combined dependency-source program is analyzed at a logical path beside it, which extends it).
+    let tsconfig = if project.is_dir() {
+        project.join("tsconfig.json")
+    } else {
+        project.to_owned()
+    };
+    if let Err(reason) = tsconfig_resolution(&tsconfig, bundled.applies_paths) {
+        blockers.push(Blocker::new("resolution", reason));
+    }
     let entries = match entries_of(directory, &|path| by_path.contains_key(path)) {
         Ok(entries) => entries,
         Err(reason) => {
@@ -152,7 +190,7 @@ pub(crate) fn read(directory: &Path, facts: &ProjectFacts, runtime: &RuntimeEnvi
             return Realm::Unknown(blockers);
         }
     };
-    let (files, roots) = match closure(facts, &by_path, &entries) {
+    let (files, roots) = match closure(facts, &by_path, &entries, bundled.applies_paths) {
         Ok(closure) => closure,
         Err(reason) => {
             blockers.push(Blocker::new("closure", reason));
@@ -166,7 +204,8 @@ pub(crate) fn read(directory: &Path, facts: &ProjectFacts, runtime: &RuntimeEnvi
         entries,
         files,
         roots,
-        host_names,
+        host_names: bundled.host_names,
+        solid_plugins: bundled.solid_plugins,
     })
 }
 
@@ -390,7 +429,194 @@ fn chain(directory: &Path) -> Vec<PathBuf> {
     found
 }
 
-/// The Vite configs of the chain, or why the chain is not read: another bundler's configuration, or two Vite configs of one directory.
+/// Whether `name` is the name of a Vite configuration file other than the conventional `vite.config.<ext>` (`vite.config.prod.ts`, `vite.prod.config.js`,
+/// `app.vite.config.ts`): `vite build --config <file>` can select any of them, and which one a build uses is not read. `vitest.config.*` is a test runner's.
+fn other_vite_config(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    if CONFIG_EXTENSIONS
+        .iter()
+        .any(|extension| name == format!("vite.config.{extension}"))
+    {
+        return false;
+    }
+    (name.starts_with("vite.") && name.contains("config"))
+        || name.contains(".vite.config.")
+        || name.starts_with("vite-config")
+        || name.starts_with("vite_config")
+        || name.starts_with("viteconfig")
+}
+
+/// The commands of a `package.json` script line, each a list of words (split at `&&`, `||`, `;`, `|` and `&`), or `None` for a line with quoting, expansion, grouping,
+/// redirection, a glob or a continuation: what a `vite` in such a line runs, and where, is not read.
+fn script_commands(line: &str) -> Option<Vec<Vec<&str>>> {
+    if line.contains([
+        '"', '\'', '`', '\\', '(', ')', '<', '>', '$', '{', '}', '*', '\n',
+    ]) {
+        return None;
+    }
+    Some(
+        line.split(['&', ';', '|'])
+            .map(|command| command.split_ascii_whitespace().collect::<Vec<_>>())
+            .filter(|words| !words.is_empty())
+            .collect(),
+    )
+}
+
+/// Whether `word` names the `vite` executable (`vite`, `node_modules/.bin/vite`, `node_modules/vite/bin/vite.js`); `vitest` and `vite-node` are other programs.
+fn is_vite(word: &str) -> bool {
+    matches!(
+        word.rsplit('/').next(),
+        Some("vite" | "vite.js" | "vite.mjs" | "vite.cjs")
+    )
+}
+
+/// Whether a script line names `vite` as a word, however it is quoted.
+fn mentions_vite(line: &str) -> bool {
+    line.split(|c: char| !(c.is_alphanumeric() || "-_./@".contains(c)))
+        .any(is_vite)
+}
+
+/// The flags of `vite` that take their value as the next word.
+const VITE_VALUE_FLAGS: [&str; 10] = [
+    "--port",
+    "--mode",
+    "-m",
+    "--base",
+    "--logLevel",
+    "-l",
+    "--outDir",
+    "--assetsDir",
+    "--target",
+    "--assetsInlineLimit",
+];
+
+/// The commands of `vite`; its first word may name one (`vite build`), and any other word that is no flag or flag value is the project root.
+const VITE_COMMANDS: [&str; 5] = ["build", "dev", "serve", "preview", "optimize"];
+
+/// The words that may precede `vite` in a command: runners and environment setters that run it where the script runs, with the options none of them has a directory
+/// in (`pnpm --dir ../.. exec vite`, `npm --prefix web run`).
+const VITE_LAUNCHERS: [&str; 12] = [
+    "npx",
+    "pnpx",
+    "bunx",
+    "pnpm",
+    "npm",
+    "yarn",
+    "exec",
+    "run",
+    "dlx",
+    "node",
+    "env",
+    "cross-env",
+];
+const VITE_LAUNCHER_FLAGS: [&str; 5] = ["--", "--bun", "--no-install", "-y", "--yes"];
+
+/// Whether `word` is a host address (`localhost`, `0.0.0.0`, `::1`): the value of `--host`, as a project root is a directory name.
+fn address_like(word: &str) -> bool {
+    matches!(word, "localhost" | "true" | "false")
+        || (word
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() || c == '.' || c == ':')
+            && word.contains(['.', ':']))
+}
+
+/// Why `words` (one command of a script) run `vite` other than as the plain `vite [build|dev|preview] [flags]` of the project directory, or `None`: a `--config` file
+/// is another configuration than the one read, and a launcher option, a project root argument or a directory change run it in another directory or project, where
+/// another configuration (and another `index.html`) is the build's. A `--mode` is none of these: it picks `.env` files and the branches of a function-form config,
+/// and the closure is the union of those branches (the config grammar takes both) with both the development and the production page code of Vite in it.
+fn vite_run_differs(words: &[&str]) -> Option<String> {
+    #[derive(Clone, Copy, PartialEq)]
+    enum Next {
+        Any,
+        Value,
+        Host,
+    }
+    let at = words.iter().position(|word| is_vite(word))?;
+    for word in &words[..at] {
+        let assignment = word.split_once('=').is_some_and(|(name, _)| {
+            !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        });
+        if !assignment && !VITE_LAUNCHERS.contains(word) && !VITE_LAUNCHER_FLAGS.contains(word) {
+            return Some(format!(
+                "`{word}` before vite may run it in another directory or project"
+            ));
+        }
+    }
+    let mut next = Next::Any;
+    for (index, word) in words[at + 1..].iter().enumerate() {
+        let expected = std::mem::replace(&mut next, Next::Any);
+        if word.starts_with('-') {
+            let (name, has_value) = word
+                .split_once('=')
+                .map_or((*word, false), |(name, _)| (name, true));
+            if matches!(name, "--config" | "-c") {
+                return Some("it gives vite a --config file".to_owned());
+            }
+            if !has_value && VITE_VALUE_FLAGS.contains(&name) {
+                next = Next::Value;
+            } else if !has_value && name == "--host" {
+                next = Next::Host;
+            }
+            continue;
+        }
+        let accepted = match expected {
+            Next::Value => true,
+            Next::Host => address_like(word),
+            Next::Any => index == 0 && VITE_COMMANDS.contains(word),
+        };
+        if !accepted {
+            return Some(format!("`{word}` after vite may be a project root"));
+        }
+    }
+    None
+}
+
+/// Why the script `line` runs `vite` other than plainly in the project directory, or `None` (also for a line that does not run it).
+fn script_run_differs(line: &str) -> Option<String> {
+    if !mentions_vite(line) {
+        return None;
+    }
+    let Some(commands) = script_commands(line) else {
+        return Some("a script with quoting, expansion or grouping".to_owned());
+    };
+    if commands
+        .iter()
+        .any(|words| matches!(words.first(), Some(&("cd" | "pushd" | "popd"))))
+    {
+        return Some("it changes directory".to_owned());
+    }
+    commands.iter().find_map(|words| vite_run_differs(words))
+}
+
+/// The first `package.json` script of the chain whose run of `vite` is not the plain build of the project directory (see [`vite_run_differs`]): the build it runs
+/// reads a configuration, or a project, that this reader does not.
+fn script_selecting_vite_config(directory: &Path) -> Option<String> {
+    for dir in chain(directory) {
+        let Some(package) = fs::read_to_string(dir.join("package.json"))
+            .ok()
+            .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+        else {
+            continue;
+        };
+        let Some(scripts) = package
+            .get("scripts")
+            .and_then(serde_json::Value::as_object)
+        else {
+            continue;
+        };
+        for (name, command) in scripts {
+            if let Some(why) = command.as_str().and_then(script_run_differs) {
+                return Some(format!(
+                    "{}: the script `{name}` runs vite other than plainly in the project directory: {why}",
+                    dir.join("package.json").display()
+                ));
+            }
+        }
+    }
+    None
+}
+
+/// The Vite configs of the chain, or why the chain is not read: another bundler's configuration, another Vite config file, or two Vite configs of one directory.
 fn vite_configs(directory: &Path) -> Result<Vec<PathBuf>, String> {
     let mut configs = Vec::new();
     for dir in chain(directory) {
@@ -401,6 +627,16 @@ fn vite_configs(directory: &Path) -> Result<Vec<PathBuf>, String> {
                     return Err(format!(
                         "{} is a bundler configuration this reader does not read",
                         path.display()
+                    ));
+                }
+            }
+        }
+        if let Ok(listing) = fs::read_dir(&dir) {
+            for entry in listing.flatten() {
+                if entry.file_name().to_str().is_some_and(other_vite_config) {
+                    return Err(format!(
+                        "{} is another Vite configuration file: `vite --config` may select it",
+                        entry.path().display()
                     ));
                 }
             }
@@ -419,9 +655,20 @@ fn vite_configs(directory: &Path) -> Result<Vec<PathBuf>, String> {
     Ok(configs)
 }
 
-/// Every bundler configuration of the chain, read: the package names the Vite configs import (what the dev client loads), or why one ends the read. Some Vite
-/// config must name the build: a page and its modules with no configuration say nothing of how they are built.
-fn bundler(directory: &Path) -> Result<BTreeSet<String>, String> {
+/// What the Vite configs of the chain say, read.
+#[derive(Debug, Default)]
+struct Bundled {
+    /// The package names the page's host loads whatever the files import: Vite and the packages the configs import.
+    host_names: BTreeSet<String>,
+    /// Each Solid plugin a config imports: the directory of the config and the specifier.
+    solid_plugins: Vec<(PathBuf, String)>,
+    /// Whether every config of the chain has Vite apply the project's tsconfig `paths` on every branch (`resolve.tsconfigPaths: true`): the build may read any of them.
+    applies_paths: bool,
+}
+
+/// Every bundler configuration of the chain, read, or why one ends the read. Some Vite config must name the build: a page and its modules with no configuration say
+/// nothing of how they are built.
+fn bundler(directory: &Path) -> Result<Bundled, String> {
     let configs = vite_configs(directory)?;
     if configs.is_empty() {
         return Err(format!(
@@ -429,7 +676,14 @@ fn bundler(directory: &Path) -> Result<BTreeSet<String>, String> {
             directory.display()
         ));
     }
-    let mut names = BTreeSet::<String>::from(["vite".to_owned()]);
+    if let Some(script) = script_selecting_vite_config(directory) {
+        return Err(script);
+    }
+    let mut bundled = Bundled {
+        host_names: BTreeSet::from(["vite".to_owned()]),
+        applies_paths: true,
+        ..Bundled::default()
+    };
     for path in configs {
         let source =
             fs::read_to_string(&path).map_err(|error| format!("{}: {error}", path.display()))?;
@@ -441,7 +695,7 @@ fn bundler(directory: &Path) -> Result<BTreeSet<String>, String> {
                 path.display()
             ));
         }
-        // The resolution the closure follows is the producer's (tsconfig paths included); a Vite-only alias or a deduplicated package may send a specifier elsewhere.
+        // A Vite-only alias or a deduplicated package may send a specifier elsewhere than the resolution the closure follows.
         if !config.aliases.is_empty() || config.package_dedupe {
             return Err(format!(
                 "{}: a Vite alias or a deduplicated package may redirect a specifier after the resolution the closure follows",
@@ -456,9 +710,71 @@ fn bundler(directory: &Path) -> Result<BTreeSet<String>, String> {
                 path.display()
             ));
         }
-        names.extend(imported_packages(&source));
+        for plugin in &config.plugins {
+            if SOLID_PLUGINS.contains(&plugin.as_str()) {
+                bundled.solid_plugins.push((
+                    path.parent().unwrap_or(directory).to_owned(),
+                    plugin.clone(),
+                ));
+            }
+        }
+        bundled.applies_paths &= config.tsconfig_paths_every;
+        bundled.host_names.extend(imported_packages(&source));
     }
-    Ok(names)
+    Ok(bundled)
+}
+
+/// The tsconfig options that make TypeScript's resolution (the closure's) differ from Vite's. `customConditions`, `rootDirs` and `moduleSuffixes` have no Vite
+/// counterpart; `paths` and `baseUrl` are Vite's only where a config applies them (`resolve.tsconfigPaths`), and then only for the `tsconfig.json` it discovers
+/// beside the project.
+fn tsconfig_resolution(project: &Path, vite_applies_paths: bool) -> Result<(), String> {
+    let mut configs = vec![project.to_owned()];
+    configs.extend(
+        crate::host_config::tsconfig_extends_chain(project)
+            .ok_or_else(|| format!("{}: its extends chain is not read", project.display()))?,
+    );
+    let mut paths = false;
+    for config in &configs {
+        let source =
+            fs::read_to_string(config).map_err(|error| format!("{}: {error}", config.display()))?;
+        let value = crate::host_config::jsonc(&source)
+            .ok_or_else(|| format!("{}: not JSONC", config.display()))?;
+        let Some(options) = value
+            .get("compilerOptions")
+            .and_then(serde_json::Value::as_object)
+        else {
+            continue;
+        };
+        if let Some(key) = ["customConditions", "rootDirs", "moduleSuffixes"]
+            .iter()
+            .find(|key| options.contains_key(**key))
+        {
+            return Err(format!(
+                "{}: compilerOptions.{key} changes TypeScript's resolution, and Vite has no counterpart",
+                config.display()
+            ));
+        }
+        paths |= options.contains_key("paths") || options.contains_key("baseUrl");
+    }
+    if !paths {
+        return Ok(());
+    }
+    if !vite_applies_paths {
+        return Err(format!(
+            "{}: tsconfig paths or baseUrl resolve specifiers that Vite does not (no resolve.tsconfigPaths)",
+            project.display()
+        ));
+    }
+    if project
+        .file_name()
+        .is_none_or(|name| name != "tsconfig.json")
+    {
+        return Err(format!(
+            "{}: Vite applies the paths of the tsconfig.json it finds, and the project is another file",
+            project.display()
+        ));
+    }
+    Ok(())
 }
 
 /// The package names a config imports (`from "pkg"`, a scoped name whole, a subpath dropped), a superset of what its plugins load.
@@ -500,14 +816,141 @@ const ASSET_EXTENSIONS: &[&str] = &[
     "txt", "md",
 ];
 
+/// What a load's specifier is to a bundler.
+#[derive(Debug, Eq, PartialEq)]
+enum Specifier {
+    /// A data file (a style sheet, an image, a font): nothing of it evaluates as a module of the program.
+    Asset,
+    /// A module: the attested resolution decides what it loads.
+    Module,
+    /// A query on a script module or a package (`?url`, `?raw`, `?inline`, `?worker`): the page may load or run what the string or the URL holds, so no module is known.
+    Refused(String),
+}
+
 fn is_asset(specifier: &str) -> bool {
+    classify(specifier) == Specifier::Asset
+}
+
+/// The extensions of files a bundler evaluates as code: a query on one (`?url`, `?raw`, `?inline`) hands the page its URL or its text, which it can load or run.
+const SCRIPT_EXTENSIONS: [&str; 9] = ["js", "jsx", "mjs", "cjs", "ts", "tsx", "mts", "cts", "wasm"];
+
+fn classify(specifier: &str) -> Specifier {
     let (path, query) = specifier.split_once('?').unwrap_or((specifier, ""));
-    if !query.is_empty() {
-        return matches!(query, "raw" | "url" | "inline" | "no-inline");
+    let extension = path
+        .rsplit_once('.')
+        .map(|(_, extension)| extension.to_ascii_lowercase())
+        .filter(|extension| !extension.contains('/'));
+    if query.is_empty() {
+        return if extension
+            .as_deref()
+            .is_some_and(|extension| ASSET_EXTENSIONS.contains(&extension))
+        {
+            Specifier::Asset
+        } else {
+            Specifier::Module
+        };
     }
-    path.rsplit_once('.').is_some_and(|(_, extension)| {
-        ASSET_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
-    })
+    // A data file's `?raw`, `?url` or `?inline` is its text or its URL (a shader, a style sheet, an image, a JSON file): no module. A script's or a package's, or a
+    // query this reader does not know, may be what the page loads or runs.
+    let bare = !path.starts_with('.') && !path.starts_with('/');
+    let script = extension
+        .as_deref()
+        .is_none_or(|extension| SCRIPT_EXTENSIONS.contains(&extension));
+    if !bare && !script && matches!(query, "raw" | "url" | "inline" | "no-inline") {
+        Specifier::Asset
+    } else {
+        Specifier::Refused(format!(
+            "the query ?{query} on {path} (a script module or a package, or a query this reader does not know)"
+        ))
+    }
+}
+
+/// Vite's default `resolve.extensions` (the grammar admits no other), in its order: it takes the first that exists, so `util.js` beside `util.ts` is the page's file
+/// though TypeScript resolves `util.ts`.
+const VITE_EXTENSIONS: [&str; 7] = [".mjs", ".js", ".mts", ".ts", ".jsx", ".tsx", ".json"];
+
+fn appended(path: &Path, suffix: &str) -> PathBuf {
+    let mut os = path.as_os_str().to_owned();
+    os.push(suffix);
+    PathBuf::from(os)
+}
+
+/// The file Vite's resolver takes for the relative specifier `specifier` written in a file of `directory` (its `tryCleanFsResolve`): the file itself; the TypeScript
+/// source a `.js`, `.jsx`, `.mjs` or `.cjs` emit names where no such file exists; the first of [`VITE_EXTENSIONS`] appended; the first `index` of them in a directory. A
+/// directory with a `package.json` is read through its fields, which this does not follow: an error. `Ok(None)` is no file.
+fn vite_pick(directory: &Path, specifier: &str) -> Result<Option<PathBuf>, String> {
+    let base = directory.join(specifier);
+    if base.is_file() {
+        return Ok(Some(base));
+    }
+    if let Some(sources) = base
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| match extension {
+            "js" => &["ts", "tsx"][..],
+            "jsx" => &["tsx"][..],
+            "mjs" => &["mts"][..],
+            "cjs" => &["cts"][..],
+            _ => &[][..],
+        })
+    {
+        for source in sources {
+            let candidate = base.with_extension(source);
+            if candidate.is_file() {
+                return Ok(Some(candidate));
+            }
+        }
+    }
+    for extension in VITE_EXTENSIONS {
+        let candidate = appended(&base, extension);
+        if candidate.is_file() {
+            return Ok(Some(candidate));
+        }
+    }
+    if base.is_dir() {
+        if base.join("package.json").exists() {
+            return Err(format!(
+                "{} is a directory with a package.json, whose fields Vite reads",
+                base.display()
+            ));
+        }
+        for extension in VITE_EXTENSIONS {
+            let candidate = base.join(format!("index{extension}"));
+            if candidate.is_file() {
+                return Ok(Some(candidate));
+            }
+        }
+    }
+    Ok(None)
+}
+
+fn same_file(left: &Path, right: &Path) -> bool {
+    matches!((fs::canonicalize(left), fs::canonicalize(right)), (Ok(left), Ok(right)) if left == right)
+}
+
+/// Whether Vite resolves the relative `specifier` written in `importer` to the file the closure follows (`resolved`, the attested resolution): the premise that the
+/// closure equals Vite's resolution, checked where it can fail on the files of the project.
+fn vite_agrees(importer: &str, specifier: &str, resolved: &str) -> Result<(), String> {
+    let relative = specifier == "."
+        || specifier == ".."
+        || specifier.starts_with("./")
+        || specifier.starts_with("../");
+    if !relative {
+        return Ok(());
+    }
+    let directory = Path::new(importer)
+        .parent()
+        .ok_or_else(|| format!("{importer} has no directory"))?;
+    match vite_pick(directory, specifier)? {
+        Some(picked) if same_file(&picked, Path::new(resolved)) => Ok(()),
+        Some(picked) => Err(format!(
+            "Vite resolves {specifier} to {}, and TypeScript's attested resolution (the closure's) is {resolved}",
+            program_path(&picked)
+        )),
+        None => Err(format!(
+            "Vite resolves {specifier} to no file, and TypeScript's attested resolution (the closure's) is {resolved}"
+        )),
+    }
 }
 
 /// Whether `source` names `word` as an identifier of its own (no identifier character on either side): `Worker` in `new Worker(url)` or `Reflect.construct(Worker, …)`,
@@ -596,6 +1039,7 @@ fn closure(
     facts: &ProjectFacts,
     by_path: &HashMap<&str, &FileFacts>,
     entries: &[Entry],
+    vite_applies_paths: bool,
 ) -> Result<(BTreeSet<String>, BTreeSet<String>), String> {
     let Some(imports) = &facts.resolved_imports else {
         return Err("no attested import resolutions".to_owned());
@@ -620,11 +1064,17 @@ fn closure(
             return Err(format!("{path}: its imports were not attested"));
         }
         for (at, specifier) in loads(file) {
-            if is_asset(specifier) {
-                continue;
+            match classify(specifier) {
+                Specifier::Asset => continue,
+                Specifier::Refused(why) => return Err(format!("{path}: {why}")),
+                Specifier::Module => {}
             }
-            if specifier.contains("?worker") || specifier.contains("?sharedworker") {
-                return Err(format!("{path}: {specifier} is a worker"));
+            // Package `imports` are read under each tool's own conditions, and a root-absolute specifier is Vite's project-relative path and TypeScript's filesystem
+            // one: no row says which file the page loads.
+            if specifier.starts_with('#') || specifier.starts_with('/') {
+                return Err(format!(
+                    "{path}: {specifier} is read differently by TypeScript and Vite (package imports, a root-absolute path)"
+                ));
             }
             let row = match imports.specifier(&path, at, specifier) {
                 SpecifierAttestation::Attested(row) => row,
@@ -650,9 +1100,18 @@ fn closure(
                 continue;
             }
             if by_path.contains_key(resolved) {
+                // A bare specifier that resolves to a file of the project went through tsconfig `paths` or `baseUrl` (or a package's self reference), which Vite applies
+                // only where a config says so; a relative one must be the file Vite picks.
+                if !specifier.starts_with('.') && !vite_applies_paths {
+                    return Err(format!(
+                        "{path}: {specifier} resolves to the project file {resolved} by a mapping Vite does not apply"
+                    ));
+                }
+                vite_agrees(&path, specifier, resolved).map_err(|why| format!("{path}: {why}"))?;
                 queue.push_back(resolved.to_owned());
             } else if resolved.ends_with(".json") {
-                // Data: a JSON module loads nothing.
+                // Data: a JSON module loads nothing, where it is the file Vite picks (`data.js` beside `data.json` is a script it would take first).
+                vite_agrees(&path, specifier, resolved).map_err(|why| format!("{path}: {why}"))?;
             } else {
                 return Err(format!(
                     "{path}: {specifier} resolves to {resolved}, which the program does not analyze"
@@ -668,11 +1127,96 @@ fn real(root: &str) -> Option<PathBuf> {
     fs::canonicalize(root).ok()
 }
 
+/// The stamp of a path: its identity and times, or `None` where nothing is there. A kept answer is current while every stamp is the one it was made under.
+#[cfg(unix)]
+type Stamp = Option<(u64, u64, u64, i64, i64, i64, i64)>;
+
+#[cfg(unix)]
+fn stamp(path: &Path) -> Stamp {
+    use std::os::unix::fs::MetadataExt as _;
+    let metadata = fs::symlink_metadata(path).ok()?;
+    Some((
+        metadata.dev(),
+        metadata.ino(),
+        metadata.len(),
+        metadata.mtime(),
+        metadata.mtime_nsec(),
+        metadata.ctime(),
+        metadata.ctime_nsec(),
+    ))
+}
+
+/// Whether the installed closure of the Solid plugin `name`, imported from a config in `directory`, is one ADR 0270 pins ([`crate::host_plugins::audit`]: the
+/// digest of every file of every package it loads, and the edges between them), else why not. The audit hashes the whole closure, which a workspace's optional
+/// peers make large (seconds), so a retained daemon keeps the answer while the stamp of everything the audit read is unchanged, and a one-shot check asks once.
+fn plugin_pinned(directory: &Path, name: &str) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        use std::sync::{Mutex, OnceLock, PoisonError};
+        type Kept = Mutex<HashMap<(PathBuf, String), (Vec<(PathBuf, Stamp)>, Result<(), String>)>>;
+        static KEPT: OnceLock<Kept> = OnceLock::new();
+        let kept = KEPT.get_or_init(Default::default);
+        let key = (directory.to_owned(), name.to_owned());
+        if let Some((stamps, answer)) = kept
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(&key)
+            && stamps
+                .iter()
+                .all(|(path, recorded)| stamp(path) == *recorded)
+        {
+            return answer.clone();
+        }
+        let started = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |elapsed| i64::try_from(elapsed.as_secs()).unwrap_or(0));
+        let mut inputs = Vec::new();
+        let answer = crate::host_plugins::audit(
+            directory,
+            name,
+            &mut inputs,
+            &mut crate::host_plugins::PackageAudits::new(),
+            None,
+        )
+        .map_err(|refusal| refusal.reason);
+        inputs.sort();
+        inputs.dedup();
+        let stamps = inputs
+            .into_iter()
+            .map(|path| {
+                let at = stamp(&path);
+                (path, at)
+            })
+            .collect::<Vec<_>>();
+        // Kept only where nothing it read changed in or after the second the audit began: a write during the read could be a digest of other bytes.
+        if stamps
+            .iter()
+            .all(|(_, at)| at.is_none_or(|(_, _, _, _, _, ctime, _)| ctime < started))
+        {
+            kept.lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .insert(key, (stamps, answer.clone()));
+        }
+        answer
+    }
+    #[cfg(not(unix))]
+    {
+        crate::host_plugins::audit(
+            directory,
+            name,
+            &mut Vec::new(),
+            &mut crate::host_plugins::PackageAudits::new(),
+            None,
+        )
+        .map_err(|refusal| refusal.reason)
+    }
+}
+
 /// Sets `index.product` from a known realm: the files, and the writers of `index` the realm's packages (or the declared host) load. An unknown realm leaves the
-/// index as it is, every site judged against every writer.
-pub(crate) fn apply(realm: &Realm, index: &mut PackageReachIndex) {
+/// index as it is, every site judged against every writer, and so does a realm that would narrow while a Solid plugin it names is not an installed, pinned closure.
+pub(crate) fn apply(realm: &Realm, index: &mut PackageReachIndex) -> Applied {
     let Realm::Known(known) = realm else {
-        return;
+        return Applied::Unknown;
     };
     let loaded_real = known
         .roots
@@ -726,17 +1270,38 @@ pub(crate) fn apply(realm: &Realm, index: &mut PackageReachIndex) {
         .cloned()
         .collect::<BTreeSet<_>>();
     let narrows = writers != index.prototype_writers || any != index.prototype_writers_any;
+    // The Solid plugin is trusted for what the audited release does: asked only where the realm changes a site, as the audit is the dear part.
+    if narrows {
+        for (directory, name) in &known.solid_plugins {
+            if let Err(reason) = plugin_pinned(directory, name) {
+                return Applied::Refused(format!(
+                    "the Solid plugin {name} imported from {}: {reason}",
+                    directory.display()
+                ));
+            }
+        }
+    }
     index.product = Some(ProductWriters {
         files: known.files.clone(),
         prototype_writers: writers,
         prototype_writers_any: any,
         narrows,
     });
+    if narrows {
+        Applied::Narrowed
+    } else {
+        Applied::Unchanged
+    }
 }
 
 /// Appends the realm's census line to the file `SOLID_CHECKER_PRODUCT_REALM_CENSUS` names (a directory gets one `realm-<pid>.jsonl` per process): a measurement,
 /// internal, changes no verdict. Unset, it costs one environment read per check.
-pub(crate) fn write_census(realm: &Realm, index: &PackageReachIndex, directory: &Path) {
+pub(crate) fn write_census(
+    realm: &Realm,
+    applied: &Applied,
+    index: &PackageReachIndex,
+    directory: &Path,
+) {
     use std::io::Write as _;
     let Some(target) =
         std::env::var_os("SOLID_CHECKER_PRODUCT_REALM_CENSUS").filter(|t| !t.is_empty())
@@ -747,19 +1312,31 @@ pub(crate) fn write_census(realm: &Realm, index: &PackageReachIndex, directory: 
     if path.is_dir() {
         path = path.join(format!("realm-{}.jsonl", std::process::id()));
     }
-    let line = census(realm, index, &directory.to_string_lossy());
+    let line = census(realm, applied, index, &directory.to_string_lossy());
     if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(path) {
         let _ = writeln!(file, "{line}");
     }
 }
 
 /// The census of one program's realm: one JSON object.
-pub(crate) fn census(realm: &Realm, index: &PackageReachIndex, project: &str) -> serde_json::Value {
+pub(crate) fn census(
+    realm: &Realm,
+    applied: &Applied,
+    index: &PackageReachIndex,
+    project: &str,
+) -> serde_json::Value {
+    let applied = match applied {
+        Applied::Unknown => "unknown".to_owned(),
+        Applied::Unchanged => "unchanged".to_owned(),
+        Applied::Narrowed => "narrowed".to_owned(),
+        Applied::Refused(reason) => format!("refused: {reason}"),
+    };
     match realm {
         Realm::Unknown(blockers) => serde_json::json!({
             "productRealm": {
                 "project": project,
                 "status": "unknown",
+                "applied": applied,
                 "reason": blockers.first().map(|blocker| blocker.reason.as_str()),
                 "blockers": blockers.iter().map(|blocker| serde_json::json!({ "stage": blocker.stage, "reason": blocker.reason })).collect::<Vec<_>>(),
             },
@@ -770,6 +1347,7 @@ pub(crate) fn census(realm: &Realm, index: &PackageReachIndex, project: &str) ->
                 "productRealm": {
                     "project": project,
                     "status": "known",
+                    "applied": applied,
                     "entries": known.entries.iter().map(|entry| serde_json::json!({ "path": entry.path, "source": entry.source })).collect::<Vec<_>>(),
                     "files": known.files.len(),
                     "roots": known.roots.len(),
@@ -796,7 +1374,6 @@ mod tests {
             "./app.css",
             "./logo.SVG",
             "./shader.frag?raw",
-            "./x.ts?url",
             "@fontsource/inter/400.css",
         ] {
             assert!(is_asset(asset), "{asset}");
@@ -806,6 +1383,7 @@ mod tests {
             "./App.tsx",
             "solid-js",
             "./worker.ts?worker",
+            "./x.ts?url",
             "./data.json",
             "./x?foo",
         ] {
@@ -1018,7 +1596,7 @@ mod tests {
                      export default defineConfig({{ plugins: [solid()], test: {{ setupFiles: ['./setup.ts'] }} }});"
                 ),
             );
-            let names = bundler(&project).unwrap();
+            let names = bundler(&project).unwrap().host_names;
             assert!(
                 names.contains("vite") && names.contains("vite-plugin-solid"),
                 "{names:?}"
@@ -1129,5 +1707,321 @@ mod tests {
                 "{options}"
             );
         }
+    }
+
+    #[test]
+    fn only_a_data_files_query_is_no_load() {
+        for data in [
+            "./a.css",
+            "./logo.svg?url",
+            "./shader.png?inline",
+            "./data.json?raw",
+            "./shader.frag?raw",
+            "./notes.md?raw",
+            "./a.css?no-inline",
+        ] {
+            assert_eq!(classify(data), Specifier::Asset, "{data}");
+        }
+        for module in [
+            "./App",
+            "./App.tsx",
+            "solid-js",
+            "pkg/dist/index.js",
+            "./data.json",
+        ] {
+            assert_eq!(classify(module), Specifier::Module, "{module}");
+        }
+        // A script's or a package's query is a string or a URL the page can run; an unknown query is unknown.
+        for refused in [
+            "./x.ts?url",
+            "./x.ts?raw",
+            "./x.js?inline",
+            "./x.mjs?raw",
+            "./noextension?raw",
+            "fz-prealm-any/index.js?url",
+            "pkg?url",
+            "pkg/style.css?inline",
+            "./w.ts?worker",
+            "./w.ts?sharedworker",
+            "./a.css?used",
+            "./a.css?react",
+        ] {
+            assert!(
+                matches!(classify(refused), Specifier::Refused(_)),
+                "{refused}"
+            );
+        }
+    }
+
+    #[test]
+    fn vite_picks_by_its_own_extension_order_and_the_closure_must_agree() {
+        let root = scratch("vite-pick");
+        write(&root, "util.ts", "export const util = 1;");
+        let ts = root.join("util.ts");
+        let importer = root.join("main.tsx");
+        let importer = importer.to_str().unwrap();
+        // Only the `.ts`: Vite picks it too.
+        assert_eq!(vite_pick(&root, "./util").unwrap(), Some(ts.clone()));
+        assert!(vite_agrees(importer, "./util", ts.to_str().unwrap()).is_ok());
+        // A `.js` beside it ranks first for Vite (`.mjs, .js, .mts, .ts, …`), and TypeScript's attestation is the `.ts`.
+        write(&root, "util.js", "import 'x';");
+        assert_eq!(
+            vite_pick(&root, "./util").unwrap(),
+            Some(root.join("util.js"))
+        );
+        let refused = vite_agrees(importer, "./util", ts.to_str().unwrap()).unwrap_err();
+        assert!(refused.contains("util.js"), "{refused}");
+        // An exact name is itself; a `.js` that names a TypeScript source where no `.js` exists is the source.
+        assert_eq!(
+            vite_pick(&root, "./util.ts").unwrap(),
+            Some(root.join("util.ts"))
+        );
+        write(&root, "emit.ts", "");
+        assert_eq!(
+            vite_pick(&root, "./emit.js").unwrap(),
+            Some(root.join("emit.ts"))
+        );
+        write(&root, "emit.js", "");
+        assert_eq!(
+            vite_pick(&root, "./emit.js").unwrap(),
+            Some(root.join("emit.js"))
+        );
+        // A directory: its `index` in Vite's order; with a `package.json`, its fields (not followed).
+        write(&root, "dir/index.ts", "");
+        write(&root, "dir/index.js", "");
+        assert_eq!(
+            vite_pick(&root, "./dir").unwrap(),
+            Some(root.join("dir/index.js"))
+        );
+        write(&root, "dir/package.json", "{}");
+        assert!(vite_pick(&root, "./dir").is_err());
+        // A file beside a directory of the same stem is the file (Vite probes extensions first).
+        write(&root, "both.ts", "");
+        write(&root, "both/index.ts", "");
+        assert_eq!(
+            vite_pick(&root, "./both").unwrap(),
+            Some(root.join("both.ts"))
+        );
+        // Nothing there: no file; a bare or absolute specifier is not this check's.
+        assert_eq!(vite_pick(&root, "./absent").unwrap(), None);
+        assert!(vite_agrees(importer, "./absent", "/somewhere").is_err());
+        assert!(vite_agrees(importer, "solid-js", "/node_modules/solid-js/x.js").is_ok());
+    }
+
+    #[test]
+    fn another_vite_config_file_or_a_script_that_selects_one_ends_the_read() {
+        for name in [
+            "vite.config.prod.ts",
+            "vite.prod.config.js",
+            "app.vite.config.ts",
+            "vite.config.staging.mjs",
+            "vite-config.ts",
+        ] {
+            assert!(other_vite_config(name), "{name}");
+        }
+        for name in [
+            "vite.config.ts",
+            "vite.config.mjs",
+            "vitest.config.ts",
+            "vitest.workspace.ts",
+            "vite-env.d.ts",
+            "vite.svg",
+        ] {
+            assert!(!other_vite_config(name), "{name}");
+        }
+        // A run of vite that is not the plain build of the project directory ends the read: another config file, another directory or project, a project root.
+        for line in [
+            "vite build --config vite.config.prod.ts",
+            "tsc && vite build -c other.ts",
+            "vite build --config=x.ts",
+            "pnpm --dir ../.. exec vite build",
+            "npm --prefix web exec vite build",
+            "cd web && vite build",
+            "vite build web",
+            "vite ./web --port 3000",
+            "vite --watch ./web",
+            "vite build --mode staging web",
+            "FOO=1 npm exec -- vite build -c x.ts",
+            "concurrently \"vite\" \"node server\"",
+            "echo vite",
+            "vite build && cd ../x",
+        ] {
+            assert!(script_run_differs(line).is_some(), "{line}");
+        }
+        // The plain runs: a mode (it picks env files and config branches, which the closure covers whole), flags with their values, runners, environment setters, other
+        // commands in the line, and what is no vite.
+        for line in [
+            "vite build",
+            "vite",
+            "vite dev",
+            "vite preview --host",
+            "vite dev --port 3000",
+            "vite dev --host 127.0.0.1 --port 5173",
+            "vite build --watch --mode development",
+            "vite --mode staging",
+            "node_modules/.bin/vite build --mode=production",
+            "VITE_DEV_BACKEND=emulator vite",
+            "panda codegen --clean && vite build",
+            "tsc --noEmit && vite build",
+            "vite build && pnpm typecheck",
+            "npx vite build",
+            "pnpm exec vite build",
+            "cross-env NODE_ENV=production vite build",
+            "node node_modules/vite/bin/vite.js build",
+            "vitest run --config vitest.config.ts",
+            "tsc --project tsconfig.json",
+            "playwright test --config pw.config.ts",
+            "wrangler types --cwd src && tsc -b",
+            "rimraf node_modules/.vite",
+            "cd web && vitest run",
+        ] {
+            assert!(script_run_differs(line).is_none(), "{line}");
+        }
+        let root = scratch("vite-select");
+        let project = root.join("app");
+        write(
+            &project,
+            "package.json",
+            r#"{ "private": true, "scripts": { "test": "vitest run --config vitest.config.ts", "build": "vite build" } }"#,
+        );
+        write(
+            &project,
+            "vite.config.ts",
+            "export default { plugins: [] };",
+        );
+        write(&project, "vitest.config.ts", "export default {};");
+        assert!(bundler(&project).is_ok());
+        write(
+            &project,
+            "package.json",
+            r#"{ "private": true, "scripts": { "build": "vite build --config vite.config.prod.ts" } }"#,
+        );
+        let script = bundler(&project).unwrap_err();
+        assert!(script.contains("the script `build`"), "{script}");
+        write(&project, "package.json", r#"{ "private": true }"#);
+        // A script of an ancestor in the chain counts too (the workspace root's).
+        write(
+            &root,
+            "package.json",
+            r#"{ "scripts": { "dev": "vite --config other.config.ts" } }"#,
+        );
+        assert!(bundler(&project).is_err());
+        // A mode is no other config: kui's `watch` script is `vite build --watch --mode development`.
+        write(
+            &root,
+            "package.json",
+            r#"{ "scripts": { "watch": "vite build --watch --mode development" } }"#,
+        );
+        assert!(bundler(&project).is_ok());
+        fs::remove_file(root.join("package.json")).unwrap();
+        assert!(bundler(&project).is_ok());
+        write(&project, "vite.config.prod.ts", "export default {};");
+        let other = bundler(&project).unwrap_err();
+        assert!(other.contains("another Vite configuration file"), "{other}");
+    }
+
+    #[test]
+    fn tsconfig_options_vite_does_not_share_end_the_read() {
+        let root = scratch("tsconfig");
+        let project = root.join("tsconfig.json");
+        write(
+            &root,
+            "tsconfig.json",
+            r#"{ "compilerOptions": { "strict": true } }"#,
+        );
+        assert!(tsconfig_resolution(&project, false).is_ok());
+        // `customConditions`, `rootDirs` and `moduleSuffixes` have no Vite counterpart.
+        for option in [
+            r#""customConditions": ["browser"]"#,
+            r#""rootDirs": ["./a", "./b"]"#,
+            r#""moduleSuffixes": [".web", ""]"#,
+        ] {
+            write(
+                &root,
+                "tsconfig.json",
+                &format!(r#"{{ "compilerOptions": {{ {option} }} }}"#),
+            );
+            for applies in [false, true] {
+                let refused = tsconfig_resolution(&project, applies).unwrap_err();
+                assert!(
+                    refused.contains("changes TypeScript's resolution"),
+                    "{option}: {refused}"
+                );
+            }
+        }
+        // `paths` and `baseUrl`: Vite's only where a config applies them, and for the `tsconfig.json` it finds.
+        for option in [r#""paths": { "x": ["./y.ts"] }"#, r#""baseUrl": ".""#] {
+            write(
+                &root,
+                "tsconfig.json",
+                &format!(r#"{{ "compilerOptions": {{ {option} }} }}"#),
+            );
+            let refused = tsconfig_resolution(&project, false).unwrap_err();
+            assert!(refused.contains("Vite does not"), "{option}: {refused}");
+            assert!(tsconfig_resolution(&project, true).is_ok(), "{option}");
+        }
+        write(
+            &root,
+            "tsconfig.app.json",
+            r#"{ "compilerOptions": { "paths": { "x": ["./y.ts"] } } }"#,
+        );
+        let other = tsconfig_resolution(&root.join("tsconfig.app.json"), true).unwrap_err();
+        assert!(other.contains("another file"), "{other}");
+        // An option an `extends` chain brings is the project's.
+        write(
+            &root,
+            "base.json",
+            r#"{ "compilerOptions": { "customConditions": ["browser"] } }"#,
+        );
+        write(
+            &root,
+            "tsconfig.json",
+            r#"{ "extends": "./base.json", "compilerOptions": {} }"#,
+        );
+        assert!(tsconfig_resolution(&project, true).is_err());
+        // A chain that cannot be read is no proof.
+        write(&root, "tsconfig.json", r#"{ "extends": "./missing.json" }"#);
+        assert!(tsconfig_resolution(&project, true).is_err());
+    }
+
+    #[test]
+    fn a_solid_plugin_that_is_not_an_installed_pinned_closure_is_not_trusted() {
+        let root = scratch("plugin");
+        let project = root.join("app");
+        write(&project, "package.json", r#"{ "private": true }"#);
+        // Not installed: nothing to build with.
+        let missing = plugin_pinned(&project, "vite-plugin-solid").unwrap_err();
+        assert!(missing.contains("is not installed"), "{missing}");
+        // Installed with the audited release's name and version, and a closure no pin names.
+        write(
+            &root,
+            "node_modules/vite-plugin-solid/package.json",
+            r#"{ "name": "vite-plugin-solid", "version": "3.0.0-next.27" }"#,
+        );
+        write(
+            &root,
+            "node_modules/vite-plugin-solid/index.js",
+            "export default () => ({});",
+        );
+        let unpinned = plugin_pinned(&project, "vite-plugin-solid").unwrap_err();
+        assert!(
+            unpinned.contains("unaudited installed closure"),
+            "{unpinned}"
+        );
+        // The answer is kept while what it read is unchanged, and read again when it changes.
+        assert_eq!(
+            plugin_pinned(&project, "vite-plugin-solid").unwrap_err(),
+            unpinned
+        );
+        write(
+            &root,
+            "node_modules/vite-plugin-solid/index.js",
+            "export default () => ({ name: 'other' });",
+        );
+        let changed = plugin_pinned(&project, "vite-plugin-solid").unwrap_err();
+        assert!(
+            changed.contains("unaudited installed closure") && changed != unpinned,
+            "{changed}"
+        );
     }
 }
