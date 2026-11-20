@@ -15,7 +15,7 @@
 import {
   walk, domExpr, listenExpr, signal, storeSignal, memoSignal, actionSignal, reactionSignal, asyncSignal, asyncDeclaredSignal, asyncMaybeSignal, storeAsyncSignal, storeRawSignal, storeClassSignal, storeOptSignal, storeNestedSignal, storeListSignal, storeLinkSignal, storeArraySignal, storeEmptySignal, storeShallowSignal, apiSignal, num, ref, call, iife, fn, prim, expr, decl, ret, awaitStmt, read, write,
   HANDOFF_FORMS, DEPTH_FORMS, CHAIN_FORMS, propEl, jsxExpr, button, child, attr, iter, show, forEach, refEl, flowEl, handlerExpr, FLOW_FORMS, flush, use, contain, ctl, member as memberOf, obj, jsx, createOwnerExpr, loadingView, asyncDepSignal,
-  CBP_CALLS, CBP_FORMS, cbProp, namedButton, mounted, setUpdater,
+  CBP_CALLS, CBP_FORMS, cbProp, namedButton, mounted, setUpdater, bareParam,
 } from "./model.mjs";
 import { codePolicy, policyOf } from "./codes.mjs";
 import { RECALL_MOUNTS, WRAP_MOUNTS } from "./mounts.mjs";
@@ -237,7 +237,10 @@ const DISPOSALS = { "dny-dispose-body": "body", "dny-dispose-memo": "memo", "dny
 /** The same triggers on an event of the measured list: nothing delivers it, and it keeps the proof. */
 // ADR 1132 (review F6): `dny-legal-mount-disabled`, the click control disabled by its own JSX from mount: no event ever reaches its handler, so a
 // violation there is no "wrong if it runs" (legal.mjs `undrivenHandlerSite` refuses it) and stays a look.
-const DENIED_LEGAL = ["dny-legal-keydown", "dny-legal-click", "dny-legal-pointer", "dny-legal-project-click", "dny-blur-lowercase", "dny-legal-mount-disabled"];
+// ADR 1129 round 2 (N1): `dny-legal-view-later`, a child that spreads `merge({ onClick: <site> }, props)` onto its button and writes its own
+// `onClick` after the spread: rc.21's `spread` skips a key a later source has, so the view literal's handler is never attached (the click runs
+// the later one).
+const DENIED_LEGAL = ["dny-legal-keydown", "dny-legal-click", "dny-legal-pointer", "dny-legal-project-click", "dny-blur-lowercase", "dny-legal-mount-disabled", "dny-legal-view-later"];
 const DENIED_OTHER = ["dny-blur-spread", "dny-typo-event", "dny-blur-dynamic", "dny-portal-dispose", "dny-load-append", "dny-load-for", "dny-load-show", "dny-unmount-flush-body", "dny-unmount-flush-root", "dny-insert-body", "dny-renamed-prop", "dny-shared-fn", "dny-chain-click"];
 /** ADR 1125: the Fable review of ADR 1089 E round 2 (G1, G3, G6) and round 1's F2 on main's event-callback read proof: each runs the
  * handler of an element's `onScroll` from an effect's apply other than by a delivery that sets `window.event`. */
@@ -1752,6 +1755,12 @@ function deniedContextOf(context, stmts, kit, b) {
   if (context === "dny-blur-lowercase") { const h = kit.name("f"); return { body: [decl(h, fn(stmts)), ...laterRoot(kit, [`${el}.focus()`], `${el}.disabled = true`)], view: [button(b, [], { on: "onKeyDown", attrs: `{...{ onblur: ${h} }}` })] }; }
   if (context === "dny-legal-project-click") return { body: laterRoot(kit, [], "({ click() { return 1; } }).click()"), view: [button(b, stmts)] };
   if (context === "dny-legal-mount-disabled") return { body: [], view: [button(b, stmts, { tag: "button", on: "onClick", attrs: "disabled" })] };
+  if (context === "dny-legal-view-later") {
+    const m = kit.name("m");
+    const kid = decl("ViewKid", fn([decl(m, prim("mergeOn", fn(stmts), { key: "onClick", source: "p0" })),
+      ret(jsxExpr(button(b, [], { on: "onClick", attrs: `{...${m}}` })))], { params: [bareParam("{ onClick?: () => void }", false)] }));
+    return { body: [kid], view: [mounted(kit.name("v"), domExpr("<ViewKid />"))] };
+  }
   const legal = { "dny-legal-keydown": { tag: "input", on: "onKeyDown" }, "dny-legal-click": { tag: "button", on: "onClick" }, "dny-legal-pointer": { tag: "button", on: "onPointerDown" } }[context];
   if (legal) return { body: laterRoot(kit, [`${el}.focus()`], `${el}.disabled = true`), view: [button(b, stmts, legal)] };
   const spec = DENIED[context];

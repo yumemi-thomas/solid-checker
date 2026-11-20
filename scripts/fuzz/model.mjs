@@ -29,7 +29,10 @@ export const HELPER_FORMS = ["call", "defaultCall", "returnClosure", "returnCb",
 /** `prim` names: the Solid primitive or host API a function expression is handed to. */
 export const PRIMS = ["memo", "effect", "untrack", "root", "owner", "settled", "cleanup", "timer", "then", "rootd", "micro", "render", "tracked", "action", "reaction", "resolve", "until",
   // ADR 0940 (primitive-layer-shapes.mjs): `latest(fn)` and `isPending(fn)` run `fn` in place, as `untrack` does, and hand its value back.
-  "latest", "isPending"];
+  "latest", "isPending",
+  // ADR 1129 round 2 (misuse.mjs `dny-legal-view-later`): `merge({ [key]: fn }, source)`, a view whose literal holds `fn` under a listener key; the
+  // function runs only where the view's spread attaches it.
+  "mergeOn"];
 
 export const num = (n) => ({ k: "num", n });
 export const read = (sig, extra = {}) => ({ k: "read", sig, ...extra });
@@ -663,6 +666,10 @@ export function validate(program, { maxNodes = 400 } = {}) {
         case "untrack": case "root": case "latest": return fnTypeChecked(e.fn, scope, "free").ret;
         // `isPending(fn)` hands back a boolean, never `fn`'s value.
         case "isPending": fnTypeChecked(e.fn, scope, "free"); return T.unknown;
+        case "mergeOn":
+          if (!lookup(scope, e.source)) fail(`${where}: ${e.source} is not declared`);
+          fnTypeChecked(e.fn, scope, "free");
+          return T.unknown;
         case "owner":
           if (e.ownerArg === "owner" && !lookup(scope, "owner")) fail(`${where}: owner is not captured`);
           if (e.ownerArg === "bound" && lookup(scope, "boundOwner")?.t !== "owner") fail(`${where}: boundOwner is not declared`);

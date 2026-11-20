@@ -558,6 +558,7 @@ function render(program, instrument) {
       // ADR 0940: the primitive layers of the `pl-*` contexts (primitive-layer-shapes.mjs).
       case "latest": used.add("latest"); return `latest(${f})`;
       case "isPending": used.add("isPending"); return `isPending(${f})`;
+      case "mergeOn": used.add("merge"); return `merge({ ${e.key}: ${f} }, ${e.source})`;
       case "root": used.add("createRoot"); return `createRoot(${f})`;
       case "owner": {
         used.add("runWithOwner");
