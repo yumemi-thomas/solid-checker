@@ -317,17 +317,6 @@
       "fixes": 0
     },
     {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/route-mount-throw/Routes.tsx",
-      "start": 2464,
-      "end": 2479,
-      "fixes": 0
-    },
-    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -611,17 +600,6 @@
       "path": "fixtures/reactive-ir/route-mount-throw/Routes.tsx",
       "start": 3762,
       "end": 3857,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/route-mount-throw/Routes.tsx",
-      "start": 3796,
-      "end": 3811,
       "fixes": 0
     },
     {

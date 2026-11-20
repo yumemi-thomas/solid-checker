@@ -61,6 +61,14 @@ a first parameter that has no default. Exact primitive identity decides, so a lo
 is a plain component. A child of length 0 is handed back as a value and stays
 uncertifiable, as does a function child of any other component.
 
+A function written in place as the whole value of `Errored`'s `fallback` runs under an owner
+the tag provides too (ADR 1153): rc.21 creates it as a computation of its own under the owner
+that encloses the tag, once per show. The element must have no spread, and the function must be
+neither `async` (the code after its first `await` has no owner) nor a generator, and must not be
+able to hand itself on (a named function expression that uses its own name or reads `arguments`).
+A fallback handed by name, a conditional, a user component's `fallback` prop and a local component
+named `Errored` stay uncertifiable.
+
 ## What it does
 
 The checker reports an operation when no component, computation, or root owner

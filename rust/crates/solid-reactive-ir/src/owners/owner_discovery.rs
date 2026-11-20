@@ -976,6 +976,27 @@ pub(crate) fn discover_owner_file(
             });
         }
     }
+    // ADR 1153 (textbook id-async-memo-loading): a function the tag itself calls,
+    // written in place as a prop's whole value (`Errored`'s `fallback`), runs in
+    // a computation the tag creates under an owner of its own, whoever owns the
+    // tag (rc.21 `createBoundary`'s `fallback(b)`), like the function child above.
+    if !crate::site_accounting::ablated_id(CONTROL_FLOW_PROP_FUNCTION) {
+        for element in &file.ast.jsx_elements {
+            for function in control_flow_prop_functions(file, element, lookup) {
+                crate::proof_log::silent(
+                    "SC4001",
+                    &crate::location(file.path.shared(), function),
+                    CONTROL_FLOW_PROP_FUNCTION,
+                    &[],
+                );
+                edges.push(SymbolicOwnerEdge {
+                    source: None,
+                    target: OwnerTarget::LocalSpan(function),
+                    kind: OwnerEdgeKind::Owned,
+                });
+            }
+        }
+    }
     // ADR 0883: JSX creates a render effect with no call to name it.
     for site in jsx_sites(file, lookup) {
         if !matches!(

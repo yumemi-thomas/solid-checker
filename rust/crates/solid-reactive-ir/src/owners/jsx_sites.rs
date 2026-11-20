@@ -386,7 +386,8 @@ fn calls_function_in_place(
 /// expression that uses its own name inside (`{function row() { pick = row; ... }}`). An arrow has no name to use. A name no reference of the producer's is known for, or a
 /// reference it lists, is a use. A function expression that reads `arguments` answers yes as well, as a precaution and no proof of a hand-on: `arguments.callee` throws in module
 /// code and nothing else of `arguments` is the function. It sends the function to the entry walk, which closes the function child of `For`, `Repeat`, `Show` and `Match` (a
-/// control-flow child no reference names: no row, as in place) and not `Errored`'s `fallback` (the site keeps its uncertifiable row). The re-check of #225, N1.
+/// control-flow child no reference names: no row, as in place) and, since ADR 1153, the function `Errored`'s `fallback` holds in place ([`control_flow_prop_functions`]); a
+/// function that can hand itself on keeps its uncertifiable row there. The re-check of #225, N1.
 fn can_hand_itself_on(
     file: &solid_facts::FileFacts,
     lookup: &SemanticLookup<'_>,
@@ -613,6 +614,74 @@ pub(crate) fn control_flow_child(
         .filter(|expression| child.contains(**expression))
         .max_by_key(|expression| expression.end - expression.start)?;
     Some((*expression, run))
+}
+
+/// The proof id of [`control_flow_prop_functions`]'s owner edge and of the entry walk's stop for it: the proof log's `silent` line names it, and
+/// `SOLID_CHECKER_IR_ABLATE_SILENCE` turns both off (ADR 1118's gate).
+pub(crate) const CONTROL_FLOW_PROP_FUNCTION: &str = "owners.control_flow_prop_function";
+
+/// ADR 1153 (the edge, the stop and this predicate are W7's WIP, 7b853a25945, with the changes named below): the functions `element` itself calls under an owner of its own
+/// when each is written in place as the whole value of one of its props ([`solid_dialect::Dialect::control_flow_prop_function_run`]; rc.21: only `Errored`'s `fallback`, which
+/// the boundary calls as `f(err, reset)` inside a lazy computed it creates under the owner that encloses the tag: `solid-js` `dist/solid.dev.js` `Errored`, `@solidjs/signals`
+/// `dist/dev.js` `createBoundary`, `fallback(b)`). What is proved, and what is not:
+/// - the tag resolves to the dialect primitive exactly ([`crate::owners::element_primitive`]: a local component of the same name, a namespace member and an alias answer as
+///   their declaration does);
+/// - the element has no spread: `props.fallback` is then a merge, and that this literal is what the tag calls is not proved (W7's WIP wrote "no spread holds it" and never
+///   asked);
+/// - the prop is a plain attribute (no namespace) and its value is the function literal itself, through type assertions and parentheses only; any other value (a name, a call,
+///   a conditional) is handed on;
+/// - the function is run as the dialect says ([`runs_as_child`]: a generator never) and is no `async` function: the code after its first `await` runs with no owner (Chrome
+///   rc.21, NO_OWNER_CLEANUP), a route the owner graph's edge does not show (the existing after-await rows keep it; this edge does not lean on them);
+/// - the function cannot hand itself on ([`can_hand_itself_on`]).
+///
+/// `children` is [`control_flow_child`]'s, not this one's.
+pub(crate) fn control_flow_prop_functions(
+    file: &solid_facts::FileFacts,
+    element: &JsxElementFact,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<Span> {
+    if !element.spreads.is_empty() {
+        return Vec::new();
+    }
+    let Some(primitive) = crate::owners::element_primitive(lookup, file, element) else {
+        return Vec::new();
+    };
+    element
+        .attributes
+        .iter()
+        .filter(|attribute| {
+            attribute.namespace.is_none()
+                && attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::Expression
+        })
+        .filter_map(|attribute| {
+            let prop = file.source_text(attribute.name)?;
+            if prop == "children" {
+                return None;
+            }
+            let run = lookup
+                .dialect
+                .control_flow_prop_function_run(primitive, prop)?;
+            let value = file.ast.peel_ts_sugar_span(attribute.expression?);
+            let function = file.ast.function_at(value)?;
+            (function.span == value
+                && runs_as_child(function, run)
+                && !function.r#async
+                && !can_hand_itself_on(file, lookup, function))
+            .then_some(function.span)
+        })
+        .collect()
+}
+
+/// Whether `function` is one of [`control_flow_prop_functions`] of the element around it (and the edge is not ablated).
+pub(crate) fn is_control_flow_prop_function(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    !crate::site_accounting::ablated_id(CONTROL_FLOW_PROP_FUNCTION)
+        && innermost_element(file, function.span).is_some_and(|element| {
+            control_flow_prop_functions(file, element, lookup).contains(&function.span)
+        })
 }
 
 /// Whether `function` declares the `.length` a `WithParameter` tag tests: a

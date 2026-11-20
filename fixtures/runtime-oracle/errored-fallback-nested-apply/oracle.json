@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1153: a layer written inside an Errored fallback is its own. A primitive created in the apply of an effect the fallback creates raises PRIMITIVE_IN_EFFECT_CALLBACK (and halts the reactive system); only the creation of the effect, written directly in the fallback, is owned (fixture errored-fallback-owner `Nested`). covered-violation before and after the owner edge."
+}

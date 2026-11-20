@@ -1653,6 +1653,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/owner-call-inplace-nested/node_modules/**
 !fixtures/reactive-ir/owner-call-inplace-escapes/node_modules/
 !fixtures/reactive-ir/owner-call-inplace-escapes/node_modules/**
+!fixtures/reactive-ir/errored-fallback-owner/node_modules/
+!fixtures/reactive-ir/errored-fallback-owner/node_modules/**
 !fixtures/reactive-ir/owner-call-getter-helper/node_modules/
 !fixtures/reactive-ir/owner-call-getter-helper/node_modules/**
 !fixtures/reactive-ir/flush-universe-package-prop-arrow/node_modules/

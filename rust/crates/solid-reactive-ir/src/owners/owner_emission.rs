@@ -1191,8 +1191,8 @@ pub(super) fn named_layer_entry_open(
     lookup: &SemanticLookup<'_>,
     caller_unplaced: impl Fn(&solid_facts::FileFacts, Span) -> bool,
 ) -> bool {
-    let mut walked = HashSet::default();
-    layer_entry_open(
+    let mut walked = Walked::default();
+    let open = layer_entry_open(
         file,
         span,
         region,
@@ -1200,7 +1200,9 @@ pub(super) fn named_layer_entry_open(
         &caller_unplaced,
         &mut walked,
         LAYER_CALLER_DEPTH,
-    )
+    );
+    walked.name_the_edge(file, span, open);
+    open
 }
 
 /// [`named_layer_entry_open`] with no region, for the owner-call universe's silences (batch 11, slice 6): the same walk, whose premises the emission adopted
@@ -1214,8 +1216,8 @@ pub(super) fn layer_entry_open_by_reference(
     lookup: &SemanticLookup<'_>,
     caller_unplaced: impl Fn(&solid_facts::FileFacts, Span) -> bool,
 ) -> bool {
-    let mut walked = HashSet::default();
-    layer_entry_open(
+    let mut walked = Walked::default();
+    let open = layer_entry_open(
         file,
         span,
         None,
@@ -1223,7 +1225,9 @@ pub(super) fn layer_entry_open_by_reference(
         &caller_unplaced,
         &mut walked,
         LAYER_CALLER_DEPTH,
-    )
+    );
+    walked.name_the_edge(file, span, open);
+    open
 }
 
 /// Whether nothing references `function` but the position that enters it (N2): a callback with no binding (an arrow, an anonymous function) cannot be, and a
@@ -1393,6 +1397,28 @@ pub(super) fn creates_owner_for(
         })
 }
 
+/// What an entry walk remembers: the layers it has walked, and whether it ended anywhere at the stop of ADR 1153 (the function an `Errored` runs for its fallback).
+#[derive(Default)]
+struct Walked {
+    visited: HashSet<(String, Span)>,
+    at_prop_function: bool,
+}
+
+impl Walked {
+    /// ADR 1153: a walk that was closed, and ended anywhere at the fallback function's stop, names the arm at the site it began from. The function's own silence line is at its
+    /// span; a callee only the function reaches lies outside it, and the proof log is what ADR 1118's M2b asks which arm moved a row. Write-only: the walk's answer is not read back.
+    fn name_the_edge(&self, file: &solid_facts::FileFacts, span: Span, open: bool) {
+        if !open && self.at_prop_function {
+            crate::proof_log::silent(
+                "SC4001",
+                &crate::location(file.path.shared(), span),
+                super::CONTROL_FLOW_PROP_FUNCTION,
+                &[],
+            );
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn layer_entry_open(
     file: &solid_facts::FileFacts,
@@ -1400,7 +1426,7 @@ fn layer_entry_open(
     region: Option<Span>,
     lookup: &SemanticLookup<'_>,
     caller_unplaced: &dyn Fn(&solid_facts::FileFacts, Span) -> bool,
-    walked: &mut HashSet<(String, Span)>,
+    walked: &mut Walked,
     depth: usize,
 ) -> bool {
     use crate::local_access::HandOff;
@@ -1432,11 +1458,13 @@ fn layer_entry_open(
         {
             return false;
         }
-        // Reached through a caller, no candidate names the region.
-        if (creates_owner_for(file, function.span, lookup)
-            || is_control_flow_child(file, function, lookup))
-            && referenced_only_by_entry(file, function, lookup)
-        {
+        // Reached through a caller, no candidate names the region. ADR 1153: the function an `Errored` runs for its fallback is such a layer too (the owner edge of
+        // `owners.control_flow_prop_function`); the walk remembers it ended there, so the proof log names the arm at the site it began from.
+        let by_owner = creates_owner_for(file, function.span, lookup)
+            || is_control_flow_child(file, function, lookup);
+        let by_edge = !by_owner && is_control_flow_prop_function(file, function, lookup);
+        if (by_owner || by_edge) && referenced_only_by_entry(file, function, lookup) {
+            walked.at_prop_function |= by_edge;
             return false;
         }
         if function.method_name.is_some() {
@@ -1512,7 +1540,10 @@ fn layer_entry_open(
         // A closed layer is entered only by its callers, and each is entered
         // as it is: `wrapUse` called from an `f` that escapes runs with no
         // owner on `f`'s other entries too.
-        if !walked.insert((file.path.as_str().to_owned(), function.span)) {
+        if !walked
+            .visited
+            .insert((file.path.as_str().to_owned(), function.span))
+        {
             continue;
         }
         if depth == 0 {

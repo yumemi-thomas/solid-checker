@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1153, negative: an `async` fallback. The code after its first `await` runs with no owner (NO_OWNER_CLEANUP), so the owner edge excludes async functions; the checker's SC4001 violation there is unchanged."
+}
