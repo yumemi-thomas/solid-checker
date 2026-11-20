@@ -268,8 +268,14 @@ const aloneRuns = new Map(alone.map((id) => [id, run([id])]));
   sections.push(`### Each mechanism alone: rows freed (measured ceiling; see 'how rows are measured')\n\n${table(["mechanism", "what it decides", "level", "projects freed", "rows freed", "writer packages decided (of " + number(total(projects, (project) => new Set(project.writers.filter((writer) => writer.effective).map((writer) => writer.canonical || writer.root)).size)) + " package-in-project pairs)"], head)}`);
   for (const id of alone) {
     const result = aloneRuns.get(id);
-    const rows = result.perProject.filter((item) => item.effective > 0).sort((a, b) => b.rows - a.rows).map((item) => [projectOf(item.id) ? `${item.app}/${projectOf(item.id)}` : item.app, item.packages, item.packages - item.packagesLeft, item.packagesLeft, number(item.rows), number(item.freed) + (item.freed !== item.upper ? ` (${number(item.upper)} if every row)` : "")]);
-    sections.push(`#### ${id}: ${MECHANISMS[id].label}${result.measured ? " (measured)" : " (offline: no run of this set)"}\n\n${table(["project", "any-name writer packages", "decided", "left", "family-3 rows", "rows freed"], rows)}`);
+    const live = result.perProject.filter((item) => item.effective > 0);
+    const header = `#### ${id}: ${MECHANISMS[id].label}${result.measured ? " (measured)" : " (offline: no run of this set)"}`;
+    if (live.every((item) => item.packagesLeft === item.packages)) {
+      sections.push(`${header}\n\nDecides no writer package in any of the ${live.length} projects with an any-name writer (every one keeps a cause this mechanism does not decide): 0 rows freed.`);
+      continue;
+    }
+    const rows = live.sort((a, b) => b.rows - a.rows).map((item) => [projectOf(item.id) ? `${item.app}/${projectOf(item.id)}` : item.app, item.packages, item.packages - item.packagesLeft, item.packagesLeft, number(item.rows), number(item.freed) + (item.freed !== item.upper ? ` (${number(item.upper)} if every row)` : "")]);
+    sections.push(`${header}\n\n${table(["project", "any-name writer packages", "decided", "left", "family-3 rows", "rows freed"], rows)}`);
   }
   results.mechanisms = Object.fromEntries(alone.map((id) => [id, { freed: aloneRuns.get(id).freed, projectsFreed: aloneRuns.get(id).projectsFreed, perProject: aloneRuns.get(id).perProject.map(({ left, ...rest }) => ({ ...rest, left: left.length })) }]));
 }
