@@ -383,6 +383,35 @@ impl PackageReachIndex {
             .map(String::as_str)
     }
 
+    /// ADR 1108 part 2: the roots of the installed packages that write `name` on a built-in's prototype by that name and may reach a Solid action (no any-name writer).
+    pub fn prototype_writers_by_name<'a>(
+        &'a self,
+        name: &str,
+    ) -> impl Iterator<Item = &'a str> + 'a {
+        self.prototype_writers
+            .get(name)
+            .into_iter()
+            .flatten()
+            .filter(|root| {
+                self.by_root
+                    .get(root.as_str())
+                    .is_none_or(|reach| !reach.is_clear())
+            })
+            .map(String::as_str)
+    }
+
+    /// ADR 1108 part 2: the roots of the installed packages that may write a built-in's prototype under a name nothing decides and may reach a Solid action.
+    pub fn prototype_writers_any_name<'a>(&'a self) -> impl Iterator<Item = &'a str> + 'a {
+        self.prototype_writers_any
+            .iter()
+            .filter(|root| {
+                self.by_root
+                    .get(root.as_str())
+                    .is_none_or(|reach| !reach.is_clear())
+            })
+            .map(String::as_str)
+    }
+
     /// ADR 1108: the roots of the installed packages whose closure writes any member on a built-in's prototype and may reach a Solid action: a call of a standard-library
     /// method by a key the program does not spell may run their code.
     pub fn prototype_writers_of_unspelled<'a>(&'a self) -> impl Iterator<Item = &'a str> + 'a {

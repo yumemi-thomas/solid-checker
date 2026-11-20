@@ -63,6 +63,28 @@
       "blocker": "package-may-call-action",
       "severity": "error",
       "path": "fixtures/reactive-ir/package-access-helper/variants/eval/Eval.tsx",
+      "start": 277,
+      "end": 284,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-access-helper/variants/eval/Eval.tsx",
+      "start": 287,
+      "end": 302,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-access-helper/variants/eval/Eval.tsx",
       "start": 306,
       "end": 366,
       "fixes": 0
@@ -142,6 +164,28 @@
       "path": "fixtures/reactive-ir/package-access-helper/variants/eval/Eval.tsx",
       "start": 393,
       "end": 398,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-access-helper/variants/eval/Eval.tsx",
+      "start": 410,
+      "end": 432,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-access-helper/variants/eval/Eval.tsx",
+      "start": 417,
+      "end": 424,
       "fixes": 0
     },
     {
