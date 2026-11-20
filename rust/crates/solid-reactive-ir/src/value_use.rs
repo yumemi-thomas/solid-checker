@@ -453,6 +453,9 @@ pub(crate) struct Census<'l, 'a> {
     /// the read's), and a callee nothing resolves is handed the value without holding it in what the call answers (a package's result has a start
     /// of its own).
     package_value: bool,
+    /// ADR 1146: how many `affects` targets a walk of this census ended at ([`UNTOUCHED_TARGET_READ`]). Read only as a difference across
+    /// one start, to name the start's reference where the proof removed its row: no answer depends on its value.
+    untouched_proofs: usize,
 }
 
 /// ADR 0811: the store member writes SC2003 decides in a file.
@@ -528,6 +531,7 @@ impl<'l, 'a> Census<'l, 'a> {
             reached: Vec::new(),
             allowed: HashMap::default(),
             package_value: false,
+            untouched_proofs: 0,
         }
     }
 
@@ -710,6 +714,7 @@ impl<'l, 'a> Census<'l, 'a> {
             Carried::Accessor
         };
         self.begin_start();
+        let proofs = self.untouched_proofs;
         let mode = match (store, tuple) {
             (false, false) => Mode::Value,
             (false, true) => Mode::Holder(Slot::Any),
@@ -721,6 +726,14 @@ impl<'l, 'a> Census<'l, 'a> {
             Position::Open(blocker) => Some(blocker),
         };
         self.run_escapes();
+        if answer.is_none() && self.untouched_proofs != proofs {
+            crate::proof_log::silent(
+                "SC9012",
+                &call.location(file.path.as_str()),
+                UNTOUCHED_TARGET_READ,
+                &[],
+            );
+        }
         answer
     }
 
@@ -730,6 +743,7 @@ impl<'l, 'a> Census<'l, 'a> {
             return Some(blockers::VALUE_USE_UNCLASSIFIED);
         };
         self.begin_start();
+        let proofs = self.untouched_proofs;
         let answer = if is_value_reference(file, span) {
             match self.position(file, span, mode) {
                 Position::Followed => None,
@@ -739,6 +753,11 @@ impl<'l, 'a> Census<'l, 'a> {
             self.unnamed_reference(file, span, mode)
         };
         self.run_escapes();
+        // ADR 1146: the row a walk through a helper's parameter to an `affects` target removes stands at the reference it started from
+        // (the one call that hands the value), not only at the target.
+        if answer.is_none() && self.untouched_proofs != proofs {
+            crate::proof_log::silent("SC9012", reference, UNTOUCHED_TARGET_READ, &[]);
+        }
         answer
     }
 
@@ -3336,6 +3355,7 @@ impl<'l, 'a> Census<'l, 'a> {
                     return Position::Followed;
                 }
                 if untouched_target_read_is_plain(self.lookup) {
+                    self.untouched_proofs += 1;
                     crate::proof_log::silent(
                         "SC9012",
                         &call.arguments[index].span.location(file.path.as_str()),

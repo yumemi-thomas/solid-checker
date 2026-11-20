@@ -114,6 +114,32 @@ fn member_name(file: &FileFacts, member: &solid_facts::ast::MemberFact) -> Optio
     }
 }
 
+/// The key of an object literal member: written, or a string literal under brackets; `None` for a key computed by an expression no literal names
+/// (`[k]`, `[a + b]`), which may be any name.
+fn literal_member_name(
+    file: &FileFacts,
+    property: &solid_facts::ast::ObjectPropertyFact,
+) -> Option<String> {
+    let text = file.source_text(property.key)?.trim();
+    if !property.computed {
+        return solid_facts::kernel::cooked_key(text);
+    }
+    let text = text
+        .strip_prefix('[')
+        .and_then(|inner| inner.strip_suffix(']'))
+        .unwrap_or(text)
+        .trim();
+    let literal = text.starts_with(['"', '\'']) || (text.starts_with('`') && !text.contains("${"));
+    literal
+        .then(|| solid_facts::kernel::cooked_key(text))
+        .flatten()
+}
+
+/// Whether the member's value is no function by its own syntax (a data property of a literal value): a key that may be any name holds no code.
+fn holds_no_code(property: &solid_facts::ast::ObjectPropertyFact) -> bool {
+    property.data && property.value_kind.is_proven_noncallable()
+}
+
 /// Whether `callee` (a member of `addEventListener`, or the bare name) is called directly with a literal type no focus move delivers.
 fn quiet_registration(file: &FileFacts, callee: solid_facts::core::Span) -> bool {
     file.ast
@@ -153,58 +179,73 @@ fn code_may_listen(file: &FileFacts) -> bool {
                 .member_at(target)
                 .and_then(|member| member_name(file, member))
                 .is_some_and(|key| names_listener(&key))
-    }) || ast.object_properties.iter().any(|property| {
-        crate::kernel::property_key(file, property.key).is_some_and(|key| names_listener(&key))
-    }) || ast.members.iter().any(|member| {
-        member_name(file, member).is_some_and(|key| key == "addEventListener")
-            && !quiet_registration(file, member.span)
-    }) || ast.identifiers.iter().any(|identifier| {
-        file.source_text(identifier.span) == Some("addEventListener")
-            && ast.reference_declaration(identifier.span).is_none()
-            && !ast
-                .members
-                .iter()
-                .any(|member| member.property == identifier.span)
-            && !quiet_registration(file, identifier.span)
-    }) || ast.bindings.iter().any(|binding| {
-        binding
-            .object_properties
-            .iter()
-            .any(|property| property.key.as_deref() == Some("addEventListener"))
-    }) || ast.code_sinks.iter().any(|sink| {
-        matches!(
-            sink.kind,
-            CodeSinkKind::EventAttribute | CodeSinkKind::MarkupWrite
-        )
     }) || ast
-        .premise_sites
+        .object_properties
         .iter()
-        .any(|site| site.clause == PremiseClause::PrivateKey)
+        .any(|property| match literal_member_name(file, property) {
+            Some(key) => names_listener(&key),
+            // A key computed by an expression may be `onfocus`: a handler object handed to a registration the scans cannot read.
+            None => !holds_no_code(property),
+        })
+        || ast.members.iter().any(|member| {
+            member_name(file, member).is_some_and(|key| key == "addEventListener")
+                && !quiet_registration(file, member.span)
+        })
+        || ast.identifiers.iter().any(|identifier| {
+            file.source_text(identifier.span) == Some("addEventListener")
+                && ast.reference_declaration(identifier.span).is_none()
+                && !ast
+                    .members
+                    .iter()
+                    .any(|member| member.property == identifier.span)
+                && !quiet_registration(file, identifier.span)
+        })
+        || ast.bindings.iter().any(|binding| {
+            binding
+                .object_properties
+                .iter()
+                .any(|property| property.key.as_deref() == Some("addEventListener"))
+        })
+        || ast.code_sinks.iter().any(|sink| {
+            matches!(
+                sink.kind,
+                CodeSinkKind::EventAttribute | CodeSinkKind::MarkupWrite
+            )
+        })
+        || ast
+            .premise_sites
+            .iter()
+            .any(|site| site.clause == PremiseClause::PrivateKey)
 }
 
 /// Whether the file defines a member named `focus` that is, or may be, a function: a class member (any kind, static too), an object
 /// literal member, or an assignment to one.
 fn defines_focus(file: &FileFacts) -> bool {
     let ast = &file.ast;
-    ast.object_properties.iter().any(|property| {
-        crate::kernel::property_key(file, property.key).is_some_and(|key| key == "focus")
-            && !(property.data && property.value_kind.is_proven_noncallable())
-    }) || ast
-        .classes
+    ast.object_properties
         .iter()
-        .flat_map(|class| &class.elements)
-        .any(|element| {
-            matches!(
-                element.kind,
-                ClassElementKind::Method
-                    | ClassElementKind::Getter
-                    | ClassElementKind::Setter
-                    | ClassElementKind::Field
-            ) && element
-                .key
-                .and_then(|key| crate::kernel::property_key(file, key))
-                .is_some_and(|key| key == "focus")
+        .any(|property| match literal_member_name(file, property) {
+            Some(key) => key == "focus" && !holds_no_code(property),
+            // A key computed by an expression may be `focus`.
+            None => !holds_no_code(property),
         })
+        || ast
+            .classes
+            .iter()
+            .flat_map(|class| &class.elements)
+            .any(|element| {
+                matches!(
+                    element.kind,
+                    ClassElementKind::Method
+                        | ClassElementKind::Getter
+                        | ClassElementKind::Setter
+                        | ClassElementKind::Field
+                ) && (element.computed
+                    || element
+                        .key
+                        .and_then(|key| crate::kernel::property_key(file, key))
+                        .is_some_and(|key| key == "focus"))
+            })
         || ast.assignments.iter().any(|assignment| {
             ast.member_at(ast.peel_ts_sugar_span(assignment.target))
                 .and_then(|member| member_name(file, member))
@@ -362,6 +403,8 @@ mod tests {
             ("el.onclick = f;", false),
             ("Object.assign(el, { onblur: f });", true),
             ("Object.assign(el, { onclick: f });", false),
+            ("Object.assign(el, { [evt]: f });", true),
+            ("const o = { [k]: 1 };", false),
             ("const o = { 'prop:onfocus': f };", true),
             ("el.setAttribute('onfocus', 'run()');", true),
             ("el.id = 'a';", false),
@@ -381,6 +424,14 @@ mod tests {
             ("const o = { focus() {} };", true),
             ("const o = { 'focus': () => 1 };", true),
             ("const o = { get focus() { return 1; } };", true),
+            // A key computed by an expression may be any name; a literal under brackets is read; a datum holds no code.
+            ("const o = { [k]: () => 1 };", true),
+            ("const o = { ['foc' + 'us']: () => 1 };", true),
+            ("const o = { ['focus']: () => 1 };", true),
+            ("const o = { ['blur']: () => 1 };", false),
+            ("const o = { [k]: 1 };", false),
+            ("class A extends HTMLElement { [k]() {} }", true),
+            ("class A { ['blur']() {} }", true),
             ("el.focus = f;", true),
             ("el['focus'] = f;", true),
             ("const o = { focus: 1 };", false),
