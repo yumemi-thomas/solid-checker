@@ -8,7 +8,7 @@ import type { JSX } from "@solidjs/web";
 
 const [count, setCount] = createSignal(0);
 
-type Props = { variant?: "primary" | "plain"; onPointerDown?: () => void; children?: JSX.Element };
+type Props = { variant?: "primary" | "plain"; onPointerDown?: () => void; onClick?: () => void; children?: JSX.Element };
 
 function Trigger(props: Props) {
   const merged = merge({ variant: "plain" as const }, props);
@@ -29,6 +29,26 @@ function Spreaded(props: Props) {
   return <button {...rest} />;
 }
 
+// ADR 1134 beside ADR 1129: the delegated dispatcher passes over a disabled
+// control, so a handler the view spreads onto one may never run; the spread's
+// handlers stay unresolved (an obligation), never a violation.
+function DefaultedOff(props: Props) {
+  const merged = merge({ onClick: () => { createRenderEffect(() => count(), () => {}); } }, props);
+  return <button disabled {...merged} />;
+}
+
+// The view may own `disabled` (a caller writes it).
+function KeyedOff(props: Props & { disabled?: boolean }) {
+  const merged = merge({ onClick: () => { createRenderEffect(() => count(), () => {}); } }, props);
+  return <button {...merged} />;
+}
+
+// Positive twin: an enabled button runs the view literal's handler, which creates an effect with no owner.
+function DefaultedOn(props: Props) {
+  const merged = merge({ onClick: () => { createRenderEffect(() => count(), () => {}); } }, props);
+  return <button {...merged} />;
+}
+
 const more: Props = {};
 
 export function Page() {
@@ -45,6 +65,9 @@ export function Page() {
         creates
       </Trigger>
       <Defaulted />
+      <DefaultedOff />
+      <KeyedOff disabled />
+      <DefaultedOn />
       <Spreaded onPointerDown={() => setCount(count() + 1)} />
       <Spreaded {...more} />
     </div>

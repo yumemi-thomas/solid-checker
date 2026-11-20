@@ -787,6 +787,16 @@ impl Memo<BuildSchema> for SpreadTargetsAt {
                     // keeps that answer, so the proof only adds answers.
                     match super::view_spread::view_spread(cx, slot, argument)? {
                         Some(view) => match (targets, view.handlers) {
+                            // ADR 1134: a handler on a control that may be disabled may never run.
+                            (None, Some(handlers))
+                                if !handlers.is_empty()
+                                    && cx.dialect().delegated_handler_skips_disabled_node()
+                                    && crate::disabled_handlers::view_spread_may_meet_disabled(
+                                        file, element, &view.keys,
+                                    ) =>
+                            {
+                                (None, Some((view.keys, false)))
+                            }
                             (None, Some(handlers)) => (Some(handlers), Some((view.keys, true))),
                             (targets, _) => (targets, Some((view.keys, false))),
                         },
