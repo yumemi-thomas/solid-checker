@@ -9650,13 +9650,30 @@ pub(crate) fn whole_store_tuple_get(
     dialect: &dyn solid_dialect::Dialect,
 ) -> StoreHeadGet {
     const HANDED: &str = "the store tuple is held whole, and what its element is handed to is not followed to a store Get";
+    // The key a member Gets: a computed member's literal key (the facts'), or a name's cooked key (the kernel's, K3).
+    let key = |member: &solid_facts::ast::MemberFact| -> Option<String> {
+        if file
+            .ast
+            .computed_members
+            .binary_search(&member.span)
+            .is_ok()
+        {
+            file.ast
+                .literal_computed_members
+                .iter()
+                .find(|literal| literal.span == member.span)
+                .map(|literal| literal.key.to_string())
+        } else {
+            crate::kernel::property_key(file, member.property)
+        }
+    };
     let Some(mut head) = file.ast.member_at(span) else {
         return StoreHeadGet::Undecided(HANDED);
     };
     while let Some(inner) = file.ast.member_at(file.ast.peel_ts_sugar_span(head.object)) {
         head = inner;
     }
-    if member_key(file, head) != Some("0") {
+    if key(head).as_deref() != Some("0") {
         return StoreHeadGet::Undecided(HANDED);
     }
     let Some(get) = file
@@ -9672,7 +9689,7 @@ pub(crate) fn whole_store_tuple_get(
         .members
         .iter()
         .any(|member| file.ast.peel_ts_sugar_span(member.object) == get.span);
-    match member_key(file, get) {
+    match key(get).as_deref() {
         None => StoreHeadGet::Undecided(
             "the store Get's key is not a known string; a symbol key or \"then\" does not warn",
         ),
@@ -9684,27 +9701,6 @@ pub(crate) fn whole_store_tuple_get(
             })
         }
         Some(_) => StoreHeadGet::Warns,
-    }
-}
-
-/// The spelled key of a member: its property name, or a computed member's literal key.
-fn member_key<'f>(
-    file: &'f solid_facts::FileFacts,
-    member: &solid_facts::ast::MemberFact,
-) -> Option<&'f str> {
-    if file
-        .ast
-        .computed_members
-        .binary_search(&member.span)
-        .is_ok()
-    {
-        file.ast
-            .literal_computed_members
-            .iter()
-            .find(|literal| literal.span == member.span)
-            .map(|literal| literal.key.as_ref())
-    } else {
-        file.source_text(member.property)
     }
 }
 
