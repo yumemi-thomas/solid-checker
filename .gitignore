@@ -2072,3 +2072,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/event-delivery-spellings/variants/attributes-built-key/node_modules/**
 !fixtures/reactive-ir/event-delivery-spellings/variants/data-href-unproven-key/node_modules/
 !fixtures/reactive-ir/event-delivery-spellings/variants/data-href-unproven-key/node_modules/**
+!fixtures/reactive-ir/census-claim-order/node_modules/
+!fixtures/reactive-ir/census-claim-order/node_modules/**
