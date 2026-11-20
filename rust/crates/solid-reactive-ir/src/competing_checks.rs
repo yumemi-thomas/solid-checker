@@ -357,6 +357,7 @@ fn creation_an_apply_may_deliver_in_shadow(
 /// - a callee that is a value a primitive returned (an accessor, a setter: a `const` bound to the primitive's call, its tuple slots)
 ///   may run the callbacks handed to that call (a memo's compute runs where its accessor is read), so their code joins the reach;
 /// - any other callee is followed to the function it resolves to; one that resolves to none may run any function.
+///
 /// "Any function" is [`ShadowReach::Unbounded`].
 enum ShadowReach {
     Unbounded,
