@@ -1,0 +1,6 @@
+{
+  "note": "ADR 1123, the review's F2 and F3 through a package the build does not read (dep-track names and imports no Solid package): a provider element stored and handed to the package (StoredApp), a pattern's name createContext's defaultValue initializes (PatternApp) and a written let (WrittenApp) each run a flushing child expression in the package's tracked effect. Chrome reports FLUSH_IN_TRACKED_QUEUE_CALLBACK at each, covered by SC3001 (covered-uncertifiable) on the fix and on the build before round 1 alike.",
+  "packages": [
+    "dep-track"
+  ]
+}
