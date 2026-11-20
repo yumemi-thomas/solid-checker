@@ -2435,7 +2435,7 @@
    "ruleOptions": {},
    "presets": [],
    "enableRules": [],
-   "note": "The SC9012 row is the value-use census (ADR 0692): where `target` goes, not its type, so a distinct claim beside TS2345 (invariant 1); uncertifiable rows are internal (ADR 0328).",
+   "note": "TS2345 owns the key (`affects(accessor, key)` has no such overload). The value-use census no longer holds a row at `target` (ADR 1146): `affects` reads `$TARGET` and `$REFRESH` off the accessor and never calls it or hands it on, with or without a key, and the program has nothing that writes a prototype.",
    "expect": {
     "findings": [
      {
@@ -2454,26 +2454,6 @@
          }
         }
        ]
-      }
-     },
-     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "span": {
-       "textRange": [
-        93,
-        99
-       ]
-      },
-      "fix": {
-       "behavior": "none"
-      },
-      "typescript": {
-       "ownership": "distinct-claim",
-       "diagnostics": [],
-       "justification": "TS2345 is about the argument's type; the census row says where `target`'s value goes (into `affects`, a slot the census does not follow). A different claim about the same code, which invariant 1 allows. Uncertifiable, so internal only and never reported (ADR 0328)."
       }
      }
     ],
