@@ -111,7 +111,12 @@ An owned context is the edges the owner graph holds. A function the body calls a
 also assigns to a handler, stores, hands to a value-only argument, or writes to a
 member has another entry with no edge, so an owner operation in it is uncertifiable
 (`owner-callers-unenumerated`, ADR 0868). Only direct calls, inline runs and
-primitive positions, each from placed code, keep the proof.
+primitive positions, each from placed code, keep the proof. A read of a context with
+no default and no provider asks the same entry test: its owned run is
+[missing-context-provider](missing-context-provider.md)'s claim, and an entry with no edge
+(`[f].forEach((g) => g())` in a handler, a stored function, a helper's parameter) leaves this
+rule's obligation beside it (ADR 1142). A `forEach` in the body carries it the same way: the
+carried call is not followed, so where it runs is not placed.
 
 A function that returns JSX is no exception (ADR 0970): it is entered by renders
 alone only where every reference of its binding is a JSX tag. One a reference also

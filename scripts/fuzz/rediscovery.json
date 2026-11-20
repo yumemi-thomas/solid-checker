@@ -40580,5 +40580,19 @@
   "found": "Fable final review of ADR 1129 (F2), on 0e1d4ccea; probes c1-c4 (W6)",
   "fixed": "ADR 1129 round 2 (plain_premise::program_may_write_standard_member, asked by standard_member_replaced: any program file's prototype route, Proxy/Reflect, with, Object.assign, coercion hook, code sink, unproven computed key, a write under includes or an undecided key, or an unread module withholds the omit view)",
   "outside": "what leaks is a key no runtime diagnostic watches: the content conflict draws none in rc.21, and a listener omit hides that a replaced includes lets through is a caller's function the checker holds uncertifiable at its site on every build (W3's probe incl, round 1), so no generated program can show a false clean for fuzz-focus to judge. Pinned instead: fixture merge-omit-view-spread-includes variants define-computed and cross-file (SC8003 spread-content-unproven U on the fix; clean on 0e1d4ccea), read-only still clean; Chrome quiet with no TypeScript error"
+ },
+ {
+  "finding": "ADR 1142: a read of a provider-free context in a function an effect's compute runs, which another entry carries on (`[f].forEach((g) => g())` in a click handler, a stored function, a project helper's parameter, an object member, an imported function), had SC4002's violation alone: Chrome also reports NO_OWNER_CONTEXT at the read (the click calls it with no owner), a certified false clean of SC4001's code. The owner emission's provider-free arm took the owned context the graph holds for every run; the arms for a read WITH a default asked the entry test (ADR 0868) already",
+  "found": "the fuzzer: mx-census CONTEXT_NOT_FOUND `barm-carried-handler` (ADR 1124 round 2's context; mx-context-not-found-barm-carried-handler-x-direct-none, secondary-false-clean on main a64fc92ad), reported by the coordinator; the routes beside it (stored, helper, member, imported) found reading the arm",
+  "fixed": "ADR 1142 (owner_emission.rs: the provider-free arm asks named_layer_entry_open and gives SC4001's owner-callers-unenumerated obligation beside SC4002's claim)",
+  "grid": "patterns",
+  "code": "NO_OWNER_CONTEXT",
+  "ids": [
+   "owner-entry/carried-handler",
+   "owner-entry/helper",
+   "owner-entry/stored"
+  ],
+  "rediscovered": "make fuzz-patterns (--only owner-entry/), release builds: main a64fc92ad has 3 false cleans (NO_OWNER_CONTEXT at carried-handler, helper and stored; member and imported are covered through an application frame of the stack), this build none. Census: focus --grids mx-census --contexts barm-carried-handler (1124 round 2's context, applied to main without committing it): main secondary-false-clean (NO_OWNER_CONTEXT false-clean-certified, findings missing-context-provider/violation@7 alone), this build recall-gap (missing-owner/uncertifiable@7 beside it) and nothing needs a look",
+  "outside": "the pattern lane holds the programs (scripts/fuzz/patterns/owner-entry); main's generators write the carried route only through ADR 1124 round 2's `barm-carried-handler` context, which is not on main: the census id joins this entry (and scripts/fuzz/smoke/mx-census.json) when that context does"
  }
 ]

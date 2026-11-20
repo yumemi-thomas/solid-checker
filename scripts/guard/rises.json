@@ -7806,6 +7806,78 @@
    "to": 171,
    "adr": "ADR 1114",
    "fact": "family 3 slice G and N4 (reads, member assignments, computed keys, the named default and async returns are sites under a package prototype writer), measured on main with ADR 1125: SC2002 package-may-call-action uncertifiable only, no violation or clean moved"
+  },
+  {
+   "fixture": "reactive-ir/context-provider-open",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 1142",
+   "fact": "a provider-free context read (SC4002's claim) in a layer the ADR 0868 entry walk calls open (a function carried on by a forEach, stored, handed to a call, a member, a prop arrow, an exported component of an open program, a dynamic component, a generator layer, a reassigned let) gains SC4001's owner-callers-unenumerated obligation beside the claim; measured against main a64fc92ad, additions only, no violation or clean moved, corpus 0 rows"
+  },
+  {
+   "fixture": "reactive-ir/namespace-destructured-api",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 3,
+   "to": 4,
+   "adr": "ADR 1142",
+   "fact": "a provider-free context read (SC4002's claim) in a layer the ADR 0868 entry walk calls open (a function carried on by a forEach, stored, handed to a call, a member, a prop arrow, an exported component of an open program, a dynamic component, a generator layer, a reassigned let) gains SC4001's owner-callers-unenumerated obligation beside the claim; measured against main a64fc92ad, additions only, no violation or clean moved, corpus 0 rows"
+  },
+  {
+   "fixture": "reactive-ir/owner-callback-prop",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 2,
+   "to": 5,
+   "adr": "ADR 1142",
+   "fact": "a provider-free context read (SC4002's claim) in a layer the ADR 0868 entry walk calls open (a function carried on by a forEach, stored, handed to a call, a member, a prop arrow, an exported component of an open program, a dynamic component, a generator layer, a reassigned let) gains SC4001's owner-callers-unenumerated obligation beside the claim; measured against main a64fc92ad, additions only, no violation or clean moved, corpus 0 rows"
+  },
+  {
+   "fixture": "reactive-ir/owner-handed-inline",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1142",
+   "fact": "a provider-free context read (SC4002's claim) in a layer the ADR 0868 entry walk calls open (a function carried on by a forEach, stored, handed to a call, a member, a prop arrow, an exported component of an open program, a dynamic component, a generator layer, a reassigned let) gains SC4001's owner-callers-unenumerated obligation beside the claim; measured against main a64fc92ad, additions only, no violation or clean moved, corpus 0 rows"
+  },
+  {
+   "fixture": "reactive-ir/stored-throw-dynamic-mount",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 5,
+   "to": 15,
+   "adr": "ADR 1142",
+   "fact": "a provider-free context read (SC4002's claim) in a layer the ADR 0868 entry walk calls open (a function carried on by a forEach, stored, handed to a call, a member, a prop arrow, an exported component of an open program, a dynamic component, a generator layer, a reassigned let) gains SC4001's owner-callers-unenumerated obligation beside the claim; measured against main a64fc92ad, additions only, no violation or clean moved, corpus 0 rows"
+  },
+  {
+   "fixture": "reactive-ir/stored-throw-observation",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1142",
+   "fact": "a provider-free context read (SC4002's claim) in a layer the ADR 0868 entry walk calls open (a function carried on by a forEach, stored, handed to a call, a member, a prop arrow, an exported component of an open program, a dynamic component, a generator layer, a reassigned let) gains SC4001's owner-callers-unenumerated obligation beside the claim; measured against main a64fc92ad, additions only, no violation or clean moved, corpus 0 rows"
+  },
+  {
+   "fixture": "reactive-ir/stored-throw-portal",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1142",
+   "fact": "a provider-free context read (SC4002's claim) in a layer the ADR 0868 entry walk calls open (a function carried on by a forEach, stored, handed to a call, a member, a prop arrow, an exported component of an open program, a dynamic component, a generator layer, a reassigned let) gains SC4001's owner-callers-unenumerated obligation beside the claim; measured against main a64fc92ad, additions only, no violation or clean moved, corpus 0 rows"
+  },
+  {
+   "fixture": "reactive-ir/stored-throw-returned-param",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1142",
+   "fact": "a provider-free context read (SC4002's claim) in a layer the ADR 0868 entry walk calls open (a function carried on by a forEach, stored, handed to a call, a member, a prop arrow, an exported component of an open program, a dynamic component, a generator layer, a reassigned let) gains SC4001's owner-callers-unenumerated obligation beside the claim; measured against main a64fc92ad, additions only, no violation or clean moved, corpus 0 rows"
+  },
+  {
+   "fixture": "uncertifiable-repro/open-program-packages-ui",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 4,
+   "to": 5,
+   "adr": "ADR 1142",
+   "fact": "a provider-free context read (SC4002's claim) in a layer the ADR 0868 entry walk calls open (a function carried on by a forEach, stored, handed to a call, a member, a prop arrow, an exported component of an open program, a dynamic component, a generator layer, a reassigned let) gains SC4001's owner-callers-unenumerated obligation beside the claim; measured against main a64fc92ad, additions only, no violation or clean moved, corpus 0 rows"
   }
  ]
 }
