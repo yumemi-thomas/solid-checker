@@ -803,7 +803,9 @@ impl Memo<BuildSchema> for SpreadTargetsAt {
                             // attribute of the same name may supply is never attached.
                             (None, Some(handlers))
                                 if !handlers.is_empty()
-                                    && later_source_may_supply(cx, file, element, spread, &view.keys) =>
+                                    && later_source_may_supply(
+                                        cx, file, element, spread, &view.keys,
+                                    ) =>
                             {
                                 (None, Some((view.keys, false)))
                             }
