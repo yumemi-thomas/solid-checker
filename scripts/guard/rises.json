@@ -7968,6 +7968,14 @@
    "adr": "ADR 1133",
    "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx writes `anchor.href = url` with a URL nothing proves is no `javascript:` URL (NavigationUrl, ADR 1133 F5). The dispatch veto withholds every event proof of the program's handlers",
    "why": "fail-closed: code built from a string, or a definer or reader under an unproven key, may make a handler run with no event; the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc9012",
+   "key": "SC1001 function-run-unplaced",
+   "from": 6,
+   "to": 8,
+   "adr": "ADR 1146",
+   "fact": "a helper handed to an event-handler slot under the read veto is an unproven use (local_access helper_value_execution: Unknown under synchronous_event_read_dispatch_present)"
   }
  ]
 }
