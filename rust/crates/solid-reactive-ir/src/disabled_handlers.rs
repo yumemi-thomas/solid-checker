@@ -108,7 +108,8 @@ fn in_delegated_handler_of_disabled_control(
 /// disabled control when the control is one of [`DISABLEABLE`] with one bare or `{true}` `disabled`, no `ref`, and spreads each of
 /// whose own keys is proven ([`spread_own_keys`]) with no `disabled`, `ref` or namespaced key among them (nothing can write
 /// `disabled` back); and the handler is either the control's own `on…` attribute whose key is delegated, or a function an object
-/// literal written in place in one of the spreads holds under a delegated key (no other reference can reach it).
+/// literal written in place in one of the spreads holds (ADR 0358's exact targets) where every listener key of that literal is
+/// delegated (no other reference can reach it).
 fn spread_handler_of_disabled_control(
     lookup: &SemanticLookup<'_>,
     file: &FileFacts,
@@ -129,8 +130,14 @@ fn spread_handler_of_disabled_control(
         {
             return false;
         }
-        if let Some(literal) = literal {
-            in_place.push((spread.argument, literal));
+        // An in-place literal's handlers count only when every listener key its shape holds (the facts' cooked keys) is delegated.
+        if literal.is_some()
+            && keys
+                .iter()
+                .filter(|key| lookup.dialect.spread_key_is_event(key) != Some(false))
+                .all(|key| lookup.dialect.spread_event_delegated(key))
+        {
+            in_place.push(spread.argument);
         }
     }
     let delegated = |key: &str| lookup.dialect.spread_event_delegated(key);
@@ -143,7 +150,7 @@ fn spread_handler_of_disabled_control(
     });
     // A function an in-place literal holds directly under a key: one of ADR 0358's exact targets of that spread.
     by_attribute
-        || in_place.iter().any(|(argument, literal)| {
+        || in_place.iter().any(|argument| {
             let Some(Some(targets)) = lookup
                 .spread_handler_targets()
                 .get(&crate::location(file.path.shared(), *argument))
@@ -151,16 +158,7 @@ fn spread_handler_of_disabled_control(
                 return false;
             };
             targets.iter().any(|(path, function)| {
-                path.as_str() == file.path.as_str()
-                    && function.contains(site)
-                    && file.ast.object_properties.iter().any(|property| {
-                        !property.computed
-                            && literal.contains(property.span)
-                            && file.ast.peel_ts_sugar_span(property.value) == *function
-                            && file
-                                .source_text(property.key)
-                                .is_some_and(|key| delegated(key.trim_matches(['\'', '"'])))
-                    })
+                path.as_str() == file.path.as_str() && function.contains(site)
             })
         })
 }
