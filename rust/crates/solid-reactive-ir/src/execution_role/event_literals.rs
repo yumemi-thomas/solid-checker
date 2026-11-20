@@ -551,7 +551,7 @@ impl<'a, W: FlowWorld<'a>> InvocationFlow<'a, '_, '_, W> {
             callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
                 && file.ast.peel_ts_sugar_span(callback.span) == owner.span
         }) {
-            if crate::execution_role::handler_event_denied(file, callback.span) {
+            if self.world.handler_event_denied(file, callback.span) {
                 return None;
             }
             return Some(Some(role_arm!(

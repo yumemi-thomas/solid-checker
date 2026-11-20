@@ -1121,6 +1121,61 @@ fn the_any_file_vetoes_follow_what_the_project_writes() {
     assert!(iterator.4 && !iterator.5);
 }
 
+/// ADR 1146: whether any project file may write the `type` of an element.
+#[test]
+fn the_retype_veto_follows_what_the_project_writes() {
+    let veto = |source: &str| {
+        let facts = project(source);
+        let store = crate::base::memo::build::MemoStore::new(true, true);
+        memo_build(&facts, &store, &[], |lookup| {
+            lookup.element_retype_possible()
+        })
+        .0
+    };
+    // Writes of other keys, and reads, retype nothing: a flow row's store update, a proven key, a call's argument, a `type` read.
+    for source in [
+        "export const answer = 1;",
+        "export function f(el: HTMLInputElement) { el.value = 'x'; el.checked = true; }",
+        "export function f(el: any) { const key = 'disabled'; el[key] = false; }",
+        "export function f(draft: any, index: () => number) { draft[index()].done = !draft[index()].done; }",
+        "export function f(el: HTMLInputElement) { return el.type + String(el.type === 'text'); }",
+        "export function f(el: any) { el['value'] = 1; el.typeName = 'x'; }",
+        "export function f(o: { type: string }) { const { type } = o; return type; }",
+        "export function f(n: number) { let type = 'a'; type += String(n); return type; }",
+    ] {
+        assert!(!veto(source), "{source}");
+    }
+    // A write whose key is `type`, by any spelling a write has, or one no proof narrows away from it.
+    for source in [
+        "export function f(el: HTMLInputElement) { el.type = 'text'; }",
+        "export function f(el: any) { el['type'] = 'text'; }",
+        "export function f(el: any) { el.type += 'x'; }",
+        "export function f(el: any) { delete el.type; }",
+        "export function f(el: any, o: any) { ({ a: el.type } = o); }",
+        "export function f(el: any) { [el.type] = ['x']; }",
+        "export function f(el: any, k: string) { el[k] = 1; }",
+        "export function f(el: any) { const k = 'type'; el[k] = 1; }",
+        "export function f(el: any, c: boolean) { const k = c ? 'type' : 'value'; el[k] = 1; }",
+        "export function f(el: any) { (el as HTMLInputElement).type = 'text'; }",
+    ] {
+        assert!(veto(source), "{source}");
+    }
+    // A name of the DOM's attribute API, spelled anywhere: a call, an alias, a pattern key, a node's value.
+    for source in [
+        "export function f(el: HTMLElement) { el.setAttribute('a', 'b'); }",
+        "export function f(el: HTMLElement) { el.removeAttribute('type'); }",
+        "export function f(el: HTMLElement) { const { setAttribute } = el; setAttribute('a', 'b'); }",
+        "export function f(el: HTMLElement) { return el.attributes.length; }",
+        "export function f(el: HTMLElement) { el.getAttributeNode('type')!.value = 'text'; }",
+    ] {
+        assert!(veto(source), "{source}");
+    }
+    // A longer identifier is no such name.
+    assert!(!veto(
+        "export function mySetAttribute() { return 1; }\nexport const attributesList = [];"
+    ));
+}
+
 /// ADR 0931: a `const` arrow is initialized at every run of a forwarder
 /// written after its declarator, unless a hoisted declaration lies between
 /// or the declarator sits in a `switch` clause.

@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1146: a createEffect in the change handler of a literal checkbox or radio is a proven missing-owner violation; Chrome warns NO_OWNER_EFFECT at each."
+}

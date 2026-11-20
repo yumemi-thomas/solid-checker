@@ -70,8 +70,8 @@ mod test_runner;
 pub(crate) use intrinsics::mentions_word;
 pub(crate) use project_memos::{
     DispatchVetoAnswer, EffectApplyCalls, EffectApplyRegions, FlushVetoAnswer,
-    IntrinsicHandedToUnseen, PROJECT_TABLES_FROM, ProjectTables, RouterParams, SourceTexts,
-    StringCodeVeto, TupleIterationVeto,
+    IntrinsicHandedToUnseen, PROJECT_TABLES_FROM, ProjectTables, RetypeVeto, RouterParams,
+    SourceTexts, StringCodeVeto, TupleIterationVeto,
 };
 pub(crate) use test_runner::TestRunnerCallback;
 
@@ -982,6 +982,7 @@ pub(super) struct SemanticLookup<'a> {
     tuple_iteration_veto: crate::base::reads::Recorded<bool>,
     string_code_veto: crate::base::reads::Recorded<bool>,
     intrinsic_handed_to_unseen: crate::base::reads::Recorded<bool>,
+    retype_veto: crate::base::reads::Recorded<bool>,
     /// ADR 0277: `(path, function span, parameter index)` for each parameter
     /// a synchronous project function calls on its every-completion path.
     parameter_completion_calls: crate::base::reads::Recorded<HashSet<(&'a str, Span, usize)>>,
@@ -1369,6 +1370,7 @@ impl<'a> SemanticLookup<'a> {
             tuple_iteration_veto: crate::base::reads::Recorded::new(),
             string_code_veto: crate::base::reads::Recorded::new(),
             intrinsic_handed_to_unseen: crate::base::reads::Recorded::new(),
+            retype_veto: crate::base::reads::Recorded::new(),
             parameter_completion_calls: crate::base::reads::Recorded::new(),
             never_returning_calls: OnceLock::new(),
             parameter_testing_functions: crate::base::reads::Recorded::new(),
@@ -2723,6 +2725,14 @@ impl<'a> SemanticLookup<'a> {
         *self
             .intrinsic_handed_to_unseen
             .get_or_init(|| self.whole_program_answer::<IntrinsicHandedToUnseen>())
+    }
+
+    /// ADR 1146: some project file may write the `type` of an element
+    /// ([`crate::change_delivery::program_may_retype`]).
+    pub(crate) fn element_retype_possible(&self) -> bool {
+        *self
+            .retype_veto
+            .get_or_init(|| self.whole_program_answer::<RetypeVeto>())
     }
 
     /// ADR 0292: whether `property` holding `function` is the `default` of a
