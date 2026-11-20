@@ -380,11 +380,11 @@ fn shadow_reach(lookup: &SemanticLookup<'_>) -> ShadowReach {
                     // names; one nothing resolves may be any function.
                     if let Some(expression) = attribute.expression {
                         let expression = file.ast.peel_ts_sugar_span(expression);
-                        if file
+                        let literal = file
                             .ast
                             .function_at(expression)
-                            .is_none_or(|function| function.span != expression)
-                        {
+                            .is_some_and(|function| function.span == expression);
+                        if !literal {
                             match lookup
                                 .function_called_at(file.path.as_str(), expression)
                                 .or_else(|| lookup.object_member_function(file, expression))
@@ -399,7 +399,10 @@ fn shadow_reach(lookup: &SemanticLookup<'_>) -> ShadowReach {
                 }
             }
             // ADR 1139 r1 (F2): the handlers an intrinsic element's spread hands it (ADR 0358's exact targets); an unresolved spread may hand any
-            // function.
+            // function. A component's spread is its props: where the component spreads them onto an element, that spread is asked there.
+            if !crate::object_members::intrinsic_element(file, element) {
+                continue;
+            }
             for spread in &element.spreads {
                 match lookup
                     .spread_handler_targets()
@@ -410,7 +413,7 @@ fn shadow_reach(lookup: &SemanticLookup<'_>) -> ShadowReach {
                             .extend(targets.iter().map(|(path, span)| (path.to_string(), *span)));
                     }
                     Some(None) => return ShadowReach::Unbounded,
-                    None => {}
+                    None => return ShadowReach::Unbounded,
                 }
             }
         }

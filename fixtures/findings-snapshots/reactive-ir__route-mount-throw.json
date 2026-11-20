@@ -38,11 +38,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/route-mount-throw/Routes.tsx",
       "start": 586,
-      "end": 593,
+      "end": 591,
       "fixes": 0
     },
     {
@@ -81,11 +81,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/route-mount-throw/Routes.tsx",
       "start": 818,
-      "end": 825,
+      "end": 823,
       "fixes": 0
     },
     {
@@ -124,11 +124,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/route-mount-throw/Routes.tsx",
       "start": 1040,
-      "end": 1047,
+      "end": 1045,
       "fixes": 0
     },
     {
@@ -168,11 +168,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/route-mount-throw/Routes.tsx",
       "start": 1286,
-      "end": 1293,
+      "end": 1291,
       "fixes": 0
     },
     {
@@ -234,11 +234,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/route-mount-throw/Routes.tsx",
       "start": 1698,
-      "end": 1705,
+      "end": 1703,
       "fixes": 0
     },
     {
@@ -277,11 +277,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/route-mount-throw/Routes.tsx",
       "start": 2031,
-      "end": 2038,
+      "end": 2036,
       "fixes": 0
     },
     {
@@ -353,11 +353,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/route-mount-throw/Routes.tsx",
       "start": 2576,
-      "end": 2583,
+      "end": 2581,
       "fixes": 0
     },
     {
@@ -441,11 +441,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/route-mount-throw/Routes.tsx",
       "start": 2862,
-      "end": 2869,
+      "end": 2867,
       "fixes": 0
     },
     {
@@ -485,11 +485,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/route-mount-throw/Routes.tsx",
       "start": 3303,
-      "end": 3310,
+      "end": 3308,
       "fixes": 0
     },
     {
@@ -529,11 +529,11 @@
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
-      "blocker": "flush-in-effect-unaccounted",
+      "blocker": "handler-dispatch-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/route-mount-throw/Routes.tsx",
       "start": 3557,
-      "end": 3564,
+      "end": 3562,
       "fixes": 0
     },
     {

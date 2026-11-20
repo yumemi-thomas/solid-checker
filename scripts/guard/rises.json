@@ -7992,6 +7992,22 @@
    "to": 1,
    "adr": "ADR 1139",
    "fact": "creation-throws-first where an apply may deliver into a shadow tree and a JSX handler may reach the creation (ShadowReach; unbounded at an unresolved call); package-finding-at-entry where the after-await rows lose owner-varies-by-caller"
+  },
+  {
+   "fixture": "reactive-ir/jsx-creation-sites",
+   "key": "SC4001 creation-throws-first",
+   "from": 0,
+   "to": 5,
+   "adr": "ADR 1139",
+   "fact": "r1: may_hold_handler counts a JSX spread (delivery and shadow answers); ShadowReach unbounded at an unresolved spread or handler value"
+  },
+  {
+   "fixture": "reactive-ir/route-mount-throw",
+   "key": "SC2008 handler-dispatch-unproven",
+   "from": 0,
+   "to": 10,
+   "adr": "ADR 1139",
+   "fact": "r1: may_hold_handler counts a JSX spread (delivery and shadow answers); ShadowReach unbounded at an unresolved spread or handler value"
   }
  ]
 }

@@ -103,11 +103,11 @@
   "SC2007 static-source-unproven": 7,
   "SC2008 callee-callback-timing": 1,
   "SC2008 creation-throws-first": 1,
-  "SC2008 flush-in-effect-unaccounted": 418,
+  "SC2008 flush-in-effect-unaccounted": 408,
   "SC2008 function-run-unplaced": 30,
   "SC2008 function-unentered": 5,
   "SC2008 generator-step-unplaced": 6,
-  "SC2008 handler-dispatch-unproven": 158,
+  "SC2008 handler-dispatch-unproven": 168,
   "SC2008 package-finding-at-entry": 9,
   "SC2008 package-operation-in-effect-apply": 1,
   "SC2008 parameter-initializer-unplaced": 11,
@@ -129,9 +129,9 @@
   "SC3001 refused-creation-unrun": 1,
   "SC3002 function-unentered": 2,
   "SC4001 async-flight-error-unobserved": 4,
-  "SC4001 component-identity-unproven": 15,
+  "SC4001 component-identity-unproven": 14,
   "SC4001 computation-error-unobserved": 31,
-  "SC4001 creation-throws-first": 14,
+  "SC4001 creation-throws-first": 22,
   "SC4001 function-run-unplaced": 280,
   "SC4001 function-unentered": 3,
   "SC4001 handler-key-overridden": 4,
@@ -199,9 +199,9 @@
   "SC5008 pending-read-unresolved": 24,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5437,
+  "SC6002 effect-creation-unaccounted": 5438,
   "SC6002 effect-owner-unproven": 52,
-  "SC6002 function-run-unplaced": 59,
+  "SC6002 function-run-unplaced": 62,
   "SC6002 generator-step-unplaced": 1,
   "SC6002 package-finding-at-entry": 27,
   "SC6002 package-operation-in-effect-apply": 1,
@@ -5006,6 +5006,15 @@
     "proved": "reactive-ir/object-member-import",
     "open": "reactive-ir/context-callee-past-await"
    }
+  },
+  {
+   "fixture": "reactive-ir/jsx-creation-sites",
+   "key": "SC4001 component-identity-unproven",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1139",
+   "kind": "relabel",
+   "relabeledTo": "SC4001 creation-throws-first"
   }
  ],
  "renames": []
