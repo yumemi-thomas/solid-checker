@@ -8326,7 +8326,12 @@ impl LocalAccessContext<'_, '_> {
                 }
                 StoreHeadGet::Undecided(reason) => {
                     let key = (object.path.clone(), object.start_byte, object.end_byte);
-                    if execution.reports_untracked_read() && seen.insert(key) {
+                    // ADR 1138: a whole tuple's index in a function nothing places keeps its row too: what the element is handed
+                    // to is not followed, and no role there ends the site.
+                    if (execution.reports_untracked_read()
+                        || (whole_tuple && execution.reports_unplaced()))
+                        && seen.insert(key)
+                    {
                         result.dispatch_obligations.push(crate::StaticDefect {
                             kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
                                 callee: file

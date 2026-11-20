@@ -76,6 +76,9 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   makes the store (a `createStore` slot, a projection a primitive or a hook returns
   whole) and whatever TypeScript wraps the receiver (`as`, `!`, `satisfies`;
   ADR 1121).
+  A tuple held whole (`const st = createStore(…)`) is no store: only `st[0].k` is
+  its Get; `st[0]` alone, `st[1]` or a dynamic index is uncertifiable, since what the
+  element is handed to is not followed (ADR 1138).
   A function a primitive names by its binding (`createMemo(cb)`, `onClick={cb}`,
   `onSettled(cb)`) takes that position's role only when every reference to it is
   a position, a resolved call or a `const` alias accounted the same way; any other
