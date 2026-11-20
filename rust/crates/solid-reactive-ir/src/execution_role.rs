@@ -20,6 +20,7 @@ mod project_consumer;
 
 mod jsx_census;
 pub(crate) use jsx_census::*;
+mod family4_census; // MEASUREMENT ONLY (ADR 1114 family 4, step 0)
 mod write_roles;
 pub(crate) use write_roles::*;
 mod slot_layers;
@@ -429,9 +430,23 @@ pub(crate) fn read_execution_role(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
 ) -> ExecutionRole {
-    crate::role_log::decide("read", file.path.as_str(), span, || {
+    let role = crate::role_log::decide("read", file.path.as_str(), span, || {
         read_execution_role_unlogged(file, span, allowed, entities, symbol_names, lookup)
-    })
+    });
+    if family4_census::enabled() {
+        family4_census::note("read", file, span, role, lookup, |call| {
+            semantic_execution_role_within(
+                file,
+                call,
+                allowed,
+                entities,
+                symbol_names,
+                lookup,
+                &mut HashSet::default(),
+            )
+        });
+    }
+    role
 }
 
 fn read_execution_role_unlogged(
