@@ -3388,7 +3388,6 @@ pub(crate) fn visible_string_code(lookup: &SemanticLookup<'_>) -> bool {
         || lookup.file_slots().iter().any(|file| {
             file.ast.calls.iter().any(|call| {
                 string_code_reference(file, call.callee, lookup, 24, false)
-                    || string_timer_call(file, call, lookup)
                     || tuple_mutation_method(file, call, lookup) == Some("stringCode")
                     || (call.construct
                         && lookup
@@ -3404,51 +3403,6 @@ pub(crate) fn visible_string_code(lookup: &SemanticLookup<'_>) -> bool {
                             }))
             })
         })
-}
-
-/// ADR 1137: a timer (`setTimeout`, `setInterval`, bare or a member the standard library declares) whose handler may be a string, which it runs as
-/// code: a spread, a primitive, or anything not seen to be a function (a function literal, or a name that resolves to a function of the program).
-fn string_timer_call(file: &FileFacts, call: &ast::CallFact, lookup: &SemanticLookup<'_>) -> bool {
-    if call.construct {
-        return false;
-    }
-    let bare = matches!(
-        global_name(file, file.ast.peel_ts_sugar_span(call.callee)),
-        Some("setTimeout" | "setInterval")
-    );
-    let declared = || {
-        lookup
-            .placing_standard_declaration(file, call)
-            .is_some_and(|declaration| {
-                let name = declaration.qualified_name.as_ref();
-                name.rsplit('.').next().is_some_and(|last| matches!(last, "setTimeout" | "setInterval"))
-            })
-    };
-    if !bare && !declared() {
-        return false;
-    }
-    let Some(handler) = call.arguments.first() else {
-        return false;
-    };
-    if handler.spread || handler.runtime_value_kind == ast::RuntimeValueKind::Primitive {
-        return true;
-    }
-    if handler.runtime_value_kind == ast::RuntimeValueKind::Function
-        || function_literal(file, handler.span).is_some()
-    {
-        return false;
-    }
-    // The compiler's type of the handler (demanded with no symbol observation): a value that may not be a string is no code. Unknown or absent stays code.
-    if lookup
-        .entity_at(file.path.as_str(), handler.span)
-        .and_then(|entity| entity.primitive_value_domain.present())
-        .is_some_and(|domain| !domain.unknown() && !domain.may_be_string())
-    {
-        return false;
-    }
-    lookup
-        .function_called_at(file.path.as_str(), file.ast.peel_ts_sugar_span(handler.span))
-        .is_none()
 }
 
 pub(super) fn string_code_reference(

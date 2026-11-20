@@ -669,6 +669,9 @@ pub(crate) enum Hazard {
     /// A call TypeFacts resolves to a standard-library `Function`
     /// constructor or `eval` (ordinal in `calls`), whatever its validity.
     CodeEvaluatingCall,
+    /// ADR 1137: code may be built from a string some other way (value 0): the global `eval` or `Function` used as a value (handed on, aliased, called where
+    /// no resolution names it), a timer whose handler may be a string, a `.constructor(…)` call.
+    StringCode,
     /// A member, destructured property or callee spelled like a reflective
     /// definer (review round 1 of ADR 0293; value 0).
     ReflectiveDefinitionSpelling,
@@ -3045,6 +3048,71 @@ pub(crate) fn impostor_veto(
         )
 }
 
+/// ADR 1137: whether the file may build code from a string in a way [`Hazard::Eval`] and [`Hazard::CodeEvaluatingCall`] do not record:
+///
+/// - the global `eval` or `Function` (no binding of the file declares the name) in any position but a type, a member's object (`Function.prototype.call`)
+///   or a binary operand (`x instanceof Function`): handed on, aliased, called or constructed;
+/// - `setTimeout`/`setInterval` (bare or a member) whose handler may be a string: a spread, a primitive, or anything not seen to be a function (a function
+///   literal, or a value whose compiler type may not be a string; the primitive domain is demanded there with no symbol observation);
+/// - a call of a member named `constructor` with an argument (`fn.constructor("code")` reaches `Function`).
+fn string_code_spelled(view: &FileView<'_>) -> bool {
+    use solid_facts::ast::{IdentifierRole, ReferencePosition, RuntimeValueKind};
+    let file = view.file;
+    let ast = &file.ast;
+    let position = |span: Span| {
+        ast.reference_positions
+            .binary_search_by_key(&(span.start, span.end), |fact| (fact.span.start, fact.span.end))
+            .ok()
+            .map(|found| ast.reference_positions[found].position)
+    };
+    let global_value = ast.identifiers.iter().any(|identifier| {
+        identifier.role == IdentifierRole::Reference
+            && matches!(file.source_text(identifier.span), Some("eval" | "Function"))
+            && ast.reference_declaration(identifier.span).is_none()
+            && !ast.type_names.contains(&identifier.span)
+            && !matches!(
+                position(identifier.span),
+                Some(
+                    ReferencePosition::TypeOnly
+                        | ReferencePosition::MemberObject
+                        | ReferencePosition::BinaryOperand
+                )
+            )
+    });
+    if global_value {
+        return true;
+    }
+    ast.calls.iter().any(|call| {
+        let callee = ast.peel_ts_sugar_span(call.callee);
+        let named = ast
+            .member_at(callee)
+            .and_then(|member| file.source_text(member.property))
+            .or_else(|| file.source_text(callee));
+        match named {
+            Some("constructor") => !call.construct && !call.arguments.is_empty(),
+            Some("setTimeout" | "setInterval") if !call.construct => {
+                let Some(handler) = call.arguments.first() else {
+                    return false;
+                };
+                if handler.spread || handler.runtime_value_kind == RuntimeValueKind::Primitive {
+                    return true;
+                }
+                let function = handler.runtime_value_kind == RuntimeValueKind::Function
+                    || ast
+                        .functions
+                        .iter()
+                        .any(|function| function.span == ast.peel_ts_sugar_span(handler.span));
+                let typed_not_string = view
+                    .entity_at(handler.span)
+                    .and_then(|entity| entity.primitive_value_domain.present())
+                    .is_some_and(|domain| !domain.unknown() && !domain.may_be_string());
+                !function && !typed_not_string
+            }
+            _ => false,
+        }
+    })
+}
+
 /// The memo begin keeps this index between builds and updates it with the
 /// changed files only (`MemoStore::kept_hazards`, ADR 0909): a file's
 /// contribution must stay a function of its view. It reads no
@@ -3102,6 +3170,9 @@ pub(crate) fn hazards(view: &FileView<'_>, _: &BuildConstants<'_>) -> Vec<(Hazar
         {
             entries.push((Hazard::CodeEvaluatingCall, ordinal(index)));
         }
+    }
+    if string_code_spelled(view) {
+        entries.push((Hazard::StringCode, 0));
     }
     if reflective_definition_spelled(file) {
         entries.push((Hazard::ReflectiveDefinitionSpelling, 0));

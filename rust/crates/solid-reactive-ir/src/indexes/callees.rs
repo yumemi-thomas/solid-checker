@@ -437,9 +437,8 @@ impl<'a> SemanticLookup<'a> {
         file: &FileFacts,
         callee: Span,
     ) -> Option<&'a ResolvedCall> {
-        // ADR 1137: the string-code veto is left out here. The string-code census itself places calls through this (`tuple_mutation_method`), and
-        // a standard call the resolution above declines was declined by the impostor or reached-patch veto, never by string code, so asking it
-        // would change no answer and only close a cycle.
+        // ADR 1137: the string-code veto is left out here: a standard call the resolution above declines was declined by the impostor or the
+        // reached-patch veto, never by string code, so asking it changes no answer.
         self.resolved_callee_call(file, callee).or_else(|| {
             (self.impostor_withheld(file, callee) || self.reached_patch_withheld(file, callee))
                 .then(|| {
@@ -481,9 +480,13 @@ impl<'a> SemanticLookup<'a> {
             || self.string_code_patch_withheld(file, callee)
     }
 
-    /// ADR 1137: whether the standard call at `callee` may run a member code built from a string replaced: the program holds such code anywhere.
+    /// ADR 1137: whether the standard call at `callee` may run a member code built from a string replaced: some analyzed file builds code from a string
+    /// (a direct `eval`, a call resolved to `eval` or the `Function` constructor, or [`crate::base::Hazard::StringCode`]'s other spellings).
     pub(crate) fn string_code_patch_withheld(&self, file: &FileFacts, callee: Span) -> bool {
-        self.visible_string_code() && self.resolved_standard_call_name(file, callee).is_some()
+        (self.hazard_present(crate::base::Hazard::Eval)
+            || self.hazard_present(crate::base::Hazard::CodeEvaluatingCall)
+            || self.hazard_present(crate::base::Hazard::StringCode))
+            && self.resolved_standard_call_name(file, callee).is_some()
     }
 
     /// ADR 0876: whether a write some chain reaches may have replaced the
