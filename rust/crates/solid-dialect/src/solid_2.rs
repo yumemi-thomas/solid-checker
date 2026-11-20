@@ -2656,12 +2656,33 @@ impl Dialect for Solid2 {
     /// node for `eventHandler`. Only the release whose spread keys were read (`on` and an upper-case letter) answers.
     fn spread_event_delegated(&self, key: &str) -> bool {
         const DELEGATED: [&str; 22] = [
-            "beforeinput", "click", "dblclick", "contextmenu", "focusin", "focusout", "input", "keydown", "keyup", "mousedown",
-            "mousemove", "mouseout", "mouseover", "mouseup", "pointerdown", "pointermove", "pointerout", "pointerover",
-            "pointerup", "touchend", "touchmove", "touchstart",
+            "beforeinput",
+            "click",
+            "dblclick",
+            "contextmenu",
+            "focusin",
+            "focusout",
+            "input",
+            "keydown",
+            "keyup",
+            "mousedown",
+            "mousemove",
+            "mouseout",
+            "mouseover",
+            "mouseup",
+            "pointerdown",
+            "pointermove",
+            "pointerout",
+            "pointerover",
+            "pointerup",
+            "touchend",
+            "touchmove",
+            "touchstart",
         ];
-        matches!(self.spread_event_keys, releases::SpreadEventKeys::OnUppercase)
-            && self.spread_key_is_event(key) == Some(true)
+        matches!(
+            self.spread_event_keys,
+            releases::SpreadEventKeys::OnUppercase
+        ) && self.spread_key_is_event(key) == Some(true)
             && DELEGATED.contains(&key[2..].to_ascii_lowercase().as_str())
     }
 

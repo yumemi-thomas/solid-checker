@@ -75,7 +75,11 @@ pub(crate) fn mark(program: &mut Program, lookup: &SemanticLookup<'_>) {
 
 /// Whether `site` is written in the value of an `on…` attribute of a disabled control that the compiler delegated, or (ADR 1141) in a
 /// handler that reaches a disabled control with spreads through the runtime's delegated dispatcher.
-fn in_delegated_handler_of_disabled_control(lookup: &SemanticLookup<'_>, file: &FileFacts, site: Span) -> bool {
+fn in_delegated_handler_of_disabled_control(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    site: Span,
+) -> bool {
     // A recorded delegation is the compiler's own answer for that handler; completeness (`generated_operations_complete`) is
     // what an absent operation would need, and no absence is read here.
     let model = &file.compiler.semantic_model;
@@ -133,7 +137,9 @@ fn spread_handler_of_disabled_control(
     let by_attribute = element.attributes.iter().any(|attribute| {
         attribute.namespace.is_none()
             && attribute.value.is_some_and(|value| value.contains(site))
-            && file.source_text(attribute.local_name).is_some_and(delegated)
+            && file
+                .source_text(attribute.local_name)
+                .is_some_and(delegated)
     });
     // A function an in-place literal holds directly under a key: one of ADR 0358's exact targets of that spread.
     by_attribute
