@@ -28,6 +28,9 @@ pub(crate) fn later_source_may_supply(
     after: Span,
     key: &str,
 ) -> bool {
+    if !lookup.dialect.spread_skips_key_a_later_source_has() {
+        return false;
+    }
     element
         .attributes
         .iter()
@@ -78,6 +81,29 @@ pub(crate) fn literal_key_of<'f>(file: &'f FileFacts, function: Span) -> Option<
         .find(|property| file.ast.peel_ts_sugar_span(property.value) == function)
         .and_then(|property| file.source_text(property.key))
         .map(|key| key.trim_matches(['\'', '"']))
+}
+
+/// Whether the event handler written as the value of an intrinsic element's attribute at `handler` (a compiler event-handler
+/// role's span) is one a later source of the element may supply under the attribute's key.
+pub(crate) fn attribute_handler_overridden(
+    file: &FileFacts,
+    lookup: &SemanticLookup<'_>,
+    handler: Span,
+) -> bool {
+    let handler = file.ast.peel_ts_sugar_span(handler);
+    file.ast.jsx_elements.iter().any(|element| {
+        !element.spreads.is_empty()
+            && crate::object_members::intrinsic_element(file, element)
+            && element.attributes.iter().any(|attribute| {
+                attribute
+                    .expression
+                    .is_some_and(|expression| file.ast.peel_ts_sugar_span(expression) == handler)
+                    && file.source_text(attribute.name).is_some_and(|key| {
+                        lookup.dialect.spread_key_is_event(key) == Some(true)
+                            && later_source_may_supply(file, lookup, element, attribute.span, key)
+                    })
+            })
+    })
 }
 
 /// Marks each owner row written inside a handler a later source of its element overrides (module docs).

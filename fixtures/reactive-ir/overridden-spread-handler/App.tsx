@@ -36,3 +36,18 @@ export function AttributeOverridden() {
   const extra: { onClick?: () => void } = { onClick: () => {} };
   return <button onClick={() => { createRenderEffect(() => s1.v, () => {}); }} {...extra}>attr</button>;
 }
+
+// A helper an overridden handler calls runs only if the handler does; the helper an attached handler calls runs unowned.
+function startOverridden(s: { v: number }) { createRenderEffect(() => s.v, () => {}); }
+function startAttached(s: { v: number }) { createRenderEffect(() => s.v, () => {}); }
+export function Helpers() {
+  const [s1] = createStore({ v: 0 });
+  const extra: { onClick?: () => void } = { onClick: () => {} };
+  return (
+    <div>
+      <button onClick={() => startOverridden(s1)} {...extra}>overridden</button>
+      <button {...{ onClick: () => startOverridden(s1) }} onClick={undefined}>overridden spread</button>
+      <button {...{ onClick: () => startAttached(s1) }}>attached</button>
+    </div>
+  );
+}

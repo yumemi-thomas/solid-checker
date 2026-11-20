@@ -122,6 +122,7 @@ fn catalog_prose_program() -> Program {
             report: true,
             earlier_check_throws: false,
             handler_on_disabled_control: false,
+            handler_key_overridden: false,
         }],
         async_reads: vec![AsyncRead {
             provenance_open: false,

@@ -893,6 +893,17 @@ pub(crate) fn discover_owner_file(
                 solid_facts::compiler::CallbackRoleKind::DirectiveApply => {
                     OwnerEdgeKind::RefApplied
                 }
+                // ADR 1140: a later source of the element may supply the
+                // attribute's key, and the runtime's spread then never
+                // attaches this handler: no proven run.
+                _ if crate::overridden_handlers::attribute_handler_overridden(
+                    file,
+                    lookup,
+                    callback.span,
+                ) =>
+                {
+                    OwnerEdgeKind::MayBeUnowned
+                }
                 _ if lookup.synchronous_event_dispatch_present()
                     || crate::execution_role::handler_event_denied(file, callback.span) =>
                 {

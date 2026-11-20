@@ -68,6 +68,15 @@ pub(super) fn owner_node(
             | OWNER_CONTEXT_OWNED
             | OWNER_CONTEXT_UNOWNED;
     }
+    // ADR 1140: a handler a later source of its element may override is never
+    // proven attached, so never proven to run unowned.
+    if file.compiler.callback_roles.iter().any(|callback| {
+        callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+            && callback.span.contains(function.body)
+            && crate::overridden_handlers::attribute_handler_overridden(file, lookup, callback.span)
+    }) {
+        seed_context = (seed_context & !OWNER_CONTEXT_PROVEN_UNOWNED) | OWNER_CONTEXT_UNOWNED;
+    }
     // ADR 0319's walk, in its owner mode, proved that every invocation of
     // this literal comes through event delivery (a callback a helper calls from
     // the handler it returns, which the caller spreads onto an element): it
