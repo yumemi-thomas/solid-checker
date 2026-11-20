@@ -40915,5 +40915,61 @@
   "found": "Opus review of ADR 1148 (review-1148.md, probe p43, checker-verified; Chrome not run: it needs a frame server); reproduced here by the fixture change-retyped-frames (a stand-in module the program loads) on the reviewed head binary",
   "fixed": "ADR 1148 round 1 (Dialect::runtime_module_element_writes answers per module specifier, root and subpaths, as Option<ElementWrites>: Exports for the root and the JSX runtimes, Any for the frames tier, None for the audited tiers, unknown for the rest; solid_v2_runtime_subpaths.txt freezes every exported subpath of the pinned packages, held against the Solid 2 audit by solid-dialect's every_exported_runtime_subpath_is_audited and against the installed packages by scripts/fuzz/runtime-exports.test.mjs; takes_runtime_writer asks it of an import, a side-effect import, a re-export, an export *, an import() and a require(); a specifier that is no runtime package's by name but resolves into a file of one (a relative path into node_modules, a paths alias) is unknown too, by the build's attested resolution; fixtures change-retyped-frames (U) and change-retyped-frames-alias (U); unit test the_retype_veto_follows_a_specifier_into_a_runtime_file)",
   "outside": "the generator has no checkbox or radio `change` handler and imports no subpath of the web package's runtime, so it cannot generate the program; the fixture and the tests hold it"
+ },
+ {
+  "finding": "ADR 1148 Opus re-check of d0c1d494e (review-1148-r2.md), N1: the retype veto of the checkbox `change` proof matched the DOM names in the source text, and the parser decodes a name written with an escape (`document.ev\\u0061luate(…).singleNodeV\\u0061lue`, `el[\"\\u0061ttributes\"]`, a template key, `el.s\\u0065tAttribute(\"type\", \"text\")`, `el.t\\u0079pe = \"text\"`) to a name no text spells, so the checker certified a literal checkbox whose `type` the program rewrites to text, which delivers `change` as a text control does, here inside a later root's body: the handler's write ran owned (a false clean)",
+  "found": "Opus review of ADR 1148 round 2 (review-1148-r2.md, probes n1-n3, Chrome-verified by the reviewer); the template, `type`-member, method and collection-identifier spellings are the author's twins of the same hole",
+  "fixed": "ADR 1148 round 2 (facts schema 107: AstFacts::escaped_words lists the decoded words of every identifier, string literal and template piece written with an escape, solid-facts/src/ast/escaped_words.rs; change_delivery.rs spells_by_escape matches them against ATTRIBUTE_API and the key `type` beside the source-text scan; fixtures change-escaped-{identifier,string-key,collection,template,type-member} (U), -type-string (held) and -benign (certified), runtime-oracle cases of the same names, unit tests in escaped_words.rs and change_delivery.rs, each arm failing without its clause)",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-collection-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-collection-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-collection-store-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-collection-ident-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-collection-ident-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-collection-ident-store-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-collection-template-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-collection-template-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-collection-template-store-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-member-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-member-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-member-store-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-method-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-method-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-method-store-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-xpath-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-xpath-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-xpath-store-direct-none"
+  ],
+  "rediscovered": "focus on the eight `dny-change-checkbox-*` contexts' mx-recall programs (misuse.mjs CHECKBOX_RETYPES, REACTIVE_WRITE_IN_OWNED_SCOPE and STRICT_READ_UNTRACKED, 552 programs, fast host with Chrome confirming, debug checkers, 2026-11-21): the reviewed head (d0c1d494e) 18 false cleans at REACTIVE_WRITE_IN_OWNED_SCOPE (234 over both codes: the six escaped spellings; the plain `retyped` cell and the string key were vetoed already); FIXED here (0 false cleans, every program a recall gap)"
+ },
+ {
+  "finding": "ADR 1148 Opus re-check of d0c1d494e (review-1148-r2.md), N1: the retype veto of the checkbox `change` proof matched the DOM names in the source text, and the parser decodes a name written with an escape (`document.ev\\u0061luate(…).singleNodeV\\u0061lue`, `el[\"\\u0061ttributes\"]`, a template key, `el.s\\u0065tAttribute(\"type\", \"text\")`, `el.t\\u0079pe = \"text\"`) to a name no text spells, so the checker certified a literal checkbox whose `type` the program rewrites to text, which delivers `change` as a text control does, here inside a later root's body: the handler's read ran owned (a false clean)",
+  "found": "Opus review of ADR 1148 round 2 (review-1148-r2.md, probes n1-n3, Chrome-verified by the reviewer); the template, `type`-member, method and collection-identifier spellings are the author's twins of the same hole",
+  "fixed": "ADR 1148 round 2 (facts schema 107: AstFacts::escaped_words lists the decoded words of every identifier, string literal and template piece written with an escape, solid-facts/src/ast/escaped_words.rs; change_delivery.rs spells_by_escape matches them against ATTRIBUTE_API and the key `type` beside the source-text scan; fixtures change-escaped-{identifier,string-key,collection,template,type-member} (U), -type-string (held) and -benign (certified), runtime-oracle cases of the same names, unit tests in escaped_words.rs and change_delivery.rs, each arm failing without its clause)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-dny-change-checkbox-esc-collection-memo-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-collection-signal-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-collection-store-as-cast-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-collection-ident-memo-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-collection-ident-signal-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-collection-ident-store-as-cast-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-collection-template-memo-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-collection-template-signal-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-collection-template-store-as-cast-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-member-memo-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-member-signal-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-member-store-as-cast-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-method-memo-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-method-signal-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-method-store-as-cast-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-xpath-memo-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-xpath-signal-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-xpath-store-as-cast-direct-none"
+  ],
+  "rediscovered": "focus on the eight `dny-change-checkbox-*` contexts' mx-recall programs (misuse.mjs CHECKBOX_RETYPES, REACTIVE_WRITE_IN_OWNED_SCOPE and STRICT_READ_UNTRACKED, 552 programs, fast host with Chrome confirming, debug checkers, 2026-11-21): the reviewed head (d0c1d494e) 216 false cleans at STRICT_READ_UNTRACKED (234 over both codes: the six escaped spellings; the plain `retyped` cell and the string key were vetoed already); FIXED here (0 false cleans, every program a recall gap)"
  }
 ]

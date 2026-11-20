@@ -54,8 +54,10 @@ const CHECKABLE_TYPES: [&str; 2] = ["checkbox", "radio"];
 /// (`HTMLInputElement.prototype.__lookupSetter__("type").call(el, "text")`), and every route to the control's `Attr` node, whose `value`, `nodeValue` or `textContent`
 /// is the attribute (`document.evaluate("//input/@type", …).singleNodeValue.value = "text"`: a write no key `type` names, which Chrome retypes the control by).
 /// A program that spells one is no program whose controls keep their type. A spelling is matched, never a symbol: the platform's methods are reached through
-/// values the types may not name (`any`), so a veto by spelling is the fail-closed reading of the family, and it can only withdraw the proof. The dialect's own
-/// exports are not in this list: they are matched as the exact imported symbols they are ([`takes_runtime_writer`]).
+/// values the types may not name (`any`), so a veto by spelling is the fail-closed reading of the family, and it can only withdraw the proof. A name is read as the engine
+/// reads it, not as the source writes it: the source text, and the decoded word of an identifier, string or template piece written with an escape
+/// (`document.ev\u0061luate`, `el["\u0061ttributes"]`: [`spells_by_escape`]). The dialect's own exports are not in this list: they are matched as the exact imported symbols
+/// they are ([`takes_runtime_writer`]).
 const ATTRIBUTE_API: [&str; 28] = [
     "setAttribute",
     "setAttributeNS",
@@ -254,7 +256,7 @@ pub(crate) fn program_may_retype(lookup: &SemanticLookup<'_>) -> bool {
 
 /// The first place that may write the `type` of an element, as its file and what it does: a write whose key is `type`, or is a computed one no proof narrows away from it
 /// ([`write_may_be_type`]) (`type-write`); a spelling of a name of the DOM's attribute API, of an accessor lookup or of a route to an `Attr` node ([`ATTRIBUTE_API`])
-/// (`spelled-name`); a computed key that folds to such a name (`el["set" + "Attribute"]("type", "text")`: the name is spelled nowhere, the key's proof names it)
+/// (`spelled-name`, in the source text or by its decoded spelling: [`spells_by_escape`]); a computed key that folds to such a name (`el["set" + "Attribute"]("type", "text")`: the name is spelled nowhere, the key's proof names it)
 /// (`folded-name`); or a module of the dialect's own runtime taken into the file that may write an element ([`takes_runtime_writer`]) (`runtime-writer`).
 ///
 /// Every file of the program is read, a dependency's source as the project's: a dependency needs no element handed to it (`document.querySelectorAll("input").forEach((i)
@@ -294,6 +296,7 @@ fn file_retype_hazard(lookup: &SemanticLookup<'_>, file: &FileFacts) -> Option<&
     if ATTRIBUTE_API
         .iter()
         .any(|name| spells_word(&file.source, name))
+        || spells_by_escape(ast.escaped_words.iter().map(|word| word.as_str()))
     {
         return Some("spelled-name");
     }
@@ -472,6 +475,16 @@ fn write_may_be_type(file: &FileFacts, target: Span) -> bool {
         == Some("type")
 }
 
+/// Whether the file writes, with an escape, a word a spelling veto matches: a name of [`ATTRIBUTE_API`], or the key `type` (`el.t\u0079pe = "text"`, which no key of the
+/// write names as text). `spells_word` reads the source text, which holds none of them (the parser decodes `document.ev\u0061luate`, `el["\u0061ttributes"]`, a template's
+/// `` `ev\u0061luate` ``, `"\evaluate"` and a line continuation to the name); the facts hold the decoded words of every identifier, string and template piece written with an
+/// escape (`AstFacts::escaped_words`), so the veto compares the name the engine reads, whatever its spelling.
+fn spells_by_escape<'a>(words: impl IntoIterator<Item = &'a str>) -> bool {
+    words
+        .into_iter()
+        .any(|word| word == "type" || ATTRIBUTE_API.contains(&word))
+}
+
 /// Whether `source` holds `word` as an identifier: not part of a longer one.
 fn spells_word(source: &str, word: &str) -> bool {
     let identifier = |c: char| c.is_alphanumeric() || c == '_' || c == '$';
@@ -600,6 +613,55 @@ mod tests {
         assert!(!takes_the_proof(
             "const e = <input type=\"checkbox\" title={(() => {})()} onChange={f} />;"
         ));
+    }
+
+    /// Whether the file the source makes writes, with an escape, a name the retype veto matches.
+    fn escapes_a_vetoed_name(source: &str) -> bool {
+        spells_by_escape(
+            file(source)
+                .ast
+                .escaped_words
+                .iter()
+                .map(|word| word.as_str()),
+        )
+    }
+
+    #[test]
+    fn a_name_written_with_an_escape_is_vetoed_by_its_decoded_spelling() {
+        // The reviewed head (d0c1d494e) read the source text only, which holds none of these as text: a false clean (Chrome retypes the control).
+        for source in [
+            // An identifier, by `\u` and by `\u{}`.
+            "document.ev\\u0061luate(x).singleNodeV\\u0061lue.value = 'text';",
+            "el.\\u{61}ttributes.type.value = 'text';",
+            // A string key, a template key, an escape of a character that needs none, a line continuation and a hex escape.
+            "(document as any)['ev\\u0061luate'](x);",
+            "el['\\u0061ttributes'];",
+            "(document as any)[`ev\\u0061luate`](x);",
+            "el['\\evaluate'];",
+            "el['eval\\\nuate'];",
+            "el['\\x61ttributes'];",
+            // A destructured name, a binding and a method key.
+            "const { ev\\u0061luate: run } = document; run(x);",
+            "const set\\u0041ttribute = el.setAttr; set\\u0041ttribute('type', 'text');",
+            // The key `type`, as a member written (the write target's property text is `t\\u0079pe`), a string and a template.
+            "el.t\\u0079pe = 'text';",
+            "el['t\\u0079pe'] = 'text';",
+            "el[`t\\u0079pe`] = 'text';",
+            // A name inside a longer text is a word of it, as the source scan finds it.
+            "f('call set\\u0041ttribute here');",
+        ] {
+            assert!(escapes_a_vetoed_name(source), "{source}");
+        }
+        // The same names without an escape are the source scan's (`spells_word`), and escapes that spell no such word withdraw nothing.
+        for source in [
+            "document.evaluate(x); el.type = 'text';",
+            "const label = 'tab\\there\\u00e9'; const caf\\u00e9 = `a\\u0042c`; el['\\u0069d'];",
+            "f('\\n', `\\t`, '\\\\'); const r = /\\u0061ttributes/;",
+            // A word that merely contains a name is another word.
+            "el.my\\u0053etAttribute(x);",
+        ] {
+            assert!(!escapes_a_vetoed_name(source), "{source}");
+        }
     }
 
     #[test]

@@ -2166,3 +2166,17 @@ packages/wasm/owned/
 !fixtures/reactive-ir/change-dispatch-veto/node_modules/**
 !fixtures/reactive-ir/change-delivery-hazard/node_modules/
 !fixtures/reactive-ir/change-delivery-hazard/node_modules/**
+!fixtures/reactive-ir/change-escaped-identifier/node_modules/
+!fixtures/reactive-ir/change-escaped-identifier/node_modules/**
+!fixtures/reactive-ir/change-escaped-string-key/node_modules/
+!fixtures/reactive-ir/change-escaped-string-key/node_modules/**
+!fixtures/reactive-ir/change-escaped-template/node_modules/
+!fixtures/reactive-ir/change-escaped-template/node_modules/**
+!fixtures/reactive-ir/change-escaped-type-member/node_modules/
+!fixtures/reactive-ir/change-escaped-type-member/node_modules/**
+!fixtures/reactive-ir/change-escaped-type-string/node_modules/
+!fixtures/reactive-ir/change-escaped-type-string/node_modules/**
+!fixtures/reactive-ir/change-escaped-benign/node_modules/
+!fixtures/reactive-ir/change-escaped-benign/node_modules/**
+!fixtures/reactive-ir/change-escaped-collection/node_modules/
+!fixtures/reactive-ir/change-escaped-collection/node_modules/**

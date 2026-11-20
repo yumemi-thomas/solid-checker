@@ -169,6 +169,11 @@ pub struct AstFacts {
     /// that holds none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub premise_sites: Vec<PremiseSiteFact>,
+    /// ADR 1148 round 2 (facts schema 107): the words of the decoded text of every identifier, string literal and template piece the file writes with an escape
+    /// (`document.ev\u0061luate`, `el["\u0061ttributes"]`), sorted: a name a scan of the source text cannot see. A word written without an escape is the source text's
+    /// own and is not listed. Nothing is listed for a file that writes no escape.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub escaped_words: Vec<CompactString>,
     pub awaits: Vec<Span>,
     /// The subset of [`AstFacts::awaits`] proven to execute on every run of
     /// their innermost enclosing function (or of module evaluation): awaits
@@ -2737,6 +2742,7 @@ impl AstFacts {
             assignment_pattern_keys: Vec::new(),
             computed_keys: Vec::new(),
             premise_sites: Vec::new(),
+            escaped_words: Vec::new(),
             code_sinks: Vec::new(),
             uses_receiver: false,
             awaits: Vec::new(),
