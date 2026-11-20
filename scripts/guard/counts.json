@@ -246,7 +246,7 @@
   "SC9012 dependency-value-unfollowed": 23,
   "SC9012 derived-read-under-untrack": 6,
   "SC9012 dialect-specifier-mapped": 10,
-  "SC9012 escaped-name-unresolved": 41,
+  "SC9012 escaped-name-unresolved": 54,
   "SC9012 exported-parameter-member-dispatch": 83,
   "SC9012 forwarded-to-undescribed-callee": 29,
   "SC9012 function-call-target-unresolved": 8,
