@@ -29,8 +29,10 @@ const ALIAS_DEPTH: u8 = 3;
 ///
 /// - `pattern`: the initializer of an object pattern of static keys and no rest (`const { customElements } = globalThis`): a read of those names;
 /// - `pattern-open`: of any other pattern (a rest element, a computed key, a nested pattern, an array pattern);
-/// - `alias`: the initializer of a binding nothing reassigns, exports or declares again, every use of which reads a member, a pattern or a computed key, or is judged
-///   inert (`typeof`, a comparison); `alias-open`: any other binding;
+/// - `alias[<uses>]`: the initializer of a binding nothing reassigns, exports or declares again, with the kinds of use it has, sorted and distinct (`member`,
+///   `pattern`, `pattern-open`, `computed`, `inspected`, `coerced`, `regexp-arg`, `argument`, `new`, `callee`, `return`, `assign`, `store`, `spread`, `valueOf`, `other`; the
+///   uses of an alias of the alias are its own); `alias-open`: a binding the scan does not follow (reassigned, exported, declared again, a script's top-level `var`, past
+///   the depth);
 /// - `member:<name>`: the object of a static member read (`(view.defaultView || window).innerHeight`, `(a || self).document`);
 /// - `computed-read`: the object of a computed member read by a key the syntax does not fix;
 /// - `argument:<callee>`, `new:<callee>`, `callee`, `spread`: an argument of a call or a construction (named by the callee as it is spelled: `fill`, `Object.assign`,
@@ -185,8 +187,7 @@ fn is_at(expression: &Expression<'_>, span: Span) -> bool {
     expression.span() == span || expression.get_inner_expression().span() == span
 }
 
-/// `alias` where the binding the value initializes is followable to its uses and each is one the scan judges (a member, a pattern, a computed key, an inert use);
-/// `alias-open` otherwise (see [`use_shape`]).
+/// `alias[<uses>]` where the binding the value initializes is followable to its uses; `alias-open` otherwise (see [`use_shape`]).
 fn alias_shape(
     scoping: &Scoping,
     nodes: &AstNodes<'_>,
@@ -215,14 +216,41 @@ fn alias_shape(
     {
         return open();
     }
-    let followed = scoping.get_resolved_references(symbol).all(|reference| {
+    let mut uses = std::collections::BTreeSet::<String>::new();
+    for reference in scoping.get_resolved_references(symbol) {
         let shape = shape_at(scoping, nodes, reference.node_id(), script, depth - 1);
         let shape = shape.strip_prefix("branch:").unwrap_or(&shape);
+        match shape
+            .strip_prefix("alias[")
+            .and_then(|rest| rest.strip_suffix(']'))
+        {
+            // The uses of an alias of the alias are this alias's own.
+            Some(inner) => uses.extend(
+                inner
+                    .split(',')
+                    .filter(|kind| !kind.is_empty())
+                    .map(str::to_owned),
+            ),
+            None => {
+                uses.insert(use_kind(shape));
+            }
+        }
+    }
+    format!("alias[{}]", uses.into_iter().collect::<Vec<_>>().join(","))
+}
+
+/// The kind of use a shape is, for the list an alias keeps (see [`alias_shape`]).
+fn use_kind(shape: &str) -> String {
+    match shape {
         // `valueOf` hands the global object back (the scan's own rule for a member of it).
-        (shape.starts_with("member:") && shape != "member:valueOf")
-            || matches!(shape, "pattern" | "alias" | "computed-read" | "inspected")
-    });
-    if followed { "alias".to_owned() } else { open() }
+        "member:valueOf" => "valueOf".to_owned(),
+        "computed-read" => "computed".to_owned(),
+        "argument:RegExp" | "new:RegExp" => "regexp-arg".to_owned(),
+        _ if shape.starts_with("member:") => "member".to_owned(),
+        _ if shape.starts_with("argument:") => "argument".to_owned(),
+        _ if shape.starts_with("new:") => "new".to_owned(),
+        _ => shape.to_owned(),
+    }
 }
 
 /// The callee of a call as it is spelled, for a class: an identifier, `object.member` of two names, or `?`.
@@ -428,12 +456,16 @@ mod tests {
         );
         has(
             "const g = globalThis; export const x = g.foo, y = g.bar;",
-            "escape:globalThis/alias",
+            "escape:globalThis/alias[member]",
         );
-        // A binding that is handed on, reassigned or exported is not followed.
+        has(
+            "const g = globalThis; const s = g; export const x = typeof s, { a } = s, y = s.b;",
+            "escape:globalThis/alias[inspected,member,pattern]",
+        );
+        // The kinds of use a binding has are kept; a binding that is reassigned or exported is not followed.
         has(
             "const g = globalThis; export const x = h(g);",
-            "escape:globalThis/alias-open",
+            "escape:globalThis/alias[argument]",
         );
         has(
             "let g = globalThis; g = null; export const x = g.foo;",
