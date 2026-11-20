@@ -14,6 +14,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AssumedReportError, refuseAssumed } from "../lib/assumed.mjs";
 import { ignoredRules, isProgramModule } from "./codes.mjs";
+import { lastLine } from "./finding-lines.mjs";
 import { tsconfigFor } from "./typecheck.mjs";
 
 /**
@@ -380,7 +381,7 @@ export function parseFindings(analysis, dir) {
 
 const findingRow = (finding, file) => ({
   file, rule: finding.rule, id: finding.id, kind: finding.kind, ...(finding.analysisContext ? { blocker: String(finding.analysisContext).split(":")[0] } : {}),
-  line: finding.primaryLocation.line, column: finding.primaryLocation.column, endLine: finding.primaryLocation.endLine ?? finding.primaryLocation.line,
+  line: finding.primaryLocation.line, column: finding.primaryLocation.column, endLine: lastLine(finding),
   ...(String(finding.hint ?? "").includes(NO_RUNTIME_WARNING) ? { claimsSilent: true } : {}),
 });
 

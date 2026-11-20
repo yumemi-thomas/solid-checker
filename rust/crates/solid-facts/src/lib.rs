@@ -19,6 +19,8 @@ pub mod resolution;
 pub mod runtime_resolution;
 
 mod project;
+#[cfg(feature = "raw-name-trace")]
+mod raw_name_trace;
 
 pub use core::{resolve_relative_module_path, resolve_relative_module_path_indexed};
 pub use project::{
