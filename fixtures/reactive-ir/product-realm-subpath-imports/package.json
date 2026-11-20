@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#env": {
+      "browser": "./env.browser.js",
+      "default": "./env.ts"
+    }
+  }
+}

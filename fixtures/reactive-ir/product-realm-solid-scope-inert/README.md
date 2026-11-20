@@ -1,0 +1,10 @@
+# product-realm-solid-scope-inert
+
+**A Solid package the entries import whose manifest depends on nothing that writes (review round 2).** `main.tsx` imports `@solidjs/router` (a stand-in with no dependency); `setup.ts` imports `fz-prealm-any` for the tests. Nothing the page loads depends on the writer, so the realm clears the product's sites as it does without the import. The twin `-solid-scope-dependency` differs only by the stand-in's `dependencies`.
+
+- **Cleared (a typed silence, no row)**: the seven SC2002 sites of `App.tsx`. Each ends in `package_action_calls.package_action_calls.product-realm` and is named in the proof log. Dropping the silence (`SOLID_CHECKER_IR_ABLATE_SILENCE=package_action_calls.package_action_calls.product-realm`) gives back the seven rows every writer of the program gave them.
+- **Kept**: the test's own sites in `app.test.tsx` (a test is not the product) and `App.tsx:3`'s SC9012 `standard-member-impostor` row (another consumer of the writer set, `docs/open-work.md`).
+
+Twins, each its own project: cleared `-test-writer`, `-package-exports` (a package's entries), `-tsconfig-paths-applied`, `-asset-query`, `-diagnostics-off`, `-solid-scope-inert`; kept `-product-writer`, `-dev-client`, `-dev-client-production`, `-second-page`, `-plugin-name`, `-plugin-unpinned`, `-plugin-missing`, `-config-writer`, `-computed-load`, `-js-sibling`, `-subpath-imports`, `-custom-conditions`, `-tsconfig-paths`, `-url-script`, `-other-vite-config`, `-vite-script-config`, `-solid-scope-dependency`, `-diagnostics-on`, `-diagnostics-auto`, `-diagnostics-declared`.
+
+`node_modules/fz-*` and the `@solidjs/diagnostics` and `@solidjs/router` stand-ins are **not** published bytes: each is written for this fixture. `node_modules/solid-js`, `@solidjs/web` and `@solidjs/signals` are the manifests of `action-in-owned-scope-prototype-writes`; `.solid-checker/runtime.json` selects `browser`, `development`, `csr`. `vite.config.ts` is not part of the program (`tsconfig.json` excludes it); the checker reads it as configuration.
