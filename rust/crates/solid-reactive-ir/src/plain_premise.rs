@@ -487,10 +487,12 @@ pub(crate) fn program_may_write_standard_member(lookup: &SemanticLookup<'_>, mem
                 PremiseClause::StandardKeyWrite | PremiseClause::GlobalWrite => {
                     site.key == "*" || site.key == member
                 }
+                // ADR 1133: a dispatcher read as a value (`DispatchHandedOn`) writes no member, as a key reader does not.
                 PremiseClause::Accessor
                 | PremiseClause::PrivateKey
                 | PremiseClause::ShadowRoot
-                | PremiseClause::KeyReader => false,
+                | PremiseClause::KeyReader
+                | PremiseClause::DispatchHandedOn => false,
             }) || !file.ast.code_sinks.is_empty()
                 || file.ast.computed_keys.iter().any(|key| {
                     !key.proven
