@@ -339,12 +339,16 @@
         "why": "pending-review"
       },
       "name-only-match": {
-        "count": 1,
-        "why": "ADR 1123: the provider element's attribute key `value` is JSX syntax (the dialect provider form's one prop), read from the attribute fact, not a binding or callee identified by spelling"
+        "count": 3,
+        "why": "ADRs 1123, 1147: the provider element's attribute keys `value` and `children` are JSX syntax (the dialect provider form's one prop, and the attribute that would replace its written children), read from the attribute fact, not a binding or callee identified by spelling; a `children` attribute refuses the arm"
       },
       "primitive-name-match": {
-        "count": 3,
-        "why": "ADR 1123: the primitive comes from the exact call resolution (`primitive_at_call`, a resolved Solid export); the enum names which of the dialect's primitives the context arm takes (createContext, useContext), no name is matched"
+        "count": 7,
+        "why": "ADRs 1123, 1147: the primitive comes from the exact call resolution (`primitive_at_call`, a resolved Solid export, each call also `exactly_resolved`); the enum names which of the dialect's primitives the context arms take (createContext, useContext, createStore), no name is matched"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "ADR 1147: a reader pattern's element no arm names (a rest, a computed key, an index past 1) returns None from `store_tuple_consumer`, which refuses the whole plan: the reads keep SC9012 and the writes their rows, never a silence"
       }
     },
     "rust/crates/solid-reactive-ir/src/carrier_runs.rs": {
