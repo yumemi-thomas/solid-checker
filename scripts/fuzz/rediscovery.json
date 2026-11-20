@@ -40400,5 +40400,17 @@
    "mx-strict-read-untracked-root-store-settled-named-carried-wrapper-none"
   ],
   "rediscovered": "fuzz-focus mx-recall on the new variants store-byname-named-carried, store-settled-named-carried, store-effect-named-carried, store-render-effect-named-carried, store-byname-same-carried: the reviewed head 94b43648a 3331 false cleans; round 2 none (identical to the ADR 1127 base)"
+ },
+ {
+  "finding": "Fable review of ADR 1124, round 2, N1 (live on main): `Array.prototype.forEach` replaced by code built from a string (`(0, eval)(\"…\")`, `new Function(\"…\")()`) by one that defers its callbacks; the inline `[1].forEach(() => { base(); })` inside `untrack` ran the memo read later in the component body, and the standard-call veto never asked ADR 0801's string-code census, so the read was clean; rc.21 warns STRICT_READ_UNTRACKED",
+  "found": "review-1124-r2 (pa-eval, pa-newfn)",
+  "fixed": "ADR 1137 (indexes/callees.rs standard_call_withheld withholds every standard call under Hazard::Eval, CodeEvaluatingCall or the new StringCode)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-barm-strpatch-eval-memo-direct-none",
+   "mx-strict-read-untracked-barm-strpatch-newfn-memo-direct-none"
+  ],
+  "rediscovered": "new contexts barm-strpatch-eval, barm-strpatch-newfn (legal twin barm-strpatch-none, arm-shapes.mjs): `focus.mjs --codes STRICT_READ_UNTRACKED --grids mx-recall -- --contexts …`, release builds: main dba9d3cee false-clean 2 (the memo variants; the signal variants carry the tuple slot's SC9012), ADR 1137 recall-gap 4; lg-recall twin clean 2 both; oracle compared, 0 behaviour"
  }
 ]
