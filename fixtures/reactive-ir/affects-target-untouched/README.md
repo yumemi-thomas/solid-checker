@@ -11,6 +11,8 @@ accessor as its receiver, in the scope the call is written in. The proof therefo
 Proxy, `Reflect`, `Object.assign` or code built from a string, and no loaded package or unread module may.
 
 - `Direct`, `Namespace`: no SC9012 at the accessor (the namespace member resolves to the same primitive).
+- `Wrapper`: a project function hands the accessor to `affects`: the walk follows the parameter and ends there, proved.
+- `Shadowed`: a local named `affects` is no Solid primitive: still open.
 - `AlsoHanded`: the accessor also goes to `keep`, which nothing here reads: still open.
 - `InBody`: `affects` in a component body is proved too: it has no owned-scope guard, and Chrome is quiet (`refresh` is the one that writes there).
 - `variants/prototype-hook`: `Object.defineProperty(Function.prototype, $TARGET, …)`: the row stays (SC9012 `value-in-carrier`).

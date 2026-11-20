@@ -1,4 +1,5 @@
 import { createTrackedEffect, onSettled } from "solid-js";
+import * as S from "solid-js";
 
 // Nothing in this program listens for what a focus move delivers (`focus`, `blur`, `focusin`, `focusout`, `change`, the composition
 // and input events of a commit) or stands in for `focus`, so an element's `focus()` runs no project code on the stack of a leaf
@@ -8,6 +9,15 @@ import { createTrackedEffect, onSettled } from "solid-js";
 export function LetRef() {
   let input: HTMLInputElement | undefined;
   onSettled(() => {
+    input?.focus();
+  });
+  return <input ref={(el) => (input = el)} />;
+}
+
+// Clean: the leaf owner through the namespace import.
+export function Namespace() {
+  let input: HTMLInputElement | undefined;
+  S.onSettled(() => {
     input?.focus();
   });
   return <input ref={(el) => (input = el)} />;

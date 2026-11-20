@@ -88,7 +88,14 @@ toggles, `AbortController.abort`, and since ADR 0705 `form.submit`,
 `reportError`, `replaceWith`, `replaceChild`, `replaceChildren`,
 `History.go`, `Location.assign`/`reload`/`replace`) keeps the obligation,
 since a listener it reaches may call `onCleanup`; so does an optional
-`getContext`.
+`getContext`. An element's `focus()` (`x.focus()`, `x?.focus()`, no argument
+or data only) is the one exception: it delivers `focus`, `focusin`, `blur`,
+`focusout` and `change` (measured in Chrome), so where the whole program,
+packages included, holds no listener for any of them (a JSX handler or spread
+on an intrinsic element, an `addEventListener` that is not a literal other
+type, an `on<event>` property) and nothing that stands in for `focus` (a
+class or object member named `focus`, a replaced standard member), it runs no
+project code and the call is no obligation (ADR 11xx-b, `focus_delivery`).
 
 `onSettled` becomes a leaf owner only when its call is proven owner-backed.
 Out-of-band calls enqueue a plain callback and remain outside this rule; an

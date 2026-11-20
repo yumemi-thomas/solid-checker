@@ -102,7 +102,7 @@ fn names_listener(name: &str) -> bool {
 }
 
 /// The key a member's name denotes, written (`el.onfocus`) or a literal under brackets (`el["onfocus"]`); `None` for a key no fact names.
-fn member_key(file: &FileFacts, member: &solid_facts::ast::MemberFact) -> Option<String> {
+fn member_name(file: &FileFacts, member: &solid_facts::ast::MemberFact) -> Option<String> {
     let ast = &file.ast;
     if ast.computed_members.binary_search(&member.span).is_ok() {
         ast.literal_computed_members
@@ -151,12 +151,12 @@ fn code_may_listen(file: &FileFacts) -> bool {
         file.source_text(target).is_none()
             || ast
                 .member_at(target)
-                .and_then(|member| member_key(file, member))
+                .and_then(|member| member_name(file, member))
                 .is_some_and(|key| names_listener(&key))
     }) || ast.object_properties.iter().any(|property| {
         crate::kernel::property_key(file, property.key).is_some_and(|key| names_listener(&key))
     }) || ast.members.iter().any(|member| {
-        member_key(file, member).is_some_and(|key| key == "addEventListener")
+        member_name(file, member).is_some_and(|key| key == "addEventListener")
             && !quiet_registration(file, member.span)
     }) || ast.identifiers.iter().any(|identifier| {
         file.source_text(identifier.span) == Some("addEventListener")
@@ -207,7 +207,7 @@ fn defines_focus(file: &FileFacts) -> bool {
         })
         || ast.assignments.iter().any(|assignment| {
             ast.member_at(ast.peel_ts_sugar_span(assignment.target))
-                .and_then(|member| member_key(file, member))
+                .and_then(|member| member_name(file, member))
                 .is_some_and(|key| key == "focus")
         })
 }
@@ -221,11 +221,11 @@ pub(crate) fn program_may_run_code_on_focus(lookup: &SemanticLookup<'_>) -> bool
         .any(|file| jsx_may_listen(file) || code_may_listen(file) || defines_focus(file))
 }
 
-/// The silence's record in the proof log, at the callee of the call it makes complete.
-pub(crate) fn log(file: &FileFacts, call: &solid_facts::ast::CallFact) {
+/// The silence's record in the proof log, at a span a row it removes would stand at.
+pub(crate) fn log(path: &std::sync::Arc<str>, at: solid_facts::core::Span) {
     crate::proof_log::silent(
         "SC9012",
-        &crate::location(file.path.shared(), call.callee),
+        &crate::location(std::sync::Arc::clone(path), at),
         PROOF,
         &[],
     );

@@ -21,7 +21,7 @@ input, into a shadow tree, a dialog, a popover, a frame and back, from a removed
 `focus` and `blur` at the window. The composition and input events of an IME commit are named after ADR 0642, not measured (a headless page
 has no composition).
 
-- `App.tsx`: `LetRef` (the textbook shape, `cs-ref-directive`), `Direct`, `OptionBag`, `Tracked` (`createTrackedEffect`) and `ViaHelper` are
+- `App.tsx`: `LetRef` (the textbook shape, `cs-ref-directive`), `Namespace` (`S.onSettled`), `Direct`, `OptionBag`, `Tracked` (`createTrackedEffect`) and `ViaHelper` are
   clean. `Blur`, `Click`, `ShowModal` and the bare global `BareFocus` keep their SC9012 (the proof is for an element's `focus()`);
   `OptionsBinding` and `OptionsGetter` keep theirs (the argument is no data).
 - `variants/jsx-focus`, `jsx-blur` (the element losing focus hears `blur` inside the second leaf callback), `jsx-focusin`, `jsx-change`,

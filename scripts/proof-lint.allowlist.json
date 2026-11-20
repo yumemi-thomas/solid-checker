@@ -647,6 +647,16 @@
         "why": "`findings.dedup()` after the total ordering removes only a finding equal in every field (id, rule, kind, message, location, evidence) to its neighbour: the same row twice; `fold_destructure_findings` (ADR 1107) removes only the slot reads tagged `fold_into` and pushes for each pattern one SC1003 row in their place, a violation if any slot read is one, else an obligation: no verdict leaves the report"
       }
     },
+    "rust/crates/solid-reactive-ir/src/focus_delivery.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "`jsx_may_listen`'s `is_none_or`: an attribute whose written name no fact reads is taken for a listener, so the answer is `may run code on a focus move`, which withholds the proof (ADR 11xx-b); it never ends a row"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "`code_may_listen`'s bare `addEventListener`: a spelling of the registration API that no binding declares only WIDENS what the proof withholds (the call is quiet only as a direct call with a literal type outside the focus family); no row ends on the spelling (ADR 11xx-b)"
+      }
+    },
     "rust/crates/solid-reactive-ir/src/hosts.rs": {
       "default-on-missing": {
         "count": 1,

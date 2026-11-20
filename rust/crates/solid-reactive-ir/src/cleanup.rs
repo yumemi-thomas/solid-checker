@@ -446,6 +446,7 @@ pub(super) fn leaf_owner_operations_for_file(
     let sync_sites = RefCell::default();
     let leaf_has_observer = Cell::new(false);
     let focus_scan = Cell::new(None);
+    let anchors = RefCell::default();
     let resolution = LeafScopeResolution {
         lookup,
         symbol_names,
@@ -456,6 +457,7 @@ pub(super) fn leaf_owner_operations_for_file(
         sync_sites: &sync_sites,
         leaf_has_observer: &leaf_has_observer,
         focus_scan: &focus_scan,
+        anchors: &anchors,
     };
     let mut operations = Vec::new();
     for owner_call in &file.ast.calls {
@@ -555,16 +557,18 @@ pub(super) fn leaf_owner_operations_for_file(
             if let Some((callback_file, callback)) = exact_callback {
                 let mut kinds = Vec::new();
                 let mut visited = Vec::new();
-                let complete = function_forbidden_operations(
-                    resolution,
-                    callback_file,
-                    callback,
-                    &mut kinds,
-                    &mut visited,
-                    8,
-                    None,
-                    Entry::LeafBody,
-                );
+                let complete = resolution.anchored(file.path.shared(), callback_span, || {
+                    function_forbidden_operations(
+                        resolution,
+                        callback_file,
+                        callback,
+                        &mut kinds,
+                        &mut visited,
+                        8,
+                        None,
+                        Entry::LeafBody,
+                    )
+                });
                 let via = file
                     .source_text(callback_span)
                     .unwrap_or_default()
@@ -1114,17 +1118,20 @@ pub(super) fn leaf_owner_operations_for_file(
             {
                 let mut named = Vec::new();
                 let mut named_visited = Vec::new();
-                let named_complete = slot_callback_operations(
-                    resolution,
-                    callback_file,
-                    call,
-                    &primitive,
-                    &mut named,
-                    &mut named_visited,
-                    8,
-                    true,
-                    true,
-                );
+                let named_complete =
+                    resolution.anchored(callback_file.path.shared(), call.callee, || {
+                        slot_callback_operations(
+                            resolution,
+                            callback_file,
+                            call,
+                            &primitive,
+                            &mut named,
+                            &mut named_visited,
+                            8,
+                            true,
+                            true,
+                        )
+                    });
                 if !named.is_empty() || !named_complete {
                     push_reached(
                         &mut operations,
@@ -1216,15 +1223,17 @@ pub(super) fn leaf_owner_operations_for_file(
                 step_unproven(template.span) || through_iife(template.span).is_none();
             let mut kinds = Vec::new();
             let mut visited = Vec::new();
-            let complete = tag_forbidden_operations(
-                resolution,
-                callback_file,
-                template,
-                &mut kinds,
-                &mut visited,
-                8,
-                true,
-            );
+            let complete = resolution.anchored(callback_file.path.shared(), template.tag, || {
+                tag_forbidden_operations(
+                    resolution,
+                    callback_file,
+                    template,
+                    &mut kinds,
+                    &mut visited,
+                    8,
+                    true,
+                )
+            });
             let via = callback_file
                 .source_text(template.tag)
                 .unwrap_or_default()
@@ -1706,6 +1715,20 @@ struct LeafScopeResolution<'a, 'lookup> {
     /// ADR 11xx-b: whether the program may run project code on the stack of a focus move (`focus_delivery`), asked at most once per
     /// file: the first element `focus()` the walk meets decides it.
     focus_scan: &'a Cell<Option<bool>>,
+    /// ADR 11xx-b: the spans a row of this walk would stand at, outermost first: the call (or the callback named by value) of the
+    /// leaf callback's own text and each call the walk then enters. A proof that removes a row names every one, since the row stands
+    /// at the outermost (a helper's call), not where the proof is.
+    anchors: &'a RefCell<Vec<(std::sync::Arc<str>, Span)>>,
+}
+
+impl LeafScopeResolution<'_, '_> {
+    /// Runs `walk` with `at` of `path` as the innermost anchor ([`Self::anchors`]).
+    fn anchored<T>(&self, path: std::sync::Arc<str>, at: Span, walk: impl FnOnce() -> T) -> T {
+        self.anchors.borrow_mut().push((path, at));
+        let answer = walk();
+        self.anchors.borrow_mut().pop();
+        answer
+    }
 }
 
 /// A forbidden operation the walk reached, and whether the leaf scope's call
@@ -1964,6 +1987,24 @@ fn exact_instance_method<'a>(
 /// (ADR 0275).
 #[allow(clippy::too_many_arguments)]
 fn helper_forbidden_operations(
+    resolution: LeafScopeResolution<'_, '_>,
+    call_file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    kinds: &mut Reached,
+    visited: &mut Visited,
+    depth: usize,
+    exact_this: ExactThis,
+    guaranteed: bool,
+) -> bool {
+    resolution.anchored(call_file.path.shared(), call.callee, || {
+        helper_forbidden_operations_walk(
+            resolution, call_file, call, kinds, visited, depth, exact_this, guaranteed,
+        )
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn helper_forbidden_operations_walk(
     resolution: LeafScopeResolution<'_, '_>,
     call_file: &FileFacts,
     call: &solid_facts::ast::CallFact,
@@ -2339,7 +2380,12 @@ fn focus_delivers_nothing(
     if may_run {
         return false;
     }
-    focus::log(file, call);
+    // The row this removes stands at the outermost anchor (a helper's call, a callback named by value), not at this call.
+    let anchors = resolution.anchors.borrow();
+    for (path, at) in anchors.iter() {
+        focus::log(path, *at);
+    }
+    focus::log(&file.path.shared(), call.callee);
     true
 }
 
