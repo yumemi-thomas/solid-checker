@@ -2,7 +2,8 @@
 // Writer-cause census driver (ADR 1131's M0, measurement only): runs the checker over the frozen corpus project by project, keeps each project's findings in a small
 // form, and with `--census` keeps the census the checker prints (`SOLID_CHECKER_WRITER_CENSUS`): every root that may write a built-in's prototype under any name, why,
 // and what loads it. With `--whatif-causes` or `--drop-dir` it runs the what-if switch (`SOLID_CHECKER_WHATIF_WRITER_CAUSES`, `SOLID_CHECKER_WHATIF_WRITER_DROP`), which
-// leaves roots out of the any-name writers and so moves verdicts: a measurement, never a baseline.
+// leaves roots out of the any-name writers and so moves verdicts: a measurement, never a baseline. Only the what-if build (`make build-what-if`, ADR 0950; its reports are
+// tainted and every other consumer refuses them) has the switch: point `--checker` at `rust/target-what-if/release/solid-checker-what-if`.
 //
 //   node scripts/writer-census.mjs --checker <solid-checker-rust> --typefacts <solid-typefacts> --out <dir>
 //     [--census] [--whatif-causes <token,token>] [--drop-dir <dir>] [--projects app/project,...] [--apps a,b] [--jobs 4] [--timeout 900]

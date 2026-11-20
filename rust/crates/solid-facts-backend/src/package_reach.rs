@@ -279,9 +279,10 @@ pub fn package_reach_index(
                     .or_default()
                     .insert(root.clone());
             }
-            // Writer-cause what-if (measurement, ADR 1131's M0): a root the switch decides is left out of the any-name writers. Off (the default), none is.
+            // Writer-cause what-if (measurement, ADR 1131's M0): a root the switch decides is left out of the any-name writers. Only the what-if build (ADR 0950) has the
+            // switch; in any other build no environment variable can reach it.
             if closure.global_writes.prototype_any_name
-                && !solid_facts::package_reach::what_if_writer_decided(
+                && !writer_what_if_decides(
                     &root,
                     &closure.global_writes.prototype_any_causes,
                     loaded.contains(runtime),
@@ -484,6 +485,28 @@ pub fn writer_census_report(
         "writers": writers,
         "loaders": loaders,
     })
+}
+
+/// Writer-cause what-if (measurement, ADR 1131's M0): whether the switch (`SOLID_CHECKER_WHATIF_WRITER_DROP`, `SOLID_CHECKER_WHATIF_WRITER_CAUSES`, see
+/// [`solid_facts::package_reach::what_if_writer_decided`]) leaves the root out of the any-name prototype writers. A build with the `what-if` feature (ADR 0950, every report
+/// tainted) asks it; every other build answers `false` without reading the environment, as it has no seam an environment variable could reach.
+#[cfg(feature = "what-if")]
+fn writer_what_if_decides(
+    root: &str,
+    causes: &std::collections::BTreeMap<String, u32>,
+    loaded: bool,
+) -> bool {
+    solid_facts::package_reach::what_if_writer_decided(root, causes, loaded)
+}
+
+#[cfg(not(feature = "what-if"))]
+#[allow(clippy::missing_const_for_fn)]
+fn writer_what_if_decides(
+    _root: &str,
+    _causes: &std::collections::BTreeMap<String, u32>,
+    _loaded: bool,
+) -> bool {
+    false
 }
 
 /// Writer-cause census (measurement, ADR 1131's M0): the project files that name each runtime package, by an attested import, and how they name it. Empty unless the

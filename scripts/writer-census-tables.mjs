@@ -385,6 +385,22 @@ const aloneRuns = new Map(alone.map((id) => [id, run([id])]));
     sections.push(`### What the floor is made of: the ${number(packagesLeft)} writer packages (per app) that stay under every mechanism together, by the causes no cause-level mechanism (the upper bounds M1u, M3u, M4w, M5u included) decides (measured)\n\n${table(["cause", "writer packages with it"], rows)}`);
     results.floorMadeOf = rows;
   }
+  // Closest to free: the projects with the fewest writer packages left under every mechanism, and what each package keeps it for. A reviewed-bytes premise (M7's form) on
+  // each would free the project; this is the order a targeted review would take.
+  {
+    const close = everything.perProject.filter((item) => item.effective > 0 && item.packagesLeft > 0 && item.packagesLeft <= 5).sort((a, b) => a.packagesLeft - b.packagesLeft || b.rows - a.rows);
+    const causeLevel = closeOver(["M1u", "M3u", "M4w", "M5u"]);
+    const rowsOut = close.map((item) => {
+      const why = item.left.map((writer) => {
+        const hard = new Set();
+        for (const { cause, parsed } of writer.causeClasses) if (!["M1u", "M3u", "M4w", "M5u"].some((id) => MECHANISMS[id].decides(parsed, writer, cause, causeLevel))) hard.add(parsed.family === "unread" ? `unread ${parsed.blocker}` : parsed.family === "generated" ? `generated ${parsed.kind.replace(/:.*$/, "")}` : parsed.family === "key" ? "prototype key" : parsed.family);
+        return `${writer.name}: ${[...hard].sort().join(", ") || "root-level only"}`;
+      });
+      return [`${item.app}/${projectOf(item.id)}`, number(item.rows), item.packagesLeft, [...new Set(why)].slice(0, 5).join("; ")];
+    });
+    sections.push(`### Closest to free: projects with at most five writer packages left under every mechanism (measured causes)\n\n${table(["project", "family-3 rows", "packages left", "package: the causes no cause-level mechanism decides"], rowsOut)}`);
+    results.closest = rowsOut;
+  }
   sections.push(`### What stays under every mechanism together (M1u, M3u, M4w, M5u, M2b, M6, M7v), by project (measured causes)\n\n${table(["project", "family-3 rows", "writer packages left", "which (first 8)"], leftRows)}`);
   results.left = leftRows;
   // The sets to run for the plan and the unlock table.

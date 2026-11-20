@@ -255,7 +255,8 @@ pub struct RootImporter {
 }
 
 /// Writer-cause what-if (measurement only, ADR 1131's M0). `SOLID_CHECKER_WHATIF_WRITER_CAUSES=<token>[,…]` and `SOLID_CHECKER_WHATIF_WRITER_DROP=<file>` leave roots out of
-/// the any-name prototype writers (`prototype_writers_any`); nothing else changes, and with neither set (the default) nothing does. A token is a cause class prefix
+/// the any-name prototype writers (`prototype_writers_any`); nothing else changes, and with neither set (the default) nothing does. Only the what-if build (ADR 0950,
+/// `make build-what-if`, whose every report is tainted) asks: the backend of any other build never calls [`what_if_writer_decided`]. A token is a cause class prefix
 /// (`escape:source`, `escape:`, `generated:`, `unread:`, `prototype-key`, …): a root is left out when it has a cause and each of its causes has a class a token prefixes;
 /// or `unloaded`: a root the program does not load is left out, whatever its causes. The file lists roots, one per line (the census's `root`), each left out whatever its
 /// causes. Both moves verdicts and are no proof: a measurement of what deciding those causes, or those roots, would free.
