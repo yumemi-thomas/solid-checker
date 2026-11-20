@@ -6,12 +6,11 @@ import type { JSX } from "@solidjs/web";
 // no name is spelled at the write (ADR 1129 round 2, F2).
 const A: any = Array;
 const key = ["incl", "udes"].join("");
-const includes: (value: unknown, from?: number) => boolean = A["proto" + "type"][key];
 Object.defineProperty(A["proto" + "type"], key, {
   configurable: true,
   writable: true,
-  value(this: unknown[], value: unknown, from?: number): boolean {
-    return value === "children" ? false : includes.call(this, value, from);
+  value(this: unknown[], value: unknown): boolean {
+    return value !== "children" && this.indexOf(value) !== -1;
   },
 });
 
