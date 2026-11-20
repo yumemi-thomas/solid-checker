@@ -615,6 +615,60 @@ pub(crate) fn control_flow_child(
     Some((*expression, run))
 }
 
+/// The proof id of [`control_flow_prop_functions`]'s owner edge: the proof log's `silent` line names it, and `SOLID_CHECKER_IR_ABLATE_SILENCE` turns the edge off
+/// (ADR 1118's gate).
+pub(crate) const CONTROL_FLOW_PROP_FUNCTION: &str = "owners.control_flow_prop_function";
+
+/// The functions `element` itself calls under an owner of its own when they are written in place as the whole value of one of its props
+/// ([`solid_dialect::Dialect::control_flow_prop_function_run`]; rc.21: only `Errored`'s `fallback`, which the boundary calls as `f(err, reset)` inside a lazy computed it
+/// creates under the boundary output's owner, `@solidjs/signals` `createErrorBoundary`, `solid-js` `Errored`). The tag resolves to the dialect primitive exactly; the
+/// prop is a plain attribute (no namespace, no spread holds it); the value is a function literal, run as the dialect says ([`runs_as_child`]: a generator never), that
+/// cannot hand itself on ([`can_hand_itself_on`]). `children` is [`control_flow_child`]'s.
+pub(crate) fn control_flow_prop_functions(
+    file: &solid_facts::FileFacts,
+    element: &JsxElementFact,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<Span> {
+    let Some(primitive) = crate::owners::element_primitive(lookup, file, element) else {
+        return Vec::new();
+    };
+    element
+        .attributes
+        .iter()
+        .filter(|attribute| {
+            attribute.namespace.is_none()
+                && attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::Expression
+        })
+        .filter_map(|attribute| {
+            let prop = file.source_text(attribute.name)?;
+            if prop == "children" {
+                return None;
+            }
+            let run = lookup
+                .dialect
+                .control_flow_prop_function_run(primitive, prop)?;
+            let value = file.ast.peel_ts_sugar_span(attribute.expression?);
+            let function = file.ast.function_at(value)?;
+            (function.span == value
+                && runs_as_child(function, run)
+                && !can_hand_itself_on(file, lookup, function))
+            .then_some(function.span)
+        })
+        .collect()
+}
+
+/// Whether `function` is one of [`control_flow_prop_functions`] of the element around it (and the edge is not ablated).
+pub(crate) fn is_control_flow_prop_function(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    !crate::site_accounting::ablated_id(CONTROL_FLOW_PROP_FUNCTION)
+        && innermost_element(file, function.span).is_some_and(|element| {
+            control_flow_prop_functions(file, element, lookup).contains(&function.span)
+        })
+}
+
 /// Whether `function` declares the `.length` a `WithParameter` tag tests: a
 /// first parameter that is no rest and has no default. A generator's body runs
 /// only where its iterator is stepped, so no tag runs it.

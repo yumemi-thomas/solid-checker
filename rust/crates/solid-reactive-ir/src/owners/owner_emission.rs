@@ -1434,7 +1434,8 @@ fn layer_entry_open(
         }
         // Reached through a caller, no candidate names the region.
         if (creates_owner_for(file, function.span, lookup)
-            || is_control_flow_child(file, function, lookup))
+            || is_control_flow_child(file, function, lookup)
+            || is_control_flow_prop_function(file, function, lookup))
             && referenced_only_by_entry(file, function, lookup)
         {
             return false;
