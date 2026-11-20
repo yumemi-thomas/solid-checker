@@ -31,7 +31,7 @@ use solid_facts::module_reach::is_global_object_name;
 use solid_facts::package_reach::{
     AMBIENT_PREFIX, AccessorFacts, COMPUTED_LOAD_PREFIX, LIMIT_PREFIX, PROTOTYPE_WRITE_ANY_PREFIX,
     PROTOTYPE_WRITE_PREFIX, PackageReach, READ_ANY_PREFIX, ReachBlocker, WRITE_ANY_PREFIX,
-    WRITE_PREFIX, is_declaration_file, package_label, package_root_of,
+    WRITE_PREFIX, WriterScope, is_declaration_file, package_label, package_root_of,
 };
 
 mod value_reads;
@@ -87,6 +87,9 @@ pub(crate) struct PackageSite {
     pub(crate) provider: Provider,
     /// ADR 1061: every blocker of the site, where the blocker census is on (empty otherwise).
     pub(crate) census: Vec<String>,
+    /// ADR 1145: the site exists only under writers of a built-in's prototype that the product's real entries do not load, and the file is one they load: the realm
+    /// clears it, with a typed silence ([`SiteSilence::PackageCallProductRealm`]) instead of a row.
+    pub(crate) product_clear: bool,
 }
 
 /// Whose code a site enters.
@@ -193,9 +196,86 @@ pub(crate) fn sites<'c>(ctx: &'c AnalysisContext<'_>) -> &'c [Vec<PackageSite>] 
             .collect::<HashSet<_>>();
         files
             .iter()
-            .map(|file| file_sites(ctx, &analyzed, file))
+            .map(|file| realm_sites(ctx, &analyzed, file))
             .collect()
     })
+}
+
+thread_local! {
+    /// ADR 1145: set while [`realm_sites`] finds the sites a file has under every writer of the program (the sites the realm clears), so each question of the
+    /// walk asks the whole program's writers.
+    static EVERY_WRITER: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Restores [`EVERY_WRITER`] when dropped.
+struct EveryWriter(bool);
+
+impl EveryWriter {
+    fn enter() -> Self {
+        Self(EVERY_WRITER.replace(true))
+    }
+}
+
+impl Drop for EveryWriter {
+    fn drop(&mut self) {
+        EVERY_WRITER.set(self.0);
+    }
+}
+
+/// ADR 1145: the prototype writers a site in `file` is judged against: those of the product's realm where the product's real entries load the file and the
+/// realm holds fewer writers than the program, else every writer the program loads. `None` where no package is read at all.
+fn writer_scope<'i>(ctx: &AnalysisContext<'i>, file: &FileFacts) -> Option<WriterScope<'i>> {
+    let index = ctx.package_reach?;
+    Some(if EVERY_WRITER.get() || realm_ablated() {
+        index.full_scope()
+    } else {
+        index
+            .product_scope(file.path.as_str())
+            .unwrap_or_else(|| index.full_scope())
+    })
+}
+
+/// The ablation `SOLID_CHECKER_IR_ABLATE_SILENCE=package_action_calls.package_action_calls.product-realm` (or `all`): every site is judged against every writer, as
+/// it was before ADR 1145.
+fn realm_ablated() -> bool {
+    crate::site_accounting::ablated_id(SiteSilence::PackageCallProductRealm.id())
+}
+
+/// ADR 1145: the sites of one file. In a file the product's real entries load, under a realm that holds fewer prototype writers than the program, the sites are those
+/// the realm's writers make, and each site only the program's writers make is kept, marked as one the realm clears: it ends in the realm's typed silence, so the proof
+/// log names it and dropping the silence gives back the row the program's writers gave it.
+fn realm_sites(
+    ctx: &AnalysisContext<'_>,
+    analyzed: &HashSet<&str>,
+    file: &FileFacts,
+) -> Vec<PackageSite> {
+    let narrowed = !realm_ablated()
+        && ctx
+            .package_reach
+            .is_some_and(|index| index.product_scope(file.path.as_str()).is_some());
+    let scoped = file_sites(ctx, analyzed, file);
+    if !narrowed {
+        return scoped;
+    }
+    let every = {
+        let _every = EveryWriter::enter();
+        file_sites(ctx, analyzed, file)
+    };
+    let mut kept = scoped
+        .into_iter()
+        .map(|site| ((site.at, site.entry), Some(site)))
+        .collect::<std::collections::HashMap<_, _>>();
+    // A site the realm's writers make is the realm's own (it names a writer the product loads); the rest are the program's, cleared.
+    every
+        .into_iter()
+        .map(|mut site| match kept.get_mut(&(site.at, site.entry)) {
+            Some(slot) => slot.take().unwrap_or(site),
+            None => {
+                site.product_clear = true;
+                site
+            }
+        })
+        .collect()
 }
 
 /// The sites of one file, in source order.
@@ -213,13 +293,8 @@ fn file_sites(
         .package_reach
         .is_some_and(solid_facts::package_reach::PackageReachIndex::defines_global_accessors);
     // ADR 1145: where the product's entries load this file, the writers of the product's realm only.
-    let prototype_writer_loaded = ctx.package_reach.is_some_and(|index| {
-        index
-            .writer_scope(file.path.as_str())
-            .prototype_writers_of_unspelled()
-            .next()
-            .is_some()
-    });
+    let prototype_writer_loaded = writer_scope(ctx, file)
+        .is_some_and(|scope| scope.prototype_writers_of_unspelled().next().is_some());
     let mut push = |at: Span, callee: Span, entry: Entry, declaration: Option<DeclarationAt>| {
         let Some(declaration) = declaration else {
             return;
@@ -310,6 +385,7 @@ fn file_sites(
             } else {
                 Provider::Package
             },
+            product_clear: false,
         });
     };
     for call in &file.ast.calls {
@@ -664,10 +740,7 @@ fn file_sites(
     }
     // ADR 1108 part 2: what runs a method a package writes on a built-in's prototype without a call of it: a member of that name read for its value or handed on, an
     // object pattern that reads it, an iteration (a writer under any name may have written `Symbol.iterator` or `next`), a template literal (`toString`, `join`).
-    if ctx
-        .package_reach
-        .is_some_and(|index| !index.writer_scope(file.path.as_str()).is_empty())
-    {
+    if writer_scope(ctx, file).is_some_and(|scope| !scope.is_empty()) {
         for member in &file.ast.members {
             if !evaluated_member(file, member.span) {
                 continue;
@@ -2913,7 +2986,7 @@ fn prototype_written(
     if resolve != Resolve::Call {
         return None;
     }
-    let scope = ctx.package_reach?.writer_scope(file.path.as_str());
+    let scope = writer_scope(ctx, file)?;
     let member = file.ast.member_at(file.ast.peel_ts_sugar_span(callee))?;
     let (name, root, named) = match member_key(file, member) {
         Key::Name(name) => {
@@ -2987,7 +3060,7 @@ fn prototype_call(
     call: &solid_facts::ast::CallFact,
 ) -> Option<DeclarationAt> {
     // ADR 1145: the writers of the product's realm where the product's entries load this file.
-    let scope = ctx.package_reach?.writer_scope(file.path.as_str());
+    let scope = writer_scope(ctx, file)?;
     if scope.is_empty() {
         return None;
     }
@@ -3163,7 +3236,7 @@ fn prototype_read(
     kind: &str,
 ) -> Option<DeclarationAt> {
     // ADR 1145: the writers of the product's realm where the product's entries load this file.
-    let scope = ctx.package_reach?.writer_scope(file.path.as_str());
+    let scope = writer_scope(ctx, file)?;
     if let Some((name, root)) = names.iter().find_map(|name| {
         scope
             .prototype_writers_by_name(name)
@@ -3338,6 +3411,13 @@ pub(crate) fn package_action_calls(
                     }
                     SiteDecision::Reports => {}
                 }
+            }
+            // ADR 1145: a site only the program's writers make, in a file the product's entries load, where no package the page loads writes what the site runs.
+            if site.product_clear {
+                ends.end_with(file, site.at, SiteSilence::PackageCallProductRealm, || {
+                    vec![Premise::at(PremiseKind::ProductRealmWriters, Some(site.at))]
+                });
+                continue;
             }
             let filed = row(file, site);
             if !site.census.is_empty() {

@@ -140,6 +140,10 @@ and read it under a `<Loading>` boundary.
 
 Generators are placed as for [no-write-in-pure-computation](no-write-in-pure-computation.md) (ADRs 0851, 0853).
 
+## The product realm (ADR 1145)
+
+A package that writes a built-in's prototype is judged against the page that runs the site. Where the build configuration says which modules the page loads (an `index.html`'s module scripts or a package's `exports`, with the Solid plugin the only Vite plugin, no other bundler's configuration, no second page that can run code, and every load of the entries' closure resolved), a site in a file those entries load is judged against the writers the entries load (in a development build, the dev client's too), not against a package only a test, a story, a script or a config loads. The site is not dropped: it ends in the named silence `package_action_calls.package_action_calls.product-realm`, so the proof log names it. Any doubt leaves every site judged against every writer, and a test's own sites keep every writer. The premises and what is not scoped are in ADR 1145 and `docs/open-work.md`.
+
 ## Endings by code (ADR 0968)
 
 An action call is accounted for, for this rule's Chrome code, only by an ending that answers that code: a row of its own table, an SC9012, the compiler's discard, a finding of a rule the dialect says claims the code, or a named silence that names it. A row of another table or a finding of another rule at the same place answers another code and ends nothing here, so this rule's own uncertifiable row (`action-unaccounted`) stands beside it: never a violation, and it yields to any row of the rule that stands. A site whose rule claims no code here, or whose code has no policy in the dialect, is not ended by what stands at it.

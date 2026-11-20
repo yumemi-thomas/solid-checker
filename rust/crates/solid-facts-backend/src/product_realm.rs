@@ -9,17 +9,21 @@
 //! - the entries: the module scripts of the `index.html` beside the project (host discovery's HTML grammar, which refuses a page with a classic script, an inline
 //!   module, an external URL or markup it does not read), and the runtime targets of the `package.json` beside it (`exports` without a pattern, `main`, `module`,
 //!   `browser`), each a file of the program; a program with neither is unknown;
-//! - the bundler: every `vite.config.*` from the project directory up to its workspace root must parse in the closed Vite config grammar of host discovery
-//!   (`host_config`) with only plugins that add no load but Solid's own and the dev client (Solid's, Tailwind, tsconfig paths, Uno without a config file); any other
-//!   bundler configuration file in that chain is unknown, and so is a second config of one directory;
+//! - the pages: any other HTML file of the project that can run code may share a module with the page, so it ends the read;
+//! - the bundler: some `vite.config.*` from the project directory up to its workspace root must name the build, and every one there must parse in the closed Vite
+//!   config grammar of host discovery (`host_config`, with the bundler's output naming options added) with no plugin but Solid's. The Solid plugin is the dialect's
+//!   compile step; no other plugin is trusted for what it is called, and none is read for what it does: its installed source is not proven to add no load, so it
+//!   ends the read. The config helper `defineConfig` only returns its argument (Vite's documented typing helper; its installed bytes are not read). A Vite alias, a
+//!   deduplicated package, the Solid plugin's start mode, any other bundler's configuration file in that chain and a second Vite config of one directory end it too;
 //! - the closure of the entries over every `import`, `export … from`, literal `import()` and `require`, and `import x = require()`, by the attested resolution of each
 //!   specifier. A load by a computed specifier, `import.meta.glob`, a worker, a service worker, `new URL(…, import.meta.url)`, a specifier no row attests or that
 //!   resolves nowhere, a resolved file the program does not analyze (an asset and a JSON module excepted), and an entry the program does not hold end it;
 //! - the declared host: a browser target with a declared build. In a development build the page also loads the dev server's client, so the packages named `vite` and
-//!   the config's own plugin packages are in the realm whatever the files import.
+//!   the config's own imports are in the realm whatever the files import (a name kept is a writer kept: the direction that only narrows the change).
 //!
-//! Premise, named in `docs/open-work.md`: no recognized plugin adds a load of a package that writes a built-in's prototype to the page, and code outside the program
-//! shares the page with it as the package integrity premise (ADR 0300) already assumes.
+//! Premises (`docs/decisions.md`, ADR 1145): the Solid plugin adds only Solid's own loads; `defineConfig` is the identity; the build is the Vite build the config
+//! describes; tests, stories and configs are not the product (the owner's ruling), so a product file's site is judged against what the page loads though a test loads
+//! the file with more; code outside the program shares the page with it as the package integrity premise (ADR 0300) already assumes.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::fs;
@@ -52,8 +56,6 @@ pub(crate) enum Realm {
 pub(crate) struct Blocker {
     pub stage: &'static str,
     pub reason: String,
-    /// A measurement assumed the stage away ([`assumed`]): it does not keep the realm unknown.
-    pub assumed: bool,
 }
 
 impl Blocker {
@@ -61,28 +63,8 @@ impl Blocker {
         Self {
             stage,
             reason: reason.into(),
-            assumed: assumed(stage),
         }
     }
-}
-
-/// `SOLID_CHECKER_PRODUCT_REALM_ASSUME=<stage>[,<stage>...]` (`pages`, `bundler`): a measurement of what a stage's reader would free if it decided, the way
-/// `--assume` is for a hazard (ADR 0950). The stage's blocker is not raised; nothing else is read differently. Never set by a check that ships a verdict.
-fn assumed(stage: &str) -> bool {
-    static ASSUMED: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
-    ASSUMED
-        .get_or_init(|| {
-            std::env::var("SOLID_CHECKER_PRODUCT_REALM_ASSUME")
-                .map(|value| {
-                    value
-                        .split(',')
-                        .map(|stage| stage.trim().to_owned())
-                        .collect()
-                })
-                .unwrap_or_default()
-        })
-        .iter()
-        .any(|assumed| assumed == stage)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -96,22 +78,17 @@ pub(crate) struct Known {
     pub host_names: BTreeSet<String>,
     /// Whether the declared build is a development build (the dev client is loaded).
     pub development: bool,
-    /// The stages a measurement assumed (empty in any check that ships a verdict).
-    pub assumed: Vec<Blocker>,
 }
 
-/// The sources the closed config grammar records ([`crate::host_config::Config::plugins`]) whose reviewed behaviour adds no load to the page but Solid's own and
-/// the dev client: the two config helpers (`defineConfig`, which is no plugin), Solid's plugin, Tailwind, tsconfig paths and Uno without a config file.
-const INERT_PLUGINS: [&str; 8] = [
-    "vite",
-    "vitest/config",
-    "@solidjs/vite-plugin",
-    "vite-plugin-solid",
-    "@tailwindcss/vite",
-    "vite-tsconfig-paths",
-    "unocss/vite",
-    "@unocss/vite",
-];
+/// The Solid plugin, by the specifier a config imports it from: the dialect's compile step. Its output loads Solid's own packages (the runtime, and in a development
+/// build the refresh runtime), which are the dialect's and write no prototype; host discovery reads the installed closure of the same two names against its pins
+/// (ADR 0270). No other plugin is trusted for its name (invariant 3): one whose installed source were read and proved to add no load (no `resolveId`, `load`,
+/// `transform` or `transformIndexHtml` that adds an import, no `config` hook that adds an entry) would be allowed, and no such reading is built, so any other plugin
+/// leaves the realm unknown.
+const SOLID_PLUGINS: [&str; 2] = ["@solidjs/vite-plugin", "vite-plugin-solid"];
+
+/// The config helper: `defineConfig` returns its argument, in Vite and in Vitest (the sources the closed grammar admits it from). It is no plugin and runs in Node.
+const CONFIG_HELPERS: [&str; 2] = ["vite", "vitest/config"];
 
 /// Bundler and framework configuration files whose entries or injected loads this reader does not read: a directory holding one is unknown.
 const UNREAD_CONFIGS: [&str; 14] = [
@@ -166,7 +143,7 @@ pub(crate) fn read(directory: &Path, facts: &ProjectFacts, runtime: &RuntimeEnvi
         Ok(names) => names,
         Err(reason) => {
             blockers.push(Blocker::new("bundler", reason));
-            config_import_names(directory)
+            BTreeSet::new()
         }
     };
     let entries = match entries_of(directory, &|path| by_path.contains_key(path)) {
@@ -183,7 +160,7 @@ pub(crate) fn read(directory: &Path, facts: &ProjectFacts, runtime: &RuntimeEnvi
             return Realm::Unknown(blockers);
         }
     };
-    let Some(build) = build.filter(|_| blockers.iter().all(|blocker| blocker.assumed)) else {
+    let Some(build) = build.filter(|_| blockers.is_empty()) else {
         return Realm::Unknown(blockers);
     };
     Realm::Known(Known {
@@ -192,7 +169,6 @@ pub(crate) fn read(directory: &Path, facts: &ProjectFacts, runtime: &RuntimeEnvi
         roots,
         host_names,
         development: build == RuntimeBuild::Development,
-        assumed: blockers,
     })
 }
 
@@ -293,18 +269,9 @@ fn entries_of(directory: &Path, in_program: &dyn Fn(&str) -> bool) -> Result<Vec
     Ok(entries)
 }
 
-/// The directories a page search does not enter: installed code, VCS data and build output (a page there is generated or a package's own).
-const PAGE_SEARCH_SKIPS: [&str; 9] = [
-    "node_modules",
-    ".git",
-    "dist",
-    "build",
-    "out",
-    "coverage",
-    ".vite",
-    ".solid-checker",
-    "target",
-];
+/// The directories a page search does not enter: installed code and VCS data (host discovery's own inventory skips the same two). A built output with a page that
+/// can run code is a second page, so a project that has been built is unknown until its output is removed.
+const PAGE_SEARCH_SKIPS: [&str; 2] = ["node_modules", ".git"];
 
 /// The files a page search reads before it gives up: a tree this large is not read, and the realm is unknown.
 const PAGE_SEARCH_LIMIT: usize = 50_000;
@@ -454,41 +421,46 @@ fn vite_configs(directory: &Path) -> Result<Vec<PathBuf>, String> {
     Ok(configs)
 }
 
-/// Every bundler configuration of the chain, read: the package names the Vite configs import (the dev client's plugins), or why one is unknown.
+/// Every bundler configuration of the chain, read: the package names the Vite configs import (what the dev client loads), or why one ends the read. Some Vite
+/// config must name the build: a page and its modules with no configuration say nothing of how they are built.
 fn bundler(directory: &Path) -> Result<BTreeSet<String>, String> {
+    let configs = vite_configs(directory)?;
+    if configs.is_empty() {
+        return Err(format!(
+            "no Vite configuration from {} up to its workspace root names the build",
+            directory.display()
+        ));
+    }
     let mut names = BTreeSet::<String>::from(["vite".to_owned()]);
-    for path in vite_configs(directory)? {
+    for path in configs {
         let source =
             fs::read_to_string(&path).map_err(|error| format!("{}: {error}", path.display()))?;
         let config = crate::host_config::parse_realm(&path, &source)
             .map_err(|refusal| format!("{}: {}", path.display(), refusal.reason))?;
-        if let Some(plugin) = config
-            .plugins
-            .iter()
-            .find(|plugin| !INERT_PLUGINS.contains(&plugin.as_str()))
-        {
+        if config.mode != crate::host_config::EntryMode::Html {
             return Err(format!(
-                "{}: the plugin {plugin} may add loads this reader does not follow",
+                "{}: the Solid plugin's start mode takes the framework's entries, not the page's",
+                path.display()
+            ));
+        }
+        // The resolution the closure follows is the producer's (tsconfig paths included); a Vite-only alias or a deduplicated package may send a specifier elsewhere.
+        if !config.aliases.is_empty() || config.package_dedupe {
+            return Err(format!(
+                "{}: a Vite alias or a deduplicated package may redirect a specifier after the resolution the closure follows",
+                path.display()
+            ));
+        }
+        if let Some(plugin) = config.plugins.iter().find(|plugin| {
+            !CONFIG_HELPERS.contains(&plugin.as_str()) && !SOLID_PLUGINS.contains(&plugin.as_str())
+        }) {
+            return Err(format!(
+                "{}: the plugin {plugin} is not Solid's and no reading of its installed source proves it adds no load",
                 path.display()
             ));
         }
         names.extend(imported_packages(&source));
     }
     Ok(names)
-}
-
-/// The package names every readable Vite config of the chain imports, whether or not the grammar admits it (the names an assumed bundler stage keeps in a dev
-/// build, a superset of what its plugins load).
-fn config_import_names(directory: &Path) -> BTreeSet<String> {
-    let mut names = BTreeSet::<String>::from(["vite".to_owned()]);
-    for dir in chain(directory) {
-        for extension in CONFIG_EXTENSIONS {
-            if let Ok(source) = fs::read_to_string(dir.join(format!("vite.config.{extension}"))) {
-                names.extend(imported_packages(&source));
-            }
-        }
-    }
-    names
 }
 
 /// The package names a config imports (`from "pkg"`, a scoped name whole, a subpath dropped), a superset of what its plugins load.
@@ -751,25 +723,13 @@ pub(crate) fn apply(realm: &Realm, index: &mut PackageReachIndex) {
         .filter(|root| loaded(root))
         .cloned()
         .collect::<BTreeSet<_>>();
+    let narrows = writers != index.prototype_writers || any != index.prototype_writers_any;
     index.product = Some(ProductWriters {
         files: known.files.clone(),
         prototype_writers: writers,
         prototype_writers_any: any,
+        narrows,
     });
-}
-
-/// `SOLID_CHECKER_IR_ABLATE_SILENCE=product-realm` (or `all`) leaves every site judged against every writer: the mutation test and the monotone gate's
-/// ablation of this change, read once.
-pub(crate) fn ablated() -> bool {
-    static ABLATED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ABLATED.get_or_init(|| {
-        std::env::var("SOLID_CHECKER_IR_ABLATE_SILENCE").is_ok_and(|value| {
-            value
-                .split(',')
-                .map(str::trim)
-                .any(|id| id == "all" || id == "product-realm")
-        })
-    })
 }
 
 /// Appends the realm's census line to the file `SOLID_CHECKER_PRODUCT_REALM_CENSUS` names (a directory gets one `realm-<pid>.jsonl` per process): a measurement,
@@ -798,8 +758,8 @@ pub(crate) fn census(realm: &Realm, index: &PackageReachIndex, project: &str) ->
             "productRealm": {
                 "project": project,
                 "status": "unknown",
-                "reason": blockers.iter().find(|blocker| !blocker.assumed).map(|blocker| blocker.reason.as_str()),
-                "blockers": blockers.iter().map(|blocker| serde_json::json!({ "stage": blocker.stage, "reason": blocker.reason, "assumed": blocker.assumed })).collect::<Vec<_>>(),
+                "reason": blockers.first().map(|blocker| blocker.reason.as_str()),
+                "blockers": blockers.iter().map(|blocker| serde_json::json!({ "stage": blocker.stage, "reason": blocker.reason })).collect::<Vec<_>>(),
             },
         }),
         Realm::Known(known) => {
@@ -812,7 +772,6 @@ pub(crate) fn census(realm: &Realm, index: &PackageReachIndex, project: &str) ->
                     "files": known.files.len(),
                     "roots": known.roots.len(),
                     "development": known.development,
-                    "assumed": known.assumed.iter().map(|blocker| serde_json::json!({ "stage": blocker.stage, "reason": blocker.reason })).collect::<Vec<_>>(),
                     "hostNames": known.host_names,
                     "writersAny": index.prototype_writers_any.len(),
                     "writersAnyInProduct": product.map_or(0, |product| product.prototype_writers_any.len()),
@@ -1039,29 +998,52 @@ mod tests {
     }
 
     #[test]
-    fn a_vite_config_with_inert_plugins_is_read_and_anything_else_in_the_chain_is_unknown() {
+    fn a_vite_config_with_the_solid_plugin_is_read_and_anything_else_in_the_chain_is_unknown() {
         let root = scratch("bundler");
         let project = root.join("app");
         write(&project, "package.json", r#"{ "private": true }"#);
-        write(
-            &project,
-            "vite.config.ts",
-            "import solid from 'vite-plugin-solid'; export default { plugins: [solid()] };",
-        );
-        let names = bundler(&project).unwrap();
-        assert!(
-            names.contains("vite") && names.contains("vite-plugin-solid"),
-            "{names:?}"
-        );
 
-        // A plugin the grammar admits but that adds a load (a service worker) is not inert.
-        write(
-            &project,
-            "vite.config.ts",
-            "import { VitePWA } from 'vite-plugin-pwa'; export default { plugins: [VitePWA()] };",
-        );
-        let pwa = bundler(&project).unwrap_err();
-        assert!(pwa.contains("vite-plugin-pwa"), "{pwa}");
+        // No configuration says nothing of how the page is built.
+        let none = bundler(&project).unwrap_err();
+        assert!(none.contains("names the build"), "{none}");
+
+        // The Solid plugin, with either helper.
+        for helper in ["vite", "vitest/config"] {
+            write(
+                &project,
+                "vite.config.ts",
+                &format!(
+                    "import {{ defineConfig }} from '{helper}'; import solid from 'vite-plugin-solid'; \
+                     export default defineConfig({{ plugins: [solid()], test: {{ setupFiles: ['./setup.ts'] }} }});"
+                ),
+            );
+            let names = bundler(&project).unwrap();
+            assert!(
+                names.contains("vite") && names.contains("vite-plugin-solid"),
+                "{names:?}"
+            );
+        }
+
+        // A name proves nothing (invariant 3): a plugin the grammar admits by name is no more trusted than one it does not know, whatever it is called.
+        for (import, plugin) in [
+            ("import tw from '@tailwindcss/vite';", "tw()"),
+            ("import paths from 'vite-tsconfig-paths';", "paths()"),
+            (
+                "import uno from 'unocss/vite';",
+                "uno({ configFile: false })",
+            ),
+            ("import { VitePWA } from 'vite-plugin-pwa';", "VitePWA()"),
+        ] {
+            write(
+                &project,
+                "vite.config.ts",
+                &format!(
+                    "import solid from 'vite-plugin-solid'; {import} export default {{ plugins: [solid(), {plugin}] }};"
+                ),
+            );
+            let refused = bundler(&project).unwrap_err();
+            assert!(refused.contains("is not Solid's"), "{import}: {refused}");
+        }
 
         // A plugin the grammar does not know refuses the config.
         write(
@@ -1070,6 +1052,30 @@ mod tests {
             "import other from 'some-plugin'; export default { plugins: [other()] };",
         );
         assert!(bundler(&project).is_err());
+
+        // A Vite alias, a deduplicated package and the Solid plugin's start mode send a specifier or the entries elsewhere than the closure follows.
+        for options in [
+            "resolve: { alias: { '~': './src' } }",
+            "resolve: { dedupe: ['solid-js'] }",
+        ] {
+            write(
+                &project,
+                "vite.config.ts",
+                &format!("export default {{ plugins: [], {options} }};"),
+            );
+            let refused = bundler(&project).unwrap_err();
+            assert!(
+                refused.contains("alias or a deduplicated"),
+                "{options}: {refused}"
+            );
+        }
+        write(
+            &project,
+            "vite.config.ts",
+            "import solid from 'vite-plugin-solid'; export default { plugins: [solid({ start: true })] };",
+        );
+        let start = bundler(&project).unwrap_err();
+        assert!(start.contains("start mode"), "{start}");
 
         // Another bundler's configuration, beside the project or above it, is not read.
         write(
