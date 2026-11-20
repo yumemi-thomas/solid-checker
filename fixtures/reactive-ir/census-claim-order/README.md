@@ -7,7 +7,7 @@ late walks (ADR 1104, here the `for…of` binding `child`), and nothing ran them
 source and memo, so which start named a row (the accessor of an SC5003 row, the first reach in start order) followed the scheduler: one run in
 some number differed, and a project that crosses the threshold (64 starts) never answered twice alike.
 
-Six copies of one start-leaving unit, so that the one a start leaves its work to differs by the order the starts are claimed in
+Two copies of one start-leaving unit, so that the start a leaving start's work lands in differs by the order the starts are claimed in
 (`SOLID_CHECKER_IR_CLAIM_ORDER=reverse` shows it on one worker with no scheduler). The answer is held to the same on every claim order and
 worker count by `rust/crates/solid-facts-backend/tests/verdict_determinism_process.rs` (which repeats the unit past the threshold) and by
 `scripts/determinism-check.mjs`. The unit was reduced from a corpus program (a tree mapper) by delta debugging while the claim orders still

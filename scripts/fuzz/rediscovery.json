@@ -40873,5 +40873,11 @@
    "mx-strict-read-untracked-evt-rerun-attributes-built-key-signal-direct-none"
   ],
   "rediscovered": "focus on the two contexts' mx-recall programs (STRICT_READ_UNTRACKED and REACTIVE_WRITE_IN_OWNED_SCOPE 4,516): the round-1 final build 2,972 false cleans; FIXED here (0)"
+ },
+ {
+  "finding": "ADR 1128: a start's verdict followed the worker and the order that walked it: the value-use census left the late walks of its walks past a withheld call queued, and the next start the same worker took ran them under its own source and memo, so the accessor an SC5003 row names (and the odd row) changed in one run in some number, and a corpus project never answered twice alike on the default worker count",
+  "found": "app-game's SC5003 at strokeDrawing.ts:8365 flipping in about one run in eighteen under corpus --jobs 4 (the coordinator's brief for ADR 1128)",
+  "fixed": "ADR 1128: `run_past_withheld` runs the late walks its walks queued before the start ends; `begin_start` classes every census field; `end_start` fails closed where a queue is left",
+  "outside": "the defect is a dependence on the scheduler, not on a program's shape: the report of one program differs between two orders of the same analysis, and Chrome has no verdict to compare (the rows are uncertifiable obligations whose accessor name or presence moved), so no generated program can be a false clean or a wrong rule. The generator would have to compare a program with its own report under another claim order, which no cell does. The gate is the process test `verdict_determinism_process` (the unit of fixtures/reactive-ir/census-claim-order repeated past the 64-start threshold under workers 1, 3 and the default and five claim orders; the unfixed code fails it, an unknown order is refused) and `scripts/determinism-check.mjs` (app-game: 26 runs, one report; the unfixed build gave a different report under every other claim order)"
  }
 ]

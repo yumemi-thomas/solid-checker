@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { compareReports, main, planRuns, validOrder } from "./determinism-check.mjs";
@@ -65,5 +68,21 @@ describe("determinism-check", () => {
     expect(lines.filter((line) => line.startsWith("same")).length).toBe(2);
     expect(lines.filter((line) => line.startsWith("DIFF")).length).toBe(1);
     expect(lines.some((line) => line.includes("FAILED"))).toBe(true);
+  });
+
+  it("checks every project of a corpus manifest from its app's root, with the manifest's configuration", () => {
+    const root = mkdtempSync(join(tmpdir(), "determinism-check-"));
+    writeFileSync(join(root, "tsconfig.json"), "{}");
+    const manifest = join(root, "manifest.json");
+    writeFileSync(manifest, JSON.stringify({ configuration: { runtimeTarget: "browser", runtimeBuild: "development", rendering: "csr" }, projects: [{ app: "a", root: ".", project: "tsconfig.json" }] }));
+    const calls = [];
+    const spawn = (checker, args, options) => { calls.push({ args, cwd: options.cwd }); return { status: 1, stdout: report(finding(1, "a")), stderr: "" }; };
+    const lines = [];
+    const code = main(["--corpus", "--manifest", manifest, "--apps-root", root, "--checker", here, "--typefacts", here, "--workers", "1,default", "--orders", "forward", "--repeats", "1"], spawn, (line) => lines.push(line));
+    expect(code).toBe(0);
+    expect(calls).toHaveLength(2);
+    expect(calls[0].cwd).toBe(root);
+    expect(calls[0].args).toEqual(["--format", "json", "--project", join(root, "tsconfig.json"), "--runtime-target", "browser", "--runtime-build", "development", "--rendering", "csr"]);
+    expect(lines[0]).toMatch(/^same a\/tsconfig\.json: 2 runs/);
   });
 });
