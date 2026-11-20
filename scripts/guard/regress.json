@@ -295,7 +295,7 @@
    "code": "SC1001",
    "removed": 9,
    "adr": "ADR 1152",
-   "why": "the fixture writes a name with a unicode escape on purpose (a key such as then or value, an identifier, a computed key) and the program is not proven: every violation of an execution rule is uncertifiable under escaped-name-unresolved until the central decode reads the names the facts already decode correctly here (docs/open-work.md, ADR 1152)"
+   "why": "the fixture writes a name with a unicode escape on purpose (a key such as then or value, an identifier, a computed key) and the program is not proven: every violation of an execution rule is uncertifiable under escaped-name-unresolved (the central decode that would read the names the facts already decode correctly here is not built: docs/open-work.md, ADR 1152)"
   },
   {
    "fixture": "reactive-ir/async-call-prefix",
@@ -303,7 +303,7 @@
    "code": "SC1001",
    "removed": 4,
    "adr": "ADR 1152",
-   "why": "the fixture writes a name with a unicode escape on purpose (a key such as then or value, an identifier, a computed key) and the program is not proven: every violation of an execution rule is uncertifiable under escaped-name-unresolved until the central decode reads the names the facts already decode correctly here (docs/open-work.md, ADR 1152)"
+   "why": "the fixture writes a name with a unicode escape on purpose (a key such as then or value, an identifier, a computed key) and the program is not proven: every violation of an execution rule is uncertifiable under escaped-name-unresolved (the central decode that would read the names the facts already decode correctly here is not built: docs/open-work.md, ADR 1152)"
   },
   {
    "fixture": "reactive-ir/async-call-prefix",
@@ -311,7 +311,7 @@
    "code": "SC2003",
    "removed": 2,
    "adr": "ADR 1152",
-   "why": "the fixture writes a name with a unicode escape on purpose (a key such as then or value, an identifier, a computed key) and the program is not proven: every violation of an execution rule is uncertifiable under escaped-name-unresolved until the central decode reads the names the facts already decode correctly here (docs/open-work.md, ADR 1152)"
+   "why": "the fixture writes a name with a unicode escape on purpose (a key such as then or value, an identifier, a computed key) and the program is not proven: every violation of an execution rule is uncertifiable under escaped-name-unresolved (the central decode that would read the names the facts already decode correctly here is not built: docs/open-work.md, ADR 1152)"
   },
   {
    "fixture": "reactive-ir/prop-head-get",
@@ -319,7 +319,7 @@
    "code": "SC1001",
    "removed": 3,
    "adr": "ADR 1152",
-   "why": "the fixture writes a name with a unicode escape on purpose (a key such as then or value, an identifier, a computed key) and the program is not proven: every violation of an execution rule is uncertifiable under escaped-name-unresolved until the central decode reads the names the facts already decode correctly here (docs/open-work.md, ADR 1152)"
+   "why": "the fixture writes a name with a unicode escape on purpose (a key such as then or value, an identifier, a computed key) and the program is not proven: every violation of an execution rule is uncertifiable under escaped-name-unresolved (the central decode that would read the names the facts already decode correctly here is not built: docs/open-work.md, ADR 1152)"
   },
   {
    "fixture": "reactive-ir/prop-head-get",
@@ -327,7 +327,7 @@
    "code": "SC1001",
    "removed": 1,
    "adr": "ADR 1152",
-   "why": "the fixture writes a name with a unicode escape on purpose (a key such as then or value, an identifier, a computed key) and the program is not proven: every violation of an execution rule is uncertifiable under escaped-name-unresolved until the central decode reads the names the facts already decode correctly here (docs/open-work.md, ADR 1152)"
+   "why": "the fixture writes a name with a unicode escape on purpose (a key such as then or value, an identifier, a computed key) and the program is not proven: every violation of an execution rule is uncertifiable under escaped-name-unresolved (the central decode that would read the names the facts already decode correctly here is not built: docs/open-work.md, ADR 1152)"
   },
   {
    "fixture": "reactive-ir/value-use-census",
@@ -335,7 +335,7 @@
    "code": "SC1001",
    "removed": 2,
    "adr": "ADR 1152",
-   "why": "the fixture writes a name with a unicode escape on purpose (a key such as then or value, an identifier, a computed key) and the program is not proven: every violation of an execution rule is uncertifiable under escaped-name-unresolved until the central decode reads the names the facts already decode correctly here (docs/open-work.md, ADR 1152)"
+   "why": "the fixture writes a name with a unicode escape on purpose (a key such as then or value, an identifier, a computed key) and the program is not proven: every violation of an execution rule is uncertifiable under escaped-name-unresolved (the central decode that would read the names the facts already decode correctly here is not built: docs/open-work.md, ADR 1152)"
   },
   {
    "fixture": "reactive-ir/value-use-census",
@@ -343,7 +343,7 @@
    "code": "SC1003",
    "removed": 1,
    "adr": "ADR 1152",
-   "why": "the fixture writes a name with a unicode escape on purpose (a key such as then or value, an identifier, a computed key) and the program is not proven: every violation of an execution rule is uncertifiable under escaped-name-unresolved until the central decode reads the names the facts already decode correctly here (docs/open-work.md, ADR 1152)"
+   "why": "the fixture writes a name with a unicode escape on purpose (a key such as then or value, an identifier, a computed key) and the program is not proven: every violation of an execution rule is uncertifiable under escaped-name-unresolved (the central decode that would read the names the facts already decode correctly here is not built: docs/open-work.md, ADR 1152)"
   }
  ]
 }
