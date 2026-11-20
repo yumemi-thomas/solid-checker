@@ -47,10 +47,10 @@
 //!   the program ([`solid_facts::package_reach::PackageReachIndex::page_may_run_code`]); where it has no HTML the program is closed
 //!   (ADR 0640, ADR 1080's listener census).
 //!
-//! Where the dialect's runtime is analysed (`--runtime-resolution required`), its own files are not read: what they register is what
-//! its exports register, which the answers above hold (`addEvent` and the others are the registrars, the delegated listeners they
-//! attach deliver only handlers one of them stored, and the runtime's own `change` listener on a `<select>` runs no project code).
-//! Without that, the runtime's own `addEventListener(name, …)` would end the proof in the one mode where its source is read.
+//! The files of the dialect's own runtime packages are not read: what they register is what its exports register, which the answers above
+//! hold (`addEvent` and the others are the registrars, the delegated listeners they attach deliver only handlers one of them stored, and
+//! the runtime's own `change` listener on a `<select>` runs no project code). Under `--runtime-resolution required` the proof does not
+//! fire, for a cause not found (ADR 1151); that is safe, a withheld proof being the fail-closed direction.
 //!
 //! Everything else stays what ADR 0329 made it: the obligation. `blur`, `click`, `dispatchEvent`, the dialog and popover members and
 //! the bare global `focus()` are not asked.

@@ -2248,8 +2248,8 @@ fn with_program_lookup<T>(
 }
 
 /// ADR 1151 (round 1): the focus proof reads every analysed file, a dependency's source as the project's, except the dialect's own runtime packages (whose registrars are asked at
-/// the import, `Dialect::runtime_module_listener_registrations`): the runtime's own `addEventListener(name, …)` with a variable type is what ended the proof for a program that
-/// analysed `@solidjs/web`, and what a program registers through the runtime is what its imports ask.
+/// the import, `Dialect::runtime_module_listener_registrations`): a copy of the runtime's own `addEventListener(name, …)` with a variable type would end the proof of a program whose
+/// files include `@solidjs/web`'s, and what a program registers through the runtime is what its imports ask.
 #[test]
 fn the_focus_proof_reads_every_file_but_the_dialects_runtime() {
     let may = |files: &[(&str, &str)]| {

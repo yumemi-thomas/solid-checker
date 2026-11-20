@@ -67,7 +67,11 @@ reviewed build had **no** SC9012 at the call for the ones marked `old`. Every na
   write the handler in `App.tsx`, where its own rows (SC3001, SC4001) cover the diagnostic at its `onCleanup`; their snapshots hold the row at the call.
 - The page (`../leaf-focus-page-*`, top-level fixtures: a project's HTML is read from its whole tree): `clean` (the page's only script is the program's module entry:
   proved), `inline-handler`, `body-handler`, `inline-script`, `extra-script`, `second-module` and `unread` (an element host discovery's grammar does not read) each
-  withhold the proof. A project with no HTML is the closed world (the main case).
+  withhold the proof. Round 2 (the review's N1, the grammar of ADR 1154): `solidus-body` (`<body/onfocusin=…>`), `solidus-attribute` (`<div id="root"/onfocusin=…>`),
+  `uppercase-handler` (`ONFOCUSIN`), `uppercase-solidus`, `comment-bang` (a comment HTML ends at `--!>`), and the pages of `public/`: `public-handler`
+  (`<body/onfocus=…>`), `public-upper`; the control `public-static` (markup alone) keeps the proof. The reviewed build (853e30b5c) proved the first six and the two
+  `public` handlers (no SC9012 at the call); Chrome 148 runs each handler (`../product-realm-page-handler-solidus/html-tokenizer-probe.mjs`). A project with no HTML is the
+  closed world (the main case).
 
 The stubs of the `@solidjs/web` variants declare the registrars byte-faithfully to `types/client.d.ts` of `@solidjs/web@2.0.0-rc.21`, except `Dynamic` (the stub
 declares no `JSX.Element`); the runtime oracle types every case against the real packages. The `runtime-path-alias` stand-in `web.js` is written for the fixture, not the
