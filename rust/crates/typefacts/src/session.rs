@@ -260,9 +260,51 @@ struct SentRequest {
     cancellable: bool,
 }
 
+/// How long a freshly spawned producer is given to send its startup frame. A liveness bound, never a verdict: see [`ProcessConnection::spawn`].
+const HANDSHAKE_BOUND: Duration = Duration::from_secs(60);
+/// How long a killed producer is given to exit and be reaped before it is left to a background thread ([`terminate_child`]).
+const REAP_BOUND: Duration = Duration::from_secs(5);
+/// How soon, and at most how long between asks, a killed producer is asked whether it has exited meanwhile: the first ask follows the kill at once, and the pause
+/// doubles up to the ceiling, so a producer that dies in a millisecond (the ordinary case: a session closing) costs about that, not a fixed tick.
+const REAP_POLL_FIRST: Duration = Duration::from_micros(100);
+const REAP_POLL_CEILING: Duration = Duration::from_millis(10);
+
+/// The bounds and the kill of one producer's life. The production values are the constants above; a test passes its own (short bounds, a kill that does nothing: the
+/// child the kernel will not let die).
+#[derive(Clone, Copy)]
+struct Terms {
+    handshake: Duration,
+    reap: Duration,
+    kill: fn(&mut Child),
+}
+
+impl Terms {
+    const PRODUCTION: Self = Self {
+        handshake: HANDSHAKE_BOUND,
+        reap: REAP_BOUND,
+        kill: kill_child,
+    };
+}
+
+fn kill_child(child: &mut Child) {
+    let _ = child.kill();
+}
+
+/// What became of a producer after it was killed.
+#[derive(Debug, Eq, PartialEq)]
+enum Reaping {
+    /// The kernel reported its exit within the bound: no process is left, and the pipes it held are closed.
+    Reaped,
+    /// It had not exited when the bound ran out (the kernel can hold a process whose `SIGKILL` is pending, as macOS does while a launching process's exec check
+    /// runs: the producer was observed parked at startup with `wait4` never returning). A background thread now waits for it and its pid was logged.
+    Abandoned { pid: u32 },
+}
+
 /// A producer child process and the threads that serve its pipes.
 struct ProcessConnection {
-    child: Child,
+    /// `None` once [`ProcessConnection::terminate`] has taken it.
+    child: Option<Child>,
+    terms: Terms,
     writer: Arc<Mutex<BufWriter<ChildStdin>>>,
     pending: PendingResponses,
     next_request_id: Arc<AtomicU64>,
@@ -304,6 +346,14 @@ impl Cancellation {
 
 impl ProcessConnection {
     fn spawn(producer: &Producer, project_id: &str) -> Result<Self, SessionError> {
+        Self::spawn_with(producer, project_id, Terms::PRODUCTION)
+    }
+
+    fn spawn_with(
+        producer: &Producer,
+        project_id: &str,
+        terms: Terms,
+    ) -> Result<Self, SessionError> {
         if cfg!(target_family = "wasm") {
             // A WASM build reaches its producer through a FrameBridge, never a
             // child process.
@@ -355,33 +405,48 @@ impl ProcessConnection {
         // observed recording load-dependent *refusals* for packages that
         // certify on an idle machine -- a nondeterministic verdict, which is
         // worse than a slow failure.
-        let (handshake, mut output) = match handshake_receiver.recv_timeout(Duration::from_secs(60))
-        {
+        let (handshake, mut output) = match handshake_receiver.recv_timeout(terms.handshake) {
             Ok(result) => {
-                handshake_reader
-                    .join()
-                    .map_err(|_| SessionError::Handshake("startup reader panicked".into()))?;
+                if handshake_reader.join().is_err() {
+                    return Err(refuse_startup(
+                        child,
+                        &terms,
+                        "startup reader panicked".into(),
+                    ));
+                }
                 result
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
-                terminate_child(&mut child);
-                let _ = handshake_reader.join();
-                return Err(SessionError::Handshake(
-                    "producer did not report compatibility within 60 seconds".into(),
+                return Err(refuse_startup(
+                    child,
+                    &terms,
+                    format!(
+                        "producer did not report compatibility within {} seconds",
+                        terms.handshake.as_secs_f64()
+                    ),
                 ));
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => {
-                terminate_child(&mut child);
-                let _ = handshake_reader.join();
-                return Err(SessionError::Handshake(
+                return Err(refuse_startup(
+                    child,
+                    &terms,
                     "startup reader disconnected".into(),
                 ));
             }
         };
-        let handshake = handshake
-            .map_err(|error| SessionError::Handshake(format!("invalid startup frame: {error}")))?;
+        let handshake = match handshake {
+            Ok(handshake) => handshake,
+            Err(error) => {
+                return Err(refuse_startup(
+                    child,
+                    &terms,
+                    format!("invalid startup frame: {error}"),
+                ));
+            }
+        };
         if let Err(error) = check_handshake(&handshake) {
-            terminate_child(&mut child);
+            // The mismatch is the answer, whatever became of the child.
+            terminate_child(child, &terms);
             return Err(error);
         }
 
@@ -416,7 +481,8 @@ impl ProcessConnection {
         });
 
         Ok(Self {
-            child,
+            child: Some(child),
+            terms,
             writer,
             pending,
             next_request_id: Arc::new(AtomicU64::new(1)),
@@ -548,11 +614,17 @@ impl ProcessConnection {
             .ok();
     }
 
+    /// Kills the producer and waits for it, for at most `terms.reap`: the reader that serves its stdout is joined once the child is gone (its pipe is closed, so the reader
+    /// has seen the end of the file), and left running beside the child's background reaper when the child could not be reaped, because it would wait for the pipe as long.
     fn terminate(&mut self) {
-        terminate_child(&mut self.child);
-        if let Some(reader) = self.reader.take() {
+        if let Some(child) = self.child.take()
+            && terminate_child(child, &self.terms) == Reaping::Reaped
+            && let Some(reader) = self.reader.take()
+        {
             let _ = reader.join();
         }
+        // An abandoned child's reader is detached: dropping the handle does not stop it.
+        self.reader = None;
     }
 }
 
@@ -877,8 +949,11 @@ pub enum CloseOutcome {
     /// within the bound -- so the child was terminated without a goodbye.
     ///
     /// Not a failure. Nothing is left behind either way: the child is killed
-    /// and its reader joined by `Connection::terminate`, and a shared
-    /// transition arena is removed by its own `Drop` on this side of the pipe.
+    /// and reaped, and its reader joined, by `Connection::terminate`, and a
+    /// shared transition arena is removed by its own `Drop` on this side of
+    /// the pipe. A child the kernel does not let exit within the bound is the
+    /// one exception: a background thread reaps it later and its pid is
+    /// logged (`terminate_child`).
     ProducerAlreadyGone,
 }
 
@@ -2522,9 +2597,54 @@ impl Drop for ReaderExit {
     }
 }
 
-fn terminate_child(child: &mut Child) {
-    let _ = child.kill();
-    let _ = child.wait();
+/// Kills `child` and waits for it, for at most `terms.reap`, and never longer.
+///
+/// An unbounded `wait` hung the checker for good when a producer parked at startup (observed on macOS: a process the kernel holds in its exec check, `SIGKILL`
+/// pending, is not reaped until the check ends, and `wait4` does not return meanwhile). The wait here polls `try_wait`, which never blocks. A child that is still not
+/// reaped when the bound runs out is handed to a thread that waits for it however long the kernel takes, so no zombie outlives it, and its pid is logged to
+/// standard error so it can be found if it never exits. A caller that is told `Abandoned` reports the failure it was handling (the startup failure, the closed
+/// session) all the same: nothing here turns a failure into a result.
+fn terminate_child(mut child: Child, terms: &Terms) -> Reaping {
+    (terms.kill)(&mut child);
+    let deadline = Instant::now() + terms.reap;
+    let mut pause = REAP_POLL_FIRST;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => return Reaping::Reaped,
+            // The kernel no longer knows the child (it was reaped elsewhere): nothing is left to wait for, as with the unbounded wait whose error was ignored.
+            Err(_) => return Reaping::Reaped,
+            Ok(None) => {}
+        }
+        let now = Instant::now();
+        if now >= deadline {
+            break;
+        }
+        std::thread::sleep(pause.min(deadline - now));
+        pause = (pause * 2).min(REAP_POLL_CEILING);
+    }
+    let pid = child.id();
+    eprintln!(
+        "typefacts: producer pid {pid} had not exited {} seconds after SIGKILL; a background thread waits for it",
+        terms.reap.as_secs_f64()
+    );
+    let _ = std::thread::Builder::new()
+        .name("typefacts-reaper".into())
+        .spawn(move || {
+            let _ = child.wait();
+        });
+    Reaping::Abandoned { pid }
+}
+
+/// A producer that failed its startup (no startup frame in time, an unreadable or incompatible one): kills it, and says so in the error, with what became of it where
+/// it could not be reaped. The reader that waits for its first frame is not joined: it ends with the child's pipe, and a child that cannot be reaped holds the pipe open.
+fn refuse_startup(child: Child, terms: &Terms, reason: String) -> SessionError {
+    match terminate_child(child, terms) {
+        Reaping::Reaped => SessionError::Handshake(reason),
+        Reaping::Abandoned { pid } => SessionError::Handshake(format!(
+            "{reason}; the producer (pid {pid}) had not exited {} seconds after being killed and is left to a background reaper",
+            terms.reap.as_secs_f64()
+        )),
+    }
 }
 
 mod closure;
