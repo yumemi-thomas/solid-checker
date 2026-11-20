@@ -288,6 +288,62 @@
    "removed": 1,
    "adr": "ADR 1141",
    "why": "the StillRuns case <button disabled {...rest} onClick> moved to disabled-spread-handler-owner (SpreadDisabled), where rc.21's spread delegates onClick and the dispatcher skips the disabled button (Chrome quiet): an obligation, handler-on-disabled-control"
+  },
+  {
+   "fixture": "reactive-ir/async-call-prefix",
+   "path": "fixtures/reactive-ir/async-call-prefix/App.tsx",
+   "code": "SC1001",
+   "removed": 9,
+   "adr": "ADR 1152",
+   "why": "the fixture writes a name with a unicode escape on purpose (a key such as then or value, an identifier, a computed key) and the program is not proven: every violation of an execution rule is uncertifiable under escaped-name-unresolved until the central decode reads the names the facts already decode correctly here (docs/open-work.md, ADR 1152)"
+  },
+  {
+   "fixture": "reactive-ir/async-call-prefix",
+   "path": "fixtures/reactive-ir/async-call-prefix/Extra.tsx",
+   "code": "SC1001",
+   "removed": 4,
+   "adr": "ADR 1152",
+   "why": "the fixture writes a name with a unicode escape on purpose (a key such as then or value, an identifier, a computed key) and the program is not proven: every violation of an execution rule is uncertifiable under escaped-name-unresolved until the central decode reads the names the facts already decode correctly here (docs/open-work.md, ADR 1152)"
+  },
+  {
+   "fixture": "reactive-ir/async-call-prefix",
+   "path": "fixtures/reactive-ir/async-call-prefix/Extra.tsx",
+   "code": "SC2003",
+   "removed": 2,
+   "adr": "ADR 1152",
+   "why": "the fixture writes a name with a unicode escape on purpose (a key such as then or value, an identifier, a computed key) and the program is not proven: every violation of an execution rule is uncertifiable under escaped-name-unresolved until the central decode reads the names the facts already decode correctly here (docs/open-work.md, ADR 1152)"
+  },
+  {
+   "fixture": "reactive-ir/prop-head-get",
+   "path": "fixtures/reactive-ir/prop-head-get/App.tsx",
+   "code": "SC1001",
+   "removed": 3,
+   "adr": "ADR 1152",
+   "why": "the fixture writes a name with a unicode escape on purpose (a key such as then or value, an identifier, a computed key) and the program is not proven: every violation of an execution rule is uncertifiable under escaped-name-unresolved until the central decode reads the names the facts already decode correctly here (docs/open-work.md, ADR 1152)"
+  },
+  {
+   "fixture": "reactive-ir/prop-head-get",
+   "path": "fixtures/reactive-ir/prop-head-get/Rows.tsx",
+   "code": "SC1001",
+   "removed": 1,
+   "adr": "ADR 1152",
+   "why": "the fixture writes a name with a unicode escape on purpose (a key such as then or value, an identifier, a computed key) and the program is not proven: every violation of an execution rule is uncertifiable under escaped-name-unresolved until the central decode reads the names the facts already decode correctly here (docs/open-work.md, ADR 1152)"
+  },
+  {
+   "fixture": "reactive-ir/value-use-census",
+   "path": "fixtures/reactive-ir/value-use-census/InNamed.tsx",
+   "code": "SC1001",
+   "removed": 2,
+   "adr": "ADR 1152",
+   "why": "the fixture writes a name with a unicode escape on purpose (a key such as then or value, an identifier, a computed key) and the program is not proven: every violation of an execution rule is uncertifiable under escaped-name-unresolved until the central decode reads the names the facts already decode correctly here (docs/open-work.md, ADR 1152)"
+  },
+  {
+   "fixture": "reactive-ir/value-use-census",
+   "path": "fixtures/reactive-ir/value-use-census/ReviewTwo.tsx",
+   "code": "SC1003",
+   "removed": 1,
+   "adr": "ADR 1152",
+   "why": "the fixture writes a name with a unicode escape on purpose (a key such as then or value, an identifier, a computed key) and the program is not proven: every violation of an execution rule is uncertifiable under escaped-name-unresolved until the central decode reads the names the facts already decode correctly here (docs/open-work.md, ADR 1152)"
   }
  ]
 }

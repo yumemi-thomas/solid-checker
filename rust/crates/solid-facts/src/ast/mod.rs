@@ -80,7 +80,9 @@ use thiserror::Error;
 /// `Object` handed on as a value is an `ObjectAssign` site, and `Object["assign"]` a key reader.
 /// 107 (ADR 1148 round 2): the words of every identifier, string literal and template piece written with an escape (`escaped_words`): a name's decoded
 /// spelling, which a scan of the source text cannot see (`document.ev\u0061luate`).
-pub const AST_FACTS_SCHEMA: u32 = 107;
+/// 108 (ADR 1152): the span of each name written with an escape, and of each chain of names that holds one, with the text the program means (`escaped_names`), and each
+/// string or template written with an escape whose whole value is one word, a text a check may read as a name (`escaped_strings`).
+pub const AST_FACTS_SCHEMA: u32 = 108;
 
 mod argument_completion;
 pub(crate) mod code_sinks;
@@ -88,6 +90,8 @@ mod completion_call_cover;
 mod component_value_flow;
 mod computed_keys;
 mod emission;
+mod escaped_names;
+mod escaped_strings;
 mod escaped_words;
 mod host_call_completion;
 mod host_constants;

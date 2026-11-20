@@ -1,6 +1,17 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-head-get/App.tsx",
+      "start": 0,
+      "end": 8550,
+      "fixes": 0
+    },
     {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
@@ -246,7 +257,8 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/prop-head-get/App.tsx",
       "start": 2523,
@@ -377,7 +389,8 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/prop-head-get/App.tsx",
       "start": 3752,
@@ -409,7 +422,8 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/prop-head-get/App.tsx",
       "start": 4023,
@@ -1363,6 +1377,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-head-get/Forwarder.tsx",
+      "start": 0,
+      "end": 137,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -1382,6 +1407,17 @@
       "path": "fixtures/reactive-ir/prop-head-get/Forwarder.tsx",
       "start": 105,
       "end": 133,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/prop-head-get/Rows.tsx",
+      "start": 0,
+      "end": 252,
       "fixes": 0
     },
     {
@@ -1409,7 +1445,8 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/prop-head-get/Rows.tsx",
       "start": 147,

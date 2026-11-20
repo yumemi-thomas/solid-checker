@@ -7968,6 +7968,102 @@
    "adr": "ADR 1133",
    "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx writes `anchor.href = url` with a URL nothing proves is no `javascript:` URL (NavigationUrl, ADR 1133 F5). The dispatch veto withholds every event proof of the program's handlers",
    "why": "fail-closed: code built from a string, or a definer or reader under an unproven key, may make a handler run with no event; the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/action-in-owned-scope-global-spellings",
+   "key": "SC9012 escaped-name-unresolved",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1152",
+   "fact": "the program writes a name with an escape (an identifier, or a string or template whose whole value is one word): every violation of an execution rule turns uncertifiable under escaped-name-unresolved and each project file gets one file-wide SC9012"
+  },
+  {
+   "fixture": "reactive-ir/async-call-prefix",
+   "key": "SC1001 escaped-name-unresolved",
+   "from": 0,
+   "to": 13,
+   "adr": "ADR 1152",
+   "fact": "the program writes a name with an escape (an identifier, or a string or template whose whole value is one word): every violation of an execution rule turns uncertifiable under escaped-name-unresolved and each project file gets one file-wide SC9012"
+  },
+  {
+   "fixture": "reactive-ir/async-call-prefix",
+   "key": "SC2003 escaped-name-unresolved",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1152",
+   "fact": "the program writes a name with an escape (an identifier, or a string or template whose whole value is one word): every violation of an execution rule turns uncertifiable under escaped-name-unresolved and each project file gets one file-wide SC9012"
+  },
+  {
+   "fixture": "reactive-ir/async-call-prefix",
+   "key": "SC9012 escaped-name-unresolved",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 1152",
+   "fact": "the program writes a name with an escape (an identifier, or a string or template whose whole value is one word): every violation of an execution rule turns uncertifiable under escaped-name-unresolved and each project file gets one file-wide SC9012"
+  },
+  {
+   "fixture": "reactive-ir/context-member-refusals",
+   "key": "SC9012 escaped-name-unresolved",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1152",
+   "fact": "the program writes a name with an escape (an identifier, or a string or template whose whole value is one word): every violation of an execution rule turns uncertifiable under escaped-name-unresolved and each project file gets one file-wide SC9012"
+  },
+  {
+   "fixture": "reactive-ir/flush-universe-package-hand-off-receiver-confinement",
+   "key": "SC9012 escaped-name-unresolved",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1152",
+   "fact": "the program writes a name with an escape (an identifier, or a string or template whose whole value is one word): every violation of an execution rule turns uncertifiable under escaped-name-unresolved and each project file gets one file-wide SC9012"
+  },
+  {
+   "fixture": "reactive-ir/prop-head-get",
+   "key": "SC1001 escaped-name-unresolved",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 1152",
+   "fact": "the program writes a name with an escape (an identifier, or a string or template whose whole value is one word): every violation of an execution rule turns uncertifiable under escaped-name-unresolved and each project file gets one file-wide SC9012"
+  },
+  {
+   "fixture": "reactive-ir/prop-head-get",
+   "key": "SC9012 escaped-name-unresolved",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 1152",
+   "fact": "the program writes a name with an escape (an identifier, or a string or template whose whole value is one word): every violation of an execution rule turns uncertifiable under escaped-name-unresolved and each project file gets one file-wide SC9012"
+  },
+  {
+   "fixture": "reactive-ir/transported-member-stability",
+   "key": "SC9012 escaped-name-unresolved",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1152",
+   "fact": "the program writes a name with an escape (an identifier, or a string or template whose whole value is one word): every violation of an execution rule turns uncertifiable under escaped-name-unresolved and each project file gets one file-wide SC9012"
+  },
+  {
+   "fixture": "reactive-ir/value-use-census",
+   "key": "SC1001 escaped-name-unresolved",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1152",
+   "fact": "the program writes a name with an escape (an identifier, or a string or template whose whole value is one word): every violation of an execution rule turns uncertifiable under escaped-name-unresolved and each project file gets one file-wide SC9012"
+  },
+  {
+   "fixture": "reactive-ir/value-use-census",
+   "key": "SC1003 escaped-name-unresolved",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1152",
+   "fact": "the program writes a name with an escape (an identifier, or a string or template whose whole value is one word): every violation of an execution rule turns uncertifiable under escaped-name-unresolved and each project file gets one file-wide SC9012"
+  },
+  {
+   "fixture": "reactive-ir/value-use-census",
+   "key": "SC9012 escaped-name-unresolved",
+   "from": 0,
+   "to": 17,
+   "adr": "ADR 1152",
+   "fact": "the program writes a name with an escape (an identifier, or a string or template whose whole value is one word): every violation of an execution rule turns uncertifiable under escaped-name-unresolved and each project file gets one file-wide SC9012"
   }
  ]
 }

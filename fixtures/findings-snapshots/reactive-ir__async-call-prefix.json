@@ -1,6 +1,17 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-call-prefix/App.tsx",
+      "start": 0,
+      "end": 7454,
+      "fixes": 0
+    },
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
@@ -26,7 +37,8 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-call-prefix/App.tsx",
       "start": 475,
@@ -69,7 +81,8 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-call-prefix/App.tsx",
       "start": 603,
@@ -200,7 +213,8 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-call-prefix/App.tsx",
       "start": 1892,
@@ -298,7 +312,8 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-call-prefix/App.tsx",
       "start": 2458,
@@ -473,7 +488,8 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-call-prefix/App.tsx",
       "start": 3685,
@@ -494,7 +510,8 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-call-prefix/App.tsx",
       "start": 4154,
@@ -636,7 +653,8 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-call-prefix/App.tsx",
       "start": 6228,
@@ -657,7 +675,8 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-call-prefix/App.tsx",
       "start": 6448,
@@ -689,7 +708,8 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-call-prefix/App.tsx",
       "start": 7256,
@@ -705,6 +725,17 @@
       "path": "fixtures/reactive-ir/async-call-prefix/App.tsx",
       "start": 7372,
       "end": 7386,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-call-prefix/Extra.tsx",
+      "start": 0,
+      "end": 4263,
       "fixes": 0
     },
     {
@@ -820,7 +851,8 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-call-prefix/Extra.tsx",
       "start": 915,
@@ -951,7 +983,8 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-call-prefix/Extra.tsx",
       "start": 2528,
@@ -961,7 +994,8 @@
     {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-call-prefix/Extra.tsx",
       "start": 2699,
@@ -1004,7 +1038,8 @@
     {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-call-prefix/Extra.tsx",
       "start": 2977,
@@ -1080,7 +1115,8 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-call-prefix/Extra.tsx",
       "start": 3414,
@@ -1211,7 +1247,8 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-call-prefix/Extra.tsx",
       "start": 4113,
@@ -1227,6 +1264,17 @@
       "path": "fixtures/reactive-ir/async-call-prefix/Extra.tsx",
       "start": 4206,
       "end": 4214,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-call-prefix/remote.ts",
+      "start": 0,
+      "end": 275,
       "fixes": 0
     },
     {

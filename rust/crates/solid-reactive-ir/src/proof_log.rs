@@ -339,6 +339,9 @@ pub(crate) enum PremiseKind {
     BindingBeforeInitialization,
     /// The compiler refused the file, so it has no compiler facts (ADR 0360).
     CompilerRefusedFile,
+    /// A file of the program writes a name with an escape (an identifier, or a string that is one word), which a check that compares a name reads as its
+    /// spelling: nothing in the program is proven (ADR 1152). The span is the site the pass demoted.
+    EscapedNameWritten,
     /// The rule claims a client runtime window and the program's execution
     /// paths decide whether the site is in one (ADR 0659).
     ClientRuntimeReach,
@@ -581,6 +584,8 @@ pub enum DropPass {
     BindingBeforeInitialization,
     /// ADR 0360: the compiler refused the file.
     CompilerRefusedFile,
+    /// ADR 1152: a file of the program writes a name with an escape, so a violation anywhere in it is not proven.
+    EscapedName,
     /// ADR 0659 and the deferred-mount rule: the program's execution paths.
     ExecutionPaths,
     /// ADR 0822: a violation at the same site makes a pending-value
@@ -611,6 +616,7 @@ impl DropPass {
             Self::SiteUnreached => "SiteUnreached",
             Self::BindingBeforeInitialization => "BindingBeforeInitialization",
             Self::CompilerRefusedFile => "CompilerRefusedFile",
+            Self::EscapedName => "EscapedName",
             Self::ExecutionPaths => "ExecutionPaths",
             Self::SupersededByViolation => "SupersededByViolation",
             Self::RuntimeConfiguration => "RuntimeConfiguration",
@@ -633,6 +639,7 @@ impl DropPass {
             Self::SiteUnreached => &[PremiseKind::SiteReach],
             Self::BindingBeforeInitialization => &[PremiseKind::BindingBeforeInitialization],
             Self::CompilerRefusedFile => &[PremiseKind::CompilerRefusedFile],
+            Self::EscapedName => &[PremiseKind::EscapedNameWritten],
             Self::ExecutionPaths => &[PremiseKind::ClientRuntimeReach],
             Self::SupersededByViolation => &[PremiseKind::ViolationAtSite],
             Self::RuntimeConfiguration => &[PremiseKind::RuntimeConfiguration],
@@ -1317,6 +1324,7 @@ mod tests {
             DropPass::SiteUnreached,
             DropPass::BindingBeforeInitialization,
             DropPass::CompilerRefusedFile,
+            DropPass::EscapedName,
             DropPass::ExecutionPaths,
             DropPass::SupersededByViolation,
             DropPass::RuntimeConfiguration,
