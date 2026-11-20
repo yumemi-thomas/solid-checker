@@ -209,6 +209,17 @@
    "witness": "mx-strict-read-untracked-evt-apply-event-replaced-signal-direct-none (and fixtures/reactive-ir/event-dispatch-shadow/variants/event-replaced): Chrome rc.21 warns STRICT_READ_UNTRACKED at a handler read the removed proof certified, the handler run with no event after `globalThis.event` is replaced (ADR 1125 G1; rediscovery row in scripts/fuzz/rediscovery.json)",
    "collateral": 1,
    "why": "ADR 1125 (#296 smoke, run 44606315559): App.tsx defines a `then` method on an object literal (coercion-hook then), which an await or a promise resolution calls with the object as `this`; event delivery is not proven intact, so the dispatch veto withholds the handler's event proofs (owner, read, flush, listener, apply) and the verdict is recall-gap (fail closed). Hazard per program from the blocker census (event-delivery-hazard) on d40e3f3cd. recovered in ADR 1133 if the facts' `contained` mark on a hook defined on a fresh object literal is honoured by the delivery scan (Fable round 2 N4's narrowing); otherwise owed."
+  },
+  {
+   "grid": "mx-census",
+   "ids": [
+    "mx-context-not-found-dny-formdata-submit-x-direct-none"
+   ],
+   "adr": "ADR 1125",
+   "kind": "fix",
+   "witness": "mx-context-not-found-evt-apply-event-replaced-x-direct-none: Chrome rc.21 throws NO_OWNER_CONTEXT where d40e3f3cd reported missing-context-provider (CONTEXT_NOT_FOUND) in a handler whose delivery premise is broken (#296 smoke-census, run 44606315559)",
+   "collateral": 1,
+   "why": "ADR 1125 (#296 census, second run): a context-provider requirement in a JSX handler is uncertifiable where the delivery premise is broken or an apply may deliver into a shadow tree (the CONTEXT_NOT_FOUND false positives fix). This program writes a literal javascript: URL (`<form action=\"javascript:void 0\">`, code-from-string JavascriptUrl), so delivery is not proven intact and its true CONTEXT_NOT_FOUND proof is withheld."
   }
  ]
 }
