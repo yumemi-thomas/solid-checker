@@ -351,31 +351,42 @@ const PAGE_SEARCH_LIMIT: usize = 50_000;
 
 /// Whether the HTML file at `path` may run code in a page that shares modules with another: a script element, a dynamic `import(`, a `javascript:` URL or an inline
 /// event handler. A static file (a site-verification token, an error page of markup alone) loads nothing. A file that cannot be read may.
+///
+/// An inline handler is an attribute name `on…` followed by `=`, compared in lower case (`ONFOCUS=`). HTML's tokenizer starts an attribute name after white space, a solidus
+/// (`<body/onfocus=…>`) or a quote (`<a href='/'onclick=…>`), and this scan takes any byte that is no part of a longer name before the `on` for the start of one, so a
+/// text that only looks like a handler ends the premise too (the fail-closed direction).
 fn may_run_code(path: &Path) -> Result<bool, String> {
     let Ok(bytes) = fs::read(path) else {
         return Ok(true);
     };
     let text = String::from_utf8_lossy(&bytes).to_ascii_lowercase();
+    Ok(text_may_run_code(&text))
+}
+
+/// [`may_run_code`] over the lower-cased text of a page.
+fn text_may_run_code(text: &str) -> bool {
     if text.contains("<script") || text.contains("import(") || text.contains("javascript:") {
-        return Ok(true);
+        return true;
     }
-    // An inline handler: whitespace, `on`, letters, optional spaces, `=`.
     let bytes = text.as_bytes();
+    let part_of_a_name =
+        |byte: u8| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b':' | b'.');
     for at in 0..bytes.len().saturating_sub(3) {
-        if bytes[at].is_ascii_whitespace() && bytes[at + 1] == b'o' && bytes[at + 2] == b'n' {
-            let mut end = at + 3;
-            while end < bytes.len() && bytes[end].is_ascii_lowercase() {
-                end += 1;
-            }
-            while end < bytes.len() && bytes[end].is_ascii_whitespace() {
-                end += 1;
-            }
-            if end > at + 3 && bytes.get(end) == Some(&b'=') {
-                return Ok(true);
-            }
+        if bytes[at] != b'o' || bytes[at + 1] != b'n' || (at > 0 && part_of_a_name(bytes[at - 1])) {
+            continue;
+        }
+        let mut end = at + 2;
+        while end < bytes.len() && bytes[end].is_ascii_lowercase() {
+            end += 1;
+        }
+        while end < bytes.len() && bytes[end].is_ascii_whitespace() {
+            end += 1;
+        }
+        if end > at + 2 && bytes.get(end) == Some(&b'=') {
+            return true;
         }
     }
-    Ok(false)
+    false
 }
 
 /// The first HTML file under `directory` that is not its own `index.html`, or an error where the tree is too large to search or cannot be read.
@@ -1779,6 +1790,110 @@ mod tests {
         write(&root, "src/main.tsx", "export {};");
         let none = entries_of(&root, &|_| true).unwrap_err();
         assert!(none.contains("neither an index.html"), "{none}");
+    }
+
+    /// ADR 1154: the scan of another page reads an attribute name `on…` after white space, a solidus or a quote, in any case.
+    #[test]
+    fn a_page_scan_reads_an_inline_handler_after_a_solidus_a_quote_or_in_upper_case() {
+        for text in [
+            "<body onfocus=\"hook()\">",
+            "<body/onfocus=\"hook()\">",
+            "<body//onfocus=\"hook()\">",
+            "<body / onfocus = \"hook()\">",
+            "<div id=\"a\"/onclick=\"go()\">",
+            "<a href='/'onclick='go()'>x</a>",
+            "<BODY ONFOCUSIN=\"hook()\">",
+            "<body\tonload=go()>",
+            "<body\nonload=go()>",
+            "<svg/onload=go()>",
+            "<img src=x onerror=go()>",
+            "<script src=\"/a.js\"></script>",
+            "<script>go()</script>",
+            "<a href=\"javascript:go()\">x</a>",
+            "<p>import('/a.js')</p>",
+        ] {
+            assert!(text_may_run_code(&text.to_ascii_lowercase()), "{text}");
+        }
+        // Markup alone, a name that only contains `on`, and a path or text that has `on` in it but no `=` after the letters.
+        for text in [
+            "<html><body><p>hi</p></body></html>",
+            "<div id=\"root\" data-online=\"1\" class=\"one\">x</div>",
+            "<a href=\"/section/one\">x</a>",
+            "<meta name=\"description\" content=\"a conference on lists\">",
+            "<p>the person said so</p>",
+            "<button type=\"button\" aria-pressed=\"true\">go</button>",
+        ] {
+            assert!(!text_may_run_code(&text.to_ascii_lowercase()), "{text}");
+        }
+    }
+
+    /// ADR 1154: the page the entries are read from and the other pages of a project read an inline handler after a solidus, in upper case and after a quote as they read
+    /// one after a space: the `index.html` is refused (the realm is unknown), and a `public/` page with a handler is a second page that can run code.
+    #[test]
+    fn a_handler_after_a_solidus_is_read_in_the_entry_page_and_in_a_public_page() {
+        let entries = |page: &str| {
+            let root = scratch("n1-entries");
+            write(&root, "index.html", page);
+            write(&root, "src/main.tsx", "export {};");
+            let files = program(&root, &["src/main.tsx"]);
+            entries_of(&root, &|path| files.contains(path)).map(|entries| entries.len())
+        };
+        assert_eq!(entries(PAGE), Ok(1));
+        for (name, page, reason) in [
+            (
+                "space",
+                PAGE.replace("<body>", "<body onfocus=\"hook()\">"),
+                "executable inline event attribute",
+            ),
+            (
+                "solidus",
+                PAGE.replace("<body>", "<body/onfocus=\"hook()\">"),
+                "executable inline event attribute",
+            ),
+            (
+                "solidus-div",
+                PAGE.replace(
+                    "<div id=\"root\">",
+                    "<div id=\"root\"/onfocusin=\"hook()\">",
+                ),
+                "executable inline event attribute",
+            ),
+            (
+                "upper",
+                PAGE.replace("<body>", "<body ONFOCUSIN=\"hook()\">"),
+                "executable inline event attribute",
+            ),
+            (
+                "upper-solidus",
+                PAGE.replace("<body>", "<BODY/ONFOCUSIN=\"hook()\">"),
+                "executable inline event attribute",
+            ),
+            (
+                "bang-comment",
+                PAGE.replace("<body>", "<!-- x --!><body onfocusin=\"hook()\"> -->"),
+                "ended by `--!>`",
+            ),
+        ] {
+            let error = entries(&page).expect_err(name);
+            assert!(error.contains(reason), "{name}: {error}");
+        }
+        let other = |page: &str| {
+            let root = scratch("n1-public");
+            write(&root, "index.html", PAGE);
+            write(&root, "src/main.tsx", "export {};");
+            write(&root, "public/frame.html", page);
+            other_page(&root).unwrap().is_some()
+        };
+        assert!(other(
+            "<html><body/onfocus=\"parent.hook()\"></body></html>"
+        ));
+        assert!(other(
+            "<HTML><BODY ONFOCUS=\"parent.hook()\"></BODY></HTML>"
+        ));
+        assert!(other(
+            "<html><body><a href='/'onclick='go()'>x</a></body></html>"
+        ));
+        assert!(!other("<html><body><p>hi</p></body></html>"));
     }
 
     #[test]

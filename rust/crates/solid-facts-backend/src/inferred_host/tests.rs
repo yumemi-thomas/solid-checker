@@ -1313,3 +1313,85 @@ fn passive_svg_does_not_hide_or_create_module_roots() {
     assert!(denied.reason.contains("http-equiv"));
     assert_eq!(denied.line, Some(2));
 }
+
+/// ADR 1151 (round 2, N1): HTML's tokenizer separates attributes by white space and by a `/` not followed by `>`, and names are compared in lower case. A handler after a `/`
+/// (`<body/onfocusin="x">`, `<div id='root'/onfocusin='x'>`) is a handler, and the page that holds one is refused as it is with a space before it.
+#[test]
+fn a_solidus_separates_attributes_as_html_tokenizes_and_a_handler_after_one_is_refused() {
+    let module = "<script type='module' src='/src/main.ts'></script>";
+    for handler in [
+        "<body onfocusin='hook()'>",
+        "<body/onfocusin='hook()'>",
+        "<body//onfocusin='hook()'>",
+        "<body / onfocusin='hook()'>",
+        "<body\tonfocusin='hook()'>",
+        "<body\nonfocusin='hook()'>",
+        "<body\u{c}onfocusin='hook()'>",
+        "<body ONFOCUSIN='hook()'>",
+        "<body/ONFOCUSIN='hook()'>",
+        "<body OnFocusIn = 'hook()'>",
+        "<div id='root'/onfocusin='hook()'>",
+        "<div id='root' / onfocusin='hook()'>",
+        "<div id=\"root\"/onfocusin=\"hook()\">",
+        "<div id='root'onfocusin='hook()'>",
+        "<div id='root'/ONFOCUSIN='hook()'>",
+        "<main/class='a'/onclick='go()'>",
+        "<svg/onload='go()'></svg>",
+        "<svg><path d='M0 0'/onclick='go()'/></svg>",
+    ] {
+        assert_eq!(
+            html_entries(&format!("{handler}{module}")),
+            None,
+            "{handler}"
+        );
+    }
+    // What the tokenizer reads without a handler still reads: a `/` before `>`, a `/` between attributes, and a script whose attributes a `/` separates.
+    for (page, entries) in [
+        ("<div id='root'/>", vec!["src/main.ts"]),
+        ("<div id='root' / >", vec!["src/main.ts"]),
+        ("<div/id='root'/class='a'>", vec!["src/main.ts"]),
+        ("<svg><path d='M0 0'/></svg>", vec!["src/main.ts"]),
+    ] {
+        assert_eq!(
+            html_entries(&format!("{page}{module}")),
+            Some(entries.iter().map(ToString::to_string).collect()),
+            "{page}"
+        );
+    }
+    assert_eq!(
+        html_entries("<script/type='module'/src='/src/main.ts'></script>"),
+        Some(vec!["src/main.ts".to_string()])
+    );
+    // A name the tokenizer keeps characters of, a boolean attribute, an unquoted value: no certainty, so a refusal.
+    for page in [
+        "<div id='root' \"onfocusin\"='hook()'>",
+        "<div id='root' o'nfocusin='hook()'>",
+        "<div id='root' <onfocusin='hook()'>",
+        "<div id='root' hidden>",
+        "<div id='root' onfocusin>",
+        "<div id='root'/onfocusin=hook()>",
+        "<div id='root' =onfocusin='hook()'>",
+    ] {
+        assert_eq!(html_entries(&format!("{page}{module}")), None, "{page}");
+    }
+}
+
+/// ADR 1151 (round 2): a comment HTML's tokenizer ends at `--!>` hides markup from a reader that ends it at `-->` only: the handler after it would read as comment text.
+#[test]
+fn a_comment_html_ends_at_bang_is_refused_and_an_ordinary_comment_is_skipped() {
+    let module = "<script type='module' src='/src/main.ts'></script>";
+    for page in [
+        "<!-- x --!><body onfocusin='hook()'> -->",
+        "<!-- x --!><script>hook()</script> -->",
+        "<!----!><body/onfocusin='hook()'>-->",
+    ] {
+        assert_eq!(html_entries(&format!("{page}{module}")), None, "{page}");
+    }
+    for page in ["<!-- x -->", "<!-- a --b -->", "<!---->", "<!-->", "<!--->"] {
+        assert_eq!(
+            html_entries(&format!("{page}{module}")),
+            Some(vec!["src/main.ts".to_string()]),
+            "{page}"
+        );
+    }
+}

@@ -7,6 +7,11 @@ use super::*;
 /// are inert; script/integration elements, handlers and external refs refuse.
 /// Comments/raw text are consumed as
 /// such, so a script-shaped string in either never becomes a root.
+///
+/// Tokenization follows HTML's: a tag name ends at white space or `/`, an attribute name at white space, `/` or `=` and is compared in lower case, and white space and a `/`
+/// not followed by `>` both separate attributes. A construct this reader cannot tokenize with certainty (a comment HTML ends at `--!>`, a name with a quote in it, a boolean or
+/// unquoted attribute, an element or entity it does not name) is a refusal, never a page without code: the product realm (ADR 1145) and the focus proof (ADR 1151) read the
+/// same page by it.
 #[cfg(test)]
 pub(super) fn html_entries(html: &str) -> Option<Vec<String>> {
     html_entries_at(Path::new("index.html"), html).ok()
@@ -21,10 +26,14 @@ pub(super) fn html_entries_at(path: &Path, source: &str) -> Result<Vec<String>, 
         let offset = source.len() - html.len();
         let refusal = |reason: &str| DiscoveryRefusal::at(path, source, offset, reason);
         if html.starts_with("<!--") {
-            html = &html[html
+            let end = html
                 .find("-->")
-                .ok_or_else(|| refusal("unterminated HTML comment"))?
-                + 3..];
+                .ok_or_else(|| refusal("unterminated HTML comment"))?;
+            // HTML's tokenizer ends a comment at `--!>` as well, which this one does not: markup after it (a handler, a script) would be read here as comment text.
+            if html[..end].contains("--!>") {
+                return Err(refusal("HTML comment ended by `--!>`"));
+            }
+            html = &html[end + 3..];
             continue;
         }
         if html
@@ -79,12 +88,19 @@ pub(super) fn html_entries_at(path: &Path, source: &str) -> Result<Vec<String>, 
             continue;
         }
         let mut attributes = BTreeMap::new();
-        let mut rest = tag[name_end..].trim();
-        while !rest.is_empty() && rest != "/" {
+        // HTML's tokenizer (the before-attribute-name and after-attribute-value states): white space and a solidus not followed by `>` both separate attributes
+        // (`<body/onfocusin="x">`, `<div id="root"/onfocusin="x">`, `<a href='/'onclick='x'>`), and a name is compared in lower case (`ONFOCUSIN`).
+        let is_separator = |c: char| c.is_whitespace() || c == '/';
+        let mut rest = tag[name_end..].trim_start_matches(is_separator);
+        while !rest.is_empty() {
             let end = rest
-                .find(|c: char| c.is_ascii_whitespace() || c == '=')
+                .find(|c: char| c.is_ascii_whitespace() || c == '=' || c == '/')
                 .ok_or_else(|| refusal("unquoted or boolean HTML attribute"))?;
             let key = rest[..end].to_ascii_lowercase();
+            // A name the tokenizer reads some other way than as written (`"`, `'` and `<` in a name are parse errors it keeps as characters of the name).
+            if key.is_empty() || key.contains(['"', '\'', '<']) {
+                return Err(refusal("HTML attribute name outside the entry grammar"));
+            }
             rest = rest[end..].trim_start();
             rest = rest
                 .strip_prefix('=')
@@ -105,7 +121,7 @@ pub(super) fn html_entries_at(path: &Path, source: &str) -> Result<Vec<String>, 
             if value.contains('&') || attributes.insert(key, value.to_owned()).is_some() {
                 return Err(refusal("entity-bearing or duplicate HTML attribute"));
             }
-            rest = rest[end + 1..].trim_start();
+            rest = rest[end + 1..].trim_start_matches(is_separator);
         }
         if attributes.keys().any(|key| key.starts_with("on")) {
             return Err(refusal("executable inline event attribute"));
