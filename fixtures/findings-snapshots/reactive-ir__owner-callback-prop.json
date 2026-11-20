@@ -2,9 +2,10 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "missing-context-provider",
-      "code": "SC4002",
-      "kind": "violation",
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-callback-prop/App.tsx",
       "start": 547,
@@ -17,8 +18,40 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-callback-prop/App.tsx",
+      "start": 547,
+      "end": 557,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-callback-prop/App.tsx",
       "start": 768,
       "end": 778,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-callback-prop/App.tsx",
+      "start": 768,
+      "end": 778,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-callback-prop/App.tsx",
+      "start": 1005,
+      "end": 1017,
       "fixes": 0
     },
     {

@@ -7,5 +7,5 @@ alike. `MountDisabled`: `createEffect` in the handler is no longer an SC4001 `mi
 f79f19e72 each was a violation, which Chrome never confirms (runtime-oracle `handler-effect-driven` `MountDisabled`: quiet).
 
 `StillRuns` keeps every violation: a `div` (no `disabled` property), `onWheel` (not delegated; the browser delivers a user's wheel to a disabled control),
-a spread, a `disabled` that follows a signal, and the driven twin. `disabled-handler-owner-enabled` keeps the row where the program
-writes `.disabled`.
+a `disabled` that follows a signal, and the driven twin. `disabled-handler-owner-enabled` keeps the row where the program
+writes `.disabled`. A control with spreads is ADR 1141's (`disabled-spread-handler-owner`).

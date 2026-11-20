@@ -944,6 +944,22 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// ADR 1141: whether the runtime attaches the function under `key`, a listener key of an intrinsic element's spread (or an
+    /// attribute the compiler folds into the spread's sources), through its delegated dispatcher, the one
+    /// [`Self::delegated_handler_skips_disabled_node`] describes. Default `false`: an unaudited runtime's listener may be the
+    /// browser's own, which a disabled control can still receive.
+    fn spread_event_delegated(&self, key: &str) -> bool {
+        let _ = key;
+        false
+    }
+
+    /// ADR 1140: whether the runtime's spread may skip a key of an intrinsic element's source when a later source of the same
+    /// element (an attribute or a spread, in source order) has that key, so the earlier source's value (an event handler) is never
+    /// installed. Default `true`: an unaudited runtime's spread is not proven to install an earlier source's key.
+    fn spread_skips_key_a_later_source_has(&self) -> bool {
+        true
+    }
+
     /// ADR 1067: whether the setter returned in tuple slot one calls its function-form
     /// updater with the store returned in slot zero. This proves identity, not allocation:
     /// consumers must separately prove the store cannot be a user-supplied proxy.

@@ -1116,17 +1116,6 @@
       "fixes": 0
     },
     {
-      "rule": "no-await-primitive-in-tracked-scope",
-      "code": "SC2005",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/unplaced-site-obligations/Scopes.tsx",
-      "start": 1192,
-      "end": 1197,
-      "fixes": 0
-    },
-    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -1925,17 +1914,6 @@
       "path": "fixtures/reactive-ir/unplaced-site-obligations/Unplaced.tsx",
       "start": 885,
       "end": 897,
-      "fixes": 0
-    },
-    {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/unplaced-site-obligations/Unplaced.tsx",
-      "start": 970,
-      "end": 977,
       "fixes": 0
     },
     {

@@ -169,6 +169,20 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   file); a function value is stored, not run, and stays unplaced. A prop in
   `value` follows its component's callers like any prop read
   (`fixtures/reactive-ir/provider-value-untracked`).
+- **A context read takes the one provider's signal tuple** ([ADR 1123](../decisions.md#adr-1123)).
+  `const [theme, setTheme] = useContext(Ctx)` follows the `createSignal` tuple that
+  `<Ctx value={…}>` stores: the two slots are that signal's accessor and setter, so
+  `theme()` read in a component body is a violation and one in an effect's compute is
+  clean (`fixtures/reactive-ir/context-signal-tuple`). It needs an unwritten, unexported
+  `const` context made by `createContext()` with no default and referenced only as the tag
+  of that one provider element (no spread, one `value`) or as the argument of such a
+  destructured read; a plain value signal as the provider's value (no function form, no
+  options); each slot read only as a callee; no direct `eval`; and a resolved record, not a
+  recovered one, for the context read and for both creations (a missing record refuses).
+  Anything else keeps its SC9012, uncertifiable (`context-signal-tuple-forms`, `-twins`).
+  The provider's *children* are not followed: a component rendered inside a provider is
+  any package component's child, so its creation rows stay uncertifiable (the withdrawn
+  children arm, `docs/open-work.md`).
 - **A closure a tracked scope builds is not run by it.** A read in a closure a
   memo or effect compute, or a tracked JSX expression, returns, stores or names
   (`const f = () => count(); return f`) is tracked only where a call runs the

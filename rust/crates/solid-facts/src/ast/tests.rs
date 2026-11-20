@@ -3056,6 +3056,343 @@ fn a_neighbour_of_a_code_sink_that_runs_no_built_code_is_not_one() {
 }
 
 #[test]
+fn a_navigation_url_not_proven_and_srcdoc_markup_are_code_sinks() {
+    // ADR 1133 (F5): a `javascript:` URL built at run time runs when navigated to, by every route the syntax names.
+    let source = "declare const el: any, url: string, html: string, w: any; \
+        location.href = 'java' + 'script:' + 'x'; el.href = url; location = url as any; el.src = `${url}`; \
+        el.srcdoc = html; el.setAttribute('HREF', url); el.setAttribute('srcdoc', html); \
+        location.assign(url); window.location.replace(url); open(url); w.open(url); \
+        const go = location.assign; const loc = location; const o = { href: url }; class K { src = url; } \
+        const a = <a href={url} />; const f = <iframe srcdoc={html} />; const x = <a attr:href={url} />; \
+        const tab = 'java\tscript:x';";
+    let listed = code_sink_facts(source);
+    let kinds = |kind: CodeSinkKind| {
+        listed
+            .iter()
+            .filter(|(_, listed)| *listed == kind)
+            .map(|(text, _)| text.as_str())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        kinds(CodeSinkKind::NavigationUrl),
+        vec![
+            "location.href = 'java' + 'script:' + 'x'",
+            "el.href = url",
+            "location = url as any",
+            "el.src = `${url}`",
+            "el.setAttribute('HREF', url)",
+            "location.assign(url)",
+            "window.location.replace(url)",
+            "open(url)",
+            "w.open(url)",
+            "location.assign",
+            "location",
+            "href: url",
+            "src = url;",
+            "href={url}",
+            "attr:href={url}",
+        ]
+    );
+    assert_eq!(
+        kinds(CodeSinkKind::MarkupWrite),
+        vec![
+            "el.srcdoc = html",
+            "el.setAttribute('srcdoc', html)",
+            "srcdoc={html}"
+        ]
+    );
+    assert_eq!(kinds(CodeSinkKind::JavascriptUrl), vec!["'java\tscript:x'"]);
+}
+
+#[test]
+fn a_navigation_url_whose_leading_text_is_no_javascript_scheme_is_no_code_sink() {
+    // ADR 1133 (F5): known leading text that already differs from `javascript:`, a `blob:` URL, a branch of proven arms, a `const` of one,
+    // inert `srcdoc` markup, a method's literal first argument, a flag test of `open`, and `location` read as text or destructured.
+    let source = "declare const el: any, url: string, cond: boolean, blob: Blob, xhr: any, dialog: any, props: any; \
+        el.href = '/path/' + url; el.href = `https://${url}`; el.src = URL.createObjectURL(blob); el.href = cond ? '/a' : '#b'; \
+        const base = '/x/'; el.href = base + url; el.href = ''; el.data = url; \
+        el.srcdoc = '<p>hi</p>'; el.setAttribute('href', '/x'); xhr.open('GET', url); dialog.open(); if (props.open) {} \
+        const n = location.href.length; const { pathname } = location; const t = `${location}`; \
+        const a = <a href=\"/x\" />; const b = <a href={'/x/' + url} />;";
+    assert_eq!(code_sink_facts(source), vec![]);
+}
+
+/// Whether `listed` holds a sink of `kind` whose text contains `text`.
+fn has_sink(listed: &[(String, CodeSinkKind)], text: &str, kind: CodeSinkKind) -> bool {
+    listed
+        .iter()
+        .any(|(sink, listed)| *listed == kind && sink.contains(text))
+}
+
+#[test]
+fn a_call_spelled_sink_read_as_a_value_is_the_sink_its_name_is() {
+    // ADR 1133, round 1 F2: `Sinks::call` matches these by a call's spelling; read anywhere but as a callee (`Reflect.apply(el.write, …)`,
+    // `.call`, an alias, a literal or built key, a pattern) the function runs under a name no call spells.
+    let source = "declare const el: any, doc: any, name: string; \
+        Reflect.apply(el.insertAdjacentHTML, el, ['beforeend', name]); Reflect.apply(doc.write, doc, [name]); \
+        Reflect.apply(doc.createElement, doc, ['script']); doc.write.call(doc, name); const w = doc.writeln; \
+        const f = el['createContextualFragment']; const g = doc['setHTML' + 'Unsafe']; el.setAttributeNode.call(el, name); \
+        el['insert' + 'AdjacentHTML']('beforeend', name); doc['create' + 'Element']('script');";
+    let listed = code_sink_facts(source);
+    for (text, kind) in [
+        ("el.insertAdjacentHTML", CodeSinkKind::MarkupWrite),
+        ("doc.write", CodeSinkKind::MarkupWrite),
+        ("doc.createElement", CodeSinkKind::ScriptElement),
+        ("doc.writeln", CodeSinkKind::MarkupWrite),
+        ("el['createContextualFragment']", CodeSinkKind::MarkupWrite),
+        ("doc['setHTML' + 'Unsafe']", CodeSinkKind::MarkupWrite),
+        ("el.setAttributeNode", CodeSinkKind::EventAttribute),
+        // A key the program builds, called, is the call it spells.
+        (
+            "el['insert' + 'AdjacentHTML']('beforeend', name)",
+            CodeSinkKind::MarkupWrite,
+        ),
+        (
+            "doc['create' + 'Element']('script')",
+            CodeSinkKind::ScriptElement,
+        ),
+    ] {
+        assert!(has_sink(&listed, text, kind), "{text}: {listed:?}");
+    }
+    // A pattern takes the member out: a name only one kind of object has is a sink whatever the source, a name every kind has
+    // (`write`, `createElement`) only from a document.
+    let patterns = "declare const el: any; const { insertAdjacentHTML } = el; const { write } = document; \
+        const { createElement: make } = document; const { setAttribute } = el; let w: any; ({ write: w } = document);";
+    assert_eq!(
+        code_sink_facts(patterns),
+        vec![
+            ("insertAdjacentHTML".to_string(), CodeSinkKind::MarkupWrite),
+            ("write".to_string(), CodeSinkKind::MarkupWrite),
+            (
+                "createElement: make".to_string(),
+                CodeSinkKind::ScriptElement
+            ),
+            ("setAttribute".to_string(), CodeSinkKind::NavigationUrl),
+            ("write: w".to_string(), CodeSinkKind::MarkupWrite),
+        ]
+    );
+    // The written calls with benign arguments, destructuring other objects, and a flag read stay no sink.
+    let clean = "declare const el: any, doc: any, props: any, stream: any; \
+        el.insertAdjacentHTML('beforeend', '<i>x</i>'); doc.write('<p>hi</p>'); doc.createElement('div'); \
+        const { children } = el; const { open } = props; const { write } = stream; const { replace } = props;";
+    assert_eq!(code_sink_facts(clean), vec![]);
+}
+
+#[test]
+fn a_url_or_markup_spelling_the_first_cut_missed_is_a_code_sink() {
+    // ADR 1133, round 1 F5: the location by another member, a built key, an attribute node, the SVG animated `href`, the scheme of the URL
+    // an element holds, character references where an HTML parser decodes them, a destructured `open`, `assign` or `location`.
+    let source = "declare const a: any, el: any, frame: any, url: string, go: any; \
+        const loc = document.location; go(window.location); \
+        (a as any)['hr' + 'ef'] = 'java' + 'script:void 0'; \
+        a.getAttributeNode('href')!.value = 'x'; a.getAttributeNodeNS(null, name as string); \
+        a.href.baseVal = url; a.protocol = url; a.protocol = 'java' + 'script'; \
+        const e = <a href=\"&#106;avascript:void 0\" />; \
+        frame.srcdoc = '<a href=\"&#106;avascript:void 0\">x</a>'; el.innerHTML = '<a href=\"&#x6A;avascript:1\">x</a>'; \
+        el.innerHTML = '<a href=\"java\tscript:1\">x</a>';";
+    let listed = code_sink_facts(source);
+    for (text, kind) in [
+        ("document.location", CodeSinkKind::NavigationUrl),
+        ("window.location", CodeSinkKind::NavigationUrl),
+        (
+            "(a as any)['hr' + 'ef'] = 'java' + 'script:void 0'",
+            CodeSinkKind::NavigationUrl,
+        ),
+        ("a.getAttributeNode('href')", CodeSinkKind::NavigationUrl),
+        (
+            "a.getAttributeNodeNS(null, name as string)",
+            CodeSinkKind::NavigationUrl,
+        ),
+        ("a.href.baseVal = url", CodeSinkKind::NavigationUrl),
+        ("a.protocol = url", CodeSinkKind::NavigationUrl),
+        (
+            "a.protocol = 'java' + 'script'",
+            CodeSinkKind::NavigationUrl,
+        ),
+        (
+            "href=\"&#106;avascript:void 0\"",
+            CodeSinkKind::NavigationUrl,
+        ),
+        ("frame.srcdoc = ", CodeSinkKind::MarkupWrite),
+        (
+            "el.innerHTML = '<a href=\"&#x6A;",
+            CodeSinkKind::MarkupWrite,
+        ),
+        (
+            "el.innerHTML = '<a href=\"java\tscript:1",
+            CodeSinkKind::MarkupWrite,
+        ),
+    ] {
+        assert!(has_sink(&listed, text, kind), "{text}: {listed:?}");
+    }
+    // A pattern's `open` or `location` taken out of a window, `assign` or `replace` out of the location.
+    let patterns = "const { open: o } = window; const { assign } = location; const { location: l } = window; const { replace: r } = window.location;";
+    assert_eq!(
+        code_sink_facts(patterns),
+        vec![
+            ("open: o".to_string(), CodeSinkKind::NavigationUrl),
+            ("assign".to_string(), CodeSinkKind::NavigationUrl),
+            ("location: l".to_string(), CodeSinkKind::NavigationUrl),
+            ("replace: r".to_string(), CodeSinkKind::NavigationUrl),
+        ]
+    );
+    // The neighbours that run nothing: a literal attribute node that is no URL or handler, a plain `baseVal`, a scheme that is none, a
+    // reference outside any attribute value or past the scheme, and `open`, `assign`, `location` taken from other objects.
+    let clean = "declare const a: any, el: any, props: any, other: any; \
+        a.getAttributeNode('title'); (a as any).href.baseVal = '/x'; a.protocol = 'https:'; \
+        const e = <a href=\"/x?a=1&b=2\" />; el.innerHTML = '<p title=\"a\">x &amp; y &times;</p>'; \
+        const { pathname, search } = location; const { open } = props; const { assign } = other; const { location } = props;";
+    assert_eq!(code_sink_facts(clean), vec![]);
+}
+
+#[test]
+fn a_member_location_of_a_local_plain_object_is_no_window_but_any_other_receiver_may_be_one() {
+    // ADR 1133, round 1: `x.location` kept or passed is the window's location by another route unless `x` is a `const` object literal of the
+    // file with no spread (`const window: any = {}`): the real location reaches such an object only through code that reads it, a sink there.
+    let clean = "const local: any = {}; use(local.location); const holder: any = { location: 1, other: 2 }; use(holder.location);";
+    assert_eq!(code_sink_facts(clean), vec![]);
+    let source = "const spread: any = { ...window }; use(spread.location); function g(win: any) { use(win.location); } \
+        let l: any = {}; use(l.location);";
+    let listed = code_sink_facts(source);
+    for text in ["spread.location", "win.location", "l.location"] {
+        assert!(
+            has_sink(&listed, text, CodeSinkKind::NavigationUrl),
+            "{text}: {listed:?}"
+        );
+    }
+}
+
+#[test]
+fn an_attribute_node_by_the_collection_or_a_global_behind_an_alias_is_a_code_sink() {
+    // ADR 1133, round 1 (adjacent spellings): the attribute nodes `getAttributeNode` gives out also come out of the `attributes` collection
+    // (`getNamedItem(NS)`, `item`, a name a URL or a handler has, an index or a key nothing proves, a `const` alias of the collection),
+    // one is set into it (`setNamedItem(NS)`), `execCommand` parses markup and makes links, and a window, a document or a location behind
+    // a `const` alias is the one it stands for.
+    let source = "declare const a: any, t: any, html: string, url: string, i: number, key: string; \
+        a.attributes.getNamedItem('href')!.value = 'x'; a.attributes.getNamedItemNS(null, key); a.attributes.item(0); \
+        a.attributes.href.value = 'x'; a.attributes['onclick'].value = 'x'; a.attributes[i].value = 'x'; a.attributes[0].value = 'x'; \
+        const at = a.attributes; at.src.value = 'x'; \
+        a['attri' + 'butes'].href.value = 'x'; const built = a['attri' + 'butes']; built.action.value = 'x'; \
+        a.attributes.setNamedItem(t); a.attributes.setNamedItemNS(t); \
+        document.execCommand('insertHTML', false, html); document.execCommand('createLink', false, url); \
+        document.execCommand(key, false, html); \
+        new DOMParser().parseFromString(html, 'text/html'); (Document as any).parseHTMLUnsafe(html);";
+    let listed = code_sink_facts(source);
+    for (text, kind) in [
+        (
+            "a.attributes.getNamedItem('href')",
+            CodeSinkKind::NavigationUrl,
+        ),
+        (
+            "a.attributes.getNamedItemNS(null, key)",
+            CodeSinkKind::NavigationUrl,
+        ),
+        ("a.attributes.item(0)", CodeSinkKind::NavigationUrl),
+        ("a.attributes.href", CodeSinkKind::NavigationUrl),
+        ("a.attributes['onclick']", CodeSinkKind::NavigationUrl),
+        ("a.attributes[i]", CodeSinkKind::NavigationUrl),
+        ("a.attributes[0]", CodeSinkKind::NavigationUrl),
+        ("at.src", CodeSinkKind::NavigationUrl),
+        ("a['attri' + 'butes'].href", CodeSinkKind::NavigationUrl),
+        ("built.action", CodeSinkKind::NavigationUrl),
+        ("a.attributes.setNamedItem(t)", CodeSinkKind::EventAttribute),
+        (
+            "a.attributes.setNamedItemNS(t)",
+            CodeSinkKind::EventAttribute,
+        ),
+        (
+            "document.execCommand('insertHTML', false, html)",
+            CodeSinkKind::MarkupWrite,
+        ),
+        (
+            "document.execCommand('createLink', false, url)",
+            CodeSinkKind::NavigationUrl,
+        ),
+        (
+            "document.execCommand(key, false, html)",
+            CodeSinkKind::MarkupWrite,
+        ),
+        (
+            "document.execCommand(key, false, html)",
+            CodeSinkKind::NavigationUrl,
+        ),
+        (
+            "new DOMParser().parseFromString(html, 'text/html')",
+            CodeSinkKind::MarkupWrite,
+        ),
+        (
+            "(Document as any).parseHTMLUnsafe(html)",
+            CodeSinkKind::MarkupWrite,
+        ),
+    ] {
+        assert!(has_sink(&listed, text, kind), "{text}: {listed:?}");
+    }
+    // `setNamedItem` handed on (`Reflect.apply`) is the sink its name is.
+    assert_eq!(
+        code_sink_facts(
+            "declare const a: any, t: any; Reflect.apply(a.attributes.setNamedItem, a.attributes, [t]);"
+        ),
+        vec![(
+            "a.attributes.setNamedItem".to_string(),
+            CodeSinkKind::EventAttribute
+        )]
+    );
+    // `execCommand` read as a value, and taken out of the document by a pattern.
+    let kept = "declare const el: any, parser: any; const ec = document.execCommand; const { execCommand } = document; \
+        const { getNamedItem } = el.attributes; const { setNamedItem: put } = el.attributes; \
+        const pf = parser.parseFromString; const { parseHTMLUnsafe } = Document as any;";
+    assert_eq!(
+        code_sink_facts(kept),
+        vec![
+            (
+                "document.execCommand".to_string(),
+                CodeSinkKind::MarkupWrite
+            ),
+            ("execCommand".to_string(), CodeSinkKind::MarkupWrite),
+            ("getNamedItem".to_string(), CodeSinkKind::NavigationUrl),
+            (
+                "setNamedItem: put".to_string(),
+                CodeSinkKind::EventAttribute
+            ),
+            (
+                "parser.parseFromString".to_string(),
+                CodeSinkKind::MarkupWrite
+            ),
+            ("parseHTMLUnsafe".to_string(), CodeSinkKind::MarkupWrite),
+        ]
+    );
+    // A pattern out of the collection takes the attribute node under its key; a window, a document and a location behind a `const`
+    // alias (one hop or several) are the ones they stand for, where a `let` or a parameter is no alias.
+    let patterns = "declare const el: any; const { href } = el.attributes; const { title } = el.attributes; \
+        const w = window; const { open: o } = w; const d = document; const { write } = d; const { location: l } = w; \
+        const w2 = w as Window; const w3 = w2; const { open: o3 } = w3; const loc = window.location; const { assign } = loc;";
+    let listed = code_sink_facts(patterns);
+    for (text, kind) in [
+        ("href", CodeSinkKind::NavigationUrl),
+        ("open: o", CodeSinkKind::NavigationUrl),
+        ("write", CodeSinkKind::MarkupWrite),
+        ("location: l", CodeSinkKind::NavigationUrl),
+        ("open: o3", CodeSinkKind::NavigationUrl),
+        ("assign", CodeSinkKind::NavigationUrl),
+    ] {
+        assert!(has_sink(&listed, text, kind), "{text}: {listed:?}");
+    }
+    assert!(
+        !has_sink(&listed, "title", CodeSinkKind::NavigationUrl),
+        "{listed:?}"
+    );
+    // The neighbours that run nothing: an attribute collection read as data (a literal name no URL or handler has, its length, a
+    // dotted OpenTelemetry key), a literal node name, commands that write no markup or link, and the same names off other objects.
+    let clean = "declare const a: any, item: any, props: any, span: any, p: any; \
+        a.attributes.title; a.attributes.length; item.attributes['compass.message.ids']; span.attributes.attempt; \
+        a['attri' + 'bute'].href; item['attri' + 'butes'].title; \
+        a.attributes.getNamedItem('title'); document.execCommand('copy'); document.execCommand('insertHTML', false, '<b>x</b>'); \
+        document.execCommand('createLink', false, '/x'); const q = p; const { open } = q; const { write } = props; \
+        const { title } = a.attributes; new DOMParser().parseFromString('<p>x</p>', 'text/html');";
+    assert_eq!(code_sink_facts(clean), vec![]);
+}
+
+#[test]
 fn a_native_event_attribute_of_jsx_is_a_code_sink_unless_a_function_is_written_there() {
     let source = "declare const handler: any; \
         const a = <img onerror=\"x()\" />; const b = <div onclick={handler} />; const c = <div onclick={() => {}} />; const d = <div onClick={handler} on:click={handler} />;";
@@ -4403,6 +4740,45 @@ fn a_computed_read_whose_value_only_feeds_operators_and_tests_is_inert() {
         inert,
         vec![false, true],
         "the arrow body returns it; the statement discards it"
+    );
+    // ADR 1133 (round 1 F6): the object of a member under a plain data key, in any use (read, written, called, kept, called through
+    // `.call`, `new`), is inert: the key alone decides, because what a plain key holds is something the program put there. A standard
+    // name, a route, a hook, a private key and `event` are not plain, whatever the member's own use.
+    let members = "declare const a: any, k: any; a[k].done = !a[k].done; a[k].push(1); a[k].addEventListener; a[k].done(); \
+        a[k].prototype; a[k].then; a[k]._$$click; a[k].event; \
+        const f = a[k].run; f(1); a[k].run.call(null, 1); new a[k].Ctor(); a[k].call(null);";
+    let inert = extract("keys.ts", members)
+        .unwrap()
+        .computed_keys
+        .iter()
+        .map(|fact| fact.value_inert)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        inert,
+        vec![
+            true, true, false, false, true, false, false, false, false, true, true, true, false
+        ]
+    );
+}
+
+/// ADR 1133 (round 2 N1): the object of a member under a name a URL, an event handler or the attribute collection goes by is not inert: the
+/// unproven key may be `attributes`, and `el[key()].href` is then the attribute node of `href`, whose `value`, `textContent` or `nodeValue`
+/// sets the URL. A data field no attribute has (`done`, `label`, `title`, `data`) stays plain.
+#[test]
+fn a_member_under_an_attribute_name_is_no_plain_data_key() {
+    let source = "declare const a: any, k: any; void a[k].href; void a[k].src; void a[k].action; void a[k].formAction; void a[k].srcdoc; \
+        void a[k].onclick; void a[k].onClick; void a[k].attributes; void a[k].title; void a[k].label; void a[k].data; void a[k].done;";
+    let inert = extract("keys.ts", source)
+        .unwrap()
+        .computed_keys
+        .iter()
+        .map(|fact| fact.value_inert)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        inert,
+        vec![
+            false, false, false, false, false, false, false, false, true, true, true, true
+        ]
     );
 }
 

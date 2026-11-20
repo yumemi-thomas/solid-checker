@@ -32,6 +32,8 @@ mod cross_file_digest_process;
 mod daemon_residue_process;
 #[path = "dispatch_veto_reads_process.rs"]
 mod dispatch_veto_reads_process;
+#[path = "fact_mode_parity_process.rs"]
+mod fact_mode_parity_process;
 #[path = "forwarding_refresh_process.rs"]
 mod forwarding_refresh_process;
 #[path = "harness_process.rs"]

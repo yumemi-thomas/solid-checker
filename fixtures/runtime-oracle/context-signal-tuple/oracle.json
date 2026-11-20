@@ -1,0 +1,1 @@
+{"note": "ADR 1123: a consumer destructuring useContext of a context whose one provider stores one createSignal tuple takes its slots: ThemeButton's read is clean (Chrome quiet; its render child keeps an SC3001/SC6002 pair, uncertifiable), the body reads in ThemeLabel and Count are SC1001 (covered-violation)"}

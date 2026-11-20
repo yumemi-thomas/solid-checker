@@ -792,6 +792,7 @@ pub(crate) fn push_owner_requirement(
             report: status.report,
             earlier_check_throws: false,
             handler_on_disabled_control: false,
+            handler_key_overridden: false,
         });
     }
 }
