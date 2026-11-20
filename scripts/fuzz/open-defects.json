@@ -128,15 +128,6 @@
     "ACTION_CALLED_IN_OWNED_SCOPE"
    ],
    "certified": false
-  },
-  {
-   "id": "pkgaction/proto-r2-clearlisten-c1",
-   "item": "ADR 1114 family 3 round-2 review N4 (Fable; Chrome-confirmed, rc.21): a writer whose closure is clear replaces `Promise.prototype.then` and runs the callback at once; the action in the `then` callback runs in the owned scope, but the checker places the callback by the standard member's timing (a clear writer is dropped, package_reach.rs). This program: `void act();` (line 13). Held after slice G: vetoing the standard reading of a call whose member a package writes (as a project patch is, callees.rs) closes it, but on the corpus other rules then lose uncertifiable rows (SC9012 at a vetoed `trim`, SC1002 at a vetoed `focus`), a fail-open answer to an unresolved call; the fix must withdraw only the callback's placed role",
-   "outcome": "false-clean",
-   "codes": [
-    "ACTION_CALLED_IN_OWNED_SCOPE"
-   ],
-   "certified": false
   }
  ],
  "notGenerated": [

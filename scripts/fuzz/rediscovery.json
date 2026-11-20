@@ -36911,5 +36911,18 @@
    "mx-action-called-in-owned-scope-pa-gprotoasyncret-root-x-direct-none"
   ],
   "rediscovered": "new contexts pa-gprotoanyget, -gprotoin, -gprotoassign, -gprotokey, -gprotoerror, -gprotoasyncret (pa-shapes.mjs; gprotoasyncret calls a resolved project async arrow): `focus.mjs --codes ACTION_CALLED_IN_OWNED_SCOPE --grids mx-recall --ids`, release builds: slice F 93598e618 exits 1 (false-clean 18), slice G exits 0 (recall-gap 18); oracle compared, 0 behaviour"
+ },
+ {
+  "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent at an action called in a `then` callback that a package whose closure names no Solid package runs at once (it replaces `Promise.prototype.then`): the callback was placed by the standard member's timing",
+  "found": "Fable round-2 review of ADR 1114 family 3 (A-E: N4), pattern lane `pkgaction/proto-r2-clearlisten-c1`; Chrome-confirmed",
+  "fixed": "ADR 1114 family 3 slice G, N4: a function handed to a standard call whose member a loaded package writes by name has no placed role (handed_to_withheld_call); the call stays resolved",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pa-gprotothensync-body-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotothensync-memo-x-direct-none",
+   "mx-action-called-in-owned-scope-pa-gprotothensync-root-x-direct-none"
+  ],
+  "rediscovered": "new context pa-gprotothensync (pa-shapes.mjs, fz-gprotothensync): `focus.mjs --codes ACTION_CALLED_IN_OWNED_SCOPE --grids mx-recall --boundary both --ids`, release builds: slice G bba6136ec exits 1 (false-clean 3), this exits 0 (recall-gap 3); oracle 3 compared, 0 behaviour"
  }
 ]
