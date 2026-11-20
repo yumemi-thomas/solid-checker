@@ -598,6 +598,8 @@ impl<'l, 'a> Census<'l, 'a> {
             member_writes: _,
             files: _,
             keys: _,
+            // ADR 1147: per file, a function of the file and the lookup alone (no start reads or writes it).
+            store_tuple_readers: _,
             decided_writes: _,
             allowed: _,
             exported: _,
