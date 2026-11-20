@@ -40881,14 +40881,44 @@
   "grid": "mx-census",
   "code": "NO_OWNER_CLEANUP",
   "ids": [
+   "mx-no-owner-cleanup-evt-apply-dispatch-shadow-x-direct-none",
+   "mx-no-owner-cleanup-evt-apply-shadow-concat-x-direct-none"
+  ],
+  "rediscovered": "focus mx-census,mx-recall --contexts evt-apply-dispatch-shadow,evt-apply-shadow-concat, release builds: main a7e9e7113 has these 10 recall-gap; this build agrees at all 10. mx-recall (4,880 programs): nothing needs a look; with the guard check lexical only it had 72 false positives (helpers, closures, IIFEs a handler runs, ADR 1125's 12 shadow-concat store-(render-)effect-carried among them), none here"
+ },
+ {
+  "finding": "ADR 1139 (owed by ADR 1125, #296 smoke-census): the dispatch veto's owner bit took an apply's possible delivery into a shadow tree, withholding every owner proof of a JSX handler; Chrome reports NO_OWNER_* (cleanup, boundary loading/errored, context) and SETTLED_CLEANUP_UNOWNED there, so those rows were recall-gap",
+  "found": "ADR 1125's #296 smoke-census (the 5 evt-apply-dispatch-shadow ids, owed in scripts/fuzz/proved/owed.json)",
+  "fixed": "ADR 1139 (event_delivery.rs: the owner bit leaves shadow delivery; competing_checks: every creation a JSX handler may reach meets the effect-callback guard first)",
+  "grid": "mx-census",
+  "code": "NO_OWNER_BOUNDARY",
+  "ids": [
    "mx-no-owner-boundary-evt-apply-dispatch-shadow-errored-direct-none",
    "mx-no-owner-boundary-evt-apply-dispatch-shadow-loading-direct-none",
    "mx-no-owner-boundary-evt-apply-shadow-concat-errored-direct-none",
-   "mx-no-owner-boundary-evt-apply-shadow-concat-loading-direct-none",
-   "mx-no-owner-cleanup-evt-apply-dispatch-shadow-x-direct-none",
-   "mx-no-owner-cleanup-evt-apply-shadow-concat-x-direct-none",
+   "mx-no-owner-boundary-evt-apply-shadow-concat-loading-direct-none"
+  ],
+  "rediscovered": "focus mx-census,mx-recall --contexts evt-apply-dispatch-shadow,evt-apply-shadow-concat, release builds: main a7e9e7113 has these 10 recall-gap; this build agrees at all 10. mx-recall (4,880 programs): nothing needs a look; with the guard check lexical only it had 72 false positives (helpers, closures, IIFEs a handler runs, ADR 1125's 12 shadow-concat store-(render-)effect-carried among them), none here"
+ },
+ {
+  "finding": "ADR 1139 (owed by ADR 1125, #296 smoke-census): the dispatch veto's owner bit took an apply's possible delivery into a shadow tree, withholding every owner proof of a JSX handler; Chrome reports NO_OWNER_* (cleanup, boundary loading/errored, context) and SETTLED_CLEANUP_UNOWNED there, so those rows were recall-gap",
+  "found": "ADR 1125's #296 smoke-census (the 5 evt-apply-dispatch-shadow ids, owed in scripts/fuzz/proved/owed.json)",
+  "fixed": "ADR 1139 (event_delivery.rs: the owner bit leaves shadow delivery; competing_checks: every creation a JSX handler may reach meets the effect-callback guard first)",
+  "grid": "mx-census",
+  "code": "NO_OWNER_CONTEXT",
+  "ids": [
    "mx-no-owner-context-evt-apply-dispatch-shadow-x-direct-none",
-   "mx-no-owner-context-evt-apply-shadow-concat-x-direct-none",
+   "mx-no-owner-context-evt-apply-shadow-concat-x-direct-none"
+  ],
+  "rediscovered": "focus mx-census,mx-recall --contexts evt-apply-dispatch-shadow,evt-apply-shadow-concat, release builds: main a7e9e7113 has these 10 recall-gap; this build agrees at all 10. mx-recall (4,880 programs): nothing needs a look; with the guard check lexical only it had 72 false positives (helpers, closures, IIFEs a handler runs, ADR 1125's 12 shadow-concat store-(render-)effect-carried among them), none here"
+ },
+ {
+  "finding": "ADR 1139 (owed by ADR 1125, #296 smoke-census): the dispatch veto's owner bit took an apply's possible delivery into a shadow tree, withholding every owner proof of a JSX handler; Chrome reports NO_OWNER_* (cleanup, boundary loading/errored, context) and SETTLED_CLEANUP_UNOWNED there, so those rows were recall-gap",
+  "found": "ADR 1125's #296 smoke-census (the 5 evt-apply-dispatch-shadow ids, owed in scripts/fuzz/proved/owed.json)",
+  "fixed": "ADR 1139 (event_delivery.rs: the owner bit leaves shadow delivery; competing_checks: every creation a JSX handler may reach meets the effect-callback guard first)",
+  "grid": "mx-census",
+  "code": "SETTLED_CLEANUP_UNOWNED",
+  "ids": [
    "mx-settled-cleanup-unowned-evt-apply-dispatch-shadow-x-direct-none",
    "mx-settled-cleanup-unowned-evt-apply-shadow-concat-x-direct-none"
   ],
