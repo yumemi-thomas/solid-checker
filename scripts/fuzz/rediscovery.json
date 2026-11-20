@@ -40520,5 +40520,27 @@
    "mx-action-called-in-owned-scope-pa-gprotothensync-root-x-direct-none"
   ],
   "rediscovered": "new context pa-gprotothensync (pa-shapes.mjs, fz-gprotothensync): `focus.mjs --codes ACTION_CALLED_IN_OWNED_SCOPE --grids mx-recall --boundary both --ids`, release builds: slice G bba6136ec exits 1 (false-clean 3), this exits 0 (recall-gap 3); oracle 3 compared, 0 behaviour"
+ },
+ {
+  "finding": "Review of ADR 1124 round 2, S1 (on main): a store tuple held whole (`const st = createStore(…)`) was the store source, so `st[0]`, `st[1]` and `const o = st[0]` in a component body were SC1001 violations (store path `st.0`); rc.21 is silent: an index of the tuple is no store Get",
+  "found": "review-1124-r2 S1; Chrome patterns storeindex/tuple-c0..c11 (main dba9d3cee: 5 false positives)",
+  "fixed": "ADR 1138 (local_access store_tuple_held_whole / whole_store_tuple_get: only `st[0].k` is a store Get; any other index is uncertifiable)",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-body-store-tuple-element-direct-none",
+   "lg-strict-read-untracked-body-store-tuple-element-direct-helper",
+   "lg-strict-read-untracked-body-store-tuple-element-direct-iife",
+   "lg-strict-read-untracked-body-store-tuple-element-direct-module-helper",
+   "lg-strict-read-untracked-body-store-tuple-setter-direct-none",
+   "lg-strict-read-untracked-body-store-tuple-setter-direct-helper",
+   "lg-strict-read-untracked-body-store-tuple-setter-direct-iife",
+   "lg-strict-read-untracked-body-store-tuple-setter-direct-module-helper",
+   "lg-strict-read-untracked-body-store-tuple-handed-direct-none",
+   "lg-strict-read-untracked-body-store-tuple-handed-direct-helper",
+   "lg-strict-read-untracked-body-store-tuple-handed-direct-iife",
+   "lg-strict-read-untracked-body-store-tuple-handed-direct-module-helper"
+  ],
+  "rediscovered": "new variants store-tuple-element, -setter, -handed (misuse.mjs WHOLE_STORE_READS): `focus.mjs --codes STRICT_READ_UNTRACKED --grids lg-recall --boundary both --ids`, release builds: main dba9d3cee exits 1 (false-positive 12), ADR 1138 exits 0 (uncertifiable 12)"
  }
 ]

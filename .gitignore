@@ -1958,3 +1958,5 @@ packages/wasm/owned/
 !fixtures/runtime-oracle/package-prototype-iteration/node_modules/**
 !fixtures/reactive-ir/string-code-standard-patch/node_modules/
 !fixtures/reactive-ir/string-code-standard-patch/node_modules/**
+!fixtures/reactive-ir/store-tuple-held-whole/node_modules/
+!fixtures/reactive-ir/store-tuple-held-whole/node_modules/**
