@@ -293,7 +293,6 @@ pub fn run(
     let directory = project_directory(&facts.project_id);
     let (boundary, inferred) = package_inputs(
         &directory,
-        Path::new(&options.project_id),
         &facts,
         &source_refusals,
         &options.runtime,
@@ -343,7 +342,6 @@ pub fn run(
 /// keeps an open requirement (`SC9005`).
 pub fn package_inputs(
     directory: &Path,
-    project: &Path,
     facts: &solid_facts::ProjectFacts,
     source_refusals: &[SourceRefusal],
     runtime: &RuntimeEnvironment,
@@ -378,11 +376,6 @@ pub fn package_inputs(
             })
         );
     }
-    // ADR 1145: the writers a program's product entries load, where its build configuration decides the entry set; every other program keeps every writer.
-    let mut reach = reach;
-    let realm = crate::product_realm::read(directory, project, facts, runtime);
-    let applied = crate::product_realm::apply(&realm, &mut reach);
-    crate::product_realm::write_census(&realm, &applied, &reach, directory);
     boundary.set_package_reach(reach);
     let inferred =
         crate::inferred_project_host_with_note(directory, runtime, dialect.vocabulary, facts)?;

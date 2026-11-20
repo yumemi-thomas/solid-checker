@@ -483,26 +483,6 @@ impl PackageBoundary {
             for root in &index.prototype_writers_any {
                 text(hash, root);
             }
-            // ADR 1145: the product realm's files and writers. Added only where the entries are known, so a boundary without any keeps its digest.
-            if let Some(product) = &index.product {
-                hash.update(b"package-product-writers-v1");
-                hash.update((product.files.len() as u64).to_be_bytes());
-                for file in &product.files {
-                    text(hash, file);
-                }
-                hash.update((product.prototype_writers.len() as u64).to_be_bytes());
-                for (name, roots) in &product.prototype_writers {
-                    text(hash, name);
-                    hash.update((roots.len() as u64).to_be_bytes());
-                    for root in roots {
-                        text(hash, root);
-                    }
-                }
-                hash.update((product.prototype_writers_any.len() as u64).to_be_bytes());
-                for root in &product.prototype_writers_any {
-                    text(hash, root);
-                }
-            }
             // ADR 0974: where each closure may define an accessor.
             hash.update((index.accessors.len() as u64).to_be_bytes());
             for (root, facts) in &index.accessors {

@@ -56,7 +56,6 @@ mod observed;
 mod package_drop;
 pub mod package_reach;
 mod package_requirements;
-mod product_realm;
 mod program_boundary;
 mod release_scope;
 mod reviewed_packages;

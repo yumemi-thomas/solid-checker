@@ -501,10 +501,6 @@ pub(crate) enum PremiseKind {
     /// An action's step runs from the continuation of a `yield` whose operand is a promise (or any `yield` of an async generator) on every path to the site: a
     /// later task with no observer (ADR 0985; `owners::action_step_resumption`). The span is the `yield`.
     StepResumedByYield,
-    /// The product's real entries (an HTML page's module scripts, a package's `exports`, read from the build configuration) load the file that holds the site, and
-    /// no package they load writes the member the site runs on a built-in's prototype: the packages that do are loaded by a test, a story, a script or a config,
-    /// never by the page (ADR 1145). The span is the site.
-    ProductRealmWriters,
 }
 
 /// A premise: a typed fact kind, the code the fact is about (`at`, in the

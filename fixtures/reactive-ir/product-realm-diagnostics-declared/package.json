@@ -1,7 +1,0 @@
-{
-  "private": true,
-  "type": "module",
-  "devDependencies": {
-    "@solidjs/diagnostics": "^1.0.0"
-  }
-}

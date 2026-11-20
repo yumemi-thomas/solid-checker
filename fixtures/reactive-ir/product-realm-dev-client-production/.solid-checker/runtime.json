@@ -1,5 +1,0 @@
-{
-  "target": "browser",
-  "build": "production",
-  "rendering": "csr"
-}
