@@ -7,7 +7,8 @@
 //!   (`solid_reactive_ir::kernel`): an identifier must name a binding (a global may be an accessor of the global object), and an
 //!   operand a coercing operator converts must be proved primitive.
 //! - **K4** [`value_inert`]: is an expression's value provably neither called nor kept (it only meets operators, tests, keys or a
-//!   discarded statement)?
+//!   discarded statement), or is it only the object of a member under a plain data key (ADR 1133: any use of that member is the
+//!   program's own code, which the scans read)?
 //! - **K3** [`cooked_key`]: the exact property key a key's source text denotes, from the parser's cooked value (escapes decoded,
 //!   numbers canonical), never from trimmed text.
 //!
@@ -459,22 +460,15 @@ pub(crate) fn value_inert(
             AstKind::ComputedMemberExpression(member) => {
                 return member.expression.span() == child_span;
             }
-            // ADR 1133 (#296 textbook): the value only as the object of a member read or written under a plain data key
-            // (`draft[index()].done = …`), never called: no standard function-valued name, prototype route, hook, private key,
-            // shadow spelling or delivery name, so the member can hold no definer or handler that a visible write did not put there.
+            // ADR 1133 (#296 textbook; round 1 F6): the value only as the object of a member read, written or called under a plain
+            // data key (`draft[index()].done = …`, `el[key()].run`, `el[key()].run(e)`): no standard function-valued name, prototype
+            // route, hook, private key, shadow spelling or delivery name, so what the member holds is something the program put
+            // there (every platform function, Solid's stored handler and every reader has such a name), and what the program then
+            // does with it is code the scans read. The rule is the key's alone: a first cut also asked that the member not be
+            // called, which held a direct call and let `const f = el[key()].run; f(e)` and `.run.call(…)` pass for the same member.
             AstKind::StaticMemberExpression(member) => {
-                if member.object.span() != child_span {
-                    return false;
-                }
-                let key = member.property.name.as_str();
-                let called = matches!(
-                    nodes.parent_kind(parent),
-                    AstKind::CallExpression(call) if call.callee.span() == member.span
-                ) || matches!(
-                    nodes.parent_kind(parent),
-                    AstKind::TaggedTemplateExpression(_)
-                );
-                return !called && plain_data_key(key);
+                return member.object.span() == child_span
+                    && plain_data_key(member.property.name.as_str());
             }
             // An arrow's expression body is an expression statement in Oxc's tree: its value is the arrow's return (F3).
             AstKind::ExpressionStatement(_) => {

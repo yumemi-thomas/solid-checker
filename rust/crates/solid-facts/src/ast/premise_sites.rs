@@ -65,6 +65,9 @@ const KEY_READERS: [&str; 9] = [
     "groupBy",
 ];
 
+/// ADR 1133: the names whose value, kept or called other than as a written call, may deliver an event no scan reads.
+const DISPATCHERS: [&str; 2] = ["dispatchEvent", "click"];
+
 /// ADR 1125 (G4): the reflective definers and the index of their key argument.
 const DEFINERS: [(&str, usize); 4] = [
     ("defineProperty", 1),
@@ -133,6 +136,14 @@ pub(super) fn premise_sites<'a>(semantic: &Semantic<'a>, resolve: bool) -> Vec<P
                 {
                     sites.add(identifier.span, PremiseClause::ObjectAssign, "*");
                 }
+                // ADR 1133 (round 1 F4): `JSON` handed on (`const J = JSON`, `f(JSON)`) may be called as `JSON.stringify` with a replacer
+                // by any name, which walks every own enumerable value of what it is given (Solid's stored handler among them).
+                if identifier.name == "JSON"
+                    && sites.global(identifier)
+                    && !sites.object_in_sight(node.id(), identifier.span)
+                {
+                    sites.add(identifier.span, PremiseClause::KeyReader, "JSON");
+                }
             }
             AstKind::ForInStatement(statement) => {
                 sites.add(statement.span, PremiseClause::KeyReader, "for-in")
@@ -140,29 +151,15 @@ pub(super) fn premise_sites<'a>(semantic: &Semantic<'a>, resolve: bool) -> Vec<P
             AstKind::StaticMemberExpression(member) => {
                 let key = member.property.name.as_str();
                 // ADR 1125 (G2): a standard reader of own keys or values, named in any position (a call, a value handed on, `.call`).
-                if (sites.names_object(&member.object) && KEY_READERS.contains(&key))
-                    || matches!(peel_ts_sugar(&member.object), Expression::Identifier(object) if sites.global(object)
-                        && (object.name == "JSON"
-                            && key == "stringify"
-                            && !sites.is_callee(node.id(), member.span)))
+                // ADR 1133 (round 1 F4): `JSON` by any route (`globalThis.JSON.stringify`).
+                if (sites.names_object(&member.object, &mut keys) && KEY_READERS.contains(&key))
+                    || (key == "stringify"
+                        && sites.names_json(&member.object, &mut keys)
+                        && !sites.is_callee(node.id(), member.span))
                 {
                     sites.add(member.span, PremiseClause::KeyReader, key);
                 }
-                // ADR 1133: a dispatcher read as a value (`el.dispatchEvent.call(…)`, `Reflect.apply(….dispatchEvent, …)`, an alias).
-                if matches!(key, "dispatchEvent" | "click")
-                    && sites.value_kept(node.id(), member.span)
-                {
-                    sites.add(member.span, PremiseClause::DispatchHandedOn, key);
-                }
-                // ADR 1133 (F6): `globalThis.Reflect`, `window.Proxy`, and `globalThis.Object` handed on, are the globals by another route.
-                if matches!(key, "Proxy" | "Reflect") {
-                    sites.add(member.span, PremiseClause::ProxyOrReflect, key);
-                }
-                if matches!(key, "Object" | "constructor")
-                    && !sites.object_in_sight(node.id(), member.span)
-                {
-                    sites.add(member.span, PremiseClause::ObjectAssign, "*");
-                }
+                sites.member_name(node.id(), member.span, key, false);
                 sites.key(member.span, key);
                 if sites.is_write(node.id(), member.span) {
                     sites.written(member.span, key);
@@ -186,11 +183,10 @@ pub(super) fn premise_sites<'a>(semantic: &Semantic<'a>, resolve: bool) -> Vec<P
                 // `JSON["stringify"]`) is the reader; a key proven to be texts is checked against each, and a key nothing proves may be
                 // any reader.
                 // ADR 1133 (N2): `globalThis.Object["values"]` too (`names_object`).
-                let readers: Option<&[&str]> = if sites.names_object(&member.object) {
+                // ADR 1133 (round 1 F4): `JSON` by any route (`globalThis.JSON["stringify"]`), `Object` by a computed member too.
+                let readers: Option<&[&str]> = if sites.names_object(&member.object, &mut keys) {
                     Some(&KEY_READERS)
-                } else if matches!(peel_ts_sugar(&member.object), Expression::Identifier(object)
-                    if object.name == "JSON" && sites.global(object))
-                {
+                } else if sites.names_json(&member.object, &mut keys) {
                     Some(&["stringify"])
                 } else {
                     None
@@ -214,12 +210,9 @@ pub(super) fn premise_sites<'a>(semantic: &Semantic<'a>, resolve: bool) -> Vec<P
                 }
                 // An unproven key is the `computed_keys` fact's; a literal one is checked as a name.
                 if let Some(key) = literal_property_key(&member.expression) {
-                    // ADR 1133: `el["dispatchEvent"]` read as a value, as the static member.
-                    if matches!(key.as_str(), "dispatchEvent" | "click")
-                        && sites.value_kept(node.id(), member.span)
-                    {
-                        sites.add(member.span, PremiseClause::DispatchHandedOn, &key);
-                    }
+                    // ADR 1133: `el["dispatchEvent"]` read as a value, as the static member; round 1 F4: every name test of the static
+                    // member (`globalThis["Object"]`, `({})["constructor"]`, `x["Reflect"]`).
+                    sites.member_name(node.id(), member.span, &key, false);
                     sites.key(member.span, &key);
                     if sites.is_write(node.id(), member.span) {
                         sites.written(member.span, &key);
@@ -230,6 +223,9 @@ pub(super) fn premise_sites<'a>(semantic: &Semantic<'a>, resolve: bool) -> Vec<P
                     if let Some((texts, _)) = keys.key(&member.expression) {
                         for text in texts {
                             sites.key(member.span, &text);
+                            // Round 1 F3: a key the program builds is a key the dispatch census cannot read, so a dispatcher under it is
+                            // handed on whether its value is kept or called (`el["dispatch" + "Event"](e)`).
+                            sites.member_name(node.id(), member.span, &text, true);
                         }
                     }
                 } else if sites.is_write(node.id(), member.span) {
@@ -314,31 +310,23 @@ pub(super) fn premise_sites<'a>(semantic: &Semantic<'a>, resolve: bool) -> Vec<P
                 );
                 sites.contain(from, class_of(semantic, node.id()));
             }
+            // ADR 1133 (round 1 F3, F4): a pattern takes a member out under its key as a value (`const { dispatchEvent } = el`,
+            // `({ dispatchEvent: d } = el)`, `({ entries } = Object)`, `const { Object: O } = globalThis`), so every name test of a
+            // member read applies to the key, whatever spelling gives it (a name, a literal, proven texts).
             AstKind::BindingProperty(property) => {
-                if let Some(key) = kernel_key(&property.key) {
-                    sites.key(property.span, &key);
-                    // ADR 1133: `const { dispatchEvent } = el` takes the dispatcher out (`dispatchEvent.call(el, e)`).
-                    if matches!(key.as_str(), "dispatchEvent" | "click") {
-                        sites.add(property.span, PremiseClause::DispatchHandedOn, &key);
-                    }
-                    // ADR 1125 (G2): `const { entries } = Object` takes a reader out by name (whatever the object: fail closed).
-                    if KEY_READERS.contains(&key.as_str()) {
-                        sites.add(property.span, PremiseClause::KeyReader, &key);
-                    }
-                }
+                sites.pattern_member(property.span, &property.key, property.computed, &mut keys);
             }
             AstKind::AssignmentTargetPropertyProperty(property) => {
-                if let Some(key) = kernel_key(&property.name) {
-                    sites.key(property.span, &key);
-                }
+                sites.pattern_member(property.span, &property.name, property.computed, &mut keys);
+            }
+            AstKind::AssignmentTargetPropertyIdentifier(property) => {
+                sites.pattern_key(property.span, property.binding.name.as_str());
             }
             AstKind::CallExpression(call) => {
                 sites.definer_key(call, &mut keys);
                 if let Expression::StaticMemberExpression(callee) = peel_ts_sugar(&call.callee)
                     && callee.property.name == "stringify"
-                    && let Expression::Identifier(object) = peel_ts_sugar(&callee.object)
-                    && object.name == "JSON"
-                    && sites.global(object)
+                    && sites.names_json(&callee.object, &mut keys)
                     // N1: a spread may hand any number of arguments, a replacer among them.
                     && (call.arguments.len() >= 2
                         || call.arguments.iter().any(|argument| argument.is_spread()))
@@ -348,7 +336,7 @@ pub(super) fn premise_sites<'a>(semantic: &Semantic<'a>, resolve: bool) -> Vec<P
                 }
                 if let Expression::StaticMemberExpression(callee) = peel_ts_sugar(&call.callee)
                     && callee.property.name == "assign"
-                    && sites.names_object(&callee.object)
+                    && sites.names_object(&callee.object, &mut keys)
                     && !matches!(
                         call.arguments
                             .first()
@@ -609,6 +597,78 @@ impl<'a> Sites<'_, 'a> {
         }
     }
 
+    /// ADR 1133 (round 1 F3, F4): the name tests of a member read under `key` at `span` (`id` is the member's node), shared by the
+    /// static member and every spelling of its key. `hidden`: the key is one the program builds (proven texts), which the dispatch
+    /// census cannot read, so a dispatcher under it is handed on whether its value is kept or called; a key written as a name or a
+    /// literal is the census's own, and a dispatcher is handed on only where its value is kept.
+    fn member_name(&mut self, id: NodeId, span: oxc_span::Span, key: &str, hidden: bool) {
+        // A dispatcher read as a value (`el.dispatchEvent.call(…)`, `Reflect.apply(….dispatchEvent, …)`, an alias).
+        if DISPATCHERS.contains(&key) && (hidden || self.value_kept(id, span)) {
+            self.add(span, PremiseClause::DispatchHandedOn, key);
+        }
+        // `globalThis.Reflect`, `window.Proxy`, and `globalThis.Object` handed on, are the globals by another route.
+        if matches!(key, "Proxy" | "Reflect") {
+            self.add(span, PremiseClause::ProxyOrReflect, key);
+        }
+        // `Object` and `constructor` kept or handed on may be called as `Object.assign` by any name, `JSON` as `JSON.stringify` with a
+        // replacer: used as the object of a member read they are in sight, and the member's own test reads what it names.
+        if matches!(key, "Object" | "constructor") && !self.object_in_sight(id, span) {
+            self.add(span, PremiseClause::ObjectAssign, "*");
+        }
+        if key == "JSON" && !self.object_in_sight(id, span) {
+            self.add(span, PremiseClause::KeyReader, "JSON");
+        }
+    }
+
+    /// A pattern's property (`const { k } = x`, `({ k: v } = x)`, `({ [expr]: v } = x)`) under the key it names: a name or literal, or
+    /// the texts a proof gives a computed key (a key nothing proves is `computed_keys`' and refuses the program).
+    fn pattern_member(
+        &mut self,
+        at: oxc_span::Span,
+        key: &'a PropertyKey<'a>,
+        computed: bool,
+        keys: &mut super::computed_keys::KeyProver<'_, 'a>,
+    ) {
+        match kernel_key(key) {
+            Some(text) => self.pattern_key(at, &text),
+            None if computed => {
+                if let Some((texts, _)) = key
+                    .as_expression()
+                    .and_then(|expression| keys.key(expression))
+                {
+                    for text in texts {
+                        self.pattern_key(at, &text);
+                    }
+                }
+            }
+            None => {}
+        }
+    }
+
+    /// A member taken out of an object by a pattern under `key` is read as a value and kept in a name no scan follows (a binding, a
+    /// parameter): every name test applies to the key whatever the object (fail closed), not only the three of [`Sites::key`].
+    fn pattern_key(&mut self, at: oxc_span::Span, key: &str) {
+        self.key(at, key);
+        // `const { dispatchEvent } = el` takes the dispatcher out (`dispatchEvent.call(el, e)`).
+        if DISPATCHERS.contains(&key) {
+            self.add(at, PremiseClause::DispatchHandedOn, key);
+        }
+        // ADR 1125 (G2): `const { entries } = Object` takes a reader out by name (whatever the object: fail closed).
+        if KEY_READERS.contains(&key) {
+            self.add(at, PremiseClause::KeyReader, key);
+        }
+        // `const { Object: O } = globalThis`, `const { constructor: C } = {}`, `const { JSON: J } = globalThis`, `({ Reflect: R } = window)`.
+        if matches!(key, "Object" | "constructor") {
+            self.add(at, PremiseClause::ObjectAssign, "*");
+        }
+        if matches!(key, "Proxy" | "Reflect") {
+            self.add(at, PremiseClause::ProxyOrReflect, key);
+        }
+        if key == "JSON" {
+            self.add(at, PremiseClause::KeyReader, "JSON");
+        }
+    }
+
     /// A property, method or field defined under `key`; `code` says whether the value may be code.
     fn definition(
         &mut self,
@@ -706,13 +766,47 @@ impl<'a> Sites<'_, 'a> {
     }
 
     /// ADR 1133 (F6, N2): whether the expression may be the global `Object`: the name no binding declares, a member so named of anything
-    /// (`globalThis.Object`, `window.Object`: fail closed on the receiver), or any value's `constructor`.
-    fn names_object(&self, expression: &Expression<'_>) -> bool {
+    /// (`globalThis.Object`, `window.Object`: fail closed on the receiver), or any value's `constructor`, by whatever spelling the key
+    /// has: a name, a literal (`({})["constructor"]`, `globalThis["Object"]`) or texts a proof gives it (round 1 F4).
+    fn names_object(
+        &self,
+        expression: &'a Expression<'a>,
+        keys: &mut super::computed_keys::KeyProver<'_, 'a>,
+    ) -> bool {
+        self.names_global(expression, keys, "Object", true)
+    }
+
+    /// ADR 1133 (round 1 F4): whether the expression may be the global `JSON`, as [`Self::names_object`] reads `Object` (without
+    /// `constructor`): the name no binding declares, or a member so named of anything.
+    fn names_json(
+        &self,
+        expression: &'a Expression<'a>,
+        keys: &mut super::computed_keys::KeyProver<'_, 'a>,
+    ) -> bool {
+        self.names_global(expression, keys, "JSON", false)
+    }
+
+    fn names_global(
+        &self,
+        expression: &'a Expression<'a>,
+        keys: &mut super::computed_keys::KeyProver<'_, 'a>,
+        name: &str,
+        constructor: bool,
+    ) -> bool {
+        let named = |key: &str| key == name || (constructor && key == "constructor");
         match peel_ts_sugar(expression) {
-            Expression::Identifier(object) => object.name == "Object" && self.global(object),
+            Expression::Identifier(object) => object.name == name && self.global(object),
             // N2: any value's `constructor` may be `Object` (`({}).constructor.values(el)`).
-            Expression::StaticMemberExpression(member) => {
-                matches!(member.property.name.as_str(), "Object" | "constructor")
+            Expression::StaticMemberExpression(member) => named(member.property.name.as_str()),
+            // F4: the same member under a literal or proven key; a key nothing proves is `computed_keys`' (the value is no plain
+            // data, so `unproven-key` refuses it).
+            Expression::ComputedMemberExpression(member) => {
+                match literal_property_key(&member.expression) {
+                    Some(key) => named(&key),
+                    None => keys
+                        .key(&member.expression)
+                        .is_some_and(|(texts, _)| texts.iter().any(|text| named(text))),
+                }
             }
             _ => false,
         }
@@ -740,11 +834,14 @@ impl<'a> Sites<'_, 'a> {
         }
     }
 
-    /// ADR 1133 (#296 owed): whether the global `Reflect` at `span` is the object of a call of a member that only calls or reads:
+    /// ADR 1133 (#296 owed): whether the global `Reflect` at `span` is the object of a call of a member that only calls or tests:
     /// `Reflect.apply(f, t, args)` and `Reflect.construct(F, args)` call a function value the program names elsewhere (its own
-    /// read is checked there); `Reflect.get(o, k)` and `Reflect.has(o, k)` read key `k`, which is checked as a read key (a route, a
-    /// private key, a spelling) when a literal or proven texts name it. Any other member (`defineProperty`, `set`, `setPrototypeOf`,
-    /// `deleteProperty`, `ownKeys`, …), a member read but not called, a computed member, or a key nothing proves: fail closed.
+    /// read is checked there), and `Reflect.has(o, k)` answers a boolean (its key is checked as a read key: a route, a private key, a
+    /// spelling). `Reflect.get` hands back the member itself, and every name test of the scans (a key reader, `Object`, `Reflect`,
+    /// `JSON`, a dispatcher, a timer, `eval`, `location`, `open`, a call-spelled sink) lives on a member named where it is read, which
+    /// `Reflect.get(o, "constructor")` hides: it is a hazard (ADR 1133, round 1 F1; it recovered no proof). Any other member
+    /// (`defineProperty`, `set`, `setPrototypeOf`, `deleteProperty`, `ownKeys`, …), a member read but not called, a computed member,
+    /// or a key nothing proves: fail closed.
     fn reflect_member_reads_only(
         &mut self,
         id: NodeId,
@@ -767,7 +864,7 @@ impl<'a> Sites<'_, 'a> {
         }
         match member.property.name.as_str() {
             "apply" | "construct" => true,
-            "get" | "has" => {
+            "has" => {
                 let Some(key) = call
                     .arguments
                     .get(1)
@@ -962,11 +1059,11 @@ mod tests {
                 .any(|(clause, _)| *clause == PremiseClause::DispatchHandedOn),
             "{written}"
         );
-        // #296: `Reflect.apply`, `Reflect.construct` and `Reflect.get`/`has` under a literal key are no Reflect hazard; the key read is a key.
+        // #296: `Reflect.apply`, `Reflect.construct` and `Reflect.has` under a literal key are no Reflect hazard; the key tested is a key.
         for source in [
             "declare const f: any; Reflect.apply(f, null, []);",
             "declare const F: any; Reflect.construct(F, []);",
-            "declare const o: any; Reflect.get(o, \"x\"); Reflect.has(o, \"y\");",
+            "declare const o: any; Reflect.has(o, \"y\");",
         ] {
             assert!(
                 !has(source, PremiseClause::ProxyOrReflect, "Reflect"),
@@ -974,11 +1071,19 @@ mod tests {
             );
         }
         assert!(has(
-            "declare const el: any; Reflect.get(el, \"_$$click\");",
+            "declare const el: any; Reflect.has(el, \"_$$click\");",
             PremiseClause::PrivateKey,
             "_$$click"
         ));
+        // Round 1 F1: `Reflect.get` hands the member back whatever its key (`Reflect.get({}, \"constructor\")`,
+        // `Reflect.get(el, \"dispatchEvent\")`, `Reflect.get(globalThis, \"JSON\")`), and every name test lives on a member read where it
+        // is named: a hazard under a literal, a proven or an unknown key.
         for source in [
+            "declare const o: any; Reflect.get(o, \"x\");",
+            "Reflect.get({}, \"constructor\");",
+            "declare const el: any; (Reflect.get(el, \"dispatchEvent\") as any).call(el, new Event(\"x\"));",
+            "(Reflect.get(globalThis, \"Object\") as any).values({});",
+            "(Reflect.get(window, \"setTimeout\") as any)(\"code\");",
             "declare const o: any, k: string; Reflect.get(o, k);",
             "declare const o: any; Reflect.set(o, \"x\", 1);",
             "declare const o: any; Reflect.ownKeys(o);",
@@ -1036,6 +1141,124 @@ mod tests {
             "declare const x: any; const k = Object[\"freeze\"](x);",
         ] {
             assert!(!has(source, PremiseClause::ObjectAssign, "*"), "{source}");
+        }
+    }
+
+    #[test]
+    fn a_dispatcher_by_a_built_key_or_a_pattern_is_handed_on_whether_kept_or_called() {
+        // ADR 1133, round 1 F3: the dispatch census counts only dispatch calls spelled as dispatches; a key the program builds, and every
+        // pattern form (a declaration, an assignment, a shorthand, a built key), takes the dispatcher out by a route it cannot read.
+        for source in [
+            "declare const el: any; (el as any)[\"dispatch\" + \"Event\"].call(el, new Event(\"x\"));",
+            "declare const el: any; (el as any)[\"dispatch\" + \"Event\"](new Event(\"x\"));",
+            "declare const el: any; (el as any)[\"cl\" + \"ick\"]();",
+            "declare const el: any; let d: any; ({ dispatchEvent: d } = el as any); d.call(el, new Event(\"x\"));",
+            "declare const el: any; let dispatchEvent: any; ({ dispatchEvent } = el as any);",
+            "declare const el: any; const { [\"dispatch\" + \"Event\"]: d } = el as any;",
+            "declare const el: any; let d: any; ({ [\"click\"]: d } = el as any);",
+        ] {
+            assert!(
+                sites(source)
+                    .iter()
+                    .any(|(clause, _)| *clause == PremiseClause::DispatchHandedOn),
+                "{source}"
+            );
+        }
+        // A dispatch written as a name or a literal key is the census's: it stays no hazard.
+        let written = "declare const el: any; el.dispatchEvent(new Event(\"x\")); el[\"click\"](); el?.[\"click\"](); if (el[\"click\"]) {}";
+        assert!(
+            !sites(written)
+                .iter()
+                .any(|(clause, _)| *clause == PremiseClause::DispatchHandedOn),
+            "{written}"
+        );
+    }
+
+    #[test]
+    fn json_and_object_by_a_computed_member_an_alias_or_a_pattern_are_the_globals() {
+        // ADR 1133, round 1 F4: the spellings round 2's N2 named, which the scans read only as the global name or a static member.
+        for (source, clause, key) in [
+            (
+                "declare const el: any; globalThis.JSON.stringify(el, (_k: string, v: unknown) => v);",
+                PremiseClause::KeyReader,
+                "JSON.stringify",
+            ),
+            (
+                "declare const el: any; (globalThis as any)[\"JSON\"].stringify(el, (_k: string, v: unknown) => v);",
+                PremiseClause::KeyReader,
+                "JSON.stringify",
+            ),
+            (
+                "const J = JSON; J.stringify({}, null);",
+                PremiseClause::KeyReader,
+                "JSON",
+            ),
+            (
+                "const { stringify } = JSON; stringify({}, null);",
+                PremiseClause::KeyReader,
+                "JSON",
+            ),
+            (
+                "const J = globalThis.JSON;",
+                PremiseClause::KeyReader,
+                "JSON",
+            ),
+            (
+                "const { JSON: J } = globalThis as any;",
+                PremiseClause::KeyReader,
+                "JSON",
+            ),
+            (
+                "declare const el: any; ({} as any)[\"constructor\"].values(el);",
+                PremiseClause::KeyReader,
+                "values",
+            ),
+            (
+                "declare const el: any; (globalThis as any)[\"Object\"].values(el);",
+                PremiseClause::KeyReader,
+                "values",
+            ),
+            (
+                "declare const el: any; (globalThis as any)[\"Obj\" + \"ect\"].values(el);",
+                PremiseClause::KeyReader,
+                "values",
+            ),
+            (
+                "const { Object: O } = globalThis as any; O.values({});",
+                PremiseClause::ObjectAssign,
+                "*",
+            ),
+            (
+                "const { constructor: C } = {} as any; C.values({});",
+                PremiseClause::ObjectAssign,
+                "*",
+            ),
+            (
+                "const { Reflect: R } = globalThis as any;",
+                PremiseClause::ProxyOrReflect,
+                "Reflect",
+            ),
+            (
+                "const R = (globalThis as any)[\"Reflect\"];",
+                PremiseClause::ProxyOrReflect,
+                "Reflect",
+            ),
+        ] {
+            assert!(has(source, clause, key), "{source}");
+        }
+        // `JSON` read as the object of a member, a one-argument `stringify` and `typeof`, a plain `constructor` read: no hazard.
+        for source in [
+            "declare const x: any; const s = JSON.stringify(x); const p = JSON.parse(s); const t = typeof JSON;",
+            "declare const x: any; const s = globalThis.JSON.stringify(x);",
+            "declare const x: any; const n = (x as any)[\"constructor\"][\"name\"];",
+        ] {
+            assert!(
+                !sites(source).iter().any(|(clause, _)| matches!(
+                    clause,
+                    PremiseClause::KeyReader | PremiseClause::ObjectAssign
+                )),
+                "{source}"
+            );
         }
     }
 

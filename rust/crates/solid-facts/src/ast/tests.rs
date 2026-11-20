@@ -3117,6 +3117,134 @@ fn a_navigation_url_whose_leading_text_is_no_javascript_scheme_is_no_code_sink()
     assert_eq!(code_sink_facts(source), vec![]);
 }
 
+/// Whether `listed` holds a sink of `kind` whose text contains `text`.
+fn has_sink(listed: &[(String, CodeSinkKind)], text: &str, kind: CodeSinkKind) -> bool {
+    listed
+        .iter()
+        .any(|(sink, listed)| *listed == kind && sink.contains(text))
+}
+
+#[test]
+fn a_call_spelled_sink_read_as_a_value_is_the_sink_its_name_is() {
+    // ADR 1133, round 1 F2: `Sinks::call` matches these by a call's spelling; read anywhere but as a callee (`Reflect.apply(el.write, …)`,
+    // `.call`, an alias, a literal or built key, a pattern) the function runs under a name no call spells.
+    let source = "declare const el: any, doc: any, name: string; \
+        Reflect.apply(el.insertAdjacentHTML, el, ['beforeend', name]); Reflect.apply(doc.write, doc, [name]); \
+        Reflect.apply(doc.createElement, doc, ['script']); doc.write.call(doc, name); const w = doc.writeln; \
+        const f = el['createContextualFragment']; const g = doc['setHTML' + 'Unsafe']; el.setAttributeNode.call(el, name); \
+        el['insert' + 'AdjacentHTML']('beforeend', name); doc['create' + 'Element']('script');";
+    let listed = code_sink_facts(source);
+    for (text, kind) in [
+        ("el.insertAdjacentHTML", CodeSinkKind::MarkupWrite),
+        ("doc.write", CodeSinkKind::MarkupWrite),
+        ("doc.createElement", CodeSinkKind::ScriptElement),
+        ("doc.writeln", CodeSinkKind::MarkupWrite),
+        ("el['createContextualFragment']", CodeSinkKind::MarkupWrite),
+        ("doc['setHTML' + 'Unsafe']", CodeSinkKind::MarkupWrite),
+        ("el.setAttributeNode", CodeSinkKind::EventAttribute),
+        // A key the program builds, called, is the call it spells.
+        (
+            "el['insert' + 'AdjacentHTML']('beforeend', name)",
+            CodeSinkKind::MarkupWrite,
+        ),
+        (
+            "doc['create' + 'Element']('script')",
+            CodeSinkKind::ScriptElement,
+        ),
+    ] {
+        assert!(has_sink(&listed, text, kind), "{text}: {listed:?}");
+    }
+    // A pattern takes the member out: a name only one kind of object has is a sink whatever the source, a name every kind has
+    // (`write`, `createElement`) only from a document.
+    let patterns = "declare const el: any; const { insertAdjacentHTML } = el; const { write } = document; \
+        const { createElement: make } = document; const { setAttribute } = el; let w: any; ({ write: w } = document);";
+    assert_eq!(
+        code_sink_facts(patterns),
+        vec![
+            ("insertAdjacentHTML".to_string(), CodeSinkKind::MarkupWrite),
+            ("write".to_string(), CodeSinkKind::MarkupWrite),
+            (
+                "createElement: make".to_string(),
+                CodeSinkKind::ScriptElement
+            ),
+            ("setAttribute".to_string(), CodeSinkKind::NavigationUrl),
+            ("write: w".to_string(), CodeSinkKind::MarkupWrite),
+        ]
+    );
+    // The written calls with benign arguments, destructuring other objects, and a flag read stay no sink.
+    let clean = "declare const el: any, doc: any, props: any, stream: any; \
+        el.insertAdjacentHTML('beforeend', '<i>x</i>'); doc.write('<p>hi</p>'); doc.createElement('div'); \
+        const { children } = el; const { open } = props; const { write } = stream; const { replace } = props;";
+    assert_eq!(code_sink_facts(clean), vec![]);
+}
+
+#[test]
+fn a_url_or_markup_spelling_the_first_cut_missed_is_a_code_sink() {
+    // ADR 1133, round 1 F5: the location by another member, a built key, an attribute node, the SVG animated `href`, the scheme of the URL
+    // an element holds, character references where an HTML parser decodes them, a destructured `open`, `assign` or `location`.
+    let source = "declare const a: any, el: any, frame: any, url: string, go: any; \
+        const loc = document.location; go(window.location); \
+        (a as any)['hr' + 'ef'] = 'java' + 'script:void 0'; \
+        a.getAttributeNode('href')!.value = 'x'; a.getAttributeNodeNS(null, name as string); \
+        a.href.baseVal = url; a.protocol = url; a.protocol = 'java' + 'script'; \
+        const e = <a href=\"&#106;avascript:void 0\" />; \
+        frame.srcdoc = '<a href=\"&#106;avascript:void 0\">x</a>'; el.innerHTML = '<a href=\"&#x6A;avascript:1\">x</a>'; \
+        el.innerHTML = '<a href=\"java\tscript:1\">x</a>';";
+    let listed = code_sink_facts(source);
+    for (text, kind) in [
+        ("document.location", CodeSinkKind::NavigationUrl),
+        ("window.location", CodeSinkKind::NavigationUrl),
+        (
+            "(a as any)['hr' + 'ef'] = 'java' + 'script:void 0'",
+            CodeSinkKind::NavigationUrl,
+        ),
+        ("a.getAttributeNode('href')", CodeSinkKind::NavigationUrl),
+        (
+            "a.getAttributeNodeNS(null, name as string)",
+            CodeSinkKind::NavigationUrl,
+        ),
+        ("a.href.baseVal = url", CodeSinkKind::NavigationUrl),
+        ("a.protocol = url", CodeSinkKind::NavigationUrl),
+        (
+            "a.protocol = 'java' + 'script'",
+            CodeSinkKind::NavigationUrl,
+        ),
+        (
+            "href=\"&#106;avascript:void 0\"",
+            CodeSinkKind::NavigationUrl,
+        ),
+        ("frame.srcdoc = ", CodeSinkKind::MarkupWrite),
+        (
+            "el.innerHTML = '<a href=\"&#x6A;",
+            CodeSinkKind::MarkupWrite,
+        ),
+        (
+            "el.innerHTML = '<a href=\"java\tscript:1",
+            CodeSinkKind::MarkupWrite,
+        ),
+    ] {
+        assert!(has_sink(&listed, text, kind), "{text}: {listed:?}");
+    }
+    // A pattern's `open` or `location` taken out of a window, `assign` or `replace` out of the location.
+    let patterns = "const { open: o } = window; const { assign } = location; const { location: l } = window; const { replace: r } = window.location;";
+    assert_eq!(
+        code_sink_facts(patterns),
+        vec![
+            ("open: o".to_string(), CodeSinkKind::NavigationUrl),
+            ("assign".to_string(), CodeSinkKind::NavigationUrl),
+            ("location: l".to_string(), CodeSinkKind::NavigationUrl),
+            ("replace: r".to_string(), CodeSinkKind::NavigationUrl),
+        ]
+    );
+    // The neighbours that run nothing: a literal attribute node that is no URL or handler, a plain `baseVal`, a scheme that is none, a
+    // reference outside any attribute value or past the scheme, and `open`, `assign`, `location` taken from other objects.
+    let clean = "declare const a: any, el: any, props: any, other: any; \
+        a.getAttributeNode('title'); (a as any).href.baseVal = '/x'; a.protocol = 'https:'; \
+        const e = <a href=\"/x?a=1&b=2\" />; el.innerHTML = '<p title=\"a\">x &amp; y &times;</p>'; \
+        const { pathname, search } = location; const { open } = props; const { assign } = other; const { location } = props;";
+    assert_eq!(code_sink_facts(clean), vec![]);
+}
+
 #[test]
 fn a_native_event_attribute_of_jsx_is_a_code_sink_unless_a_function_is_written_there() {
     let source = "declare const handler: any; \
@@ -4466,10 +4594,12 @@ fn a_computed_read_whose_value_only_feeds_operators_and_tests_is_inert() {
         vec![false, true],
         "the arrow body returns it; the statement discards it"
     );
-    // ADR 1133: the object of a plain data key read or written, never called (`draft[index()].done = …`), is inert; a standard name, a
-    // route, a hook, a private key, `event`, or a call of the member is not.
+    // ADR 1133 (round 1 F6): the object of a member under a plain data key, in any use (read, written, called, kept, called through
+    // `.call`, `new`), is inert: the key alone decides, because what a plain key holds is something the program put there. A standard
+    // name, a route, a hook, a private key and `event` are not plain, whatever the member's own use.
     let members = "declare const a: any, k: any; a[k].done = !a[k].done; a[k].push(1); a[k].addEventListener; a[k].done(); \
-        a[k].prototype; a[k].then; a[k]._$$click; a[k].event;";
+        a[k].prototype; a[k].then; a[k]._$$click; a[k].event; \
+        const f = a[k].run; f(1); a[k].run.call(null, 1); new a[k].Ctor(); a[k].call(null);";
     let inert = extract("keys.ts", members)
         .unwrap()
         .computed_keys
@@ -4478,7 +4608,9 @@ fn a_computed_read_whose_value_only_feeds_operators_and_tests_is_inert() {
         .collect::<Vec<_>>();
     assert_eq!(
         inert,
-        vec![true, true, false, false, false, false, false, false, false]
+        vec![
+            true, true, false, false, true, false, false, false, false, true, true, true, false
+        ]
     );
 }
 
