@@ -40593,6 +40593,17 @@
    "owner-entry/stored"
   ],
   "rediscovered": "make fuzz-patterns (--only owner-entry/), release builds: main a64fc92ad has 3 false cleans (NO_OWNER_CONTEXT at carried-handler, helper and stored; member and imported are covered through an application frame of the stack), this build none. Census: focus --grids mx-census --contexts barm-carried-handler (1124 round 2's context, applied to main without committing it): main secondary-false-clean (NO_OWNER_CONTEXT false-clean-certified, findings missing-context-provider/violation@7 alone), this build recall-gap (missing-owner/uncertifiable@7 beside it) and nothing needs a look",
-  "outside": "the pattern lane holds the programs (scripts/fuzz/patterns/owner-entry); main's generators write the carried route only through ADR 1124 round 2's `barm-carried-handler` context, which is not on main: the census id joins this entry (and scripts/fuzz/smoke/mx-census.json) when that context does"
+  "outside": "the pattern lane holds the programs (scripts/fuzz/patterns/owner-entry); the census route, ADR 1124 round 2's `barm-carried-handler` context (on main since #299), is the next entry (mx-census CONTEXT_NOT_FOUND), its id held in scripts/fuzz/smoke/mx-census.json"
+ },
+ {
+  "finding": "ADR 1142, the census route: a read of a provider-free context in a function an effect's compute runs, which a click handler carries on (`[f].forEach((g) => g())`, ADR 1124 round 2's `barm-carried-handler`), had SC4002's violation alone while Chrome also reports NO_OWNER_CONTEXT there, a certified false clean of SC4001's code (a secondary false clean); held by exact id in open-defects-rows.json until this fix",
+  "found": "the fuzzer: mx-census CONTEXT_NOT_FOUND `barm-carried-handler` (ADR 1124 round 2's context, in main since #299), reported by the coordinator; the same defect as the previous entry's pattern programs",
+  "fixed": "ADR 1142 (owner_emission.rs: the provider-free arm asks named_layer_entry_open and gives SC4001's owner-callers-unenumerated obligation beside SC4002's claim); its known-open row is removed with it",
+  "grid": "mx-census",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-barm-carried-handler-x-direct-none"
+  ],
+  "rediscovered": "focus --grids mx-census --contexts barm-carried-handler --codes CONTEXT_NOT_FOUND, release builds, same typefacts, the known-open row removed: main a7e9e7113 exits 1, secondary-false-clean (NO_OWNER_CONTEXT false-clean-certified, findings missing-context-provider/violation@7 alone); bundle f (1142) exits 0, missing-owner/uncertifiable@7 beside the violation, the secondary NO_OWNER_CONTEXT recall-gap, nothing needs a look. scripts/fuzz/smoke/mx-census.json holds the id with that behaviour"
  }
 ]
