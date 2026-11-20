@@ -2521,8 +2521,19 @@ impl Dialect for Solid2 {
     /// `accessor()` sets on every Solid accessor (`:3237-3240`), then `markRefresh(node)` and a waiter that reads `node`, never
     /// `target`. Its promise resolves with the node's value (or the store passed), not with an accessor. A target with no node
     /// throws `INVALID_REFRESH_TARGET` before anything else.
+    ///
+    /// rc.21 `affects(target)` (`@solidjs/signals` `dist/dev.js:10018-10050`, `dist/prod/affects.js:56-69`) reads the same property after
+    /// one more: `target?.[$TARGET]` (the store half), then `target?.[$REFRESH]`, and marks that node (`register`, `schedule`: a count
+    /// on the node, its verdict readers queued to re-derive) without calling `target` or handing it on. A target with no node throws
+    /// `INVALID_AFFECTS_TARGET` in the dev build, before anything else.
     fn argument_is_untouched_target(&self, primitive: Primitive, argument: usize) -> bool {
-        argument == 0 && primitive == Primitive::Refresh
+        argument == 0 && matches!(primitive, Primitive::Refresh | Primitive::Affects)
+    }
+
+    /// `affects` asks for `$TARGET` first, which no accessor owns: on a function value that read walks `Function.prototype` and
+    /// `Object.prototype`. `refresh` reads `$REFRESH` only, an own property.
+    fn argument_target_read_walks_prototypes(&self, primitive: Primitive, argument: usize) -> bool {
+        argument == 0 && primitive == Primitive::Affects
     }
 
     /// `const track = createReaction(onInvalidate); track(() => read())` —

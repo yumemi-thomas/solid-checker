@@ -2072,3 +2072,7 @@ packages/wasm/owned/
 !fixtures/reactive-ir/event-delivery-spellings/variants/attributes-built-key/node_modules/**
 !fixtures/reactive-ir/event-delivery-spellings/variants/data-href-unproven-key/node_modules/
 !fixtures/reactive-ir/event-delivery-spellings/variants/data-href-unproven-key/node_modules/**
+!fixtures/reactive-ir/affects-target-untouched/node_modules/
+!fixtures/reactive-ir/affects-target-untouched/node_modules/**
+!fixtures/reactive-ir/leaf-focus-no-listener/node_modules/
+!fixtures/reactive-ir/leaf-focus-no-listener/node_modules/**

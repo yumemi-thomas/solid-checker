@@ -3329,8 +3329,21 @@ impl<'l, 'a> Census<'l, 'a> {
             }
             // ADR 1089: `refresh(m)` reads the property the runtime set on `m` and never calls `m` or hands it on. Only a
             // function value: a holder (a store root) is a proxy whose property read is the store's.
+            // ADR 11xx-a: `affects(m)` is the same, after a read of `$TARGET` that walks the prototype chain of a function: a
+            // hook there is project code, so that read asks its own premise ([`untouched_target_read_is_plain`]).
             if mode == Mode::Value && dialect.argument_is_untouched_target(primitive, index) {
-                return Position::Followed;
+                if !dialect.argument_target_read_walks_prototypes(primitive, index) {
+                    return Position::Followed;
+                }
+                if untouched_target_read_is_plain(self.lookup) {
+                    crate::proof_log::silent(
+                        "SC9012",
+                        &call.arguments[index].span.location(file.path.as_str()),
+                        UNTOUCHED_TARGET_READ,
+                        &[],
+                    );
+                    return Position::Followed;
+                }
             }
             let callback = mode == Mode::Value
                 && (dialect.callback_positions(primitive).contains(&index)
@@ -3424,6 +3437,25 @@ impl<'l, 'a> Census<'l, 'a> {
         self.parameter_hops -= 1;
         answer
     }
+}
+
+/// The proof's id for the read an `affects` call makes of its target: the proof log's `silent` lines name it, and
+/// `SOLID_CHECKER_IR_ABLATE_SILENCE` turns it off (ADR 1118's gate).
+pub(crate) const UNTOUCHED_TARGET_READ: &str = "value_use.untouched_target_read";
+
+/// ADR 11xx-a: whether the runtime's read of `$TARGET` on a function value (the accessor `affects` is handed; no accessor owns that key, so
+/// the read walks `Function.prototype`, then `Object.prototype`) runs no project code. A hook at that key on either prototype, or a prototype
+/// the accessor's own is swapped for, is code that `affects(m)` would run in whatever scope it is written. Asked as ADR 1129's shared standard
+/// member premise, whose name census cannot hold a symbol: nothing in the program may write a prototype by a route, by a key no fact decides
+/// or through a Proxy, `Reflect`, `Object.assign` or code built from a string, no loaded package may write a built-in's prototype under a key
+/// it does not decide, and no module the build does not read may do any of it.
+fn untouched_target_read_is_plain(lookup: &SemanticLookup<'_>) -> bool {
+    if crate::site_accounting::ablated_id(UNTOUCHED_TARGET_READ) {
+        return false;
+    }
+    ["Function.$TARGET", "Object.$TARGET"]
+        .into_iter()
+        .all(|name| !crate::interproc::accessor_provenance::standard_member_replaced(lookup, name))
 }
 
 /// A member's key as written: a static name or a literal computed key.

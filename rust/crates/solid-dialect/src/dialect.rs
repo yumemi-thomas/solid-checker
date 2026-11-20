@@ -1678,6 +1678,15 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether the property read [`Dialect::argument_is_untouched_target`] names may reach a key the argument does not own: the
+    /// runtime first asks the value for a key only a store carries, so on a function the read walks its prototype chain
+    /// (`Function.prototype`, `Object.prototype`) and a hook installed there would run project code. The IR asks the
+    /// standard-member premise (nothing may write those prototypes under a key no fact decides) before it ends a walk there.
+    fn argument_target_read_walks_prototypes(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
     /// How a callback passed to the function returned by `primitive` runs.
     ///
     /// This is deliberately separate from [`Dialect::callback_execution_at`]:

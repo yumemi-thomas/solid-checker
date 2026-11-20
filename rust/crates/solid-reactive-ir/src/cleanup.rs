@@ -445,6 +445,7 @@ pub(super) fn leaf_owner_operations_for_file(
     let async_depth = Cell::new(0);
     let sync_sites = RefCell::default();
     let leaf_has_observer = Cell::new(false);
+    let focus_scan = Cell::new(None);
     let resolution = LeafScopeResolution {
         lookup,
         symbol_names,
@@ -454,6 +455,7 @@ pub(super) fn leaf_owner_operations_for_file(
         async_depth: &async_depth,
         sync_sites: &sync_sites,
         leaf_has_observer: &leaf_has_observer,
+        focus_scan: &focus_scan,
     };
     let mut operations = Vec::new();
     for owner_call in &file.ast.calls {
@@ -1701,6 +1703,9 @@ struct LeafScopeResolution<'a, 'lookup> {
     /// a `resolve` or `until` reached under a slot that takes what its callback throws is the observer guard's plain throw (the
     /// slot takes it) or the leaf owner's refused creation (a diagnostic emitted before the throw, which the slot does not).
     leaf_has_observer: &'a Cell<bool>,
+    /// ADR 11xx-b: whether the program may run project code on the stack of a focus move (`focus_delivery`), asked at most once per
+    /// file: the first element `focus()` the walk meets decides it.
+    focus_scan: &'a Cell<Option<bool>>,
 }
 
 /// A forbidden operation the walk reached, and whether the leaf scope's call
@@ -2272,6 +2277,7 @@ fn member_call_operations(
                     || file
                         .source_text(Span::new(call.callee.end, call.span.end))
                         .is_some_and(|suffix| suffix.trim_start().starts_with("?.")))))
+        && !focus_delivers_nothing(resolution, file, call, resolved)
     {
         return false;
     }
@@ -2301,6 +2307,40 @@ fn member_call_operations(
         });
     }
     complete
+}
+
+/// ADR 11xx-b: whether the element `focus()` at `call` (a direct member call, `x.focus()` or `x?.focus()`) runs no project code: the
+/// program holds no listener for what a focus move delivers and nothing that stands in for `focus` ([`crate::focus_delivery`]), the
+/// standard call is not withheld and its member is not replaced. The one member ADR 0329's refusal lets through.
+fn focus_delivers_nothing(
+    resolution: LeafScopeResolution<'_, '_>,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    resolved: &typefacts::ResolvedCall,
+) -> bool {
+    use crate::focus_delivery as focus;
+    let lookup = resolution.lookup;
+    let Some(name) = crate::runtime_semantics::standard_call_name(resolved) else {
+        return false;
+    };
+    if crate::site_accounting::ablated_id(focus::PROOF)
+        || !focus::is_element_focus(name)
+        || !focus::call_shape(file, call)
+        || lookup.standard_call_withheld(file, call.callee)
+        || crate::interproc::accessor_provenance::standard_member_replaced(lookup, name)
+    {
+        return false;
+    }
+    let may_run = resolution.focus_scan.get().unwrap_or_else(|| {
+        let answer = focus::program_may_run_code_on_focus(lookup);
+        resolution.focus_scan.set(Some(answer));
+        answer
+    });
+    if may_run {
+        return false;
+    }
+    focus::log(file, call);
+    true
 }
 
 /// Whether `resolved` is a `lib.dom` global (`dispatchEvent(…)`,
