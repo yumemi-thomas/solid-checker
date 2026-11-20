@@ -19,12 +19,13 @@ export function Overridden() {
 export function StillAttached() {
   const [s1] = createStore({ v: 0 });
   const earlier = () => {};
+  const first: { onClick?: () => void } = { onClick: earlier };
   return (
     <div>
       <button {...{ onClick: () => { createRenderEffect(() => s1.v, () => {}); } }} title="t">attribute</button>
       <button {...{ onClick: () => { createRenderEffect(() => s1.v, () => {}); } }} {...{ onInput: earlier }}>spread</button>
-      <button onClick={earlier} {...{ onClick: () => { createRenderEffect(() => s1.v, () => {}); } }}>earlier</button>
-      <button {...{ onClick: () => { createRenderEffect(() => s1.v, () => {}); } }} onclick={earlier}>case</button>
+      <button {...first} {...{ onClick: () => { createRenderEffect(() => s1.v, () => {}); } }}>earlier</button>
+      <button {...{ onClick: () => { createRenderEffect(() => s1.v, () => {}); } }} onDblClick={earlier}>other key</button>
     </div>
   );
 }
@@ -32,6 +33,6 @@ export function StillAttached() {
 // The attribute handler a later spread overrides.
 export function AttributeOverridden() {
   const [s1] = createStore({ v: 0 });
-  const later = () => {};
-  return <button onClick={() => { createRenderEffect(() => s1.v, () => {}); }} {...{ onClick: later }}>attr</button>;
+  const extra: { onClick?: () => void } = { onClick: () => {} };
+  return <button onClick={() => { createRenderEffect(() => s1.v, () => {}); }} {...extra}>attr</button>;
 }
