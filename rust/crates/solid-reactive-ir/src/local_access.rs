@@ -8304,7 +8304,12 @@ impl LocalAccessContext<'_, '_> {
         // (a symbol, a dynamic expression) may not either. Review round
         // 1: a `then` Get is withheld only when its backing runs nothing.
         if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
-            match store_get_decision(file, member.span, declaration, self.lookup) {
+            let decision = if self.store_tuple_held_whole(symbol, declaration) {
+                whole_store_tuple_get(file, member.span, self.lookup.dialect)
+            } else {
+                store_get_decision(file, member.span, declaration, self.lookup)
+            };
+            match decision {
                 StoreHeadGet::Warns => {}
                 StoreHeadGet::Exempt => {
                     result.ends.end_at(
@@ -8383,6 +8388,48 @@ impl LocalAccessContext<'_, '_> {
             execution,
             result,
         );
+    }
+
+    /// ADR 1138: whether the store source `symbol`, created at `declaration`, is a tuple primitive's result held whole
+    /// (`const st = createStore(…)`, or a hook returning that tuple): then `st` is the tuple, `st[0]` the store proxy and `st[1]`
+    /// its setter, and a Get on `st` is an array index, no store Get. The primitive is the symbol's, or the creation's when the
+    /// symbol carries the creation's declaration (an effect's store parameter). Only an array slot 0 at the declaration (`const
+    /// [st] = …`, `[st] = …`) is the store itself; anything else that holds a tuple primitive's store is taken as the tuple.
+    fn store_tuple_held_whole(&self, symbol: &SymbolId, declaration: &Location) -> bool {
+        let dialect = self.lookup.dialect;
+        let tuple = |symbol: &SymbolId| {
+            self.source_primitives
+                .get(symbol)
+                .and_then(|name| dialect.primitive(name.as_str()))
+                .is_some_and(|primitive| {
+                    dialect.returns_store(primitive) && dialect.returns_reactive_tuple(primitive)
+                })
+        };
+        if !(tuple(symbol) || self.entities.get(declaration).is_some_and(tuple)) {
+            return false;
+        }
+        let at = |span: &solid_facts::core::Span| {
+            u64::from(span.start) == declaration.start_byte
+                && u64::from(span.end) == declaration.end_byte
+        };
+        let Some(file) = self.lookup.file_by_path(&declaration.path) else {
+            return true;
+        };
+        let slot = file.ast.bindings.iter().any(|binding| {
+            binding.shape == solid_facts::ast::BindingShape::Array
+                && binding
+                    .array_slots
+                    .first()
+                    .and_then(Option::as_ref)
+                    .is_some_and(|slot| at(&slot.span))
+        }) || file.ast.assignments.iter().any(|assignment| {
+            assignment
+                .array_slots
+                .first()
+                .and_then(|slot| slot.as_ref())
+                .is_some_and(at)
+        });
+        !slot
     }
 
     fn member_read(
@@ -9554,6 +9601,67 @@ pub(crate) fn store_head_get(
             }
         }
         Some(_) => StoreHeadGet::Warns,
+    }
+}
+
+/// ADR 1138: the Get decision on a store tuple held whole (`const st = createStore(…)`). `st[0]` is the store proxy, so in
+/// `st[0].v` the store's head Get is `.v`, decided as [`store_head_get`] decides a head; `st[0]` alone, `st[1]`, a dynamic
+/// index or a destructure of `st` is no store Get there, but what it hands on (`const o = st[0]`, then `o.v`) is not followed:
+/// undecided, never a violation and never a silent clean.
+pub(crate) fn whole_store_tuple_get(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+    dialect: &dyn solid_dialect::Dialect,
+) -> StoreHeadGet {
+    const HANDED: &str = "the store tuple is held whole, and what its element is handed to is not followed to a store Get";
+    let Some(mut head) = file.ast.member_at(span) else {
+        return StoreHeadGet::Undecided(HANDED);
+    };
+    while let Some(inner) = file.ast.member_at(file.ast.peel_ts_sugar_span(head.object)) {
+        head = inner;
+    }
+    if member_key(file, head) != Some("0") {
+        return StoreHeadGet::Undecided(HANDED);
+    }
+    let Some(get) = file
+        .ast
+        .members
+        .iter()
+        .find(|member| file.ast.peel_ts_sugar_span(member.object) == head.span)
+    else {
+        return StoreHeadGet::Undecided(HANDED);
+    };
+    let chained = file
+        .ast
+        .members
+        .iter()
+        .any(|member| file.ast.peel_ts_sugar_span(member.object) == get.span);
+    match member_key(file, get) {
+        None => StoreHeadGet::Undecided(
+            "the store Get's key is not a known string; a symbol key or \"then\" does not warn",
+        ),
+        Some(key) if dialect.store_key_may_skip_strict_read(key) => StoreHeadGet::Undecided(if chained {
+            "the store Get's head key does not warn, and whether its value is a store proxy whose next Get does is not proven"
+        } else {
+            "the store Get's key \"then\" does not warn, but the property it reads is not proven to be data that runs nothing (a getter there reads on access)"
+        }),
+        Some(_) => StoreHeadGet::Warns,
+    }
+}
+
+/// The spelled key of a member: its property name, or a computed member's literal key.
+fn member_key<'f>(
+    file: &'f solid_facts::FileFacts,
+    member: &solid_facts::ast::MemberFact,
+) -> Option<&'f str> {
+    if file.ast.computed_members.binary_search(&member.span).is_ok() {
+        file.ast
+            .literal_computed_members
+            .iter()
+            .find(|literal| literal.span == member.span)
+            .map(|literal| literal.key.as_ref())
+    } else {
+        file.source_text(member.property)
     }
 }
 
