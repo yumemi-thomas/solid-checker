@@ -37,6 +37,12 @@ pub fn property_key(file: &FileFacts, span: Span) -> Option<String> {
     solid_facts::kernel::cooked_key(file.source_text(span)?)
 }
 
+/// K5: whether the markup `text` (a cooked string) holds no script, no event attribute and no `javascript:` URL ([`solid_facts::kernel::markup_is_inert`]).
+#[must_use]
+pub fn markup_is_inert(text: &str) -> bool {
+    solid_facts::kernel::markup_is_inert(text)
+}
+
 fn evaluate(file: &FileFacts, span: Span, depth: usize) -> Option<ValueKind> {
     let evaluation = solid_facts::kernel::evaluation(file.path.as_str(), &file.source, span)?;
     for obligation in &evaluation.obligations {

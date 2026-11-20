@@ -1200,3 +1200,283 @@ fn flow_children_exclusion_is_three_literals_on_the_rc21_triple() {
         }
     }
 }
+
+#[test]
+fn refresh_and_affects_take_their_target_untouched_and_only_affects_reads_a_key_no_accessor_owns() {
+    let dialect = Solid2::default();
+    // rc.21 `refresh(target)` reads `target[$REFRESH]` (an own property); `affects(target)` reads `target[$TARGET]` first (no accessor
+    // owns it: a function value walks its prototype chain), then `target[$REFRESH]`.
+    for primitive in [Primitive::Refresh, Primitive::Affects] {
+        assert!(
+            dialect.argument_is_untouched_target(primitive, 0),
+            "{primitive:?}"
+        );
+        // The second argument of `affects(store, key)` is a key, and `refresh` ignores extra arguments: neither is a target.
+        assert!(
+            !dialect.argument_is_untouched_target(primitive, 1),
+            "{primitive:?}"
+        );
+    }
+    assert!(!dialect.argument_target_read_walks_prototypes(Primitive::Refresh, 0));
+    assert!(dialect.argument_target_read_walks_prototypes(Primitive::Affects, 0));
+    assert!(!dialect.argument_target_read_walks_prototypes(Primitive::Affects, 1));
+    // No other primitive takes a target untouched.
+    for primitive in [
+        Primitive::CreateMemo,
+        Primitive::CreateEffect,
+        Primitive::Untrack,
+        Primitive::OnSettled,
+    ] {
+        assert!(
+            !dialect.argument_is_untouched_target(primitive, 0),
+            "{primitive:?}"
+        );
+        assert!(
+            !dialect.argument_target_read_walks_prototypes(primitive, 0),
+            "{primitive:?}"
+        );
+    }
+}
+
+#[test]
+fn every_export_of_the_audited_web_surface_has_a_listener_row_and_a_new_one_has_none_until_audited()
+{
+    use runtime_listeners::WEB_ROLES;
+    // The table is sorted (binary-searched) and holds exactly the names of the audited declaration surface: an export added to
+    // `solid_v2_solidjs_web::VALUES` has no row here, so this test refuses it until its role is read from the runtime's source.
+    assert!(WEB_ROLES.windows(2).all(|pair| pair[0].0 < pair[1].0));
+    let surface: Vec<&str> = crate::exports::solid_v2_solidjs_web::VALUES
+        .iter()
+        .map(|(name, _)| *name)
+        .collect();
+    let rows: Vec<&str> = WEB_ROLES.iter().map(|(name, _)| *name).collect();
+    assert_eq!(
+        rows, surface,
+        "the role table and the audited export surface name the same exports"
+    );
+}
+
+#[test]
+fn the_exports_that_register_a_listener_or_write_markup_are_pinned_by_name_and_argument() {
+    use crate::RuntimeListenerRole::{self, Event, Forwards, Markup, Named, Opaque};
+    let expected: Vec<(&str, RuntimeListenerRole)> = vec![
+        ("Dynamic", Forwards),
+        ("Hydration", Opaque),
+        ("HydrationScript", Opaque),
+        ("NoHydration", Opaque),
+        ("acquireAsset", Opaque),
+        ("addEvent", Event { argument: 1 }),
+        ("assign", Opaque),
+        ("claimElement", Opaque),
+        ("claimElementTree", Opaque),
+        ("commitEventResponse", Opaque),
+        ("delegateEvents", Opaque),
+        ("dispatchAsInteraction", Opaque),
+        ("dynamic", Forwards),
+        ("dynamicComponent", Forwards),
+        ("generateHydrationScript", Opaque),
+        ("getHydrationKey", Opaque),
+        ("getNextElement", Opaque),
+        ("getNextMarker", Opaque),
+        ("getNextMatch", Opaque),
+        ("hydrate", Opaque),
+        ("installServerComponentHydration", Opaque),
+        ("registerDelegatedContainer", Opaque),
+        ("registerDelegatedRoot", Opaque),
+        ("registerElementClaim", Opaque),
+        ("runHydrationEvents", Opaque),
+        ("setAttribute", Named { argument: 1 }),
+        ("setAttributeNS", Named { argument: 2 }),
+        ("setLinkClaim", Opaque),
+        ("setProperty", Named { argument: 1 }),
+        ("setStatefulProperty", Named { argument: 1 }),
+        ("spread", Opaque),
+        ("template", Markup { argument: 0 }),
+        ("useHead", Opaque),
+        ("warmAsset", Opaque),
+    ];
+    assert_eq!(runtime_listeners::root_registrars(), expected.as_slice());
+    // Every one is a value export of the root in the audited export table, so the list cannot name a symbol the table does not hold.
+    for (name, _) in &expected {
+        let exported = crate::exports::modules(
+            crate::exports::solid_v2_solidjs_web::VALUES,
+            crate::exports::solid_v2_solidjs_web::TYPES,
+            name,
+            crate::exports::Position::Value,
+        );
+        assert!(exported.contains(&"@solidjs/web"), "{name}: {exported:?}");
+    }
+    // The ordinary imports register nothing: a component, a render call, a fixed-property writer.
+    for export in [
+        "render",
+        "For",
+        "Show",
+        "Portal",
+        "className",
+        "style",
+        "insert",
+        "isServer",
+    ] {
+        assert!(
+            !expected.iter().any(|(name, _)| *name == export),
+            "{export}"
+        );
+    }
+}
+
+/// ADR 1151: every subpath the pinned rc.21 runtime packages export (`exports/solid_v2_runtime_subpaths.txt`, the file ADR 1148's audit reads too, held against the
+/// installed packages by `scripts/fuzz/runtime-exports.test.mjs`) has an audited answer, so a release that adds one fails here until it is audited, and an import of
+/// a subpath no release was audited for is unknown (`None`) at run time.
+#[test]
+fn every_exported_runtime_subpath_has_an_audited_listener_answer() {
+    let dialect = Solid2::default();
+    let mut specifiers = Vec::new();
+    for line in include_str!("../exports/solid_v2_runtime_subpaths.txt").lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let specifier = match line.split(' ').collect::<Vec<_>>().as_slice() {
+            ["pin", _, _] => continue,
+            [package, "."] => (*package).to_string(),
+            [package, subpath] => {
+                format!("{package}/{}", subpath.trim_start_matches("./")).replace('*', "x")
+            }
+            _ => panic!("a line is `<package> <subpath>` or `pin <package> <version>`: {line}"),
+        };
+        assert!(
+            dialect
+                .runtime_module_listener_registrations(&specifier)
+                .is_some(),
+            "{specifier} is exported by the pinned runtime and not audited"
+        );
+        specifiers.push(specifier);
+    }
+    assert!(specifiers.len() >= 20, "{specifiers:?}");
+    let answer = |specifier: &str| dialect.runtime_module_listener_registrations(specifier);
+    // The root and the two JSX runtimes (one file) export the registrars; the frames tier is audited as any.
+    for specifier in [
+        "@solidjs/web",
+        "@solidjs/web/jsx-runtime",
+        "@solidjs/web/jsx-dev-runtime",
+    ] {
+        assert_eq!(
+            answer(specifier),
+            Some(ListenerRegistrations::Exports(
+                runtime_listeners::root_registrars()
+            )),
+            "{specifier}"
+        );
+    }
+    for specifier in specifiers
+        .iter()
+        .filter(|s| s.starts_with("@solidjs/web/frames"))
+    {
+        assert_eq!(
+            answer(specifier),
+            Some(ListenerRegistrations::Any),
+            "{specifier}"
+        );
+    }
+    for specifier in [
+        "solid-js",
+        "solid-js/internal",
+        "solid-js/refresh",
+        "@solidjs/signals",
+        "@solidjs/web/storage",
+        "@solidjs/web/serialization",
+        "@solidjs/web/performance-tracks",
+        "@solidjs/web/server-functions/client",
+        "@solidjs/web/types/jsx.d.ts",
+    ] {
+        assert_eq!(
+            answer(specifier),
+            Some(ListenerRegistrations::None),
+            "{specifier}"
+        );
+    }
+    // A subpath no release was audited for, a name this dialect does not own and a deep path into a package are unknown, never "registers nothing".
+    for specifier in [
+        "@solidjs/web/new-tier",
+        "@solidjs/web/frames/new-tier",
+        "@solidjs/web/dist/web.js",
+        "solid-js/web",
+        "@solidjs/signals/dist/dev.js",
+        "@solidjs/router",
+        "some-lib",
+    ] {
+        assert_eq!(answer(specifier), None, "{specifier}");
+    }
+}
+
+/// The pinned package's own export list: every name `dist/web.js` publishes has a row. Skipped where the oracle install is absent
+/// (`scripts/runtime-oracle-install`, which `make` provisions); the table test above is the always-on audit.
+#[test]
+fn every_name_the_pinned_web_dist_exports_has_a_listener_row() {
+    use runtime_listeners::WEB_ROLES;
+    let dist = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../scripts/runtime-oracle-install/node_modules/@solidjs/web/dist/web.js");
+    let Ok(text) = std::fs::read_to_string(&dist) else {
+        eprintln!("skipped: {} is not installed", dist.display());
+        return;
+    };
+    let mut names = Vec::<String>::new();
+    for line in text.lines().filter(|line| line.starts_with("export {")) {
+        let list = line
+            .trim_start_matches("export {")
+            .split('}')
+            .next()
+            .unwrap_or("");
+        for item in list.split(',') {
+            // `a as b` publishes `b`.
+            let name = item.rsplit(" as ").next().unwrap_or(item).trim();
+            if !name.is_empty() {
+                names.push(name.to_owned());
+            }
+        }
+    }
+    assert!(names.len() > 100, "found {} export names", names.len());
+    // Names the pinned dist publishes that no declaration names (hydration and server internals the compiler's output calls, and three constants): a
+    // program cannot import one without a `tsc` error, and the engine reads a use of one as a registration it cannot read (`Exports` lists the registrars,
+    // so an export outside the table is judged by the module's answer alone: the root names every registrar of the pinned dist, and these are not among
+    // them). They are listed so that a new one fails this test and is looked at.
+    let undeclared = [
+        "NULL_BODY_STATUSES",
+        "RESPONSE_HEADER_VALUE_LIMIT",
+        "REVALIDATE_ALL",
+        "configureServerErrors",
+        "getFirstChild",
+        "getHydrationWriter",
+        "getNextSibling",
+        "getTraceContext",
+        "installHydrationRuntime",
+        "readShallow",
+        "reportRequestFailure",
+        "ssrElementAttribute",
+        "ssrLinkClaim",
+        "ssrStyleProperties",
+        "takeHydrationValue",
+        "waitAsset",
+    ];
+    for name in undeclared {
+        assert!(
+            WEB_ROLES
+                .binary_search_by(|(row, _)| row.cmp(&name))
+                .is_err(),
+            "{name} is declared now: give it a row"
+        );
+    }
+    let unaudited: Vec<&String> = names
+        .iter()
+        .filter(|name| {
+            WEB_ROLES
+                .binary_search_by(|(row, _)| (*row).cmp(name.as_str()))
+                .is_err()
+                && !undeclared.contains(&name.as_str())
+        })
+        .collect();
+    assert!(
+        unaudited.is_empty(),
+        "exports of the pinned @solidjs/web with no listener row: {unaudited:?}"
+    );
+}

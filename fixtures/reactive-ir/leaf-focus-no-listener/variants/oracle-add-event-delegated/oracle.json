@@ -1,0 +1,1 @@
+{"note": "F2: addEvent(el, 'focusin', h, true) with delegateEvents(['focusin'])", "packages": ["fz-handler"]}

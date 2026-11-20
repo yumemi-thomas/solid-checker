@@ -456,6 +456,9 @@ pub(crate) struct Census<'l, 'a> {
     /// the read's), and a callee nothing resolves is handed the value without holding it in what the call answers (a package's result has a start
     /// of its own).
     package_value: bool,
+    /// ADR 1150: how many `affects` targets a walk of this census ended at ([`UNTOUCHED_TARGET_READ`]). Read only as a difference across
+    /// one start, to name the start's reference where the proof removed its row: no answer depends on its value.
+    untouched_proofs: usize,
 }
 
 /// ADR 0811: the store member writes SC2003 decides in a file.
@@ -531,6 +534,7 @@ impl<'l, 'a> Census<'l, 'a> {
             reached: Vec::new(),
             allowed: HashMap::default(),
             package_value: false,
+            untouched_proofs: 0,
         }
     }
 
@@ -615,6 +619,7 @@ impl<'l, 'a> Census<'l, 'a> {
             past_withheld,
             late,
             late_rows,
+            untouched_proofs,
         } = self;
         debug_assert_eq!(*parameter_hops, 0, "a hop outlived its start");
         debug_assert_eq!(*return_hops, 0, "a hop outlived its start");
@@ -633,6 +638,8 @@ impl<'l, 'a> Census<'l, 'a> {
         walked.clear();
         *steps = 0;
         hop_starts.clear();
+        // ADR 1150: this start's own count of `affects` targets it ended at, read as a difference to name the start's reference.
+        *untouched_proofs = 0;
     }
 
     /// The answer of the start just walked, taken out of the census.
@@ -785,6 +792,7 @@ impl<'l, 'a> Census<'l, 'a> {
             Carried::Accessor
         };
         self.begin_start();
+        let proofs = self.untouched_proofs;
         let mode = match (store, tuple) {
             (false, false) => Mode::Value,
             (false, true) => Mode::Holder(Slot::Any),
@@ -796,6 +804,14 @@ impl<'l, 'a> Census<'l, 'a> {
             Position::Open(blocker) => Some(blocker),
         };
         self.run_escapes();
+        if answer.is_none() && self.untouched_proofs != proofs {
+            crate::proof_log::silent(
+                "SC9012",
+                &call.location(file.path.as_str()),
+                UNTOUCHED_TARGET_READ,
+                &[],
+            );
+        }
         answer
     }
 
@@ -805,6 +821,7 @@ impl<'l, 'a> Census<'l, 'a> {
             return Some(blockers::VALUE_USE_UNCLASSIFIED);
         };
         self.begin_start();
+        let proofs = self.untouched_proofs;
         let answer = if is_value_reference(file, span) {
             match self.position(file, span, mode) {
                 Position::Followed => None,
@@ -814,6 +831,11 @@ impl<'l, 'a> Census<'l, 'a> {
             self.unnamed_reference(file, span, mode)
         };
         self.run_escapes();
+        // ADR 1150: the row a walk through a helper's parameter to an `affects` target removes stands at the reference it started from
+        // (the one call that hands the value), not only at the target.
+        if answer.is_none() && self.untouched_proofs != proofs {
+            crate::proof_log::silent("SC9012", reference, UNTOUCHED_TARGET_READ, &[]);
+        }
         answer
     }
 
@@ -3421,8 +3443,22 @@ impl<'l, 'a> Census<'l, 'a> {
             }
             // ADR 1089: `refresh(m)` reads the property the runtime set on `m` and never calls `m` or hands it on. Only a
             // function value: a holder (a store root) is a proxy whose property read is the store's.
+            // ADR 1150: `affects(m)` is the same, after a read of `$TARGET` that walks the prototype chain of a function: a
+            // hook there is project code, so that read asks its own premise ([`untouched_target_read_is_plain`]).
             if mode == Mode::Value && dialect.argument_is_untouched_target(primitive, index) {
-                return Position::Followed;
+                if !dialect.argument_target_read_walks_prototypes(primitive, index) {
+                    return Position::Followed;
+                }
+                if untouched_target_read_is_plain(self.lookup) {
+                    self.untouched_proofs += 1;
+                    crate::proof_log::silent(
+                        "SC9012",
+                        &call.arguments[index].span.location(file.path.as_str()),
+                        UNTOUCHED_TARGET_READ,
+                        &[],
+                    );
+                    return Position::Followed;
+                }
             }
             let callback = mode == Mode::Value
                 && (dialect.callback_positions(primitive).contains(&index)
@@ -3516,6 +3552,25 @@ impl<'l, 'a> Census<'l, 'a> {
         self.parameter_hops -= 1;
         answer
     }
+}
+
+/// The proof's id for the read an `affects` call makes of its target: the proof log's `silent` lines name it, and
+/// `SOLID_CHECKER_IR_ABLATE_SILENCE` turns it off (ADR 1118's gate).
+pub(crate) const UNTOUCHED_TARGET_READ: &str = "value_use.untouched_target_read";
+
+/// ADR 1150: whether the runtime's read of `$TARGET` on a function value (the accessor `affects` is handed; no accessor owns that key, so
+/// the read walks `Function.prototype`, then `Object.prototype`) runs no project code. A hook at that key on either prototype, or a prototype
+/// the accessor's own is swapped for, is code that `affects(m)` would run in whatever scope it is written. Asked as ADR 1129's shared standard
+/// member premise, whose name census cannot hold a symbol: nothing in the program may write a prototype by a route, by a key no fact decides
+/// or through a Proxy, `Reflect`, `Object.assign` or code built from a string, no loaded package may write a built-in's prototype under a key
+/// it does not decide, and no module the build does not read may do any of it.
+fn untouched_target_read_is_plain(lookup: &SemanticLookup<'_>) -> bool {
+    if crate::site_accounting::ablated_id(UNTOUCHED_TARGET_READ) {
+        return false;
+    }
+    ["Function.$TARGET", "Object.$TARGET"]
+        .into_iter()
+        .all(|name| !crate::interproc::accessor_provenance::standard_member_replaced(lookup, name))
 }
 
 /// A member's key as written: a static name or a literal computed key.

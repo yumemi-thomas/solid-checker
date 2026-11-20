@@ -215,6 +215,11 @@ pub struct PackageReachIndex {
     /// ADR 1145: where the product's real entries are known, the files they load and the prototype writers among what those files (and the declared host) load.
     /// `None` is every site judged against every writer above, as before.
     pub product: Option<ProductWriters>,
+    /// ADR 1151 (round 1): whether an HTML page of the project may run code the analysed files do not hold: an `index.html` beside the project that the host-discovery
+    /// grammar refuses (an inline `on*` handler, an element it does not read), that holds a `<script>` other than the module entries it names (an inline or classic
+    /// one), that names an entry the program does not analyse, or that cannot be read; or another HTML file of the project with a script or an inline handler. Where
+    /// there is no project HTML the program is closed (ADR 0640, ADR 1080), so `false`. A proof that nothing listens for an event reads it (`focus_delivery`).
+    pub page_may_run_code: bool,
 }
 
 /// ADR 1145: the product realm of a program whose real entries are read from its build configuration (an HTML page's module scripts, a package's `exports`): the

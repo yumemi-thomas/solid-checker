@@ -1,11 +1,11 @@
 {"programs":{
-"cs-api-2-0-1":{"hash":"98f6e56287f19e84607f","certified":false,"u":["App.tsx@531-535|SC9012"]},
+"cs-api-2-0-1":{"hash":"98f6e56287f19e84607f","certified":true,"u":[]},
 "cs-async-loading":{"hash":"19b10785530e73c65007","certified":true,"u":[]},
 "cs-context-provider":{"hash":"715d7f7971e99595b578","certified":false,"u":["App.tsx@381-388|SC3001","App.tsx@381-388|SC6002"]},
 "cs-effect-split":{"hash":"f910c4b84ac97263c5a4","certified":true,"u":[]},
 "cs-form-input":{"hash":"ccf6a81bc847bddd7a30","certified":true,"u":[]},
 "cs-props-helpers":{"hash":"7f485c9b32789f7bde9b","certified":true,"u":[]},
-"cs-ref-directive":{"hash":"26bb1d80077567ff5972","certified":false,"u":["App.tsx@441-453|SC9012"]},
+"cs-ref-directive":{"hash":"26bb1d80077567ff5972","certified":true,"u":[]},
 "cs-signals-memo":{"hash":"b6b3ab06a1b8386cfdc8","certified":true,"u":[]},
 "cs-store-draft":{"hash":"56ff8bdca6ed21363e75","certified":true,"u":[]},
 "id-async-memo-loading":{"hash":"6f859c9fdda54715ab9e","certified":false,"u":["App.tsx@489-502|SC4001"]},

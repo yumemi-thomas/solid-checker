@@ -13,8 +13,8 @@
         "why": "pending-review"
       },
       "silent-unmatched-slot": {
-        "count": 1,
-        "why": "`runtime_module_element_writes`' last arm: a specifier of the runtime packages that no audited arm names answers `None`, which the engine reads as unknown and takes as writing an element (it withdraws the `change` proof of a program that imports it, ADR 0027), so the unmatched case is the fail-closed one; a test holds every exported subpath of the pinned packages against the audited arms"
+        "count": 2,
+        "why": "`runtime_module_element_writes` (ADR 1148) and `runtime_module_listener_registrations` (ADR 1151): a specifier no release was audited for answers `None`, which the engine reads as unknown (a retype, a registration), never as clean (ADR 0027)"
       }
     },
     "rust/crates/solid-dialect/src/solid_2/releases.rs": {
@@ -667,6 +667,20 @@
       "finding-filter": {
         "count": 2,
         "why": "`findings.dedup()` after the total ordering removes only a finding equal in every field (id, rule, kind, message, location, evidence) to its neighbour: the same row twice; `fold_destructure_findings` (ADR 1107) removes only the slot reads tagged `fold_into` and pushes for each pattern one SC1003 row in their place, a violation if any slot read is one, else an obligation: no verdict leaves the report"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/focus_delivery.rs": {
+      "default-on-missing": {
+        "count": 4,
+        "why": "the unknown answers of the dialect's audit and the facts: a module or an export the dialect has not audited, a name no fact reads and an attribute no fact names answer `registers` (`Any | None`, `is_none_or`, `None => true`): the answer is `may run code on a focus move`, which withholds the proof and never ends a row (ADR 0027, ADR 1151)"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "`import.meta` is a meta property, a keyword no program binds (`.glob` and `.globEager` load files by a pattern the program may not hold): the spelling only WIDENS what the proof withholds, and no row ends on it (ADR 1151)"
+      },
+      "private-judgment": {
+        "count": 1,
+        "why": "`registrar_call_is_inert` composes the kernel's answers (constant evaluation through `constant_text`, K5 `markup_is_inert`) with the proof's own event and name lists: a registrar call is exempt only for a cooked constant outside those lists, and it decides no value's inertness itself (ADR 1151)"
       }
     },
     "rust/crates/solid-reactive-ir/src/hosts.rs": {

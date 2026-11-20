@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "jsx": "preserve",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "target": "ES2022",
+    "allowJs": true,
+    "checkJs": false,
+    "maxNodeModuleJsDepth": 1,
+    "baseUrl": ".",
+    "paths": {
+      "@web/web": [
+        "./node_modules/@solidjs/web/dist/web.js"
+      ]
+    }
+  },
+  "include": [
+    "*.ts",
+    "*.tsx"
+  ]
+}

@@ -1,0 +1,1 @@
+{"note": "a computed member whose key is a const that names addEventListener (F3: Chrome rc.21 reports CLEANUP_IN_FORBIDDEN_SCOPE)"}

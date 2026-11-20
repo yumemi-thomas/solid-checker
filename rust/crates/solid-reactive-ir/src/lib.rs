@@ -66,6 +66,7 @@ mod effect_execution;
 mod effect_phase;
 mod execution_role;
 mod findings;
+mod focus_delivery;
 mod identity;
 mod indexes;
 mod installed_members;

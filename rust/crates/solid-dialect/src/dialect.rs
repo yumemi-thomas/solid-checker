@@ -258,6 +258,22 @@ pub trait Dialect: Sync {
     /// subpath a later release adds withdraws the proof until it is audited.
     fn runtime_module_element_writes(&self, specifier: &str) -> Option<ElementWrites>;
 
+    /// ADR 1151: what a program that imports one module of this dialect's own runtime packages ([`Dialect::primitive_defining_packages`]) may register for a focus
+    /// move to deliver to, or write as markup or a property under a name it chooses, asked per module specifier as a program writes it, the root and every subpath
+    /// alike (`@solidjs/web`, `@solidjs/web/frames/client`).
+    ///
+    /// The engine asks it of an import, a re-export or a dynamic load of such a module, and of a specifier that resolves into a file of one. `None`: this dialect has
+    /// not audited that specifier, and the program is taken to register one (ADR 0027: missing native behaviour is unknown, never "no effects"), so a subpath or an
+    /// export a later release adds withdraws a proof that nothing listens until it is audited. A sibling of ADR 1148's question about element writes; the two are
+    /// separate answers (a module may write a property and register no listener).
+    fn runtime_module_listener_registrations(
+        &self,
+        specifier: &str,
+    ) -> Option<ListenerRegistrations> {
+        let _ = specifier;
+        None
+    }
+
     /// Resolves an exported name to a primitive, or `None` when this dialect
     /// does not export it.
     fn primitive(&self, name: &str) -> Option<Primitive>;
@@ -1685,6 +1701,15 @@ pub trait Dialect: Sync {
     /// with the value is read a property the runtime itself set on it, and nothing it returns or stores is that value. A
     /// function value walked to such a slot is used up there (no read of it happens there or later through the call).
     fn argument_is_untouched_target(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
+    /// Whether the property read [`Dialect::argument_is_untouched_target`] names may reach a key the argument does not own: the
+    /// runtime first asks the value for a key only a store carries, so on a function the read walks its prototype chain
+    /// (`Function.prototype`, `Object.prototype`) and a hook installed there would run project code. The IR asks the
+    /// standard-member premise (nothing may write those prototypes under a key no fact decides) before it ends a walk there.
+    fn argument_target_read_walks_prototypes(&self, primitive: Primitive, argument: usize) -> bool {
         let _ = (primitive, argument);
         false
     }

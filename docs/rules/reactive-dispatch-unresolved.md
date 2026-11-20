@@ -218,7 +218,7 @@ Every reference of a proven source is followed, or it is this rule's uncertifiab
 | `value-thrown` | a `throw`; its own function's `catch` parameter's untracked uses too (ADR 0923) |
 | `value-use-unclassified` | anything else, the default: a computed key, a walk's limit |
 
-A primitive's slot that takes a target it never calls nor hands on (`Dialect::argument_is_untouched_target`; in Solid 2 `refresh(m)`, which reads only the node the runtime stored on `m`, ADR 1089) ends an accessor's walk with no row.
+A primitive's slot that takes a target it never calls nor hands on (`Dialect::argument_is_untouched_target`; in Solid 2 `refresh(m)`, which reads only the node the runtime stored on `m`, ADR 1089, and `affects(m)`, which reads `m[$TARGET]` first, ADR 1150) ends an accessor's walk with no row. `affects`'s first read walks the prototype chain of a function, so it also asks that nothing in the program may write `Function.prototype` or `Object.prototype` by a route or under a key no fact decides (`Dialect::argument_target_read_walks_prototypes`, the shared standard-member premise of ADR 1129); otherwise the row stands.
 
 A call reached by walking must have a read, write or action row, or, for an accessor, a tracked position. The row stands at the reference and, too, at each use the walk ends at, in any file: an IIFE's result, a `let` and a class field are walked on to their uses (ADR 0831). Links are not this census: `const t = s.a; t.x = 1` is SC2003's forward flow.
 
@@ -232,7 +232,10 @@ functions and arrows, imports resolved by path or alias, a method of an exact
 a parameter, a destructured hook or a call result, a member of a field,
 parameter or element access, an inherited or twice-declared method, a project
 constructor, a reassigned `let` function and a synchronous DOM dispatcher
-(`focus()`, `showModal()`), optional or not (ADR 0439).
+(`showModal()`, `blur()`, `click()`, and an element's `focus()` unless the whole
+program (its packages, the dialect's registrars it imports and its page's HTML
+included) holds no listener for what a focus move delivers and nothing that
+stands in for `focus`: ADR 1151), optional or not (ADR 0439).
 
 ## How it is proven
 

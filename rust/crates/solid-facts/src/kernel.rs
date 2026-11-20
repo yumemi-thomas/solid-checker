@@ -404,6 +404,14 @@ pub fn cooked_key(text: &str) -> Option<String> {
     property_key_value(&property.key)
 }
 
+/// K5 (ADR 1151): whether markup written as a string holds no script, no event attribute and no `javascript:` URL: the judgment a markup write's sink uses
+/// (`MarkupWrite`), asked of one cooked string. Text with no tag in it is inert. A string read from JSX attribute text must not hold a character reference
+/// (`&lt;`): the JSX transform decodes it before the markup parser sees the value.
+#[must_use]
+pub fn markup_is_inert(markup: &str) -> bool {
+    crate::ast::code_sinks::markup_is_inert(markup)
+}
+
 /// ADR 1133: a key that names no standard function-valued member, prototype route, coercion or protocol hook, Solid private key,
 /// shadow-root spelling, nor a name the delivery premise watches (`event`, `Promise`, `__proto__`). Round 2 (N1): nor an attribute a
 /// URL or an event handler lives in (`href`, `src`, `action`, `formAction`, `srcdoc`, `on…`: `el[key()].href` is the attribute node of
