@@ -363,25 +363,13 @@ pub fn package_inputs(
             scopes: dialect.vocabulary.ecosystem_scopes(),
         },
     );
-    // Writer-cause census (measurement, ADR 1131's M0; needs SOLID_CHECKER_BLOCKER_CENSUS=1 too): every root that may write a built-in's prototype under any
-    // name, whether the program loads it, why, and whether the what-if switch left it out. One JSON line on stderr; no verdict reads it.
-    if std::env::var_os("SOLID_CHECKER_WRITER_CENSUS").is_some() {
-        let roots = reach
-            .census
-            .iter()
-            .filter(|(_, census)| census.prototype_any)
-            .map(|(root, census)| {
-                serde_json::json!({
-                    "root": root,
-                    "name": reach.names.get(root),
-                    "loaded": census.loaded,
-                    "counted": reach.prototype_writers_any.contains(root),
-                    "reach": census.problems.first().map(|problem| format!("{problem:?}")),
-                    "causes": census.prototype_any_causes,
-                })
-            })
-            .collect::<Vec<_>>();
-        eprintln!("{}", serde_json::json!({ "writerCensus": roots }));
+    // Writer-cause census (measurement, ADR 1131's M0): every root that may write a built-in's prototype under any name, why, and what loads it; one JSON line on
+    // stderr, and no verdict reads it.
+    if solid_facts::package_reach::writer_census() {
+        eprintln!(
+            "{}",
+            serde_json::json!({ "writerCensus": crate::package_reach::writer_census_report(facts, &reach) })
+        );
     }
     // ADR 0974: the walk reads every file of a closure, so what it costs is measured where it is paid.
     if std::env::var_os("SOLID_CHECKER_TIMINGS").is_some() {

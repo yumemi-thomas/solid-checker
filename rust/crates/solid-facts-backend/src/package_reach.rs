@@ -202,6 +202,14 @@ pub fn package_reach_index(
         .filter(|(_, (demand, _))| !demand.subpaths.is_empty())
         .map(|(runtime, _)| runtime.clone())
         .collect::<HashSet<_>>();
+    // Writer-cause census (measurement): the project files that name each runtime's package, and how.
+    let importers = census_importers(
+        facts,
+        &roots
+            .iter()
+            .filter_map(|(root, named)| Some((root.as_str(), named.runtime.as_ref().ok()?)))
+            .collect(),
+    );
     let mut memo = Memo {
         inert_default_views: inert_default_views(facts),
         ..Memo::default()
@@ -271,9 +279,10 @@ pub fn package_reach_index(
                     .or_default()
                     .insert(root.clone());
             }
-            // Writer-cause what-if (measurement, ADR 1131's M0): a root whose every cause the switch names is left out of the any-name writers.
+            // Writer-cause what-if (measurement, ADR 1131's M0): a root the switch decides is left out of the any-name writers. Off (the default), none is.
             if closure.global_writes.prototype_any_name
                 && !solid_facts::package_reach::what_if_writer_decided(
+                    &root,
                     &closure.global_writes.prototype_any_causes,
                     loaded.contains(runtime),
                 )
@@ -304,7 +313,9 @@ pub fn package_reach_index(
             }
         }
         // ADR 1061: the blocker census keeps every problem of the closure, not only the verdict.
-        if solid_facts::package_reach::blocker_census() {
+        if solid_facts::package_reach::blocker_census()
+            || solid_facts::package_reach::writer_census()
+        {
             let census = match &named.runtime {
                 Ok(runtime) => verdicts.get(runtime).map_or_else(
                     || solid_facts::package_reach::RootCensus {
@@ -316,8 +327,14 @@ pub fn package_reach_index(
                         write_any_files: closure.write_any_files.clone(),
                         write_any_unread: closure.unread,
                         prototype_any: closure.global_writes.prototype_any_name,
-                        prototype_any_causes: closure.global_writes.prototype_any_causes.clone(),
+                        writer_causes: closure.writer_causes.clone(),
                         loaded: loaded.contains(runtime),
+                        canonical: canonical(runtime)
+                            .ok()
+                            .map(|real| real.to_string_lossy().into_owned())
+                            .unwrap_or_default(),
+                        importers: importers.get(runtime).cloned().unwrap_or_default(),
+                        closure_roots: closure.closure_roots.clone(),
                     },
                 ),
                 Err(reach) => solid_facts::package_reach::RootCensus {
@@ -342,6 +359,236 @@ pub fn package_reach_index(
         crate::reviewed_packages::PREMISES,
     );
     index
+}
+
+/// Writer-cause census (measurement, ADR 1131's M0): every root that may write a built-in's prototype under any name, why, and what loads it, as one JSON value for
+/// stderr (`SOLID_CHECKER_WRITER_CENSUS`). Nothing reads it. `writers`: the root (the declaration root the index keys), its name, the real directory its code is read
+/// from, whether the program loads it, whether the what-if switch left it counted, whether its verdict is clear, the first problem and every problem by blocker, every
+/// cause (the file, the class, how many times), and the project files that name it. `loaders`: every root a project file names, with the writers its walk read (by real
+/// directory). `program`: what the project's own files load that no import names (a computed `import(x)`, an import no resolution answers).
+#[must_use]
+pub fn writer_census_report(
+    facts: &solid_facts::ProjectFacts,
+    reach: &PackageReachIndex,
+) -> serde_json::Value {
+    use serde_json::json;
+    let kinds = |problems: &[PackageReach]| {
+        let mut kinds = BTreeMap::<String, u32>::new();
+        for problem in problems {
+            let kind = match problem {
+                PackageReach::Clear => "clear".to_owned(),
+                PackageReach::ReachesSolid { .. } => "reaches-solid".to_owned(),
+                PackageReach::Undecided { blocker, .. } => format!("{blocker:?}"),
+            };
+            *kinds.entry(kind).or_default() += 1;
+        }
+        kinds
+    };
+    let importers = |list: &[solid_facts::package_reach::RootImporter]| {
+        list.iter()
+            .map(|importer| {
+                json!({ "file": importer.file, "specifier": importer.specifier, "kind": importer.kind })
+            })
+            .collect::<Vec<_>>()
+    };
+    let writers = reach
+        .census
+        .iter()
+        .filter(|(_, census)| census.prototype_any)
+        .map(|(root, census)| {
+            json!({
+                "root": root,
+                "name": reach.names.get(root),
+                "canonical": census.canonical,
+                "loaded": census.loaded,
+                "counted": reach.prototype_writers_any.contains(root),
+                "clear": reach.by_root.get(root).is_some_and(PackageReach::is_clear),
+                "reach": census.problems.first().map(|problem| format!("{problem:?}")),
+                "problemKinds": kinds(&census.problems),
+                "causes": census.writer_causes.iter().map(|cause| json!({
+                    "file": cause.file,
+                    "class": cause.class,
+                    "n": cause.count,
+                    "detail": cause.detail,
+                })).collect::<Vec<_>>(),
+                "importers": importers(&census.importers),
+            })
+        })
+        .collect::<Vec<_>>();
+    let writer_directories = reach
+        .census
+        .values()
+        .filter(|census| census.prototype_any && !census.canonical.is_empty())
+        .map(|census| census.canonical.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    let loaders = reach
+        .census
+        .iter()
+        .filter(|(_, census)| !census.importers.is_empty())
+        .map(|(root, census)| {
+            json!({
+                "root": root,
+                "canonical": census.canonical,
+                "importers": importers(&census.importers),
+                "writers": census
+                    .closure_roots
+                    .iter()
+                    .filter(|directory| writer_directories.contains(directory.as_str()))
+                    .collect::<Vec<_>>(),
+            })
+        })
+        .collect::<Vec<_>>();
+    let is_project_file = |path: &str| {
+        !path.contains("/node_modules/") && facts.dependency_source_root(path).is_none()
+    };
+    let computed_loads = facts
+        .files
+        .iter()
+        .filter(|file| is_project_file(file.path.as_str()))
+        .filter(|file| {
+            file.ast
+                .module_loads
+                .iter()
+                .any(|load| load.specifier.is_none())
+        })
+        .map(|file| file.path.to_string())
+        .collect::<Vec<_>>();
+    let unresolved = facts
+        .resolved_imports
+        .as_ref()
+        .map(|imports| {
+            let mut found = imports
+                .iter()
+                .filter(|(importer, import)| {
+                    is_project_file(importer)
+                        && import.resolution
+                            == solid_facts::resolution::ImportResolution::Unresolved
+                        && !import.text.starts_with('.')
+                        && !import.text.starts_with('/')
+                })
+                .map(|(importer, import)| format!("{importer} {}", import.text))
+                .collect::<Vec<_>>();
+            found.sort();
+            found
+        })
+        .unwrap_or_default();
+    json!({
+        "version": 1,
+        "project": facts.project_id,
+        "program": {
+            "files": facts.files.len(),
+            "computedLoads": computed_loads,
+            "unresolvedImports": unresolved,
+            "projectJsDeclarations": reach.project_js.len(),
+        },
+        "writers": writers,
+        "loaders": loaders,
+    })
+}
+
+/// Writer-cause census (measurement, ADR 1131's M0): the project files that name each runtime package, by an attested import, and how they name it. Empty unless the
+/// census is on. A file of the project is one outside every `node_modules` that is no dependency source.
+fn census_importers(
+    facts: &solid_facts::ProjectFacts,
+    runtime_of: &BTreeMap<&str, &PathBuf>,
+) -> HashMap<PathBuf, Vec<solid_facts::package_reach::RootImporter>> {
+    let mut found = HashMap::<PathBuf, Vec<solid_facts::package_reach::RootImporter>>::new();
+    let Some(imports) = &facts.resolved_imports else {
+        return found;
+    };
+    if !solid_facts::package_reach::writer_census() {
+        return found;
+    }
+    let files = facts
+        .files
+        .iter()
+        .map(|file| (file.path.as_str(), file))
+        .collect::<HashMap<_, _>>();
+    for (importer, import) in imports.iter() {
+        if importer.contains("/node_modules/")
+            || facts.dependency_source_root(importer).is_some()
+            || import.resolved_path.is_empty()
+        {
+            continue;
+        }
+        let path = if import.symlink_path.is_empty() {
+            &import.resolved_path
+        } else {
+            &import.symlink_path
+        };
+        let Some(runtime) = package_root_of(path).and_then(|root| runtime_of.get(root)) else {
+            continue;
+        };
+        let kind = files
+            .get(importer)
+            .map_or("unknown", |file| import_kind(file, import.span));
+        let entry = solid_facts::package_reach::RootImporter {
+            file: importer.to_owned(),
+            specifier: import.text.to_string(),
+            kind: kind.to_owned(),
+        };
+        let list = found.entry((*runtime).clone()).or_default();
+        if !list.contains(&entry) {
+            list.push(entry);
+        }
+    }
+    found
+}
+
+/// How the specifier at `span` of `file` is named: see [`solid_facts::package_reach::RootImporter`].
+fn import_kind(file: &solid_facts::FileFacts, span: solid_facts::core::Span) -> &'static str {
+    let ast = &file.ast;
+    if let Some(import) = ast
+        .imports
+        .iter()
+        .find(|import| import.specifier_span == Some(span))
+    {
+        return if import.type_only {
+            "type"
+        } else if import.bindings.is_empty() {
+            "side-effect"
+        } else if import
+            .bindings
+            .iter()
+            .all(|binding| binding.type_only || !binding.runtime_referenced)
+        {
+            "type-erased"
+        } else {
+            "value"
+        };
+    }
+    if let Some(export) = ast
+        .exports
+        .iter()
+        .find(|export| export.specifier_span == Some(span))
+    {
+        return if export.type_only { "type" } else { "reexport" };
+    }
+    if let Some(load) = ast
+        .module_loads
+        .iter()
+        .find(|load| load.specifier_span == Some(span))
+    {
+        return match load.kind {
+            solid_facts::ast::ModuleLoadKind::DynamicImport => "dynamic",
+            solid_facts::ast::ModuleLoadKind::Require => "require",
+        };
+    }
+    if let Some(equals) = ast
+        .import_equals
+        .iter()
+        .find(|equals| equals.specifier_span == Some(span))
+    {
+        return if equals.type_only { "type" } else { "value" };
+    }
+    if ast
+        .type_imports
+        .iter()
+        .any(|import| import.specifier_span == Some(span))
+    {
+        return "type";
+    }
+    "unknown"
 }
 
 /// The linked workspace packages the project imports: for each attested import of a `node_modules` link (the compiler's `symlink_path`), the real
@@ -828,6 +1075,9 @@ struct Closure {
     unread: bool,
     /// What the closure runs that the build does not see (the second re-check of #232): the answer of the walk that reads every file once, beside the action verdict.
     unseen: prototype::Closure,
+    /// Writer-cause census (measurement): every cause of `global_writes.prototype_any_name`, and the packages whose files the walk read. Empty unless the census is on.
+    writer_causes: Vec<solid_facts::package_reach::WriterCause>,
+    closure_roots: Vec<String>,
 }
 
 /// The closure walk of one package. It reads the whole closure: a hazard, an unreadable file or a load of Solid ends nothing but that branch (a Solid package is
@@ -854,6 +1104,8 @@ fn package_reach(
             unread: false,
             // Solid's own packages are the dialect's and are not asked.
             unseen: prototype::Closure::default(),
+            writer_causes: Vec::new(),
+            closure_roots: Vec::new(),
         };
     }
     let mut walk = Walk {
@@ -873,7 +1125,12 @@ fn package_reach(
         accessors_written_any: false,
         prototypes_written: BTreeSet::new(),
         prototypes_written_any: false,
-        prototype_any_causes: Vec::new(),
+        census: solid_facts::package_reach::writer_causes_wanted(),
+        causes: Vec::new(),
+        unread_noted: IdSet::default(),
+        current: None,
+        closure_roots: BTreeSet::new(),
+        last_root: String::new(),
         unread: false,
         unseen: None,
         reads_receiver: false,
@@ -894,6 +1151,24 @@ fn package_reach(
     // ADR 1002: code of the closure that nobody read may write any global and define an accessor for any: what the files that were read write says nothing of
     // it. Unavailable source is no evidence that a global is the standard library's.
     let unread = walk.unread;
+    // Writer-cause census: the causes of this closure by file, and by class for the what-if switch.
+    let writer_causes = walk
+        .causes
+        .iter()
+        .map(
+            |(file, class, count, detail)| solid_facts::package_reach::WriterCause {
+                file: file.map_or_else(String::new, |file| census_path(walk.memo.path(file))),
+                class: class.clone(),
+                count: *count,
+                detail: detail.clone(),
+            },
+        )
+        .collect::<Vec<_>>();
+    let mut cause_classes = std::collections::BTreeMap::<String, u32>::new();
+    for cause in &writer_causes {
+        *cause_classes.entry(cause.class.clone()).or_default() += cause.count;
+    }
+    let closure_roots = walk.closure_roots.iter().cloned().collect::<Vec<_>>();
     Closure {
         reach: problems.first().cloned().unwrap_or(PackageReach::Clear),
         problems,
@@ -910,7 +1185,7 @@ fn package_reach(
             // ADR 1108: code nobody read may write a built-in's prototype too.
             prototype_names: walk.prototypes_written.into_iter().collect(),
             prototype_any_name: walk.prototypes_written_any || unread,
-            prototype_any_causes: walk.prototype_any_causes,
+            prototype_any_causes: cause_classes,
         },
         write_any_files: walk
             .written_any_files
@@ -923,6 +1198,8 @@ fn package_reach(
             why: walk.unseen.map(|why| walk.memo.unseen_text(why).to_owned()),
             reads_receiver: walk.unseen.is_none() && walk.reads_receiver,
         },
+        writer_causes,
+        closure_roots,
     }
 }
 
@@ -1537,8 +1814,15 @@ struct Walk<'s, 'd, 'm> {
     /// ADR 1108: the members the files read write on a built-in's prototype, and whether one may be written under a name the syntax does not fix.
     prototypes_written: BTreeSet<String>,
     prototypes_written_any: bool,
-    /// Writer-cause census (measurement): why [`Self::prototypes_written_any`] holds, `file|class` per cause, in walk order (`unread:<blocker>` for code nobody read).
-    prototype_any_causes: Vec<String>,
+    /// Writer-cause census (measurement): whether this walk records why [`Self::prototypes_written_any`] holds (the census or the what-if switch is on); the causes in walk
+    /// order (the file, the class, how many times, what the blocker says of code nobody read); the problems already recorded as an unread cause; the file being visited;
+    /// and the installed packages whose files the walk read, with the one of the last file (a run of files shares its package).
+    census: bool,
+    causes: Vec<(Option<FileId>, String, u32, String)>,
+    unread_noted: IdSet,
+    current: Option<FileId>,
+    closure_roots: BTreeSet<String>,
+    last_root: String,
     /// Whether the closure holds code nobody read (ADR 1002): a load by a computed name, a load no installed file answers, a file the parser refuses, a native
     /// module, a manifest the walk does not read, or files past the closure limit. Kept apart from `problems`, which keeps only the first [`MAX_PROBLEMS`].
     unread: bool,
@@ -1626,13 +1910,18 @@ impl Walk<'_, '_, '_> {
             }
         );
         self.unread |= unread;
-        if unread
-            && let PackageReach::Undecided { blocker, .. } = self.memo.problem(problem)
+        if self.census
+            && unread
+            && self.unread_noted.insert(problem.0)
+            && let PackageReach::Undecided { blocker, detail } = self.memo.problem(problem)
         {
-            let cause = format!("|unread:{blocker:?}");
-            if !self.prototype_any_causes.contains(&cause) {
-                self.prototype_any_causes.push(cause);
-            }
+            let cause = (
+                self.current,
+                format!("unread:{blocker:?}"),
+                1,
+                detail.chars().take(160).collect::<String>(),
+            );
+            self.causes.push(cause);
         }
         if self.problems.len() < MAX_PROBLEMS && self.noted.insert(problem.0) {
             self.problems.push(problem);
@@ -1682,6 +1971,23 @@ impl Walk<'_, '_, '_> {
     /// One file: what visiting it does, replayed in order.
     fn visit(&mut self, file: FileId) {
         let visit = self.memo.visit(self.solid, file);
+        self.current = Some(file);
+        if self.census {
+            let path = self.memo.path(file).to_string_lossy().into_owned();
+            let root = solid_facts::package_reach::package_root_of(&path).map_or_else(
+                || {
+                    nearest_manifest_directory(Path::new(&path))
+                        .map_or_else(String::new, |directory| {
+                            directory.to_string_lossy().into_owned()
+                        })
+                },
+                str::to_owned,
+            );
+            if root != self.last_root {
+                self.closure_roots.insert(root.clone());
+                self.last_root = root;
+            }
+        }
         if let Some(scan) = &visit.scan {
             extend(&mut self.accessor_names, &scan.accessors.names);
             self.accessors_any_name |= scan.accessors.any_name;
@@ -1700,17 +2006,17 @@ impl Walk<'_, '_, '_> {
                 &scan.global_writes.prototype_names,
             );
             self.prototypes_written_any |= scan.global_writes.prototype_any_name;
-            if !scan.global_writes.prototype_any_causes.is_empty() {
-                let at = short(self.memo.path(file));
-                for cause in &scan.global_writes.prototype_any_causes {
-                    self.prototype_any_causes.push(format!("{at}|{cause}"));
+            if self.census {
+                for (class, count) in &scan.global_writes.prototype_any_causes {
+                    self.causes
+                        .push((Some(file), class.clone(), *count, String::new()));
                 }
             }
         }
         for step in &visit.steps {
             match *step {
                 Step::Note(problem) => self.note_problem(problem),
-                Step::Push(file) => self.push(file),
+                Step::Push(pushed) => self.push(pushed),
                 Step::Enter(entry) => {
                     if let Err(problem) = self.enter_entry(entry) {
                         if self.unseen.is_none() {
@@ -1918,6 +2224,15 @@ fn prepare(memo: &mut Memo, solid: &SolidPackages<'_>, level: &[FileId], wants_r
 }
 
 /// A path as a report names it: from the package directory under its last `node_modules` (`fz-step/index.js`), else its file name.
+/// A file of a closure as the writer-cause census names it: the path below the last `node_modules`, else the whole path.
+fn census_path(path: &Path) -> String {
+    let text = path.to_string_lossy();
+    match text.rfind("/node_modules/") {
+        Some(at) => text[at + "/node_modules/".len()..].to_owned(),
+        None => text.into_owned(),
+    }
+}
+
 fn short(path: &Path) -> String {
     let text = path.to_string_lossy();
     match text.rfind("/node_modules/") {

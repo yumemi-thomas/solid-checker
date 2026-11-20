@@ -37,6 +37,8 @@ use oxc_parser::Parser;
 use oxc_semantic::{AstNodes, NodeId, Scoping, SemanticBuilder, SymbolId};
 use oxc_span::{GetSpan, SourceType};
 
+mod writer_causes;
+
 /// The global value names the pinned TypeScript's `lib.es*.d.ts` and `lib.dom*.d.ts` declare at top level, one per line, sorted. Generated
 /// by `known_globals_are_the_pinned_libraries_names` (ignored test) from the tsrs fork's `crates/tsrs_vfs/libs` at the revision
 /// `apps/solid-typefacts/Cargo.toml` pins.
@@ -136,11 +138,11 @@ pub struct GlobalWrites {
     /// ADR 1108: a built-in's prototype may be written under a name nothing fixes: a key the syntax does not decide, the prototype handed on (an argument, a binding that is
     /// reassigned), the global object handed on, or code generated at run time.
     pub prototype_any_name: bool,
-    /// Writer-cause census (measurement, no verdict reads it): why [`Self::prototype_any_name`] is set, one class per cause, sorted and distinct: `escape:<route>` (the
-    /// global object handed on, by the name it was reached through: `globalThis`, `window`, `this`, `source`, `defaultView`, …), `generated` (code built at run time),
-    /// `prototype-key` (a prototype member written under a key nothing decides), `prototype-handed-on` (a prototype handed on whole), `prototype-pattern` (a destructured
-    /// `prototype` the file reassigns, or bound by a rest element or a nested pattern).
-    pub prototype_any_causes: Vec<String>,
+    /// Writer-cause census (measurement, no verdict reads it; filled only where [`crate::package_reach::writer_causes_wanted`] holds): why [`Self::prototype_any_name`] is
+    /// set, one class per cause with how many times the file has it (see `writer_causes.rs`): `escape:<head>/<shape>[@<receiver>]` (the global object handed on),
+    /// `generated:<kind>` (code built at run time), `prototype-key` (a prototype member written under a key nothing decides), `prototype-handed-on/<shape>` (a prototype
+    /// handed on whole), `prototype-pattern` (a destructured `prototype` the file reassigns, or bound by a rest element or a nested pattern).
+    pub prototype_any_causes: std::collections::BTreeMap<String, u32>,
 }
 
 impl GlobalWrites {
@@ -165,8 +167,9 @@ impl GlobalWrites {
         self.prototype_names
             .extend(other.prototype_names.iter().cloned());
         self.prototype_any_name |= other.prototype_any_name;
-        self.prototype_any_causes
-            .extend(other.prototype_any_causes.iter().cloned());
+        for (cause, count) in &other.prototype_any_causes {
+            *self.prototype_any_causes.entry(cause.clone()).or_default() += count;
+        }
     }
 
     /// Sorts the names and drops repeats.
@@ -177,15 +180,14 @@ impl GlobalWrites {
         self.accessor_names.dedup();
         self.prototype_names.sort();
         self.prototype_names.dedup();
-        self.prototype_any_causes.sort();
-        self.prototype_any_causes.dedup();
     }
 
-    /// A built-in's prototype may be written under any name, for `cause` (the writer-cause census's class).
-    fn any_prototype(&mut self, cause: String) {
+    /// A built-in's prototype may be written under any name, for the cause `cause` names (the writer-cause census's class, worked out only where the census or the what-if
+    /// switch is on).
+    fn any_prototype(&mut self, cause: impl FnOnce() -> String) {
         self.prototype_any_name = true;
-        if !self.prototype_any_causes.contains(&cause) {
-            self.prototype_any_causes.push(cause);
+        if crate::package_reach::writer_causes_wanted() {
+            *self.prototype_any_causes.entry(cause()).or_default() += 1;
         }
     }
 
@@ -761,6 +763,8 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
         })
         .collect::<Vec<_>>();
     let scoping = semantic.scoping();
+    // A file without module syntax is a script or CommonJS: its top-level `this` and `var`s are the global object's (the writer-cause census follows a binding with this).
+    let script = !has_module_syntax(&program);
     for (name, references) in scoping.root_unresolved_references() {
         let name = name.as_str();
         for reference in references {
@@ -817,19 +821,25 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                 },
                 "eval" => {
                     hazard(ModuleHazardKind::CodeGeneration, "eval");
-                    code_generated(&mut writes);
+                    code_generated(&mut writes, || {
+                        writer_causes::generated_kind(nodes, "eval", id)
+                    });
                 }
                 // A timer given a string evaluates it (`setTimeout("code", 0)`): as `eval`. A function or a name is the timer's ordinary use.
                 "setTimeout" | "setInterval" | "setImmediate" | "execScript"
                     if string_timer(nodes, id) =>
                 {
                     hazard(ModuleHazardKind::CodeGeneration, name);
-                    code_generated(&mut writes);
+                    code_generated(&mut writes, || {
+                        writer_causes::generated_kind(nodes, name, id)
+                    });
                 }
                 "Function" => {
                     if !function_use_is_inert(nodes, id) {
                         hazard(ModuleHazardKind::CodeGeneration, "Function");
-                        code_generated(&mut writes);
+                        code_generated(&mut writes, || {
+                            writer_causes::generated_kind(nodes, "Function", id)
+                        });
                     }
                 }
                 "exports" | "__filename" | "__dirname" | "undefined" | "NaN" | "Infinity"
@@ -849,7 +859,9 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                             defined_by_receiver(scoping, nodes, &member, at, &mut writes);
                             if generates_code_by_member(nodes, &member, at) {
                                 hazard(ModuleHazardKind::CodeGeneration, &path);
-                                code_generated(&mut writes);
+                                code_generated(&mut writes, || {
+                                    writer_causes::generated_kind(nodes, &member, at)
+                                });
                             }
                             if !is_known_global(&member) {
                                 hazard(ModuleHazardKind::UnknownGlobal, &path);
@@ -859,7 +871,9 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                     GlobalUse::Escape { path, at } => {
                         if !call_writes(scoping, nodes, at, &mut writes) {
                             hazard(ModuleHazardKind::GlobalObjectEscape, &path);
-                            escaped(&mut writes, &path);
+                            escaped(&mut writes, &path, || {
+                                writer_causes::use_shape(scoping, nodes, at, script)
+                            });
                         }
                     }
                     // `document.defaultView.x = …` writes the global `x`.
@@ -875,11 +889,13 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                                 defined_by_receiver(scoping, nodes, &member, at, &mut writes);
                                 if generates_code_by_member(nodes, &member, at) {
                                     hazard(ModuleHazardKind::CodeGeneration, &path);
-                                    code_generated(&mut writes);
+                                    code_generated(&mut writes, || {
+                                        writer_causes::generated_kind(nodes, &member, at)
+                                    });
                                 }
                                 if member == "valueOf" {
                                     hazard(ModuleHazardKind::GlobalObjectEscape, &path);
-                                    escaped(&mut writes, &path);
+                                    escaped(&mut writes, &path, || "member:valueOf".to_owned());
                                 }
                                 if !is_known_global(&member) {
                                     hazard(ModuleHazardKind::UnknownGlobal, &path);
@@ -895,7 +911,9 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                         GlobalUse::Escape { path, at } => {
                             if !call_writes(scoping, nodes, at, &mut writes) {
                                 hazard(ModuleHazardKind::GlobalObjectEscape, &path);
-                                escaped(&mut writes, &path);
+                                escaped(&mut writes, &path, || {
+                                    writer_causes::use_shape(scoping, nodes, at, script)
+                                });
                             }
                         }
                     }
@@ -907,7 +925,7 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
         }
     }
     // `this` at the top of a script is the global object, and `defaultView` read off any object is (ADR 0974).
-    if !has_module_syntax(&program) {
+    if script {
         for node in nodes.iter() {
             if matches!(node.kind(), AstKind::ThisExpression(_))
                 && is_script_top_this(nodes, node.id())
@@ -919,6 +937,8 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                     node.id(),
                     "this",
                     true,
+                    script,
+                    "",
                     &mut hazard,
                     &mut writes,
                 );
@@ -952,6 +972,19 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
             };
             let reads_default_view = route.is_some();
             let root = route.unwrap_or("defaultView");
+            // The writer-cause census names what the route's member was read off (`lineBreak.source`: a RegExp).
+            let receiver = |object: &Expression<'_>| {
+                if crate::package_reach::writer_causes_wanted() {
+                    format!("@{}", writer_causes::route_receiver(scoping, nodes, object))
+                } else {
+                    String::new()
+                }
+            };
+            let receiver = match node.kind() {
+                AstKind::StaticMemberExpression(member) => receiver(&member.object),
+                AstKind::ComputedMemberExpression(member) => receiver(&member.object),
+                _ => String::new(),
+            };
             // ADR 1077: a static read is kept apart with what it adds, so a walk the program's types prove `x` no document for can leave it out.
             if reads_default_view && let AstKind::StaticMemberExpression(member) = node.kind() {
                 let mut route = DefaultViewRoute {
@@ -970,6 +1003,8 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                     node.id(),
                     root,
                     false,
+                    script,
+                    &receiver,
                     &mut route_hazard,
                     &mut route.global_writes,
                 );
@@ -986,6 +1021,8 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                     node.id(),
                     root,
                     false,
+                    script,
+                    &receiver,
                     &mut hazard,
                     &mut writes,
                 );
@@ -1013,7 +1050,7 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
             };
             let Some(symbol) = binding.and_then(|binding| binding.symbol_id.get()) else {
                 hazard(ModuleHazardKind::GlobalObjectEscape, root);
-                escaped(&mut writes, root);
+                escaped(&mut writes, root, || "pattern-nested".to_owned());
                 continue;
             };
             for reference in scoping.get_resolved_references(symbol) {
@@ -1023,6 +1060,8 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
                     reference.node_id(),
                     root,
                     false,
+                    script,
+                    "@pattern",
                     &mut hazard,
                     &mut writes,
                 );
@@ -1041,7 +1080,9 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
         }
         if constructor_generates_code(nodes, node.id(), member) {
             hazard(ModuleHazardKind::CodeGeneration, ".constructor");
-            code_generated(&mut writes);
+            code_generated(&mut writes, || {
+                writer_causes::constructor_kind(nodes, node.id(), member)
+            });
         }
     }
     loads.sort();
@@ -1054,7 +1095,7 @@ pub fn scan_module(path: &Path, source: &str) -> ModuleScan {
     // The writer functions used where the global object they write is not named (ADR 0974).
     indirect_writers(scoping, nodes, &mut writes);
     // ADR 1108: the members written on a built-in's prototype.
-    prototype_writes(scoping, nodes, !has_module_syntax(&program), &mut writes);
+    prototype_writes(scoping, nodes, script, &mut writes);
     writes.normalize();
     // ADR 1077: the scan counts every `defaultView` read as the global object; what it says without the static ones is kept beside, for the walk to fall back on
     // where the program's types prove a receiver no document.
@@ -1774,6 +1815,8 @@ fn route_use(
     id: NodeId,
     root: &str,
     lookup: bool,
+    script: bool,
+    receiver: &str,
     hazard: &mut impl FnMut(ModuleHazardKind, &str),
     writes: &mut GlobalWrites,
 ) {
@@ -1783,7 +1826,7 @@ fn route_use(
                 defined_by_receiver(scoping, nodes, &name, at, writes);
                 if generates_code_by_member(nodes, &name, at) {
                     hazard(ModuleHazardKind::CodeGeneration, &path);
-                    code_generated(writes);
+                    code_generated(writes, || writer_causes::generated_kind(nodes, &name, at));
                 }
                 if lookup && !is_known_global(&name) {
                     hazard(ModuleHazardKind::UnknownGlobal, &path);
@@ -1794,7 +1837,12 @@ fn route_use(
         GlobalUse::Escape { path, at } => {
             if !call_writes(scoping, nodes, at, writes) {
                 hazard(ModuleHazardKind::GlobalObjectEscape, &path);
-                escaped(writes, &path);
+                escaped(writes, &path, || {
+                    format!(
+                        "{}{receiver}",
+                        writer_causes::use_shape(scoping, nodes, at, script)
+                    )
+                });
             }
         }
         GlobalUse::Reassigned | GlobalUse::Inert => {}
@@ -1837,15 +1885,17 @@ fn rooted_in_global(scoping: &Scoping, expression: &Expression<'_>) -> bool {
 
 /// The global object was handed on (an argument, an assignment, a return, an element, a branch of a conditional): the code that has it may write any global, defining accessors
 /// under any name (ADR 0974).
-fn escaped(writes: &mut GlobalWrites, route: &str) {
+fn escaped(writes: &mut GlobalWrites, route: &str, shape: impl FnOnce() -> String) {
     writes.undecided(true);
     // ADR 1108: the code that has the global object can reach every built-in through it (`g.Array.prototype`).
-    let head = route
-        .split(['.', '['])
-        .next()
-        .filter(|head| !head.is_empty())
-        .unwrap_or(route);
-    writes.any_prototype(format!("escape:{head}"));
+    writes.any_prototype(|| {
+        let head = route
+            .split(['.', '['])
+            .next()
+            .filter(|head| !head.is_empty())
+            .unwrap_or(route);
+        format!("escape:{head}/{}", shape())
+    });
 }
 
 /// How far a binding that holds a built-in's prototype (`var ArrayProto = Array.prototype`) is followed to the uses of its own bindings (ADR 1108).
@@ -1889,14 +1939,14 @@ fn prototype_writes(
                             continue;
                         }
                         let BindingPattern::BindingIdentifier(binding) = &property.value else {
-                            writes.any_prototype("prototype-pattern".to_owned());
+                            writes.any_prototype(|| "prototype-pattern".to_owned());
                             continue;
                         };
                         let Some(symbol) = binding.symbol_id.get() else {
                             continue;
                         };
                         if scoping.symbol_is_mutated(symbol) {
-                            writes.any_prototype("prototype-pattern".to_owned());
+                            writes.any_prototype(|| "prototype-pattern".to_owned());
                             continue;
                         }
                         for reference in scoping.get_resolved_references(symbol) {
@@ -1912,7 +1962,7 @@ fn prototype_writes(
                         }
                     }
                     if pattern.rest.is_some() {
-                        writes.any_prototype("prototype-pattern".to_owned());
+                        writes.any_prototype(|| "prototype-pattern".to_owned());
                     }
                 }
                 None
@@ -2089,7 +2139,12 @@ fn prototype_use(
                             );
                         }
                     }
-                    None if whole => found.prototype_any_name = true,
+                    None if whole => found.any_prototype(|| {
+                        format!(
+                            "prototype-handed-on/{}",
+                            writer_causes::use_shape(scoping, nodes, at, script)
+                        )
+                    }),
                     None => {}
                 }
             }
@@ -2098,14 +2153,12 @@ fn prototype_use(
     }
     writes.prototype_names.extend(found.names);
     writes.prototype_names.extend(found.accessor_names);
-    if found.prototype_any_name {
-        writes.any_prototype("prototype-handed-on".to_owned());
-    }
     if found.any_name || found.accessors_any_name {
-        writes.any_prototype("prototype-key".to_owned());
+        writes.any_prototype(|| "prototype-key".to_owned());
     }
-    for cause in found.prototype_any_causes {
-        writes.any_prototype(cause);
+    writes.prototype_any_name |= found.prototype_any_name;
+    for (cause, count) in found.prototype_any_causes {
+        *writes.prototype_any_causes.entry(cause).or_default() += count;
     }
 }
 
@@ -2192,10 +2245,10 @@ fn prototype_alias(
 }
 
 /// Code is generated at run time (`eval`, `Function(…)`, a string timer, `.constructor("…")`): it can reach the global object (`Function("return this")()`) and write it.
-fn code_generated(writes: &mut GlobalWrites) {
+fn code_generated(writes: &mut GlobalWrites, kind: impl FnOnce() -> String) {
     writes.undecided(true);
     // ADR 1108: generated code may write any built-in's prototype too.
-    writes.any_prototype("generated".to_owned());
+    writes.any_prototype(|| format!("generated:{}", kind()));
 }
 
 /// Whether the file has module syntax (`import`, `export`): its top-level `this` is `undefined`. A file without is a script or CommonJS, where it may be the global object.

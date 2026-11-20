@@ -222,45 +222,129 @@ pub struct RootCensus {
     /// The files of the closure that write a global under a key nothing in the file decides, and whether code nobody read may.
     pub write_any_files: Vec<String>,
     pub write_any_unread: bool,
-    /// Writer-cause census (measurement): whether the closure may write a built-in's prototype under any name, why (`file|class`, see
-    /// [`crate::module_reach::GlobalWrites::prototype_any_causes`]; `|unread:<blocker>` for code nobody read), and whether the program loads the package.
+    /// Writer-cause census (measurement, ADR 1131's M0): whether the closure may write a built-in's prototype under any name, every cause of it ([`WriterCause`]), whether
+    /// the program loads the package, the real directory its code is read from, the project files that name it, and the other packages whose files its walk read.
     pub prototype_any: bool,
-    pub prototype_any_causes: Vec<String>,
+    pub writer_causes: Vec<WriterCause>,
     pub loaded: bool,
+    pub canonical: String,
+    pub importers: Vec<RootImporter>,
+    pub closure_roots: Vec<String>,
 }
 
-/// Writer-cause what-if (measurement only, ADR 1131's M0): `SOLID_CHECKER_WHATIF_WRITER_CAUSES=<class prefix>[,…]` leaves out of the any-name prototype writers
-/// every root each of whose causes has a class the list names by prefix (`escape:source`, `escape:`, `generated`, `unread:`, `prototype-key`, …); the token
-/// `unloaded` leaves out a root the program does not load, whatever its causes. A root with no recorded cause stays. Unset (the default), nothing changes. It
-/// moves verdicts and is no proof: a measurement of what deciding those causes would free.
-#[must_use]
-pub fn what_if_writer_decided(causes: &[String], loaded: bool) -> bool {
-    static CLASSES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
-    let classes = CLASSES.get_or_init(|| {
-        std::env::var("SOLID_CHECKER_WHATIF_WRITER_CAUSES")
-            .map(|value| {
-                value
-                    .split(',')
-                    .map(str::trim)
-                    .filter(|class| !class.is_empty())
-                    .map(str::to_owned)
-                    .collect()
+/// Writer-cause census: one reason a closure may write a built-in's prototype under any name (see `module_reach/writer_causes.rs` for the classes).
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct WriterCause {
+    /// The file of the closure the cause is in (relative to the last `node_modules`, or the whole path outside one); empty for code nobody read that no file names.
+    pub file: String,
+    /// The class: `escape:<head>/<shape>[@<receiver>]`, `generated:<kind>`, `prototype-key`, `prototype-handed-on/<shape>`, `prototype-pattern`, `unread:<blocker>`.
+    pub class: String,
+    /// How many times the file has it (1 for code nobody read).
+    pub count: u32,
+    /// For `unread:<blocker>`, what the blocker says (`import()`, a path); empty otherwise.
+    pub detail: String,
+}
+
+/// Writer-cause census: a file of the project that names a package, and how: `value` (an import some binding of which is used at run time), `side-effect`, `type`,
+/// `type-erased` (a value import none of whose bindings runs), `reexport`, `dynamic`, `require`, `unknown`.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct RootImporter {
+    pub file: String,
+    pub specifier: String,
+    pub kind: String,
+}
+
+/// Writer-cause what-if (measurement only, ADR 1131's M0). `SOLID_CHECKER_WHATIF_WRITER_CAUSES=<token>[,…]` and `SOLID_CHECKER_WHATIF_WRITER_DROP=<file>` leave roots out of
+/// the any-name prototype writers (`prototype_writers_any`); nothing else changes, and with neither set (the default) nothing does. A token is a cause class prefix
+/// (`escape:source`, `escape:`, `generated:`, `unread:`, `prototype-key`, …): a root is left out when it has a cause and each of its causes has a class a token prefixes;
+/// or `unloaded`: a root the program does not load is left out, whatever its causes. The file lists roots, one per line (the census's `root`), each left out whatever its
+/// causes. Both moves verdicts and are no proof: a measurement of what deciding those causes, or those roots, would free.
+pub struct WhatIfWriters {
+    classes: Vec<String>,
+    unloaded: bool,
+    drop: std::collections::HashSet<String>,
+}
+
+fn what_if_writers() -> Option<&'static WhatIfWriters> {
+    static WHAT_IF: std::sync::OnceLock<Option<WhatIfWriters>> = std::sync::OnceLock::new();
+    WHAT_IF
+        .get_or_init(|| {
+            let tokens = std::env::var("SOLID_CHECKER_WHATIF_WRITER_CAUSES").unwrap_or_default();
+            let mut classes = Vec::new();
+            let mut unloaded = false;
+            for token in tokens
+                .split(',')
+                .map(str::trim)
+                .filter(|token| !token.is_empty())
+            {
+                if token == "unloaded" {
+                    unloaded = true;
+                } else {
+                    classes.push(token.to_owned());
+                }
+            }
+            let drop = std::env::var("SOLID_CHECKER_WHATIF_WRITER_DROP")
+                .ok()
+                .filter(|path| !path.is_empty())
+                .and_then(|path| std::fs::read_to_string(path).ok())
+                .map(|text| {
+                    text.lines()
+                        .map(str::trim)
+                        .filter(|line| !line.is_empty())
+                        .map(str::to_owned)
+                        .collect::<std::collections::HashSet<_>>()
+                })
+                .unwrap_or_default();
+            (!classes.is_empty() || unloaded || !drop.is_empty()).then_some(WhatIfWriters {
+                classes,
+                unloaded,
+                drop,
             })
-            .unwrap_or_default()
-    });
-    if classes.is_empty() {
-        return false;
-    }
-    if !loaded && classes.iter().any(|class| class == "unloaded") {
-        return true;
-    }
-    !causes.is_empty()
-        && causes.iter().all(|cause| {
-            let class = cause.rsplit_once('|').map_or(cause.as_str(), |(_, class)| class);
-            classes
-                .iter()
-                .any(|prefix| prefix != "unloaded" && class.starts_with(prefix.as_str()))
         })
+        .as_ref()
+}
+
+/// Whether the writer-cause what-if switch leaves the root `root` out of the any-name prototype writers: `causes` are the classes of its causes, `loaded` whether the
+/// program loads its package. `false` whenever the switch is off.
+#[must_use]
+pub fn what_if_writer_decided(
+    root: &str,
+    causes: &std::collections::BTreeMap<String, u32>,
+    loaded: bool,
+) -> bool {
+    let Some(what_if) = what_if_writers() else {
+        return false;
+    };
+    what_if.drop.contains(root)
+        || (what_if.unloaded && !loaded)
+        || (!causes.is_empty()
+            && causes.keys().all(|class| {
+                what_if
+                    .classes
+                    .iter()
+                    .any(|prefix| class.starts_with(prefix.as_str()))
+            }))
+}
+
+/// Whether the writer-cause census is on (`SOLID_CHECKER_WRITER_CENSUS` set): the backend prints, on stderr, one JSON line of every root that may write a built-in's
+/// prototype under any name, and why. Internal only: it changes no finding, verdict, text or exit code.
+#[must_use]
+pub fn writer_census() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("SOLID_CHECKER_WRITER_CENSUS").is_some())
+}
+
+/// Whether the scan and the walk record the cause classes: the census or the what-if switch is on. Off, none of that code runs.
+#[must_use]
+pub fn writer_causes_wanted() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    // This crate's own tests always record them, so the classes are exercised by every scan test.
+    *ON.get_or_init(|| {
+        cfg!(test)
+            || writer_census()
+            || what_if_writers()
+                .is_some_and(|what_if| !what_if.classes.is_empty() || what_if.unloaded)
+    })
 }
 
 /// ADR 1061: whether the blocker census is on (`SOLID_CHECKER_BLOCKER_CENSUS=1`). Internal only: it adds the `blockerCensus` table to the internal JSON and
