@@ -29,23 +29,32 @@ function parseArguments(argv) {
   return options;
 }
 
-/** The rows of a run that moved against the baseline: by rule, how many left, arrived or changed kind. */
+/**
+ * The rows of a run that moved against the baseline: by rule, how many left (`gone`), arrived, changed kind (a violation and an obligation) or kept their kind and changed
+ * their context (`relabelled`: a row of family 3 names the first writer's verdict, which another writer's leaving changes).
+ */
 function moved(baseRows, rows) {
-  const key = (row) => `${row[0]}|${row[2]}@${row[3]}-${row[4]}|${row[5]}`;
+  const key = (row) => `${row[0]}|${row[2]}@${row[3]}-${row[4]}`;
   const was = new Map();
-  for (const row of baseRows) was.set(key(row), row[1]);
+  for (const row of baseRows) was.set(key(row), [...(was.get(key(row)) ?? []), row]);
   const now = new Map();
-  for (const row of rows) now.set(key(row), row[1]);
+  for (const row of rows) now.set(key(row), [...(now.get(key(row)) ?? []), row]);
   const byRule = {};
-  const bump = (rule, name) => {
-    byRule[rule] ??= { gone: 0, arrived: 0, changed: 0 };
-    byRule[rule][name] += 1;
+  const bump = (rule, name, by = 1) => {
+    byRule[rule] ??= { gone: 0, arrived: 0, changed: 0, relabelled: 0 };
+    byRule[rule][name] += by;
   };
-  for (const [row, kind] of was) {
-    if (!now.has(row)) bump(row.split("|")[0], "gone");
-    else if (now.get(row) !== kind) bump(row.split("|")[0], "changed");
+  const signature = (list, index) => list.map((row) => row[index]).sort().join("+");
+  for (const [site, before] of was) {
+    const rule = site.split("|")[0];
+    const after = now.get(site);
+    if (!after) bump(rule, "gone", before.length);
+    else if (signature(before, 1) !== signature(after, 1)) bump(rule, "changed", Math.max(before.length, after.length));
+    else if (before.length > after.length) bump(rule, "gone", before.length - after.length);
+    else if (after.length > before.length) bump(rule, "arrived", after.length - before.length);
+    else if (signature(before, 5) !== signature(after, 5)) bump(rule, "relabelled", before.length);
   }
-  for (const row of now.keys()) if (!was.has(row)) bump(row.split("|")[0], "arrived");
+  for (const [site, after] of now) if (!was.has(site)) bump(site.split("|")[0], "arrived", after.length);
   const violations = rows.filter((row) => row[1] === "violation").length - baseRows.filter((row) => row[1] === "violation").length;
   return { byRule, violationsDelta: violations };
 }

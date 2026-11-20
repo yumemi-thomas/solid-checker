@@ -446,6 +446,26 @@ if (args["emit-scenarios"] && args.stage === "B") {
   results.openLoads = lines;
 }
 
+// Against the design report's per-app estimates (`coord-land/writer-decision-design.md` section 1: R5's census of 2026-11-18 and its import closure, rows at slice E): the report's
+// columns A (roots a value import reaches), A+esc, B (roots reached from non-test, non-config files) and B+esc, against this census (writers by package, the maximum over an
+// app's projects) and the runs of the nearest sets: A is M2a, A+esc is M1u+M2a+M3u, B is M2b, B+esc is M1u+M2b+M3u.
+{
+  const report = { "app-game": [58610, 86, 84, 35, 83, 34], kui: [30335, 19, 18, 8, 9, 0], "solid-groove": [9202, 28, 28, 22, 19, 13], "probus-hk": [7404, 20, 19, 9, 12, 2], inferay: [5517, 8, 8, 6, 6, 4], "viviana-ui-web": [5135, 14, 13, 7, 13, 7], "donegeon-client": [4725, 3, 3, 1, 2, 0], "ai-memory-ui": [3152, 23, 23, 12, 19, 10], "compass-ui": [3078, 17, 17, 4, 15, 2] };
+  const sets = { A: ["M2a"], "A+esc": ["M1u", "M2a", "M3u"], B: ["M2b"], "B+esc": ["M1u", "M2b", "M3u"] };
+  const runs = Object.fromEntries(Object.entries(sets).map(([name, selected]) => [name, run(selected)]));
+  const maxLeft = (result, app) => Math.max(...result.perProject.filter((item) => item.app === app && item.effective > 0).map((item) => item.packagesLeft), 0);
+  const today = (app) => Math.max(...projects.filter((project) => appOf(project.id) === app).map((project) => new Set(project.writers.filter((writer) => writer.effective).map((writer) => writer.canonical || writer.root)).size), 0);
+  const rows = Object.entries(report).map(([app, [reportRows, ...writers]]) => {
+    const headRows = total(projects.filter((project) => appOf(project.id) === app), (project) => project.rows);
+    const left = Object.keys(sets).map((name) => maxLeft(runs[name], app));
+    const freedB = total(runs["B+esc"].perProject.filter((item) => item.app === app), (item) => item.freed);
+    return [app, number(reportRows), number(headRows), `${writers[0]} / ${today(app)}`, `${writers[1]} / ${left[0]}`, `${writers[2]} / ${left[1]}`, `${writers[3]} / ${left[2]}`, `${writers[4]} / ${left[3]}`, number(freedB)];
+  });
+  const totals = Object.fromEntries(Object.entries(runs).map(([name, result]) => [name, result.freed]));
+  sections.push(`### Against the design report, per app: writers by project (report's estimate / this census), and rows freed (measured)\n\nWriters: the maximum over an app's projects (the report's R5 census is by package; this census counts a package once however a linker spells it). Columns A, A+esc, B, B+esc: writers left under the report's closure estimates, against the writers left under the nearest sets (M2a; M1u+M2a+M3u; M2b; M1u+M2b+M3u). \`rows freed B+esc\`: the rows of the app freed by M1u+M2b+M3u (product-file rows where M2b alone decides a writer).\n\n${table(["app", "rows (report, slice E)", "rows (head)", "today", "A", "A+esc", "B", "B+esc", "rows freed, B+esc set (measured)"], rows)}\n\nRows freed in all (the report: A 0, A+esc 0, B 1,839, B+esc 36,899 of 136,756): A (M2a) ${number(totals.A)}, A+esc ${number(totals["A+esc"])}, B (M2b) ${number(totals.B)}, B+esc ${number(totals["B+esc"])} of ${number(results.baseline.rows)}.`);
+  results.againstReport = { rows, totals };
+}
+
 // The design report's top writers (`coord-land/writer-decision-design.md` section 1), re-read from the census: why each is a writer, what loads it, what would decide it.
 {
   const top = [["@app-game/abr-brush", "app-game", "58,489 (first writer)"], ["@types/chai", "kui", "19,639"], ["@testing-library/dom", "kui", "11,267"], ["@inlang/paraglide-js", "probus-hk", "7,404"], ["@babel/parser", "inferay", "5,515"], ["@sentry/browser", "solid-groove", "5,003"], ["vite", "donegeon-client", "4,725"], ["@firebase/analytics", "solid-groove", "4,170"], ["@codemirror/commands", "ai-memory-ui", "3,152"], ["@bufbuild/protobuf", "compass-ui", "3,078"], ["@ag-grid-community/core", "dashiboard-ui", "1,651"]];
@@ -479,7 +499,7 @@ if (args["emit-scenarios"] && args.stage === "B") {
     const other = {};
     for (const found of floorRun.projects) {
       for (const [rule, counts] of Object.entries(found.moved.byRule)) {
-        other[rule] ??= { gone: 0, arrived: 0, changed: 0 };
+        other[rule] ??= { gone: 0, arrived: 0, changed: 0, relabelled: 0 };
         for (const name of Object.keys(counts)) other[rule][name] += counts[name];
       }
       for (const row of scenarioRows(found.id, found).filter(isFamily3)) {
@@ -488,8 +508,8 @@ if (args["emit-scenarios"] && args.stage === "B") {
       }
     }
     const kinds = [...byKind.entries()].sort((a, b) => b[1] - a[1]).map(([kind, count]) => [kind, number(count)]);
-    const rulesMoved = Object.entries(other).map(([rule, counts]) => [rule, number(counts.gone), number(counts.arrived), number(counts.changed)]);
-    sections.push(`### The floor: the rows left with every any-name writer decided, by kind (measured)\n\n${table(["kind of row", "rows left"], kinds)}\n\nEverything the floor run moved, by rule (rows gone, arrived, changed kind):\n\n${table(["rule", "gone", "arrived", "changed"], rulesMoved)}\n\nViolations: ${floorRun.totals.violationsDelta >= 0 ? "+" : ""}${floorRun.totals.violationsDelta}.`);
+    const rulesMoved = Object.entries(other).map(([rule, counts]) => [rule, number(counts.gone), number(counts.arrived), number(counts.changed), number(counts.relabelled)]);
+    sections.push(`### The floor: the rows left with every any-name writer decided, by kind (measured)\n\n${table(["kind of row", "rows left"], kinds)}\n\nEverything the floor run moved, by rule (rows gone, arrived, changed kind, or the same kind with another context):\n\n${table(["rule", "gone", "arrived", "changed kind", "relabelled"], rulesMoved)}\n\nViolations: ${floorRun.totals.violationsDelta >= 0 ? "+" : ""}${floorRun.totals.violationsDelta}.`);
     results.floor = { rows: floorRun.totals.family3, freed: floorRun.totals.freed, byKind: kinds, moved: other };
   }
   const v2 = readScenario("v2");
