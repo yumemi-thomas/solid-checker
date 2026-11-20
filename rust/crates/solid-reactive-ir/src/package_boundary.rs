@@ -503,6 +503,15 @@ impl PackageBoundary {
                     text(hash, root);
                 }
             }
+            // ADR 1144: the reviewed hosts. Added only where there is one, so a boundary without any keeps its digest.
+            if !index.reviewed_hosts.is_empty() {
+                hash.update(b"package-reviewed-hosts-v1");
+                hash.update((index.reviewed_hosts.len() as u64).to_be_bytes());
+                for (root, id) in &index.reviewed_hosts {
+                    text(hash, root);
+                    text(hash, id);
+                }
+            }
             // ADR 0974: where each closure may define an accessor.
             hash.update((index.accessors.len() as u64).to_be_bytes());
             for (root, facts) in &index.accessors {

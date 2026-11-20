@@ -90,6 +90,10 @@ pub(crate) struct PackageSite {
     /// ADR 1145: the site exists only under writers of a built-in's prototype that the product's real entries do not load, and the file is one they load: the realm
     /// clears it, with a typed silence ([`SiteSilence::PackageCallProductRealm`]) instead of a row.
     pub(crate) product_clear: bool,
+    /// ADR 1144: the site exists only under the prototype writes a reviewed host's own closure holds (`vite`'s dev server code, which runs in Node, not in the page):
+    /// the reviewed dev client is what the host puts in the page, and it writes no prototype, so the site ends in a typed silence
+    /// ([`SiteSilence::PackageCallReviewedHost`]) instead of a row.
+    pub(crate) host_clear: bool,
 }
 
 /// Whose code a site enters.
@@ -205,20 +209,26 @@ thread_local! {
     /// ADR 1145: set while [`realm_sites`] finds the sites a file has under every writer of the program (the sites the realm clears), so each question of the
     /// walk asks the whole program's writers.
     static EVERY_WRITER: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// ADR 1144: set while [`realm_sites`] finds the sites a file has with the reviewed hosts' own writes kept (the sites the premise clears).
+    static HOSTS_KEPT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
-/// Restores [`EVERY_WRITER`] when dropped.
-struct EveryWriter(bool);
+/// Sets a flag of [`realm_sites`] and restores it when dropped.
+struct EveryWriter(&'static std::thread::LocalKey<std::cell::Cell<bool>>, bool);
 
 impl EveryWriter {
     fn enter() -> Self {
-        Self(EVERY_WRITER.replace(true))
+        Self(&EVERY_WRITER, EVERY_WRITER.replace(true))
+    }
+
+    fn keep_hosts() -> Self {
+        Self(&HOSTS_KEPT, HOSTS_KEPT.replace(true))
     }
 }
 
 impl Drop for EveryWriter {
     fn drop(&mut self) {
-        EVERY_WRITER.set(self.0);
+        self.0.set(self.1);
     }
 }
 
@@ -226,12 +236,18 @@ impl Drop for EveryWriter {
 /// realm holds fewer writers than the program, else every writer the program loads. `None` where no package is read at all.
 fn writer_scope<'i>(ctx: &AnalysisContext<'i>, file: &FileFacts) -> Option<WriterScope<'i>> {
     let index = ctx.package_reach?;
-    Some(if EVERY_WRITER.get() || realm_ablated() {
+    let scope = if EVERY_WRITER.get() || realm_ablated() {
         index.full_scope()
     } else {
         index
             .product_scope(file.path.as_str())
             .unwrap_or_else(|| index.full_scope())
+    };
+    // ADR 1144: the reviewed hosts are left out of every scope but the one that finds what the premise clears.
+    Some(if HOSTS_KEPT.get() || hosts_ablated() {
+        scope.with_hosts()
+    } else {
+        scope
     })
 }
 
@@ -239,6 +255,12 @@ fn writer_scope<'i>(ctx: &AnalysisContext<'i>, file: &FileFacts) -> Option<Write
 /// it was before ADR 1145.
 fn realm_ablated() -> bool {
     crate::site_accounting::ablated_id(SiteSilence::PackageCallProductRealm.id())
+}
+
+/// The ablation `SOLID_CHECKER_IR_ABLATE_SILENCE=package_action_calls.package_action_calls.reviewed-host` (or `all`): the reviewed hosts are kept in every scope, as
+/// they were before ADR 1144.
+fn hosts_ablated() -> bool {
+    crate::site_accounting::ablated_id(SiteSilence::PackageCallReviewedHost.id())
 }
 
 /// ADR 1145: the sites of one file. In a file the product's real entries load, under a realm that holds fewer prototype writers than the program, the sites are those
@@ -253,29 +275,58 @@ fn realm_sites(
         && ctx
             .package_reach
             .is_some_and(|index| index.product_scope(file.path.as_str()).is_some());
+    // ADR 1144: a reviewed host that writes a prototype somewhere is left out of the scopes; the sites it alone makes are found with it kept.
+    let hosts = !hosts_ablated()
+        && ctx
+            .package_reach
+            .is_some_and(|index| index.full_scope().leaves_out_a_host());
     let scoped = file_sites(ctx, analyzed, file);
-    if !narrowed {
+    if !narrowed && !hosts {
         return scoped;
     }
-    let every = {
+    let with_hosts = if hosts {
+        let _hosts = EveryWriter::keep_hosts();
+        Some(file_sites(ctx, analyzed, file))
+    } else {
+        None
+    };
+    let host_made = with_hosts
+        .iter()
+        .flatten()
+        .map(|site| (site.at, site.entry))
+        .collect::<HashSet<_>>();
+    let every = if narrowed {
         let _every = EveryWriter::enter();
+        let _hosts = EveryWriter::keep_hosts();
         file_sites(ctx, analyzed, file)
+    } else {
+        with_hosts.unwrap_or_default()
     };
     let mut kept = scoped
         .into_iter()
         .map(|site| ((site.at, site.entry), Some(site)))
         .collect::<std::collections::HashMap<_, _>>();
-    // A site the realm's writers make is the realm's own (it names a writer the product loads); the rest are the program's, cleared.
-    every
+    // A site the scope's writers make is its own (it names a writer the page loads); one the reviewed hosts' own writes make is the premise's, cleared; the rest are
+    // the program's, cleared by the realm.
+    let mut sites = every
         .into_iter()
         .map(|mut site| match kept.get_mut(&(site.at, site.entry)) {
             Some(slot) => slot.take().unwrap_or(site),
+            None if hosts && (!narrowed || host_made.contains(&(site.at, site.entry))) => {
+                site.host_clear = true;
+                site
+            }
             None => {
                 site.product_clear = true;
                 site
             }
         })
-        .collect()
+        .collect::<Vec<_>>();
+    // A site of the scope that the wider writers do not make keeps its row (never a reason to lose one).
+    let mut left = kept.into_values().flatten().collect::<Vec<_>>();
+    left.sort_by_key(|site| (site.at.start, site.at.end));
+    sites.extend(left);
+    sites
 }
 
 /// The sites of one file, in source order.
@@ -386,6 +437,7 @@ fn file_sites(
                 Provider::Package
             },
             product_clear: false,
+            host_clear: false,
         });
     };
     for call in &file.ast.calls {
@@ -3411,6 +3463,13 @@ pub(crate) fn package_action_calls(
                     }
                     SiteDecision::Reports => {}
                 }
+            }
+            // ADR 1144: a site only a reviewed host's own closure makes: the page holds the host's reviewed client, which writes no prototype.
+            if site.host_clear {
+                ends.end_with(file, site.at, SiteSilence::PackageCallReviewedHost, || {
+                    vec![Premise::at(PremiseKind::ReviewedHostClient, Some(site.at))]
+                });
+                continue;
             }
             // ADR 1145: a site only the program's writers make, in a file the product's entries load, where no package the page loads writes what the site runs.
             if site.product_clear {

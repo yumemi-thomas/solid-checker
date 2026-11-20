@@ -2150,3 +2150,9 @@ packages/wasm/owned/
 !fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation-eval/node_modules/**
 !fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation-package/node_modules/
 !fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation-package/node_modules/**
+!fixtures/reactive-ir/vite-dev-client/node_modules/
+!fixtures/reactive-ir/vite-dev-client/node_modules/**
+!fixtures/reactive-ir/vite-dev-client/variants/mismatch/node_modules/
+!fixtures/reactive-ir/vite-dev-client/variants/mismatch/node_modules/**
+!fixtures/reactive-ir/vite-dev-client/variants/vite-7/node_modules/
+!fixtures/reactive-ir/vite-dev-client/variants/vite-7/node_modules/**

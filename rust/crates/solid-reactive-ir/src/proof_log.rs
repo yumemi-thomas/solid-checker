@@ -505,6 +505,9 @@ pub(crate) enum PremiseKind {
     /// no package they load writes the member the site runs on a built-in's prototype: the packages that do are loaded by a test, a story, a script or a config,
     /// never by the page (ADR 1145). The span is the site.
     ProductRealmWriters,
+    /// The only writers of a built-in's prototype the site meets are a reviewed host's own closure (`vite`'s dev server code, run in Node): no program file loads
+    /// the host, and what it puts in the page is a dev client whose installed bytes are a release that was read and writes no prototype (ADR 1144). The span is the site.
+    ReviewedHostClient,
 }
 
 /// A premise: a typed fact kind, the code the fact is about (`at`, in the

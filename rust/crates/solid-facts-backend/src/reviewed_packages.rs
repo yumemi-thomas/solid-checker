@@ -234,7 +234,7 @@ pub(crate) fn file_stamp(metadata: &fs::Metadata) -> Option<FileStamp> {
 }
 
 /// The lower-case hex SHA-256 of a file, kept for the process while its stamp holds.
-fn digest_of(path: &Path) -> Option<String> {
+pub(crate) fn digest_of(path: &Path) -> Option<String> {
     type Kept = Mutex<HashMap<PathBuf, (FileStamp, String)>>;
     static KEPT: OnceLock<Kept> = OnceLock::new();
     let stamp = file_stamp(&fs::metadata(path).ok()?);
