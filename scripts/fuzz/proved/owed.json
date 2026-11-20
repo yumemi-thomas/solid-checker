@@ -2,8 +2,8 @@
  "rows": [
   {
    "adr": "ADR 1125",
-   "owed": 39,
-   "why": "#296 smoke and smoke-census: 39 true proofs withheld beside the false ones, each named in changes.json. Hazards per the blocker census: Reflect.apply 20 (recovered when ADR 1133 narrows Reflect to its writing members and ownKeys), an uninstalled package (unread-module) 12, JSON.stringify with a replacer (key-reader) 5, a literal javascript: URL 1, a then method on an object literal (coercion-hook) 1. The veto withholds every event proof wherever such a hazard is in the program (docs/open-work.md, ADR 1125 owed and N4)."
+   "owed": 40,
+   "why": "#296 smoke and smoke-census: 40 true proofs withheld beside the false ones, each named in changes.json. Hazards per the blocker census: Reflect.apply 20 (recovered when ADR 1133 narrows Reflect to its writing members and ownKeys), an uninstalled package (unread-module) 12, JSON.stringify with a replacer (key-reader) 5, a literal javascript: URL 2 (one of them CONTEXT_NOT_FOUND, withheld by the provider yield where delivery is broken), a then method on an object literal (coercion-hook) 1. The veto withholds every event proof wherever such a hazard is in the program (docs/open-work.md, ADR 1125 owed and N4)."
   }
  ]
 }
