@@ -123,8 +123,11 @@ pub(crate) fn models(
     lookup: &SemanticLookup<'_>,
     dialect: &dyn Dialect,
 ) -> Vec<DevelopmentFile> {
+    // ADR 1135: the models of the project's own files. A package read as source (ADR 0284) is analyzed for the project's findings, but its
+    // files are not the project's: the host does not instrument them, and a run with no selection holds none.
     crate::base::reads::file_slots(facts)
         .iter()
+        .filter(|file| !lookup.in_dependency_source(file.path.as_str()))
         .map(|file| {
             let origins = file
                 .ast

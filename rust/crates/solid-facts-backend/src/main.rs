@@ -367,16 +367,21 @@ fn run_ordinary_check(
 /// '*'` does, unless an explicit selection says otherwise. A package `*` does
 /// not select or refuses stays uncertifiable.
 ///
-/// Every other mode keeps the selection it was given. Feedback facts,
-/// bundler runtime resolution, caller-supplied sources and the daemon server
-/// (which serves its client's selection verbatim) are not ordinary analyses, and none of them has been shown to mean the same thing under a
-/// source selection.
+/// ADR 1135: a run with feedback facts (the fuzz judge's and the development
+/// feedback's) takes the same default, so it analyzes the program a user's
+/// run does: its findings are that run's, and its feedback facts are the
+/// project's own files' models (the selected packages' files have none,
+/// `development_feedback::models`).
+///
+/// Every other mode keeps the selection it was given. Bundler runtime
+/// resolution, caller-supplied sources and the daemon server (which serves its
+/// client's selection verbatim) are not ordinary analyses, and none of them has
+/// been shown to mean the same thing under a source selection.
 fn defaults_to_dependency_sources(request: &Request) -> bool {
     let declared_host = request.runtime.target.is_some() && request.runtime.build.is_some();
     let ordinary = !request.serve
         && !request.help
         && request.sources.is_empty()
-        && !request.feedback_facts
         && !request.runtime_resolution
         && env!("CARGO_BIN_NAME") == "solid-checker-rust";
     declared_host && ordinary && request.dependency_sources.is_empty()
@@ -409,6 +414,12 @@ mod default_dependency_source_tests {
         let mut named = request(true, true);
         named.dependency_sources = vec!["dep".into()];
         assert!(!defaults_to_dependency_sources(&named));
+        // ADR 1135: feedback facts take the default, so the judge reads what a user's run reads.
+        let mut feedback = request(true, true);
+        feedback.feedback_facts = true;
+        assert!(defaults_to_dependency_sources(&feedback));
+        feedback.runtime.build = None;
+        assert!(!defaults_to_dependency_sources(&feedback));
     }
 
     #[test]
@@ -417,7 +428,6 @@ mod default_dependency_source_tests {
         let modes: &[Mode] = &[
             ("serve", |r| r.serve = true),
             ("help", |r| r.help = true),
-            ("feedback-facts", |r| r.feedback_facts = true),
             ("runtime-resolution", |r| r.runtime_resolution = true),
         ];
         for (mode, set) in modes {
