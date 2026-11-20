@@ -437,8 +437,11 @@ impl<'a> SemanticLookup<'a> {
         file: &FileFacts,
         callee: Span,
     ) -> Option<&'a ResolvedCall> {
+        // ADR 1137: the string-code veto is left out here. The string-code census itself places calls through this (`tuple_mutation_method`), and
+        // a standard call the resolution above declines was declined by the impostor or reached-patch veto, never by string code, so asking it
+        // would change no answer and only close a cycle.
         self.resolved_callee_call(file, callee).or_else(|| {
-            self.standard_call_withheld(file, callee)
+            (self.impostor_withheld(file, callee) || self.reached_patch_withheld(file, callee))
                 .then(|| {
                     resolved_callee_call_in(
                         file,
@@ -468,8 +471,19 @@ impl<'a> SemanticLookup<'a> {
     /// it, or a write some chain reaches may have replaced any member. Either
     /// way its rows stand at their sites, uncertain; only the first has an
     /// impostor's row. A patch that names this member is ADR 0781's.
+    ///
+    /// ADR 1137: so does code built from a string the program holds (`eval`, `new Function`, a string timer: ADR 0801's census): it may replace any
+    /// standard member, which no census of the program's text can see (the review of ADR 1124, round 2, N1: `Array.prototype.forEach` replaced by
+    /// `(0, eval)("…")` ran a carried callback later, and the inline `[1].forEach(() => base())` was silent too).
     pub(crate) fn standard_call_withheld(&self, file: &FileFacts, callee: Span) -> bool {
-        self.impostor_withheld(file, callee) || self.reached_patch_withheld(file, callee)
+        self.impostor_withheld(file, callee)
+            || self.reached_patch_withheld(file, callee)
+            || self.string_code_patch_withheld(file, callee)
+    }
+
+    /// ADR 1137: whether the standard call at `callee` may run a member code built from a string replaced: the program holds such code anywhere.
+    pub(crate) fn string_code_patch_withheld(&self, file: &FileFacts, callee: Span) -> bool {
+        self.visible_string_code() && self.resolved_standard_call_name(file, callee).is_some()
     }
 
     /// ADR 0876: whether a write some chain reaches may have replaced the

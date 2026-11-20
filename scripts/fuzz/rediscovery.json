@@ -36905,5 +36905,17 @@
    "mx-action-called-in-owned-scope-pa-gprotoruntime-root-x-direct-none"
   ],
   "rediscovered": "new contexts pa-gprotoclear, pa-gprotoruntime (pa-shapes.mjs): `focus.mjs --codes ACTION_CALLED_IN_OWNED_SCOPE --grids mx-recall --boundary both --ids`, release builds: slice E 7db0f9ff0 exits 1 (false-clean 6), slice F exits 0 (recall-gap 6); oracle 6 compared, 0 behaviour"
+ },
+ {
+  "finding": "Fable review of ADR 1124, round 2, N1 (live on main): `Array.prototype.forEach` replaced by code built from a string (`(0, eval)(\"\u2026\")`, `new Function(\"\u2026\")()`) by one that defers its callbacks; the inline `[1].forEach(() => { base(); })` inside `untrack` ran the memo read later in the component body, and the standard-call veto never asked ADR 0801's string-code census, so the read was clean; rc.21 warns STRICT_READ_UNTRACKED",
+  "found": "review-1124-r2 (pa-eval, pa-newfn)",
+  "fixed": "ADR 1137 (indexes/callees.rs standard_call_withheld asks visible_string_code, which now counts string timers too)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-barm-strpatch-eval-memo-direct-none",
+   "mx-strict-read-untracked-barm-strpatch-newfn-memo-direct-none"
+  ],
+  "rediscovered": "new contexts barm-strpatch-eval, barm-strpatch-newfn (legal twin barm-strpatch-none, arm-shapes.mjs): `focus.mjs --codes STRICT_READ_UNTRACKED --grids mx-recall -- --contexts \u2026`, release builds: main dba9d3cee false-clean 2 (the memo variants; the signal variants carry the tuple slot's SC9012), ADR 1137 recall-gap 4; lg-recall twin clean 2 both; oracle compared, 0 behaviour"
  }
 ]

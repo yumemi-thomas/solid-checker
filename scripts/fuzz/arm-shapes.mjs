@@ -16,26 +16,58 @@
 //                           `<For>` row's body
 //     barm-climb-sync       misuse  both layers run in the row body's window
 //     barm-climb-await      legal   the outer layer awaits first, so the inner one runs on a later task
+//   a standard member replaced by code built from a string (ADR 1137; the review of ADR 1124, round 2, N1)   `Array.prototype.forEach` replaced through
+//                           `(0, eval)("…")` or `new Function("…")()` by one that defers its callbacks while a flag is set; the site is in an inline
+//                           `[1].forEach(() => { <site> })` inside `untrack`, and the body then runs what was deferred: the read runs in the body's window
+//     barm-strpatch-eval    misuse  the patch through indirect `eval`
+//     barm-strpatch-newfn   misuse  the patch through `new Function`
+//     barm-strpatch-none    legal   no patch: the callback runs inside `untrack`, where a read is legal
 //
 // Recall contexts only, base shapes (misuse.mjs BASE_ONLY_CONTEXTS): the question is the host's run, not the spelling at the site.
-import { awaitStmt, button, ctl, expr, flowEl, fn, iife, domExpr } from "./model.mjs";
+import { awaitStmt, button, contain, ctl, expr, flowEl, fn, iife, domExpr } from "./model.mjs";
 
 /** `{ [context]: "misuse" | "legal" }`, the side a context is on for the codes it is placed for (`ARM_CODES`). */
 export const ARM_CONTEXTS = {
   "barm-gen-spread": "misuse", "barm-gen-handler": "legal", "barm-gen-never": "legal",
   "barm-gen-drain": "misuse", "barm-gen-await": "legal",
   "barm-climb-sync": "misuse", "barm-climb-await": "legal",
+  "barm-strpatch-eval": "misuse", "barm-strpatch-newfn": "misuse", "barm-strpatch-none": "legal",
 };
 export const ARM_CONTEXT_NAMES = Object.keys(ARM_CONTEXTS);
 
 /** The codes each context is placed for: the generator contexts on the three window codes, the loop pair on the two that a write decides, the climb on the read. */
 export const ARM_CODES = {
-  STRICT_READ_UNTRACKED: ["barm-gen-spread", "barm-gen-handler", "barm-gen-never", "barm-climb-sync", "barm-climb-await"],
+  STRICT_READ_UNTRACKED: ["barm-gen-spread", "barm-gen-handler", "barm-gen-never", "barm-climb-sync", "barm-climb-await", "barm-strpatch-eval", "barm-strpatch-newfn",
+    "barm-strpatch-none"],
   REACTIVE_WRITE_IN_OWNED_SCOPE: ["barm-gen-spread", "barm-gen-handler", "barm-gen-never", "barm-gen-drain", "barm-gen-await"],
   ACTION_CALLED_IN_OWNED_SCOPE: ["barm-gen-spread", "barm-gen-handler", "barm-gen-never", "barm-gen-drain", "barm-gen-await"],
 };
 
 const gen = (name, stmts) => ({ ...ctl("gstep", stmts), name });
+
+/**
+ * ADR 1137: the string-patch contexts. `install` is the statement that replaces `forEach` (none for the legal twin); the site runs in an inline `forEach` callback inside
+ * `untrack`, and what the patched `forEach` deferred runs after it, in the body.
+ */
+const strPatch = (kit, stmts, install) => {
+  const flag = kit.name("sf");
+  const late = kit.name("sl");
+  const orig = kit.name("so");
+  const hook = `__${kit.name("sp")}`;
+  const setup = [
+    `const ${flag} = { on: false };`,
+    `const ${late}: Array<() => void> = [];`,
+    `const ${orig} = Array.prototype.forEach;`,
+    `(globalThis as any).${hook} = function (this: unknown[], fn: any, t?: unknown) { if (${flag}.on) { ${late}.push(() => ${orig}.call(this, fn, t)); return; } return ${orig}.call(this, fn, t); };`,
+    ...(install ? [install(`Array.prototype.forEach = (globalThis as any).${hook}`.replace("(globalThis as any)", "globalThis"))] : []),
+  ];
+  return contain("frame", 0, stmts, {
+    head: `${setup.join("\n")}\nuntrack(() => { ${flag}.on = true; [1].forEach(() => `,
+    close: `); ${flag}.on = false; });`,
+    then: [`for (const f of ${late}.splice(0)) f();`],
+    imports: ["untrack"],
+  });
+};
 
 /** The placement of `stmts` for a `barm-*` context (`{ body, view }`), or undefined for any other. */
 export function armContext(context, stmts, kit) {
@@ -54,6 +86,9 @@ export function armContext(context, stmts, kit) {
     }
     case "barm-climb-sync": return { body: [], view: [flowEl(kit.name("v"), "for", [expr(iife(fn([expr(iife(fn(stmts)))])))])] };
     case "barm-climb-await": return { body: [], view: [flowEl(kit.name("v"), "for", [expr(iife(fn([awaitStmt(), expr(iife(fn(stmts)))], { async: true })))])] };
+    case "barm-strpatch-eval": return { body: [strPatch(kit, stmts, (code) => `(0, eval)(${JSON.stringify(code)});`)], view: [] };
+    case "barm-strpatch-newfn": return { body: [strPatch(kit, stmts, (code) => `new Function(${JSON.stringify(code)})();`)], view: [] };
+    case "barm-strpatch-none": return { body: [strPatch(kit, stmts, null)], view: [] };
     default: return undefined;
   }
 }
