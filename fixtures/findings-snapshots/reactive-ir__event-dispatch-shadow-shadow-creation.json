@@ -5,7 +5,7 @@
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
-      "blocker": "owner-varies-by-caller",
+      "blocker": "creation-throws-first",
       "severity": "error",
       "path": "fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation/App.tsx",
       "start": 532,

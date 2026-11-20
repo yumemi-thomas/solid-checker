@@ -2126,6 +2126,14 @@ packages/wasm/owned/
 !fixtures/reactive-ir/product-realm-solid-scope-dependency/node_modules/**
 !fixtures/reactive-ir/product-realm-solid-scope-inert/node_modules/
 !fixtures/reactive-ir/product-realm-solid-scope-inert/node_modules/**
+!fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation-named/node_modules/
+!fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation-named/node_modules/**
+!fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation-member/node_modules/
+!fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation-member/node_modules/**
+!fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation-spread/node_modules/
+!fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation-spread/node_modules/**
+!fixtures/reactive-ir/event-dispatch-shadow/variants/light-creation-named/node_modules/
+!fixtures/reactive-ir/event-dispatch-shadow/variants/light-creation-named/node_modules/**
 !fixtures/reactive-ir/product-realm-page-handler/node_modules/
 !fixtures/reactive-ir/product-realm-page-handler/node_modules/**
 !fixtures/reactive-ir/product-realm-page-handler-solidus/node_modules/
@@ -2138,3 +2146,7 @@ packages/wasm/owned/
 !fixtures/reactive-ir/product-realm-public-handler/node_modules/**
 !fixtures/reactive-ir/product-realm-public-static/node_modules/
 !fixtures/reactive-ir/product-realm-public-static/node_modules/**
+!fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation-eval/node_modules/
+!fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation-eval/node_modules/**
+!fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation-package/node_modules/
+!fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation-package/node_modules/**

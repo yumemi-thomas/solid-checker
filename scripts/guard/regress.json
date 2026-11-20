@@ -288,6 +288,22 @@
    "removed": 1,
    "adr": "ADR 1141",
    "why": "the StillRuns case <button disabled {...rest} onClick> moved to disabled-spread-handler-owner (SpreadDisabled), where rc.21's spread delegates onClick and the dispatcher skips the disabled button (Chrome quiet): an obligation, handler-on-disabled-control"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc4001",
+   "path": "fixtures/uncertifiable-repro/sc4001/src/primitive-in-ref-callback.tsx",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1139",
+   "why": "an effect's apply may deliver into a shadow tree here (the delivery premise is broken in this bundled program), and a JSX handler of the program makes a call the reach cannot name (competing_checks ShadowReach unbounded): every creation may run in the effect-callback window, where PRIMITIVE_IN_EFFECT_CALLBACK precedes NO_OWNER_EFFECT (creation-throws-first)"
+  },
+  {
+   "fixture": "reactive-ir/jsx-creation-sites",
+   "path": "fixtures/reactive-ir/jsx-creation-sites/App.tsx",
+   "code": "SC4001",
+   "removed": 4,
+   "adr": "ADR 1139",
+   "why": "r1 (Opus review F2): a JSX spread may hand an element any handler, so the program may hold a handler; an apply may deliver into a shadow tree and the unresolved spread (<div {...rest} />) makes the handler reach unbounded: every creation may run in the effect-callback window, where PRIMITIVE_IN_EFFECT_CALLBACK precedes NO_OWNER_EFFECT (creation-throws-first)"
   }
  ]
 }
