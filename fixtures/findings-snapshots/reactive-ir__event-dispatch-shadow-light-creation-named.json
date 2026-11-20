@@ -1,0 +1,26 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/event-dispatch-shadow/variants/light-creation-named/App.tsx",
+      "start": 314,
+      "end": 332,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/event-dispatch-shadow/variants/light-creation-named/App.tsx",
+      "start": 314,
+      "end": 332,
+      "fixes": 0
+    }
+  ]
+}

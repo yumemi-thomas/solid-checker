@@ -262,8 +262,9 @@ describe("the project site (ADR 0992)", () => {
       ...cellList({ codes: [code], recall: true }).flatMap((cell) => recallShapes(code, cell.context, { lean: true })),
       ...legalCells({ codes: [code], recall: true }).flatMap((cell) => recallLegalShapes(code, cell.context, { lean: true })),
     ]).map((shape) => shape.pkg ?? "").filter((pkg) => pkg.endsWith("-proj"));
-    // ADR 0992 built 79 programs of them (31 matrix, 48 legal): the same cells, now in the grids.
-    expect(names).toHaveLength(79);
+    // ADR 0992 built 79 programs of them (31 matrix, 48 legal): the same cells, now in the grids. ADR 1139's NO_OWNER_CLEANUP context
+    // `handler-await-helper-veto` adds one.
+    expect(names).toHaveLength(80);
     expect(new Set(names)).toEqual(new Set(projectShapesOf()));
   });
   it("builds a program whose site is in site1.tsx and whose lazy loader imports it", () => {

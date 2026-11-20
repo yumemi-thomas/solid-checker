@@ -103,11 +103,11 @@
   "SC2007 static-source-unproven": 7,
   "SC2008 callee-callback-timing": 1,
   "SC2008 creation-throws-first": 1,
-  "SC2008 flush-in-effect-unaccounted": 418,
+  "SC2008 flush-in-effect-unaccounted": 408,
   "SC2008 function-run-unplaced": 30,
   "SC2008 function-unentered": 5,
   "SC2008 generator-step-unplaced": 6,
-  "SC2008 handler-dispatch-unproven": 158,
+  "SC2008 handler-dispatch-unproven": 168,
   "SC2008 package-finding-at-entry": 9,
   "SC2008 package-operation-in-effect-apply": 1,
   "SC2008 parameter-initializer-unplaced": 11,
@@ -129,9 +129,9 @@
   "SC3001 refused-creation-unrun": 1,
   "SC3002 function-unentered": 2,
   "SC4001 async-flight-error-unobserved": 4,
-  "SC4001 component-identity-unproven": 15,
+  "SC4001 component-identity-unproven": 14,
   "SC4001 computation-error-unobserved": 31,
-  "SC4001 creation-throws-first": 12,
+  "SC4001 creation-throws-first": 22,
   "SC4001 function-run-unplaced": 280,
   "SC4001 function-unentered": 3,
   "SC4001 handler-key-overridden": 4,
@@ -143,8 +143,8 @@
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 4,
-  "SC4001 owner-varies-by-caller": 155,
-  "SC4001 package-finding-at-entry": 69,
+  "SC4001 owner-varies-by-caller": 144,
+  "SC4001 package-finding-at-entry": 75,
   "SC4001 unreached-dead-code": 2,
   "SC4002 component-identity-unproven": 2,
   "SC4002 computation-error-unobserved": 31,
@@ -199,9 +199,9 @@
   "SC5008 pending-read-unresolved": 24,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5437,
+  "SC6002 effect-creation-unaccounted": 5438,
   "SC6002 effect-owner-unproven": 52,
-  "SC6002 function-run-unplaced": 59,
+  "SC6002 function-run-unplaced": 62,
   "SC6002 generator-step-unplaced": 1,
   "SC6002 package-finding-at-entry": 27,
   "SC6002 package-operation-in-effect-apply": 1,
@@ -4961,6 +4961,60 @@
    "kind": "moved",
    "movedToFixture": "uncertifiable-repro/sc1001-computed-key",
    "note": "ADR 1125 (Fable round 1): options-object.tsx moved to the sc1001-computed-key project; ADR 1133 raises the rest of sc1001 (navigation-url sinks), so the fixture-level moved row no longer covers this path: the row stands in sc1001-computed-key"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-object-member",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 1139",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_context.rs::call_owner_edge",
+   "fixtures": {
+    "proved": "reactive-ir/dependency-source-object-member",
+    "open": "reactive-ir/context-callee-past-await"
+   }
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-owner",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 14,
+   "to": 7,
+   "adr": "ADR 1139",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_context.rs::call_owner_edge",
+   "fixtures": {
+    "proved": "reactive-ir/dependency-source-owner",
+    "open": "reactive-ir/dependency-source-owner"
+   }
+  },
+  {
+   "fixture": "reactive-ir/event-dispatch-shadow-shadow-creation",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1139",
+   "kind": "relabel",
+   "relabeledTo": "SC4001 creation-throws-first"
+  },
+  {
+   "fixture": "reactive-ir/object-member-import",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1139",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_context.rs::call_owner_edge",
+   "fixtures": {
+    "proved": "reactive-ir/object-member-import",
+    "open": "reactive-ir/context-callee-past-await"
+   }
+  },
+  {
+   "fixture": "reactive-ir/jsx-creation-sites",
+   "key": "SC4001 component-identity-unproven",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1139",
+   "kind": "relabel",
+   "relabeledTo": "SC4001 creation-throws-first"
   }
  ],
  "renames": []

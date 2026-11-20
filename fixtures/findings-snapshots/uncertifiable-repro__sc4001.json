@@ -5379,8 +5379,9 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
+      "kind": "uncertifiable",
+      "blocker": "creation-throws-first",
+      "severity": "error",
       "path": "fixtures/uncertifiable-repro/sc4001/src/primitive-in-ref-callback.tsx",
       "start": 449,
       "end": 461,

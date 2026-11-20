@@ -430,11 +430,11 @@ impl SemanticLookup<'_> {
             // ADR 1099: an apply's delivery has an owner only when a flush drains the queue under one. The flush census
             // asks this answer (its sites' callers), so the owner bit takes the answer before it
             // (`SemanticLookup::flush_referenced`), inside this memo.
-            // ADR 1125: an apply's delivery to a listener in a shadow tree runs it with no `window.event`, inside the apply's
-            // effect-callback window (rc.21 throws PRIMITIVE_IN_EFFECT_CALLBACK at a creation there, not a missing owner).
+            // ADR 1139: an apply's delivery to a listener in a shadow tree runs the handler with no owner too (rc.21 reports
+            // NO_OWNER_* there), so it leaves the owner bit alone; a creation there meets the effect-callback guard first
+            // (PRIMITIVE_IN_EFFECT_CALLBACK), which `competing_checks` marks (`apply_delivery_in_shadow_possible`).
             sites.iter().any(DispatchSite::withholds_owner_proofs)
-                || (delivers_in_effect_apply
-                    && (self.flush_referenced() || self.shadow_roots_answer())),
+                || (delivers_in_effect_apply && self.flush_referenced()),
             // ADR 1115: a delivery's read proof that rests on its event holds only where no listener sits in a shadow tree.
             sites.iter().any(DispatchSite::withholds_read_proofs)
                 || (sites.iter().any(DispatchSite::read_proof_rests_on_event)
@@ -468,8 +468,7 @@ impl SemanticLookup<'_> {
                     .to_owned(),
                     caller: site.caller.map(|caller| caller.word().to_owned()),
                     withholds_owner_proofs: site.withholds_owner_proofs()
-                        || (site.delivers_in_effect_apply()
-                            && (self.flush_referenced() || self.shadow_roots_answer())),
+                        || (site.delivers_in_effect_apply() && self.flush_referenced()),
                     withholds_read_proofs: site.withholds_read_proofs(),
                 })
             })
@@ -1407,12 +1406,14 @@ pub(crate) fn scan_delivery_hazard(lookup: &super::SemanticLookup<'_>) -> bool {
 /// spelled anywhere in its text, or a handler property written (`el.onclick = …`; a text test, which only refuses more).
 fn may_hold_handler(file: &solid_facts::FileFacts) -> bool {
     file.ast.jsx_elements.iter().any(|element| {
-        element.attributes.iter().any(|attribute| {
-            attribute.namespace.is_some()
-                || file
-                    .source_text(attribute.local_name)
-                    .is_some_and(|name| name.len() > 2 && name.starts_with("on"))
-        })
+        // ADR 1139 r1 (F2): a spread may hand the element any handler (`{...{ onScroll: f }}`, a component's props).
+        !element.spreads.is_empty()
+            || element.attributes.iter().any(|attribute| {
+                attribute.namespace.is_some()
+                    || file
+                        .source_text(attribute.local_name)
+                        .is_some_and(|name| name.len() > 2 && name.starts_with("on"))
+            })
     }) || ["addEventListener", "attachEvent", "handleEvent"]
         .iter()
         .any(|spelling| file.source.contains(spelling))
