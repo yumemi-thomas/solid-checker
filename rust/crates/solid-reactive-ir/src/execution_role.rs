@@ -21,6 +21,7 @@ mod project_consumer;
 mod jsx_census;
 pub(crate) use jsx_census::*;
 mod family4_census; // MEASUREMENT ONLY (ADR 1114 family 4, step 0)
+pub(crate) use family4_census::note_write as note_family4_write;
 mod write_roles;
 pub(crate) use write_roles::*;
 mod slot_layers;

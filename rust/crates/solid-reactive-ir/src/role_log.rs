@@ -168,6 +168,10 @@ fn init_from_env() {
             ON.store(true, Ordering::Release);
         }
         let _ = ABLATE.set(ablate);
+        // MEASUREMENT ONLY (ADR 1114 family 4, step 0): the census needs decisions framed to read their arms.
+        if std::env::var_os("SOLID_CHECKER_F4_CENSUS").is_some_and(|path| !path.is_empty()) {
+            ON.store(true, Ordering::Release);
+        }
         // ADR 1065: the blocker census records the arm chain of each undecided answer, so decisions are framed while it is on.
         if crate::blocker_census::enabled() {
             CENSUS_TRACKS.store(true, Ordering::Release);
@@ -240,6 +244,9 @@ struct Decision {
 }
 
 thread_local! {
+    /// MEASUREMENT ONLY (ADR 1114 family 4, step 0): the arms of the last closed outermost decision on this thread, read by
+    /// `execution_role::family4_census` right after the decision returns.
+    static LAST_ARMS: RefCell<(Vec<&'static str>, Option<&'static str>)> = const { RefCell::new((Vec::new(), None)) };
     static CURRENT: RefCell<Option<Decision>> = const { RefCell::new(None) };
     /// The lines this thread appends, for each [`record`] running on it.
     static RECORDING: RefCell<Vec<Vec<u8>>> = const { RefCell::new(Vec::new()) };
@@ -387,9 +394,20 @@ fn decide_logged(
     let decision = CURRENT.with(|current| current.borrow_mut().take());
     drop(close);
     if let Some(decision) = decision {
+        LAST_ARMS.with(|last| {
+            *last.borrow_mut() = (
+                arm_names(&decision),
+                answering_arm(&decision, role).map(|(id, _)| id),
+            );
+        });
         write_decision(&decision, role);
     }
     role
+}
+
+/// MEASUREMENT ONLY: the arms the last outermost decision on this thread passed, and the one that answered.
+pub(crate) fn last_arms() -> (Vec<&'static str>, Option<&'static str>) {
+    LAST_ARMS.with(|last| last.borrow().clone())
 }
 
 /// Whether a final `role` of a `kind` decision is reported by no rule: a

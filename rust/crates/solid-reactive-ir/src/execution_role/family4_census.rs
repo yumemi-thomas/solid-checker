@@ -69,9 +69,11 @@ pub(super) fn note(
     let Some(sink) = sink() else {
         return;
     };
-    if BUSY.with(Cell::get) {
+    // A decision asked inside another (a frame open) is part of that decision, which is noted itself.
+    if BUSY.with(Cell::get) || crate::role_log::frame_open() {
         return;
     }
+    let (arms, answering) = crate::role_log::last_arms();
     BUSY.with(|busy| busy.set(true));
     struct Reset;
     impl Drop for Reset {
@@ -110,6 +112,8 @@ pub(super) fn note(
         "pos": positions,
         "complete": complete,
         "calls": at_calls,
+        "arm": answering,
+        "arms": arms,
     });
     let mut text = line.to_string();
     text.push('\n');
@@ -121,4 +125,36 @@ pub(super) fn note(
 /// Whether the census is on (the hooks cost one load when it is not).
 pub(super) fn enabled() -> bool {
     sink().is_some()
+}
+
+/// The write census note for a decision made by `semantic_write_execution_role` (or an action's, which asks it): `role` is the decision's.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn note_write(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    role: ExecutionRole,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    root_body: RootBodyGuard,
+) {
+    if !enabled() {
+        return;
+    }
+    note("write", file, span, role, lookup, |call| {
+        let allowed = write_allowed_spans(file, allowed, lookup);
+        super::write_components::bounded_walk(lookup, || {
+            semantic_write_execution_role_within(
+                file,
+                call,
+                &allowed,
+                entities,
+                symbol_names,
+                lookup,
+                root_body,
+                &mut HashSet::default(),
+            )
+        })
+    });
 }

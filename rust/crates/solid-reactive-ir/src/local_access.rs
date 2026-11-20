@@ -5682,6 +5682,16 @@ impl LocalAccessContext<'_, '_> {
                             RootBodyGuard::Rejects,
                         )
                     });
+                crate::execution_role::note_family4_write(
+                    file,
+                    call.callee,
+                    role,
+                    allowed,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                    RootBodyGuard::Rejects,
+                );
                 handed_write_execution(
                     file,
                     call.callee,
@@ -5742,6 +5752,16 @@ impl LocalAccessContext<'_, '_> {
                             RootBodyGuard::Rejects,
                         )
                     });
+                crate::execution_role::note_family4_write(
+                    file,
+                    call.callee,
+                    role,
+                    allowed,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                    RootBodyGuard::Rejects,
+                );
                 let role = handed_write_execution(
                     file,
                     call.callee,

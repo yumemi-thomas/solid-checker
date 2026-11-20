@@ -36,21 +36,16 @@ pub(crate) fn semantic_write_execution_role(
         })
     });
     if super::family4_census::enabled() {
-        super::family4_census::note("write", file, span, role, lookup, |call| {
-            let allowed = write_allowed_spans(file, allowed, lookup);
-            super::write_components::bounded_walk(lookup, || {
-                semantic_write_execution_role_within(
-                    file,
-                    call,
-                    &allowed,
-                    entities,
-                    symbol_names,
-                    lookup,
-                    root_body,
-                    &mut HashSet::default(),
-                )
-            })
-        });
+        super::family4_census::note_write(
+            file,
+            span,
+            role,
+            allowed,
+            entities,
+            symbol_names,
+            lookup,
+            root_body,
+        );
     }
     role
 }
