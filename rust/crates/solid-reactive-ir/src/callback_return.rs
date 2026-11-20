@@ -358,6 +358,403 @@ pub(crate) fn exact_context_provider(
         && exactly_resolved(lookup, file, created.callee)
 }
 
+/// ADR 1147: the store-tuple arm's id. `SOLID_CHECKER_IR_ABLATE_SILENCE=context-provided-store-tuple` switches it off (a measurement only).
+pub(crate) const CONTEXT_PROVIDED_STORE_TUPLE: &str = "context-provided-store-tuple";
+
+/// ADR 1147 (arm 3): one context whose one value is a fresh `[store, { actions }]` literal, and every reader that takes it apart.
+#[derive(Clone, Debug)]
+pub(crate) struct ProvidedStoreTuple {
+    /// The provider's value, as written (`[cart, { add }] as const`, or the `const` that holds it).
+    pub(crate) value: Span,
+    /// The store root's declaration: slot 0 of the `createStore` pattern.
+    pub(crate) root: Span,
+    /// The `createStore` call.
+    pub(crate) created: Span,
+    /// Each action: its key, the identifier the literal holds it by, and the function the identifier's `const` holds.
+    pub(crate) actions: Vec<(String, Span, Span)>,
+    pub(crate) consumers: Vec<StoreTupleConsumer>,
+}
+
+/// ADR 1147 (arm 3): a reader `const [store, { add }] = useContext(Ctx)`.
+#[derive(Clone, Debug)]
+pub(crate) struct StoreTupleConsumer {
+    /// The binding's index in the file's `bindings`.
+    pub(crate) binding: usize,
+    /// The slot-0 name, the store: `None` for a hole.
+    pub(crate) root: Option<Span>,
+    /// The slot-1 object pattern's names: (key, local name). Each local is only called.
+    pub(crate) actions: Vec<(String, Span)>,
+}
+
+/// ADR 1147 (arm 3): the contexts of `file` whose one value is a fresh `[store, { actions }]` literal (textbook `id-context`). The premises are ADR 1123's tuple
+/// arm's, with the value a literal instead of a signal's tuple:
+/// - the context is an unwritten, unexported `const` of one name initialized by the dialect's `createContext` with no argument (no default: a read under no
+///   provider throws), resolved exactly; every reference of it is the tag of the one provider element (no spread, one `value`) or the argument of an exact
+///   `useContext` whose result a `const` array pattern takes apart at once ([`context_read`]): so the only holders of the shared tuple are the readers' patterns;
+/// - the value is an array literal (or a `const` it initializes whose one reference is the value), of a store root and, optionally, an object literal: the root is
+///   slot 0 of a `const` array pattern a `createStore` call initializes, resolved exactly; the object is closed (no spread, computed key, accessor or method), each
+///   property a data property whose value is a `const` identifier bound to a function the binding holds now;
+/// - each reader's pattern names only slot 0 (one identifier, no default) and slot 1 (an object pattern of plain keys the object holds, each an identifier with no
+///   default; no rest): no holder of the action object exists but the literal, and each action's local is only called (`add(…)`), never written or handed on;
+/// - no file builds code from a string (ADR 1137's veto, [`SemanticLookup::program_builds_code`]) and nothing may mutate the iteration protocol the patterns use
+///   (`array_slots_withdrawn`, as for ADR 1123).
+///
+/// Anything else is no plan: the reads keep SC9012 and the writes their rows.
+pub(crate) fn provided_store_tuples(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+) -> Vec<ProvidedStoreTuple> {
+    if crate::site_accounting::ablated_id(CONTEXT_PROVIDED_STORE_TUPLE)
+        || !file.source.contains("useContext")
+        || lookup.program_builds_code()
+        || lookup.array_slots_withdrawn()
+    {
+        return Vec::new();
+    }
+    file.ast
+        .bindings
+        .iter()
+        .filter_map(|binding| provided_store_tuple(lookup, file, binding))
+        .collect()
+}
+
+fn provided_store_tuple(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    context: &BindingFact,
+) -> Option<ProvidedStoreTuple> {
+    let ast = &file.ast;
+    let created_context = ast.call_at(context.call_initializer?)?;
+    if lookup.primitive_at_call(file, created_context.span) != Some(Primitive::CreateContext) {
+        return None;
+    }
+    let declaration = context.names.first()?.span;
+    if !context.immutable
+        || context.shape != BindingShape::Identifier
+        || context.names.len() != 1
+        || binding_written(file, declaration)
+        || crate::execution_role::flow_binding_exported(file, declaration)
+        || crate::indexes::binding_exported(file, declaration)
+        || context.initializer.map(|value| ast.peel_ts_sugar_span(value)) != Some(created_context.span)
+        || created_context.construct
+        || !created_context.arguments.is_empty()
+        || !exactly_resolved(lookup, file, created_context.callee)
+    {
+        return None;
+    }
+    let mut provider: Option<&solid_facts::ast::JsxElementFact> = None;
+    let mut readers = Vec::new();
+    for reference in references(file, declaration) {
+        if let Some(element) = ast.jsx_elements.iter().find(|element| {
+            element.member_object.is_none()
+                && (element.name.span == reference || element.closing_name == Some(reference))
+        }) {
+            if provider.is_some_and(|seen| seen.span != element.span) {
+                return None;
+            }
+            provider = Some(element);
+            continue;
+        }
+        let read = ast.calls.iter().find(|read| {
+            read.arguments.len() == 1
+                && ast.peel_ts_sugar_span(read.arguments[0].span) == reference
+                && lookup.primitive_at_call(file, read.span) == Some(Primitive::UseContext)
+                && context_read(lookup, file, read)
+        })?;
+        let (index, _) = ast.bindings.iter().enumerate().find(|(_, binding)| {
+            binding.shape == BindingShape::Array
+                && binding.immutable
+                && !binding.pattern_rest
+                && binding.call_initializer == Some(read.span)
+                && binding.initializer.is_some_and(|value| ast.peel_ts_sugar_span(value) == read.span)
+        })?;
+        readers.push(index);
+    }
+    let provider = provider?;
+    let mut values = provider.attributes.iter().filter(|attribute| {
+        attribute.namespace.is_none() && file.source_text(attribute.local_name) == Some("value")
+    });
+    let value_attribute = values.next()?;
+    if values.next().is_some()
+        || provider.attributes.len() != 1
+        || !provider.spreads.is_empty()
+        || value_attribute.runtime_type_escape
+    {
+        return None;
+    }
+    let value = ast.peel_ts_sugar_span(value_attribute.expression?);
+    let literal_span = if ast.array_literal_elements.iter().any(|array| array.span == value) {
+        value
+    } else {
+        let held = sole_reference_binding(file, value)?;
+        let initializer = ast.peel_ts_sugar_span(held.initializer?);
+        if references(file, held.names[0].span).ne(std::iter::once(value)) {
+            return None;
+        }
+        initializer
+    };
+    let literal = ast.array_literal_elements.iter().find(|array| array.span == literal_span)?;
+    if literal.elements.is_empty()
+        || literal.elements.len() > 2
+        || literal
+            .elements
+            .iter()
+            .any(|element| element.kind != solid_facts::ast::ArrayElementKind::Value)
+    {
+        return None;
+    }
+    let (root, created) = store_root(lookup, file, ast.peel_ts_sugar_span(literal.elements[0].span))?;
+    let actions = match literal.elements.get(1) {
+        Some(element) => action_object(lookup, file, ast.peel_ts_sugar_span(element.span))?,
+        None => Vec::new(),
+    };
+    let consumers = readers
+        .into_iter()
+        .map(|index| store_tuple_consumer(file, index, &actions))
+        .collect::<Option<Vec<_>>>()?;
+    Some(ProvidedStoreTuple {
+        value,
+        root,
+        created,
+        actions,
+        consumers,
+    })
+}
+
+/// ADR 1147: the declaration of the store root the identifier at `reference` reads: slot 0 of an unwritten `const` array pattern a `createStore` call initializes,
+/// resolved exactly.
+fn store_root(lookup: &SemanticLookup<'_>, file: &FileFacts, reference: Span) -> Option<(Span, Span)> {
+    let ast = &file.ast;
+    if !ast
+        .identifiers
+        .iter()
+        .any(|identifier| identifier.span == reference && identifier.role == IdentifierRole::Reference)
+    {
+        return None;
+    }
+    let declaration = ast.reference_declaration(reference)?;
+    let binding = ast.bindings.iter().find(|binding| {
+        binding.shape == BindingShape::Array
+            && binding.array_slots.first().and_then(Option::as_ref).map(|name| name.span) == Some(declaration)
+    })?;
+    let created = ast.call_at(binding.call_initializer?)?;
+    (binding.immutable
+        && !binding_written(file, declaration)
+        && binding.initializer.map(|value| ast.peel_ts_sugar_span(value)) == Some(created.span)
+        && !created.construct
+        && lookup.primitive_at_call(file, created.span) == Some(Primitive::CreateStore)
+        && exactly_resolved(lookup, file, created.callee))
+    .then_some((declaration, created.span))
+}
+
+/// ADR 1147 (arm 3): the proof log names the arm wherever it decides (monotone.mjs M2b): the provider's value (the root's census), each reader's declarator (its
+/// pattern and read), each reference of a reader's store name (the alias's reads) and each action's function (the writes its entries place).
+pub(crate) fn log_store_tuple_decisions(file: &FileFacts, plans: &[ProvidedStoreTuple]) {
+    if !crate::proof_log::enabled() {
+        return;
+    }
+    let decide = |span: Span| {
+        crate::proof_log::decision(
+            "context-store-tuple",
+            file.path.as_str(),
+            span,
+            crate::ExecutionRole::Unknown,
+            Some((CONTEXT_PROVIDED_STORE_TUPLE, false)),
+            &[CONTEXT_PROVIDED_STORE_TUPLE],
+            Some(false),
+        );
+    };
+    for plan in plans {
+        decide(plan.value);
+        for (_, held, function) in &plan.actions {
+            decide(*held);
+            decide(*function);
+        }
+        for consumer in &plan.consumers {
+            decide(file.ast.bindings[consumer.binding].declaration);
+            for name in consumer.root {
+                references(file, name).for_each(decide);
+            }
+            for (_, local) in &consumer.actions {
+                references(file, *local).for_each(decide);
+            }
+        }
+    }
+}
+
+/// ADR 1147 (arm 3): the entries of a function that is an action of a provided `[store, { actions }]` literal of `file`: the references the literal holds it
+/// by (each an entry the readers' calls account for) and the callee of every call of a reader's local for its key (each local is only called). `None` for any
+/// other function.
+pub(crate) fn store_tuple_action_entries(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    function: Span,
+) -> Option<(Vec<Span>, Vec<Span>)> {
+    if !file.source.contains("useContext") {
+        return None;
+    }
+    let mut held = Vec::new();
+    let mut calls = Vec::new();
+    for plan in provided_store_tuples(lookup, file) {
+        for (key, at, action) in &plan.actions {
+            if *action != function {
+                continue;
+            }
+            held.push(*at);
+            for consumer in &plan.consumers {
+                for (local_key, local) in &consumer.actions {
+                    if local_key != key {
+                        continue;
+                    }
+                    for reference in references(file, *local) {
+                        calls.extend(
+                            file.ast
+                                .calls_with_peeled_callee(reference)
+                                .filter(|call| !call.construct)
+                                .map(|call| call.callee),
+                        );
+                    }
+                }
+            }
+        }
+    }
+    (!held.is_empty()).then_some((held, calls))
+}
+
+/// ADR 1147: the actions of a closed object literal at `span`: each property a data property under a plain key whose value is a `const` identifier bound to a
+/// function the binding holds now, as (key, the identifier, the function).
+fn action_object(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    span: Span,
+) -> Option<Vec<(String, Span, Span)>> {
+    let ast = &file.ast;
+    let shape = ast.object_get_shapes.iter().find(|shape| shape.span == span)?;
+    if !shape.closed || ast.spreads.iter().any(|spread| span.contains(spread.span)) {
+        return None;
+    }
+    let direct = |inner: Span| {
+        span.contains(inner)
+            && inner != span
+            && !ast
+                .object_properties
+                .iter()
+                .any(|property| property.span != inner && property.span.contains(inner) && span.contains(property.span))
+            && !ast
+                .object_get_shapes
+                .iter()
+                .any(|other| other.span != span && span.contains(other.span) && other.span.contains(inner))
+    };
+    let mut actions: Vec<(String, Span, Span)> = Vec::new();
+    for property in ast.object_properties.iter().filter(|property| direct(property.span)) {
+        let key = file.source_text(property.key)?;
+        if property.computed
+            || !property.data
+            || property.method
+            || property.runtime_type_escape
+            || !key.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '$')
+            || actions.iter().any(|(seen, _, _)| seen == key)
+        {
+            return None;
+        }
+        let held = ast.peel_ts_sugar_span(property.value);
+        let binding = sole_local_binding(file, held)?;
+        let initializer = ast.peel_ts_sugar_span(binding.initializer?);
+        let function = ast.functions.iter().find(|function| function.span == initializer)?;
+        if !lookup.function_value_is_current(file, function) {
+            return None;
+        }
+        actions.push((key.to_owned(), held, function.span));
+    }
+    (actions.len() == shape.properties.len()).then_some(actions)
+}
+
+/// The `const` of one name, in `file`, that the identifier reference at `span` reads, when nothing writes it (exported or not: a reader's other uses of the
+/// function are its call sites, which the call graph keeps).
+fn sole_local_binding(file: &FileFacts, span: Span) -> Option<&BindingFact> {
+    if !file
+        .ast
+        .identifiers
+        .iter()
+        .any(|identifier| identifier.span == span && identifier.role == IdentifierRole::Reference)
+    {
+        return None;
+    }
+    let declaration = file.ast.reference_declaration(span)?;
+    let binding = file
+        .ast
+        .bindings
+        .iter()
+        .find(|binding| binding.names.iter().any(|name| name.span == declaration))?;
+    (binding.immutable
+        && binding.shape == BindingShape::Identifier
+        && binding.names.len() == 1
+        && !binding_written(file, declaration))
+    .then_some(binding)
+}
+
+/// ADR 1147: a reader's pattern, by the pattern elements of the binding (facts schema 62: a hole has no element): slot 0 one identifier with no default, slot 1
+/// an object pattern of plain keys of `actions`, each an identifier with no default, and nothing else; each action local only called.
+fn store_tuple_consumer(
+    file: &FileFacts,
+    index: usize,
+    actions: &[(String, Span, Span)],
+) -> Option<StoreTupleConsumer> {
+    let ast = &file.ast;
+    let binding = &ast.bindings[index];
+    let mut root = None;
+    let mut locals = Vec::new();
+    let mut named = 0;
+    for element in ast.pattern_elements.iter().filter(|element| element.pattern == binding.pattern) {
+        if element.assignment || element.default.is_some() {
+            return None;
+        }
+        match element.slot {
+            solid_facts::ast::PatternSlot::Index(0) => {
+                if !binding.names.iter().any(|name| name.span == element.target) {
+                    return None;
+                }
+                root = Some(element.target);
+                named += 1;
+            }
+            solid_facts::ast::PatternSlot::Index(1) => {
+                for inner in ast.pattern_elements.iter().filter(|inner| inner.pattern == element.target) {
+                    let solid_facts::ast::PatternSlot::Key(key) = &inner.slot else {
+                        return None;
+                    };
+                    if inner.assignment
+                        || inner.default.is_some()
+                        || !binding.names.iter().any(|name| name.span == inner.target)
+                        || !actions.iter().any(|(action, _, _)| action == key.as_str())
+                        || locals.iter().any(|(seen, _): &(String, Span)| seen == key.as_str())
+                    {
+                        return None;
+                    }
+                    // The local is only called: never written, handed on or read as a value.
+                    let only_called = references(file, inner.target).all(|reference| {
+                        ast.calls_with_peeled_callee(reference).any(|call| !call.construct)
+                    });
+                    if !only_called {
+                        return None;
+                    }
+                    locals.push((key.to_string(), inner.target));
+                    named += 1;
+                }
+                // An object pattern element holds no plain name itself; a nested array pattern or an identifier at slot 1 is refused below.
+                if binding.names.iter().any(|name| name.span == element.target) {
+                    return None;
+                }
+            }
+            _ => return None,
+        }
+    }
+    (named == binding.names.len()).then_some(StoreTupleConsumer {
+        binding: index,
+        root,
+        actions: locals,
+    })
+}
+
 /// ADR 1123: the arm's id. `SOLID_CHECKER_IR_ABLATE_SILENCE=context-provided-tuple`
 /// switches it off (a measurement only: the gate's ablation identity).
 pub(crate) const CONTEXT_PROVIDED_TUPLE: &str = "context-provided-tuple";

@@ -3098,18 +3098,23 @@ pub(super) fn caller_loop(
         return role_arm!("write_roles.walk-unknown-9", unknown);
     }
     let imperative = named.then_some(direct);
-    let folded = super::write_components::region_fold(
-        file,
-        function,
-        imperative,
-        entities,
-        symbol_names,
-        lookup,
-        root_body,
-        visiting,
-    )
-    .unwrap_or_else(|| {
-        path_fold(
+    // ADR 1147 (arm 3): an action of a provided `[store, { actions }]` literal is entered by its readers' calls, which no call edge shows: the path fold
+    // walks them beside the graph's sites, and the literal's reference is the entry they account for.
+    let action_entries =
+        crate::callback_return::store_tuple_action_entries(lookup, file, function.span);
+    let folded = match &action_entries {
+        Some((_, calls)) => path_fold(
+            file,
+            function,
+            imperative,
+            entities,
+            symbol_names,
+            lookup,
+            root_body,
+            visiting,
+            calls,
+        ),
+        None => super::write_components::region_fold(
             file,
             function,
             imperative,
@@ -3119,7 +3124,20 @@ pub(super) fn caller_loop(
             root_body,
             visiting,
         )
-    });
+        .unwrap_or_else(|| {
+            path_fold(
+                file,
+                function,
+                imperative,
+                entities,
+                symbol_names,
+                lookup,
+                root_body,
+                visiting,
+                &[],
+            )
+        }),
+    };
     visiting.remove(&key);
     let (imperative, unplaced) = match folded {
         CallerFold::Rejected(role) => {
@@ -3143,7 +3161,10 @@ pub(super) fn caller_loop(
     // A permissive role is inherited only from a complete census of the
     // function's entries: a use the walk did not follow (handed to a child
     // component, stored, aliased, exported) may run it in an owned scope.
-    if entry_census_complete(file, function, lookup) || event_only_entries(file, function, lookup) {
+    let held = action_entries.map(|(held, _)| held).unwrap_or_default();
+    if entry_census_complete_except(file, function, lookup, &held)
+        || event_only_entries(file, function, lookup)
+    {
         past_possible_suspension(role, suspendable, unknown)
     } else {
         unknown
@@ -3163,9 +3184,17 @@ fn path_fold(
     lookup: &SemanticLookup<'_>,
     root_body: RootBodyGuard,
     visiting: &mut HashSet<(String, Span)>,
+    also: &[Span],
 ) -> CallerFold {
     let mut unplaced = false;
-    for (caller_file, callee) in lookup.function_call_sites(file.path.as_str(), function.span) {
+    // ADR 1147 (arm 3): `also`, the same-file callees of an action's readers' calls, beside the graph's sites.
+    let mut sites: Vec<(&solid_facts::FileFacts, Span)> = lookup
+        .function_call_sites(file.path.as_str(), function.span)
+        .into_iter()
+        .map(|(caller, callee)| (caller as &solid_facts::FileFacts, callee))
+        .collect();
+    sites.extend(also.iter().map(|callee| (file, *callee)));
+    for (caller_file, callee) in sites {
         lookup.count_write_walk_steps(1);
         // ADR 0560: past its bound the walk unwinds; it answers `Unknown`
         // ([`super::write_components::bounded_walk`]).
