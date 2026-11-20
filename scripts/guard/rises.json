@@ -7968,6 +7968,30 @@
    "adr": "ADR 1133",
    "fact": "event delivery not proven intact (event-delivery-hazard): App.tsx writes `anchor.href = url` with a URL nothing proves is no `javascript:` URL (NavigationUrl, ADR 1133 F5). The dispatch veto withholds every event proof of the program's handlers",
    "why": "fail-closed: code built from a string, or a definer or reader under an unproven key, may make a handler run with no event; the new rows are uncertifiable, never violations"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-owner",
+   "key": "SC4001 package-finding-at-entry",
+   "from": 8,
+   "to": 14,
+   "adr": "ADR 1139",
+   "fact": "creation-throws-first where an apply may deliver into a shadow tree and a JSX handler may reach the creation (ShadowReach; unbounded at an unresolved call); package-finding-at-entry where the after-await rows lose owner-varies-by-caller"
+  },
+  {
+   "fixture": "reactive-ir/event-dispatch-shadow-shadow-creation",
+   "key": "SC4001 creation-throws-first",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1139",
+   "fact": "creation-throws-first where an apply may deliver into a shadow tree and a JSX handler may reach the creation (ShadowReach; unbounded at an unresolved call); package-finding-at-entry where the after-await rows lose owner-varies-by-caller"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc4001",
+   "key": "SC4001 creation-throws-first",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1139",
+   "fact": "creation-throws-first where an apply may deliver into a shadow tree and a JSX handler may reach the creation (ShadowReach; unbounded at an unresolved call); package-finding-at-entry where the after-await rows lose owner-varies-by-caller"
   }
  ]
 }
