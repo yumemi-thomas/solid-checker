@@ -619,6 +619,7 @@ impl<'l, 'a> Census<'l, 'a> {
             past_withheld,
             late,
             late_rows,
+            untouched_proofs,
         } = self;
         debug_assert_eq!(*parameter_hops, 0, "a hop outlived its start");
         debug_assert_eq!(*return_hops, 0, "a hop outlived its start");
@@ -637,6 +638,8 @@ impl<'l, 'a> Census<'l, 'a> {
         walked.clear();
         *steps = 0;
         hop_starts.clear();
+        // ADR 1150: this start's own count of `affects` targets it ended at, read as a difference to name the start's reference.
+        *untouched_proofs = 0;
     }
 
     /// The answer of the start just walked, taken out of the census.
