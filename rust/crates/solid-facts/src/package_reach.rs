@@ -222,6 +222,45 @@ pub struct RootCensus {
     /// The files of the closure that write a global under a key nothing in the file decides, and whether code nobody read may.
     pub write_any_files: Vec<String>,
     pub write_any_unread: bool,
+    /// Writer-cause census (measurement): whether the closure may write a built-in's prototype under any name, why (`file|class`, see
+    /// [`crate::module_reach::GlobalWrites::prototype_any_causes`]; `|unread:<blocker>` for code nobody read), and whether the program loads the package.
+    pub prototype_any: bool,
+    pub prototype_any_causes: Vec<String>,
+    pub loaded: bool,
+}
+
+/// Writer-cause what-if (measurement only, ADR 1131's M0): `SOLID_CHECKER_WHATIF_WRITER_CAUSES=<class prefix>[,…]` leaves out of the any-name prototype writers
+/// every root each of whose causes has a class the list names by prefix (`escape:source`, `escape:`, `generated`, `unread:`, `prototype-key`, …); the token
+/// `unloaded` leaves out a root the program does not load, whatever its causes. A root with no recorded cause stays. Unset (the default), nothing changes. It
+/// moves verdicts and is no proof: a measurement of what deciding those causes would free.
+#[must_use]
+pub fn what_if_writer_decided(causes: &[String], loaded: bool) -> bool {
+    static CLASSES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    let classes = CLASSES.get_or_init(|| {
+        std::env::var("SOLID_CHECKER_WHATIF_WRITER_CAUSES")
+            .map(|value| {
+                value
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|class| !class.is_empty())
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default()
+    });
+    if classes.is_empty() {
+        return false;
+    }
+    if !loaded && classes.iter().any(|class| class == "unloaded") {
+        return true;
+    }
+    !causes.is_empty()
+        && causes.iter().all(|cause| {
+            let class = cause.rsplit_once('|').map_or(cause.as_str(), |(_, class)| class);
+            classes
+                .iter()
+                .any(|prefix| prefix != "unloaded" && class.starts_with(prefix.as_str()))
+        })
 }
 
 /// ADR 1061: whether the blocker census is on (`SOLID_CHECKER_BLOCKER_CENSUS=1`). Internal only: it adds the `blockerCensus` table to the internal JSON and

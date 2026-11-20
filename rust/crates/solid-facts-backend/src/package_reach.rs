@@ -271,7 +271,13 @@ pub fn package_reach_index(
                     .or_default()
                     .insert(root.clone());
             }
-            if closure.global_writes.prototype_any_name {
+            // Writer-cause what-if (measurement, ADR 1131's M0): a root whose every cause the switch names is left out of the any-name writers.
+            if closure.global_writes.prototype_any_name
+                && !solid_facts::package_reach::what_if_writer_decided(
+                    &closure.global_writes.prototype_any_causes,
+                    loaded.contains(runtime),
+                )
+            {
                 index.prototype_writers_any.insert(root.clone());
             }
         }
@@ -309,6 +315,9 @@ pub fn package_reach_index(
                         problems: closure.problems.clone(),
                         write_any_files: closure.write_any_files.clone(),
                         write_any_unread: closure.unread,
+                        prototype_any: closure.global_writes.prototype_any_name,
+                        prototype_any_causes: closure.global_writes.prototype_any_causes.clone(),
+                        loaded: loaded.contains(runtime),
                     },
                 ),
                 Err(reach) => solid_facts::package_reach::RootCensus {
@@ -864,6 +873,7 @@ fn package_reach(
         accessors_written_any: false,
         prototypes_written: BTreeSet::new(),
         prototypes_written_any: false,
+        prototype_any_causes: Vec::new(),
         unread: false,
         unseen: None,
         reads_receiver: false,
@@ -900,6 +910,7 @@ fn package_reach(
             // ADR 1108: code nobody read may write a built-in's prototype too.
             prototype_names: walk.prototypes_written.into_iter().collect(),
             prototype_any_name: walk.prototypes_written_any || unread,
+            prototype_any_causes: walk.prototype_any_causes,
         },
         write_any_files: walk
             .written_any_files
@@ -1526,6 +1537,8 @@ struct Walk<'s, 'd, 'm> {
     /// ADR 1108: the members the files read write on a built-in's prototype, and whether one may be written under a name the syntax does not fix.
     prototypes_written: BTreeSet<String>,
     prototypes_written_any: bool,
+    /// Writer-cause census (measurement): why [`Self::prototypes_written_any`] holds, `file|class` per cause, in walk order (`unread:<blocker>` for code nobody read).
+    prototype_any_causes: Vec<String>,
     /// Whether the closure holds code nobody read (ADR 1002): a load by a computed name, a load no installed file answers, a file the parser refuses, a native
     /// module, a manifest the walk does not read, or files past the closure limit. Kept apart from `problems`, which keeps only the first [`MAX_PROBLEMS`].
     unread: bool,
@@ -1600,7 +1613,7 @@ impl Walk<'_, '_, '_> {
     }
 
     fn note_problem(&mut self, problem: ProblemId) {
-        self.unread |= matches!(
+        let unread = matches!(
             self.memo.problem(problem),
             PackageReach::Undecided {
                 blocker: ReachBlocker::MissingSource
@@ -1612,6 +1625,15 @@ impl Walk<'_, '_, '_> {
                 ..
             }
         );
+        self.unread |= unread;
+        if unread
+            && let PackageReach::Undecided { blocker, .. } = self.memo.problem(problem)
+        {
+            let cause = format!("|unread:{blocker:?}");
+            if !self.prototype_any_causes.contains(&cause) {
+                self.prototype_any_causes.push(cause);
+            }
+        }
         if self.problems.len() < MAX_PROBLEMS && self.noted.insert(problem.0) {
             self.problems.push(problem);
         }
@@ -1678,6 +1700,12 @@ impl Walk<'_, '_, '_> {
                 &scan.global_writes.prototype_names,
             );
             self.prototypes_written_any |= scan.global_writes.prototype_any_name;
+            if !scan.global_writes.prototype_any_causes.is_empty() {
+                let at = short(self.memo.path(file));
+                for cause in &scan.global_writes.prototype_any_causes {
+                    self.prototype_any_causes.push(format!("{at}|{cause}"));
+                }
+            }
         }
         for step in &visit.steps {
             match *step {
