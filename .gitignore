@@ -2154,6 +2154,12 @@ packages/wasm/owned/
 !fixtures/reactive-ir/change-retyped-runtime-writer-alias/node_modules/**
 !fixtures/reactive-ir/change-attr-namespace/node_modules/
 !fixtures/reactive-ir/change-attr-namespace/node_modules/**
+!fixtures/reactive-ir/change-retyped-attr-node/node_modules/
+!fixtures/reactive-ir/change-retyped-attr-node/node_modules/**
+!fixtures/reactive-ir/change-attr-node-control/node_modules/
+!fixtures/reactive-ir/change-attr-node-control/node_modules/**
+!fixtures/reactive-ir/change-retyped-frames/node_modules/
+!fixtures/reactive-ir/change-retyped-frames/node_modules/**
 !fixtures/reactive-ir/change-dispatch-veto/node_modules/
 !fixtures/reactive-ir/change-dispatch-veto/node_modules/**
 !fixtures/reactive-ir/change-delivery-hazard/node_modules/

@@ -11,6 +11,10 @@
       "private-judgment": {
         "count": 2,
         "why": "pending-review"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "`runtime_module_element_writes`' last arm: a specifier of the runtime packages that no audited arm names answers `None`, which the engine reads as unknown and takes as writing an element (it withdraws the `change` proof of a program that imports it, ADR 0027), so the unmatched case is the fail-closed one; a test holds every exported subpath of the pinned packages against the audited arms"
       }
     },
     "rust/crates/solid-dialect/src/solid_2/releases.rs": {
@@ -355,8 +359,8 @@
     },
     "rust/crates/solid-reactive-ir/src/change_delivery.rs": {
       "default-on-missing": {
-        "count": 2,
-        "why": "the two arms of `takes_runtime_writer`'s load scan: an `import()` or `require()` with no literal specifier, and one whose result escapes unnamed, may reach any export of any module, so the answer to 'may this file take a runtime writer' is yes, and yes withdraws the `change` proof (the veto, never a clean); a missing fact can only refuse"
+        "count": 3,
+        "why": "the three yes-on-missing answers of `takes_runtime_writer`: a binding whose export name no fact gives (`export.is_none_or(..)`), an `import()` or `require()` with no literal specifier, and one whose result escapes unnamed, may reach any export of the module (or any module), so the answer to 'may this file take a module that writes an element' is yes, and yes withdraws the `change` proof (the veto, never a clean); a missing fact can only refuse"
       },
       "name-only-match": {
         "count": 1,

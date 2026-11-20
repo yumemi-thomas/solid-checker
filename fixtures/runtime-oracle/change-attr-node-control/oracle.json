@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1148 (round 1, F1): the control of change-attr-node-retype, the same program without the two lines that reach the Attr node. The control stays a checkbox: Chrome is quiet, and the checker certifies it."
+}

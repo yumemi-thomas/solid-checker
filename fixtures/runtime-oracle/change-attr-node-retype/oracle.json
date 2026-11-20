@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1148 (round 1, F1): an Attr node reached by XPath is retyped (`value = \"text\"`); the retyped, dirty, focused control is removed by an ancestor's textContent write inside Grab's owned body and delivers `change` there. Chrome warns REACTIVE_WRITE_IN_OWNED_SCOPE and STRICT_READ_UNTRACKED at the handler's setter; the checker stays uncertifiable (the proof is withdrawn)."
+}

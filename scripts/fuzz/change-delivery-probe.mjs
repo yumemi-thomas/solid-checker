@@ -117,6 +117,24 @@ await scenario("text", "user types, then the parent is removed while focused", T
 await scenario("text", "dispatchEvent(Event change)", TEXT, async (page) => { await text(page); await call(page, "document.getElementById('t').dispatchEvent(new Event('change', { bubbles: true }))"); });
 await scenario("text", "form.reset() after a user edit", TEXT, async (page) => { await text(page); await page.click("#t"); await page.keyboard.type("abc"); await call(page, "document.getElementById('f').reset()"); });
 
+// ---- replacement of an ancestor: the handler is a listener of the ORIGINAL node, which a replacement detaches. Does anything run it for a new control?
+// A new text control is made by each route, typed into and made to lose focus (a user's edit and Tab); `c`'s own listener records every event it sees.
+const WRAP = `<div id="wrap"><input id="c" type="checkbox"></div><button id="other">other</button>`;
+const replaceScenario = (name, op) => scenario("replace", name, WRAP, async (page) => {
+  await setup(page);
+  await page.evaluate(() => document.addEventListener("change", (e) => window.__log.push({ el: `document(target ${e.target.id || e.target.tagName})`, type: "change", trusted: e.isTrusted, sync: window.__sync, winEvent: window.event === e }), true));
+  await call(page, op);
+  await page.focus("#n");
+  await page.keyboard.type("abc");
+  await page.keyboard.press("Tab");
+});
+await replaceScenario("wrap.innerHTML = a text input", "document.getElementById('wrap').innerHTML = '<input id=\"n\" type=\"text\">'");
+await replaceScenario("wrap.outerHTML = a div with a text input", "document.getElementById('wrap').outerHTML = '<div id=\"wrap\"><input id=\"n\" type=\"text\"></div>'");
+await replaceScenario("wrap.insertAdjacentHTML('beforeend', a text input)", "document.getElementById('wrap').insertAdjacentHTML('beforeend', '<input id=\"n\" type=\"text\">')");
+await replaceScenario("wrap.replaceWith(a clone, retyped by a write)", "const w = document.getElementById('wrap'); const k = w.cloneNode(true); k.querySelector('#c').id = 'n'; k.querySelector('#n').type = 'text'; w.replaceWith(k)");
+await replaceScenario("wrap.after(wrap.cloneNode(true)) with the clone's input retyped", "const w = document.getElementById('wrap'); const k = w.cloneNode(true); k.querySelector('#c').id = 'n'; k.querySelector('#n').type = 'text'; w.after(k)");
+await replaceScenario("wrap.replaceChildren(a text input)", "const t = document.createElement('input'); t.id = 'n'; t.type = 'text'; document.getElementById('wrap').replaceChildren(t)");
+
 // ---- select (the other control whose change a user makes)
 const SELECT = `<select id="s"><option value="a">a</option><option value="b">b</option></select>`;
 await scenario("select", "ArrowDown on the focused select", SELECT, async (page) => { await watch(page, "#s", "s"); await page.focus("#s"); await page.keyboard.press("ArrowDown"); });

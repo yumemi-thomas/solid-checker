@@ -50,12 +50,13 @@ pub(crate) const ACTIVATION_ONLY: &str = "change_delivery.checkable-input-activa
 const CHECKABLE_TYPES: [&str; 2] = ["checkbox", "radio"];
 
 /// The DOM's own names, whose mention anywhere in the program (a project file or a dependency's source) may retype a control: the DOM's attribute API
-/// (`el.setAttribute("type", …)`, an alias, a pattern key, `el.attributes.getNamedItem("type").value = …`) and the accessor lookups, which hand out the `type`
-/// setter itself (`HTMLInputElement.prototype.__lookupSetter__("type").call(el, "text")`). A program that spells one is no program whose controls keep their type. A
-/// spelling is matched, never a symbol: the platform's methods are reached through values the types may not name (`any`), so a veto by spelling is the fail-closed
-/// reading, and it can only withdraw the proof. The dialect's own exports are not in this list: they are matched as the exact imported symbols they are
-/// ([`takes_runtime_writer`]).
-const ATTRIBUTE_API: [&str; 20] = [
+/// (`el.setAttribute("type", …)`, an alias, a pattern key, `el.attributes.getNamedItem("type").value = …`), the accessor lookups, which hand out the `type` setter itself
+/// (`HTMLInputElement.prototype.__lookupSetter__("type").call(el, "text")`), and every route to the control's `Attr` node, whose `value`, `nodeValue` or `textContent`
+/// is the attribute (`document.evaluate("//input/@type", …).singleNodeValue.value = "text"`: a write no key `type` names, which Chrome retypes the control by).
+/// A program that spells one is no program whose controls keep their type. A spelling is matched, never a symbol: the platform's methods are reached through
+/// values the types may not name (`any`), so a veto by spelling is the fail-closed reading of the family, and it can only withdraw the proof. The dialect's own
+/// exports are not in this list: they are matched as the exact imported symbols they are ([`takes_runtime_writer`]).
+const ATTRIBUTE_API: [&str; 28] = [
     "setAttribute",
     "setAttributeNS",
     "removeAttribute",
@@ -76,6 +77,14 @@ const ATTRIBUTE_API: [&str; 20] = [
     "__lookupSetter__",
     "__defineGetter__",
     "__defineSetter__",
+    "createAttribute",
+    "createAttributeNS",
+    "evaluate",
+    "createExpression",
+    "XPathEvaluator",
+    "singleNodeValue",
+    "snapshotItem",
+    "iterateNext",
 ];
 
 /// Whether the permit is on: not ablated (as an arm, for the monotone gate's M2b, or as a silence).
@@ -244,29 +253,26 @@ pub(crate) fn program_may_retype(lookup: &SemanticLookup<'_>) -> bool {
 }
 
 /// The first place that may write the `type` of an element, as its file and what it does: a write whose key is `type`, or is a computed one no proof narrows away from it
-/// ([`write_may_be_type`]) (`type-write`); a spelling of a name of the DOM's attribute API or of an accessor lookup ([`ATTRIBUTE_API`]) (`spelled-name`); a computed key that
-/// folds to such a name (`el["set" + "Attribute"]("type", "text")`: the name is spelled nowhere, the key's proof names it) (`folded-name`); or one of the dialect's runtime
-/// writers taken into the file as the exact symbol it is ([`takes_runtime_writer`]) (`runtime-writer`). A dialect that does not name its writers
-/// ([`solid_dialect::Dialect::element_property_writers`]) is unknown, and every program may retype (`writers-unknown`, no file).
+/// ([`write_may_be_type`]) (`type-write`); a spelling of a name of the DOM's attribute API, of an accessor lookup or of a route to an `Attr` node ([`ATTRIBUTE_API`])
+/// (`spelled-name`); a computed key that folds to such a name (`el["set" + "Attribute"]("type", "text")`: the name is spelled nowhere, the key's proof names it)
+/// (`folded-name`); or a module of the dialect's own runtime taken into the file that may write an element ([`takes_runtime_writer`]) (`runtime-writer`).
 ///
 /// Every file of the program is read, a dependency's source as the project's: a dependency needs no element handed to it (`document.querySelectorAll("input").forEach((i)
 /// => { i.type = "text"; })`), and a library setter (`$(el).prop("type", "text")`) is a computed write in the library's own source. A dependency whose source the program
 /// does not hold is the delivery premise's unread module (ADR 1125), which withholds the proof beside this answer. The files of the dialect's own runtime packages
-/// ([`solid_dialect::Dialect::primitive_defining_packages`]) are not read (ADR 0027: the dialect states what its runtime does): their writes of a property are the
-/// compiler's, on elements whose `type` is dynamic or spread, and that is no checkable input here ([`checkable_input`]); their exports that write by a name are the dialect's
-/// answer, asked of every other file. The ecosystem packages (`@solidjs/router`, …) are consumers of the runtime, not part of it, and are read like any other. The reflective
-/// routes (`Object.assign` onto an element it was handed, `defineProperty`, `Reflect.set`, `with`, a key reader, code from a string) are the delivery premise's, asked beside
-/// this answer.
+/// ([`solid_dialect::Dialect::primitive_defining_packages`]) are not read (ADR 0027: the dialect states what its runtime does), because what they do is asked at the
+/// import instead, per module specifier ([`solid_dialect::Dialect::runtime_module_element_writes`]): the root's writes of a property are the compiler's, on elements whose
+/// `type` is dynamic or spread, and that is no checkable input here ([`checkable_input`]); its exports that write by a name, and the frames tier that morphs the children it
+/// finds with the server's attributes, are what the dialect names. The ecosystem packages (`@solidjs/router`, …) are consumers of the runtime, not part of it, and are read
+/// like any other. The reflective routes (`Object.assign` onto an element it was handed, `defineProperty`, `Reflect.set`, `with`, a key reader, code from a string) are the
+/// delivery premise's, asked beside this answer.
 pub(crate) fn retype_hazard(lookup: &SemanticLookup<'_>) -> Option<(String, &'static str)> {
-    let Some(writers) = lookup.dialect.element_property_writers() else {
-        return Some((String::new(), "writers-unknown"));
-    };
     let runtime = lookup.dialect.primitive_defining_packages();
     lookup
         .files()
         .iter()
         .filter(|file| !is_dialect_runtime(file.path.as_str(), runtime))
-        .find_map(|file| file_retype_hazard(file, writers).map(|why| (file.path.to_string(), why)))
+        .find_map(|file| file_retype_hazard(lookup, file).map(|why| (file.path.to_string(), why)))
 }
 
 /// Whether `path` is a file of one of the dialect's own runtime packages (`…/node_modules/@solidjs/web/…`).
@@ -275,7 +281,7 @@ fn is_dialect_runtime(path: &str, runtime: &[&str]) -> bool {
 }
 
 /// What in `file` may write the `type` of an element, if anything ([`retype_hazard`]).
-fn file_retype_hazard(file: &FileFacts, writers: &[(&str, &str)]) -> Option<&'static str> {
+fn file_retype_hazard(lookup: &SemanticLookup<'_>, file: &FileFacts) -> Option<&'static str> {
     let ast = &file.ast;
     if ast
         .write_targets
@@ -298,25 +304,45 @@ fn file_retype_hazard(file: &FileFacts, writers: &[(&str, &str)]) -> Option<&'st
     }) {
         return Some("folded-name");
     }
-    takes_runtime_writer(file, writers).then_some("runtime-writer")
+    takes_runtime_writer(lookup, file).then_some("runtime-writer")
 }
 
-/// Whether `file` takes one of the dialect's runtime writers into the program, by the exact pair `(module, export)` ([`solid_dialect::Dialect::element_property_writers`]).
-/// A named import names its export whatever the local alias is; a default or namespace import of a module that holds a writer exposes them all; `export … from` and
-/// `export * from` such a module hand them on to every importer; an `import()` or a `require()` of it reaches the ones its consumer names, and all when it escapes unnamed.
-/// An import that erases (`import type`) takes nothing. A function of the same name that the program declares is no import: the proof is not refused by a name.
-fn takes_runtime_writer(file: &FileFacts, writers: &[(&str, &str)]) -> bool {
-    let holds = |module: &str| writers.iter().any(|(owner, _)| *owner == module);
-    let names = |module: &str, export: &str| {
-        writers
+/// Whether `file` takes a module of the dialect's own runtime into the program that may write an element ([`solid_dialect::Dialect::runtime_module_element_writes`], asked
+/// of the specifier as written, the root and every subpath). A module is the runtime's when its specifier is a runtime package or a path under one: a specifier the dialect
+/// has not audited is unknown and taken to write, so a subpath a later release adds withdraws the proof until it is audited. A named import names its export whatever the
+/// local alias is, and takes a writer only where the dialect lists that export (or all of them, for the frames tier that rewrites the children it finds); a default or
+/// namespace import exposes every export; `export … from` and `export * from` hand them on to every importer; an `import()` or a `require()` reaches the exports its consumer
+/// names, and all when it escapes unnamed. An import that erases (`import type`) takes nothing. A function of the same name that the program declares is no import: the
+/// proof is not refused by a name.
+fn takes_runtime_writer(lookup: &SemanticLookup<'_>, file: &FileFacts) -> bool {
+    use solid_dialect::ElementWrites;
+    let dialect = lookup.dialect;
+    let packages = dialect.primitive_defining_packages();
+    // What the dialect says of `module`: `None` for a module that is no runtime package's (the program's own or a dependency's, read as source).
+    let answer = |module: &str| {
+        packages
             .iter()
-            .any(|(owner, name)| *owner == module && *name == export)
+            .any(|package| {
+                module == *package
+                    || module
+                        .strip_prefix(package)
+                        .is_some_and(|rest| rest.starts_with('/'))
+            })
+            .then(|| dialect.runtime_module_element_writes(module))
     };
-    // An export no fact names exactly may be any of the module's: a module that holds a writer is taken as holding it.
-    let exact = |module: &str, export: Option<&str>| match export {
-        Some(export) => names(module, export),
-        None => holds(module),
+    // Whether a binding `export` of `module` (any of its exports, when no fact names which) may write an element.
+    let may = |module: &str, export: Option<&str>| match answer(module) {
+        None | Some(Some(ElementWrites::None)) => false,
+        Some(Some(ElementWrites::Exports(names))) => {
+            export.is_none_or(|export| names.contains(&export))
+        }
+        Some(Some(ElementWrites::Any) | None) => true,
     };
+    // Whether merely loading `module` may: the frames tier, and a module no release was audited for, run code of their own when they load.
+    let loads_rewriting =
+        |module: &str| matches!(answer(module), Some(Some(ElementWrites::Any) | None));
+    let holds = |module: &str| may(module, None);
+    let exact = |module: &str, export: Option<&str>| may(module, export);
     let ast = &file.ast;
     let imported = ast
         .imports
@@ -332,8 +358,8 @@ fn takes_runtime_writer(file: &FileFacts, writers: &[(&str, &str)]) -> bool {
         .any(|(module, binding)| match binding.kind {
             ImportKind::Named => exact(module, binding.imported.as_deref()),
             ImportKind::Default | ImportKind::Namespace => holds(module),
-            // `import "m"` binds nothing: it loads the module for its effects, and a writer is reached through a binding.
-            ImportKind::SideEffect => false,
+            // `import "m"` binds nothing, so no export is reached; the module's own load-time code runs.
+            ImportKind::SideEffect => loads_rewriting(module),
         });
     let imported_equals = ast
         .import_equals

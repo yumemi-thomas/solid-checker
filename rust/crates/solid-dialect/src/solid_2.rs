@@ -12,9 +12,9 @@
 
 use crate::{
     AsyncBoundaryShape, Boundary, CallbackOwner, ChildrenNever, CleanupRule, CodePolicy,
-    ComponentEntry, ComponentSlot, ContextRole, Dialect, ExcludingLiteral, Execution,
-    FlowChildrenExclusion, OwnerRequirementRole, Primitive, ReactiveRole, ResultSlot, RuntimeCode,
-    TrackedCallbackTiming, Version, lookup, reverse,
+    ComponentEntry, ComponentSlot, ContextRole, Dialect, ElementWrites, ExcludingLiteral,
+    Execution, FlowChildrenExclusion, OwnerRequirementRole, Primitive, ReactiveRole, ResultSlot,
+    RuntimeCode, TrackedCallbackTiming, Version, lookup, reverse,
 };
 
 mod code_policy;
@@ -593,22 +593,55 @@ impl Dialect for Solid2 {
         &["@solidjs/"]
     }
 
-    /// The exports of `@solidjs/web` that write a property or an attribute of the element
-    /// they are handed under a name the caller gives: `assignProp`'s callers `assign` and
-    /// `spread`, and the three single writers (rc.21 `dist/web.js`: `node[name] = value`,
-    /// `node.setAttribute(name, value)`, `node.setAttributeNS(ns, name, value)`). Each pair
-    /// is a row of [`crate::exports::solid_v2_solidjs_web::VALUES`], which a test holds.
-    /// The other exports write a fixed property (`className`, `style`), an event slot, a
-    /// child, or run what they are handed.
-    fn element_property_writers(&self) -> Option<&'static [(&'static str, &'static str)]> {
-        Some(&[
-            ("@solidjs/web", "assign"),
-            ("@solidjs/web", "setAttribute"),
-            ("@solidjs/web", "setAttributeNS"),
-            ("@solidjs/web", "setProperty"),
-            ("@solidjs/web", "setStatefulProperty"),
-            ("@solidjs/web", "spread"),
-        ])
+    /// The pinned rc.21 runtime, audited subpath by subpath (every exported subpath of the three packages is a line of
+    /// `exports/solid_v2_runtime_subpaths.txt`, which a test holds against this answer and a script holds against the installed
+    /// packages): the reactive core and the server and transport tiers touch no element; `@solidjs/web` writes a property of the
+    /// element compiled output hands it (the element rule of ADR 1148 keeps a non-constant `type` out) and exports six writers that
+    /// take the name from the caller (rc.21 `dist/web.js`: `node[name] = value`, `node.setAttribute(name, value)`,
+    /// `node.setAttributeNS(ns, name, value)`); and the frames tier morphs the children it finds with the attributes of the server's
+    /// markup (`frames/dist/wire.js` `morphAttributes`: `oldEl.setAttribute(name, attr.value)`), `type` included. A specifier no
+    /// release was audited for is unknown.
+    fn runtime_module_element_writes(&self, specifier: &str) -> Option<ElementWrites> {
+        Some(match specifier {
+            // `jsx-runtime` and `jsx-dev-runtime` resolve to the same `dist/web.js` as the root.
+            "@solidjs/web" | "@solidjs/web/jsx-runtime" | "@solidjs/web/jsx-dev-runtime" => {
+                ElementWrites::Exports(&[
+                    "assign",
+                    "setAttribute",
+                    "setAttributeNS",
+                    "setProperty",
+                    "setStatefulProperty",
+                    "spread",
+                ])
+            }
+            "@solidjs/web/frames"
+            | "@solidjs/web/frames/assets"
+            | "@solidjs/web/frames/client"
+            | "@solidjs/web/frames/regions"
+            | "@solidjs/web/frames/server"
+            | "@solidjs/web/frames/trace"
+            | "@solidjs/web/frames/wire" => ElementWrites::Any,
+            "solid-js"
+            | "solid-js/attribution"
+            | "solid-js/internal"
+            | "solid-js/internal/container-trace"
+            | "solid-js/package.json"
+            | "solid-js/refresh"
+            | "@solidjs/signals"
+            | "@solidjs/signals/attribution"
+            | "@solidjs/signals/package.json"
+            | "@solidjs/web/performance-tracks"
+            | "@solidjs/web/serialization"
+            | "@solidjs/web/serialization/decode"
+            | "@solidjs/web/server-functions"
+            | "@solidjs/web/server-functions/client"
+            | "@solidjs/web/server-functions/rich-args"
+            | "@solidjs/web/server-functions/server"
+            | "@solidjs/web/storage" => ElementWrites::None,
+            // `./types/*`: declarations only.
+            _ if specifier.starts_with("@solidjs/web/types/") => ElementWrites::None,
+            _ => return None,
+        })
     }
 
     fn primitive(&self, name: &str) -> Option<Primitive> {

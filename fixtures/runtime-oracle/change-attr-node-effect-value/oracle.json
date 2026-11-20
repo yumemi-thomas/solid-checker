@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1148 (round 1, F1): review probe p03: a createEffect handler on a checkbox, and an exported function that writes an Attr node's value. The checkbox's click creates the effect unowned in Chrome (NO_OWNER_EFFECT), so SC4001 was a true violation on that path; the Attr route now withdraws the proof."
+}

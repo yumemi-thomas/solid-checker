@@ -1170,6 +1170,23 @@ fn the_retype_veto_follows_what_the_project_writes() {
     ] {
         assert!(veto(source), "{source}");
     }
+    // Every route to the control's `Attr` node, whose `value`, `nodeValue` or `textContent` is the attribute: no key `type` is written, and no attribute-API
+    // name but the route's own is spelled (`document.evaluate("//input/@type", …).singleNodeValue.value = "text"` retypes the control in Chrome).
+    for source in [
+        "export function f() { const a = document.evaluate('//input/@type', document, null, 9, null).singleNodeValue as Attr; a.value = 'text'; }",
+        "export function f() { const a = document.evaluate('//input/@type', document, null, 9, null).singleNodeValue as Attr; a.nodeValue = 'text'; }",
+        "export function f() { const a = document.evaluate('//input/@type', document, null, 9, null).singleNodeValue as Attr; a.textContent = 'text'; }",
+        "export function f() { return new XPathEvaluator(); }",
+        "export function f() { return document.createExpression('//input/@type'); }",
+        "export function f(r: XPathResult) { return r.iterateNext(); }",
+        "export function f(r: XPathResult) { return r.snapshotItem(0); }",
+        "export function f(r: XPathResult) { return r.singleNodeValue; }",
+        "export function f() { return document.createAttribute('type'); }",
+        "export function f() { return document.createAttributeNS(null, 'type'); }",
+        "export function f(d: any) { return d['eval' + 'uate']('//input/@type', d, null, 9, null); }",
+    ] {
+        assert!(veto(source), "{source}");
+    }
     // The accessor lookups hand out the `type` setter itself; a name a computed key folds to is spelled nowhere, and the key's proof names it.
     for source in [
         "export function f(el: any) { (HTMLInputElement.prototype as any).__lookupSetter__('type').call(el, 'text'); }",
@@ -1190,7 +1207,7 @@ fn the_retype_veto_follows_what_the_project_writes() {
     }
     // A longer identifier is no such name.
     assert!(!veto(
-        "export function mySetAttribute() { return 1; }\nexport const attributesList = [];"
+        "export function mySetAttribute() { return 1; }\nexport const attributesList = [];\nexport const evaluated = 1;\nexport function evaluateAll() { return 2; }"
     ));
 }
 
@@ -1277,6 +1294,7 @@ fn the_retype_veto_reads_the_dependencies_the_program_runs() {
     // a namespace or default import of the module, a re-export, an `export *`, a dynamic import that names one or escapes, a `require`, an `import = require`.
     for source in [
         "import { setProperty } from '@solidjs/web';\nexport function f(el: HTMLInputElement) { setProperty(el, 'type', 'text'); }",
+        "import { setProperty } from '@solidjs/web/jsx-runtime';\nexport const f = setProperty;",
         "import { setProperty as sp } from '@solidjs/web';\nexport function f(el: HTMLInputElement) { sp(el, 'type', 'text'); }",
         "import { setStatefulProperty as put } from '@solidjs/web';\nexport const f = put;",
         "import { spread } from '@solidjs/web';\nexport function f(el: HTMLInputElement) { spread(el, { type: 'text' }); }",
@@ -1303,12 +1321,44 @@ fn the_retype_veto_reads_the_dependencies_the_program_runs() {
             "import { spread } from '@solidjs/web';\nexport const f = (el) => spread(el, { type: 'text' });"
         )
     ]));
+    // The frames tier morphs the children it finds with the server's attributes, `type` included (`frames/dist/wire.js` `morphAttributes`), and a specifier no release was
+    // audited for is unknown: any way into either takes a module that may write an element, whatever is named, and so does merely loading it.
+    for source in [
+        "import { createFrame } from '@solidjs/web/frames/client';\nexport const f = createFrame;",
+        "import { render } from '@solidjs/web/frames/client';\nexport const f = render;",
+        "import * as frames from '@solidjs/web/frames';\nexport const f = frames;",
+        "import frames from '@solidjs/web/frames/wire';\nexport const f = frames;",
+        "import '@solidjs/web/frames/client';\nexport const f = 1;",
+        "export * from '@solidjs/web/frames';",
+        "export { createFrame } from '@solidjs/web/frames/client';",
+        "export async function f() { return import('@solidjs/web/frames/regions'); }",
+        "export async function f() { const { createFrame } = await import('@solidjs/web/frames/client'); return createFrame; }",
+        "export const f = require('@solidjs/web/frames/assets');",
+        "import web = require('@solidjs/web/frames/trace');\nexport const f = web;",
+        "import { x } from '@solidjs/web/new-tier';\nexport const f = x;",
+        "import '@solidjs/web/new-tier';\nexport const f = 1;",
+        "import { y } from '@solidjs/web/dist/web.js';\nexport const f = y;",
+        "import { z } from 'solid-js/web';\nexport const f = z;",
+    ] {
+        assert!(veto(&[("proj/app.tsx", source)]), "{source}");
+    }
+    assert!(veto(&[
+        app,
+        (
+            "proj/node_modules/dep/index.js",
+            "import { createFrame } from '@solidjs/web/frames/client';\nexport const f = createFrame;"
+        )
+    ]));
     // No import of a writer, whatever the names: the ordinary imports, a type import, a side-effect import, a module that is not the dialect's, and a function the program
     // declares under a writer's name (the proof is not refused by a name).
     for source in [
         "import { render, For, Show, insert, template, className, style } from '@solidjs/web';\nexport const f = [render, For, Show, insert, template, className, style];",
         "import { createSignal } from 'solid-js';\nexport const f = createSignal;",
         "import type { setProperty } from '@solidjs/web';\nexport type F = typeof setProperty;",
+        "import { x } from '@solidjs/web/storage';\nexport const f = x;",
+        "import * as S from 'solid-js';\nexport const f = S;",
+        "import { createSignal } from '@solidjs/signals';\nexport const f = createSignal;",
+        "import pkg from 'solid-js/package.json';\nexport const f = pkg;",
         "import { type spread, render } from '@solidjs/web';\nexport const f = render;",
         "import '@solidjs/web';\nexport const f = 1;",
         "import { setProperty } from 'some-lib';\nexport const f = setProperty;",
