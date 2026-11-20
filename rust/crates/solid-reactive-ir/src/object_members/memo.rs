@@ -739,13 +739,18 @@ impl Memo<BuildSchema> for ObjectMemberTargets {
 /// be resolved exactly.
 type Handlers = Option<Vec<(Arc<str>, Span)>>;
 
+/// ADR 1129: a spread a `merge`/`omit` view proof answered: every key the
+/// spread object may own, and whether the handlers came from that proof.
+pub(crate) type ViewKeys = Option<(Vec<Arc<str>>, bool)>;
+
 /// What each intrinsic element's spread argument of one file slot supplies,
-/// by the argument's span, in production order.
+/// by the argument's span, in production order, with the view proof's keys
+/// (ADR 1129) where it holds.
 pub(crate) struct SpreadTargetsAt;
 
 impl Memo<BuildSchema> for SpreadTargetsAt {
     type Key = SlotKey;
-    type Value = Vec<(Span, Handlers)>;
+    type Value = Vec<(Span, Handlers, ViewKeys)>;
     const NAME: &'static str = "spread_handler_targets";
     const ID: TableId = SPREAD_TARGETS_AT;
 
@@ -771,14 +776,46 @@ impl Memo<BuildSchema> for SpreadTargetsAt {
                 let argument = file.ast.peel_ts_sugar_span(spread.argument);
                 // A direct `eval` anywhere can rewrite any object, so every
                 // spread is unresolved then.
-                let targets = if cx.hazard(Hazard::Eval) {
-                    None
+                let (targets, view) = if cx.hazard(Hazard::Eval) {
+                    (None, None)
                 } else {
-                    spread_handlers(cx, slot, file, argument, &references)?.or_else(|| {
-                        declared_keys_hold_no_listener(cx, slot, spread.argument).then(Vec::new)
-                    })
+                    let targets =
+                        spread_handlers(cx, slot, file, argument, &references)?.or_else(|| {
+                            declared_keys_hold_no_listener(cx, slot, spread.argument).then(Vec::new)
+                        });
+                    // ADR 1129, asked last: a spread an earlier route resolved
+                    // keeps that answer, so the proof only adds answers.
+                    match super::view_spread::view_spread(cx, slot, argument)? {
+                        Some(view) => match (targets, view.handlers) {
+                            // ADR 1134: a handler on a control that may be disabled may never run.
+                            (None, Some(handlers))
+                                if !handlers.is_empty()
+                                    && cx.dialect().delegated_handler_skips_disabled_node()
+                                    && crate::disabled_handlers::view_spread_may_meet_disabled(
+                                        file, element, &view.keys,
+                                    ) =>
+                            {
+                                (None, Some((view.keys, false)))
+                            }
+                            // ADR 1129 round 2 (N1): rc.21's `spread` takes the element's sources as one
+                            // array (`spread(el, [view, { onClick: g }])`), and `collectProps` skips a key a
+                            // later source has, `undefined` included: a listener a later spread or a later
+                            // attribute of the same name may supply is never attached.
+                            (None, Some(handlers))
+                                if !handlers.is_empty()
+                                    && later_source_may_supply(
+                                        cx, file, element, spread, &view.keys,
+                                    ) =>
+                            {
+                                (None, Some((view.keys, false)))
+                            }
+                            (None, Some(handlers)) => (Some(handlers), Some((view.keys, true))),
+                            (targets, _) => (targets, Some((view.keys, false))),
+                        },
+                        None => (targets, None),
+                    }
                 };
-                spreads.push((spread.argument, targets));
+                spreads.push((spread.argument, targets, view));
             }
         }
         Ok(spreads)
@@ -791,6 +828,36 @@ impl Memo<BuildSchema> for SpreadTargetsAt {
     fn implied((id, _): &SlotKey) -> Vec<Input> {
         own_inputs(*id)
     }
+}
+
+/// ADR 1129 round 2 (N1): whether a source written after `spread` on `element`
+/// may supply one of the view's listener keys: any later spread (its keys are
+/// not asked), or a later attribute whose name is such a key. rc.21's web
+/// `spread` (`collectProps` over the compiled source array) skips a key any
+/// later source has, so the view's function under it is never attached.
+fn later_source_may_supply(
+    cx: Cx<'_, '_, '_>,
+    file: &FileFacts,
+    element: &ast::JsxElementFact,
+    spread: &ast::JsxSpreadAttributeFact,
+    keys: &[Arc<str>],
+) -> bool {
+    let after = spread.span.end;
+    if element
+        .spreads
+        .iter()
+        .any(|other| other.span.start >= after)
+    {
+        return true;
+    }
+    element.attributes.iter().any(|attribute| {
+        attribute.span.start >= after
+            && file.source_text(attribute.name).is_some_and(|name| {
+                keys.iter().any(|key| {
+                    key.as_ref() == name && cx.dialect().spread_key_is_event(key) != Some(false)
+                })
+            })
+    })
 }
 
 /// ADR 0436: a spread argument that no exact object resolves still holds no

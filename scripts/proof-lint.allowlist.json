@@ -383,6 +383,12 @@
         "why": "pending-review"
       }
     },
+    "rust/crates/solid-reactive-ir/src/disabled_handlers.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "ADR 1129 beside ADR 1134: the spelling is a JSX attribute name (`disabled`), which is syntax the compiler reads by name, not a binding; the match only keeps a view spread's handlers unresolved (an obligation), never makes a clean or a violation"
+      }
+    },
     "rust/crates/solid-reactive-ir/src/effect_api.rs": {
       "name-only-match": {
         "count": 1,
