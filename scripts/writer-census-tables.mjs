@@ -12,7 +12,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
 
-import { MECHANISMS, closeOver, decided, describe, dropRoots, evaluate, isFamily3, loadRun, rowKey, shapeDecided } from "./writer-census-report.mjs";
+import { MECHANISMS, closeOver, decided, describe, dropRoots, evaluate, fileClass, isFamily3, loadRun, rowKey, shapeDecided } from "./writer-census-report.mjs";
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((pairs, value, index, all) => (index % 2 === 0 ? [...pairs, [value.replace(/^--/, ""), all[index + 1]]] : pairs), []));
 const appsRoot = resolve(args["apps-root"] ?? "/Users/thomas/Documents/Github/solid-checker-rc21-frozen-v2/apps");
@@ -41,8 +41,15 @@ const table = (headers, rows) => [`| ${headers.join(" | ")} |`, `|${headers.map(
 
 const described = new Map([...baseline.values()].map((project) => [project.id, describe(project, appsRoot)]));
 const floorRows = (id) => (floor.has(id) ? floor.get(id).rows.filter(isFamily3).length : null);
-// `--assume-floor-zero` ranks the plan before the floor run exists (every row of a freed project goes); the tables then are not the final ones.
-const floorKeys = (id) => (floor.has(id) ? new Set(floor.get(id).rows.filter(isFamily3).map(rowKey)) : args["assume-floor-zero"] ? new Set() : null);
+// The floor run's rows of a project: all, and those in product files. `--assume-floor-zero` ranks the plan before the floor run exists (every row of a freed project goes); the
+// tables then are not the final ones.
+const floorInfo = (id) => {
+  if (floor.has(id)) {
+    const rows = floor.get(id).rows.filter(isFamily3);
+    return { total: rows.length, product: rows.filter((row) => fileClass(row[2]) === "product").length };
+  }
+  return args["assume-floor-zero"] ? { total: 0, product: 0 } : null;
+};
 const total = (list, pick) => list.reduce((sum, item) => sum + pick(item), 0);
 
 const nameOf = (selected) => [...selected].sort().join("+");
@@ -55,19 +62,21 @@ const stats = { pairs: 0, agree: 0, disagree: [] };
 function run(selected) {
   const scenario = readScenario(nameOf(selected));
   const perProject = [...described.values()].map((project) => {
-    const offline = evaluate(selected, project, floorKeys(project.id));
+    const offline = evaluate(selected, project, floorInfo(project.id));
     const found = scenario?.projects.find((item) => item.id === project.id);
     let { freed, upper } = offline;
     let measured = false;
     if (found) {
       measured = true;
-      const after = new Set(scenarioRows(project.id, found).filter(isFamily3).map(rowKey));
-      const gone = project.family3.filter(([key]) => !after.has(key));
-      upper = gone.length;
-      freed = offline.realmOnly ? gone.filter(([, cls]) => cls === "product").length : gone.length;
+      // The rows freed are the net change in the project's family-3 rows, counted from the run (a row at the floor may sit at a site the baseline had no row at).
+      const afterRows = scenarioRows(project.id, found).filter(isFamily3);
+      upper = project.family3.length - afterRows.length;
+      const productBefore = project.family3.filter(([, cls]) => cls === "product").length;
+      const productAfter = afterRows.filter((row) => fileClass(row[2]) === "product").length;
+      freed = offline.realmOnly ? productBefore - productAfter : upper;
       stats.pairs += 1;
-      if (floorKeys(project.id) && upper === offline.upper) stats.agree += 1;
-      else if (floorKeys(project.id)) stats.disagree.push(`${nameOf(selected)} ${project.id}: measured ${upper}, offline ${offline.upper}`);
+      if (floorInfo(project.id) && upper === offline.upper) stats.agree += 1;
+      else if (floorInfo(project.id)) stats.disagree.push(`${nameOf(selected)} ${project.id}: measured ${upper}, offline ${offline.upper}`);
     }
     return { id: project.id, app: appOf(project.id), rows: project.rows, ...offline, freed, upper, measured, moved: found?.moved ?? null };
   });
@@ -296,7 +305,7 @@ const aloneRuns = new Map(alone.map((id) => [id, run([id])]));
   walk(0, []);
   combos.sort((a, b) => a.cost - b.cost || a.selected.length - b.selected.length);
   const live = projects.filter((project) => project.writers.some((writer) => writer.effective));
-  const cheapest = (project, allowed) => combos.find((combo) => allowed(combo) && evaluate(combo.selected, project, new Set()).left.length === 0) ?? null;
+  const cheapest = (project, allowed) => combos.find((combo) => allowed(combo) && evaluate(combo.selected, project, { total: 0, product: 0 }).left.length === 0) ?? null;
   const unlock = live.map((project) => ({
     id: project.id,
     app: appOf(project.id),
@@ -582,13 +591,13 @@ writeFileSync(join(out, "tables.md"), `${sections.join("\n\n")}\n`);
     if (writers.length === 0) continue;
     const rows = writers.map((writer) => rowOf(writer, project));
     const key = `${appOf(project.id)}\n${JSON.stringify(rows)}`;
-    const group = groups.get(key) ?? { app: appOf(project.id), projects: [], rows, writers: writers.length, open: project.openLoads };
+    const group = groups.get(key) ?? { app: appOf(project.id), projects: [], rows, writers: writers.length, packages: new Set(writers.map((writer) => writer.canonical || writer.root)).size, open: project.openLoads };
     group.projects.push({ project: projectOf(project.id), rows: project.rows });
     groups.set(key, group);
   }
   for (const group of groups.values()) {
     const names = group.projects.map((entry) => `${entry.project} (${number(entry.rows)})`).join(", ");
-    lines.push(`## ${group.app}: ${group.writers} writers; ${names}${group.open ? "; the project has an open load (computed or unresolved)" : ""}`, "");
+    lines.push(`## ${group.app}: ${group.packages} writer packages (${group.writers} roots); ${names}${group.open ? "; the program holds a load no import names" : ""}`, "");
     lines.push(table(["root", "loaded", "value", "product", "loaded by", "decided by (every mechanism) or what stays", "first problem", "signature", "causes (class×count)", "files (first 2)"], group.rows), "");
   }
   writeFileSync(join(out, "writers.md"), `${lines.join("\n")}\n`);

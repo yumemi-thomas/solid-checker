@@ -49,9 +49,10 @@ function moved(baseRows, rows) {
     const rule = site.split("|")[0];
     const after = now.get(site);
     if (!after) bump(rule, "gone", before.length);
-    else if (signature(before, 1) !== signature(after, 1)) bump(rule, "changed", Math.max(before.length, after.length));
+    // The rows at one site: more before than after, the others stayed; fewer, the others arrived; as many, the kinds or the contexts may differ.
     else if (before.length > after.length) bump(rule, "gone", before.length - after.length);
     else if (after.length > before.length) bump(rule, "arrived", after.length - before.length);
+    else if (signature(before, 1) !== signature(after, 1)) bump(rule, "changed", before.length);
     else if (signature(before, 5) !== signature(after, 5)) bump(rule, "relabelled", before.length);
   }
   for (const [site, after] of now) if (!was.has(site)) bump(site.split("|")[0], "arrived", after.length);

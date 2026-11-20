@@ -279,24 +279,23 @@ export function decided(S, writer, described) {
 export const rowKey = (reduced) => `${reduced[0]}|${reduced[2]}@${reduced[3]}-${reduced[4]}`;
 
 /**
- * What the mechanisms `selected` do to one project: the writers left, and the rows that go if none is left. The rows that go are the baseline's family-3 rows the floor run
- * (every any-name writer left out) does not have (`floorKeys`, a Set of `rowKey`s; `null` when there is no floor run, and then nothing is counted). M2b (the product realm) frees
- * a row only where the product realm is the whole question: a writer that only M2b decides still applies to the rows of files the product's entries do not reach, so those rows
- * (test, config and script files by name) stay.
+ * What the mechanisms `selected` do to one project: the writers left, and the rows that go if none is left. The rows that go are the net change in the project's family-3 rows
+ * between the baseline and the floor run (every any-name writer left out: `floor = { total, product }`, the rows of the floor run and those in product files; `null` when there is
+ * no floor run, and then nothing is counted). M2b (the product realm) frees a row only where the product realm is the whole question: a writer that only M2b decides still applies
+ * to the rows of files the product's entries do not reach, so those rows (test, config and script files by name) stay.
  */
-export function evaluate(selected, described, floorKeys) {
+export function evaluate(selected, described, floor) {
   const S = closeOver(selected);
   const effective = described.writers.filter((writer) => writer.effective);
   const left = effective.filter((writer) => !decided(S, writer, described));
-  const rows = floorKeys ? described.family3.filter(([key]) => !floorKeys.has(key)) : null;
   let freed = 0;
   let upper = 0;
   let realmOnly = false;
-  if (effective.length > 0 && left.length === 0 && rows) {
-    upper = rows.length;
+  if (effective.length > 0 && left.length === 0 && floor) {
+    upper = described.family3.length - floor.total;
     const withoutRealm = new Set([...S].filter((id) => id !== "M2b" && id !== "M2bO"));
     realmOnly = (S.has("M2b") || S.has("M2bO")) && effective.some((writer) => !decided(withoutRealm, writer, described));
-    freed = realmOnly ? rows.filter(([, cls]) => cls === "product").length : rows.length;
+    freed = realmOnly ? described.family3.filter(([, cls]) => cls === "product").length - floor.product : upper;
   }
   // The same by package: a root a linker spells two ways (a link and its real directory) or a declaration package and its runtime package is one package.
   const packageOf = (writer) => writer.canonical || writer.root;
