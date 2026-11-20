@@ -71,10 +71,11 @@ function LaterSpread(props: Props) {
 }
 
 // Positive twin: the attribute comes first, so the view's later key wins and
-// its handler runs with no owner.
+// its handler runs with no owner (the cast keeps TypeScript from rejecting
+// the attribute the spread's type always overwrites, TS2783).
 function EarlierAttr(props: Props) {
   const merged = merge({ onClick: () => { createRenderEffect(() => count(), () => {}); } }, props);
-  return <button onClick={() => setCount(count() + 1)} {...merged} />;
+  return <button onClick={() => setCount(count() + 1)} {...(merged as Props)} />;
 }
 
 const more: Props = {};
