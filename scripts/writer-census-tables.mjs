@@ -12,7 +12,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
 
-import { MECHANISMS, closeOver, decided, describe, dropRoots, evaluate, isFamily3, loadRun, rowKey } from "./writer-census-report.mjs";
+import { MECHANISMS, closeOver, decided, describe, dropRoots, evaluate, isFamily3, loadRun, rowKey, shapeDecided } from "./writer-census-report.mjs";
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((pairs, value, index, all) => (index % 2 === 0 ? [...pairs, [value.replace(/^--/, ""), all[index + 1]]] : pairs), []));
 const appsRoot = resolve(args["apps-root"] ?? "/Users/thomas/Documents/Github/solid-checker-rc21-frozen-v2/apps");
@@ -120,15 +120,18 @@ if (args["emit-scenarios"]) {
     entry.projects += 1;
     entry.rows += project.rows;
     entry.floor += floorRows(project.id) ?? project.rows;
+    const packages = new Set(effective.map((writer) => writer.canonical || writer.root)).size;
     entry.writers += effective.length;
+    entry.packages = (entry.packages ?? 0) + packages;
+    entry.maxPackages = Math.max(entry.maxPackages ?? 0, packages);
     entry.maxWriters = Math.max(entry.maxWriters, effective.length);
     entry.open += project.openLoads ? 1 : 0;
     entry.openProduct += project.openProductLoads ? 1 : 0;
     entry.unread += project.hasUnreadLoaded ? 1 : 0;
     byApp.set(entry.app, entry);
   }
-  const rows = [...byApp.values()].sort((a, b) => b.rows - a.rows).map((entry) => [entry.app, entry.projects, number(entry.rows), floor.size ? number(entry.floor) : "n/a", entry.maxWriters, `${entry.open} / ${entry.openProduct}`, entry.unread]);
-  sections.push(`### Baseline: family-3 rows, the floor, and the any-name writers per app (measured)\n\n${table(["app", "projects", "family-3 rows", "rows with every writer decided (floor)", "most writers in a project", "projects with an open load (any file / product files)", "projects whose loaded writers include unread code"], rows)}\n\nTotal: ${number(results.baseline.rows)} rows${floor.size ? `, ${number(results.baseline.floorRows)} at the floor (${number(results.baseline.rows - results.baseline.floorRows)} are held by any-name writers)` : ""}.`);
+  const rows = [...byApp.values()].sort((a, b) => b.rows - a.rows).map((entry) => [entry.app, entry.projects, number(entry.rows), floor.size ? number(entry.floor) : "n/a", `${entry.maxPackages} (${entry.maxWriters})`, `${entry.open} / ${entry.openProduct}`, entry.unread]);
+  sections.push(`### Baseline: family-3 rows, the floor, and the any-name writers per app (measured)\n\n${table(["app", "projects", "family-3 rows", "rows with every writer decided (floor)", "most writer packages in a project (roots)", "projects with an open load (any file / product files)", "projects whose loaded writers include unread code"], rows)}\n\nTotal: ${number(results.baseline.rows)} rows${floor.size ? `, ${number(results.baseline.floorRows)} at the floor (${number(results.baseline.rows - results.baseline.floorRows)} are held by any-name writers)` : ""}.`);
   results.baseline.byApp = [...byApp.values()];
 }
 
@@ -192,18 +195,35 @@ if (args["emit-scenarios"]) {
 
 // 2b. The causes in detail: occurrences (n) and the roots (counted once per app) that have them.
 {
+  // What is done with the global object (or the window a route gives): bucketed by the first mechanism whose rule decides it, else by how it stays handed on.
   const shapeClass = (parsed) => {
-    const alias = /^alias\[(.*)\]$/.exec(parsed.shape);
-    let base;
-    if (alias) {
-      const uses = alias[1] === "" ? [] : alias[1].split(",");
-      const reads = ["member", "pattern", "inspected"];
-      base = uses.every((use) => reads.includes(use)) ? "alias, every use a read of named globals (M1)" : uses.every((use) => [...reads, "computed"].includes(use)) ? "alias, reads and computed reads (M1w)" : uses.every((use) => [...reads, "computed", "coerced", "regexp-arg"].includes(use)) ? "alias, also coerced or given to RegExp (M3)" : "alias handed on or stored";
-    } else if (parsed.shape === "alias-open") base = "alias not followed (reassigned, exported, script var)";
-    else if (/^(argument|new):/.test(parsed.shape)) base = parsed.shape.startsWith("argument:RegExp") || parsed.shape.startsWith("new:RegExp") ? "given to RegExp" : "handed to a call";
-    else if (parsed.shape.startsWith("member:")) base = parsed.shape === "member:valueOf" ? "member valueOf" : "member read off a fallback";
-    else base = parsed.shape;
-    return `${parsed.branch ? "(through ||/??/?:) " : ""}${base}`;
+    const label = shapeClassBase(parsed);
+    return parsed.route ? label.replace(/^M1w?:/, (prefix) => (prefix === "M1:" ? "M1/M3:" : "M1w/M3:")) : label;
+  };
+  const shapeClassBase = (parsed) => {
+    const shape = parsed.shape;
+    const alias = /^alias\[(.*)\]$/.exec(shape);
+    if (shapeDecided(shape, "base")) {
+      if (alias) return "M1: a binding whose every use only reads (member, pattern, a look, a symbol-keyed or inert computed read)";
+      if (shape === "pattern") return "M1: an object pattern of named keys";
+      if (shape.startsWith("member:")) return "M1: a member read (off the value, or off a fallback `a || window`)";
+      if (shape === "inspected") return "M1: only looked at";
+      if (shape.startsWith("computed-read:symbol")) return "M1: a computed read by a symbol key";
+      if (shape.startsWith("computed-read:")) return "M1: a computed read whose value is only looked at or coerced";
+      return "M1: given to a standard function that returns none of its members (Object.keys, Object.hasOwn, Reflect.has)";
+    }
+    if (shapeDecided(shape, "wide")) {
+      if (alias) return "M1w: a binding whose uses include a computed read or a hop into a same-file function that only reads";
+      if (shape.startsWith("computed-read:")) return "M1w: a computed read whose value the next step does not keep in play";
+      return "M1w: one hop into a function of the file that only reads its parameter";
+    }
+    if (shapeDecided(shape, "route")) return alias ? "M3: a binding that is also coerced or given to RegExp" : "M3: coerced, or given to RegExp (the window's `source` is no window)";
+    if (alias || shape === "alias-open") return "stays: a binding that is handed on, stored, reassigned, exported or not followed";
+    if (shape.startsWith("computed-read:")) return /^computed-read:\w+>(callee|member:(prototype|constructor|__proto__|call|apply|bind))$/.test(shape) ? "stays: a computed read whose value is called or its prototype or constructor read" : "stays: a computed read whose value is handed on or stored";
+    if (/^argument:/.test(shape)) return shape.endsWith("~open") ? "stays: handed to a function of the file that does more than read it" : "stays: handed to a call (not a same-file reader or a standard read-only function)";
+    if (/^new:/.test(shape)) return "stays: handed to a constructor";
+    if (shape === "callee") return "stays: called";
+    return `stays: ${{ return: "returned", assign: "assigned", store: "stored in an object, array or class field", export: "exported", spread: "spread", other: "another use", "pattern-open": "an object pattern with a rest element, a computed key or a nested pattern", "pattern-nested": "a nested pattern" }[shape] ?? shape}`;
   };
   const aggregate = (pick, keyOf) => {
     const map = new Map();
@@ -224,8 +244,13 @@ if (args["emit-scenarios"]) {
   const names = aggregate((parsed) => (parsed.family === "escape" && !parsed.route ? shapeClass(parsed) : null));
   const routes = aggregate((parsed, cause) => (parsed.family === "escape" && parsed.route ? `${parsed.head} ${PROGRAM(cause.file) ? "in a file of the program" : "in installed JavaScript"}: ${parsed.receiver ? `receiver ${parsed.receiver.replace(/^member:.*/, "member")}` : "no receiver"}` : null));
   const routeShapes = aggregate((parsed) => (parsed.family === "escape" && parsed.route ? shapeClass(parsed) : null));
-  const generated = aggregate((parsed) => (parsed.family === "generated" ? parsed.kind.replace(/^function-member:.*/, "function-member:<name>") : null));
-  const handed = aggregate((parsed) => (parsed.family === "handed-on" ? parsed.shape.replace(/^(argument|new):.*/, "$1:<callee>") : null));
+  const generated = aggregate((parsed) => (parsed.family === "generated" ? `${MECHANISMS.M4.decides(parsed) ? "M4" : MECHANISMS.M4w.decides(parsed, null, null, new Set(["M1"])) ? "M4w" : "stays"}: ${parsed.kind.replace(/^function-member:.*/, "function-member:<name>")}` : null));
+  const handed = aggregate((parsed) => {
+    if (parsed.family !== "handed-on") return null;
+    if (MECHANISMS.M5b.decides(parsed)) return "M5b: a computed read of the prototype (a member read, not a hand-on)";
+    if (MECHANISMS.M5.decides(parsed)) return "M5: handed to a call (followed into the callee: a named writer)";
+    return `stays: ${parsed.shape.replace(/^(argument|new):.*/, "$1 <callee>").replace(/^computed-read:.*/, "computed read whose value is called or handed on")}`;
+  });
   const unread = aggregate((parsed) => (parsed.family === "unread" ? parsed.blocker : null));
   const head = ["class", "roots (per app)", "occurrences"];
   sections.push(`### Causes in detail (measured)\n\n**The global object handed on by a name (\`window\`, \`globalThis\`, \`self\`, \`this\`…), by what is done with it**\n\n${table(head, names)}\n\n**\`source\`/\`view\`/\`defaultView\` routes, by where they are and what they were read off**\n\n${table(head, routes)}\n\n**Routes by what is done with the window**\n\n${table(head, routeShapes)}\n\n**Generated code, by kind**\n\n${table(head, generated)}\n\n**A prototype handed on, by where it goes**\n\n${table(head, handed)}\n\n**Code nobody read, by blocker**\n\n${table(head, unread)}`);
@@ -334,6 +359,32 @@ const aloneRuns = new Map(alone.map((id) => [id, run([id])]));
   for (const item of everything.perProject.filter((entry) => entry.effective > 0 && entry.packagesLeft > 0).sort((a, b) => b.rows - a.rows)) {
     leftRows.push([`${item.app}/${projectOf(item.id)}`, number(item.rows), item.packagesLeft, item.leftNames.slice(0, 8).join(", ") + (item.leftNames.length > 8 ? ", …" : "")]);
   }
+  // Of the writer packages that stay, which causes no cause-level mechanism (the bounds included) decides: what the floor is made of.
+  {
+    const causeLevel = closeOver(["M1u", "M3u", "M4w", "M5u"]);
+    const families = new Map();
+    const familyOf = (parsed) => (parsed.family === "unread" ? `unread: ${parsed.blocker}` : parsed.family === "generated" ? `generated: ${parsed.kind.replace(/:.*$/, "")}` : parsed.family === "key" ? "a prototype member written under a key nothing decides" : parsed.family === "pattern" ? "a prototype bound by a pattern nothing reads" : parsed.family);
+    const seen = new Set();
+    let packagesLeft = 0;
+    for (const item of everything.perProject) {
+      for (const writer of item.left) {
+        const key = `${item.app}::${writer.canonical || writer.root}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        packagesLeft += 1;
+        const own = new Set();
+        for (const { cause, parsed } of writer.causeClasses) {
+          const decidedHere = ["M1u", "M3u", "M4w", "M5u"].some((id) => MECHANISMS[id].decides(parsed, writer, cause, causeLevel));
+          if (!decidedHere) own.add(familyOf(parsed));
+        }
+        for (const family of own.size === 0 ? ["(only root-level mechanisms decide it)"] : own) families.set(family, (families.get(family) ?? 0) + 1);
+        if (own.size === 1) families.set(`only ${[...own][0]}`, (families.get(`only ${[...own][0]}`) ?? 0) + 1);
+      }
+    }
+    const rows = [...families.entries()].sort((a, b) => b[1] - a[1]).map(([family, count]) => [family, number(count)]);
+    sections.push(`### What the floor is made of: the ${number(packagesLeft)} writer packages (per app) that stay under every mechanism together, by the causes no cause-level mechanism (the upper bounds M1u, M3u, M4w, M5u included) decides (measured)\n\n${table(["cause", "writer packages with it"], rows)}`);
+    results.floorMadeOf = rows;
+  }
   sections.push(`### What stays under every mechanism together (M1u, M3u, M4w, M5u, M2b, M6, M7v), by project (measured causes)\n\n${table(["project", "family-3 rows", "writer packages left", "which (first 8)"], leftRows)}`);
   results.left = leftRows;
   // The sets to run for the plan and the unlock table.
@@ -354,6 +405,79 @@ if (args["emit-scenarios"] && args.stage === "B") {
   writeFileSync(resolve(args["emit-scenarios"]), `${JSON.stringify(list, null, 1)}\n`);
   process.stderr.write(`${list.length} scenarios (stage B) -> ${args["emit-scenarios"]}\n`);
   process.exit(0);
+}
+
+// M2's fail-closed condition: a program with a load no import names (a computed `import(x)`, an import no resolution answers that loads code, unread JavaScript beside a project
+// declaration) keeps today's answer. Per project: what holds it open, and the writers M2b would decide if it did apply.
+{
+  const lines = [];
+  for (const project of projects.filter((item) => item.writers.some((writer) => writer.effective))) {
+    const effective = project.writers.filter((writer) => writer.effective);
+    const productOnly = new Set(effective.filter((writer) => !writer.productLoaded).map((writer) => writer.canonical || writer.root)).size;
+    const packages = new Set(effective.map((writer) => writer.canonical || writer.root)).size;
+    const projectJs = (project.census?.program?.projectJsDeclarations ?? 0) > 0;
+    const reasons = [...(project.opens ?? []).slice(0, 3).map((open) => open.replace(/^[^ ]*\/(?=[^/ ]+ )/, "")), ...(projectJs ? [`${project.census.program.projectJsDeclarations} project declaration files with unread JavaScript beside them`] : [])];
+    lines.push([`${appOf(project.id)}/${projectOf(project.id)}`, number(project.rows), packages, productOnly, project.openLoads ? (project.openProductLoads ? "yes (product files)" : "yes (other files only)") : "no", reasons.join("; ") || "-"]);
+  }
+  lines.sort((a, b) => Number(b[3]) - Number(a[3]));
+  sections.push(`### M2's fail-closed condition by project (measured): what holds the load set open\n\n\`writers no product file loads\` are the writers M2b would decide where it applies; \`open load\` is whether the program holds a load no import names, so that M2 keeps today's answer.\n\n${table(["project", "family-3 rows", "writer packages", "writers no product file loads", "open load", "what holds it open (first)"], lines)}`);
+  results.openLoads = lines;
+}
+
+// The design report's top writers (`coord-land/writer-decision-design.md` section 1), re-read from the census: why each is a writer, what loads it, what would decide it.
+{
+  const top = [["@app-game/abr-brush", "app-game", "58,489 (first writer)"], ["@types/chai", "kui", "19,639"], ["@testing-library/dom", "kui", "11,267"], ["@inlang/paraglide-js", "probus-hk", "7,404"], ["@babel/parser", "inferay", "5,515"], ["@sentry/browser", "solid-groove", "5,003"], ["vite", "donegeon-client", "4,725"], ["@firebase/analytics", "solid-groove", "4,170"], ["@codemirror/commands", "ai-memory-ui", "3,152"], ["@bufbuild/protobuf", "compass-ui", "3,078"], ["@ag-grid-community/core", "dashiboard-ui", "1,651"]];
+  const every = closeOver(["M1u", "M3u", "M4w", "M5u", "M2b", "M6", "M7v"]);
+  const rows = [];
+  for (const [name, app, said] of top) {
+    const project = projects.find((item) => appOf(item.id) === app && item.writers.some((writer) => writer.name === name && writer.effective));
+    const writer = project?.writers.find((item) => item.name === name && item.effective);
+    if (!writer) {
+      rows.push([name, app, said, "not a writer here", "", "", ""]);
+      continue;
+    }
+    const families = new Map();
+    for (const { cause, parsed } of writer.causeClasses) {
+      const family = parsed.family === "escape" ? (parsed.route ? `route ${parsed.head}` : `escape ${parsed.head}`) : parsed.family === "unread" ? `unread ${parsed.blocker}` : parsed.family === "generated" ? `generated ${parsed.kind.replace(/:.*$/, "")}` : parsed.family;
+      families.set(family, (families.get(family) ?? 0) + cause.n);
+    }
+    const by = decided(every, writer, project);
+    rows.push([name, app, said, [...families.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([family, count]) => `${family}×${count}`).join("; "), `${writer.loaded ? "y" : "n"}/${writer.valueLoaded ? "y" : "n"}/${writer.productLoaded ? "y" : "n"}`, writer.importerClasses.join("+") || "none", by ?? "stays"]);
+  }
+  sections.push(`### The design report's top writers, re-read from the census (measured)\n\n\`rows said\` is the report's first-writer attribution at slice E. \`loaded/value/product\`: the backend's flag, a value import reaches it, a product file's does. \`decided by\`: the mechanisms that decide every cause of the root, or the root, under every mechanism together; \`stays\` where none does.\n\n${table(["package", "app", "rows said", "why a writer (class×count)", "loaded/value/product", "loaded by (value importers)", "decided by"], rows)}`);
+  results.topWriters = rows;
+}
+
+// The floor and V2. The floor leaves out every counted writer: what is left is what no writer-side mechanism can move. V2 leaves out all but the last writer of each project
+// with two or more: where the rows then stay, a project's rows are held by any one writer, not by the first the message names.
+{
+  const floorRun = readScenario("floor");
+  if (floorRun) {
+    const byKind = new Map();
+    const other = {};
+    for (const found of floorRun.projects) {
+      for (const [rule, counts] of Object.entries(found.moved.byRule)) {
+        other[rule] ??= { gone: 0, arrived: 0, changed: 0 };
+        for (const name of Object.keys(counts)) other[rule][name] += counts[name];
+      }
+      for (const row of scenarioRows(found.id, found).filter(isFamily3)) {
+        const kind = (/:prototype-([^:]*)$/.exec(row[5]) ?? [, "?"])[1];
+        byKind.set(kind, (byKind.get(kind) ?? 0) + 1);
+      }
+    }
+    const kinds = [...byKind.entries()].sort((a, b) => b[1] - a[1]).map(([kind, count]) => [kind, number(count)]);
+    const rulesMoved = Object.entries(other).map(([rule, counts]) => [rule, number(counts.gone), number(counts.arrived), number(counts.changed)]);
+    sections.push(`### The floor: the rows left with every any-name writer decided, by kind (measured)\n\n${table(["kind of row", "rows left"], kinds)}\n\nEverything the floor run moved, by rule (rows gone, arrived, changed kind):\n\n${table(["rule", "gone", "arrived", "changed"], rulesMoved)}\n\nViolations: ${floorRun.totals.violationsDelta >= 0 ? "+" : ""}${floorRun.totals.violationsDelta}.`);
+    results.floor = { rows: floorRun.totals.family3, freed: floorRun.totals.freed, byKind: kinds, moved: other };
+  }
+  const v2 = readScenario("v2");
+  if (v2) {
+    const rows = v2.projects.filter((found) => found.key).map((found) => [`${appOf(found.id)}/${projectOf(found.id)}`, found.dropped, number(found.family3Base), number(found.family3), found.family3 === found.family3Base ? "same" : `${number(found.family3 - found.family3Base)}`]);
+    const same = v2.projects.filter((found) => found.key && found.family3 === found.family3Base).length;
+    const ran = v2.projects.filter((found) => found.key).length;
+    sections.push(`### V2: every writer but one decided (measured): ${same} of ${ran} projects with two or more writers keep all their rows\n\nThe project's rows are held by any one of its writers, not by the one a row's message names: deciding all but one frees nothing.\n\n${table(["project", "writers left out", "rows", "rows with one writer left", "change"], rows)}`);
+    results.v2 = { projects: ran, same, rows };
+  }
 }
 
 // The checker's own class matcher (`SOLID_CHECKER_WHATIF_WRITER_CAUSES`) against the offline step: the roots a run still counts, from its census, against the roots the offline
