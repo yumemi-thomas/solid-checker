@@ -8104,6 +8104,14 @@
    "to": 17,
    "adr": "ADR 1152",
    "fact": "the program writes a name with an escape (an identifier, or a string or template whose whole value is one word): every violation of an execution rule turns uncertifiable under escaped-name-unresolved and each project file gets one file-wide SC9012"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc9012",
+   "key": "SC1001 function-run-unplaced",
+   "from": 6,
+   "to": 8,
+   "adr": "ADR 1146",
+   "fact": "a helper handed to an event-handler slot under the read veto is an unproven use (local_access helper_value_execution: Unknown under synchronous_event_read_dispatch_present)"
   }
  ]
 }

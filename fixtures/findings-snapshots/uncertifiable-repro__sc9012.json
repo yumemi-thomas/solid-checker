@@ -1525,6 +1525,17 @@
       "kind": "uncertifiable",
       "blocker": "function-run-unplaced",
       "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/withheld-prefix-call.tsx",
+      "start": 657,
+      "end": 670,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc9012/src/withheld-prefix-member.tsx",
       "start": 463,
       "end": 469,
@@ -1561,6 +1572,17 @@
       "path": "fixtures/uncertifiable-repro/sc9012/src/withheld-prefix-member.tsx",
       "start": 657,
       "end": 669,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc9012/src/withheld-prefix-member.tsx",
+      "start": 684,
+      "end": 697,
       "fixes": 0
     }
   ]

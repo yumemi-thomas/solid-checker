@@ -42476,5 +42476,29 @@
   "found": "the author's own review of focus_delivery.rs after review-1150.md (2026-11-21), and the coordinator's item from the ADR 1148 round 2 review (a spelling veto read from source text is bypassed by a unicode escape, Chrome-verified there)",
   "fixed": "ADR 1151 round 1: `premise_may_register` (a global write under a registering name), cooked-name compares and `escaped_word_registers` (`AstFacts::escaped_words`), `plain_premise::loads_unscanned_code`, `product_realm::page_may_run_code`, every file read but the dialect's own runtime",
   "outside": "the grids place a site in the program's own text, and a handler written there is covered at its own `onCleanup` by SC3001 `leaf-owner-forbidden-call` and SC4001 `missing-owner` (measured: the reviewed build is `covered-uncertifiable` on every in-file variant of these programs, the row at the `focus()` call being absent), so the missing SC9012 shows only where the handler is in a package and the only App frame on Chrome's stack is the `focus()` line (the review's `pr-h`). The grids reach a package site through the package-site cells (ADR 0957) by call entries (`call`, `callback`, `jsx`, …), and no cell hands the package's export to a registration route (`addEvent(el, name, site1)`) beside a leaf `focus()`; no generated program can be this false clean today, so there is no shape to rediscover it. The gates that hold it: the `oracle-*` variants of `fixtures/reactive-ir/leaf-focus-no-listener` (the reviewer's four cases with the handler in a package: `node scripts/runtime-oracle.mjs --cases fixtures/reactive-ir/leaf-focus-no-listener/variants --only oracle-add-event,oracle-add-event-delegated,oracle-computed-add,oracle-dynamic-spread` reports `unproven-clean` on 35704e13e and `covered-uncertifiable` on the fix), the coverage snapshots of the 36 variants and 7 page fixtures (the reviewed build had no SC9012 at the call in 14 of them), `focus_delivery`'s unit tests, and the dialect's audit tests. A fuzz context for a leaf `focus()` with a registration route over a package-resident site is owed (docs/open-work.md, ADR 1151). The page's HTML is not a program the grids write at all (a fixture project holds `index.html`: `leaf-focus-page-*`)."
+ },
+ {
+  "finding": "ADR 1146 (a): a prop read in a handler named by its value (`onScroll={f}`), in a program where an effect's apply dispatches into a shadow tree, was certified clean where Chrome warns STRICT_READ_UNTRACKED: local_access's helper pass read the handler slot as EventCallback without the read veto, so the slot was silent and the definition ended HelperCallsAccounted (the TypeScript wrapper of the receiver was not the cause)",
+  "found": "ADR 1139 r1's generator context evt-apply-dispatch-shadow-named (W7, 2026-11-20)",
+  "fixed": "ADR 1146 (local_access helper_value_execution: Unknown under synchronous_event_read_dispatch_present; an unplaced slot is an unproven use)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-evt-apply-dispatch-shadow-named-memo-direct-none-s-prop-value-cast",
+   "mx-strict-read-untracked-evt-apply-dispatch-shadow-named-signal-direct-none-s-prop-value-cast"
+  ],
+  "rediscovered": "focus mx-recall --ids (the 2 ids and their inline twins), release builds: main 5c1435e8c 2 false-clean (certified) and needs a look with ADR 1146's judge; this build 4 recall-gap, nothing needs a look"
+ },
+ {
+  "finding": "ADR 1146 (b): focus reported nothing needs a look on a Chrome-confirmed certified STRICT_READ_UNTRACKED false clean: the rows match the open-defects family entry R-near, and in a run off the ledger's sample a failing row of a listed family was only printed (`unlisted`, not judged)",
+  "found": "the same two programs on main (focus: \"2 failing rows outside the smoke manifest and off the ledger, not judged\", \"nothing needs a look\")",
+  "fixed": "ADR 1146 (open-defects gridStanding: a certified false clean or a false positive off the ledger is never unlisted)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-evt-apply-dispatch-shadow-named-memo-direct-none-s-prop-value-cast",
+   "mx-strict-read-untracked-evt-apply-dispatch-shadow-named-signal-direct-none-s-prop-value-cast"
+  ],
+  "rediscovered": "the old judge on main 5c1435e8c: nothing needs a look; ADR 1146's judge on the same build: needs a look (2)"
  }
 ]

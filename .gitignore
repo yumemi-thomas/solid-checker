@@ -2250,3 +2250,7 @@ packages/wasm/owned/
 !fixtures/reactive-ir/product-realm-public-handler/node_modules/**
 !fixtures/reactive-ir/product-realm-public-static/node_modules/
 !fixtures/reactive-ir/product-realm-public-static/node_modules/**
+!fixtures/reactive-ir/named-handler-prop-read/node_modules/
+!fixtures/reactive-ir/named-handler-prop-read/node_modules/**
+!fixtures/reactive-ir/named-handler-prop-read/variants/quiet/node_modules/
+!fixtures/reactive-ir/named-handler-prop-read/variants/quiet/node_modules/**
