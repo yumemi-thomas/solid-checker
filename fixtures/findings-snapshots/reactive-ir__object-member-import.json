@@ -613,8 +613,9 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
+      "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
+      "severity": "error",
       "path": "fixtures/reactive-ir/object-member-import/source.ts",
       "start": 136,
       "end": 145,

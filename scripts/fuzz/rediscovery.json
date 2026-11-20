@@ -36832,6 +36832,20 @@
   "rediscovered": "fuzz-focus mx-recall on store-effect-called and store-effect-named-called: main c212ad5f5 (and ADR 1127 alone) 104 false cleans; ADR 1130 none"
  },
  {
+  "finding": "main's event-handler read proof (ADR 0639) certified a read in a light-DOM onScroll handler run from an effect's apply other than by a delivery that sets window.event: G1 globalThis.event replaced, round 1 F2 a patched addEventListener running the listener, G6 a replaced document.createElement handing Solid a fake node; G3 a shadow root under a concatenated key (covered on main only by an unrelated row); Chrome rc.21 warns STRICT_READ_UNTRACKED",
+  "found": "the Fable review of ADR 1089 E round 2 (coord-land/review-1089e-r2.md, G1, G3, G6), probed on main c212ad5f5 (sc-scratch mac21/f1125)",
+  "fixed": "ADR 1125 (`event_delivery::scan_delivery_hazard`: the dispatch veto withholds every event proof where delivery is not proven intact; ADR 1115's shadow scan reads decoded keys and code sinks; the owner bit withholds for an apply's delivery where a shadow root may exist)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-evt-apply-event-replaced-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-listener-patch-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-fake-node-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-shadow-concat-signal-direct-none"
+  ],
+  "rediscovered": "focus on the four contexts' mx-recall programs: main 4,386 false cleans (1,462 per context but shadow-concat) and 120 false positives (12 in shadow-concat: an apply's delivery to a shadow listener, a creation reported missing-owner where rc.21 throws PRIMITIVE_IN_EFFECT_CALLBACK); FIXED here (0 false cleans, 0 false positives over 8,600 programs)"
+ },
+ {
   "finding": "Bundle y #294 smoke (f3d2c5769): a legal dny-legal-click/-keydown/-pointer program with createEffect in the handler was an `unexecuted-violation` (SC4001 missing-owner violation at a site no run reached), though the handler is reachable: its element is mounted enabled and only the page timer disables it later, so a user can deliver the event first and the violation is the reading of \"wrong if it runs\" (coordinator ruling: the checker is right, the fuzz label was wrong)",
   "found": "bundle y CI smoke on #294 (lg-recall dny-legal-click-store-effect-called-direct-none); the five siblings and the six effect-carried twins by focus",
   "fixed": "ADR 1132 (legal.mjs undrivenHandlerSite: the one site use in the handler of the control a dny-legal-click/-keydown/-pointer context mounts, a top-level view element with that tag and event, undriven, no disabled/inert/spread; the unexecuted row is `reachable` only when every at-site violation is missing-owner at a createEffect or createRenderEffect line (Chrome runtime-oracle handler-effect-driven) and none is of the cell's own rules; codes.mjs unexecutedViolation asks no look for it)",
@@ -36852,6 +36866,45 @@
    "lg-strict-read-untracked-dny-legal-pointer-store-render-effect-carried-direct-none"
   ],
   "rediscovered": "focus lg-recall on the 12 dny-legal programs with a handler createEffect (bundle y f3d2c5769 release): before, 12 unexecuted-violation rows; after, the same rows unexecuted with reachable=undriven-handler and nothing needs a look"
+ },
+ {
+  "finding": "ADR 1125 head 3bc8f9a6e certified a read in a handler Chrome rc.21 warns STRICT_READ_UNTRACKED at, run with no event: F1 a key reader (`Object.values` of the element) calling Solid's stored delegated handler; F3 a shadow root attached through an arrow's expression body under a key built by `join` (`value_inert` read the body as a discarded statement); F4 a replaced `Function.prototype.valueOf` attaching the shadow root on a unary minus",
+  "found": "the Fable review of ADR 1125 round 1 (coord-land/review-1125.md, F1, F3, F4; probes sc-scratch review-1125)",
+  "fixed": "ADR 1125 round 1: KeyReader, PrivateKey and CoercionHook sites are delivery hazards, CoercionHook sites shadow hazards, an arrow's expression body is no discarded statement (`kernel::value_inert`)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-evt-apply-stored-values-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-shadow-arrow-body-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-shadow-valueof-signal-direct-none"
+  ],
+  "rediscovered": "focus on the three contexts' mx-recall programs (6,450): the reviewed head 4,344 false cleans (1,448 per context) and 108 false positives; FIXED here (0 and 0). F2 (an import cycle holding the entry beside a root nothing loads) and F8 (a hazard in a file no analysed file loads, on the page by a second script or a test setup) are not generator-expressible: every fuzz program's entry is the harness `main.tsx`, which loads `App.tsx`, and Chrome runs only what the entry loads; both are closed by asking the program, not a realm (process tests and the review's probes p8, p11b)"
+ },
+ {
+  "finding": "ADR 1125 round-1 head 122120032 certified a read in a handler run with no event when the key reader taking Solid's stored delegated handler is not spelled `Object.<name>`: `Object[\"values\"](el)`, `Object?.[\"values\"](el)`, or `JSON.stringify` handed its replacer by a spread (the call test counted two written arguments)",
+  "found": "the Fable review of ADR 1125 round 2 (coord-land/review-1125-r2.md, N1; probes q1, q1h, q1d)",
+  "fixed": "ADR 1125 round 2: a computed member of the global `Object` or `JSON` is a key reader by its literal or proven texts, any reader where nothing proves the key; a spread argument counts as a replacer",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-evt-apply-stored-values-computed-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-stored-values-optional-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-stored-stringify-spread-signal-direct-none"
+  ],
+  "rediscovered": "focus on the three contexts' mx-recall programs (6,450): 122120032 4,254 false cleans (1,418 per context) and 108 false positives (36 per context); FIXED here (0 and 0)"
+ },
+ {
+  "finding": "ADR 1125 head d40e3f3cd reported missing-context-provider (CONTEXT_NOT_FOUND) at `useContext` in a JSX handler where Chrome rc.21 throws NO_OWNER_CONTEXT: the dispatch veto made the handler possibly-owned, and the provider claim counted that possibility as an owned run",
+  "found": "#296 smoke-census (run 44606315559): 13 false positives, mx-census CONTEXT_NOT_FOUND in the evt-apply-* delivery breakers, tbl-json-stringify-h and tbl-reflect-apply-h",
+  "fixed": "ADR 1125 (#296): competing_checks: a context-provider requirement in a JSX handler whose ownerless proof the dispatch veto withholds is uncertifiable (earlier_check_throws): a delivery runs it with no owner, where NO_OWNER_CONTEXT throws first",
+  "grid": "mx-census",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-evt-apply-event-replaced-x-direct-none",
+   "mx-context-not-found-evt-apply-stored-values-x-direct-none",
+   "mx-context-not-found-tbl-reflect-apply-h-x-direct-none"
+  ],
+  "rediscovered": "focus on the 16 false-positive ids of the run (mx-census CONTEXT_NOT_FOUND): d40e3f3cd 13 false positives plus the 3 known open (dny-flush-*, scripts/fuzz/open-defects.json); FIXED here (13 not-fired, the 3 known open unchanged)"
  },
  {
   "finding": "ACTION_CALLED_IN_OWNED_SCOPE silent at an operation that runs a member a package wrote on a built-in's prototype other than a member call the library declares: a call typed by a project interface or type literal under an any-name writer, a conversion by an operator (`\"\" + d`), a template substitution, `p.catch(f)` running `then`, a bare `dispatchEvent`, an accessor read, `new Set(it)`, `new URL(u)`",

@@ -1,0 +1,38 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "callee-callback-timing",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc1001-computed-key/src/options-object.tsx",
+      "start": 870,
+      "end": 880,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/uncertifiable-repro/sc1001-computed-key/src/options-object.tsx",
+      "start": 902,
+      "end": 917,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/uncertifiable-repro/sc1001-computed-key/src/options-object.tsx",
+      "start": 980,
+      "end": 991,
+      "fixes": 0
+    }
+  ]
+}

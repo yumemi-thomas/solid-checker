@@ -200,6 +200,7 @@ impl SemanticLookup<'_> {
                 self.callability_by_symbol(symbol)
                     .map(|callability| Arc::from(format!("{callability:?}"))),
             ),
+            (Probe::EventDeliveryIntact, _) => ProbeAnswer::Flag(self.delivery_intact_answer()),
             (Probe::ProjectPrimitives, _) => {
                 let mut names = self
                     .project_primitives()

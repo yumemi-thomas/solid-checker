@@ -1,6 +1,28 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/test-runner-vitest/variants/helper-open/App.test.tsx",
+      "start": 416,
+      "end": 437,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/test-runner-vitest/variants/helper-open/App.test.tsx",
+      "start": 425,
+      "end": 432,
+      "fixes": 0
+    },
     {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
@@ -15,8 +37,9 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
+      "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
+      "severity": "error",
       "path": "fixtures/reactive-ir/test-runner-vitest/variants/helper-open/App.test.tsx",
       "start": 447,
       "end": 465,

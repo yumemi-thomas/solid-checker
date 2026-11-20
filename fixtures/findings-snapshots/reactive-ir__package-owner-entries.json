@@ -1,11 +1,34 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-owner-entries/App.tsx",
+      "start": 111,
+      "end": 122,
+      "fixes": 0
+    },
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
+      "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-owner-entries/App.tsx",
+      "start": 111,
+      "end": 122,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
       "path": "fixtures/reactive-ir/package-owner-entries/App.tsx",
       "start": 111,
       "end": 122,
@@ -20,6 +43,17 @@
       "path": "fixtures/reactive-ir/package-owner-entries/App.tsx",
       "start": 111,
       "end": 122,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-owner-entries/App.tsx",
+      "start": 197,
+      "end": 217,
       "fixes": 0
     },
     {
@@ -111,6 +145,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-owner-entries/App.tsx",
+      "start": 384,
+      "end": 396,
+      "fixes": 0
+    },
+    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -141,6 +186,17 @@
       "path": "fixtures/reactive-ir/package-owner-entries/App.tsx",
       "start": 384,
       "end": 396,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-owner-entries/App.tsx",
+      "start": 471,
+      "end": 480,
       "fixes": 0
     },
     {

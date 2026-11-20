@@ -1224,6 +1224,17 @@
       "kind": "uncertifiable",
       "blocker": "function-run-unplaced",
       "severity": "warning",
+      "path": "fixtures/reactive-ir/async-call-prefix/Extra.tsx",
+      "start": 4206,
+      "end": 4214,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/async-call-prefix/remote.ts",
       "start": 132,
       "end": 140,

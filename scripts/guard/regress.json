@@ -72,6 +72,214 @@
    "removed": 1,
    "adr": "ADR 1107",
    "why": "store-strict-read-keys DestructuredThen (`const { then } = q`): rc.21's store trap does not warn on a `then` Get, so main's SC1003 violation was a false positive; round 2 of the review makes a pattern of only `then` slots store-key-undecided"
+  },
+  {
+   "fixture": "reactive-ir/context-read-package",
+   "path": "fixtures/reactive-ir/context-read-package/App.tsx",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1125",
+   "why": "the event proofs (owner, read, flush, listener) rest on handlers running only as DOM deliveries that set window.event; this program has code that may replace the listener API, the event global or Solid's node factories (an unread module, Proxy/Reflect, a string timer, a definer or a write under such a name), so the dispatch veto withholds them (fail closed)"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-object-member",
+   "path": "fixtures/reactive-ir/dependency-source-object-member/App.tsx",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1125",
+   "why": "the event proofs (owner, read, flush, listener) rest on handlers running only as DOM deliveries that set window.event; this program has code that may replace the listener API, the event global or Solid's node factories (an unread module, Proxy/Reflect, a string timer, a definer or a write under such a name), so the dispatch veto withholds them (fail closed)"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-object-member",
+   "path": "fixtures/reactive-ir/dependency-source-object-member/local.ts",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1125",
+   "why": "the event proofs (owner, read, flush, listener) rest on handlers running only as DOM deliveries that set window.event; this program has code that may replace the listener API, the event global or Solid's node factories (an unread module, Proxy/Reflect, a string timer, a definer or a write under such a name), so the dispatch veto withholds them (fail closed)"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-owner",
+   "path": "fixtures/reactive-ir/dependency-source-owner/App.tsx",
+   "code": "SC4001",
+   "removed": 5,
+   "adr": "ADR 1125",
+   "why": "the event proofs (owner, read, flush, listener) rest on handlers running only as DOM deliveries that set window.event; this program has code that may replace the listener API, the event global or Solid's node factories (an unread module, Proxy/Reflect, a string timer, a definer or a write under such a name), so the dispatch veto withholds them (fail closed)"
+  },
+  {
+   "fixture": "reactive-ir/dependency-source-owner",
+   "path": "fixtures/reactive-ir/dependency-source-owner/Joint.tsx",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1125",
+   "why": "the event proofs (owner, read, flush, listener) rest on handlers running only as DOM deliveries that set window.event; this program has code that may replace the listener API, the event global or Solid's node factories (an unread module, Proxy/Reflect, a string timer, a definer or a write under such a name), so the dispatch veto withholds them (fail closed)"
+  },
+  {
+   "fixture": "reactive-ir/event-dispatch-await-continuation",
+   "path": "fixtures/reactive-ir/event-dispatch-await-continuation/App.tsx",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1125",
+   "why": "the event proofs (owner, read, flush, listener) rest on handlers running only as DOM deliveries that set window.event; this program has code that may replace the listener API, the event global or Solid's node factories (an unread module, Proxy/Reflect, a string timer, a definer or a write under such a name), so the dispatch veto withholds them (fail closed)"
+  },
+  {
+   "fixture": "reactive-ir/object-member-import",
+   "path": "fixtures/reactive-ir/object-member-import/source.ts",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1125",
+   "why": "named collateral (Fable round 2, N3; owed): onCleanup in useTicker, called after an await in an async onClick handler, holds under every entry (the continuation has no owner however the handler runs), but the owner graph seeds every handler literal possibly-owned while delivery is not intact (owner_graph.rs, dispatch_uncertain) and the member-import call after the await does not take the ResumesUnowned edge back to proven-unowned; the hazard is Object.assign in negative.ts. Owed: the after-await edge for resolved member calls, so the delivery premise gates only proofs that rest on it"
+  },
+  {
+   "fixture": "reactive-ir/owner-handed-inline",
+   "path": "fixtures/reactive-ir/owner-handed-inline/App.tsx",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1125",
+   "why": "the event proofs (owner, read, flush, listener) rest on handlers running only as DOM deliveries that set window.event; this program has code that may replace the listener API, the event global or Solid's node factories (an unread module, Proxy/Reflect, a string timer, a definer or a write under such a name), so the dispatch veto withholds them (fail closed)"
+  },
+  {
+   "fixture": "reactive-ir/package-owner-entries",
+   "path": "fixtures/reactive-ir/package-owner-entries/App.tsx",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1125",
+   "why": "the event proofs (owner, read, flush, listener) rest on handlers running only as DOM deliveries that set window.event; this program has code that may replace the listener API, the event global or Solid's node factories (an unread module, Proxy/Reflect, a string timer, a definer or a write under such a name), so the dispatch veto withholds them (fail closed)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-bun",
+   "path": "fixtures/reactive-ir/test-runner-bun/App.test.tsx",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1125",
+   "why": "the event proofs (owner, read, flush, listener) rest on handlers running only as DOM deliveries that set window.event; this program has code that may replace the listener API, the event global or Solid's node factories (an unread module, Proxy/Reflect, a string timer, a definer or a write under such a name), so the dispatch veto withholds them (fail closed)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-node",
+   "path": "fixtures/reactive-ir/test-runner-node/App.test.tsx",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1125",
+   "why": "the event proofs (owner, read, flush, listener) rest on handlers running only as DOM deliveries that set window.event; this program has code that may replace the listener API, the event global or Solid's node factories (an unread module, Proxy/Reflect, a string timer, a definer or a write under such a name), so the dispatch veto withholds them (fail closed)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-node-suite-inline",
+   "path": "fixtures/reactive-ir/test-runner-node/variants/suite-inline/App.test.tsx",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1125",
+   "why": "the event proofs (owner, read, flush, listener) rest on handlers running only as DOM deliveries that set window.event; this program has code that may replace the listener API, the event global or Solid's node factories (an unread module, Proxy/Reflect, a string timer, a definer or a write under such a name), so the dispatch veto withholds them (fail closed)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-suites-playwright-module",
+   "path": "fixtures/reactive-ir/test-runner-suites/variants/playwright-module/App.test.tsx",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1125",
+   "why": "the event proofs (owner, read, flush, listener) rest on handlers running only as DOM deliveries that set window.event; this program has code that may replace the listener API, the event global or Solid's node factories (an unread module, Proxy/Reflect, a string timer, a definer or a write under such a name), so the dispatch veto withholds them (fail closed)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest",
+   "path": "fixtures/reactive-ir/test-runner-vitest/App.test.tsx",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1125",
+   "why": "the event proofs (owner, read, flush, listener) rest on handlers running only as DOM deliveries that set window.event; this program has code that may replace the listener API, the event global or Solid's node factories (an unread module, Proxy/Reflect, a string timer, a definer or a write under such a name), so the dispatch veto withholds them (fail closed)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-async-dispatch",
+   "path": "fixtures/reactive-ir/test-runner-vitest/variants/async-dispatch/App.test.tsx",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1125",
+   "why": "the event proofs (owner, read, flush, listener) rest on handlers running only as DOM deliveries that set window.event; this program has code that may replace the listener API, the event global or Solid's node factories (an unread module, Proxy/Reflect, a string timer, a definer or a write under such a name), so the dispatch veto withholds them (fail closed)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-exported",
+   "path": "fixtures/reactive-ir/test-runner-vitest/variants/helper-exported/Card.tsx",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1125",
+   "why": "the event proofs (owner, read, flush, listener) rest on handlers running only as DOM deliveries that set window.event; this program has code that may replace the listener API, the event global or Solid's node factories (an unread module, Proxy/Reflect, a string timer, a definer or a write under such a name), so the dispatch veto withholds them (fail closed)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-exported-barrel",
+   "path": "fixtures/reactive-ir/test-runner-vitest/variants/helper-exported-barrel/Card.tsx",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1125",
+   "why": "the event proofs (owner, read, flush, listener) rest on handlers running only as DOM deliveries that set window.event; this program has code that may replace the listener API, the event global or Solid's node factories (an unread module, Proxy/Reflect, a string timer, a definer or a write under such a name), so the dispatch veto withholds them (fail closed)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-literal-async-destructured",
+   "path": "fixtures/reactive-ir/test-runner-vitest/variants/helper-literal-async-destructured/Card.tsx",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1125",
+   "why": "the event proofs (owner, read, flush, listener) rest on handlers running only as DOM deliveries that set window.event; this program has code that may replace the listener API, the event global or Solid's node factories (an unread module, Proxy/Reflect, a string timer, a definer or a write under such a name), so the dispatch veto withholds them (fail closed)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-literal-test",
+   "path": "fixtures/reactive-ir/test-runner-vitest/variants/helper-literal-test/Card.tsx",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1125",
+   "why": "the event proofs (owner, read, flush, listener) rest on handlers running only as DOM deliveries that set window.event; this program has code that may replace the listener API, the event global or Solid's node factories (an unread module, Proxy/Reflect, a string timer, a definer or a write under such a name), so the dispatch veto withholds them (fail closed)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-open",
+   "path": "fixtures/reactive-ir/test-runner-vitest/variants/helper-open/App.test.tsx",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1125",
+   "why": "the event proofs (owner, read, flush, listener) rest on handlers running only as DOM deliveries that set window.event; this program has code that may replace the listener API, the event global or Solid's node factories (an unread module, Proxy/Reflect, a string timer, a definer or a write under such a name), so the dispatch veto withholds them (fail closed)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-passed-through",
+   "path": "fixtures/reactive-ir/test-runner-vitest/variants/helper-passed-through/App.test.tsx",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1125",
+   "why": "the event proofs (owner, read, flush, listener) rest on handlers running only as DOM deliveries that set window.event; this program has code that may replace the listener API, the event global or Solid's node factories (an unread module, Proxy/Reflect, a string timer, a definer or a write under such a name), so the dispatch veto withholds them (fail closed)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-helper-test-only",
+   "path": "fixtures/reactive-ir/test-runner-vitest/variants/helper-test-only/App.test.tsx",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1125",
+   "why": "the event proofs (owner, read, flush, listener) rest on handlers running only as DOM deliveries that set window.event; this program has code that may replace the listener API, the event global or Solid's node factories (an unread module, Proxy/Reflect, a string timer, a definer or a write under such a name), so the dispatch veto withholds them (fail closed)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-members",
+   "path": "fixtures/reactive-ir/test-runner-vitest/variants/members/App.test.tsx",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1125",
+   "why": "the event proofs (owner, read, flush, listener) rest on handlers running only as DOM deliveries that set window.event; this program has code that may replace the listener API, the event global or Solid's node factories (an unread module, Proxy/Reflect, a string timer, a definer or a write under such a name), so the dispatch veto withholds them (fail closed)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-store",
+   "path": "fixtures/reactive-ir/test-runner-vitest-store/App.test.tsx",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1125",
+   "why": "the event proofs (owner, read, flush, listener) rest on handlers running only as DOM deliveries that set window.event; this program has code that may replace the listener API, the event global or Solid's node factories (an unread module, Proxy/Reflect, a string timer, a definer or a write under such a name), so the dispatch veto withholds them (fail closed)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest-suite-scheduled",
+   "path": "fixtures/reactive-ir/test-runner-vitest/variants/suite-scheduled/App.test.tsx",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1125",
+   "why": "the event proofs (owner, read, flush, listener) rest on handlers running only as DOM deliveries that set window.event; this program has code that may replace the listener API, the event global or Solid's node factories (an unread module, Proxy/Reflect, a string timer, a definer or a write under such a name), so the dispatch veto withholds them (fail closed)"
+  },
+  {
+   "fixture": "reactive-ir/test-runner-vitest4",
+   "path": "fixtures/reactive-ir/test-runner-vitest4/App.test.tsx",
+   "code": "SC4001",
+   "removed": 1,
+   "adr": "ADR 1125",
+   "why": "the event proofs (owner, read, flush, listener) rest on handlers running only as DOM deliveries that set window.event; this program has code that may replace the listener API, the event global or Solid's node factories (an unread module, Proxy/Reflect, a string timer, a definer or a write under such a name), so the dispatch veto withholds them (fail closed)"
   }
  ]
 }

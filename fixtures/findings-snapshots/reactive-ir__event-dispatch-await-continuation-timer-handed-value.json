@@ -1,0 +1,137 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/event-dispatch-await-continuation/variants/timer-handed-value/App.tsx",
+      "start": 365,
+      "end": 373,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/event-dispatch-await-continuation/variants/timer-handed-value/App.tsx",
+      "start": 374,
+      "end": 381,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/event-dispatch-await-continuation/variants/timer-handed-value/App.tsx",
+      "start": 374,
+      "end": 381,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/event-dispatch-await-continuation/variants/timer-handed-value/App.tsx",
+      "start": 374,
+      "end": 379,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/event-dispatch-await-continuation/variants/timer-handed-value/App.tsx",
+      "start": 396,
+      "end": 414,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/event-dispatch-await-continuation/variants/timer-handed-value/App.tsx",
+      "start": 396,
+      "end": 414,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/event-dispatch-await-continuation/variants/timer-handed-value/App.tsx",
+      "start": 421,
+      "end": 428,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/event-dispatch-await-continuation/variants/timer-handed-value/App.tsx",
+      "start": 421,
+      "end": 426,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/event-dispatch-await-continuation/variants/timer-handed-value/App.tsx",
+      "start": 859,
+      "end": 869,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/event-dispatch-await-continuation/variants/timer-handed-value/App.tsx",
+      "start": 870,
+      "end": 895,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/event-dispatch-await-continuation/variants/timer-handed-value/App.tsx",
+      "start": 903,
+      "end": 924,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/event-dispatch-await-continuation/variants/timer-handed-value/App.tsx",
+      "start": 925,
+      "end": 934,
+      "fixes": 0
+    }
+  ]
+}

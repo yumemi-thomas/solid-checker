@@ -236,6 +236,11 @@ const DISPOSALS = { "dny-dispose-body": "body", "dny-dispose-memo": "memo", "dny
 // violation there is no "wrong if it runs" (legal.mjs `undrivenHandlerSite` refuses it) and stays a look.
 const DENIED_LEGAL = ["dny-legal-keydown", "dny-legal-click", "dny-legal-pointer", "dny-legal-project-click", "dny-blur-lowercase", "dny-legal-mount-disabled"];
 const DENIED_OTHER = ["dny-blur-spread", "dny-typo-event", "dny-blur-dynamic", "dny-portal-dispose", "dny-load-append", "dny-load-for", "dny-load-show", "dny-unmount-flush-body", "dny-unmount-flush-root", "dny-insert-body", "dny-renamed-prop", "dny-shared-fn", "dny-chain-click"];
+/** ADR 1125: the Fable review of ADR 1089 E round 2 (G1, G3, G6) and round 1's F2 on main's event-callback read proof: each runs the
+ * handler of an element's `onScroll` from an effect's apply other than by a delivery that sets `window.event`. */
+const DELIVERY_BREAKERS = ["evt-apply-event-replaced", "evt-apply-listener-patch", "evt-apply-fake-node", "evt-apply-shadow-concat", "evt-apply-stored-values", "evt-apply-shadow-arrow-body", "evt-apply-shadow-valueof",
+  // Fable round 2, N1: the same reader by a computed key, an optional computed key, and `JSON.stringify` handed its replacer by a spread.
+  "evt-apply-stored-values-computed", "evt-apply-stored-values-optional", "evt-apply-stored-stringify-spread"];
 const DENIED_CONTEXTS = [...Object.keys(DENIED), ...Object.keys(DISPOSALS), ...DENIED_OTHER];
 /** `flush()` in a denied handler, with no dispatch in the program (`a04`, `b03`, `b09`): SC2008. */
 const DENIED_FLUSH = ["dny-flush-unmount", "dny-flush-load", "dny-flush-popover"];
@@ -605,7 +610,7 @@ export const SPEC = {
   },
   // `settled`: an async memo read after it settled (ADR 0511 review: probe pending-async/hook-shared-instance, rc.17 warns this code in an
   // apply, no pending throw), through the module-scope hook result beside the body's own call.
-  STRICT_READ_UNTRACKED: { legal: ["memo", "effect-compute", "render-compute", "jsx", "jsx-helper", "untrack"], recallContexts: ["evt-body-dispatch", "evt-apply-dispatch-shadow", ...firesAt("body"), ...listenersAt("body"), ...DENIED_CONTEXTS.filter((context) => !context.startsWith("dny-unmount-flush") && !["dny-dispose-memo", "dny-dispose-compute", "dny-dispose-untrack"].includes(context))], recallLegal: [...EVENT_LEGAL, ...ZERO_READS, "handed-flush"],
+  STRICT_READ_UNTRACKED: { legal: ["memo", "effect-compute", "render-compute", "jsx", "jsx-helper", "untrack"], recallContexts: ["evt-body-dispatch", "evt-apply-dispatch-shadow", ...DELIVERY_BREAKERS, ...firesAt("body"), ...listenersAt("body"), ...DENIED_CONTEXTS.filter((context) => !context.startsWith("dny-unmount-flush") && !["dny-dispose-memo", "dny-dispose-compute", "dny-dispose-untrack"].includes(context))], recallLegal: [...EVENT_LEGAL, ...ZERO_READS, "handed-flush"],
     // `settled` is a grid variant (never drawn at random, so random programs and combinations' extras keep theirs) and a legal one.
     variants: ["signal", "memo"], gridVariants: ["settled"], legalVariants: ["signal", "memo", "settled"],
     contexts: ["body", "effect-apply", "root", "render-apply"], bindings: ["direct", "alias", "destructured", "wrapper"],
@@ -1925,6 +1930,89 @@ function inContext(context, stmts, kit) {
       const attach = expr(domExpr(`document.createElement("div").attachShadow({ mode: "open" }).appendChild(${el} as HTMLElement)`));
       const fire = expr(domExpr(`(${el} as HTMLElement).dispatchEvent(new Event("scroll"))`));
       return { body: [made, attach, expr(prim("effect", fn([ret(num(1))]), { apply: fn([fire]) }))], view: [] };
+    }
+    // ADR 1125 (G1): `globalThis.event` replaced by a data property, which no delivery sets again: a light-tree dispatch from the
+    // apply runs the handler with no event, inside the apply's strict-read window.
+    case "evt-apply-event-replaced": {
+      const el = kit.name("el");
+      const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onScroll", undriven: true })));
+      const replace = expr(domExpr("globalThis.event = undefined"));
+      const fire = expr(domExpr(`(${el} as HTMLElement).dispatchEvent(new Event("scroll"))`));
+      return { body: [replace, made, expr(prim("effect", fn([ret(num(1))]), { apply: fn([fire]) }))], view: [] };
+    }
+    // ADR 1125 (round 1 F2 on main): a replaced `EventTarget.prototype.addEventListener` keeps the listener; the apply runs it.
+    case "evt-apply-listener-patch": {
+      const el = kit.name("el"), taken = kit.name("taken"), add = kit.name("add");
+      const patch = [
+        decl(taken, domExpr("[] as EventListener[]")),
+        decl(add, domExpr("EventTarget.prototype.addEventListener")),
+        expr(domExpr(`EventTarget.prototype.addEventListener = function (this: EventTarget, type: string, listener: EventListenerOrEventListenerObject | null, options?: boolean | AddEventListenerOptions) { if (typeof listener === "function") ${taken}.push(listener); return ${add}.call(this, type, listener, options); }`)),
+      ];
+      const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onScroll", undriven: true })));
+      const run = expr(domExpr(`for (const run of ${taken}) run(new Event("scroll"))`));
+      return { body: [...patch, made, expr(prim("effect", fn([ret(num(1))]), { apply: fn([run]) }))], view: [] };
+    }
+    // ADR 1125 (G6): `document.createElement` replaced while the element is made: Solid's template clones a fake node whose
+    // `addEventListener` keeps the listener; the apply runs it.
+    case "evt-apply-fake-node": {
+      const el = kit.name("el"), taken = kit.name("taken"), real = kit.name("real"), armed = kit.name("armed");
+      const patch = [
+        decl(taken, domExpr("[] as Array<(event: Event) => void>")),
+        decl(real, domExpr("document.createElement.bind(document)")),
+        decl(armed, domExpr("{ on: false }")),
+        expr(domExpr(`document.createElement = ((tag: string) => ${armed}.on && tag === "template" ? { innerHTML: "", content: { firstChild: { cloneNode: () => ({ addEventListener(_type: string, listener: (event: Event) => void) { ${taken}.push(listener); } }) } } } : ${real}(tag)) as typeof document.createElement`)),
+        expr(domExpr(`${armed}.on = true`)),
+      ];
+      const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onScroll", undriven: true })));
+      const run = expr(domExpr(`for (const run of ${taken}) run(new Event("scroll"))`));
+      return { body: [...patch, made, expr(domExpr(`${armed}.on = false`)), expr(prim("effect", fn([ret(num(1))]), { apply: fn([run]) }))], view: [] };
+    }
+    // ADR 1125 (G3): the shadow root attached under a concatenated key, which no text test of ADR 1115 reads.
+    case "evt-apply-shadow-concat": {
+      const el = kit.name("el");
+      const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onScroll", undriven: true })));
+      const attach = expr(domExpr(`(document.createElement("div") as unknown as Record<string, (init: ShadowRootInit) => ShadowRoot>)["attach" + "Shadow"]({ mode: "open" }).appendChild(${el} as HTMLElement)`));
+      const fire = expr(domExpr(`(${el} as HTMLElement).dispatchEvent(new Event("scroll"))`));
+      return { body: [made, attach, expr(prim("effect", fn([ret(num(1))]), { apply: fn([fire]) }))], view: [] };
+    }
+    // ADR 1125, Fable round 1 F1: a reader of the element's own values takes Solid's stored delegated handler (`_$$click`) and the
+    // apply calls it with no event.
+    case "evt-apply-stored-values": case "evt-apply-stored-values-computed": case "evt-apply-stored-values-optional": case "evt-apply-stored-stringify-spread": {
+      const el = kit.name("el");
+      const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onClick", undriven: true })));
+      const call = (value) => `if (typeof ${value} === "function") (${value} as (event: Event) => void)(new Event("click"))`;
+      const reader = { "evt-apply-stored-values": "Object.values", "evt-apply-stored-values-computed": 'Object["values"]', "evt-apply-stored-values-optional": '(Object as typeof Object)?.["values"]' }[context];
+      const run = expr(domExpr(reader
+        ? `for (const value of ${reader}(${el} as object)) ${call("value")}`
+        : `JSON.stringify(...([${el}, (_key: string, value: unknown) => { ${call("value")}; return value; }] as [object, (key: string, value: unknown) => unknown]))`));
+      return { body: [made, expr(prim("effect", fn([ret(num(1))]), { apply: fn([run]) }))], view: [] };
+    }
+    // F3: the shadow root attached through an arrow's expression body under a key built at run time (`join`, which no fact decodes).
+    case "evt-apply-shadow-arrow-body": {
+      const el = kit.name("el"), host = kit.name("host"), pick = kit.name("pick");
+      const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onScroll", undriven: true })));
+      const attach = [
+        decl(host, domExpr('document.createElement("div")')),
+        decl(pick, domExpr(`(key: string) => (${host} as unknown as Record<string, (init: { mode: "open" }) => Node>)[key]`)),
+        expr(domExpr(`${pick}(["attach", "Shadow"].join("")).call(${host}, { mode: "open" }).appendChild(${el} as HTMLElement)`)),
+      ];
+      const fire = expr(domExpr(`(${el} as HTMLElement).dispatchEvent(new Event("scroll"))`));
+      return { body: [made, ...attach, expr(prim("effect", fn([ret(num(1))]), { apply: fn([fire]) }))], view: [] };
+    }
+    // F4: a replaced `Function.prototype.valueOf` gets the value a unary minus converts as `this`: it attaches the shadow root.
+    case "evt-apply-shadow-valueof": {
+      const el = kit.name("el"), plain = kit.name("plain"), slot = kit.name("slot");
+      const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onScroll", undriven: true })));
+      const hook = [
+        decl(plain, domExpr("Function.prototype.valueOf")),
+        decl(slot, domExpr("{ host: undefined as HTMLElement | undefined, root: undefined as Node | undefined }")),
+        expr(domExpr(`Function.prototype.valueOf = function (this: (init: { mode: "open" }) => Node) { const at = ${slot}.host; if (at) { ${slot}.host = undefined; ${slot}.root = this.call(at, { mode: "open" }); } return ${plain}.call(this); }`)),
+        expr(domExpr(`${slot}.host = document.createElement("div")`)),
+        expr(domExpr(`void -(${slot}.host as unknown as Record<string, number>)[["attach", "Shadow"].join("")]`)),
+        expr(domExpr(`${slot}.root?.appendChild(${el} as HTMLElement)`)),
+      ];
+      const fire = expr(domExpr(`(${el} as HTMLElement).dispatchEvent(new Event("scroll"))`));
+      return { body: [made, ...hook, expr(prim("effect", fn([ret(num(1))]), { apply: fn([fire]) }))], view: [] };
     }
     // ADR 0639: `flush()`'s guard takes no event, and the dispatch that reaches it may sit in a helper or on `window`.
     case "evt-apply-helper-dispatch": {

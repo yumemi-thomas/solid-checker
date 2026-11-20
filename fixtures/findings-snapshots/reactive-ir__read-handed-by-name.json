@@ -226,6 +226,17 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/read-handed-by-name/App.tsx",
+      "start": 4930,
+      "end": 4934,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/read-handed-by-name/App.tsx",
       "start": 5155,
       "end": 5159,
       "fixes": 0

@@ -385,6 +385,28 @@
       "start": 2030,
       "end": 2089,
       "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-prototype-sites/App.tsx",
+      "start": 2048,
+      "end": 2067,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/action-in-owned-scope-prototype-sites/App.tsx",
+      "start": 2069,
+      "end": 2086,
+      "fixes": 0
     }
   ]
 }

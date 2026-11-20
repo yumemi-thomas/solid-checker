@@ -54,6 +54,28 @@
       "start": 923,
       "end": 950,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "package-value-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/router-params/variants/use-action-alias/App.tsx",
+      "start": 984,
+      "end": 989,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/router-params/variants/use-action-alias/App.tsx",
+      "start": 984,
+      "end": 989,
+      "fixes": 0
     }
   ]
 }

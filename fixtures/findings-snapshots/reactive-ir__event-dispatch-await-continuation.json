@@ -54,17 +54,6 @@
       "start": 648,
       "end": 669,
       "fixes": 0
-    },
-    {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "read-after-await-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/event-dispatch-await-continuation/App.tsx",
-      "start": 670,
-      "end": 679,
-      "fixes": 0
     }
   ]
 }

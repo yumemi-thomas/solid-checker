@@ -502,6 +502,59 @@ fn the_first_dispatch_site_and_the_removal_of_the_last_move_the_readers() {
     touch(&mut project, &mut builder, "hazard: removed", 2);
 }
 
+/// ADR 1125: with no dispatch the veto withholds every proof exactly where event delivery is not intact. A file that replaces the
+/// global `event` beside the handler (`boot.ts`, which the app loads for its effect and no reader is handed; no dispatch anywhere)
+/// moves every reader of the veto through the delivery answer's probe alone, and removing it moves them back: a reader recorded while
+/// delivery held is not reused once it does not (its probe of the delivery answer moved).
+#[test]
+fn breaking_event_delivery_without_a_dispatch_moves_the_readers() {
+    let app = format!("import \"./boot\";\n{APP}");
+    let files = [
+        ("App.tsx", app.as_str()),
+        ("handle.ts", HANDLE),
+        ("state.ts", STATE),
+        ("boot.ts", OTHER),
+    ];
+    let Some(mut project) = Project::scratch("delivery", &files) else {
+        return;
+    };
+    assert_eq!(
+        env::var("SOLID_CHECKER_IR_SHADOW").as_deref(),
+        Ok("panic"),
+        "run with SOLID_CHECKER_IR_SHADOW=panic"
+    );
+    let mut builder = IncrementalBuilder::default();
+    builder.verify_reused_memos(true);
+    let first = project.analyze();
+    let (_, opened) = retained_is_fresh(&mut builder, &first, "delivery: first");
+    assert!(opened.flow_site_role_answers[1] > 0, "{opened:?}");
+
+    let broken = format!("(globalThis as any).event = undefined;\n{OTHER}");
+    let facts = project.edit(&[("boot.ts", &broken)]);
+    let (_, moved) = retained_is_fresh(&mut builder, &facts, "delivery: event replaced");
+    assert!(
+        moved.flow_site_role_answers[1] > 0,
+        "readers rerun: {moved:?}"
+    );
+    let touched = format!("{HANDLE}// touch 1\n");
+    let facts = project.edit(&[("handle.ts", &touched)]);
+    retained_is_fresh(
+        &mut builder,
+        &facts,
+        "delivery: event replaced, then a touch",
+    );
+
+    let facts = project.edit(&[("boot.ts", OTHER)]);
+    let (_, back) = retained_is_fresh(&mut builder, &facts, "delivery: restored");
+    assert!(
+        back.flow_site_role_answers[1] > 0,
+        "readers rerun: {back:?}"
+    );
+    let touched = format!("{HANDLE}// touch 2\n");
+    let facts = project.edit(&[("handle.ts", &touched)]);
+    retained_is_fresh(&mut builder, &facts, "delivery: restored, then a touch");
+}
+
 /// ADR 0442, per function (ADR 0450): the role a write has in a function handed
 /// to a component is the role of the component's call of it. The component's
 /// file changes how it calls the prop, between two places that are both outside
