@@ -22,6 +22,10 @@ mod context_census_workers_process;
 #[path = "server_rules_workers_process.rs"]
 mod server_rules_workers_process;
 
+// ADR 1128: a verdict does not depend on the workers or the claim order that walked it.
+#[path = "verdict_determinism_process.rs"]
+mod verdict_determinism_process;
+
 use support::{
     assert_rule_findings, diagnostic_fixture, diagnostic_fixture_with, findings_for_rule,
     owner_entry_row, partition_creation_rows,

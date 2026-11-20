@@ -2346,6 +2346,7 @@ fn answer_with(
         },
     ) = solid_facts_backend::check::package_inputs(
         directory,
+        &state.project,
         &facts,
         &source_refusals,
         &check.runtime,

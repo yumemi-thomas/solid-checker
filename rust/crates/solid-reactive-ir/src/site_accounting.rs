@@ -197,6 +197,9 @@ site_silences! {
     PackageCallRoleAllows => "package_action_calls.package_action_calls.role-allows",
     /// ADR 0972: a call into a package the build does not read that cannot run (module initialization, a function nothing reaches).
     PackageCallCannotRun => "package_action_calls.package_action_calls.cannot-run",
+    /// ADR 1145: a site in a file the product's real entries load, under writers of a built-in's prototype that only a test, a story, a script or a config loads:
+    /// the realm the page runs in holds none of them, so the member the site runs is the library's own.
+    PackageCallProductRealm => "package_action_calls.package_action_calls.product-realm",
     /// An owner-call site (`onCleanup`, a creation) that ADR 0458's query proves no execution runs (batch 11, slice 6).
     OwnerCallNeverRuns => "leaf_universe.account.never-runs",
     /// An owner-call site outside every function (and no instance field's initializer): module evaluation runs it on a stack of its own, in no leaf
@@ -325,7 +328,9 @@ impl SiteSilence {
             // need an owner. An optimistic write before the load needs none, so a call at module scope keeps that code.
             Self::UnreachedWriteCannotRun => &[ReactiveWrite, ActionCall],
             // ADR 0972: a package call's own code.
-            Self::PackageCallRoleAllows | Self::PackageCallCannotRun => &[ActionCall],
+            Self::PackageCallRoleAllows
+            | Self::PackageCallCannotRun
+            | Self::PackageCallProductRealm => &[ActionCall],
             // The store writes: an assignment, a `delete`, an in-place array method, through a store or props root.
             Self::DirectCreateMutable
             | Self::DirectDestructuredPropValue

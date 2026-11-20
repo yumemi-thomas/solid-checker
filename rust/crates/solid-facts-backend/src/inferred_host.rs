@@ -81,6 +81,12 @@ const CONFIGS: &[&str] = &[
     "vite.config.cjs",
 ];
 
+/// ADR 1145: the module-script entries of the HTML page at `path` in host discovery's own grammar, or the reason it refuses the page. The product realm reads the
+/// same page the same way, so a page one refuses the other refuses.
+pub(crate) fn html_module_entries(path: &Path, source: &str) -> Result<Vec<String>, String> {
+    html::html_entries_at(path, source).map_err(|refusal| refusal.reason)
+}
+
 /// Discovery refusal is explanation only, never diagnostic authority, unless
 /// an input it read was unobservable (ADR 0915): then the ordinary analysis
 /// that follows a refusal must not certify.
