@@ -913,7 +913,7 @@ pub(super) fn semantic_role_before_awaits(
         if role == ExecutionRole::DeferredCallback
             && file.ast.functions_owning(span).any(|function| {
                 function.body.contains(span)
-                    && super::write_roles::is_event_handler_literal(file, function)
+                    && super::write_roles::is_event_handler_literal(lookup, file, function)
             })
             && !super::write_roles::runs_off_callback_stack(file, span, lookup)
         {
@@ -1012,7 +1012,7 @@ pub(super) fn semantic_role_before_awaits(
     if let Some(role) = invocation_flow_role(file, span, lookup, classifying) {
         return role_arm!("callee_roles.invocation-flow", role);
     }
-    let compiler_role = source_execution_role(file, span, allowed);
+    let compiler_role = source_execution_role(lookup, file, span, allowed);
     if compiler_role != ExecutionRole::Unknown {
         return role_arm!("callee_roles.compiler-source", compiler_role);
     }
@@ -1782,7 +1782,7 @@ pub(super) fn callee_parameter_use_role(
         );
         // A call in a denied handler: a known delivery, with no proof of its
         // stack, so the callee is unplaced, never the component's rendering.
-        if here == ExecutionRole::Unknown && super::in_denied_handler(file, call.span) {
+        if here == ExecutionRole::Unknown && super::in_denied_handler(lookup, file, call.span) {
             return Some(ExecutionRole::Unknown);
         }
         if !matches!(
@@ -3205,7 +3205,7 @@ pub(crate) fn action_step_call_sites<'a>(
             if file.compiler.callback_roles.iter().any(|callback| {
                 callback.span == reference
                     && callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
-                    && !super::handler_event_denied(file, callback.span)
+                    && !super::handler_event_denied(lookup, file, callback.span)
             }) {
                 continue;
             }

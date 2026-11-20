@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1148 (round 2, N1): the control's named-node collection reached by a string key written with an escape (`[\"\\u0061ttributes\"]`), its `type` node's value written. Chrome warns REACTIVE_WRITE_IN_OWNED_SCOPE and STRICT_READ_UNTRACKED at the handler's setter and read; the checker stays uncertifiable (the proof is withdrawn)."
+}

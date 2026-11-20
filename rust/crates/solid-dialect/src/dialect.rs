@@ -247,6 +247,17 @@ pub trait Dialect: Sync {
     /// never to grant a package semantics.
     fn ecosystem_scopes(&self) -> &'static [&'static str];
 
+    /// ADR 1148: what a program that imports one module of this dialect's own runtime
+    /// packages ([`Dialect::primitive_defining_packages`]) may do to an element's
+    /// properties and attributes, asked per module specifier as a program writes it, the
+    /// root and every subpath alike (`@solidjs/web`, `@solidjs/web/frames/client`).
+    ///
+    /// The engine asks it of an import, a re-export or a dynamic load of such a module.
+    /// `None`: this dialect has not audited that specifier, and the program is taken to
+    /// retype (ADR 0027: missing native behaviour is unknown, never "no effects"), so a
+    /// subpath a later release adds withdraws the proof until it is audited.
+    fn runtime_module_element_writes(&self, specifier: &str) -> Option<ElementWrites>;
+
     /// Resolves an exported name to a primitive, or `None` when this dialect
     /// does not export it.
     fn primitive(&self, name: &str) -> Option<Primitive>;
@@ -2263,4 +2274,18 @@ pub trait Dialect: Sync {
     fn is_async_boundary(&self, tag: &str) -> bool {
         self.boundary_kind(tag) == Some(Boundary::Async)
     }
+}
+
+/// What importing one module of a dialect's own runtime lets a program do to an element's properties and attributes
+/// ([`Dialect::runtime_module_element_writes`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ElementWrites {
+    /// Audited: no export of the module writes a property or an attribute of an element.
+    None,
+    /// Audited: only these exports write a property or an attribute of the element they are handed under a name the caller gives
+    /// (`setProperty(el, "type", "text")`), each as the module declares it (an alias is the program's, never the export's).
+    Exports(&'static [&'static str]),
+    /// Audited: the module finds elements and rewrites them (a morph of the existing children from server markup), so any import of
+    /// it may retype an element it was never handed.
+    Any,
 }

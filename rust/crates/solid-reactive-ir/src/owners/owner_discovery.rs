@@ -128,7 +128,7 @@ pub(crate) fn discover_owner_file(
             edges.push(SymbolicOwnerEdge {
                 source: None,
                 target: OwnerTarget::Function(target.path.to_string(), function.span),
-                kind: if crate::execution_role::handler_event_denied(file, callback.span) {
+                kind: if crate::execution_role::handler_event_denied(lookup, file, callback.span) {
                     OwnerEdgeKind::Conditional
                 } else {
                     event_owner_edge(lookup, function.generator)
@@ -905,7 +905,7 @@ pub(crate) fn discover_owner_file(
                     OwnerEdgeKind::MayBeUnowned
                 }
                 _ if lookup.synchronous_event_dispatch_present()
-                    || crate::execution_role::handler_event_denied(file, callback.span) =>
+                    || crate::execution_role::handler_event_denied(lookup, file, callback.span) =>
                 {
                     OwnerEdgeKind::Conditional
                 }

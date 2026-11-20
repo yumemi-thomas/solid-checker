@@ -78,7 +78,9 @@ use thiserror::Error;
 /// methods and binding/assignment patterns.
 /// 106 (ADR 1133): a navigation URL not proven no `javascript:` URL and `srcdoc` markup are code sinks (`NavigationUrl`, `MarkupWrite`);
 /// `Object` handed on as a value is an `ObjectAssign` site, and `Object["assign"]` a key reader.
-pub const AST_FACTS_SCHEMA: u32 = 106;
+/// 107 (ADR 1148 round 2): the words of every identifier, string literal and template piece written with an escape (`escaped_words`): a name's decoded
+/// spelling, which a scan of the source text cannot see (`document.ev\u0061luate`).
+pub const AST_FACTS_SCHEMA: u32 = 107;
 
 mod argument_completion;
 pub(crate) mod code_sinks;
@@ -86,6 +88,7 @@ mod completion_call_cover;
 mod component_value_flow;
 mod computed_keys;
 mod emission;
+mod escaped_words;
 mod host_call_completion;
 mod host_constants;
 mod host_execution;

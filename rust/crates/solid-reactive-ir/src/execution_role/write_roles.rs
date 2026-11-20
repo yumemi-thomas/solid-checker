@@ -814,7 +814,9 @@ fn runs_in_disposal_uncached(
                     ComponentStatus::Proven => component_mount_reach(file, function, lookup, depth),
                     // ADR 0782: a handler literal is no component, whatever it
                     // renders (`onClick={() => { createRoot(() => <Inner />); }}`).
-                    ComponentStatus::Uncertain if is_event_handler_literal(file, function) => {
+                    ComponentStatus::Uncertain
+                        if is_event_handler_literal(lookup, file, function) =>
+                    {
                         DisposalReach::NotIn
                     }
                     ComponentStatus::Uncertain | ComponentStatus::No
@@ -848,7 +850,7 @@ fn runs_in_disposal_uncached(
                     ComponentStatus::No
                         if returned_by_rerunning_effect(file, function, lookup)
                             || event_only_entries(file, function, lookup)
-                            || is_event_handler_literal(file, function)
+                            || is_event_handler_literal(lookup, file, function)
                             || stored_function_called_only_by_events(file, function, lookup) =>
                     {
                         DisposalReach::NotIn
@@ -1012,7 +1014,7 @@ pub(super) fn runs_off_callback_stack(
     };
     let off_stack = |function: &solid_facts::ast::FunctionFact| {
         matches!(layer_run(file, function, lookup), LayerRun::FreshStack)
-            || (is_event_handler_literal(file, function) && !dispatch_vetoed())
+            || (is_event_handler_literal(lookup, file, function) && !dispatch_vetoed())
             || event_only_entries(file, function, lookup)
             || stored_function_called_only_by_events(file, function, lookup)
     };
@@ -1040,13 +1042,14 @@ pub(super) fn runs_off_callback_stack(
 /// user's event runs it outside any disposal, whatever else dispatches:
 /// `NotIn` needs that one run (ADR 0782).
 pub(super) fn is_event_handler_literal(
+    lookup: &SemanticLookup<'_>,
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
 ) -> bool {
     file.compiler.callback_roles.iter().any(|callback| {
         callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
             && callback.span == function.span
-            && !super::handler_event_denied(file, callback.span)
+            && !super::handler_event_denied(lookup, file, callback.span)
     })
 }
 
@@ -1113,7 +1116,7 @@ fn stored_function_called_only_by_events(
                 file.compiler.callback_roles.iter().any(|callback| {
                     callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
                         && callback.span == caller.span
-                        && !super::handler_event_denied(file, callback.span)
+                        && !super::handler_event_denied(lookup, file, callback.span)
                 })
             })
         })

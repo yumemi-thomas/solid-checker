@@ -42366,5 +42366,85 @@
   "found": "the round-2 review of ADR 1151 (coord-land/review-1151r2.md, N1: `<body/onfocusin=…>` and `public/frame.html`); the finding-level effect on main by the author (`product-realm-diagnostics-off` with the page `<body/onload=\"import('/node_modules/fz-prealm-any/index.js')\">`: 0 rows against 7 with a space)",
   "fixed": "ADR 1154: `inferred_host/html.rs` tokenizes attributes as HTML does (a solidus and white space separate them, lower-case names, unreadable names and `--!>` comments refused) and `product_realm::text_may_run_code` reads `on…=` after any byte that is no part of a longer name",
   "outside": "no generator writes a page: the grids emit program files (`App.tsx`, helper modules, a `fz-lib` package) and the harness's own fixed `index.html` (the oracle's and the fuzz host's, which the grammar already refuses for its `<p id=\"ready\">`), while a project's `index.html` and its `public/` pages are files of a fixture project that no cell varies, so no generated program can carry a handler after a solidus. The gates that hold it: the four unit tests of ADR 1154 (the host reader over 30 spellings and the realm's scan of the entry page and of a `public/` page), the six product-realm twins in the coverage snapshots (`product-realm-page-handler-solidus`, `-upper`, `-attribute` and `product-realm-public-handler` had 0 SC2002 rows on main and have 7; the space control and the static public page are unchanged), and the Chrome probe `html-tokenizer-probe.mjs`. A fuzz context that writes a page beside a program is owed with the first generator that varies a fixture's files (docs/open-work.md)."
+ },
+ {
+  "finding": "ADR 1148 self-review: the retype veto of the checkbox `change` proof missed two spellings that retype a control, an accessor lookup (`HTMLInputElement.prototype.__lookupSetter__(\"type\").call(el, \"text\")`) and a folded attribute-API name (`el[\"set\" + \"Attribute\"](\"type\", \"text\")`: the name is spelled nowhere), so the proof stayed on for a control that may be a text control, whose `change` Chrome delivers inside `remove()` or `focus()` calls, possibly in an owned scope (a false-positive risk on SC4001, SC2001 and the read rows)",
+  "found": "twin programs of fourteen retype spellings run on the head binary before the Opus review (2026-11-20): two were certified, nine vetoed already, three retype nothing",
+  "fixed": "ADR 1148 (change_delivery.rs ATTRIBUTE_API gains the four accessor lookups; program_may_retype reads a computed key's `texts`; fixtures change-retyped-lookup-setter and change-retyped-folded-name; unit test the_retype_veto_follows_what_the_project_writes, each case failing without its clause)",
+  "outside": "the generator's `onChange` cells are text controls (misuse.mjs DENIED `dny-change-*`, denied by design) and a created checkbox's document listener (`evt-created-checkbox`); it has no JSX `onChange` on a literal checkbox or radio and no write of such a control's `type` beside one, so it cannot generate the program. The fixtures and the unit test hold it; a retyped-checkbox cell is the generator's to grow with the checkbox `change` cells (misuse.mjs, legal.mjs REACHABLE_CONTEXTS)"
+ },
+ {
+  "finding": "ADR 1148 coordinator review of the first draft: the retype veto of the checkbox `change` proof read project files only, so a dependency that retypes without being handed the element (`document.querySelectorAll(\"input\").forEach((i) => { i.type = \"text\"; })` in a package's analysed source) and a project call into the web package's property writers (`setProperty(el, \"type\", \"text\")` from `@solidjs/web`, also under an alias) kept the proof on: a proven SC4001 violation where the control may be a text control whose `change` Chrome delivers inside `remove()` or `focus()` calls, possibly in an owned scope (a false-positive risk)",
+  "found": "review of ADR 1148 by the coordinator (2026-11-20), reproduced on the first head binary by the fixtures change-retyped-dependency and change-retyped-runtime-writer (a proven violation there, uncertifiable now); the second review round asked for exact imported symbols in place of a spelling list",
+  "fixed": "ADR 1148 (change_delivery.rs retype_hazard reads every file the program runs except the dialect's own runtime packages, a dependency's source as the project's; Dialect::element_property_writers names the web package's writers as (module, export) pairs and takes_runtime_writer asks of each file whether it takes one in as that exact symbol: a named import (alias included), a default or namespace import, a re-export, export *, a dynamic import or require; fixtures change-retyped-dependency, change-dependency-plain (the negative twin: a benign loaded dependency leaves the proof standing), change-retyped-runtime-writer, change-retyped-runtime-writer-alias, change-local-setproperty (a function of the same name is no import: the proof is not refused by a name); unit tests the_retype_veto_reads_the_dependencies_the_program_runs and the_runtime_writers_are_audited_exports_of_modules_the_dialect_owns, each case failing without its clause)",
+  "outside": "the generator has no checkbox or radio `change` handler, no dependency package that writes an element's `type` and no import of the web package's property writers, so it cannot generate the program; the fixtures and the unit tests hold it (a grid cell is the generator's to grow with the checkbox `change` cells)"
+ },
+ {
+  "finding": "ADR 1148 Opus review of a537da96b, F1: the retype veto of the checkbox `change` proof missed every route to the control's `Attr` node: `document.evaluate(\"//input/@type\", …).singleNodeValue.value = \"text\"` (also `nodeValue` and `textContent`) writes no key `type`, spells none of the 20 names and leaves the delivery premise intact, so the checker certified a program in which Chrome retypes the control and, when an ancestor's `textContent = \"\"` removes it focused and dirty, delivers `change` inside an owned body (REACTIVE_WRITE_IN_OWNED_SCOPE, STRICT_READ_UNTRACKED): a false clean",
+  "found": "Opus review of ADR 1148 (review-1148.md, probes p03-p05, p28, p34, p36), Chrome-verified by the runtime oracle on p34 and p36; reproduced here by the fixtures change-retyped-attr-node and change-attr-node-control on the reviewed head binary",
+  "fixed": "ADR 1148 round 1 (change_delivery.rs ATTRIBUTE_API withdraws on every route to an Attr node by family: evaluate, createExpression, XPathEvaluator, singleNodeValue, snapshotItem, iterateNext, createAttribute(NS) with the named-item and node methods; fixtures change-retyped-attr-node (U) and change-attr-node-control (the same program without the two lines, certified); runtime-oracle cases change-attr-node-retype, change-attr-node-control and change-attr-node-effect-*; unit test the_retype_veto_follows_what_the_project_writes, each case failing without its name)",
+  "outside": "the generator has no checkbox or radio `change` handler, no XPath or Attr-node route and no ancestor removal while a control is focused and dirty, so it cannot generate the program; the fixtures, the oracle cases and the unit test hold it (a grid cell is the generator's to grow with the checkbox `change` cells)"
+ },
+ {
+  "finding": "ADR 1148 Opus review of a537da96b, F2: the file-level exclusion of the dialect's runtime packages hid `@solidjs/web/frames/client`, whose `createFrame` morphs the children of its boundary with the attributes of the server's markup, `type` included (`frames/dist/wire.js` `morphAttributes`: `oldEl.setAttribute(name, attr.value)`), and the writer check asked only the module root `@solidjs/web`, so a program that imports the frames tier was certified past a server-driven retype",
+  "found": "Opus review of ADR 1148 (review-1148.md, probe p43, checker-verified; Chrome not run: it needs a frame server); reproduced here by the fixture change-retyped-frames (a stand-in module the program loads) on the reviewed head binary",
+  "fixed": "ADR 1148 round 1 (Dialect::runtime_module_element_writes answers per module specifier, root and subpaths, as Option<ElementWrites>: Exports for the root and the JSX runtimes, Any for the frames tier, None for the audited tiers, unknown for the rest; solid_v2_runtime_subpaths.txt freezes every exported subpath of the pinned packages, held against the Solid 2 audit by solid-dialect's every_exported_runtime_subpath_is_audited and against the installed packages by scripts/fuzz/runtime-exports.test.mjs; takes_runtime_writer asks it of an import, a side-effect import, a re-export, an export *, an import() and a require(); a specifier that is no runtime package's by name but resolves into a file of one (a relative path into node_modules, a paths alias) is unknown too, by the build's attested resolution; fixtures change-retyped-frames (U) and change-retyped-frames-alias (U); unit test the_retype_veto_follows_a_specifier_into_a_runtime_file)",
+  "outside": "the generator has no checkbox or radio `change` handler and imports no subpath of the web package's runtime, so it cannot generate the program; the fixture and the tests hold it"
+ },
+ {
+  "finding": "ADR 1148 Opus re-check of d0c1d494e (review-1148-r2.md), N1: the retype veto of the checkbox `change` proof matched the DOM names in the source text, and the parser decodes a name written with an escape (`document.ev\\u0061luate(…).singleNodeV\\u0061lue`, `el[\"\\u0061ttributes\"]`, a template key, `el.s\\u0065tAttribute(\"type\", \"text\")`, `el.t\\u0079pe = \"text\"`) to a name no text spells, so the checker certified a literal checkbox whose `type` the program rewrites to text, which delivers `change` as a text control does, here inside a later root's body: the handler's write ran owned (a false clean)",
+  "found": "Opus review of ADR 1148 round 2 (review-1148-r2.md, probes n1-n3, Chrome-verified by the reviewer); the template, `type`-member, method and collection-identifier spellings are the author's twins of the same hole",
+  "fixed": "ADR 1148 round 2 (facts schema 107: AstFacts::escaped_words lists the decoded words of every identifier, string literal and template piece written with an escape, solid-facts/src/ast/escaped_words.rs; change_delivery.rs spells_by_escape matches them against ATTRIBUTE_API and the key `type` beside the source-text scan; fixtures change-escaped-{identifier,string-key,collection,template,type-member} (U), -type-string (held) and -benign (certified), runtime-oracle cases of the same names, unit tests in escaped_words.rs and change_delivery.rs, each arm failing without its clause)",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-collection-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-collection-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-collection-store-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-collection-ident-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-collection-ident-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-collection-ident-store-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-collection-template-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-collection-template-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-collection-template-store-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-member-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-member-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-member-store-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-method-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-method-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-method-store-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-xpath-refresh-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-xpath-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-dny-change-checkbox-esc-xpath-store-direct-none"
+  ],
+  "rediscovered": "focus on the eight `dny-change-checkbox-*` contexts' mx-recall programs (misuse.mjs CHECKBOX_RETYPES, REACTIVE_WRITE_IN_OWNED_SCOPE and STRICT_READ_UNTRACKED, 552 programs, fast host with Chrome confirming, debug checkers, 2026-11-21): the reviewed head (d0c1d494e) 18 false cleans at REACTIVE_WRITE_IN_OWNED_SCOPE (234 over both codes: the six escaped spellings; the plain `retyped` cell and the string key were vetoed already); FIXED here (0 false cleans, every program a recall gap)"
+ },
+ {
+  "finding": "ADR 1148 Opus re-check of d0c1d494e (review-1148-r2.md), N1: the retype veto of the checkbox `change` proof matched the DOM names in the source text, and the parser decodes a name written with an escape (`document.ev\\u0061luate(…).singleNodeV\\u0061lue`, `el[\"\\u0061ttributes\"]`, a template key, `el.s\\u0065tAttribute(\"type\", \"text\")`, `el.t\\u0079pe = \"text\"`) to a name no text spells, so the checker certified a literal checkbox whose `type` the program rewrites to text, which delivers `change` as a text control does, here inside a later root's body: the handler's read ran owned (a false clean)",
+  "found": "Opus review of ADR 1148 round 2 (review-1148-r2.md, probes n1-n3, Chrome-verified by the reviewer); the template, `type`-member, method and collection-identifier spellings are the author's twins of the same hole",
+  "fixed": "ADR 1148 round 2 (facts schema 107: AstFacts::escaped_words lists the decoded words of every identifier, string literal and template piece written with an escape, solid-facts/src/ast/escaped_words.rs; change_delivery.rs spells_by_escape matches them against ATTRIBUTE_API and the key `type` beside the source-text scan; fixtures change-escaped-{identifier,string-key,collection,template,type-member} (U), -type-string (held) and -benign (certified), runtime-oracle cases of the same names, unit tests in escaped_words.rs and change_delivery.rs, each arm failing without its clause)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-dny-change-checkbox-esc-collection-memo-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-collection-signal-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-collection-store-as-cast-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-collection-ident-memo-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-collection-ident-signal-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-collection-ident-store-as-cast-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-collection-template-memo-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-collection-template-signal-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-collection-template-store-as-cast-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-member-memo-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-member-signal-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-member-store-as-cast-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-method-memo-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-method-signal-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-method-store-as-cast-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-xpath-memo-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-xpath-signal-direct-none",
+   "mx-strict-read-untracked-dny-change-checkbox-esc-xpath-store-as-cast-direct-none"
+  ],
+  "rediscovered": "focus on the eight `dny-change-checkbox-*` contexts' mx-recall programs (misuse.mjs CHECKBOX_RETYPES, REACTIVE_WRITE_IN_OWNED_SCOPE and STRICT_READ_UNTRACKED, 552 programs, fast host with Chrome confirming, debug checkers, 2026-11-21): the reviewed head (d0c1d494e) 216 false cleans at STRICT_READ_UNTRACKED (234 over both codes: the six escaped spellings; the plain `retyped` cell and the string key were vetoed already); FIXED here (0 false cleans, every program a recall gap)"
  }
 ]

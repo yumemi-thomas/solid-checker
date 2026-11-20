@@ -536,7 +536,7 @@ pub(super) fn member_reaches_only_events(
     let event_handlers = || {
         file.compiler.callback_roles.iter().filter(|callback| {
             callback.role == CallbackRoleKind::EventHandler
-                && (denied_all || !super::handler_event_denied(file, callback.span))
+                && (denied_all || !super::handler_event_denied(lookup, file, callback.span))
         })
     };
     // The value of an attribute on some element, peeled exactly.
@@ -677,7 +677,11 @@ pub(super) fn member_in_exclusive_named_event_handler(
                     && intrinsic_attribute_value(file, callback.span)
                     && file.ast.peel_ts_sugar_span(callback.span) == *reference
                     && (denied_counts(visiting)
-                        || !crate::execution_role::handler_event_denied(file, callback.span))
+                        || !crate::execution_role::handler_event_denied(
+                            lookup,
+                            file,
+                            callback.span,
+                        ))
             }) || component_prop_literal(file, *reference).is_some_and(|(element, prop)| {
                 component_prop_reaches_only_events(file, element, prop, views, lookup, visiting)
             })

@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1148 (round 2, N1): the same retype with template-literal keys written with an escape (`` [`ev\\u0061luate`] ``). Chrome warns REACTIVE_WRITE_IN_OWNED_SCOPE and STRICT_READ_UNTRACKED at the handler's setter and read; the checker stays uncertifiable (the proof is withdrawn)."
+}
