@@ -1021,7 +1021,7 @@ impl StaticApiContext<'_> {
             // may be what runs it.
             let dispatched = || {
                 self.lookup.synchronous_event_flush_dispatch_present()
-                    || crate::execution_role::in_denied_handler(file, call.span)
+                    || crate::execution_role::in_denied_handler(self.lookup, file, call.span)
             };
             let mut unplaced = None;
             if let Some(kind) = kind

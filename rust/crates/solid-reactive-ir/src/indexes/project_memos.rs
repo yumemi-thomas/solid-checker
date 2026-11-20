@@ -86,6 +86,7 @@ project_tables! {
     48 module_scope: ModuleScopeRuns,
     49 flush_veto: FlushVetoAnswer,
     50 handed_calls: IntrinsicHandedToUnseen,
+    51 retype_veto: RetypeVeto,
 }
 
 /// A whole-program memo: key `()`, computed from the lookup in one
@@ -355,6 +356,18 @@ whole_program! {
     cycle: true,
     direct: |lookup| crate::interproc::accessor_provenance::handed_to_unseen_code(lookup),
     |ctx| Ok(ctx.project(crate::interproc::accessor_provenance::handed_to_unseen_code))
+}
+
+whole_program! {
+    /// ADR 1148: whether any project file may write the `type` of an element (a
+    /// write under that key, a computed key no proof narrows away from it, a
+    /// spelling of the DOM's attribute API or of an accessor lookup, or a
+    /// computed key that folds to one of those names), which withdraws the
+    /// `change` proof of a literal checkbox or radio.
+    RetypeVeto, 51, retype_veto, "retype_veto", bool,
+    cycle: true,
+    direct: |lookup| crate::change_delivery::program_may_retype(lookup),
+    |ctx| Ok(ctx.project(crate::change_delivery::program_may_retype))
 }
 
 whole_program! {

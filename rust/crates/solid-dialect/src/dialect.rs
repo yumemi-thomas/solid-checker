@@ -247,6 +247,21 @@ pub trait Dialect: Sync {
     /// never to grant a package semantics.
     fn ecosystem_scopes(&self) -> &'static [&'static str];
 
+    /// ADR 1148: the exports of this dialect's own runtime that write a property or an
+    /// attribute of the element they are handed under a name the caller gives, each as
+    /// `(module, export)`: the module as a program imports it, the export name as the
+    /// module declares it (an alias is the program's, never the export's).
+    ///
+    /// A program that holds one may retype any element it can reach, with no write of
+    /// `type` in its own source (`setProperty(el, "type", "text")`), so a `change`
+    /// handler of a checkbox is no longer delivered by click activation alone. The
+    /// engine asks it of an import, a re-export or a dynamic load of one of this
+    /// dialect's modules, by the exact pair, never by the spelling of a name.
+    ///
+    /// `None`: this dialect does not say, and no program is taken to hold none (ADR
+    /// 0027: missing native behaviour is unknown, never "no effects").
+    fn element_property_writers(&self) -> Option<&'static [(&'static str, &'static str)]>;
+
     /// Resolves an exported name to a primitive, or `None` when this dialect
     /// does not export it.
     fn primitive(&self, name: &str) -> Option<Primitive>;

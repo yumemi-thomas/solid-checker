@@ -309,6 +309,9 @@ impl Dialect for Silent {
     fn ecosystem_scopes(&self) -> &'static [&'static str] {
         &[]
     }
+    fn element_property_writers(&self) -> Option<&'static [(&'static str, &'static str)]> {
+        None
+    }
     fn primitive(&self, _name: &str) -> Option<Primitive> {
         None
     }
@@ -567,6 +570,41 @@ fn module_ownership_follows_the_dialects_package_layout() {
     assert!(!two.owns_module("solid-js/store"));
     assert!(two.owns_module("@solidjs/web"));
     assert!(two.owns_module("solid-js"));
+}
+
+/// ADR 1148: each runtime writer the dialect names is a module it owns and an audited value export of that module, so the list cannot name a symbol the export table
+/// does not hold, and a dialect that says nothing is unknown (`None`), never "no writers".
+#[test]
+fn the_runtime_writers_are_audited_exports_of_modules_the_dialect_owns() {
+    let two = &Solid2 as &dyn Dialect;
+    let writers = two.element_property_writers().expect("Solid 2 states them");
+    assert!(!writers.is_empty());
+    for (module, export) in writers {
+        assert!(two.owns_module(module), "{module}");
+        let exported = crate::exports::modules(
+            crate::exports::solid_v2_solidjs_web::VALUES,
+            crate::exports::solid_v2_solidjs_web::TYPES,
+            export,
+            crate::exports::Position::Value,
+        );
+        assert!(
+            exported.contains(module),
+            "{module} exports {export}: {exported:?}"
+        );
+    }
+    // The ordinary imports are no writers: a component, a render call, a fixed-property writer.
+    for export in [
+        "render",
+        "For",
+        "Show",
+        "className",
+        "style",
+        "insert",
+        "template",
+    ] {
+        assert!(!writers.iter().any(|(_, name)| *name == export), "{export}");
+    }
+    assert_eq!((&Silent as &dyn Dialect).element_property_writers(), None);
 }
 
 /// Four of the five control-flow components were shared with 1.x; the

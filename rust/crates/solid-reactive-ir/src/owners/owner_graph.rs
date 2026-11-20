@@ -62,7 +62,7 @@ pub(super) fn owner_node(
         callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
             && callback.span.contains(function.body)
             && (dispatch_uncertain
-                || crate::execution_role::handler_event_denied(file, callback.span))
+                || crate::execution_role::handler_event_denied(lookup, file, callback.span))
     }) {
         seed_context = (seed_context & !OWNER_CONTEXT_PROVEN_UNOWNED)
             | OWNER_CONTEXT_OWNED

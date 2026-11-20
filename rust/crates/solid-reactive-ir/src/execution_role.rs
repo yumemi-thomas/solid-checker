@@ -311,9 +311,9 @@ fn execution_role_where(
 
 /// Whether the event of the handler the compiler wires at `callback` keeps the
 /// host-delivery proof ([`crate::runtime_semantics::event_keeps_delivery_proof`]),
-/// read at the delivering element. A handler no attribute names (a spread) has
-/// no measured event: denied.
-pub(crate) fn handler_event_denied(file: &solid_facts::FileFacts, callback: Span) -> bool {
+/// read at the delivering element, by the event's name alone: no program is asked.
+/// A handler no attribute names (a spread) has no measured event: denied.
+pub(crate) fn handler_event_denied_by_name(file: &solid_facts::FileFacts, callback: Span) -> bool {
     !file.ast.jsx_containing(callback).any(|element| {
         element.attributes.iter().any(|attribute| {
             attribute
@@ -327,12 +327,29 @@ pub(crate) fn handler_event_denied(file: &solid_facts::FileFacts, callback: Span
     })
 }
 
+/// [`handler_event_denied_by_name`], and ADR 1148: a `change` handler of a literal
+/// checkbox or radio keeps the proof too ([`crate::change_delivery`]), where the
+/// program keeps the control's type.
+pub(crate) fn handler_event_denied(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    callback: Span,
+) -> bool {
+    handler_event_denied_by_name(file, callback)
+        && !(crate::change_delivery::checkable_change_handler(file, callback)
+            && crate::change_delivery::program_keeps_control_types(lookup))
+}
+
 /// Whether `span` is inside a handler of a denied event.
-pub(crate) fn in_denied_handler(file: &solid_facts::FileFacts, span: Span) -> bool {
+pub(crate) fn in_denied_handler(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    span: Span,
+) -> bool {
     file.compiler.callback_roles.iter().any(|callback| {
         callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
             && callback.span.contains(span)
-            && handler_event_denied(file, callback.span)
+            && handler_event_denied(lookup, file, callback.span)
     })
 }
 
@@ -344,6 +361,7 @@ pub(crate) fn in_denied_handler(file: &solid_facts::FileFacts, span: Span) -> bo
 /// `ref={[makeDirective()]}` execute while rendering and must fall through to
 /// their tracked/untracked region or enclosing component.
 fn source_execution_role(
+    lookup: &SemanticLookup<'_>,
     file: &solid_facts::FileFacts,
     span: Span,
     allowed: &[Span],
@@ -377,7 +395,7 @@ fn source_execution_role(
                     && crate::owners::yielded_value_contains(file, callback.span, function.span)
             }))
     });
-    if role == ExecutionRole::EventCallback && in_denied_handler(file, span) {
+    if role == ExecutionRole::EventCallback && in_denied_handler(lookup, file, span) {
         return role_arm!("execution_role.denied-event", ExecutionRole::Unknown);
     }
     role
