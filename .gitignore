@@ -2200,3 +2200,15 @@ packages/wasm/owned/
 !fixtures/reactive-ir/leaf-focus-no-listener/variants/oracle-computed-add/node_modules/**
 !fixtures/reactive-ir/leaf-focus-no-listener/variants/oracle-dynamic-spread/node_modules/
 !fixtures/reactive-ir/leaf-focus-no-listener/variants/oracle-dynamic-spread/node_modules/**
+!fixtures/reactive-ir/product-realm-page-handler/node_modules/
+!fixtures/reactive-ir/product-realm-page-handler/node_modules/**
+!fixtures/reactive-ir/product-realm-page-handler-solidus/node_modules/
+!fixtures/reactive-ir/product-realm-page-handler-solidus/node_modules/**
+!fixtures/reactive-ir/product-realm-page-handler-upper/node_modules/
+!fixtures/reactive-ir/product-realm-page-handler-upper/node_modules/**
+!fixtures/reactive-ir/product-realm-page-handler-attribute/node_modules/
+!fixtures/reactive-ir/product-realm-page-handler-attribute/node_modules/**
+!fixtures/reactive-ir/product-realm-public-handler/node_modules/
+!fixtures/reactive-ir/product-realm-public-handler/node_modules/**
+!fixtures/reactive-ir/product-realm-public-static/node_modules/
+!fixtures/reactive-ir/product-realm-public-static/node_modules/**
