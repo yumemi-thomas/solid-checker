@@ -681,6 +681,11 @@
   },
   {
     "name": "vite-plugin-solid",
+    "version": "3.0.0-next.27",
+    "digest": "e4bc3b8ec8f3ef6ba48752ea678fce506db02e43ab4ab37f6d918f21877f499f"
+  },
+  {
+    "name": "vite-plugin-solid",
     "version": "3.0.0-next.5",
     "digest": "77e89c29493a81a3906a6d8b8f60a918dfb8ccf59d0d53d520ab7212cc802e83"
   },
