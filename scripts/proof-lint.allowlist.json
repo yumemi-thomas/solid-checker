@@ -383,6 +383,12 @@
         "why": "pending-review"
       }
     },
+    "rust/crates/solid-reactive-ir/src/disabled_handlers.rs": {
+      "name-only-match": {
+        "count": 1,
+        "why": "ADR 1129 beside ADR 1134: the spelling is a JSX attribute name (`disabled`), which is syntax the compiler reads by name, not a binding; the match only keeps a view spread's handlers unresolved (an obligation), never makes a clean or a violation"
+      }
+    },
     "rust/crates/solid-reactive-ir/src/effect_api.rs": {
       "name-only-match": {
         "count": 1,
@@ -1197,8 +1203,8 @@
     },
     "rust/crates/solid-reactive-ir/src/package_action_calls.rs": {
       "default-on-missing": {
-        "count": 3,
-        "why": "polarity: yes means the value may be a function, which keeps the site (an uncertifiable SC2002 row, never a silence); a symbol with no declaration the compiler resolved, or a list of none, is a value nothing says is a type, so it stays a site. ADR 1114 family 3 slice E adds two with the same polarity: a tag no declaration resolves is taken as the library's (a site), and a writer root with no verdict is taken as not clear (a site)"
+        "count": 4,
+        "why": "polarity: yes means the value may be a function, which keeps the site (an uncertifiable SC2002 row, never a silence); a symbol with no declaration the compiler resolved, or a list of none, is a value nothing says is a type, so it stays a site. ADR 1114 family 3 slice E adds two with the same polarity: a tag no declaration resolves is taken as the library's (a site), and a writer root with no verdict is taken as not clear (a site); slice G adds one more: the named default in prototype_read takes a writer root with no verdict as not clear (a site)"
       },
       "private-judgment": {
         "count": 4,

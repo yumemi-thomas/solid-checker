@@ -12053,6 +12053,22 @@
      }
     }
    }
+  },
+  "foreach-carried-entry": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 3,
+      "violation": 0
+     }
+    }
+   }
   }
  },
  "arms": {
@@ -13188,6 +13204,14 @@
     "pair": "primitive-contexts",
     "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
     "context": "effect-apply",
+    "decisive": true
+   }
+  ],
+  "write_roles.role_entries_complete.foreach-carried": [
+   {
+    "pair": "foreach-carried-entry",
+    "code": "STRICT_READ_UNTRACKED",
+    "context": "barm-carried-handler",
     "decisive": true
    }
   ]

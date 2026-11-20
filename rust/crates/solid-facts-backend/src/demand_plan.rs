@@ -165,6 +165,20 @@ fn plan_file(
             .default_view_receiver_spans
             .insert(file.ast.peel_ts_sugar_span(member.object));
     }
+    // ADR 1137: whether a timer's handler may be a string (code it runs), the same demand: the value's primitive domain, no symbol observation.
+    for call in &file.ast.calls {
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        let named = file
+            .ast
+            .member_at(callee)
+            .and_then(|member| file.source_text(member.property))
+            .or_else(|| file.source_text(callee));
+        if matches!(named, Some("setTimeout" | "setInterval"))
+            && let Some(handler) = call.arguments.first()
+        {
+            spans.default_view_value_spans.insert(handler.span);
+        }
+    }
     collect_chain_link_spans(dialect, file, &mut spans);
     collect_delete_spans(dialect, file, &mut spans);
     emit_span_demands(

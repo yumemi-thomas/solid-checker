@@ -97,6 +97,27 @@ fn in_delegated_handler_of_disabled_control(file: &FileFacts, site: Span) -> boo
     })
 }
 
+/// ADR 1129 beside ADR 1134: whether a handler a `merge`/`omit` view spreads onto `element` may meet a `disabled` the dispatcher
+/// honors. True for one of [`DISABLEABLE`] that writes any `disabled` attribute, holds another spread (which may carry one), or
+/// whose view may own a `disabled` key. The view proof then leaves the spread's handlers unresolved: a handler that may never run
+/// is no violation, and the obligation stays.
+pub(crate) fn view_spread_may_meet_disabled(
+    file: &FileFacts,
+    element: &JsxElementFact,
+    view_keys: &[std::sync::Arc<str>],
+) -> bool {
+    element.member_object.is_none()
+        && file
+            .source_text(element.name.span)
+            .is_some_and(|tag| DISABLEABLE.contains(&tag))
+        && (element.spreads.len() > 1
+            || view_keys.iter().any(|key| key.as_ref() == "disabled")
+            || element
+                .attributes
+                .iter()
+                .any(|attribute| file.source_text(attribute.local_name) == Some("disabled")))
+}
+
 /// `onClick`: `on` and an upper-case letter, the form the compiler reads as an event (`onclick` is a property, `on:click` a listener).
 fn is_event_attribute(name: &str) -> bool {
     name.strip_prefix("on")

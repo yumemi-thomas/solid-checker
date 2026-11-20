@@ -20,6 +20,7 @@
 //
 //   node scripts/fuzz/matrix.mjs --out <fresh dir> --seed 1 --per-cell 20 [--codes A,B] [--contexts a,b] [--confirm-with-chrome]
 //     [--chrome-sample 3] [--shrink] [--baseline matrix.json] [--checker-label <commit>] [--all-cores]
+import { ARM_VARIANTS } from "./arm-shapes.mjs";
 import { provedKey } from "./proved.mjs";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { STORED_ASYNC_CONTEXTS, STORED_CONTEXTS } from "./flip-read.mjs";
@@ -559,6 +560,9 @@ function recallShapesOf(code, context, base, variants, { legal = false, lean = t
   // Batch 11, B2 (the re-review of #220): an `er-*` cell also takes the plain shape of each of the code's `erVariants` the cell fits (a JSX creation, a site of the owner-call
   // universe as a creating call is): its question is how the function is entered, not the spelling of the site.
   if (ER_CONTEXT_NAMES.includes(context)) return recallCell ? [...shapes, ...(SPEC[code].erVariants ?? []).filter(variantFits(code, context)).filter(takes).map((variant) => ({ variant, binding: "direct", layer: "none" }))] : shapes;
+  // ADR 1124 round 2: an arm-shape cell (arm-shapes.mjs `ARM_VARIANTS`) also takes the plain shape of each read variant its arm's question needs.
+  const armVariants = ARM_VARIANTS[code]?.[context];
+  if (armVariants) return recallCell ? [...shapes, ...armVariants.filter((variant) => recallVariantsOf(code, { legal }).includes(variant)).filter(takes).map((variant) => ({ variant, binding: "direct", layer: "none" }))] : shapes;
   if (CBP_CONTEXTS.includes(context) || BASE_ONLY_CONTEXTS().includes(context)) return shapes;
   for (const variant of variants.filter(takes)) {
     // A variant one source carries (`variantSources`, the settled async memo) is crossed on that source by the base grid; the recall
@@ -585,7 +589,12 @@ function recallShapesOf(code, context, base, variants, { legal = false, lean = t
   // The wrapper mounts a misuse cell takes (misuse.mjs `wrapMounts`): the direct binding and no layer.
   for (const mount of legal ? [] : SPEC[code].wrapMounts?.[context] ?? []) for (const shape of local.filter(wrapShape)) shapes.push({ ...shape, mount });
   // ADR 0940: CONTEXT_NOT_FOUND's `package` source is a recall source too, so it crosses the base shapes of the code's cells here and moves no default grid.
-  for (const source of [...SOURCE_AXES.files, ...SOURCE_AXES.package]) for (const shape of local) if (sourcesOf(code, shape.variant, shape.binding, context).includes(source)) shapes.push({ ...shape, source });
+  // ADR 1129: `prop-view-spread` adds an element beside the site, not another way to reach it: the plain shape of each variant (direct
+  // binding, no layer) is enough, and keeps the recall grids from growing by the whole base grid again.
+  // Only on a cell of the code's base grid, whose templates the `props` sources already take: a recall context's template may rest on
+  // C1 making its values itself (the `iter-*` cells patch the destructure of the setter C1 creates).
+  const plainOnly = (source, shape) => source !== "prop-view-spread" || (!recallCell && shape.binding === "direct" && shape.layer === "none");
+  for (const source of [...SOURCE_AXES.files, ...SOURCE_AXES.package]) for (const shape of local) if (plainOnly(source, shape) && sourcesOf(code, shape.variant, shape.binding, context).includes(source)) shapes.push({ ...shape, source });
   return shapes;
 }
 

@@ -1248,6 +1248,12 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_method_definition(&mut self, method: &oxc_ast::ast::MethodDefinition<'a>) {
+        // ADR 1114 family 3 slice G (round-2 review N2): a computed key of a class method is converted to a property key.
+        if method.computed
+            && let Some(key) = method.key.as_expression()
+        {
+            self.converted(key.span(), key);
+        }
         self.method_names.push(static_property_name(&method.key));
         walk::walk_method_definition(self, method);
         self.method_names.pop();
@@ -1842,6 +1848,10 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 | AssignmentOperator::LogicalNullish
         ) {
             self.converting_operators.push(span(expression.span));
+        } else if expression.left.as_member_expression().is_some() {
+            // ADR 1114 family 3 slice G (round-2 review N2): a member target may be a native setter, a typed array element or an array's `length`,
+            // each of which converts the value assigned; the receiver proves nothing.
+            self.converted(expression.span, &expression.right);
         }
         if self.assignment_target_has_unresolved(&expression.left) {
             self.module_hazards.push(ModuleHazardFact {
@@ -1988,8 +1998,21 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         if !property.computed {
             self.assignment_pattern_keys
                 .push(span(property.name.span()));
+        } else if let Some(key) = property.name.as_expression() {
+            // ADR 1114 family 3 slice G (round-2 review N2): a computed key of a pattern is converted to a property key, where V8 places it.
+            self.converted(key.span(), key);
         }
         walk::walk_assignment_target_property_property(self, property);
+    }
+
+    fn visit_binding_property(&mut self, property: &oxc_ast::ast::BindingProperty<'a>) {
+        // ADR 1114 family 3 slice G (round-2 review N2): a computed key of a pattern is converted to a property key, where V8 places it.
+        if property.computed
+            && let Some(key) = property.key.as_expression()
+        {
+            self.converted(key.span(), key);
+        }
+        walk::walk_binding_property(self, property);
     }
 
     fn visit_simple_assignment_target(

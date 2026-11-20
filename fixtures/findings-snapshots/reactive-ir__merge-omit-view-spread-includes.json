@@ -1,0 +1,27 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "uncertifiable",
+      "blocker": "spread-content-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/merge-omit-view-spread-includes/App.tsx",
+      "start": 911,
+      "end": 949,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "handler-spread-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/merge-omit-view-spread-includes/App.tsx",
+      "start": 920,
+      "end": 924,
+      "fixes": 0
+    }
+  ]
+}

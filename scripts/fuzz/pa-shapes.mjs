@@ -47,6 +47,10 @@
 //               gprotoclear, gprotoruntime  the written member run by code no site of the program spells (ADR 1114 family 3 slice F, Fable F5): `rev(a)` of
 //                        `fz-calmrev`, a package that reaches no Solid, runs `reverse` after `fz-gproto` writes it; the runtime clones a template root
 //                        (`void (<i>x</i>)`) after `fz-gprotoclone` writes `Node.prototype.cloneNode` and `Document.prototype.importNode`
+//               gprotoanyget, gprotoin, gprotoassign, gprotokey, gprotoerror, gprotoasyncret, gprotothensync  ADR 1114 family 3 slice G (the round-2 review's N1-N5):
+//                        `dv.byteLength` after `fz-gprotoanyget` defines it under an undecided key; `"fzprobe" in dv` after `fz-gprotoproxy` installs a Proxy;
+//                        `el.title = d` and a computed pattern key `[d]` after `fz-gprotodate`; `${e}` after `fz-gprotoerror` makes `message` an accessor;
+//                        an async function's returned object after `fz-gprotothenget`; an action in a `then` callback `fz-gprotothensync` (no Solid) runs at once
 //               gviewpattern  `fz-gviewpattern` replaces `btoa` through a click event's `view` read by a pattern (`({ view }) => …`); the site is `btoa("x")` (ADR 1108 part 2)
 //               gaccmember, gaccbare, gacctypeof, gaccpattern  `fz-gaccessor` redefines `devicePixelRatio` with a getter that calls the action; the site is the value read, no
 //                        call: `void window.devicePixelRatio`, `void devicePixelRatio`, `void typeof window.devicePixelRatio`, `({ devicePixelRatio: ratio } = window)` (ADR 0974)
@@ -83,13 +87,19 @@ const PROTO_ROUTES = {
   gprototemplate: { text: "void `${new Date(0)}`" },
   gprotocatch: { text: "void Promise.resolve(1).catch(() => {})" },
   gprotobare: { text: 'void dispatchEvent(new Event("fzprobe"))' },
-  gprotoget: { text: "void new DataView(new ArrayBuffer(1)).byteLength" },
+  gprotoget: { prelude: ["const dv = new DataView(new ArrayBuffer(1));"], text: "void dv.byteLength" },
   gprotoset: { text: "void new Set(new Float32Array(1))" },
   gprotourl: { text: 'void new URL(new URL("http://fz.test/"))' },
   gprotoruntime: { text: "void (<i>x</i>)" },
+  gprotoanyget: { prelude: ["const dv = new DataView(new ArrayBuffer(1));"], text: "void dv.byteLength" },
+  gprotoin: { prelude: ["const dv = new DataView(new ArrayBuffer(1));"], text: 'void ("fzprobe" in dv)' },
+  gprotoassign: { prelude: ['const el = document.createElement("div");', "const d = new Date(0);"], text: "el.title = d as unknown as string" },
+  gprotokey: { prelude: ["const d = new Date(0);", "const rec: Record<string, number> = {};", "let n = 0;"], text: "({ [d as unknown as string]: n } = rec)" },
+  gprotoerror: { prelude: ["const e = new Error();"], text: "void `${e}`" },
+  gprotoasyncret: { text: "const ret = async () => ({ fzprobe: 1 }); void ret()" },
   gviewpattern: { text: 'btoa("x")' },
 };
-const PROTO_KINDS = [...Object.keys(PROTO_ROUTES), "gprotoclear"];
+const PROTO_KINDS = [...Object.keys(PROTO_ROUTES), "gprotoclear", "gprotothensync"];
 export const PA_PACKAGE_KINDS = ["reach", "pure", "dyn", "inline", "winself", "docview", "getter", ...WRITER_KINDS, ...CALL_KINDS, ...ACCESSOR_KINDS, ...PATTERN_KINDS, ...ROUTE_KINDS, ...PROTO_KINDS];
 export const PA_HOSTS = ["body", "memo", "root", "timer", "micro"];
 const OWNED_HOSTS = ["body", "memo", "root"];
@@ -105,7 +115,7 @@ export const PA_PACKAGES = {
   ...Object.fromEntries(PATTERN_KINDS.map((kind) => [kind, ["fz-getter"]])),
   gproto: ["fz-gproto"], gview: ["fz-gview"],
   gprotocall: ["fz-gproto"], gprotoapply: ["fz-gproto"], gprotoreflect: ["fz-gproto"], gprotodestr: ["fz-gproto"],
-  gprotoimplicit: ["fz-gprotoexec"], gprotoiter: ["fz-gprotoiter"], gprotoany: ["fz-gprotokey"], gprotocast: ["fz-gprotokey"], gprotoannot: ["fz-gprotokey"], gprotoconcat: ["fz-gprotodate"], gprototemplate: ["fz-gprotodate"], gprotocatch: ["fz-gprotothen"], gprotobare: ["fz-gprotoevent"], gprotoget: ["fz-gprotoget"], gprotoset: ["fz-gprotoiter"], gprotourl: ["fz-gprotourl"], gprotoclear: ["fz-gproto", "fz-calmrev"], gprotoruntime: ["fz-gprotoclone"], gviewpattern: ["fz-gviewpattern"],
+  gprotoimplicit: ["fz-gprotoexec"], gprotoiter: ["fz-gprotoiter"], gprotoany: ["fz-gprotokey"], gprotocast: ["fz-gprotokey"], gprotoannot: ["fz-gprotokey"], gprotoconcat: ["fz-gprotodate"], gprototemplate: ["fz-gprotodate"], gprotocatch: ["fz-gprotothen"], gprotobare: ["fz-gprotoevent"], gprotoget: ["fz-gprotoget"], gprotoset: ["fz-gprotoiter"], gprotourl: ["fz-gprotourl"], gprotoclear: ["fz-gproto", "fz-calmrev"], gprotoruntime: ["fz-gprotoclone"], gprotoanyget: ["fz-gprotoanyget"], gprotoin: ["fz-gprotoproxy"], gprotoassign: ["fz-gprotodate"], gprotokey: ["fz-gprotodate"], gprotoerror: ["fz-gprotoerror"], gprotoasyncret: ["fz-gprotothenget"], gprotothensync: ["fz-gprotothensync"], gviewpattern: ["fz-gviewpattern"],
 };
 /** `{ [context]: "misuse" | "legal" }`. */
 /** Kinds with no legal twin: under `fz-gprotoclone` the runtime clones every template with the written `cloneNode`, the component's own view included, so
@@ -171,6 +181,13 @@ export function paPackageFiles(kind, name = PA_PACKAGES[kind].at(-1)) {
     // ADR 1114 family 3 slice F: a package that reaches no Solid and runs `reverse`; the methods the runtime clones a template with, replaced.
     "fz-calmrev": { js: ["export const rev = (a) => a.reverse();"], dts: ["export declare function rev(a: Float32Array): Float32Array;"] },
     "fz-gprotoclone": { js: ['import { action } from "solid-js";', "", "for (const [proto, key] of [[Node.prototype, \"cloneNode\"], [Document.prototype, \"importNode\"]]) {", "  const real = proto[key];", "  proto[key] = function (...args) {", "    void action(function* () {})();", "    return real.apply(this, args);", "  };", "}"], dts: ["export {};"] },
+    // ADR 1114 family 3 slice G (the round-2 review's N1-N3, N5): an accessor defined under a key the scan does not decide, a Proxy installed as a prototype's
+    // prototype, `Error.prototype.message` as an accessor, `then` as an accessor on `Object.prototype`.
+    "fz-gprotoanyget": { js: ['import { action } from "solid-js";', "", 'const key = ["byte", "Length"].join("");', "const real = Object.getOwnPropertyDescriptor(DataView.prototype, key).get;", "Object.defineProperty(DataView.prototype, key, { configurable: true, get() {", "  void action(function* () {})();", "  return real.call(this);", "} });"], dts: ["export {};"] },
+    "fz-gprotoproxy": { js: ['import { action } from "solid-js";', "", "Object.setPrototypeOf(DataView.prototype, new Proxy(Object.prototype, { has(target, key) {", '  if (key === "fzprobe") void action(function* () {})();', "  return Reflect.has(target, key);", "} }));"], dts: ["export {};"] },
+    "fz-gprotoerror": { js: ['import { action } from "solid-js";', "", 'Object.defineProperty(Error.prototype, "message", { configurable: true, get() {', "  void action(function* () {})();", '  return "m";', '}, set(value) { Object.defineProperty(this, "message", { value, writable: true, configurable: true }); } });'], dts: ["export {};"] },
+    "fz-gprotothenget": { js: ['import { action } from "solid-js";', "", "let busy = false;", 'Object.defineProperty(Object.prototype, "then", { configurable: true, get() {', "  if (!busy && this && this.fzprobe === 1) { busy = true; try { void action(function* () {})(); } finally { busy = false; } }", "  return undefined;", '}, set(value) { Object.defineProperty(this, "then", { value, writable: true, configurable: true, enumerable: true }); } });'], dts: ["export {};"] },
+    "fz-gprotothensync": { js: ["const real = Promise.prototype.then;", "Promise.prototype.then = function (f, r) {", '  if (typeof f === "function" && f.name === "fzsync") { f(); return this; }', "  return real.call(this, f, r);", "};"], dts: ["export {};"] },
     "fz-gviewpattern": { js: ['import { action } from "solid-js";', "", "const real = globalThis.btoa;", 'document.addEventListener("click", ({ view }) => {', "  view.btoa = (text) => {", "    void action(function* () {})();", "    return real(text);", "  };", "}, { once: true });", "document.documentElement.click();"], dts: ["export {};"] },
     "fz-gwritesym": { js: ['import { action } from "solid-js";', "", 'var MARK = /* @__PURE__ */ Symbol.for("fz-gwritesym");', "globalThis[MARK] = () => {", "  void action(function* () {})();", "};"], dts: ["export {};"] },
   }[name];
@@ -217,6 +234,8 @@ export function paUse(kind) {
   if (form) return { ...base, text: form.text, preludeLines: form.prelude ?? [], importLines: [`import "${PA_PACKAGES[kind][0]}";`] };
   // ADR 1114 family 3 slice F: a package that reaches no Solid runs the member `fz-gproto` wrote.
   if (kind === "gprotoclear") return { ...base, text: "void rev(new Float32Array(1))", importLines: [`import "${PA_PACKAGES[kind][0]}";`, `import { rev } from "${PA_PACKAGES[kind][1]}";`] };
+  // ADR 1114 family 3 slice G (N4): a package that reaches no Solid runs a `then` callback at once; the action is called in the callback.
+  if (kind === "gprotothensync") return { ...base, solid: ["action"], text: "void Promise.resolve(1).then(function fzsync() { void action(function* () {})(); })", importLines: [`import "${PA_PACKAGES[kind][0]}";`] };
   if (GETTER_PATTERNS[kind]) return { ...base, text: GETTER_PATTERNS[kind].text, preludeLines: GETTER_PATTERNS[kind].prelude, importLines: [`import { clock } from "${PA_PACKAGES[kind][0]}";`] };
   // The read of a getter: no call, the member evaluated for its value.
   if (kind === "getter") return { ...base, text: "void clock.now", importLines: [`import { clock } from "${PA_PACKAGES[kind][0]}";`] };

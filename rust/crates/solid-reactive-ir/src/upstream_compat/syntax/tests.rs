@@ -1,4 +1,6 @@
-use super::{check_file, duplicate_slot, is_lowercase_led, is_numeric_literal};
+use std::sync::Arc;
+
+use super::{SpreadKeySets, check_file, duplicate_slot, is_lowercase_led, is_numeric_literal};
 
 /// The compiler lowers delegated events to `el.$$event = handler`, a
 /// property write where a later occurrence overwrites an earlier one —
@@ -196,7 +198,36 @@ fn inner_text_is_a_content_source() {
     );
 }
 
+/// ADR 1129: a spread no declared key set closes takes the view proof's keys.
+/// Keys without a content key close it; a content key there beside the
+/// children keeps it uncertifiable; no keys at all leave it open, as before.
+#[test]
+fn view_keys_close_a_spread_without_a_content_key() {
+    let source = r#"export const Case = (p: any) => <div {...p}>child</div>;"#;
+    let open = violations_with_view(source, None);
+    assert_eq!(open.len(), 1, "no key set: the spread may carry content");
+    assert_eq!(
+        open[0].analysis_context,
+        crate::blockers::SPREAD_CONTENT_UNPROVEN
+    );
+
+    let closed = violations_with_view(source, Some(&["title", "class"]));
+    assert_eq!(closed.len(), 0, "keys with no content key close the spread");
+
+    let content = violations_with_view(source, Some(&["title", "innerHTML"]));
+    assert_eq!(content.len(), 1, "innerHTML may reach the spread");
+    assert!(content[0].uncertain);
+    assert_eq!(
+        content[0].analysis_context,
+        crate::blockers::SPREAD_CONTENT_UNPROVEN
+    );
+}
+
 fn violations_for(source: &str) -> Vec<crate::StaticViolation> {
+    violations_with_view(source, None)
+}
+
+fn violations_with_view(source: &str, view: Option<&[&str]>) -> Vec<crate::StaticViolation> {
     use solid_facts::{
         FileFacts, ast,
         compiler::{COMPILER_FACTS_PROTOCOL, ExecutionMap},
@@ -216,6 +247,18 @@ fn violations_for(source: &str) -> Vec<crate::StaticViolation> {
     };
     let file = FileFacts::new(Generation::new(1).unwrap(), source, ast, compiler).unwrap();
     let mut violations = Vec::new();
-    check_file(&file, |_| None, &mut violations);
+    let keys = view.map(|keys| {
+        keys.iter()
+            .map(|key| Arc::from(*key))
+            .collect::<Vec<Arc<str>>>()
+    });
+    check_file(
+        &file,
+        SpreadKeySets {
+            declared: |_| None,
+            view: |_| keys.as_deref(),
+        },
+        &mut violations,
+    );
     violations
 }
