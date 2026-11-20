@@ -329,7 +329,10 @@ pub(crate) const CONTEXT_PROVIDED_TUPLE: &str = "context-provided-tuple";
 /// are (the slots' own symbols are the identity, as [`resolve`]'s are).
 ///
 /// What proves it, all in `file` (an unexported binding is reachable from no
-/// other module; a direct `eval` anywhere refuses):
+/// other module; a direct `eval` anywhere refuses). Each of the three Solid
+/// calls it names (the context read, the `createContext` creation and the
+/// `createSignal` creation) is resolved exactly ([`exactly_resolved`]): a
+/// missing record, or one the producer recovered, is no evidence and refuses.
 /// - `Ctx` is an unwritten, unexported `const` initialized by the dialect's
 ///   `createContext` with no argument: no default, so a read under no
 ///   provider throws (`ContextNotFoundError`) and returns nothing;
@@ -366,6 +369,7 @@ pub(super) fn context_provided_tuple<'a>(
         || created_context.construct
         || !created_context.arguments.is_empty()
         || lookup.primitive_at_call(file, created_context.span) != Some(Primitive::CreateContext)
+        || !exactly_resolved(lookup, file, created_context.callee)
     {
         return None;
     }
@@ -427,9 +431,8 @@ pub(super) fn context_provided_tuple<'a>(
     if created.construct
         || !file.ast.straight_line_calls.contains(&created.span)
         || !plain_value_creation(created)
-        || lookup
-            .resolved_callee_call(file, created.callee)
-            .is_some_and(|resolved| resolved.validity == typefacts::ResolvedCallValidity::Recovery)
+        // Fail closed like the context read: a creation with no resolved-call record passed here before (only a recovery refused).
+        || !exactly_resolved(lookup, file, created.callee)
     {
         return None;
     }
@@ -514,22 +517,27 @@ fn plain_value_creation(created: &CallFact) -> bool {
     }
 }
 
-/// A plain call of the context read with one argument, no spread.
+/// A plain call of the context read with one argument, no spread, resolved exactly.
 fn context_read(lookup: &SemanticLookup<'_>, file: &FileFacts, call: &CallFact) -> bool {
     !call.construct
         && file.ast.straight_line_calls.contains(&call.span)
         && call.arguments.len() == 1
         && !call.arguments[0].spread
-        // The call must be resolved, and not by a recovery: a missing record is no evidence (fail closed).
-        && lookup
-            .resolved_callee_call(file, call.callee)
-            .is_some_and(|resolved| resolved.validity != typefacts::ResolvedCallValidity::Recovery)
+        && exactly_resolved(lookup, file, call.callee)
+}
+
+/// The callee at `callee` has a resolved-call record, and the producer did not recover it: a missing record is no evidence (fail closed), as a recovery
+/// is none. `primitive_at_call` names a primitive from the symbol alone and needs no record, so each Solid call a proof here rests on asks this too.
+fn exactly_resolved(lookup: &SemanticLookup<'_>, file: &FileFacts, callee: Span) -> bool {
+    lookup
+        .resolved_callee_call(file, callee)
+        .is_some_and(|resolved| resolved.validity != typefacts::ResolvedCallValidity::Recovery)
 }
 
 /// The `const` of one name, in `file`, that the identifier reference at `span`
 /// reads, when nothing writes it and no export (or a script's global scope)
 /// publishes it.
-pub(crate) fn sole_reference_binding(file: &FileFacts, span: Span) -> Option<&BindingFact> {
+fn sole_reference_binding(file: &FileFacts, span: Span) -> Option<&BindingFact> {
     if !file
         .ast
         .identifiers

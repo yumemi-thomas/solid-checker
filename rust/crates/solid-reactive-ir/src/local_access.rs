@@ -10345,7 +10345,7 @@ fn function_handed_unfollowed(
 
 /// ADR 1091: whether `at` is the tag name of a JSX element that is no intrinsic element, written as a plain identifier (not a
 /// dotted `<Ns.Tag>`), opening or closing.
-pub(crate) fn rendering_tag(file: &solid_facts::FileFacts, at: solid_facts::core::Span) -> bool {
+fn rendering_tag(file: &solid_facts::FileFacts, at: solid_facts::core::Span) -> bool {
     file.ast.jsx_elements.iter().any(|element| {
         element.member_property.is_none()
             && !crate::execution_role::intrinsic_element(file, element)

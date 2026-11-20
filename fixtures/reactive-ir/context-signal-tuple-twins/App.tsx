@@ -131,7 +131,7 @@ export function ShadowApp() {
   );
 }
 
-// The children arm covers written children only: `children` given as a prop goes on as any component's prop (a package may run it).
+// `children` given as a prop goes on as any component's prop (a package may run it); written children are any component's children too.
 const FnContext = createContext<Pair>();
 function Shown() {
   const [label] = createSignal("s");

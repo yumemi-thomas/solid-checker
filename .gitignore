@@ -499,6 +499,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/context-provider-children-refusals/node_modules/**
 !fixtures/runtime-oracle/context-provider-children-package/node_modules/
 !fixtures/runtime-oracle/context-provider-children-package/node_modules/**
+!fixtures/runtime-oracle/context-provider-children-placed/node_modules/
+!fixtures/runtime-oracle/context-provider-children-placed/node_modules/**
 !fixtures/reactive-ir/context-member-namespace-provider/node_modules/
 !fixtures/reactive-ir/context-member-namespace-provider/node_modules/**
 !fixtures/reactive-ir/own-setter-wrapper-identity/node_modules/

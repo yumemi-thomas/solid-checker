@@ -1,3 +1,11 @@
-# Context provider children refusals (ADR 1123, the review's F2 and F3)
+# Context provider children refusals (ADR 1123: F2, F3 and N1 of the withdrawn arm)
 
-The `context-provider-children` arm reads a dialect provider's written children in place only when the tag is this file's unwritten, unexported `const` of one name the dialect's `createContext` initializes (F2) and the provider element's own value is placed directly in owned JSX: a child of another element, or the whole returned value of a component the project renders only by its tag (or an entry nothing references) (F3). rc.21's provider returns `children(() => props.children)`, a memo its reader runs, so a provider value stored, passed to a call or returned to a caller nothing follows runs its children where that value is read. `ReturnedApp` and `NestedApp` certify; `Written` (a written `let`), `Pattern` (a pattern's name, here an unread component), `Imported` (another module's context), `Stored`, `Passed`, `Helped` and `Handed` keep their SC3001 and SC6002 rows (uncertifiable); the arm before round 1 left `Written` through `Helped` silent (the stub's provider is a component of a package with no source, whose hand-off question the arm answered). Stub: `context-provider-proof`'s.
+ADR 1123 withdrew the `context-provider-children` arm, which read a dialect provider's written children in place (a child element or expression runs where the provider element is created). rc.21's provider returns `children(() => props.children)`, a memo its reader runs, so the children run where the provider's value is read, and no test of where the provider *element* is written says where that is (review round 2, N1; round 1's F2 and F3 were the cases the first tests missed).
+
+Every case keeps its SC3001 and SC6002 rows (uncertifiable), as any component's children do, `ReturnedApp` and `NestedApp` included (the withdrawn arm certified those two). The cases are the redo's acceptance set (`docs/open-work.md`): a transitive placement may certify `ReturnedApp` and `NestedApp` only (a provider whose value is consumed where it is created); each other case must keep its rows.
+
+- F2, a tag that is no provider: `WrittenApp` (a written `let`), `PatternApp` (a pattern's name, here an unread component), `ImportedApp` (another module's context).
+- F3, the provider element's value goes elsewhere: `StoredApp`, `PassedApp`, `HelpedApp`, `HandedApp`.
+- N1, the provider is the whole return of a component and that component's element goes elsewhere: `ReturnedStoredApp`, `ArrayHandedApp`, `NestedStoredApp`.
+
+Stub: `context-provider-proof`'s. Chrome: runtime-oracle `context-provider-children-handed`, `-package` and `-placed`.

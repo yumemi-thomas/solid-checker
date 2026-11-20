@@ -46,6 +46,28 @@
       "fixes": 0
     },
     {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-signal-tuple-twins/App.tsx",
+      "start": 1311,
+      "end": 1322,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-signal-tuple-twins/App.tsx",
+      "start": 1311,
+      "end": 1322,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -129,8 +151,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/context-signal-tuple-twins/App.tsx",
-      "start": 3655,
-      "end": 3662,
+      "start": 3659,
+      "end": 3666,
       "fixes": 0
     },
     {
@@ -140,8 +162,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/context-signal-tuple-twins/App.tsx",
-      "start": 3655,
-      "end": 3662,
+      "start": 3659,
+      "end": 3666,
       "fixes": 0
     }
   ]

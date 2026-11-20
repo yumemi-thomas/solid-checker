@@ -1214,10 +1214,6 @@
       }
     },
     "rust/crates/solid-reactive-ir/src/package_hand_off.rs": {
-      "primitive-name-match": {
-        "count": 1,
-        "why": "ADR 1123 (round 1, F2): the primitive comes from the exact call resolution (`primitive_at_call`, a resolved Solid export, no recovery); the enum names the one primitive the provider's binding must be created by (createContext), no name is matched"
-      },
       "private-judgment": {
         "count": 5,
         "why": "pending-review"
