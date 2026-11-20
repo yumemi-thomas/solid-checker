@@ -1,0 +1,9 @@
+**Corpus, default build (measured).** The checker's stdout over the 34 projects, one process each, dev build, release builds, compared byte for byte (sha256 of stdout, `scripts/writer-census-identity.mjs`; the reports are kept gzipped in `runs/`):
+
+| run | against the base `dba9d3cee` |
+|---|---|
+| final default build (the branch's Rust at `bc06db9d2`, nothing on) | 33 of 34 projects byte-identical |
+| the same build with the what-if switch set: `SOLID_CHECKER_WHATIF_WRITER_DROP` (the floor's drop list of every project) and every class prefix (`escape:`, `generated:`, `prototype-`, `unread:`, `unloaded`) | 33 of 34 byte-identical: the default build does not read the switch, so no row moved (the same variables move 98,436 rows in the what-if build) |
+| the first form of the branch's build (census on, switch ungated), the census run | 33 of 34 byte-identical |
+
+The one project that differs in every comparison is app-game, and it differs from the base itself: two runs of the base build give reports that differ in four SC5003 findings (`geometry.ts:174`, `:175`, `:179`, `strokeDrawing.ts:315`: the `relatedLocations` entry names `useTick.ts:29` in one run and `createDnd.ts:158` in another; a known nondeterminism, `docs/open-work.md`). With those findings left out, app-game's report is identical to the base's in every run (findings, premises, hazards, metrics: all of it), and the other 33 projects are identical with them.
