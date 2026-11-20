@@ -2224,3 +2224,163 @@ fn every_match_on_a_climbs_stop_names_every_stop() {
         "{matches} matches found: the deciding consumers are matched"
     );
 }
+
+/// A lookup over `facts` with the dialect and, where given, the backend's package verdicts, handed to `body`: the program-wide scans that record no memo.
+fn with_program_lookup<T>(
+    facts: &ProjectFacts,
+    reach: Option<&solid_facts::package_reach::PackageReachIndex>,
+    body: impl FnOnce(&SemanticLookup<'_>) -> T,
+) -> T {
+    let entities = entity_symbols(facts, &[]);
+    let ast_indexes = HashMap::default();
+    let symbol_names = HashMap::default();
+    let dialect = solid_dialect::Solid2;
+    let lookup = SemanticLookup::new(
+        facts,
+        &ast_indexes,
+        &entities,
+        &symbol_names,
+        &dialect,
+        false,
+    )
+    .with_package_reach(reach);
+    body(&lookup)
+}
+
+/// ADR 1151 (round 1): the focus proof reads every analysed file, a dependency's source as the project's, except the dialect's own runtime packages (whose registrars are asked at
+/// the import, `Dialect::runtime_module_listener_registrations`): the runtime's own `addEventListener(name, …)` with a variable type is what ended the proof for a program that
+/// analysed `@solidjs/web`, and what a program registers through the runtime is what its imports ask.
+#[test]
+fn the_focus_proof_reads_every_file_but_the_dialects_runtime() {
+    let may = |files: &[(&str, &str)]| {
+        with_program_lookup(
+            &project_files(files),
+            None,
+            crate::focus_delivery::program_may_run_code_on_focus,
+        )
+    };
+    let app = ("proj/app.tsx", "export const App = () => 1;");
+    let registers =
+        "export function addEvent(node, name, handler) { node.addEventListener(name, handler); }";
+    // The runtime's own files, by the package the path names (a store layout's real path included).
+    for path in [
+        "proj/node_modules/@solidjs/web/dist/web.js",
+        "proj/node_modules/.pnpm/@solidjs+web@2.0.0-rc.21/node_modules/@solidjs/web/dist/web.js",
+        "proj/node_modules/solid-js/dist/solid.js",
+        "proj/node_modules/@solidjs/signals/dist/dev.js",
+    ] {
+        assert!(!may(&[app, (path, registers)]), "{path}");
+    }
+    // The same code in any other package (an ecosystem package included: a consumer of the runtime, not part of it) is read like the project's.
+    for path in [
+        "proj/node_modules/dep/index.js",
+        "proj/node_modules/@solidjs/router/dist/index.js",
+        "proj/node_modules/@solidjs/webish/dist/index.js",
+    ] {
+        assert!(may(&[app, (path, registers)]), "{path}");
+    }
+    // A dependency's computed registration, its markup write, its handler property and its stand-in for `focus` end the proof as the project's would.
+    for source in [
+        "const m = 'add' + 'EventListener'; export const reg = (el, f) => el[m]('focus', f);",
+        "export const reg = (el, f) => el['\\u0061ddEventListener']('focus', f);",
+        "export const html = (el, v) => { el.innerHTML = v; };",
+        "export const on = (el, f) => { el.onfocus = f; };",
+        "export class Field extends HTMLElement { focus() {} }",
+    ] {
+        assert!(
+            may(&[app, ("proj/node_modules/dep/index.js", source)]),
+            "{source}"
+        );
+    }
+    assert!(!may(&[
+        app,
+        (
+            "proj/node_modules/dep/index.js",
+            "export const add = (a, b) => a + b;"
+        ),
+    ]));
+}
+
+/// ADR 1151 (round 1): a registrar of the runtime taken into any file of the program, and a specifier that reaches a file of the runtime by a name no audit lists, end the proof.
+#[test]
+fn the_focus_proof_asks_the_dialect_at_every_import_of_the_runtime() {
+    let may = |source: &str, specifier: &str, resolved: &str| {
+        let facts = project_files_resolved(
+            &[
+                ("proj/app.tsx", source),
+                ("proj/lib/x.ts", "export const x = 1;"),
+            ],
+            &[("proj/app.tsx", specifier, resolved)],
+        );
+        with_program_lookup(
+            &facts,
+            None,
+            crate::focus_delivery::program_may_run_code_on_focus,
+        )
+    };
+    let web = "proj/node_modules/@solidjs/web/dist/web.js";
+    for (source, specifier, resolved, expected) in [
+        // The registrar by the runtime's own specifier, and the quiet call the dialect exempts.
+        (
+            "import { addEvent } from '@solidjs/web';\nexport const f = (el, h) => addEvent(el, 'focus', h, false);",
+            "@solidjs/web",
+            web,
+            true,
+        ),
+        (
+            "import { addEvent } from '@solidjs/web';\nexport const f = (el, h) => addEvent(el, 'click', h, false);",
+            "@solidjs/web",
+            web,
+            false,
+        ),
+        (
+            "import { render } from '@solidjs/web';\nexport const f = render;",
+            "@solidjs/web",
+            web,
+            false,
+        ),
+        // The same quiet call through a relative path into the runtime's file, and through an alias: the specifier names no audited module.
+        (
+            "import { addEvent } from './node_modules/@solidjs/web/dist/web.js';\nexport const f = (el, h) => addEvent(el, 'click', h, false);",
+            "./node_modules/@solidjs/web/dist/web.js",
+            web,
+            true,
+        ),
+        (
+            "import { addEvent } from '@web/web';\nexport const f = (el, h) => addEvent(el, 'click', h, false);",
+            "@web/web",
+            web,
+            true,
+        ),
+        // An alias that lands elsewhere is that file's own question.
+        (
+            "import { x } from '@lib/x';\nexport const f = x;",
+            "@lib/x",
+            "proj/lib/x.ts",
+            false,
+        ),
+    ] {
+        assert_eq!(may(source, specifier, resolved), expected, "{source}");
+    }
+}
+
+/// ADR 1151 (round 1): the project's HTML is the backend's verdict ([`solid_facts::package_reach::PackageReachIndex::page_may_run_code`]); no verdict is the closed world.
+#[test]
+fn the_focus_proof_reads_the_pages_verdict() {
+    let files = project_files(&[("proj/app.tsx", "export const App = () => 1;")]);
+    let may = |reach: Option<&solid_facts::package_reach::PackageReachIndex>| {
+        with_program_lookup(
+            &files,
+            reach,
+            crate::focus_delivery::program_may_run_code_on_focus,
+        )
+    };
+    assert!(!may(None));
+    let clean = solid_facts::package_reach::PackageReachIndex::default();
+    assert!(!may(Some(&clean)));
+    let page = solid_facts::package_reach::PackageReachIndex {
+        page_may_run_code: true,
+        ..Default::default()
+    };
+    assert!(may(Some(&page)));
+}
