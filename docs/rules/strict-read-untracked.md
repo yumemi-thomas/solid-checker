@@ -80,7 +80,9 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   `onSettled(cb)`) takes that position's role only when every reference to it is
   a position, a resolved call or a `const` alias accounted the same way; any other
   (`[cb].forEach((g) => g())`, a global store, a returned object) leaves the read
-  uncertifiable (ADR 1119).
+  uncertifiable (ADR 1119). A whole element of a spread-free array literal the standard
+  `forEach` runs through an only-called parameter is a call there, read as `cb()`
+  written at the `forEach` (ADR 1124).
 - **Plain assignment targets are writes, not reads.** `store.name = next` is
   diagnosed by `no-store-mutation-outside-setter` without also reporting `store.name` here.
   Only the member that *is* the written target is exempt: read-modify-write

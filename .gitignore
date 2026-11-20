@@ -1956,3 +1956,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/action-in-owned-scope-prototype-iteration/node_modules/**
 !fixtures/runtime-oracle/package-prototype-iteration/node_modules/
 !fixtures/runtime-oracle/package-prototype-iteration/node_modules/**
+!fixtures/reactive-ir/string-code-standard-patch/node_modules/
+!fixtures/reactive-ir/string-code-standard-patch/node_modules/**
