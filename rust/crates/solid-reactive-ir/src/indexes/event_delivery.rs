@@ -1406,12 +1406,14 @@ pub(crate) fn scan_delivery_hazard(lookup: &super::SemanticLookup<'_>) -> bool {
 /// spelled anywhere in its text, or a handler property written (`el.onclick = …`; a text test, which only refuses more).
 fn may_hold_handler(file: &solid_facts::FileFacts) -> bool {
     file.ast.jsx_elements.iter().any(|element| {
-        element.attributes.iter().any(|attribute| {
-            attribute.namespace.is_some()
-                || file
-                    .source_text(attribute.local_name)
-                    .is_some_and(|name| name.len() > 2 && name.starts_with("on"))
-        })
+        // ADR 1139 r1 (F2): a spread may hand the element any handler (`{...{ onScroll: f }}`, a component's props).
+        !element.spreads.is_empty()
+            || element.attributes.iter().any(|attribute| {
+                attribute.namespace.is_some()
+                    || file
+                        .source_text(attribute.local_name)
+                        .is_some_and(|name| name.len() > 2 && name.starts_with("on"))
+            })
     }) || ["addEventListener", "attachEvent", "handleEvent"]
         .iter()
         .any(|spelling| file.source.contains(spelling))

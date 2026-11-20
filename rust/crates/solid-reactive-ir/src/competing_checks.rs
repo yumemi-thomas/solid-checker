@@ -349,8 +349,9 @@ fn creation_an_apply_may_deliver_in_shadow(
     }
 }
 
-/// The code a JSX handler may run on its own stack: the handler attribute values (every function written in one), and the functions
-/// they hand on or call, transitively. Per call in the reach:
+/// The code a JSX handler may run on its own stack: the handler attribute values (every function written in one, and the function a value
+/// names: a value nothing resolves may be any function), the exact handlers an intrinsic element's spread hands it (an unresolved spread
+/// may hand any), and the functions they hand on or call, transitively. Per call in the reach:
 /// - an argument that is no function literal (those are inside the reach already) and not proven non-callable is followed to the
 ///   function it names; one nothing names may be any function;
 /// - a Solid primitive's call adds nothing more (its callbacks are its arguments);
@@ -375,6 +376,41 @@ fn shadow_reach(lookup: &SemanticLookup<'_>) -> ShadowReach {
                         .is_some_and(|name| name.len() > 2 && name.starts_with("on"));
                 if let (true, Some(value)) = (handler, attribute.value) {
                     reached.push((file.path.to_string(), value));
+                    // ADR 1139 r1 (F1): a handler named by its value (`onScroll={handle}`, `obj.m`, `props.h`) runs the function the value
+                    // names; one nothing resolves may be any function.
+                    if let Some(expression) = attribute.expression {
+                        let expression = file.ast.peel_ts_sugar_span(expression);
+                        if file
+                            .ast
+                            .function_at(expression)
+                            .is_none_or(|function| function.span != expression)
+                        {
+                            match lookup
+                                .function_called_at(file.path.as_str(), expression)
+                                .or_else(|| lookup.object_member_function(file, expression))
+                            {
+                                Some((target_file, function)) => {
+                                    reached.push((target_file.path.to_string(), function.span));
+                                }
+                                None => return ShadowReach::Unbounded,
+                            }
+                        }
+                    }
+                }
+            }
+            // ADR 1139 r1 (F2): the handlers an intrinsic element's spread hands it (ADR 0358's exact targets); an unresolved spread may hand any
+            // function.
+            for spread in &element.spreads {
+                match lookup
+                    .spread_handler_targets()
+                    .get(&crate::location(file.path.shared(), spread.argument))
+                {
+                    Some(Some(targets)) => {
+                        reached
+                            .extend(targets.iter().map(|(path, span)| (path.to_string(), *span)));
+                    }
+                    Some(None) => return ShadowReach::Unbounded,
+                    None => {}
                 }
             }
         }
