@@ -7,8 +7,8 @@
   },
   {
    "adr": "ADR 1139",
-   "owed": 2,
-   "why": "bundle j smoke-census: mx-sync-node-received-async-flw-owned-eval-{effect,memo}-direct-none, SC7002 violations Chrome confirms, withheld because the program's `eval` may attach a shadow root and dispatch from an effect's apply (apply_dispatch_into_shadow_possible fails closed on code built from a string). Recovered when a literal eval string is read as the code it is (no shadow root, no dispatch)."
+   "owed": 1,
+   "why": "bundle j smoke-census: mx-sync-node-received-async-flw-owned-eval-memo-direct-none (a proved-ledger entry; its effect twin moves alike but is no ledger entry), an SC7002 violation Chrome confirms, withheld because the program's `eval` may attach a shadow root and dispatch from an effect's apply (apply_dispatch_into_shadow_possible fails closed on code built from a string). Recovered when a literal eval string is read as the code it is (no shadow root, no dispatch)."
   }
  ]
 }

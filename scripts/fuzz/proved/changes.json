@@ -224,14 +224,13 @@
   {
    "grid": "mx-census",
    "ids": [
-    "mx-sync-node-received-async-flw-owned-eval-effect-direct-none",
     "mx-sync-node-received-async-flw-owned-eval-memo-direct-none"
    ],
    "adr": "ADR 1139",
    "kind": "fix",
    "witness": "mx-strict-read-untracked-evt-apply-dispatch-shadow-named-signal-direct-none and fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation-eval: a creation a JSX handler reaches, delivered into a shadow tree from an effect's apply, throws PRIMITIVE_IN_EFFECT_CALLBACK first (Chrome rc.21, runtime-oracle shadow-handler-forms); a shadow root attached by code built from a string is invisible to every scan",
-   "collateral": 2,
-   "why": "ADR 1139 (bundle j smoke-census): App.tsx calls `eval`, so a shadow root and a dispatch from an effect's apply are both possible (the narrowing's fail-closed half, apply_dispatch_into_shadow_possible: eval or a code-evaluating call counts); the SC7002 row of a creation the handler may reach is creation-throws-first (uncertifiable), though this program attaches no shadow root (Chrome reports SYNC_NODE_RECEIVED_ASYNC). The other four of the six (lst-handler-object, export-namespace-call-handler) stay violations."
+   "collateral": 1,
+   "why": "ADR 1139 (bundle j smoke-census): App.tsx calls `eval`, so a shadow root and a dispatch from an effect's apply are both possible (the narrowing's fail-closed half, apply_dispatch_into_shadow_possible: eval or a code-evaluating call counts); the SC7002 row of a creation the handler may reach is creation-throws-first (uncertifiable), though this program attaches no shadow root (Chrome reports SYNC_NODE_RECEIVED_ASYNC). The other four of the six (lst-handler-object, export-namespace-call-handler) stay violations. Only the memo twin is an id of the proved ledger (proved/mx-census.json), so the row names it and the collateral is 1; its effect twin (...-flw-owned-eval-effect-direct-none) moves alike (the census manifest expects recall-gap for both) but was never a ledger entry."
   }
  ]
 }
