@@ -74,7 +74,7 @@ fn spread_may_supply(
 }
 
 /// The key the object literal property whose value is `function` is written under, in `file`.
-pub(crate) fn literal_key_of<'f>(file: &'f FileFacts, function: Span) -> Option<&'f str> {
+pub(crate) fn literal_key_of(file: &FileFacts, function: Span) -> Option<&str> {
     file.ast
         .object_properties
         .iter()
