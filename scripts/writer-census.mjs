@@ -66,7 +66,8 @@ function parseArguments(argv) {
   return options;
 }
 
-function runProject(options, configuration, row, id) {
+/** One checker run of one project, with the census and the what-if switch as `options` say; `{ exitCode, signal, wallMs, stdout, stderr }`. */
+export function runProject(options, configuration, row, id) {
   const args = [
     "--format", "json", "--project", join(row.root, row.project),
     "--runtime-target", configuration.runtimeTarget, "--runtime-build", options["runtime-build"] ?? configuration.runtimeBuild, "--rendering", configuration.rendering,
@@ -91,6 +92,47 @@ function runProject(options, configuration, row, id) {
   });
 }
 
+/** Keeps one run in `directory`: `meta.json`, `rows.json.gz`, and per the options `census.json` and `report.json.gz`. */
+export function saveResult(directory, options, row, id, result, appsRoot) {
+  mkdirSync(directory, { recursive: true });
+  let payload = null;
+  let parseError = null;
+  try {
+    payload = JSON.parse(result.stdout.toString("utf8"));
+  } catch (error) {
+    parseError = `${error.name}: ${error.message}`;
+  }
+  const findings = (payload?.findings ?? []).map((finding) => reduceFinding(finding, appsRoot));
+  const census = result.stderr
+    .split("\n")
+    .filter((line) => line.startsWith('{"writerCensus":'))
+    .map((line) => JSON.parse(line).writerCensus);
+  const count = (predicate) => findings.filter(predicate).length;
+  const meta = {
+    app: row.app,
+    project: row.project,
+    exitCode: result.exitCode,
+    signal: result.signal,
+    wallMs: result.wallMs,
+    status: payload?.status ?? null,
+    parseError,
+    findings: findings.length,
+    violations: count((reduced) => reduced[1] === "violation"),
+    uncertifiable: count((reduced) => reduced[1] === "uncertifiable"),
+    family3: count(isFamily3),
+    stdoutSha256: createHash("sha256").update(result.stdout).digest("hex"),
+    stdoutBytes: result.stdout.length,
+    censusLines: census.length,
+    whatIfCauses: options["whatif-causes"] ?? null,
+    dropFile: options["drop-dir"] && existsSync(join(options["drop-dir"], `${id}.drop`)) ? `${id}.drop` : null,
+    stderrTail: result.exitCode !== 0 || parseError ? result.stderr.replace(/\{"writerCensus":.*\n?/g, "").slice(-1500) : "",
+  };
+  writeFileSync(join(directory, "meta.json"), `${JSON.stringify(meta, null, 1)}\n`);
+  writeFileSync(join(directory, "rows.json.gz"), gzipSync(JSON.stringify(findings)));
+  if (census.length > 0) writeFileSync(join(directory, "census.json"), JSON.stringify(census.at(-1)));
+  if (options["keep-report"]) writeFileSync(join(directory, "report.json.gz"), gzipSync(result.stdout));
+}
+
 async function main() {
   const options = parseArguments(process.argv.slice(2));
   const manifest = JSON.parse(readFileSync(resolve(options.manifest), "utf8"));
@@ -111,43 +153,8 @@ async function main() {
       const id = projectId(row);
       const result = await runProject(options, manifest.configuration, row, id);
       const directory = join(out, id);
-      mkdirSync(directory, { recursive: true });
-      let payload = null;
-      let parseError = null;
-      try {
-        payload = JSON.parse(result.stdout.toString("utf8"));
-      } catch (error) {
-        parseError = `${error.name}: ${error.message}`;
-      }
-      const findings = (payload?.findings ?? []).map((finding) => reduceFinding(finding, appsRoot));
-      const census = result.stderr
-        .split("\n")
-        .filter((line) => line.startsWith('{"writerCensus":'))
-        .map((line) => JSON.parse(line).writerCensus);
-      const count = (predicate) => findings.filter(predicate).length;
-      const meta = {
-        app: row.app,
-        project: row.project,
-        exitCode: result.exitCode,
-        signal: result.signal,
-        wallMs: result.wallMs,
-        status: payload?.status ?? null,
-        parseError,
-        findings: findings.length,
-        violations: count((reduced) => reduced[1] === "violation"),
-        uncertifiable: count((reduced) => reduced[1] === "uncertifiable"),
-        family3: count(isFamily3),
-        stdoutSha256: createHash("sha256").update(result.stdout).digest("hex"),
-        stdoutBytes: result.stdout.length,
-        censusLines: census.length,
-        whatIfCauses: options["whatif-causes"],
-        dropFile: options["drop-dir"] && existsSync(join(options["drop-dir"], `${id}.drop`)) ? `${id}.drop` : null,
-        stderrTail: result.exitCode !== 0 || parseError ? result.stderr.replace(/\{"writerCensus":.*\n?/g, "").slice(-1500) : "",
-      };
-      writeFileSync(join(directory, "meta.json"), `${JSON.stringify(meta, null, 1)}\n`);
-      writeFileSync(join(directory, "rows.json.gz"), gzipSync(JSON.stringify(findings)));
-      if (census.length > 0) writeFileSync(join(directory, "census.json"), JSON.stringify(census.at(-1)));
-      if (options["keep-report"]) writeFileSync(join(directory, "report.json.gz"), gzipSync(result.stdout));
+      saveResult(directory, options, row, id, result, appsRoot);
+      const meta = JSON.parse(readFileSync(join(directory, "meta.json"), "utf8"));
       finished += 1;
       process.stderr.write(`${finished}/${rows.length} ${id} exit=${meta.exitCode} ${meta.wallMs}ms findings=${meta.findings} family3=${meta.family3}\n`);
     }

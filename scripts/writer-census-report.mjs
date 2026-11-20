@@ -48,6 +48,10 @@ export function fileClass(path) {
 }
 
 const BUILTINS = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
+/** Specifiers the host provides (a runtime's own modules): no installed package's code. */
+const HOST = /^(node|bun|deno|cloudflare|npm|jsr|data|https?):/;
+/** Imports of files that are no code: a stylesheet, an image, a font, text or data, or a `?url`, `?raw`, `?inline` import of one. */
+const ASSET = /\.(css|scss|sass|less|styl|svg|png|jpe?g|gif|webp|avif|ico|bmp|woff2?|ttf|otf|eot|mp3|mp4|webm|ogg|wav|txt|md|csv|ya?ml|html|json)(\?.*)?$|\?(url|raw|inline|no-inline)$/i;
 
 /** The kinds of import that load the package: a type import and one whose bindings never run (TypeScript erases both) do not. */
 const LOADS = new Set(["value", "side-effect", "reexport", "dynamic", "require", "unknown"]);
@@ -87,37 +91,83 @@ const aliasUses = (shape) => {
   return match ? (match[1] === "" ? [] : match[1].split(",")) : null;
 };
 
-const NAMED_USES = ["member", "pattern", "inspected"];
-const WIDE_USES = [...NAMED_USES, "computed"];
-const ROUTE_USES = [...WIDE_USES, "coerced", "regexp-arg"];
+/** Standard functions that take the global object and give back no member of it (names, a boolean, descriptors of nothing writable): handing it to one hands nothing on. */
+const READ_ONLY_CALLEES = /^(Object\.(hasOwn|keys|getOwnPropertyNames|getOwnPropertySymbols|isFrozen|isSealed|isExtensible)|Reflect\.(has|ownKeys|isExtensible))$/;
 
-/** Whether an escape shape is a use M1 follows (the read of named globals), with `uses` the kinds of use of a followed binding that are such reads too. */
-function followed(shape, { simple, uses }) {
-  const alias = aliasUses(shape);
-  if (alias) return alias.every((use) => uses.includes(use));
-  return simple.some((accepted) => (accepted.endsWith("*") ? shape.startsWith(accepted.slice(0, -1)) : shape === accepted)) && shape !== "member:valueOf";
+/** A computed read `<key>><result>`: the key and what is done with the value. */
+const computedRead = (shape) => {
+  const match = /^computed-read:(symbol|names|unknown)>(.*)$/.exec(shape);
+  return match ? { key: match[1], result: match[2] } : null;
+};
+
+/** The results of a computed read that keep the value in play: it is called, its `prototype`, `constructor` or `__proto__` is read, or it is handed on or stored. */
+const KEEPS_PLAY = (result) => /^(callee|argument|new|return|export|assign|store|spread|alias|alias-open|computed-read|other|pattern-open|pattern-nested)$/.test(result) || /^member:(prototype|constructor|__proto__|call|apply|bind|__defineGetter__|__defineSetter__)$/.test(result);
+
+/**
+ * Whether a shape of the global object's use is one a mechanism of `level` follows and finds no hand-on in:
+ *  - `base`: a pattern of named keys, a member read, a look at it, a symbol-keyed read or a computed read only looked at or coerced, a standard function that returns nothing of it,
+ *    a binding whose every use is one of these;
+ *  - `wide`: also a computed read whose value the one step after it does not keep in play, and a hop into a function of the file that only reads its parameter;
+ *  - `route`: also what a route's value may be given to without harm: coerced, `RegExp`.
+ */
+export function shapeDecided(shape, level) {
+  const rank = { base: 0, wide: 1, route: 2 }[level];
+  const bare = shape.startsWith("branch:") ? shape.slice("branch:".length) : shape;
+  const alias = aliasUses(bare);
+  if (alias) {
+    const accepted = ["member", "pattern", "inspected", "computed-symbol", "computed-inert", ...(rank >= 1 ? ["computed-names", "hop-read"] : []), ...(rank >= 2 ? ["coerced", "regexp-arg"] : [])];
+    return alias.every((use) => accepted.includes(use));
+  }
+  if (bare === "pattern" || bare === "inspected") return true;
+  if (bare.startsWith("member:")) return bare !== "member:valueOf";
+  const read = computedRead(bare);
+  if (read) {
+    if (read.key === "symbol" || read.result === "inspected" || read.result === "coerced") return true;
+    return rank >= 1 && !KEEPS_PLAY(read.result);
+  }
+  const call = /^argument:([^~]*)(~(read|open))?$/.exec(bare);
+  if (call) {
+    if (READ_ONLY_CALLEES.test(call[1])) return true;
+    if (call[3] === "read") return rank >= 1;
+    if (rank >= 2 && (call[1] === "RegExp")) return true;
+    return false;
+  }
+  if (rank >= 2 && (bare === "coerced" || bare === "new:RegExp")) return true;
+  return false;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------
 // Mechanisms (`coord-land/writer-decision-design.md` section 2). A cause-level one decides some causes (a root is decided when all of its are); a root-level one decides
-// whole roots. `needs` names mechanisms whose use a cause also needs. Each is an upper bound: it says what the mechanism could decide if built to the design, not that it is.
+// whole roots. `includes` names the weaker mechanisms a stronger one contains. Each is an upper bound: it says what the mechanism could decide if built to the design, not
+// that it is built.
 
 const PROGRAM_FILE = (file) => file.startsWith("/");
+/**
+ * Packages the host loads into the page whatever the program imports: under `--runtime-build development` the Vite dev server injects its client (`vite/dist/client/client.mjs`,
+ * `env.mjs`), so no import need name `vite` for it to run. The M2 mechanisms never decide such a root (M7v does, by reviewed bytes); a production build does not load it.
+ */
+const HOST_LOADED = (writer) => writer.name === "vite";
+const escapeOf = (c) => c.family === "escape";
 
 export const MECHANISMS = {
-  M1: { label: "follow the global object as a value: pattern, alias, member off a fallback", level: "cause", size: 2, decides: (c) => c.family === "escape" && !c.route && c.head !== "document" && followed(c.shape, { simple: ["pattern", "member:*", "inspected"], uses: NAMED_USES }) },
-  M1w: { label: "M1, and a computed read followed one step", level: "cause", size: 3, includes: ["M1"], decides: (c) => c.family === "escape" && !c.route && c.head !== "document" && followed(c.shape, { simple: ["pattern", "member:*", "inspected", "computed-read"], uses: WIDE_USES }) },
-  M1u: { label: "every escape of a name of the global object (the report's `+esc` bound)", level: "cause", size: 4, includes: ["M1", "M1w"], decides: (c) => c.family === "escape" && !c.route },
-  M3: { label: "source/view/defaultView receivers: consumed in place, a RegExp or a literal receiver", level: "cause", size: 2, decides: (c, w) => c.family === "escape" && c.route && (["regexp", "literal"].includes(c.receiver) || followed(c.shape, { simple: ["pattern", "member:*", "inspected", "computed-read", "coerced", "new:RegExp", "argument:RegExp"], uses: ROUTE_USES })) },
-  X1131: { label: "ADR 1131 alone, best case: every route in a file of the program (types discharge it), none in installed JavaScript", level: "cause", size: 2, decides: (c, w, cause) => c.family === "escape" && c.route && PROGRAM_FILE(cause.file) },
-  M3u: { label: "every route (a bound: typed discharge in installed JavaScript too)", level: "cause", size: 4, includes: ["M3", "X1131"], decides: (c) => c.family === "escape" && c.route },
+  M1: { label: "follow the global object as a value: pattern, member off a fallback, a binding that is only read, a symbol-keyed read", level: "cause", size: 2, decides: (c) => escapeOf(c) && !c.route && c.head !== "document" && (shapeDecided(c.shape, "base") || (c.branch && shapeDecided(c.shape, "base"))) },
+  M1w: { label: "M1, and a computed read followed one step, and one hop into a function of the file that only reads its parameter", level: "cause", size: 3, includes: ["M1"], decides: (c) => escapeOf(c) && !c.route && c.head !== "document" && shapeDecided(c.shape, "wide") },
+  M1u: { label: "every escape of a name of the global object (the report's `+esc` bound)", level: "cause", size: 4, includes: ["M1", "M1w"], decides: (c) => escapeOf(c) && !c.route },
+  M3: { label: "source/view/defaultView receivers: a RegExp or a literal receiver, consumed in place, one hop into a function of the file", level: "cause", size: 2, decides: (c) => escapeOf(c) && c.route && (["regexp", "literal"].includes(c.receiver) || shapeDecided(c.shape, "route")) },
+  X1131: { label: "ADR 1131 alone, best case: every route in a file of the program (the types discharge it), none in installed JavaScript", level: "cause", size: 2, decides: (c, w, cause) => escapeOf(c) && c.route && PROGRAM_FILE(cause.file) },
+  M3u: { label: "every route (a bound: a typed discharge in installed JavaScript too)", level: "cause", size: 4, includes: ["M3", "X1131"], decides: (c) => escapeOf(c) && c.route },
   M4: { label: "generated code that is not generation: Function.call.bind, an empty or constant body", level: "cause", size: 1, decides: (c) => c.family === "generated" && /^(function-member:|function-literal:(empty|const)$)/.test(c.kind) },
-  M4w: { label: "M4, and literal bodies parsed with the scan (`return this` needs M1), string timers and eval literals", level: "cause", size: 2, includes: ["M4"], decides: (c, w, cause, S) => c.family === "generated" && (/^(function-member:|function-literal:(empty|const|other)$|eval-literal$|timer-string$|constructor-literal:)/.test(c.kind) || (c.kind === "function-literal:this" && ["M1", "M1w", "M1u"].some((m) => S.has(m)))) },
-  M5: { label: "a prototype handed to a callee followed into it (a named writer, not any)", level: "cause", size: 2, decides: (c) => c.family === "handed-on" && /^argument:/.test(c.shape) },
-  M2a: { label: "a package no value import loads (directly or through a loaded package) is no writer", level: "root", size: 2, decides: (w, p) => !p.openLoads && !w.valueLoaded },
-  M2b: { label: "product realm: a package only test, config and script files load is no writer for product files (needs a ruling)", level: "root", size: 2, includes: ["M2a"], ruling: true, decides: (w, p) => !p.openProductLoads && !w.productLoaded },
-  M2flag: { label: "the backend's own `loaded` flag (named by any attested import, type imports and dependency declarations included)", level: "root", size: 1, decides: (w) => !w.loaded },
-  M6: { label: "unknown globals decided by the program's own census (Q2: the root may reach Solid only by an unknown global)", level: "root", size: 2, decides: (w, p) => !p.hasUnreadLoaded && Object.keys(w.problemKinds ?? {}).every((kind) => kind === "UnknownGlobal") },
+  M4w: { label: "M4, and literal bodies parsed with the scan (`return this` also needs M1), string timers and eval literals", level: "cause", size: 2, includes: ["M4"], decides: (c, w, cause, S) => c.family === "generated" && (/^(function-member:|function-literal:(empty|const|other)$|eval-literal$|timer-string$|constructor-literal:)/.test(c.kind) || (c.kind === "function-literal:this" && ["M1", "M1w", "M1u"].some((m) => S.has(m)))) },
+  M5: { label: "a prototype handed to a callee, followed into it (a named writer, not an any-name one), with M5b", level: "cause", size: 2, includes: ["M5b"], decides: (c) => c.family === "handed-on" && /^argument:/.test(c.shape.replace(/^branch:/, "")) },
+  M5b: { label: "a computed read of a built-in's prototype is a read of a member, not a hand-on (unless the value is called, or its prototype or constructor read, or handed on)", level: "cause", size: 1, decides: (c) => c.family === "handed-on" && (() => { const read = computedRead(c.shape.replace(/^branch:/, "")); return read !== null && (read.key === "symbol" ? read.result !== "callee" : !KEEPS_PLAY(read.result) || read.result === "inspected" || read.result === "coerced"); })() },
+  M5u: { label: "every prototype handed on (a bound)", level: "cause", size: 3, includes: ["M5", "M5b"], decides: (c) => c.family === "handed-on" },
+  M2a: { label: "a package no value import loads (directly or through a loaded package) is no writer; a program with an open load keeps today's answer", level: "root", size: 2, decides: (w, p) => !p.openLoads && !w.valueLoaded && !HOST_LOADED(w) },
+  M2b: { label: "product realm: a package only test, config and script files load is no writer for the product's files (needs a ruling)", level: "root", size: 2, includes: ["M2a"], ruling: true, decides: (w, p) => !p.openProductLoads && !w.productLoaded && !HOST_LOADED(w) },
+  M2aO: { label: "M2a if virtual modules, aliases and plugin-injected imports were read (only a computed load or unread project JavaScript is open)", level: "root", size: 3, decides: (w, p) => !p.openLoadsHard && !w.valueLoaded && !HOST_LOADED(w) },
+  M2bO: { label: "M2b, the same optimistic reading of open loads", level: "root", size: 3, includes: ["M2aO"], ruling: true, decides: (w, p) => !p.openProductLoadsHard && !w.productLoaded && !HOST_LOADED(w) },
+  M2flag: { label: "the backend's own `loaded` flag (named by any attested import, type imports and dependency declarations included)", level: "root", size: 1, decides: (w) => !w.loaded && !HOST_LOADED(w) },
+  M2flagRaw: { label: "the backend's own `loaded` flag with no exception for the host's injected packages (what the checker's `unloaded` token does)", level: "root", size: 1, decides: (w) => !w.loaded },
+  M6: { label: "unknown globals decided by the program's own census (the root may reach Solid only by an unknown global)", level: "root", size: 2, decides: (w, p) => !p.hasUnreadLoaded && Object.keys(w.problemKinds ?? {}).every((kind) => kind === "UnknownGlobal") },
   M7v: { label: "reviewed bytes for vite's client files", level: "root", size: 1, decides: (w) => w.name === "vite" },
 };
 
@@ -139,7 +189,7 @@ const shortName = (writer) => writer.name ?? writer.root.split("/node_modules/")
 /** The project's writers with `valueLoaded`, `productLoaded` and the importers' file classes worked out, and the project's own loading facts. */
 export function describe(project, appsRoot) {
   const census = project.census;
-  if (!census) return { id: project.id, writers: [], openLoads: false, openProductLoads: false, opens: [], hasUnreadLoaded: false, rows: 0, family3: [], census: null };
+  if (!census) return { id: project.id, writers: [], openLoads: false, openProductLoads: false, openLoadsHard: false, openProductLoadsHard: false, opens: [], hasUnreadLoaded: false, rows: 0, family3: [], census: null };
   const relative = (file) => (file.startsWith(`${appsRoot}/`) ? file.slice(appsRoot.length + 1) : file);
   const loaders = census.loaders ?? [];
   const importersOf = (writer) => writer.importers ?? [];
@@ -169,21 +219,29 @@ export function describe(project, appsRoot) {
       causeClasses: writer.causes.map((cause) => ({ cause, parsed: parseCause(cause.class) })),
     };
   });
-  // A load no import names (a computed `import(x)`, an import no resolution answers that is no builtin of Node) may load any package: M2 keeps today's answer then.
-  // `openProductLoads` is the same for the product's files alone (M2b: a test or config file's open load is no load of the product realm).
+  // A load no import names (a computed `import(x)`, an import no resolution answers that loads code) may load any package: M2 keeps today's answer then. An unresolved import
+  // that loads no code is no such load: a Node, Bun or Cloudflare builtin, a stylesheet, an image or another asset. `openProductLoads` is the same for the product's files
+  // alone (M2b: an open load of a test or config file is no load of the product realm). The `Hard` forms read only a computed load and unread project JavaScript as open:
+  // what the M2 variants would answer if virtual modules, path aliases and plugin-injected imports were read.
   const program = census.program ?? {};
   const computed = (program.computedLoads ?? []).map((file) => ({ file }));
-  const unresolved = (program.unresolvedImports ?? []).map((entry) => ({ file: entry.slice(0, entry.indexOf(" ")), specifier: entry.slice(entry.indexOf(" ") + 1) })).filter(({ specifier }) => !BUILTINS.has(specifier));
+  const unresolved = (program.unresolvedImports ?? [])
+    .map((entry) => ({ file: entry.slice(0, entry.indexOf(" ")), specifier: entry.slice(entry.indexOf(" ") + 1) }))
+    .filter(({ specifier }) => !BUILTINS.has(specifier) && !HOST.test(specifier) && !ASSET.test(specifier));
   const opens = [...computed, ...unresolved];
   const projectJs = (program.projectJsDeclarations ?? 0) > 0;
   const openLoads = projectJs || opens.length > 0;
   const openProductLoads = projectJs || opens.some(({ file }) => fileClass(relative(file)) === "product");
+  const openLoadsHard = projectJs || computed.length > 0;
+  const openProductLoadsHard = projectJs || computed.some(({ file }) => fileClass(relative(file)) === "product");
   const hasUnreadLoaded = writers.some((writer) => writer.effective && writer.valueLoaded && writer.causes.some((cause) => cause.class.startsWith("unread:")));
   return {
     id: project.id,
     writers,
     openLoads,
     openProductLoads,
+    openLoadsHard,
+    openProductLoadsHard,
     opens: opens.slice(0, 5).map(({ file, specifier }) => `${relative(file)}${specifier ? ` ${specifier}` : ""}`),
     hasUnreadLoaded,
     rows: project.rows.filter(isFamily3).length,
@@ -231,13 +289,30 @@ export function evaluate(selected, described, floorKeys) {
   const rows = floorKeys ? described.family3.filter(([key]) => !floorKeys.has(key)) : null;
   let freed = 0;
   let upper = 0;
+  let realmOnly = false;
   if (effective.length > 0 && left.length === 0 && rows) {
     upper = rows.length;
-    const withoutRealm = new Set([...S].filter((id) => id !== "M2b"));
-    const realmOnly = S.has("M2b") && effective.some((writer) => !decided(withoutRealm, writer, described));
+    const withoutRealm = new Set([...S].filter((id) => id !== "M2b" && id !== "M2bO"));
+    realmOnly = (S.has("M2b") || S.has("M2bO")) && effective.some((writer) => !decided(withoutRealm, writer, described));
     freed = realmOnly ? rows.filter(([, cls]) => cls === "product").length : rows.length;
   }
-  return { effective: effective.length, decided: effective.length - left.length, left, freed, upper };
+  // The same by package: a root a linker spells two ways (a link and its real directory) or a declaration package and its runtime package is one package.
+  const packageOf = (writer) => writer.canonical || writer.root;
+  const groups = new Map();
+  for (const writer of effective) groups.set(packageOf(writer), { name: writer.name, left: false });
+  for (const writer of left) groups.get(packageOf(writer)).left = true;
+  const leftPackages = [...groups.values()].filter((group) => group.left);
+  return {
+    effective: effective.length,
+    decided: effective.length - left.length,
+    left,
+    freed,
+    upper,
+    realmOnly,
+    packages: groups.size,
+    packagesLeft: leftPackages.length,
+    leftNames: [...new Set(leftPackages.map((group) => group.name))].sort(),
+  };
 }
 
 /** The roots the mechanisms decide in one project, for the checker's drop list: every counted writer they decide, a clear one too (a mechanism that decides a cause decides it everywhere). */

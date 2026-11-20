@@ -1,22 +1,36 @@
 #!/usr/bin/env node
-// The tables of the writer-cause census (ADR 1131's M0): from a census run (`scripts/writer-census.mjs --census`) and, for the rows a mechanism frees, a floor run (the
-// same corpus with every any-name writer left out: `scripts/writer-census-report.mjs drops --floor`, then `scripts/writer-census.mjs --drop-dir`).
+// The tables of the writer-cause census (ADR 1131's M0): from a census run (`scripts/writer-census.mjs --census`) and the scenario runs of
+// `scripts/writer-census-scenarios.mjs` (the floor, with every any-name writer left out, and the sets of mechanisms: a scenario is named by its mechanisms, sorted,
+// joined with `+`). A set with no scenario run is answered by the offline step alone and marked so.
 //
-//   node scripts/writer-census-tables.mjs --baseline <run dir> --floor <run dir> --out <dir> [--apps-root <apps>]
+//   node scripts/writer-census-tables.mjs --baseline <run dir> --scenarios <scenario dir> --out <dir> [--apps-root <apps>] [--emit-scenarios <file>]
 //
-// Writes `<out>/results.json` (everything the markdown says, as data), `<out>/writers.md` (every writer of every project and why) and `<out>/tables.md` (the tables of
-// `M0-results.md`). Rows are the checker's family-3 rows (SC2002 uncertifiable under a package that writes a built-in's prototype).
-import { mkdirSync, writeFileSync } from "node:fs";
+// `--emit-scenarios` writes the scenarios to run (every mechanism alone, the plan's steps and frontier) and stops. Otherwise writes `<out>/results.json` (everything the
+// markdown says, as data), `<out>/writers.md` (every writer of every project and why) and `<out>/tables.md` (the tables of `M0-results.md`). Rows are the checker's
+// family-3 rows (SC2002 uncertifiable under a package that writes a built-in's prototype).
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { gunzipSync } from "node:zlib";
 
-import { MECHANISMS, closeOver, decided, describe, evaluate, isFamily3, loadRun, rowKey } from "./writer-census-report.mjs";
+import { MECHANISMS, closeOver, decided, describe, dropRoots, evaluate, isFamily3, loadRun, rowKey } from "./writer-census-report.mjs";
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((pairs, value, index, all) => (index % 2 === 0 ? [...pairs, [value.replace(/^--/, ""), all[index + 1]]] : pairs), []));
 const appsRoot = resolve(args["apps-root"] ?? "/Users/thomas/Documents/Github/solid-checker-rc21-frozen-v2/apps");
 const baseline = loadRun(resolve(args.baseline));
-const floor = args.floor ? loadRun(resolve(args.floor)) : new Map();
+const scenarioDir = args.scenarios ? resolve(args.scenarios) : null;
 const out = resolve(args.out);
 mkdirSync(out, { recursive: true });
+
+/** A scenario's result file, `null` when it was not run. */
+const readScenario = (name) => (scenarioDir && existsSync(join(scenarioDir, "scenarios", `${name}.json`)) ? JSON.parse(readFileSync(join(scenarioDir, "scenarios", `${name}.json`), "utf8")) : null);
+/** The reduced rows of one project of a scenario (the baseline's where the scenario left out no root there). */
+const scenarioRows = (id, found) => {
+  if (!found?.key) return baseline.get(id).rows;
+  return JSON.parse(gunzipSync(readFileSync(join(scenarioDir, "cache", id, found.key, "rows.json.gz"))).toString("utf8"));
+};
+const floorScenario = readScenario("floor");
+const floor = new Map();
+if (floorScenario) for (const found of floorScenario.projects) floor.set(found.id, { rows: scenarioRows(found.id, found) });
 
 const PROGRAM = (file) => file.startsWith("/");
 const appOf = (id) => id.split("__")[0];
@@ -27,13 +41,37 @@ const table = (headers, rows) => [`| ${headers.join(" | ")} |`, `|${headers.map(
 
 const described = new Map([...baseline.values()].map((project) => [project.id, describe(project, appsRoot)]));
 const floorRows = (id) => (floor.has(id) ? floor.get(id).rows.filter(isFamily3).length : null);
-const floorKeys = (id) => (floor.has(id) ? new Set(floor.get(id).rows.filter(isFamily3).map(rowKey)) : null);
+// `--assume-floor-zero` ranks the plan before the floor run exists (every row of a freed project goes); the tables then are not the final ones.
+const floorKeys = (id) => (floor.has(id) ? new Set(floor.get(id).rows.filter(isFamily3).map(rowKey)) : args["assume-floor-zero"] ? new Set() : null);
 const total = (list, pick) => list.reduce((sum, item) => sum + pick(item), 0);
 
-/** The rows of a set of mechanisms, project by project. */
+const nameOf = (selected) => [...selected].sort().join("+");
+const stats = { pairs: 0, agree: 0, disagree: [] };
+
+/**
+ * The rows of a set of mechanisms, project by project: measured where a scenario of that name ran (the baseline's family-3 rows the run lacks), else what the offline
+ * step says. `upper` is every row that goes; `freed` is the rows that go if the product realm is the whole question where M2b decided a writer (see `evaluate`).
+ */
 function run(selected) {
-  const perProject = [...described.values()].map((project) => ({ id: project.id, app: appOf(project.id), rows: project.rows, ...evaluate(selected, project, floorKeys(project.id)) }));
-  return { selected, perProject, freed: total(perProject, (item) => item.freed), upper: total(perProject, (item) => item.upper), projectsFreed: perProject.filter((item) => item.freed > 0).length };
+  const scenario = readScenario(nameOf(selected));
+  const perProject = [...described.values()].map((project) => {
+    const offline = evaluate(selected, project, floorKeys(project.id));
+    const found = scenario?.projects.find((item) => item.id === project.id);
+    let { freed, upper } = offline;
+    let measured = false;
+    if (found) {
+      measured = true;
+      const after = new Set(scenarioRows(project.id, found).filter(isFamily3).map(rowKey));
+      const gone = project.family3.filter(([key]) => !after.has(key));
+      upper = gone.length;
+      freed = offline.realmOnly ? gone.filter(([, cls]) => cls === "product").length : gone.length;
+      stats.pairs += 1;
+      if (floorKeys(project.id) && upper === offline.upper) stats.agree += 1;
+      else if (floorKeys(project.id)) stats.disagree.push(`${nameOf(selected)} ${project.id}: measured ${upper}, offline ${offline.upper}`);
+    }
+    return { id: project.id, app: appOf(project.id), rows: project.rows, ...offline, freed, upper, measured, moved: found?.moved ?? null };
+  });
+  return { selected, name: nameOf(selected), measured: Boolean(scenario), perProject, freed: total(perProject, (item) => item.freed), upper: total(perProject, (item) => item.upper), projectsFreed: perProject.filter((item) => item.freed > 0).length };
 }
 
 const results = { baseline: {}, mechanisms: {}, plan: [], left: [] };
@@ -46,6 +84,32 @@ results.baseline = {
 };
 
 const sections = [];
+
+// `--emit-scenarios <file> [--stage A|B]`: the scenarios to run. Stage A needs nothing but the census: the floor, all but the last writer (V2), every mechanism alone and
+// the two runs of the checker's own class matcher. Stage B is the plan's sets (the chain, the frontier), which need the floor's rows to rank.
+if (args["emit-scenarios"]) {
+  const list = [];
+  const seen = new Set();
+  const add = (scenario) => {
+    if (!seen.has(scenario.name)) {
+      seen.add(scenario.name);
+      list.push(scenario);
+    }
+  };
+  if ((args.stage ?? "A") === "A") {
+    add({ name: "floor", floor: true });
+    add({ name: "v2", exceptLast: true });
+    for (const id of Object.keys(MECHANISMS)) add({ name: id, mechanisms: [id] });
+    add({ name: "whatif-M3u", classes: "escape:source/,escape:view/,escape:defaultView/", mechanisms: ["M3u"] });
+    add({ name: "whatif-M4", classes: "generated:function-member:,generated:function-literal:empty,generated:function-literal:const", mechanisms: ["M4"] });
+    add({ name: "whatif-unloaded", classes: "unloaded", mechanisms: ["M2flagRaw"] });
+  }
+  if ((args.stage ?? "A") === "A") {
+    writeFileSync(resolve(args["emit-scenarios"]), `${JSON.stringify(list, null, 1)}\n`);
+    process.stderr.write(`${list.length} scenarios (stage A) -> ${args["emit-scenarios"]}\n`);
+    process.exit(0);
+  }
+}
 
 // 1. Baseline per app.
 {
@@ -100,6 +164,32 @@ const sections = [];
   results.causeClasses = rows;
 }
 
+// 2a. What the rows print against why a root is a writer: the walk's first problem (Q2, "may it reach Solid") per writer root, and how many have no other.
+{
+  const first = new Map();
+  let onlyUnknown = 0;
+  let withUnknown = 0;
+  let roots = 0;
+  const seen = new Set();
+  for (const project of projects) {
+    for (const writer of project.writers.filter((item) => item.effective)) {
+      const key = `${appOf(project.id)}::${writer.canonical || writer.root}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      roots += 1;
+      const blocker = /blocker: (\w+)/.exec(writer.reach ?? "")?.[1] ?? (writer.reach ?? "").replace(/\W.*$/, "");
+      first.set(blocker, (first.get(blocker) ?? 0) + 1);
+      const kinds = Object.keys(writer.problemKinds ?? {});
+      if (kinds.includes("UnknownGlobal")) withUnknown += 1;
+      if (kinds.length > 0 && kinds.every((kind) => kind === "UnknownGlobal")) onlyUnknown += 1;
+    }
+  }
+  const rows = [...first.entries()].sort((a, b) => b[1] - a[1]).map(([blocker, count]) => [blocker, number(count)]);
+  sections.push(`### What a row prints against why the root is a writer (measured; ${number(roots)} writer packages, per app)\n\nThe first problem of the walk (the verdict a row's message prints) is the answer to "may it reach Solid". It is not why the root writes under any name: no unknown global sets that. ${number(withUnknown)} of the ${number(roots)} writers hold an unknown global among their problems; ${number(onlyUnknown)} hold nothing else (the roots M6 would decide by itself, whatever their causes).\n\n${table(["first problem of the root", "writer packages"], rows)}`);
+  results.firstProblem = rows;
+  results.unknownGlobal = { roots, withUnknown, onlyUnknown };
+}
+
 // 2b. The causes in detail: occurrences (n) and the roots (counted once per app) that have them.
 {
   const shapeClass = (parsed) => {
@@ -143,126 +233,156 @@ const sections = [];
 }
 
 // 3. Each mechanism alone, one table per mechanism per project.
-const alone = ["M2flag", "M2a", "M2b", "M1", "M1w", "M1u", "M3", "X1131", "M3u", "M4", "M4w", "M5", "M6", "M7v"];
+const alone = ["M2flag", "M2a", "M2b", "M2aO", "M2bO", "M1", "M1w", "M1u", "M3", "X1131", "M3u", "M4", "M4w", "M5b", "M5", "M5u", "M6", "M7v"];
 const aloneRuns = new Map(alone.map((id) => [id, run([id])]));
 {
   const head = alone.map((id) => {
     const result = aloneRuns.get(id);
-    return [`**${id}**`, MECHANISMS[id].label, MECHANISMS[id].level, result.projectsFreed, number(result.freed), number(total(result.perProject, (item) => item.decided))];
+    return [`**${id}**`, MECHANISMS[id].label, MECHANISMS[id].level, result.projectsFreed, number(result.freed) + (result.freed !== result.upper ? ` (${number(result.upper)} if every row)` : ""), `${number(total(result.perProject, (item) => item.packages - item.packagesLeft))}`];
   });
-  sections.push(`### Each mechanism alone: rows freed (measured ceiling; see 'how rows are measured')\n\n${table(["mechanism", "what it decides", "level", "projects freed", "rows freed", "writers decided (of " + number(results.baseline.effectiveWriters) + ")"], head)}`);
+  sections.push(`### Each mechanism alone: rows freed (measured ceiling; see 'how rows are measured')\n\n${table(["mechanism", "what it decides", "level", "projects freed", "rows freed", "writer packages decided (of " + number(total(projects, (project) => new Set(project.writers.filter((writer) => writer.effective).map((writer) => writer.canonical || writer.root)).size)) + " package-in-project pairs)"], head)}`);
   for (const id of alone) {
     const result = aloneRuns.get(id);
-    const rows = result.perProject.filter((item) => item.effective > 0).sort((a, b) => b.rows - a.rows).map((item) => [projectOf(item.id) ? `${item.app}/${projectOf(item.id)}` : item.app, item.effective, item.decided, item.left.length, number(item.rows), number(item.freed)]);
-    sections.push(`#### ${id}: ${MECHANISMS[id].label}\n\n${table(["project", "any-name writers", "decided", "left", "family-3 rows", "rows freed"], rows)}`);
+    const rows = result.perProject.filter((item) => item.effective > 0).sort((a, b) => b.rows - a.rows).map((item) => [projectOf(item.id) ? `${item.app}/${projectOf(item.id)}` : item.app, item.packages, item.packages - item.packagesLeft, item.packagesLeft, number(item.rows), number(item.freed) + (item.freed !== item.upper ? ` (${number(item.upper)} if every row)` : "")]);
+    sections.push(`#### ${id}: ${MECHANISMS[id].label}${result.measured ? " (measured)" : " (offline: no run of this set)"}\n\n${table(["project", "any-name writer packages", "decided", "left", "family-3 rows", "rows freed"], rows)}`);
   }
   results.mechanisms = Object.fromEntries(alone.map((id) => [id, { freed: aloneRuns.get(id).freed, projectsFreed: aloneRuns.get(id).projectsFreed, perProject: aloneRuns.get(id).perProject.map(({ left, ...rest }) => ({ ...rest, left: left.length })) }]));
 }
 
-// 4. Combinations: every choice of one variant of each family, with its cost; the frontier.
+// 4. What empties a project. Every choice of one variant of each family of mechanisms (the upper bounds included), with its cost; per project the cheapest choice that decides
+// every one of its writers, with the M2b ruling and without; then the ranked plan: the sets that free the most rows per unit of cost, each on top of the last.
 {
-  const choices = [["-", "M1", "M1w"], ["-", "M3"], ["-", "M4", "M4w"], ["-", "M5"], ["-", "M2a", "M2b"], ["-", "M6"], ["-", "M7v"]];
+  const menu = [["-", "M1", "M1w", "M1u"], ["-", "M3", "X1131", "M3u"], ["-", "M4", "M4w"], ["-", "M5b", "M5", "M5u"], ["-", "M2a", "M2b", "M2aO", "M2bO"], ["-", "M6"], ["-", "M7v"]];
   const combos = [];
   const walk = (index, picked) => {
-    if (index === choices.length) {
+    if (index === menu.length) {
       const selected = picked.filter((id) => id !== "-");
-      const result = run(selected);
-      combos.push({ selected, cost: total(selected, (id) => MECHANISMS[id].size), freed: result.freed, projects: result.projectsFreed, ruling: selected.some((id) => MECHANISMS[id].ruling) });
+      combos.push({ selected, cost: total(selected, (id) => MECHANISMS[id].size), ruling: selected.some((id) => MECHANISMS[id].ruling), bound: selected.some((id) => ["M1u", "M3u", "M5u", "M2aO", "M2bO"].includes(id)) });
       return;
     }
-    for (const choice of choices[index]) walk(index + 1, [...picked, choice]);
+    for (const choice of menu[index]) walk(index + 1, [...picked, choice]);
   };
   walk(0, []);
-  combos.sort((a, b) => a.cost - b.cost || b.freed - a.freed);
-  const frontier = [];
-  let best = -1;
-  for (const combo of combos) {
-    if (combo.freed > best) {
-      frontier.push(combo);
-      best = combo.freed;
+  combos.sort((a, b) => a.cost - b.cost || a.selected.length - b.selected.length);
+  const live = projects.filter((project) => project.writers.some((writer) => writer.effective));
+  const cheapest = (project, allowed) => combos.find((combo) => allowed(combo) && evaluate(combo.selected, project, new Set()).left.length === 0) ?? null;
+  const unlock = live.map((project) => ({
+    id: project.id,
+    app: appOf(project.id),
+    rows: project.rows,
+    packages: new Set(project.writers.filter((writer) => writer.effective).map((writer) => writer.canonical || writer.root)).size,
+    noRuling: cheapest(project, (combo) => !combo.ruling),
+    withRuling: cheapest(project, () => true),
+  }));
+  const setName = (combo) => (combo ? `${combo.selected.join(" + ") || "none"}${combo.bound ? " (a bound)" : ""} (${combo.cost})` : "no set");
+  // Where nothing empties a project: what holds it, under every mechanism together.
+  const everything = run(["M1u", "M3u", "M4w", "M5u", "M2b", "M6", "M7v"]);
+  const heldBy = new Map(everything.perProject.map((item) => [item.id, item]));
+  const rows = unlock.sort((a, b) => b.rows - a.rows).map((item) => [`${item.app}/${projectOf(item.id)}`, number(item.rows), item.packages, setName(item.noRuling), setName(item.withRuling), item.withRuling ? "-" : `${heldBy.get(item.id).packagesLeft}: ${heldBy.get(item.id).leftNames.slice(0, 5).join(", ")}${heldBy.get(item.id).leftNames.length > 5 ? ", …" : ""}`]);
+  sections.push(`### What empties a project: the cheapest set of mechanisms that decides every writer of it (offline from the census; cost S=1, M=2 … is the design report's sizing, an estimate)\n\nThe menu: M1/M1w/M1u, M3/X1131/M3u, M4/M4w, M5b/M5/M5u, M2a/M2b/M2aO/M2bO, M6, M7v (one variant of each family or none; M…u and M2…O are upper bounds that decide more than the design can). \`no set\` means no choice of the menu empties the project.\n\n${table(["project", "family-3 rows", "writer packages", "cheapest set without the M2b ruling", "cheapest set with it", "held by (under every mechanism), when no set empties it"], rows)}`);
+  results.unlock = unlock.map((item) => ({ id: item.id, rows: item.rows, packages: item.packages, noRuling: item.noRuling?.selected ?? null, withRuling: item.withRuling?.selected ?? null }));
+
+  // The ranked plan: greedy over the unlocking sets of the projects, each on top of the selection so far (set cover with a cost).
+  const buildChain = (allowRuling, allowBound) => {
+    const allowed = (combo) => (allowRuling || !combo.ruling) && (allowBound || !combo.bound);
+    const candidates = new Map();
+    for (const item of live) {
+      const combo = cheapest(projects.find((project) => project.id === item.id), allowed);
+      if (combo) candidates.set(combo.selected.join("+"), combo);
     }
-  }
-  const noRuling = [];
-  best = -1;
-  for (const combo of combos.filter((item) => !item.ruling)) {
-    if (combo.freed > best) {
-      noRuling.push(combo);
-      best = combo.freed;
-    }
-  }
-  const show = (list) => table(["mechanisms", "cost (S=1, M=2 …)", "projects freed", "rows freed", "needs the M2b ruling"], list.map((combo) => [combo.selected.join(" + ") || "none", combo.cost, combo.projects, number(combo.freed), combo.ruling ? "yes" : "no"]));
-  sections.push(`### Cumulative ranked plan: the cheapest set of mechanisms for each gain (frontier over all ${combos.length} choices; cost is the design report's S/M sizing, an estimate)\n\n${show(frontier)}\n\nWithout the M2b ruling (tests count as entries):\n\n${show(noRuling)}`);
-  results.plan = frontier;
-  results.planNoRuling = noRuling;
-  results.combos = combos.length;
-  // The chain: one ranked order of building, each step the upgrade (or up to three together, where one alone frees nothing: the last writer of a project has to go) with
-  // the most rows per unit of cost; every step is a superset of the one before.
-  const families = [["M1", "M1w"], ["M3"], ["M4", "M4w"], ["M5"], ["M2a", "M2b"], ["M6"], ["M7v"]];
-  const buildChain = (allowed) => {
-    const levels = families.map(() => 0);
-    const picked = () => families.flatMap((family, index) => family.slice(0, levels[index]).slice(-1)).filter((id) => allowed(id));
-    const levelOf = (family, level) => (family.slice(0, level).filter((id) => allowed(id)).at(-1) ? level : 0);
     const steps = [];
-    let current = run(picked());
-    const costOf = (list) => total(list, (id) => MECHANISMS[id].size);
+    let selection = [];
+    let current = run([]);
+    // The union of two sets, a mechanism another one in it includes (M1 in M1w) left out.
+    const unionOf = (a, b) => {
+      const out = new Set([...a, ...b]);
+      for (const id of [...out]) if ([...out].some((other) => other !== id && (MECHANISMS[other].includes ?? []).includes(id))) out.delete(id);
+      return [...out];
+    };
     for (;;) {
-      const upgrades = [];
-      families.forEach((family, index) => {
-        for (let level = levels[index] + 1; level <= family.length; level += 1) if (allowed(family[level - 1])) upgrades.push({ index, level });
-      });
-      if (upgrades.length === 0) break;
       let best = null;
-      const consider = (bundle) => {
-        const trial = levels.slice();
-        for (const { index, level } of bundle) trial[index] = Math.max(trial[index], level);
-        const ids = families.flatMap((family, index) => family.slice(0, trial[index]).slice(-1)).filter((id) => allowed(id));
-        const result = run(ids);
-        const cost = costOf(ids) - costOf(picked());
+      for (const candidate of candidates.values()) {
+        const union = unionOf(selection, candidate.selected);
+        if (nameOf(union) === nameOf(selection)) continue;
+        const result = run(union);
+        const cost = total(union, (id) => MECHANISMS[id].size) - total(selection, (id) => MECHANISMS[id].size);
         const gain = result.freed - current.freed;
         const score = cost > 0 ? gain / cost : gain;
-        if (!best || score > best.score || (score === best.score && cost < best.cost)) best = { bundle, trial, ids, result, cost, gain, score };
-      };
-      for (const first of upgrades) {
-        consider([first]);
-        for (const second of upgrades) if (second.index > first.index) {
-          consider([first, second]);
-          for (const third of upgrades) if (third.index > second.index) consider([first, second, third]);
-        }
+        if (gain > 0 && (!best || score > best.score || (score === best.score && cost < best.cost))) best = { union, result, cost, gain, score };
       }
-      // Where nothing gains, take the cheapest single upgrade so that the chain goes on.
-      if (best.gain === 0) {
-        best = null;
-        for (const upgrade of upgrades) {
-          const before = best;
-          consider([upgrade]);
-          if (before && best.cost > before.cost) best = before;
-        }
-      }
-      const addedIds = best.bundle.map(({ index, level }) => families[index][level - 1]);
+      if (!best) break;
       const wasFreed = new Set(current.perProject.filter((item) => item.freed > 0).map((item) => item.id));
-      steps.push({ added: addedIds, selected: best.ids, cost: costOf(best.ids), freed: best.result.freed, projects: best.result.projectsFreed, gain: best.gain, newly: best.result.perProject.filter((item) => item.freed > 0 && !wasFreed.has(item.id)).map((item) => `${item.app}/${projectOf(item.id)}`) });
-      best.trial.forEach((level, index) => { levels[index] = level; });
+      steps.push({ added: best.union.filter((id) => !selection.includes(id)), selected: best.union, cost: total(best.union, (id) => MECHANISMS[id].size), freed: best.result.freed, projects: best.result.projectsFreed, gain: best.gain, newly: best.result.perProject.filter((item) => item.freed > 0 && !wasFreed.has(item.id)).map((item) => `${item.app}/${projectOf(item.id)}`) });
+      selection = best.union;
       current = best.result;
     }
     return steps;
   };
-  const chainTable = (steps) => table(["step", "adds", "cumulative cost", "projects freed", "rows freed (cumulative)", "rows gained", "projects newly freed"], steps.map((step, index) => [index + 1, step.added.join(" + "), step.cost, step.projects, number(step.freed), number(step.gain), step.newly.length === 0 ? "-" : step.newly.length > 6 ? `${step.newly.slice(0, 6).join(", ")}, … (${step.newly.length})` : step.newly.join(", ")]));
-  const chain = buildChain(() => true);
-  const chainNoRuling = buildChain((id) => !MECHANISMS[id].ruling);
-  sections.push(`### The ranked build order (cumulative; a step is the upgrade, or up to three together, with the most rows per unit of cost)\n\n${chainTable(chain)}\n\nWithout the M2b ruling:\n\n${chainTable(chainNoRuling)}`);
+  const chainTable = (steps) => (steps.length === 0 ? "No set of the menu empties any project." : table(["step", "adds (the set so far)", "cumulative cost", "projects freed", "rows freed (cumulative)", "rows gained", "projects newly freed"], steps.map((step, index) => [index + 1, `${step.added.join(" + ")} (${step.selected.join(" + ")})`, step.cost, step.projects, number(step.freed), number(step.gain), step.newly.length > 6 ? `${step.newly.slice(0, 6).join(", ")}, … (${step.newly.length})` : step.newly.join(", ")])));
+  const chain = buildChain(true, false);
+  const chainNoRuling = buildChain(false, false);
+  const chainBounds = buildChain(true, true);
+  sections.push(`### The ranked plan (cumulative: at each step the set that frees the most rows per unit of cost on top of the last; the upper bounds M…u and M2…O left out)\n\n${chainTable(chain)}\n\n**Without the M2b ruling** (tests count as entries):\n\n${chainTable(chainNoRuling)}\n\n**With the upper bounds allowed** (what no design can decide, M1u, M3u, M5u, the optimistic M2 forms):\n\n${chainTable(chainBounds)}`);
   results.chain = chain;
   results.chainNoRuling = chainNoRuling;
-  const everything = run(["M1u", "M3u", "M4w", "M5", "M2b", "M6", "M7v"]);
+  results.chainBounds = chainBounds;
+  results.plan = chain;
+  results.planNoRuling = chainNoRuling;
+  results.combos = combos.length;
   results.everything = { freed: everything.freed, projectsFreed: everything.projectsFreed };
-  // What holds the rows the full set cannot free.
-  const rows = [];
-  for (const item of everything.perProject.filter((entry) => entry.effective > 0 && entry.left.length > 0).sort((a, b) => b.rows - a.rows)) {
-    const writers = item.left.map((writer) => `${writer.name}`).slice(0, 8).join(", ");
-    rows.push([`${item.app}/${projectOf(item.id)}`, number(item.rows), item.left.length, writers + (item.left.length > 8 ? ", …" : "")]);
+  const leftRows = [];
+  for (const item of everything.perProject.filter((entry) => entry.effective > 0 && entry.packagesLeft > 0).sort((a, b) => b.rows - a.rows)) {
+    leftRows.push([`${item.app}/${projectOf(item.id)}`, number(item.rows), item.packagesLeft, item.leftNames.slice(0, 8).join(", ") + (item.leftNames.length > 8 ? ", …" : "")]);
   }
-  sections.push(`### What stays under every mechanism together (M1u, M3u, M4w, M5, M2b, M6, M7v), by project (measured causes)\n\n${table(["project", "family-3 rows", "writers left", "which (first 8)"], rows)}`);
-  results.left = rows;
+  sections.push(`### What stays under every mechanism together (M1u, M3u, M4w, M5u, M2b, M6, M7v), by project (measured causes)\n\n${table(["project", "family-3 rows", "writer packages left", "which (first 8)"], leftRows)}`);
+  results.left = leftRows;
+  // The sets to run for the plan and the unlock table.
+  results.stageB = [...new Map([...chain, ...chainNoRuling, ...chainBounds, ...unlock.flatMap((item) => [item.noRuling, item.withRuling].filter(Boolean).map((combo) => ({ selected: combo.selected })))].map((item) => [nameOf(item.selected), item])).values()];
 }
+
+if (args["emit-scenarios"] && args.stage === "B") {
+  const list = [];
+  const seen = new Set([...Object.keys(MECHANISMS), "floor", "v2"]);
+  const sets = [...(results.stageB ?? []), { selected: ["M1u", "M3u", "M4w", "M5u", "M6"] }, { selected: ["M1u", "M3u", "M4w", "M5u", "M6", "M7v"] }, { selected: ["M1u", "M2aO", "M3u", "M4w", "M5u", "M6", "M7v"] }, { selected: ["M1u", "M2bO", "M3u", "M4w", "M5u", "M6", "M7v"] }, { selected: ["M1u", "M2b", "M3u", "M4w", "M5u", "M6", "M7v"] }];
+  for (const set of sets) {
+    const mechanisms = set.selected;
+    const name = nameOf(mechanisms);
+    if (mechanisms.length === 0 || seen.has(name)) continue;
+    seen.add(name);
+    list.push({ name, mechanisms });
+  }
+  writeFileSync(resolve(args["emit-scenarios"]), `${JSON.stringify(list, null, 1)}\n`);
+  process.stderr.write(`${list.length} scenarios (stage B) -> ${args["emit-scenarios"]}\n`);
+  process.exit(0);
+}
+
+// The checker's own class matcher (`SOLID_CHECKER_WHATIF_WRITER_CAUSES`) against the offline step: the roots a run still counts, from its census, against the roots the offline
+// step leaves counted for the same mechanisms.
+{
+  const lines = [];
+  for (const name of ["whatif-M3u", "whatif-M4", "whatif-unloaded"]) {
+    const scenario = readScenario(name);
+    if (!scenario) continue;
+    let roots = 0;
+    const differences = [];
+    for (const found of scenario.projects) {
+      if (!found.stillCounted) continue;
+      const info = described.get(found.id);
+      const predicted = new Set(dropRoots(scenario.scenario.mechanisms, info));
+      for (const writer of info.writers.filter((item) => item.counted)) {
+        roots += 1;
+        const left = !found.stillCounted.includes(writer.root);
+        if (left !== predicted.has(writer.root)) differences.push(`${found.id}: ${writer.name} (checker ${left ? "left it out" : "counted it"}, offline ${predicted.has(writer.root) ? "leaves it out" : "counts it"})`);
+      }
+    }
+    lines.push(`- \`${name}\` (\`${scenario.scenario.classes}\`): ${scenario.projects.filter((found) => found.stillCounted).length} projects, ${number(roots)} writer roots compared, ${differences.length} differences${differences.length ? `: ${differences.slice(0, 6).join("; ")}` : ""}`);
+    results.classMatcher = { ...(results.classMatcher ?? {}), [name]: { roots, differences } };
+  }
+  if (lines.length) sections.push(`### The checker's own class matcher against the offline step (measured)\n\n${lines.join("\n")}`);
+}
+
+sections.push(`### Offline prediction against the runs (measured)\n\nThe offline step decides, from the census, which roots a set of mechanisms leaves out and so whether a project's rows go; the checker then ran each set with those roots left out. The rows that went agreed with the offline prediction in ${stats.agree} of ${stats.agree + stats.disagree.length} (scenario, project) pairs${stats.disagree.length ? `; the others: ${stats.disagree.slice(0, 12).join("; ")}${stats.disagree.length > 12 ? ", …" : ""}` : ""}.`);
+results.agreement = { pairs: stats.pairs, agree: stats.agree, disagree: stats.disagree };
 
 writeFileSync(join(out, "tables.md"), `${sections.join("\n\n")}\n`);
 
@@ -270,7 +390,17 @@ writeFileSync(join(out, "tables.md"), `${sections.join("\n\n")}\n`);
 {
   const lines = ["# Writers by project (measured: census of the any-name prototype writers of the 34-project corpus)", "", "A writer is a root the checker counts as one that may write a built-in's prototype under any name and that is not clear (its closure may reach Solid). `loaded`: the backend's own flag; `value`/`product`: loaded by a value import of a project file / of a product file (the file-name test of `scripts/writer-census-report.mjs`), directly or through a package that does; `loaded by`: the file classes of the project files that import it by value. `first problem`: what the row's message prints (the walk's first problem in order, which is not why the root is a writer). `signature`: the cause families, `esc` (the global object handed on by a name: `window`, `globalThis`, `self`, `this`…), `route` (`x.source`, `x.view`, `x.defaultView` taken for the window), `gen` (code generated at run time), `handed` (a built-in's prototype handed on), `key` (a prototype member written under a key nothing decides), `pat` (a prototype bound by a pattern nothing reads), `unread` (code nobody read: the blocker). Causes are `class×count` per class, most frequent first.", ""];
   const familyOf = (parsed) => (parsed.family === "escape" ? (parsed.route ? "route" : "esc") : parsed.family === "generated" ? "gen" : parsed.family === "handed-on" ? "handed" : parsed.family === "key" ? "key" : parsed.family === "pattern" ? "pat" : parsed.family === "unread" ? `unread(${parsed.blocker})` : "other");
-  const rowOf = (writer) => {
+  const everyMechanism = closeOver(["M1u", "M3u", "M4w", "M5u", "M2b", "M6", "M7v"]);
+  const causeLevel = closeOver(["M1u", "M3u", "M4w", "M5u"]);
+  const rowOf = (writer, project) => {
+    // What would decide it: the mechanisms that decide the root whole or all of its causes together, else the causes that stay (unread code, real hand-ons, generation).
+    const by = decided(everyMechanism, writer, project);
+    const hard = new Map();
+    for (const { cause, parsed } of writer.causeClasses) {
+      if (parsed.family === "unread" || !MECHANISMS.M1u.decides(parsed) && !MECHANISMS.M3u.decides(parsed) && !MECHANISMS.M5u.decides(parsed) && !MECHANISMS.M4w.decides(parsed, writer, cause, causeLevel)) hard.set(familyOf(parsed), (hard.get(familyOf(parsed)) ?? 0) + cause.n);
+      else if (parsed.family === "generated" && !MECHANISMS.M4w.decides(parsed, writer, cause, causeLevel)) hard.set(familyOf(parsed), (hard.get(familyOf(parsed)) ?? 0) + cause.n);
+    }
+    const stays = [...hard.entries()].sort((a, b) => b[1] - a[1]).map(([family, count]) => `${family}×${count}`).join(" ");
     const byClass = new Map();
     for (const cause of writer.causes) byClass.set(cause.class, (byClass.get(cause.class) ?? 0) + cause.n);
     const families = new Map();
@@ -278,13 +408,13 @@ writeFileSync(join(out, "tables.md"), `${sections.join("\n\n")}\n`);
     const signature = [...families.entries()].sort((a, b) => b[1] - a[1]).map(([family, count]) => `${family}×${count}`).join(" ");
     const causes = [...byClass.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([cls, count]) => `${cls}×${count}`).join("; ") + (byClass.size > 5 ? `; … (${byClass.size} classes)` : "");
     const files = [...new Set(writer.causes.filter((cause) => cause.file).map((cause) => cause.file))].slice(0, 2).join(", ");
-    return [writer.name, writer.loaded ? "y" : "n", writer.valueLoaded ? "y" : "n", writer.productLoaded ? "y" : "n", writer.importerClasses.join("+") || "none", (writer.reach ?? "").replace(/^Undecided \{ blocker: (\w+), detail: "([^"]{0,60}).*$/s, "$1 $2").replace(/^ReachesSolid.*$/s, "ReachesSolid"), signature, causes, files];
+    return [writer.name, writer.loaded ? "y" : "n", writer.valueLoaded ? "y" : "n", writer.productLoaded ? "y" : "n", writer.importerClasses.join("+") || "none", by ? `${by}` : `stays: ${stays || "-"}`, (writer.reach ?? "").replace(/^Undecided \{ blocker: (\w+), detail: "([^"]{0,60}).*$/s, "$1 $2").replace(/^ReachesSolid.*$/s, "ReachesSolid"), signature, causes, files];
   };
   const groups = new Map();
   for (const project of projects.sort((a, b) => (a.id < b.id ? -1 : 1))) {
     const writers = project.writers.filter((writer) => writer.effective);
     if (writers.length === 0) continue;
-    const rows = writers.map(rowOf);
+    const rows = writers.map((writer) => rowOf(writer, project));
     const key = `${appOf(project.id)}\n${JSON.stringify(rows)}`;
     const group = groups.get(key) ?? { app: appOf(project.id), projects: [], rows, writers: writers.length, open: project.openLoads };
     group.projects.push({ project: projectOf(project.id), rows: project.rows });
@@ -293,7 +423,7 @@ writeFileSync(join(out, "tables.md"), `${sections.join("\n\n")}\n`);
   for (const group of groups.values()) {
     const names = group.projects.map((entry) => `${entry.project} (${number(entry.rows)})`).join(", ");
     lines.push(`## ${group.app}: ${group.writers} writers; ${names}${group.open ? "; the project has an open load (computed or unresolved)" : ""}`, "");
-    lines.push(table(["root", "loaded", "value", "product", "loaded by", "first problem", "signature", "causes (class×count)", "files (first 2)"], group.rows), "");
+    lines.push(table(["root", "loaded", "value", "product", "loaded by", "decided by (every mechanism) or what stays", "first problem", "signature", "causes (class×count)", "files (first 2)"], group.rows), "");
   }
   writeFileSync(join(out, "writers.md"), `${lines.join("\n")}\n`);
 }
