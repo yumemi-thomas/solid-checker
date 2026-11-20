@@ -97,9 +97,13 @@ export function checkLedger({ ledger, base, computed, decisions, read, snapshotO
       // ADR 1125: the case's file moved to another fixture project (a repro case split out of a shared program): the rows stay
       // uncertifiable there under the same key, which that fixture gained.
       if (row.proof !== undefined || row.fixtures !== undefined) failures.push(`${why}: a moved row names no proof or fixtures`);
-      const target = snapshotOf(row.movedToFixture);
-      const gained = target ? keyCount(target, key) - (baseSnapshotOf(row.movedToFixture) ? keyCount(baseSnapshotOf(row.movedToFixture), key) : 0) : 0;
-      if (row.movedToFixture === fixture || gained < was - now) failures.push(`${why}: movedToFixture ${row.movedToFixture} gained ${gained}, not the ${was - now} that left`);
+      // ADR 1133: a list when the rows went to several projects (their gains add up).
+      const targets = [row.movedToFixture].flat();
+      const gained = targets.reduce((sum, name) => {
+        const target = snapshotOf(name);
+        return sum + (target ? keyCount(target, key) - (baseSnapshotOf(name) ? keyCount(baseSnapshotOf(name), key) : 0) : 0);
+      }, 0);
+      if (targets.includes(fixture) || gained < was - now) failures.push(`${why}: movedToFixture ${targets.join(", ")} gained ${gained}, not the ${was - now} that left`);
       return;
     }
     if (row.kind === "moved") {

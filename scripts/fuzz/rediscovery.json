@@ -40711,5 +40711,167 @@
    "lg-strict-read-untracked-dny-legal-spread-overridden-undefined-store-render-effect-carried-direct-none"
   ],
   "rediscovered": "focus lg-recall --contexts dny-legal-spread-overridden-{attr,spread,undefined} (207 programs), debug builds: main a64fc92ad has 12 unexecuted-violation rows (missing-owner violation at line 8) and needs a look; this build gives them handler-key-overridden (uncertifiable) and nothing needs a look"
+ },
+ {
+  "finding": "ADR 1125 head d40e3f3cd (and main's event proofs) certified a read in a handler run with no event when the code that breaks delivery is: (F5) a `javascript:` URL built by concatenation, or `srcdoc` markup built the same way; (F6) `Object.assign` through `globalThis.Object`; (N2) the key reader through an alias of `Object` or a value's `constructor`; (F7) Solid's stored handler read under a key built at run time",
+  "found": "the Fable review of ADR 1125 (coord-land/review-1125.md F5-F7, review-1125-r2.md N2; probes p12, p13, p1c, p3, q2, q3, q1f, q4)",
+  "fixed": "ADR 1133: `NavigationUrl` code sinks and `srcdoc` markup writes; `Object`, `X.Object` and `X.constructor` handed on are `ObjectAssign` sites and readers read off them key readers; an unproven computed key whose value is not inert is a delivery hazard",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-evt-rerun-js-url-signal-direct-none",
+   "mx-strict-read-untracked-evt-rerun-srcdoc-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-object-alias-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-object-member-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-stored-unproven-key-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-stored-values-alias-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-stored-values-constructor-signal-direct-none"
+  ],
+  "rediscovered": "focus on the seven contexts' mx-recall programs (15,050): d40e3f3cd 6,714 false cleans (1,418 each for js-url, srcdoc, stored-unproven-key; 820 each for object-member, stored-values-alias, -constructor) and 180 false positives (36 each but js-url and srcdoc); evt-apply-object-alias fails there by its 36 false positives only (the literal's `event` key was already a write); FIXED here (0 and 0)"
+ },
+ {
+  "finding": "main and ADR 1125 (d40e3f3cd) certified a handler's write or read run by a dispatch the census cannot see as written: `el.dispatchEvent.call(el, e)` (main: a live false clean), and, once ADR 1133 narrows `Reflect`, `Reflect.apply(EventTarget.prototype.dispatchEvent, el, [e])`",
+  "found": "ADR 1133's review of the Reflect narrowing (#296 owed; probes sc-scratch mac21/a1133/cases r1, r2, r5)",
+  "fixed": "ADR 1133: a `dispatchEvent` or `click` read whose value is kept or called other than directly is a `DispatchHandedOn` premise site and a delivery hazard",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-evt-body-dispatch-call-signal-direct-none"
+  ],
+  "rediscovered": "focus on the two contexts' mx-recall programs (REACTIVE_WRITE_IN_OWNED_SCOPE, STRICT_READ_UNTRACKED; 8,136): d40e3f3cd 2,927 false cleans and 36 false positives; FIXED here (0 and 0)"
+ },
+ {
+  "finding": "ADR 1133's first cut (9f2a7c861, merged with main a64fc92ad) certified a read in a handler run with no event when `Reflect.get` reached the member: `(Reflect.get({}, \"constructor\")).values(el)` takes Solid's stored click handler and an apply calls it, `Reflect.get(el, \"dispatchEvent\").call(el, e)` dispatches on the body's stack (F1, a regression of the Reflect narrowing)",
+  "found": "the Fable review of ADR 1133 (coord-land/review-1133.md, probes in sc-scratch review-1133/cases) F1 (r2, r5, r6, r16-r21, o-d2, d8)",
+  "fixed": "ADR 1133 round 1: `Reflect.get` is a hazard again; `Reflect.apply`, `construct` and `has` stay narrowed",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-evt-apply-stored-reflect-get-signal-direct-none",
+   "mx-strict-read-untracked-evt-body-dispatch-reflect-get-signal-direct-none"
+  ],
+  "rediscovered": "focus on the F1 contexts' mx-recall programs (STRICT_READ_UNTRACKED 4,516): head 2,942 false cleans and 144 false positives; FIXED here (0 and 0)"
+ },
+ {
+  "finding": "ADR 1133's first cut (9f2a7c861, merged with main a64fc92ad) certified a write in a handler the body dispatches through `Reflect.get(el, \"dispatchEvent\")` (F1)",
+  "found": "the Fable review of ADR 1133 (coord-land/review-1133.md, probes in sc-scratch review-1133/cases) F1 (o-d2, d8)",
+  "fixed": "ADR 1133 round 1: `Reflect.get` is a hazard again",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-evt-body-dispatch-reflect-get-signal-direct-none"
+  ],
+  "rediscovered": "focus on the F1 dispatch context's mx-recall programs (REACTIVE_WRITE_IN_OWNED_SCOPE 1,918): head 1,576 false cleans; FIXED here (0)"
+ },
+ {
+  "finding": "ADR 1133's first cut (9f2a7c861, merged with main a64fc92ad) certified a read in a handler run with no event after markup or a script a call-spelled sink wrote, handed to `Reflect.apply` (the sink read as a value, not a callee): `Reflect.apply(document.body.insertAdjacentHTML, …, [\"beforeend\", \"<img src=x onerror=…>\"])`, `Reflect.apply(document.createElement, document, [\"script\"])` (F2, a regression of the Reflect narrowing)",
+  "found": "the Fable review of ADR 1133 (coord-land/review-1133.md, probes in sc-scratch review-1133/cases) F2 (s1, s4, s10, and the `.call` twins s2, s4b)",
+  "fixed": "ADR 1133 round 1: a call-spelled sink (`insertAdjacentHTML`, `write`, `createContextualFragment`, `setHTMLUnsafe`, `createElement(NS)`, `setAttributeNode(NS)`) read as a value anywhere but as a callee is the sink its name is",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-evt-rerun-reflect-markup-signal-direct-none",
+   "mx-strict-read-untracked-evt-rerun-reflect-script-signal-direct-none"
+  ],
+  "rediscovered": "focus on the F2 contexts' mx-recall programs (STRICT_READ_UNTRACKED 4,516): head 2,972 false cleans and 72 false positives; FIXED here (0 and 0)"
+ },
+ {
+  "finding": "ADR 1133's first cut (9f2a7c861, merged with main a64fc92ad) certified a read in a handler the body runs by a dispatch the census cannot read: a dispatcher under a key the program builds (`el[\"dispatch\" + \"Event\"].call(el, e)`) or taken out by a destructuring assignment (`({ dispatchEvent: send } = el)`) (F3)",
+  "found": "the Fable review of ADR 1133 (coord-land/review-1133.md, probes in sc-scratch review-1133/cases) F3 (o-d3, o-d4, d3b)",
+  "fixed": "ADR 1133 round 1: a dispatcher under a built key is handed on whether kept or called, and every pattern key (declaration, assignment, shorthand, built key) meets every name test",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-evt-body-dispatch-built-key-signal-direct-none",
+   "mx-strict-read-untracked-evt-body-dispatch-pattern-signal-direct-none"
+  ],
+  "rediscovered": "focus on the F3 contexts' mx-recall programs (STRICT_READ_UNTRACKED 4,516): head 2,912 false cleans and 144 false positives; FIXED here (0 and 0)"
+ },
+ {
+  "finding": "ADR 1133's first cut (9f2a7c861, merged with main a64fc92ad) certified a write in a handler the body dispatches by a dispatcher under a built key or taken out by a destructuring assignment (F3)",
+  "found": "the Fable review of ADR 1133 (coord-land/review-1133.md, probes in sc-scratch review-1133/cases) F3 (o-d3, o-d4, d3b)",
+  "fixed": "ADR 1133 round 1: as the STRICT_READ_UNTRACKED row",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-evt-body-dispatch-built-key-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-evt-body-dispatch-pattern-signal-direct-none"
+  ],
+  "rediscovered": "focus on the F3 contexts' mx-recall programs (REACTIVE_WRITE_IN_OWNED_SCOPE 3,836): head 3,152 false cleans; FIXED here (0)"
+ },
+ {
+  "finding": "ADR 1133's first cut (9f2a7c861, merged with main a64fc92ad) certified a read in a handler run with no event when `JSON.stringify`'s replacer or `Object.values` reached Solid's stored handler through a route the key-reader tests missed: `globalThis.JSON.stringify(el, replacer)`, `const J = JSON`, `const { stringify } = JSON`, `({})[\"constructor\"].values(el)`, `globalThis[\"Object\"].values(el)`, `const { Object: O } = globalThis`, `const { constructor: C } = {}` (F4, round 2's N2 spellings the first cut called closed)",
+  "found": "the Fable review of ADR 1133 (coord-land/review-1133.md, probes in sc-scratch review-1133/cases) F4 (r7, r8, r9, r9b, r10, r11, r11b)",
+  "fixed": "ADR 1133 round 1: `JSON` by any route is a key reader, and `Object` or `constructor` by a computed member or a pattern key an `ObjectAssign` site",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-evt-apply-stored-stringify-global-this-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-stored-stringify-alias-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-stored-stringify-pattern-signal-direct-none",
+   "mx-strict-read-untracked-evt-apply-stored-values-computed-constructor-memo-hook-do",
+   "mx-strict-read-untracked-evt-apply-stored-values-computed-global-memo-hook-do",
+   "mx-strict-read-untracked-evt-apply-stored-values-pattern-global-memo-hook-do",
+   "mx-strict-read-untracked-evt-apply-stored-values-pattern-constructor-memo-hook-do"
+  ],
+  "rediscovered": "focus on the F4 contexts' mx-recall programs (STRICT_READ_UNTRACKED 15,806): head 7,766 false cleans and 504 false positives; FIXED here (0 and 0)"
+ },
+ {
+  "finding": "ADR 1133's first cut (9f2a7c861, merged with main a64fc92ad) certified a read in a handler run with no event after a `javascript:` URL built or hidden by a route the navigation sinks missed: the location kept in a name (`const loc = document.location; loc.assign(…)`), `form[\"act\" + \"ion\"] = …`, `form.getAttributeNode(\"action\").value = …`, an `&#106;avascript:` character reference in a markup attribute, `const { open: send } = window` (F5)",
+  "found": "the Fable review of ADR 1133 (coord-land/review-1133.md, probes in sc-scratch review-1133/cases) F5 (u1, u2, u4, u9, u10, u13, u13c, u17)",
+  "fixed": "ADR 1133 round 1: a member `location` kept or passed, a built key written, an attribute node, `baseVal` and `protocol` written, a character reference in a URL's leading bytes or a markup attribute value, and `open`/`location`/`assign`/`replace` taken out by a pattern are navigation sinks",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-evt-rerun-location-alias-signal-direct-none",
+   "mx-strict-read-untracked-evt-rerun-href-built-key-signal-direct-none",
+   "mx-strict-read-untracked-evt-rerun-attribute-node-signal-direct-none",
+   "mx-strict-read-untracked-evt-rerun-href-entity-signal-direct-none",
+   "mx-strict-read-untracked-evt-rerun-open-pattern-memo-hook-do"
+  ],
+  "rediscovered": "focus on the F5 contexts' mx-recall programs (STRICT_READ_UNTRACKED 11,290): head 6,771 false cleans; FIXED here (0)"
+ },
+ {
+  "finding": "K4's \"never called\" test (ADR 1133) held a direct call of a member under a plain data key and let `const f = el[key()].run; f(e)` and `el[key()].run.call(null, e)` pass for the same member (F6)",
+  "found": "the Fable review of ADR 1133 (coord-land/review-1133.md, probes in sc-scratch review-1133/cases) F6 (k3, k3b, k3c, k3d)",
+  "fixed": "ADR 1133 round 1: the test is gone; the rule is any use of the object of a member under a plain data key",
+  "outside": "the review found no misbehaving program and none exists: what a member under a plain data key holds is something the program put there (every platform function, every reader and Solid's stored handler has a standard or private name), so there is no false clean for the grids to rediscover. The rule is held by fixtures/reactive-ir/event-delivery-spellings/variants/plain-data-key-uses (certified) and the textbook program id-todo-for (`draft[index()].done = …`)"
+ },
+ {
+  "finding": "ADR 1133's round-1 build (3165f15a3) certified a read in a handler run with no event after code by routes its sinks and aliases missed: an attribute node out of the `attributes` collection (`getNamedItem`, a name, an index, a `const` alias) written in place, or one set into it (`setNamedItem`), markup parsed by `DOMParser.parseFromString` and moved into the page, `open` and `location` out of a `const` alias of the window, `createElement` out of a `const` alias of the document",
+  "found": "the author's probes of the neighbours of F2 and F5 (sc-scratch mac21b/p1133 cases2 v1-v9 and cases3 e1, e2), not the review",
+  "fixed": "ADR 1133 round 1, adjacent spellings: `getNamedItem(NS)`, `item`, `setNamedItem(NS)` and a member of the `attributes` collection under a URL or handler name, an index or an unproven key are sinks; `parseFromString` and `parseHTMLUnsafe` are markup sinks; `const` aliases (four hops) of a window, a document, a location and the collection meet the pattern and call tests",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-evt-rerun-attributes-named-item-signal-direct-none",
+   "mx-strict-read-untracked-evt-rerun-attributes-by-name-signal-direct-none",
+   "mx-strict-read-untracked-evt-rerun-attributes-by-index-signal-direct-none",
+   "mx-strict-read-untracked-evt-rerun-attributes-alias-signal-direct-none",
+   "mx-strict-read-untracked-evt-rerun-set-named-item-signal-direct-none",
+   "mx-strict-read-untracked-evt-rerun-dom-parser-signal-direct-none",
+   "mx-strict-read-untracked-evt-rerun-document-alias-create-element-signal-direct-none",
+   "mx-strict-read-untracked-evt-rerun-window-alias-open-memo-hook-do",
+   "mx-strict-read-untracked-evt-rerun-window-alias-location-memo-hook-do"
+  ],
+  "rediscovered": "focus on the nine contexts' mx-recall programs (STRICT_READ_UNTRACKED and REACTIVE_WRITE_IN_OWNED_SCOPE 20,322): the round-1 build 12,056 false cleans and 72 false positives; FIXED here (0 and 0)"
+ },
+ {
+  "finding": "`document.execCommand(\"insertHTML\", false, markup)` parses markup into the editable element (an event attribute in it runs) and `\"createLink\"` makes an anchor of its URL: ADR 1133's round-1 build read neither (an adjacent spelling of F2 and F5)",
+  "found": "the author's probe v6 (sc-scratch mac21b/p1133 cases2)",
+  "fixed": "ADR 1133 round 1, adjacent spellings: `execCommand` is a markup sink unless its command is fixed and not `insertHTML` or its markup is inert, and a navigation sink for `createLink` unless its URL is proven",
+  "outside": "a program that dispatches an event to a handler and reaches an `execCommand` call is already withheld (`function-run-unplaced`: the dispatch census reads `execCommand` as a delivering call, `dny-input-exec`), so no grid program is certified by the round-1 build; a program with no dispatch never runs the handler, so Chrome cannot show the false clean (the context `evt-rerun-exec-command` was recall-gap in 2,096 of 2,258 programs on both builds and was removed). The sink is held by `fixtures/reactive-ir/event-delivery-spellings/variants/exec-command` (the round-1 build certified it, the hardened build does not) and the unit test `an_attribute_node_by_the_collection_or_a_global_behind_an_alias_is_a_code_sink`"
+ },
+ {
+  "finding": "ADR 1133's round-1 final build (e43c5d469) certified a read in a handler run with no event after a `javascript:` URL set through the attribute node of `action`, reached by `form[key()].action` where `key()` returns `attributes` (K4 read `action` as a plain data key and the unproven read as inert) or by `form[\"attri\" + \"butes\"]` (a built key the literal-key test did not read) (N1)",
+  "found": "the Fable round-2 review of ADR 1133 (coord-land/review-1133-r2.md, probes review-1133/cases v11, v12, v26, v27, v29, v34), N1",
+  "fixed": "ADR 1133 round 2: K4's plain data key rejects a name an attribute may have (a URL slot, `srcdoc`, `on…`) and `attributes`; the collection under a key a proof gives the text `attributes` is the collection",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-evt-rerun-attributes-unproven-key-signal-direct-none",
+   "mx-strict-read-untracked-evt-rerun-attributes-built-key-signal-direct-none"
+  ],
+  "rediscovered": "focus on the two contexts' mx-recall programs (STRICT_READ_UNTRACKED and REACTIVE_WRITE_IN_OWNED_SCOPE 4,516): the round-1 final build 2,972 false cleans; FIXED here (0)"
  }
 ]

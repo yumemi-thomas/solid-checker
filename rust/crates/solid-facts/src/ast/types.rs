@@ -1825,6 +1825,10 @@ pub enum CodeSinkKind {
     JavascriptUrl,
     /// A global looked up by a name the program does not fix (`window[name]`).
     GlobalLookup,
+    /// ADR 1133 (F5): a URL a navigation or a frame loads (`href`, `src`, `action`, `formAction`, `data`, `location` by any route the syntax
+    /// names: a member write, a JSX attribute, `setAttribute`, an object literal's key, `location.assign`, `open`) that is not proven to be
+    /// no `javascript:` URL: a URL built at run time (`"java" + "script:" + …`) runs as code.
+    NavigationUrl,
 }
 
 /// A place a file runs code it builds as a string: see [`AstFacts::code_sinks`].
@@ -1902,6 +1906,10 @@ pub enum PremiseClause {
     /// ADR 1125 (G2): a standard reader of an object's own keys or values named in any position (`Object.values` handed to
     /// `flatMap`, `const { entries } = Object`, `Object.keys.call(…)`), `JSON.stringify` with a replacer or handed on, a `for … in`.
     KeyReader,
+    /// ADR 1133: a dispatcher (`dispatchEvent`, `click`) read as a value that may be called other than as a written dispatch call
+    /// (`el.dispatchEvent.call(el, e)`, `Reflect.apply(EventTarget.prototype.dispatchEvent, el, [e])`, an alias): the dispatch census
+    /// counts only calls spelled as dispatches.
+    DispatchHandedOn,
 }
 
 /// One place that may break the plain-program premise (ADR 1120, facts schema 101): its clause, its span and the key or name it

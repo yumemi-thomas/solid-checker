@@ -1,0 +1,38 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/event-delivery-spellings/variants/open-pattern/App.tsx",
+      "start": 500,
+      "end": 507,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "pending-read-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/event-delivery-spellings/variants/open-pattern/App.tsx",
+      "start": 500,
+      "end": 507,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "tuple-iteration-written",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/event-delivery-spellings/variants/open-pattern/App.tsx",
+      "start": 500,
+      "end": 505,
+      "fixes": 0
+    }
+  ]
+}

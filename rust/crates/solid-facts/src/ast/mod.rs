@@ -76,10 +76,12 @@ use thiserror::Error;
 /// by alias or reached through any object are code sinks.
 /// 105 (ADR 1114 family 3 slice G): `converting_operators` also lists an assignment's value to a member and the computed keys of class
 /// methods and binding/assignment patterns.
-pub const AST_FACTS_SCHEMA: u32 = 105;
+/// 106 (ADR 1133): a navigation URL not proven no `javascript:` URL and `srcdoc` markup are code sinks (`NavigationUrl`, `MarkupWrite`);
+/// `Object` handed on as a value is an `ObjectAssign` site, and `Object["assign"]` a key reader.
+pub const AST_FACTS_SCHEMA: u32 = 106;
 
 mod argument_completion;
-mod code_sinks;
+pub(crate) mod code_sinks;
 mod completion_call_cover;
 mod component_value_flow;
 mod computed_keys;
@@ -90,7 +92,7 @@ mod host_execution;
 mod inert_javascript;
 mod literal_array;
 mod module_requests;
-mod premise_sites;
+pub(crate) mod premise_sites;
 mod primitive_completion;
 mod proxy_get_forward;
 mod reference_positions;

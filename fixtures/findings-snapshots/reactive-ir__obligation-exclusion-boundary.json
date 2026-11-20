@@ -52,6 +52,17 @@
       "blocker": "parameter-use-unmodeled",
       "severity": "warning",
       "path": "fixtures/reactive-ir/obligation-exclusion-boundary/App.tsx",
+      "start": 1218,
+      "end": 1224,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "parameter-use-unmodeled",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/obligation-exclusion-boundary/App.tsx",
       "start": 1396,
       "end": 1402,
       "fixes": 0
@@ -109,6 +120,17 @@
       "path": "fixtures/reactive-ir/obligation-exclusion-boundary/App.tsx",
       "start": 2410,
       "end": 2416,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "parameter-member-target-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/obligation-exclusion-boundary/App.tsx",
+      "start": 2767,
+      "end": 2773,
       "fixes": 0
     },
     {
