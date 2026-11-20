@@ -1,0 +1,1 @@
+{ "note": "ADR 1139 r1: creations in a shadow-delivered handler (named, member, spread) throw PRIMITIVE_IN_EFFECT_CALLBACK; the light twin reports NO_OWNER_EFFECT." }

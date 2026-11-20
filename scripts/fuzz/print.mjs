@@ -613,7 +613,7 @@ function render(program, instrument) {
           ? `async () => ${block(item.handler, depth, entryFor(item, "handler"), ["await Promise.resolve();"])}`
           : `() => ${block(item.handler, depth, entryFor(item, "handler"))}`;
         const on = item.on ?? "onClick";
-        const open = `${ind(depth)}<${tag} data-act="${item.id}"${item.attrs ? ` ${item.attrs}` : ""} ${item.spread ? `{...{ ${on}: ${handler} }}` : `${on}={${handler}}`}${item.post ? ` ${item.post}` : ""}`;
+        const open = `${ind(depth)}<${tag} data-act="${item.id}"${item.attrs ? ` ${item.attrs}` : ""} ${item.spread ? `{...{ ${on}: ${item.value ?? handler} }}` : `${on}={${item.value ?? handler}}`}${item.post ? ` ${item.post}` : ""}`;
         return [tag === "input" || tag === "iframe" || tag === "Dynamic" ? `${open} />` : `${open}>go</${tag}>`];
       }
       case "hbutton": return [`${ind(depth)}<button data-act="${item.id}"${item.attrs ? ` ${item.attrs}` : ""} onClick={${item.tuple ? `[${expr(item.e, depth)}, 1]` : expr(item.e, depth)}}>go</button>`];

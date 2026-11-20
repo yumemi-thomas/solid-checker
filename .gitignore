@@ -2072,3 +2072,11 @@ packages/wasm/owned/
 !fixtures/reactive-ir/event-delivery-spellings/variants/attributes-built-key/node_modules/**
 !fixtures/reactive-ir/event-delivery-spellings/variants/data-href-unproven-key/node_modules/
 !fixtures/reactive-ir/event-delivery-spellings/variants/data-href-unproven-key/node_modules/**
+!fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation-named/node_modules/
+!fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation-named/node_modules/**
+!fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation-member/node_modules/
+!fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation-member/node_modules/**
+!fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation-spread/node_modules/
+!fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation-spread/node_modules/**
+!fixtures/reactive-ir/event-dispatch-shadow/variants/light-creation-named/node_modules/
+!fixtures/reactive-ir/event-dispatch-shadow/variants/light-creation-named/node_modules/**
