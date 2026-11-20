@@ -1,0 +1,155 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "handler-on-disabled-control",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/disabled-spread-handler-owner/App.tsx",
+      "start": 674,
+      "end": 686,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/disabled-spread-handler-owner/App.tsx",
+      "start": 674,
+      "end": 686,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "handler-on-disabled-control",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/disabled-spread-handler-owner/App.tsx",
+      "start": 773,
+      "end": 785,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/disabled-spread-handler-owner/App.tsx",
+      "start": 773,
+      "end": 785,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "handler-on-disabled-control",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/disabled-spread-handler-owner/App.tsx",
+      "start": 892,
+      "end": 904,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/disabled-spread-handler-owner/App.tsx",
+      "start": 892,
+      "end": 904,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/disabled-spread-handler-owner/App.tsx",
+      "start": 1344,
+      "end": 1356,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/disabled-spread-handler-owner/App.tsx",
+      "start": 1344,
+      "end": 1356,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/disabled-spread-handler-owner/App.tsx",
+      "start": 1524,
+      "end": 1536,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/disabled-spread-handler-owner/App.tsx",
+      "start": 1524,
+      "end": 1536,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/disabled-spread-handler-owner/App.tsx",
+      "start": 1716,
+      "end": 1728,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/disabled-spread-handler-owner/App.tsx",
+      "start": 1716,
+      "end": 1728,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/disabled-spread-handler-owner/App.tsx",
+      "start": 1840,
+      "end": 1852,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/disabled-spread-handler-owner/App.tsx",
+      "start": 1840,
+      "end": 1852,
+      "fixes": 0
+    }
+  ]
+}
