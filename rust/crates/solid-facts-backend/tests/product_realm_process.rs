@@ -126,7 +126,7 @@ fn realm_silences(log: &Path) -> Vec<(String, u64, u64)> {
 }
 
 /// The product's own file of each fixture below, and the test file that imports it.
-const CLEARED: [(&str, &str, &str); 4] = [
+const CLEARED: [(&str, &str, &str); 6] = [
     // A page's module script (`index.html` names `/main.tsx`), the test setup loads the writers.
     ("product-realm-test-writer", "App.tsx", "app.test.tsx"),
     // A package's `exports` are the entries; no page.
@@ -143,6 +143,10 @@ const CLEARED: [(&str, &str, &str); 4] = [
     ),
     // The `?url` of an image is data, no module.
     ("product-realm-asset-query", "App.tsx", "app.test.tsx"),
+    // A pinned Solid plugin with its diagnostics bridge off (`diagnostics: false`, no declaration): the page never loads `@solidjs/diagnostics`.
+    ("product-realm-diagnostics-off", "App.tsx", "app.test.tsx"),
+    // The entries import a Solid package (`@solidjs/router`) whose manifest depends on nothing that writes: the test's writer stays out of the page.
+    ("product-realm-solid-scope-inert", "App.tsx", "app.test.tsx"),
 ];
 
 #[test]
@@ -209,7 +213,7 @@ fn a_site_only_a_test_loaded_writer_makes_is_cleared_by_a_typed_silence_and_drop
 }
 
 /// Fixtures where the realm is unknown, or the page loads a writer: nothing is cleared, and the realm's silence is not named.
-const KEPT: [(&str, &str); 16] = [
+const KEPT: [(&str, &str); 20] = [
     // A second page loads the writer and shares a module.
     ("product-realm-second-page", "App.tsx"),
     // A plugin the grammar knows by name, adding a load: a name proves nothing.
@@ -240,6 +244,14 @@ const KEPT: [(&str, &str); 16] = [
     // and a Solid plugin that is not an installed closure ADR 0270 pins (unpinned, and not installed).
     ("product-realm-plugin-unpinned", "App.tsx"),
     ("product-realm-plugin-missing", "App.tsx"),
+    // The reach index does not walk a Solid package (`@solidjs/*`, the dialect's), so the writer its manifest depends on is no writer of its root, and the page
+    // loads it all the same (review round 2): through a package the entries import,
+    ("product-realm-solid-scope-dependency", "App.tsx"),
+    // and through the Solid plugin's dev-serve diagnostics bridge, which puts the app's own `@solidjs/diagnostics` in the page: forced on, the plugin's own
+    // detection deciding, or switched off beside a declaration of the package.
+    ("product-realm-diagnostics-on", "App.tsx"),
+    ("product-realm-diagnostics-auto", "App.tsx"),
+    ("product-realm-diagnostics-declared", "App.tsx"),
 ];
 
 #[test]

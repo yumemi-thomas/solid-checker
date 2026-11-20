@@ -1,6 +1,11 @@
 [
   {
     "name": "@solidjs/vite-plugin",
+    "version": "0.0.0-fixture",
+    "digest": "1a0598fc436d59eee7d55cbac6fd15e7ce2248f97e14348556d0934164c64db4"
+  },
+  {
+    "name": "@solidjs/vite-plugin",
     "version": "3.0.0-next.28",
     "digest": "762ae940dfc9a5f818362e7a214822224391143676332e1ed7fcedaa4b309353"
   },

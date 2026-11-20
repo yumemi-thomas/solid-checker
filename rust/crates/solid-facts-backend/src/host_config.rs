@@ -19,6 +19,19 @@ pub(super) enum EntryMode {
     ClientStart,
 }
 
+/// ADR 1145: how a config sets the Solid plugin's `diagnostics` option, which fronts a dev-serve bridge that loads the app's own `@solidjs/diagnostics` into the page:
+/// off only for the literal `false`, forced on by the literal `true`, and otherwise the plugin's own detection decides (its option `'auto'`). Ordered by how
+/// much of the bridge may run, so a conditional config takes the maximum of its branches.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(super) enum SolidDiagnostics {
+    /// No Solid plugin is called, or it is called with `diagnostics: false`.
+    Off,
+    /// The plugin decides (its detection of the package in the app's manifest): the option is absent or no boolean.
+    Auto,
+    /// `diagnostics: true`.
+    On,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct Config {
     pub mode: EntryMode,
@@ -41,6 +54,8 @@ pub(super) struct Config {
     pub optimize_exclude: BTreeSet<String>,
     /// A lazy route manifest has no eager picked route-config dependencies.
     pub lazy_routes: bool,
+    /// The Solid plugin's `diagnostics` option (ADR 1145: the product realm keeps the diagnostics package's writers unless the bridge is off).
+    pub solid_diagnostics: SolidDiagnostics,
 }
 
 struct Bindings<'a> {
@@ -309,6 +324,11 @@ fn plugin(
                 || ["ssr", "serverFunctions"].iter().any(|key|
                     fields.get(key).is_some_and(|value| !bool_value(value, false)))
             { return None; }
+            config.solid_diagnostics = match fields.get("diagnostics") {
+                Some(value) if bool_value(value, false) => SolidDiagnostics::Off,
+                Some(value) if bool_value(value, true) => SolidDiagnostics::On,
+                _ => SolidDiagnostics::Auto,
+            };
             if let Some(start) = fields.get("start") {
                 if bool_value(start, true) {
                     config.mode = EntryMode::ClientStart;
@@ -400,6 +420,7 @@ fn object(object: &ObjectExpression<'_>, bindings: &Bindings<'_>) -> Option<Conf
         package_dedupe: false,
         optimize_exclude: BTreeSet::new(),
         lazy_routes: false,
+        solid_diagnostics: SolidDiagnostics::Off,
     };
     for (key, value) in fields {
         bindings.refusing(
@@ -562,6 +583,7 @@ fn expression(value: &Expression<'_>, bindings: &Bindings<'_>) -> Option<Config>
             left.default_extensions &= right.default_extensions;
             left.tsconfig_paths |= right.tsconfig_paths;
             left.tsconfig_paths_every &= right.tsconfig_paths_every;
+            left.solid_diagnostics = left.solid_diagnostics.max(right.solid_diagnostics);
             left.package_dedupe |= right.package_dedupe;
             left.optimize_exclude.extend(right.optimize_exclude);
             Some(left)
@@ -589,6 +611,7 @@ fn statements(body: &[Statement<'_>], bindings: &Bindings<'_>) -> Option<Config>
             left.default_extensions &= right.default_extensions;
             left.tsconfig_paths |= right.tsconfig_paths;
             left.tsconfig_paths_every &= right.tsconfig_paths_every;
+            left.solid_diagnostics = left.solid_diagnostics.max(right.solid_diagnostics);
             left.package_dedupe |= right.package_dedupe;
             left.optimize_exclude.extend(right.optimize_exclude);
             Some(left)

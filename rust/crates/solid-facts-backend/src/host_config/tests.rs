@@ -168,6 +168,69 @@ fn tsconfig_paths_count_as_applied_only_on_every_branch() {
     }
 }
 
+/// ADR 1145: the Solid plugin's `diagnostics` option, which fronts a dev-serve bridge that loads the app's `@solidjs/diagnostics` into the page, is off only for the
+/// literal `false`, and a conditional config takes the most on of its branches.
+#[test]
+fn the_solid_plugins_diagnostics_option_is_read_and_a_conditional_takes_the_most_on_branch() {
+    let path = Path::new("vite.config.ts");
+    let solid = |options: &str| format!("solid({options})");
+    let direct = |call: String| {
+        format!("import solid from 'vite-plugin-solid'; export default {{plugins:[{call}]}}")
+    };
+    for (source, expected) in [
+        (
+            "export default {plugins:[]}".to_owned(),
+            SolidDiagnostics::Off,
+        ),
+        (direct(solid("")), SolidDiagnostics::Auto),
+        (direct(solid("{}")), SolidDiagnostics::Auto),
+        (direct(solid("{diagnostics:false}")), SolidDiagnostics::Off),
+        (direct(solid("{diagnostics:true}")), SolidDiagnostics::On),
+        (
+            direct(solid("{diagnostics:'auto'}")),
+            SolidDiagnostics::Auto,
+        ),
+        (direct(solid("{diagnostics:null}")), SolidDiagnostics::Auto),
+        (
+            "import solid from 'vite-plugin-solid'; export default {plugins:[]}".to_owned(),
+            SolidDiagnostics::Off,
+        ),
+    ] {
+        assert_eq!(
+            parse(path, &source).unwrap().solid_diagnostics,
+            expected,
+            "{source}"
+        );
+    }
+    let branches = |left: &str, right: &str| {
+        format!(
+            "import {{defineConfig}} from 'vite'; import solid from 'vite-plugin-solid'; export default defineConfig(({{mode}}) => mode ? {{plugins:[solid({left})]}} : {{plugins:[solid({right})]}})"
+        )
+    };
+    for (left, right, expected) in [
+        (
+            "{diagnostics:false}",
+            "{diagnostics:false}",
+            SolidDiagnostics::Off,
+        ),
+        (
+            "{diagnostics:false}",
+            "{diagnostics:true}",
+            SolidDiagnostics::On,
+        ),
+        ("{diagnostics:false}", "", SolidDiagnostics::Auto),
+        ("", "{diagnostics:true}", SolidDiagnostics::On),
+    ] {
+        assert_eq!(
+            parse(path, &branches(left, right))
+                .unwrap()
+                .solid_diagnostics,
+            expected,
+            "{left} / {right}"
+        );
+    }
+}
+
 #[test]
 fn package_resolver_controls_and_branch_exclusions_remain_closed() {
     let path = Path::new("vite.config.ts");

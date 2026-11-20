@@ -25,12 +25,18 @@
 //! - the closure of the entries over every `import`, `export … from`, literal `import()` and `require`, and `import x = require()`, by the attested resolution of each
 //!   specifier. A load by a computed specifier, `import.meta.glob`, a worker, a service worker, `new URL(…, import.meta.url)`, a specifier no row attests or that
 //!   resolves nowhere, a resolved file the program does not analyze (an asset and a JSON module excepted), and an entry the program does not hold end it;
+//! - what the loaded packages load that no entry names, by manifest: the reach index does not walk Solid's own packages (`@solidjs/*`, the dialect's), so a writer only
+//!   such a package's dependencies load is no writer of its root, and the page loads it all the same. The realm holds every package the manifests of the loaded
+//!   packages depend on (`dependencies`, `optionalDependencies` and `peerDependencies`, transitively: [`manifest_closure`]), those of the Solid runtime the plugin's
+//!   compile output imports (`solid-js`, `@solidjs/web`, `@solidjs/signals`) and, where the Solid plugin's dev-serve diagnostics bridge may be on, those of the app's own
+//!   `@solidjs/diagnostics` (the bridge injects a module that imports it into `index.html`): the bridge is off only for `diagnostics: false` with no manifest of the
+//!   chain declaring the package;
 //! - the declared host: a browser target with a declared build. Vite itself puts code in the page (the dev server's client in a development build, the
 //!   `modulepreload` polyfill in a production one), so the packages named `vite` and the config's own imports are in the realm whatever the files import, in either
 //!   build (a name kept is a writer kept: the direction that only narrows the change).
 //!
 //! Premises (`docs/decisions.md`, ADR 1145): the closure equals Vite's resolution wherever the read has not ended (the refusals above are where it can differ); the
-//! Solid plugin, an installed and pinned closure, adds only Solid's own loads; `defineConfig` is the identity; the build is the Vite build the config and the scripts
+//! Solid plugin, an installed and pinned closure, adds only Solid's own loads and its diagnostics bridge's (held, above); `defineConfig` is the identity; the build is the Vite build the config and the scripts
 //! describe; tests, stories and configs are not the product (the owner's ruling), so a product file's site is judged against what the page loads though a test loads
 //! the file with more; code outside the program shares the page with it as the package integrity premise (ADR 0300) already assumes.
 
@@ -85,6 +91,9 @@ pub(crate) struct Known {
     pub roots: BTreeSet<String>,
     /// The package names whose roots the page's host loads whatever the files import: Vite itself and the packages the Vite configs import.
     pub host_names: BTreeSet<String>,
+    /// The names of the packages the loaded packages may load by their manifests ([`manifest_closure`]): the reach index does not walk a Solid package (the dialect's,
+    /// `@solidjs/*`), so no writer its dependencies hold is attributed to it, and the page loads them all the same.
+    pub manifest_names: BTreeSet<String>,
     /// Each Solid plugin the configs import, by the directory of the config and the specifier: where the realm narrows anything, its installed closure is audited
     /// against ADR 0270's pins ([`apply`]).
     pub solid_plugins: Vec<(PathBuf, String)>,
@@ -197,6 +206,30 @@ pub(crate) fn read(
             return Realm::Unknown(blockers);
         }
     };
+    // What the page may load that the closure does not name, by manifests: the dependencies of each package the files load, of the diagnostics package where the
+    // Solid plugin's bridge may be on, and of the runtime the plugin's compile output imports.
+    let mut starts = roots.iter().map(PathBuf::from).collect::<Vec<_>>();
+    let mut loaded_by_plugin = Vec::new();
+    if bundled.host_names.contains(DIAGNOSTICS_PACKAGE) {
+        loaded_by_plugin.push(DIAGNOSTICS_PACKAGE);
+    }
+    if !bundled.solid_plugins.is_empty() {
+        loaded_by_plugin.extend(["solid-js", "@solidjs/web", "@solidjs/signals"]);
+    }
+    for name in loaded_by_plugin {
+        starts.extend(
+            chain(directory)
+                .iter()
+                .filter_map(|dir| installed_package(dir, name)),
+        );
+    }
+    let manifest_names = match manifest_closure(starts, MANIFEST_LIMIT) {
+        Ok(names) => names,
+        Err(reason) => {
+            blockers.push(Blocker::new("closure", reason));
+            return Realm::Unknown(blockers);
+        }
+    };
     if build.is_none() || !blockers.is_empty() {
         return Realm::Unknown(blockers);
     }
@@ -205,6 +238,7 @@ pub(crate) fn read(
         files,
         roots,
         host_names: bundled.host_names,
+        manifest_names,
         solid_plugins: bundled.solid_plugins,
     })
 }
@@ -724,6 +758,36 @@ struct Bundled {
     applies_paths: bool,
 }
 
+/// The package the Solid plugin's dev-serve diagnostics bridge loads into the page: the bridge is a virtual module, injected into the page's `index.html` when the plugin
+/// finds `@solidjs/diagnostics` declared in the nearest manifest (or `diagnostics: true`), and it imports the app's own copy of the package.
+const DIAGNOSTICS_PACKAGE: &str = "@solidjs/diagnostics";
+
+/// Whether a `package.json` of the chain declares [`DIAGNOSTICS_PACKAGE`] (in `dependencies`, `devDependencies`, `optionalDependencies` or `peerDependencies`), or is
+/// one this reader cannot parse (the plugin's own detection would read the nearest manifest, and which one is nearest depends on the root it runs in).
+fn declares_diagnostics(directory: &Path) -> bool {
+    chain(directory).iter().any(|dir| {
+        let Ok(text) = fs::read_to_string(dir.join("package.json")) else {
+            return false;
+        };
+        let Ok(package) = serde_json::from_str::<serde_json::Value>(&text) else {
+            return true;
+        };
+        [
+            "dependencies",
+            "devDependencies",
+            "optionalDependencies",
+            "peerDependencies",
+        ]
+        .iter()
+        .any(|field| {
+            package
+                .get(field)
+                .and_then(serde_json::Value::as_object)
+                .is_some_and(|names| names.contains_key(DIAGNOSTICS_PACKAGE))
+        })
+    })
+}
+
 /// Every bundler configuration of the chain, read, or why one ends the read. Some Vite config must name the build: a page and its modules with no configuration say
 /// nothing of how they are built.
 fn bundler(directory: &Path) -> Result<Bundled, String> {
@@ -742,6 +806,7 @@ fn bundler(directory: &Path) -> Result<Bundled, String> {
         applies_paths: true,
         ..Bundled::default()
     };
+    let mut diagnostics = crate::host_config::SolidDiagnostics::Off;
     for path in configs {
         let source =
             fs::read_to_string(&path).map_err(|error| format!("{}: {error}", path.display()))?;
@@ -777,7 +842,17 @@ fn bundler(directory: &Path) -> Result<Bundled, String> {
             }
         }
         bundled.applies_paths &= config.tsconfig_paths_every;
+        diagnostics = diagnostics.max(config.solid_diagnostics);
         bundled.host_names.extend(imported_packages(&source));
+    }
+    // The Solid plugin's dev-serve diagnostics bridge puts the app's own `@solidjs/diagnostics` in the page: a package no file of the entries need import. It is
+    // off only where `diagnostics` is literally `false` and no manifest of the chain declares the package (the plugin's detection is of the declaration, and an
+    // installed closure the pins cover may detect it another way): then a name kept is a writer kept, the direction that only narrows the change.
+    if !bundled.solid_plugins.is_empty()
+        && (diagnostics != crate::host_config::SolidDiagnostics::Off
+            || declares_diagnostics(directory))
+    {
+        bundled.host_names.insert(DIAGNOSTICS_PACKAGE.to_owned());
     }
     Ok(bundled)
 }
@@ -1180,6 +1255,63 @@ fn closure(
     Ok((files, roots))
 }
 
+/// The directory of the installed copy of `name` as Node finds it from `from`: the `node_modules/<name>` of `from` or of its nearest ancestor that holds one.
+fn installed_package(from: &Path, name: &str) -> Option<PathBuf> {
+    from.ancestors()
+        .map(|ancestor| ancestor.join("node_modules").join(name))
+        .find(|candidate| candidate.join("package.json").is_file())
+}
+
+/// How many packages [`manifest_closure`] may visit before the read ends (a closure this large is not a page's).
+const MANIFEST_LIMIT: usize = 20_000;
+
+/// The names of the packages in `starts` and of every package their manifests may load: the keys of `dependencies`, `optionalDependencies` and `peerDependencies`
+/// (a name counts where no copy is installed), and recursively those of each installed copy, found from the directory of the package that names it. A superset of
+/// what a package's closure loads, and of what the reach index attributes to it: the index does not walk a Solid package (the dialect's: `@solidjs/*`), so a writer
+/// only such a package's dependencies load is no writer of its root, and the manifests are the one place the page's load of it shows. More than `limit` packages
+/// end the read.
+fn manifest_closure(
+    starts: impl IntoIterator<Item = PathBuf>,
+    limit: usize,
+) -> Result<BTreeSet<String>, String> {
+    let mut names = BTreeSet::new();
+    let mut seen = BTreeSet::<PathBuf>::new();
+    let mut queue = starts.into_iter().collect::<Vec<_>>();
+    while let Some(dir) = queue.pop() {
+        let Ok(dir) = fs::canonicalize(&dir) else {
+            continue;
+        };
+        if !seen.insert(dir.clone()) {
+            continue;
+        }
+        if seen.len() > limit {
+            return Err(format!(
+                "the manifests of the loaded packages name more than {limit} packages"
+            ));
+        }
+        let Some(manifest) = fs::read_to_string(dir.join("package.json"))
+            .ok()
+            .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+        else {
+            continue;
+        };
+        if let Some(name) = manifest.get("name").and_then(serde_json::Value::as_str) {
+            names.insert(name.to_owned());
+        }
+        for field in ["dependencies", "optionalDependencies", "peerDependencies"] {
+            let Some(dependencies) = manifest.get(field).and_then(serde_json::Value::as_object)
+            else {
+                continue;
+            };
+            for dependency in dependencies.keys() {
+                names.insert(dependency.clone());
+                queue.extend(installed_package(&dir, dependency));
+            }
+        }
+    }
+    Ok(names)
+}
+
 /// The real directory of an installed root, or `None` where it cannot be resolved (then the root counts as loaded).
 fn real(root: &str) -> Option<PathBuf> {
     fs::canonicalize(root).ok()
@@ -1284,7 +1416,9 @@ pub(crate) fn apply(realm: &Realm, index: &mut PackageReachIndex) -> Applied {
     let host_roots = index
         .names
         .iter()
-        .filter(|(_, name)| known.host_names.contains(name.as_str()))
+        .filter(|(_, name)| {
+            known.host_names.contains(name.as_str()) || known.manifest_names.contains(name.as_str())
+        })
         .map(|(root, _)| root.clone())
         .collect::<BTreeSet<_>>();
     let host_real = host_roots
@@ -1410,6 +1544,7 @@ pub(crate) fn census(
                     "files": known.files.len(),
                     "roots": known.roots.len(),
                     "hostNames": known.host_names,
+                    "manifestNames": known.manifest_names.len(),
                     "writersAny": index.prototype_writers_any.len(),
                     "writersAnyInProduct": product.map_or(0, |product| product.prototype_writers_any.len()),
                     "namedWriters": index.prototype_writers.len(),
@@ -1864,6 +1999,154 @@ mod tests {
         assert_eq!(vite_pick(&root, "./absent").unwrap(), None);
         assert!(vite_agrees(importer, "./absent", "/somewhere").is_err());
         assert!(vite_agrees(importer, "solid-js", "/node_modules/solid-js/x.js").is_ok());
+    }
+
+    #[test]
+    fn the_manifest_closure_is_every_name_the_dependencies_of_the_loaded_packages_may_load() {
+        let root = scratch("manifests");
+        let package = |dir: &str, manifest: &str| {
+            write(&root, &format!("{dir}/package.json"), manifest);
+        };
+        package(
+            "node_modules/a",
+            r#"{ "name": "a", "dependencies": { "b": "1", "ghost": "1" }, "peerDependencies": { "p": "1" }, "devDependencies": { "dev": "1" } }"#,
+        );
+        package(
+            "node_modules/b",
+            r#"{ "name": "b", "optionalDependencies": { "c": "1", "nested": "1" } }"#,
+        );
+        // A dependency a package carries itself is found before one beside it.
+        package(
+            "node_modules/b/node_modules/nested",
+            r#"{ "name": "nested" }"#,
+        );
+        // A cycle ends.
+        package(
+            "node_modules/c",
+            r#"{ "name": "c", "dependencies": { "a": "1" } }"#,
+        );
+        package("node_modules/p", r#"{ "name": "p" }"#);
+        package("node_modules/dev", r#"{ "name": "dev" }"#);
+        let names = manifest_closure([root.join("node_modules/a")], 100).unwrap();
+        assert_eq!(
+            names.iter().map(String::as_str).collect::<Vec<_>>(),
+            ["a", "b", "c", "ghost", "nested", "p"],
+            "a dev dependency is not shipped; a name counts where no copy is installed"
+        );
+        // A directory no copy answers names nothing.
+        assert!(
+            manifest_closure([root.join("node_modules/absent")], 100)
+                .unwrap()
+                .is_empty()
+        );
+        // More packages than the limit end the read.
+        let refused = manifest_closure([root.join("node_modules/a")], 2).unwrap_err();
+        assert!(refused.contains("more than 2 packages"), "{refused}");
+        // A copy is found as Node finds it: in the package's own node_modules, or in an ancestor's.
+        assert_eq!(
+            installed_package(&root.join("node_modules/b"), "nested"),
+            Some(root.join("node_modules/b/node_modules/nested"))
+        );
+        assert_eq!(
+            installed_package(&root.join("node_modules/b"), "p"),
+            Some(root.join("node_modules/p"))
+        );
+        assert!(installed_package(&root.join("node_modules/b"), "absent").is_none());
+    }
+
+    #[test]
+    fn the_diagnostics_bridge_of_the_solid_plugin_keeps_its_package_in_the_realm_unless_it_is_off()
+    {
+        let root = scratch("diagnostics");
+        let project = root.join("app");
+        let config = |options: &str| {
+            write(
+                &project,
+                "vite.config.ts",
+                &format!(
+                    "import solid from 'vite-plugin-solid'; export default {{ plugins: [solid({options})] }};"
+                ),
+            );
+        };
+        let kept = |project: &Path| {
+            bundler(project)
+                .unwrap()
+                .host_names
+                .contains("@solidjs/diagnostics")
+        };
+        write(&project, "package.json", r#"{ "private": true }"#);
+        // The bridge is off for the literal `false` and a chain that does not declare the package, and for nothing else.
+        config("{ diagnostics: false }");
+        assert!(!kept(&project));
+        // Forced on, or the plugin's own detection decides (the option absent, or no boolean): the page may load the package.
+        for options in [
+            "{ diagnostics: true }",
+            "",
+            "{}",
+            "{ diagnostics: 'auto' }",
+            "{ diagnostics: null }",
+        ] {
+            config(options);
+            assert!(kept(&project), "{options}");
+        }
+        // A declaration keeps it beside `diagnostics: false` too: any of the four fields, in a manifest above the project, and a manifest that does not parse might hold it.
+        config("{ diagnostics: false }");
+        for field in [
+            "dependencies",
+            "devDependencies",
+            "optionalDependencies",
+            "peerDependencies",
+        ] {
+            write(
+                &project,
+                "package.json",
+                &format!(r#"{{ "private": true, "{field}": {{ "@solidjs/diagnostics": "^1" }} }}"#),
+            );
+            assert!(kept(&project), "{field}");
+        }
+        write(
+            &project,
+            "package.json",
+            r#"{ "private": true, "devDependencies": { "other": "1" } }"#,
+        );
+        assert!(!kept(&project));
+        write(
+            &root,
+            "package.json",
+            r#"{ "devDependencies": { "@solidjs/diagnostics": "^1" } }"#,
+        );
+        assert!(kept(&project));
+        fs::remove_file(root.join("package.json")).unwrap();
+        assert!(!kept(&project));
+        write(&project, "package.json", "{ not json");
+        assert!(kept(&project));
+        // A conditional config takes the most on of its branches, and a plugin that is imported and never called has no bridge.
+        write(&project, "package.json", r#"{ "private": true }"#);
+        write(
+            &project,
+            "vite.config.ts",
+            "import { defineConfig } from 'vite'; import solid from 'vite-plugin-solid'; \
+             export default defineConfig(({ mode }) => mode ? { plugins: [solid({ diagnostics: false })] } : { plugins: [solid({ diagnostics: true })] });",
+        );
+        assert!(kept(&project));
+        write(
+            &project,
+            "vite.config.ts",
+            "import solid from 'vite-plugin-solid'; export default { plugins: [] };",
+        );
+        assert!(!kept(&project));
+        // No Solid plugin, no bridge, whatever a manifest declares.
+        write(
+            &project,
+            "package.json",
+            r#"{ "devDependencies": { "@solidjs/diagnostics": "^1" } }"#,
+        );
+        write(
+            &project,
+            "vite.config.ts",
+            "export default { plugins: [] };",
+        );
+        assert!(!kept(&project));
     }
 
     #[test]

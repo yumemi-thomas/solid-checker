@@ -2010,3 +2010,15 @@ packages/wasm/owned/
 !fixtures/reactive-ir/product-realm-plugin-unpinned/node_modules/**
 !fixtures/reactive-ir/product-realm-plugin-missing/node_modules/
 !fixtures/reactive-ir/product-realm-plugin-missing/node_modules/**
+!fixtures/reactive-ir/product-realm-diagnostics-off/node_modules/
+!fixtures/reactive-ir/product-realm-diagnostics-off/node_modules/**
+!fixtures/reactive-ir/product-realm-diagnostics-on/node_modules/
+!fixtures/reactive-ir/product-realm-diagnostics-on/node_modules/**
+!fixtures/reactive-ir/product-realm-diagnostics-auto/node_modules/
+!fixtures/reactive-ir/product-realm-diagnostics-auto/node_modules/**
+!fixtures/reactive-ir/product-realm-diagnostics-declared/node_modules/
+!fixtures/reactive-ir/product-realm-diagnostics-declared/node_modules/**
+!fixtures/reactive-ir/product-realm-solid-scope-dependency/node_modules/
+!fixtures/reactive-ir/product-realm-solid-scope-dependency/node_modules/**
+!fixtures/reactive-ir/product-realm-solid-scope-inert/node_modules/
+!fixtures/reactive-ir/product-realm-solid-scope-inert/node_modules/**
