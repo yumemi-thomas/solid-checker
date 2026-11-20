@@ -141,6 +141,9 @@ fn walk_aliases(
     (calls, truncated)
 }
 
+/// ADR 1147 (arm 3): one file's readers of a context's `[store, { actions }]` literal, by binding index: the slot-0 name and the action locals.
+type StoreTupleReaders = HashMap<usize, (Option<Span>, Vec<Span>)>;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Position {
     Followed,
@@ -421,7 +424,7 @@ pub(crate) struct Census<'l, 'a> {
     /// says nothing about this start's walk (ADR 0909).
     hop_starts: HashSet<(String, Span)>,
     /// ADR 1147 (arm 3): per file, the readers of a context's `[store, { actions }]` literal, by binding index: the slot-0 name and the action locals.
-    store_tuple_readers: HashMap<String, HashMap<usize, (Option<Span>, Vec<Span>)>>,
+    store_tuple_readers: HashMap<String, StoreTupleReaders>,
     /// The walked source may be pending: a tracked position is SC5003's and
     /// SC5001's question then, which only a row answers (W's review H3).
     async_walk: bool,
