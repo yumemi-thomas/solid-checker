@@ -382,6 +382,8 @@ pub fn package_inputs(
     let mut reach = reach;
     let realm = crate::product_realm::read(directory, project, facts, runtime);
     let applied = crate::product_realm::apply(&realm, &mut reach);
+    // ADR 1151: whether a project HTML page may run code the analysed files do not hold, read once beside the realm (the same grammar, no second parser).
+    reach.page_may_run_code = crate::product_realm::page_may_run_code(directory, facts);
     crate::product_realm::write_census(&realm, &applied, &reach, directory);
     boundary.set_package_reach(reach);
     let inferred =

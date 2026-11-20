@@ -13,12 +13,13 @@
 use crate::{
     AsyncBoundaryShape, Boundary, CallbackOwner, ChildrenNever, CleanupRule, CodePolicy,
     ComponentEntry, ComponentSlot, ContextRole, Dialect, ExcludingLiteral, Execution,
-    FlowChildrenExclusion, OwnerRequirementRole, Primitive, ReactiveRole, ResultSlot, RuntimeCode,
-    TrackedCallbackTiming, Version, lookup, reverse,
+    FlowChildrenExclusion, ListenerRegistrations, OwnerRequirementRole, Primitive, ReactiveRole,
+    ResultSlot, RuntimeCode, TrackedCallbackTiming, Version, lookup, reverse,
 };
 
 mod code_policy;
 mod releases;
+mod runtime_listeners;
 
 #[path = "../../../dialects/solid-v2/runtime_configuration.rs"]
 mod runtime_configuration;
@@ -591,6 +592,52 @@ impl Dialect for Solid2 {
 
     fn ecosystem_scopes(&self) -> &'static [&'static str] {
         &["@solidjs/"]
+    }
+
+    /// The pinned rc.21 runtime, audited subpath by subpath (every exported subpath of the three packages is a line of `exports/solid_v2_runtime_subpaths.txt`, which a
+    /// test holds against this answer and a script holds against the installed packages; ADR 1148's question about element writes reads the same list). The root and
+    /// the two JSX runtimes (one file) export the registrars `runtime_listeners` names (rc.21 `dist/web.js`: `addEvent`, the delegation entry points, the writers that
+    /// take a property or an attribute name from the caller, `template`, the hydration, asset and head helpers); the frames tier fills the page from the server's markup
+    /// and wires listeners as it loads (`frames/dist/client.js`: `template.innerHTML = html`, `DEFER_EVENTS` listeners); the reactive core and the server and transport
+    /// tiers register nothing a focus move delivers to (`solid-js` and `@solidjs/signals` hold `DOMContentLoaded` and `abort` listeners only). A specifier no release was
+    /// audited for is unknown.
+    fn runtime_module_listener_registrations(
+        &self,
+        specifier: &str,
+    ) -> Option<ListenerRegistrations> {
+        Some(match specifier {
+            // `jsx-runtime` and `jsx-dev-runtime` resolve to the same `dist/web.js` as the root.
+            "@solidjs/web" | "@solidjs/web/jsx-runtime" | "@solidjs/web/jsx-dev-runtime" => {
+                ListenerRegistrations::Exports(runtime_listeners::root_registrars())
+            }
+            "@solidjs/web/frames"
+            | "@solidjs/web/frames/assets"
+            | "@solidjs/web/frames/client"
+            | "@solidjs/web/frames/regions"
+            | "@solidjs/web/frames/server"
+            | "@solidjs/web/frames/trace"
+            | "@solidjs/web/frames/wire" => ListenerRegistrations::Any,
+            "solid-js"
+            | "solid-js/attribution"
+            | "solid-js/internal"
+            | "solid-js/internal/container-trace"
+            | "solid-js/package.json"
+            | "solid-js/refresh"
+            | "@solidjs/signals"
+            | "@solidjs/signals/attribution"
+            | "@solidjs/signals/package.json"
+            | "@solidjs/web/performance-tracks"
+            | "@solidjs/web/serialization"
+            | "@solidjs/web/serialization/decode"
+            | "@solidjs/web/server-functions"
+            | "@solidjs/web/server-functions/client"
+            | "@solidjs/web/server-functions/rich-args"
+            | "@solidjs/web/server-functions/server"
+            | "@solidjs/web/storage" => ListenerRegistrations::None,
+            // `./types/*`: declarations only.
+            _ if specifier.starts_with("@solidjs/web/types/") => ListenerRegistrations::None,
+            _ => return None,
+        })
     }
 
     fn primitive(&self, name: &str) -> Option<Primitive> {

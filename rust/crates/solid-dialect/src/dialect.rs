@@ -247,6 +247,22 @@ pub trait Dialect: Sync {
     /// never to grant a package semantics.
     fn ecosystem_scopes(&self) -> &'static [&'static str];
 
+    /// ADR 1151: what a program that imports one module of this dialect's own runtime packages ([`Dialect::primitive_defining_packages`]) may register for a focus
+    /// move to deliver to, or write as markup or a property under a name it chooses, asked per module specifier as a program writes it, the root and every subpath
+    /// alike (`@solidjs/web`, `@solidjs/web/frames/client`).
+    ///
+    /// The engine asks it of an import, a re-export or a dynamic load of such a module, and of a specifier that resolves into a file of one. `None`: this dialect has
+    /// not audited that specifier, and the program is taken to register one (ADR 0027: missing native behaviour is unknown, never "no effects"), so a subpath or an
+    /// export a later release adds withdraws a proof that nothing listens until it is audited. A sibling of ADR 1148's question about element writes; the two are
+    /// separate answers (a module may write a property and register no listener).
+    fn runtime_module_listener_registrations(
+        &self,
+        specifier: &str,
+    ) -> Option<ListenerRegistrations> {
+        let _ = specifier;
+        None
+    }
+
     /// Resolves an exported name to a primitive, or `None` when this dialect
     /// does not export it.
     fn primitive(&self, name: &str) -> Option<Primitive>;

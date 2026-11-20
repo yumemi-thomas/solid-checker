@@ -2132,3 +2132,17 @@ packages/wasm/owned/
 !fixtures/reactive-ir/leaf-focus-no-listener/node_modules/**
 !fixtures/reactive-ir/leaf-focus-no-listener/variants/package-listener/node_modules/
 !fixtures/reactive-ir/leaf-focus-no-listener/variants/package-listener/node_modules/**
+!fixtures/reactive-ir/leaf-focus-no-listener/variants/package-typed/node_modules/
+!fixtures/reactive-ir/leaf-focus-no-listener/variants/package-typed/node_modules/**
+!fixtures/reactive-ir/leaf-focus-no-listener/variants/package-computed/node_modules/
+!fixtures/reactive-ir/leaf-focus-no-listener/variants/package-computed/node_modules/**
+!fixtures/reactive-ir/leaf-focus-no-listener/variants/runtime-path-alias/node_modules/
+!fixtures/reactive-ir/leaf-focus-no-listener/variants/runtime-path-alias/node_modules/**
+!fixtures/reactive-ir/leaf-focus-no-listener/variants/oracle-add-event/node_modules/
+!fixtures/reactive-ir/leaf-focus-no-listener/variants/oracle-add-event/node_modules/**
+!fixtures/reactive-ir/leaf-focus-no-listener/variants/oracle-add-event-delegated/node_modules/
+!fixtures/reactive-ir/leaf-focus-no-listener/variants/oracle-add-event-delegated/node_modules/**
+!fixtures/reactive-ir/leaf-focus-no-listener/variants/oracle-computed-add/node_modules/
+!fixtures/reactive-ir/leaf-focus-no-listener/variants/oracle-computed-add/node_modules/**
+!fixtures/reactive-ir/leaf-focus-no-listener/variants/oracle-dynamic-spread/node_modules/
+!fixtures/reactive-ir/leaf-focus-no-listener/variants/oracle-dynamic-spread/node_modules/**

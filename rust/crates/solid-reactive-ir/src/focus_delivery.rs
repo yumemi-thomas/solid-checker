@@ -16,25 +16,55 @@
 //!
 //! *The proof.* The call is `x.focus(…)` or `x?.focus(…)` whose exact declaration is `lib.dom`'s `HTMLOrSVGElement.focus` (or the
 //! mixin it is named in newer libraries), its arguments inert ([`crate::kernel::evaluates_no_user_code`]: a getter on an options
-//! object runs on the stack of the call), and the program holds nothing that could run on the stack of a focus move:
+//! object runs on the stack of the call), and the program holds nothing that could run on the stack of a focus move. Every name below is
+//! compared by its cooked value (a decoded identifier, a string's or a template's cooked text: `addEventListener`, `"focus"`),
+//! never by its source text. Every file is read, a dependency's source as the project's, except the files of the dialect's own runtime
+//! (whose registrars are asked at the import, below):
 //!
 //! - no listener for an event of [`EVENTS`] on any element, window or document: a JSX attribute or namespaced attribute naming one
-//!   (`onFocus`, `on:focus`, `oncapture:focus`, `prop:onfocus`), any spread onto an intrinsic element (whose keys no fact names), an
-//!   `on<event>` property written or a key of that name, an `addEventListener` that is not a direct call with a literal type outside
-//!   the list (a value, an alias, `.call`, a destructured method, a variable type), code built from markup or an event attribute, a
-//!   private delegated key (`$$focusin`);
+//!   (`onFocus`, `on:focus`, `oncapture:focus`, `prop:onfocus`), any JSX spread (whose keys no fact names), an `on<event>` property
+//!   written (`el.onfocus = f`, `onfocus = f` on the global object, `onchange ??= h`) or a key of that name, an `addEventListener` that
+//!   is not a direct call with a literal type outside the list (a value, an alias, `.call`, a destructured method, a variable type),
+//!   a computed member the program may read as `addEventListener`, `focus`, `innerHTML`… (`el[add]("focus", h)`: a key no fact proves
+//!   is another name, or one proven to be such a name, wherever the member's value is called or kept), code built from a string or
+//!   from markup, a JSX `innerHTML`/`outerHTML`/`srcdoc` attribute whose value is not a constant free of script and event attributes,
+//!   a private delegated key (`$$focusin`), the reflective routes of the shared standard-member premise (`Proxy`, `Reflect`,
+//!   `Object.assign`, a prototype route, `with`) in any file, a write to a global the program does not declare under a listener's name;
 //! - no code that stands in for `focus`: a class member, an object literal member or an assignment named `focus` (a custom element's
 //!   override, an impostor receiver), anywhere in the program or a loaded package, nor a write the shared standard-member premise
 //!   withholds ([`crate::interproc::accessor_provenance::standard_member_replaced`]: a replacement by any receiver, alias, definer,
 //!   prototype route, Proxy, `Reflect`, `Object.assign`, code built from a string, a key no fact decides, an unread module);
-//! - the standard call is not withheld ([`crate::indexes::SemanticLookup::standard_call_withheld`]).
+//! - no registrar of the dialect's own runtime ([`solid_dialect::Dialect::runtime_module_listener_registrations`]): a program that
+//!   imports `addEvent`, `delegateEvents`, `setProperty`, `setAttribute`, `spread`, `template`, a hydration or an asset helper, or any
+//!   module of the frames tier, may register a listener the scans above cannot read, unless every call of a registrar that takes the
+//!   event type or the property name as an argument passes a constant outside the focus list (`addEvent(el, "click", h)`). An export,
+//!   or a module, the dialect has not audited is unknown and counts. A specifier that is no runtime package's by name but resolves
+//!   into a file of one (a relative path into `node_modules`, a `paths` alias) reaches it by a name no audit lists, and counts;
+//! - no code the build does not read: a module outside the program's files, an asset, a computed or glob load, and a package whose
+//!   analysed files are declarations alone (TypeScript resolved the load to its `.d.ts`; the runtime source was never scanned);
+//! - the page's own HTML: where the project has an `index.html` (or another page that can run code), the host-discovery grammar must
+//!   read it (no inline `on*` handler), it must hold no `<script>` but the module entries it names, and each entry must be a file of
+//!   the program ([`solid_facts::package_reach::PackageReachIndex::page_may_run_code`]); where it has no HTML the program is closed
+//!   (ADR 0640, ADR 1080's listener census).
+//!
+//! Where the dialect's runtime is analysed (`--runtime-resolution required`), its own files are not read: what they register is what
+//! its exports register, which the answers above hold (`addEvent` and the others are the registrars, the delegated listeners they
+//! attach deliver only handlers one of them stored, and the runtime's own `change` listener on a `<select>` runs no project code).
+//! Without that, the runtime's own `addEventListener(name, …)` would end the proof in the one mode where its source is read.
 //!
 //! Everything else stays what ADR 0329 made it: the obligation. `blur`, `click`, `dispatchEvent`, the dialog and popover members and
-//! the bare global `focus()` are not asked. The page's own HTML (a `<body onfocus>` in an `index.html` no analysed file holds) is the
-//! program's closed-world premise, as for ADR 0640 and ADR 1080's listener census.
+//! the bare global `focus()` are not asked.
 
+use std::collections::BTreeSet;
+
+use solid_dialect::{ListenerRegistrations, RuntimeListenerRole};
 use solid_facts::FileFacts;
-use solid_facts::ast::{ArgumentLiteralFact, ClassElementKind, CodeSinkKind, PremiseClause};
+use solid_facts::ast::{
+    ArgumentLiteralFact, CallFact, ClassElementKind, ComputedKeySite, ExportKind,
+    ImportBindingFact, ImportKind, JsxAttributeFact, JsxAttributeValueKind, ModuleHazardKind,
+    ModuleLoadConsumer, PremiseClause,
+};
+use solid_facts::core::Span;
 use solid_facts::kernel::ValueKind;
 
 use crate::indexes::SemanticLookup;
@@ -58,6 +88,35 @@ const EVENTS: [&str; 12] = [
     "textinput",
 ];
 
+/// The names (lowercase) under which a member's write or call registers a listener, writes markup, or stands in for `focus`, beside the handler
+/// properties of [`EVENTS`] (`names_listener`): the registration and markup methods of the DOM, the attribute API an inline handler is set through,
+/// and the member `focus`.
+const REGISTERING_NAMES: [&str; 20] = [
+    "addeventlistener",
+    "attachevent",
+    "focus",
+    "handleevent",
+    "innerhtml",
+    "outerhtml",
+    "insertadjacenthtml",
+    "srcdoc",
+    "sethtmlunsafe",
+    "parsehtmlunsafe",
+    "createcontextualfragment",
+    "execcommand",
+    "write",
+    "writeln",
+    "setattribute",
+    "setattributens",
+    "setattributenode",
+    "setattributenodens",
+    "setnameditem",
+    "setnameditemns",
+];
+
+/// How many `const` initializers a constant text follows.
+const CONSTANT_DEPTH: usize = 4;
+
 /// The qualified names of the `lib.dom` declaration of an element's `focus`.
 pub(crate) fn is_element_focus(qualified_name: &str) -> bool {
     matches!(
@@ -70,7 +129,7 @@ pub(crate) fn is_element_focus(qualified_name: &str) -> bool {
 /// value with no code in it: a primitive or an object literal of data ([`ValueKind`]). The host reads an option bag's members while it
 /// converts the argument, so an argument that is an operand (a binding may hold an object with a getter) or a literal with an accessor
 /// runs project code on the stack of the call.
-pub(crate) fn call_shape(file: &FileFacts, call: &solid_facts::ast::CallFact) -> bool {
+pub(crate) fn call_shape(file: &FileFacts, call: &CallFact) -> bool {
     !call.construct
         && file
             .ast
@@ -85,8 +144,8 @@ pub(crate) fn call_shape(file: &FileFacts, call: &solid_facts::ast::CallFact) ->
         })
 }
 
-/// Whether `name` is a handler name that registers a listener for an event of [`EVENTS`]: `onfocus`, `onFocus` (cased as written),
-/// `on:focus`, `oncapture:focus`, `prop:onfocus`, `attr:onfocus`.
+/// Whether `name` (a cooked name) is a handler name that registers a listener for an event of [`EVENTS`]: `onfocus`, `onFocus` (cased as
+/// written), `on:focus`, `oncapture:focus`, `prop:onfocus`, `attr:onfocus`.
 fn names_listener(name: &str) -> bool {
     let name = name.to_ascii_lowercase();
     let name = name
@@ -101,7 +160,19 @@ fn names_listener(name: &str) -> bool {
             .is_some_and(|event| EVENTS.contains(&event))
 }
 
-/// The key a member's name denotes, written (`el.onfocus`) or a literal under brackets (`el["onfocus"]`); `None` for a key no fact names.
+/// Whether a member or key of this cooked name may register a listener, write markup or stand in for `focus` where it is called or written: a
+/// handler property of [`EVENTS`], a name of [`REGISTERING_NAMES`], or a private key of Solid's delegation (`$$focusin`, `_$…`).
+fn registers_by_name(name: &str) -> bool {
+    names_listener(name)
+        || REGISTERING_NAMES
+            .iter()
+            .any(|registering| name.eq_ignore_ascii_case(registering))
+        || name.contains("$$")
+        || name.starts_with("_$")
+}
+
+/// The key a member's name denotes, written (`el.onfocus`, `el.onfocus`) or a literal under brackets (`el["onfocus"]`), cooked; `None` for a key
+/// no fact names.
 fn member_name(file: &FileFacts, member: &solid_facts::ast::MemberFact) -> Option<String> {
     let ast = &file.ast;
     if ast.computed_members.binary_search(&member.span).is_ok() {
@@ -114,8 +185,8 @@ fn member_name(file: &FileFacts, member: &solid_facts::ast::MemberFact) -> Optio
     }
 }
 
-/// The key of an object literal member: written, or a string literal under brackets; `None` for a key computed by an expression no literal names
-/// (`[k]`, `[a + b]`), which may be any name.
+/// The key of an object literal member, cooked: written, or a string literal under brackets; `None` for a key computed by an expression no literal
+/// names (`[k]`, `[a + b]`), which may be any name.
 fn literal_member_name(
     file: &FileFacts,
     property: &solid_facts::ast::ObjectPropertyFact,
@@ -131,7 +202,7 @@ fn literal_member_name(
         .trim();
     let literal = text.starts_with(['"', '\'']) || (text.starts_with('`') && !text.contains("${"));
     literal
-        .then(|| solid_facts::kernel::cooked_key(text))
+        .then(|| solid_facts::kernel::cooked_key(&format!("[{text}]")))
         .flatten()
 }
 
@@ -140,8 +211,39 @@ fn holds_no_code(property: &solid_facts::ast::ObjectPropertyFact) -> bool {
     property.data && property.value_kind.is_proven_noncallable()
 }
 
+/// The cooked text the expression at `span` denotes when it is a constant string: a string literal, a substitution-free template, or a `const`
+/// binding of one (a few hops); `None` for anything else.
+fn constant_text(file: &FileFacts, span: Span) -> Option<String> {
+    constant_text_to(file, span, CONSTANT_DEPTH)
+}
+
+fn constant_text_to(file: &FileFacts, span: Span, depth: usize) -> Option<String> {
+    let ast = &file.ast;
+    let span = ast.peel_ts_sugar_span(span);
+    let text = file.source_text(span)?.trim();
+    let literal = text.starts_with(['"', '\'']) || (text.starts_with('`') && !text.contains("${"));
+    if literal {
+        // Under brackets, as a computed key: a template is a key only there, and a string reads the same.
+        return solid_facts::kernel::cooked_key(&format!("[{text}]"));
+    }
+    if depth == 0 {
+        return None;
+    }
+    let declaration = ast.reference_declaration(span)?;
+    ast.bindings
+        .iter()
+        .find(|binding| {
+            binding.immutable
+                && !binding.in_switch_case
+                && matches!(binding.shape, solid_facts::ast::BindingShape::Identifier)
+                && binding.names.iter().any(|name| name.span == declaration)
+        })
+        .and_then(|binding| binding.initializer)
+        .and_then(|initializer| constant_text_to(file, initializer, depth - 1))
+}
+
 /// Whether `callee` (a member of `addEventListener`, or the bare name) is called directly with a literal type no focus move delivers.
-fn quiet_registration(file: &FileFacts, callee: solid_facts::core::Span) -> bool {
+fn quiet_registration(file: &FileFacts, callee: Span) -> bool {
     file.ast
         .calls_with_peeled_callee(callee)
         .next()
@@ -155,17 +257,48 @@ fn quiet_registration(file: &FileFacts, callee: solid_facts::core::Span) -> bool
         })
 }
 
-/// Whether a JSX element of the file may register a listener for an event of [`EVENTS`].
+/// Whether a JSX attribute may register a listener, or write markup that holds an event attribute or a script.
+fn attribute_may_listen(file: &FileFacts, attribute: &JsxAttributeFact) -> bool {
+    let Some(name) = file.source_text(attribute.name) else {
+        return true;
+    };
+    if names_listener(name) {
+        return true;
+    }
+    let lower = name.to_ascii_lowercase();
+    let bare = lower
+        .strip_prefix("prop:")
+        .or_else(|| lower.strip_prefix("attr:"))
+        .unwrap_or(&lower);
+    if !matches!(bare, "innerhtml" | "outerhtml" | "srcdoc") {
+        return false;
+    }
+    // A markup-bearing attribute: inert only when its value is a constant string the markup judgment reads as free of script and event attributes. Text
+    // written as the attribute's own string literal is decoded by the JSX transform before the markup parser sees it (`&lt;` is `<`), so a character
+    // reference in it is a value no text test reads.
+    let inert = match attribute.value_kind {
+        JsxAttributeValueKind::String => attribute
+            .value
+            .and_then(|value| constant_text(file, value))
+            .is_some_and(|text| !text.contains('&') && crate::kernel::markup_is_inert(&text)),
+        JsxAttributeValueKind::Expression => attribute
+            .expression
+            .and_then(|expression| constant_text(file, expression))
+            .is_some_and(|text| crate::kernel::markup_is_inert(&text)),
+        _ => false,
+    };
+    !inert
+}
+
+/// Whether a JSX element of the file may register a listener for an event of [`EVENTS`]: an attribute naming one, a markup-bearing attribute, or a
+/// spread (on an element or on a component or `Dynamic` that forwards it: no fact names its keys).
 fn jsx_may_listen(file: &FileFacts) -> bool {
     file.ast.jsx_elements.iter().any(|element| {
-        let intrinsic = file.source_text(element.name.span).is_some_and(|name| {
-            name.starts_with(|first: char| first.is_ascii_lowercase()) && !name.contains('.')
-        });
-        (intrinsic && !element.spreads.is_empty())
+        !element.spreads.is_empty()
             || element
                 .attributes
                 .iter()
-                .any(|attribute| file.source_text(attribute.name).is_none_or(names_listener))
+                .any(|attribute| attribute_may_listen(file, attribute))
     })
 }
 
@@ -192,7 +325,8 @@ fn code_may_listen(file: &FileFacts) -> bool {
                 && !quiet_registration(file, member.span)
         })
         || ast.identifiers.iter().any(|identifier| {
-            file.source_text(identifier.span) == Some("addEventListener")
+            // The cooked name: `addEventListener(…)` is the global `addEventListener`.
+            crate::kernel::property_key(file, identifier.span).as_deref() == Some("addEventListener")
                 && ast.reference_declaration(identifier.span).is_none()
                 && !ast
                     .members
@@ -206,19 +340,62 @@ fn code_may_listen(file: &FileFacts) -> bool {
                 .iter()
                 .any(|property| property.key.as_deref() == Some("addEventListener"))
         })
-        || ast.code_sinks.iter().any(|sink| {
+        // Code built from a string or from markup, wherever it is: a `<script>` made at run time, an event attribute set as text, markup written, a load
+        // by a specifier nothing fixes (`MarkupWrite` and `EventAttribute` are written only where the facts do not prove the value inert).
+        || !ast.code_sinks.is_empty()
+        || ast.module_hazards.iter().any(|hazard| {
             matches!(
-                sink.kind,
-                CodeSinkKind::EventAttribute | CodeSinkKind::MarkupWrite
+                hazard.kind,
+                ModuleHazardKind::NonliteralDynamicLoading
+                    | ModuleHazardKind::Eval
+                    | ModuleHazardKind::OpaqueWasm
             )
         })
-        || ast
-            .premise_sites
-            .iter()
-            .any(|site| site.clause == PremiseClause::PrivateKey)
+        // `import.meta.glob` loads files by a pattern: modules the program may not hold.
+        || !ast.in_place_import_globs.is_empty()
+        || ast.members.iter().any(|member| {
+            file.source_text(ast.peel_ts_sugar_span(member.object)) == Some("import.meta")
+                && member_name(file, member)
+                    .is_some_and(|key| key == "glob" || key == "globEager")
+        })
+        || ast.premise_sites.iter().any(|site| premise_may_register(site.clause, &site.key))
 }
 
-/// Whether the file defines a member named `focus` that is, or may be, a function: a class member (any kind, static too), an object
+/// Whether a premise site of the file may register a listener or replace `focus` by a route no scan above names: a reflective write (`Proxy`,
+/// `Reflect`, `Object.assign`, a prototype route, `with`), Solid's private delegated key, or a write to a global the program does not declare
+/// (`onfocus = f`, `onchange ??= h`: the global object's handler property) under a registering name or a name no fact fixes. The shared standard-member
+/// premise withholds these in a project file already; a dependency's file is read here.
+fn premise_may_register(clause: PremiseClause, key: &str) -> bool {
+    match clause {
+        PremiseClause::ProxyOrReflect
+        | PremiseClause::PrototypeRoute
+        | PremiseClause::With
+        | PremiseClause::ObjectAssign
+        | PremiseClause::PrivateKey => true,
+        PremiseClause::GlobalWrite | PremiseClause::StandardKeyWrite => {
+            key == "*" || registers_by_name(key)
+        }
+        PremiseClause::CoercionHook
+        | PremiseClause::Accessor
+        | PremiseClause::ShadowRoot
+        | PremiseClause::KeyReader
+        | PremiseClause::DispatchHandedOn => false,
+    }
+}
+
+/// Whether a computed member (or computed pattern key, or `Reflect.get` key) of the file may read or write a registering member: a key nothing proves
+/// is another name, or one proven to be a registering name (`el[add]("focus", h)` with `const add = "addEventListener"`), wherever the value is called,
+/// written or kept. A read whose value is provably neither called nor kept (`arr[i] + 1`) runs no method of its own ([`solid_facts::ast::ComputedKeyFact::value_inert`]).
+fn computed_may_register(file: &FileFacts) -> bool {
+    file.ast.computed_keys.iter().any(|key| {
+        if key.site == ComputedKeySite::Member && key.value_inert {
+            return false;
+        }
+        !key.proven || key.texts.iter().any(|text| registers_by_name(text))
+    })
+}
+
+/// Whether the file declares a member named `focus` that is, or may be, a function: a class member (any kind, static too), an object
 /// literal member, or an assignment to one.
 fn defines_focus(file: &FileFacts) -> bool {
     let ast = &file.ast;
@@ -253,17 +430,303 @@ fn defines_focus(file: &FileFacts) -> bool {
         })
 }
 
-/// Whether some analysed file (the project's and every loaded package's) may run code on the stack of a focus move: a listener for what it
-/// delivers, or a stand-in for `focus`. A whole-program read, recorded as every scan of the files is.
-pub(crate) fn program_may_run_code_on_focus(lookup: &SemanticLookup<'_>) -> bool {
-    lookup
-        .files()
+/// Whether `path` is a file of one of the dialect's own runtime packages (`…/node_modules/@solidjs/web/…`).
+fn is_dialect_runtime(path: &str, runtime: &[&str]) -> bool {
+    crate::plain_premise::package_name(path).is_some_and(|name| runtime.contains(&name))
+}
+
+/// What the dialect says of `module`: `None` for a module that is no runtime package's by name (the program's own or a dependency's, read as source),
+/// `Some(None)` for a runtime module the dialect has not audited, `Some(Some(answer))` for an audited one.
+fn runtime_answer(
+    dialect: &dyn solid_dialect::Dialect,
+    module: &str,
+) -> Option<Option<ListenerRegistrations>> {
+    dialect
+        .primitive_defining_packages()
         .iter()
-        .any(|file| jsx_may_listen(file) || code_may_listen(file) || defines_focus(file))
+        .any(|package| {
+            module == *package
+                || module
+                    .strip_prefix(package)
+                    .is_some_and(|rest| rest.starts_with('/'))
+        })
+        .then(|| dialect.runtime_module_listener_registrations(module))
+}
+
+/// The cooked constant at argument `index` of the call, when no spread comes before it.
+fn argument_text(file: &FileFacts, call: &CallFact, index: usize) -> Option<String> {
+    if call
+        .arguments
+        .iter()
+        .take(index + 1)
+        .any(|argument| argument.spread)
+    {
+        return None;
+    }
+    constant_text(file, call.arguments.get(index)?.span)
+}
+
+/// Whether one call of a registrar by `role` registers nothing a focus move delivers to: the event type, or the property name, is a constant outside
+/// the lists, or the markup is a constant free of script and event attributes. `Forwards` and `Opaque` registrars have no argument to read.
+fn registrar_call_is_inert(file: &FileFacts, call: &CallFact, role: RuntimeListenerRole) -> bool {
+    if call.construct {
+        return false;
+    }
+    match role {
+        RuntimeListenerRole::Forwards | RuntimeListenerRole::Opaque => false,
+        RuntimeListenerRole::Event { argument } => argument_text(file, call, argument)
+            .is_some_and(|name| !EVENTS.iter().any(|event| name.eq_ignore_ascii_case(event))),
+        RuntimeListenerRole::Named { argument } => {
+            argument_text(file, call, argument).is_some_and(|name| !registers_by_name(&name))
+        }
+        RuntimeListenerRole::Markup { argument } => argument_text(file, call, argument)
+            .is_some_and(|markup| crate::kernel::markup_is_inert(&markup)),
+    }
+}
+
+/// Whether every reference to the import binding is the name of a JSX element (`<Dynamic …/>`): the attributes and spreads of the element are what the
+/// JSX scans read.
+fn only_jsx_tags(file: &FileFacts, binding: &ImportBindingFact) -> bool {
+    let ast = &file.ast;
+    ast.references_to(binding.local.span)
+        .iter()
+        .all(|reference| {
+            ast.jsx_elements.iter().any(|element| {
+                element.name.span == *reference || element.closing_name == Some(*reference)
+            })
+        })
+}
+
+/// Whether the named import `binding` of `module` registers: the role of its export in the dialect's answer, and, for a registrar that reads an
+/// argument, whether every reference is a direct call that passes a constant outside the lists. An export the module's audit does not list as a registrar
+/// is inert only where it is a value export of the audited surface: a name no surface holds, used at run time, is unknown.
+fn binding_may_register(
+    dialect: &dyn solid_dialect::Dialect,
+    file: &FileFacts,
+    module: &str,
+    binding: &ImportBindingFact,
+    answer: Option<ListenerRegistrations>,
+) -> bool {
+    let name = binding
+        .imported
+        .as_deref()
+        .or_else(|| file.source_text(binding.local.span));
+    match answer {
+        Some(ListenerRegistrations::None) => false,
+        Some(ListenerRegistrations::Any) | None => true,
+        Some(ListenerRegistrations::Exports(registrars)) => {
+            let Some(name) = name else { return true };
+            let Some((_, role)) = registrars.iter().find(|(export, _)| *export == name) else {
+                return binding.runtime_referenced
+                    && !dialect
+                        .export_modules(name, solid_dialect::ExportPosition::Value)
+                        .contains(&module);
+            };
+            // A binding handed on by a local export (`export { addEvent }`) reaches every importer of the file.
+            let exported = file.ast.exports.iter().any(|export| {
+                export.module.is_none()
+                    && export.specifiers.iter().any(|specifier| {
+                        file.source_text(specifier.local.span)
+                            == file.source_text(binding.local.span)
+                    })
+            });
+            if exported {
+                return true;
+            }
+            match role {
+                RuntimeListenerRole::Forwards => !only_jsx_tags(file, binding),
+                role => file
+                    .ast
+                    .references_to(binding.local.span)
+                    .iter()
+                    .any(|reference| {
+                        let mut calls = file.ast.calls_with_peeled_callee(*reference).peekable();
+                        // A reference that is no callee hands the registrar on: a value use no argument reads.
+                        calls.peek().is_none()
+                            || calls.any(|call| !registrar_call_is_inert(file, call, *role))
+                    }),
+            }
+        }
+    }
+}
+
+/// Whether `file` takes a registrar of the dialect's own runtime into the program ([`solid_dialect::Dialect::runtime_module_listener_registrations`], asked
+/// of the specifier as written, the root and every subpath). A module is the runtime's when its specifier is a runtime package or a path under one: a
+/// specifier the dialect has not audited is unknown and taken to register. A named import names its export whatever the local alias is, and takes a
+/// registrar only where the dialect lists that export (or any, for a module audited as `Any`); a default or namespace import exposes every export;
+/// `export … from` and `export * from` hand them on to every importer; an `import()` or a `require()` reaches the exports its consumer names, and all
+/// when it escapes unnamed. A specifier that is no runtime package's by name but resolves into a file of one reaches that file by a name no audit lists:
+/// the build's attested resolution (`attested_path`: the specifier's resolved path) says where it lands. An import that erases takes nothing.
+fn takes_registrar(
+    dialect: &dyn solid_dialect::Dialect,
+    file: &FileFacts,
+    attested_path: &dyn Fn(Span, &str) -> Option<String>,
+) -> bool {
+    let runtime = dialect.primitive_defining_packages();
+    // Whether any export of `module` may register (a namespace, a default, an `export *`).
+    let holds = |module: &str| match runtime_answer(dialect, module) {
+        None | Some(Some(ListenerRegistrations::None)) => false,
+        Some(Some(ListenerRegistrations::Exports(registrars))) => !registrars.is_empty(),
+        Some(Some(ListenerRegistrations::Any) | None) => true,
+    };
+    // Whether the export `name` of `module` may register, with no call to read.
+    let names = |module: &str, name: Option<&str>| match runtime_answer(dialect, module) {
+        None | Some(Some(ListenerRegistrations::None)) => false,
+        Some(Some(ListenerRegistrations::Exports(registrars))) => {
+            name.is_none_or(|name| registrars.iter().any(|(export, _)| *export == name))
+        }
+        Some(Some(ListenerRegistrations::Any) | None) => true,
+    };
+    // Whether merely loading `module` may: the frames tier, and a module no release was audited for, run code of their own when they load.
+    let loads_rewriting = |module: &str| {
+        matches!(
+            runtime_answer(dialect, module),
+            Some(Some(ListenerRegistrations::Any) | None)
+        )
+    };
+    let reaches_runtime_file = |at: Span, module: &str| {
+        runtime_answer(dialect, module).is_none()
+            && attested_path(at, module).is_some_and(|path| is_dialect_runtime(&path, runtime))
+    };
+    let ast = &file.ast;
+    let imported = ast
+        .imports
+        .iter()
+        .filter(|import| !import.type_only)
+        .flat_map(|import| {
+            import
+                .bindings
+                .iter()
+                .filter(|binding| !binding.type_only)
+                .map(move |binding| (import.module.as_str(), binding))
+        })
+        .any(|(module, binding)| match binding.kind {
+            ImportKind::Named => runtime_answer(dialect, module)
+                .is_some_and(|answer| binding_may_register(dialect, file, module, binding, answer)),
+            // A namespace or a default import exposes every export, where something uses it; the module's own load-time code runs either way.
+            ImportKind::Default | ImportKind::Namespace => {
+                (binding.runtime_referenced && holds(module)) || loads_rewriting(module)
+            }
+            // `import "m"` binds nothing, so no export is reached; the module's own load-time code runs.
+            ImportKind::SideEffect => loads_rewriting(module),
+        });
+    let imported_equals = ast
+        .import_equals
+        .iter()
+        .any(|import| !import.type_only && holds(import.module.as_str()));
+    let re_exported = ast
+        .exports
+        .iter()
+        .filter(|export| !export.type_only)
+        .filter_map(|export| {
+            Some((
+                export,
+                export.module.as_deref().filter(|module| holds(module))?,
+            ))
+        })
+        .any(|(export, module)| {
+            export.kind == ExportKind::All
+                || export.namespace.is_some()
+                || export
+                    .specifiers
+                    .iter()
+                    .filter(|specifier| !specifier.type_only)
+                    .any(|specifier| {
+                        let name = file
+                            .source_text(specifier.local.span)
+                            .and_then(solid_facts::kernel::cooked_key);
+                        names(module, name.as_deref())
+                    })
+        });
+    let loaded = ast
+        .module_loads
+        .iter()
+        .any(|load| match load.specifier.as_deref() {
+            // A computed specifier may name any module: unread code the load-by-load scan below withholds as well.
+            None => true,
+            Some(module) if !holds(module) => false,
+            Some(module) => match &load.consumer {
+                Some(ModuleLoadConsumer::Members { names: reads }) => {
+                    reads.iter().any(|name| names(module, Some(name)))
+                }
+                Some(ModuleLoadConsumer::Lazy { export, .. }) => names(module, Some(export)),
+                None => true,
+            },
+        });
+    let reached = ast
+        .imports
+        .iter()
+        .filter(|import| !import.type_only)
+        .any(|import| reaches_runtime_file(import.span, import.module.as_str()))
+        || ast
+            .import_equals
+            .iter()
+            .filter(|import| !import.type_only)
+            .any(|import| reaches_runtime_file(import.span, import.module.as_str()))
+        || ast
+            .exports
+            .iter()
+            .filter(|export| !export.type_only)
+            .any(|export| {
+                export
+                    .module
+                    .as_deref()
+                    .is_some_and(|module| reaches_runtime_file(export.span, module))
+            })
+        || ast.module_loads.iter().any(|load| {
+            load.specifier
+                .as_deref()
+                .is_some_and(|module| reaches_runtime_file(load.span, module))
+        });
+    imported || imported_equals || re_exported || loaded || reached
+}
+
+/// Whether the page may run code the analysed files do not hold ([`solid_facts::package_reach::PackageReachIndex::page_may_run_code`]).
+fn page_may_run_code(lookup: &SemanticLookup<'_>) -> bool {
+    lookup
+        .package_reach()
+        .is_some_and(|index| index.page_may_run_code)
+}
+
+/// Whether some analysed file (the project's and every loaded package's, but the dialect's own runtime) may run code on the stack of a focus move: a
+/// listener for what it delivers, a stand-in for `focus`, a registrar of the runtime, code the build does not read, or the page's own HTML. A
+/// whole-program read, recorded as every scan of the files is.
+pub(crate) fn program_may_run_code_on_focus(lookup: &SemanticLookup<'_>) -> bool {
+    if page_may_run_code(lookup) {
+        return true;
+    }
+    let dialect = lookup.dialect;
+    let runtime = dialect.primitive_defining_packages();
+    let files = lookup.files();
+    let program: BTreeSet<&str> = files.iter().map(|file| file.path.as_str()).collect();
+    let imports = lookup.resolved_imports();
+    files
+        .iter()
+        .filter(|file| !is_dialect_runtime(file.path.as_str(), runtime))
+        .any(|file| {
+            let attested = |at: Span, module: &str| {
+                imports.and_then(|imports| {
+                    match imports.specifier(file.path.as_str(), at, module) {
+                        solid_facts::SpecifierAttestation::Attested(row) => {
+                            Some(row.resolved_path.to_string())
+                        }
+                        solid_facts::SpecifierAttestation::Unattested => None,
+                    }
+                })
+            };
+            jsx_may_listen(file)
+                || code_may_listen(file)
+                || defines_focus(file)
+                || computed_may_register(file)
+                || takes_registrar(dialect, file, &attested)
+                || crate::plain_premise::loads_unscanned_code(lookup, file, &program, &|module| {
+                    runtime_answer(dialect, module).is_some()
+                })
+        })
 }
 
 /// The silence's record in the proof log, at a span a row it removes would stand at.
-pub(crate) fn log(path: &std::sync::Arc<str>, at: solid_facts::core::Span) {
+pub(crate) fn log(path: &std::sync::Arc<str>, at: Span) {
     crate::proof_log::silent(
         "SC9012",
         &crate::location(std::sync::Arc::clone(path), at),
@@ -354,6 +817,38 @@ mod tests {
     }
 
     #[test]
+    fn a_registering_name_is_a_handler_property_a_dom_registration_or_markup_method_or_a_private_delegated_key()
+     {
+        for name in [
+            "onfocus",
+            "addEventListener",
+            "ADDEVENTLISTENER",
+            "focus",
+            "innerHTML",
+            "outerHTML",
+            "insertAdjacentHTML",
+            "srcdoc",
+            "setAttribute",
+            "setAttributeNS",
+            "$$focusin",
+            "_$host",
+        ] {
+            assert!(registers_by_name(name), "{name}");
+        }
+        for name in [
+            "onclick",
+            "click",
+            "textContent",
+            "className",
+            "value",
+            "length",
+            "0",
+        ] {
+            assert!(!registers_by_name(name), "{name}");
+        }
+    }
+
+    #[test]
     fn the_element_focus_declarations_are_the_two_names_lib_dom_gives_it() {
         assert!(is_element_focus("HTMLOrSVGElement.focus"));
         assert!(is_element_focus("HTMLOrSVGOrMathMLElement.focus"));
@@ -368,7 +863,7 @@ mod tests {
     }
 
     #[test]
-    fn jsx_listens_by_attribute_name_or_by_a_spread_onto_an_intrinsic_element() {
+    fn jsx_listens_by_attribute_name_or_by_any_spread_or_by_markup_it_cannot_prove_inert() {
         for (source, listens) in [
             ("const a = <input onFocus={() => 1} />;", true),
             ("const a = <input onBlur={() => 1} />;", true),
@@ -376,12 +871,75 @@ mod tests {
             ("const a = <Field onChange={() => 1} />;", true),
             ("const a = <input onfocus=\"run()\" />;", true),
             ("const a = <input {...p} />;", true),
-            ("const a = <Field {...p} />;", false),
+            // A spread onto a component or `Dynamic` forwards keys no fact names.
+            ("const a = <Field {...p} />;", true),
+            (
+                "const a = <Dynamic component=\"input\" {...Object.fromEntries([[\"onFocus\", h]])} />;",
+                true,
+            ),
             (
                 "const a = <input onClick={() => 1} onKeyDown={() => 1} />;",
                 false,
             ),
             ("const a = <input value=\"x\" class=\"y\" />;", false),
+            // A markup-bearing attribute: inert only as a constant free of event attributes and scripts.
+            ("const a = <div innerHTML=\"<b>bold</b>\" />;", false),
+            ("const a = <div innerHTML={'<b>bold</b>'} />;", false),
+            (
+                "const html = '<b>bold</b>'; const a = <div innerHTML={html} />;",
+                false,
+            ),
+            (
+                "const a = <div innerHTML={'<input onfocus=\"hook()\">'} />;",
+                true,
+            ),
+            (
+                "const a = <div innerHTML={'<input o\\u006efocus=\"hook()\">'} />;",
+                true,
+            ),
+            (
+                "const a = <div innerHTML={`<img onerror=\"hook()\">`} />;",
+                true,
+            ),
+            (
+                "const a = <div innerHTML={'<script>hook()</script>'} />;",
+                true,
+            ),
+            ("const a = <div innerHTML={html} />;", true),
+            ("const a = <div innerHTML={read()} />;", true),
+            (
+                "const a = <div prop:innerHTML={'<input onfocus=\"x\">'} />;",
+                true,
+            ),
+            (
+                "const a = <div outerHTML={'<input onblur=\"x\">'} />;",
+                true,
+            ),
+            // A frame of constant markup with no script or event attribute holds no code; one with either, or a value no fact fixes, may.
+            ("const a = <iframe srcdoc={'<p>hi</p>'} />;", false),
+            ("const a = <iframe srcdoc=\"<p>hi</p>\" />;", false),
+            (
+                "const a = <iframe srcdoc={'<script>hook()</script>'} />;",
+                true,
+            ),
+            (
+                "const a = <iframe srcdoc={'<body onfocus=\"hook()\">'} />;",
+                true,
+            ),
+            ("const a = <iframe srcdoc={html} />;", true),
+            // JSX decodes a character reference in an attribute's string before the markup parser reads it.
+            (
+                "const a = <div innerHTML=\"&lt;img onerror=hook()&gt;\" />;",
+                true,
+            ),
+            (
+                "const a = <div innerHTML=\"&#60;img onerror=hook()&#62;\" />;",
+                true,
+            ),
+            (
+                "const a = <div textContent={'<input onfocus=\"x\">'} />;",
+                false,
+            ),
         ] {
             assert_eq!(jsx_may_listen(&facts(source)), listens, "{source}");
         }
@@ -402,15 +960,100 @@ mod tests {
             ("el['onchange'] = f;", true),
             ("el.onclick = f;", false),
             ("Object.assign(el, { onblur: f });", true),
+            // A literal source writes only its keys, each judged as a written key; a source no fact fixes may write any.
             ("Object.assign(el, { onclick: f });", false),
+            ("Object.assign(el, { onfocus: f });", true),
+            ("Object.assign(el, props);", true),
+            (
+                "Object.assign(el, Object.fromEntries([['onfocus', f]]));",
+                true,
+            ),
             ("Object.assign(el, { [evt]: f });", true),
             ("const o = { [k]: 1 };", false),
             ("const o = { 'prop:onfocus': f };", true),
             ("el.setAttribute('onfocus', 'run()');", true),
             ("el.id = 'a';", false),
             ("el.focus();", false),
+            // The global object's own handler properties and `addEventListener`.
+            ("onfocus = f;", true),
+            ("onchange ??= h;", true),
+            ("onblur ||= h;", true),
+            ("window.onfocus = f;", true),
+            ("globalThis['onblur'] = f;", true),
+            ("addEventListener('focus', f);", true),
+            ("addEventListener('keydown', f);", false),
+            ("onclick = f;", false),
+            // Code the program builds, and loads it does not fix.
+            ("eval('el.addEventListener(\"focus\", f)');", true),
+            ("new Function('el', 'el.onfocus = f')(el);", true),
+            ("setTimeout('hook()', 0);", true),
+            ("el.innerHTML = html;", true),
+            ("el.insertAdjacentHTML('beforeend', html);", true),
+            ("iframe.srcdoc = html;", true),
+            ("import(name);", true),
+            ("const m = import.meta.glob('./x/*.ts');", true),
+            // A reflective route in a dependency's file.
+            ("Reflect.set(el, 'onfocus', f);", true),
+            ("Object.defineProperty(el, 'focus', { value: f });", true),
+            ("const p = new Proxy(el, {});", true),
+            // Solid's private delegated key.
+            ("el.$$focusin = f;", true),
+            ("el['$$' + 'focusin'] = f;", true),
         ] {
-            assert_eq!(code_may_listen(&facts(source)), listens, "{source}");
+            assert_eq!(
+                code_may_listen(&facts(source)) || computed_may_register(&facts(source)),
+                listens,
+                "{source}"
+            );
+        }
+    }
+
+    /// The coordinator's round-1 item: a spelling is compared by its cooked value, so a unicode escape in an identifier, a string or a template names the
+    /// same member, event type or key as its plain spelling, and the scans see it.
+    #[test]
+    fn an_escaped_spelling_is_the_same_registration_as_its_plain_one() {
+        for (source, listens) in [
+            // The method `addEventListener`, escaped in an identifier (member and bare global), and a literal key escaped in a string or a template.
+            ("el.\\u0061ddEventListener('focus', f);", true),
+            ("\\u0061ddEventListener('focus', f);", true),
+            ("el['\\u0061ddEventListener']('focus', f);", true),
+            ("el[`\\u0061ddEventListener`]('focus', f);", true),
+            ("const { \\u0061ddEventListener } = el;", true),
+            ("const { '\\u0061ddEventListener': add } = el;", true),
+            // The event type escaped in the string the registration passes: a listener for `focus`.
+            ("el.addEventListener('\\u0066ocus', f);", true),
+            ("el.addEventListener('\\x66ocus', f);", true),
+            ("el.addEventListener('\\u{66}ocus', f);", true),
+            ("el.addEventListener(`\\u0066ocus`, f);", true),
+            // A type that is no focus-family event stays quiet even escaped.
+            ("el.addEventListener('\\u006beydown', f);", false),
+            // The handler property escaped: an identifier, a string key, an object key.
+            ("el.\\u006fnfocus = f;", true),
+            ("el['\\u006fnfocus'] = f;", true),
+            ("el[`\\u006fnblur`] = f;", true),
+            ("el.o\\u006efocus = f;", true),
+            ("Object.assign(el, { \\u006fnfocus: f });", true),
+            ("Object.assign(el, { '\\u006fnfocus': f });", true),
+            ("const o = { ['\\u006fnchange']: f };", true),
+            // The global object's handler property, escaped.
+            ("\\u006fnfocus = f;", true),
+            // A string escaped to a registering member through a constant.
+            (
+                "const add = '\\u0061ddEventListener'; el[add]('focus', f);",
+                true,
+            ),
+            (
+                "const add = `\\u0061ddEventListener`; el[add]('focus', f);",
+                true,
+            ),
+            // Markup that holds an escaped attribute name, in a constant the markup judgment reads.
+            ("el.setAttribute('\\u006fnfocus', 'run()');", true),
+        ] {
+            assert_eq!(
+                code_may_listen(&facts(source)) || computed_may_register(&facts(source)),
+                listens,
+                "{source}"
+            );
         }
     }
 
@@ -438,8 +1081,52 @@ mod tests {
             ("class A { blur() {} }", false),
             ("const o = { focused: () => 1 };", false),
             ("el.focus();", false),
+            // The same names, escaped: the cooked key is `focus`.
+            ("class A extends HTMLElement { f\\u006fcus() {} }", true),
+            ("class A { 'f\\u006fcus'() {} }", true),
+            ("class A { static ['f\\u006fcus']() {} }", true),
+            ("const o = { f\\u006fcus() {} };", true),
+            ("const o = { 'f\\u006fcus': () => 1 };", true),
+            ("const o = { [`f\\u006fcus`]: () => 1 };", true),
+            ("el.f\\u006fcus = f;", true),
+            ("el['f\\u006fcus'] = f;", true),
+            ("el[`f\\u006fcus`] = f;", true),
         ] {
             assert_eq!(defines_focus(&facts(source)), defined, "{source}");
+        }
+    }
+
+    #[test]
+    fn a_computed_member_is_a_registration_unless_its_key_is_proven_another_name_or_its_value_is_inert()
+     {
+        for (source, registers) in [
+            // The reviewer's F3: a constant that names the method.
+            ("const add = 'addEventListener'; el[add]('focus', h);", true),
+            ("el['add' + 'EventListener']('focus', h);", true),
+            (
+                "const k = cond ? 'addEventListener' : 'removeEventListener'; el[k]('focus', h);",
+                true,
+            ),
+            // A key nothing proves, on any receiver, whose value is called, written or kept.
+            ("el[name]('focus', h);", true),
+            ("el[name] = h;", true),
+            ("const f = el[name];", true),
+            ("use(el[name]);", true),
+            ("const { [name]: f } = el;", true),
+            ("Reflect.get(el, name);", true),
+            // A constant that names a registering member is one wherever it is read.
+            ("const k = 'innerHTML'; el[k] = html;", true),
+            ("const k = 'focus'; el[k] = f;", true),
+            ("const k = 'onfocus'; el[k] = f;", true),
+            // A key proven to be another name, or a number; a read that is neither called nor kept.
+            ("const k = 'value'; el[k] = 1;", false),
+            ("const k = 'textContent'; el[k] = 'x';", false),
+            ("const i = 0; items[i].x;", false),
+            ("const total = a[i] + 1;", false),
+            ("if (a[i]) { go(); }", false),
+            ("void a[i];", false),
+        ] {
+            assert_eq!(computed_may_register(&facts(source)), registers, "{source}");
         }
     }
 
@@ -473,5 +1160,295 @@ mod tests {
                 .expect("the focus call");
             assert_eq!(call_shape(&file, call), shape, "{source}");
         }
+    }
+
+    /// The constant text an argument holds: a literal, a substitution-free template, or a `const` of one, cooked.
+    #[test]
+    fn a_constant_text_is_a_cooked_literal_or_a_const_of_one() {
+        for (source, text) in [
+            ("f('click');", Some("click")),
+            ("f(\"click\");", Some("click")),
+            ("f(`click`);", Some("click")),
+            ("f('\\u0066ocus');", Some("focus")),
+            ("f(`\\u0066ocus`);", Some("focus")),
+            ("const e = 'blur'; f(e);", Some("blur")),
+            ("const a = 'fo'; const e = a; f(e);", Some("fo")),
+            ("f(`a${b}`);", None),
+            ("f(name);", None),
+            ("let e = 'blur'; f(e);", None),
+            ("f(a + b);", None),
+            ("f(1);", None),
+        ] {
+            let file = facts(source);
+            let call = file
+                .ast
+                .calls
+                .iter()
+                .find(|call| file.source_text(call.callee) == Some("f"))
+                .expect("the call");
+            let found = constant_text(&file, call.arguments[0].span);
+            assert_eq!(found.as_deref(), text, "{source}");
+        }
+    }
+
+    /// A runtime module taken into a file, by the dialect's audited answers (ADR 1148's shape, a sibling question).
+    fn takes(source: &str) -> bool {
+        takes_with(source, &|_, _| None)
+    }
+
+    fn takes_with(source: &str, attested: &dyn Fn(Span, &str) -> Option<String>) -> bool {
+        let dialect = solid_dialect::Solid2::default();
+        takes_registrar(&dialect, &facts(source), attested)
+    }
+
+    #[test]
+    fn an_import_of_a_registrar_of_the_runtime_is_a_registration_unless_every_call_passes_a_constant_outside_the_lists()
+     {
+        for (source, takes_one) in [
+            // The registrars.
+            (
+                "import { addEvent } from '@solidjs/web'; addEvent(el, 'focus', h, false);",
+                true,
+            ),
+            (
+                "import { addEvent } from '@solidjs/web'; addEvent(el, 'focusin', h, true);",
+                true,
+            ),
+            (
+                "import { addEvent as add } from '@solidjs/web'; add(el, 'blur', h);",
+                true,
+            ),
+            (
+                "import { addEvent } from '@solidjs/web'; addEvent(el, name, h);",
+                true,
+            ),
+            (
+                "import { addEvent } from '@solidjs/web'; const f = addEvent; f(el, 'click', h);",
+                true,
+            ),
+            (
+                "import { addEvent } from '@solidjs/web'; addEvent(el, ...args);",
+                true,
+            ),
+            (
+                "import { delegateEvents } from '@solidjs/web'; delegateEvents(['focusin']);",
+                true,
+            ),
+            (
+                "import { delegateEvents } from '@solidjs/web'; delegateEvents(['click']);",
+                true,
+            ),
+            (
+                "import { setAttribute } from '@solidjs/web'; setAttribute(el, 'onfocus', 'hook()');",
+                true,
+            ),
+            (
+                "import { setAttribute } from '@solidjs/web'; setAttribute(el, name, 'x');",
+                true,
+            ),
+            (
+                "import { setAttributeNS } from '@solidjs/web'; setAttributeNS(el, ns, 'onfocus', 'x');",
+                true,
+            ),
+            (
+                "import { setProperty } from '@solidjs/web'; setProperty(el, 'innerHTML', html);",
+                true,
+            ),
+            (
+                "import { setProperty } from '@solidjs/web'; setProperty(el, 'focus', f);",
+                true,
+            ),
+            (
+                "import { spread } from '@solidjs/web'; spread(el, props);",
+                true,
+            ),
+            (
+                "import { assign } from '@solidjs/web'; assign(el, props);",
+                true,
+            ),
+            (
+                "import { template } from '@solidjs/web'; template('<input onfocus=\"hook()\">');",
+                true,
+            ),
+            (
+                "import { template } from '@solidjs/web'; template(html);",
+                true,
+            ),
+            (
+                "import { hydrate } from '@solidjs/web'; hydrate(() => 1, el);",
+                true,
+            ),
+            ("import { useHead } from '@solidjs/web'; useHead(x);", true),
+            // Constants outside the lists: no focus-family listener, no markup with a handler, no registering property name.
+            (
+                "import { addEvent } from '@solidjs/web'; addEvent(el, 'click', h, true);",
+                false,
+            ),
+            (
+                "import { addEvent } from '@solidjs/web'; addEvent(el, 'keydown', h);",
+                false,
+            ),
+            (
+                "import { addEvent } from '@solidjs/web'; const e = 'click'; addEvent(el, e, h);",
+                false,
+            ),
+            (
+                "import { setAttribute } from '@solidjs/web'; setAttribute(el, 'class', 'x');",
+                false,
+            ),
+            (
+                "import { setProperty } from '@solidjs/web'; setProperty(el, 'textContent', 'x');",
+                false,
+            ),
+            (
+                "import { template } from '@solidjs/web'; template('<div></div>');",
+                false,
+            ),
+            // An export the dialect audited as registering nothing, and the controls.
+            (
+                "import { render, Show, For, Portal, createComponent } from '@solidjs/web'; render(() => 1, el);",
+                false,
+            ),
+            (
+                "import { isServer, className, style, insert, effect, memo } from '@solidjs/web'; className(el, 'a');",
+                false,
+            ),
+            (
+                "import { createSignal, onSettled, createEffect } from 'solid-js';",
+                false,
+            ),
+            ("import * as S from 'solid-js'; S.createSignal(1);", false),
+            // A type import, an erased import and an unused import register nothing.
+            ("import type { addEvent } from '@solidjs/web';", false),
+            ("import { type addEvent } from '@solidjs/web';", false),
+            ("import { addEvent } from '@solidjs/web';", false),
+            // A namespace or a default import exposes every export; a re-export hands them on.
+            (
+                "import * as web from '@solidjs/web'; web.addEvent(el, 'click', h);",
+                true,
+            ),
+            (
+                "import web from '@solidjs/web'; web.addEvent(el, 'click', h);",
+                true,
+            ),
+            ("import * as web from '@solidjs/web'; const n = web;", true),
+            ("export { addEvent } from '@solidjs/web';", true),
+            ("export { render } from '@solidjs/web';", false),
+            ("export * from '@solidjs/web';", true),
+            ("export * as web from '@solidjs/web';", true),
+            ("export * from 'solid-js';", false),
+            // A dynamic load reaches the exports its consumer names, and all when it escapes.
+            ("const { addEvent } = await import('@solidjs/web');", true),
+            ("const { render } = await import('@solidjs/web');", false),
+            (
+                "const web = await import('@solidjs/web'); web.addEvent(el, 'click', h);",
+                true,
+            ),
+            ("const web = require('@solidjs/web');", true),
+            ("await import(name);", true),
+            // The frames tier is audited as any, and a subpath nobody audited is unknown.
+            (
+                "import { createFrame } from '@solidjs/web/frames/client';",
+                true,
+            ),
+            ("import '@solidjs/web/frames/client';", true),
+            ("import { x } from '@solidjs/web/frames/new-tier';", true),
+            ("import { x } from '@solidjs/web/new-tier';", true),
+            ("import { x } from '@solidjs/web/dist/web.js';", true),
+            ("import { x } from '@solidjs/web/storage';", false),
+            ("import { x } from '@solidjs/web/serialization';", false),
+            (
+                "import { x } from '@solidjs/web/server-functions/client';",
+                false,
+            ),
+            // `jsx-runtime` is the root's file.
+            (
+                "import { addEvent } from '@solidjs/web/jsx-runtime'; addEvent(el, 'focus', h);",
+                true,
+            ),
+            // A module that is no runtime package's is read as source by the other scans, not here.
+            (
+                "import { addEvent } from 'some-lib'; addEvent(el, 'focus', h);",
+                false,
+            ),
+            ("import { x } from '@solidjs/router';", false),
+            ("import { x } from './local';", false),
+            // A name of the runtime's the program declares itself is no import.
+            (
+                "function addEvent(a, b, c) {} addEvent(el, 'focus', h);",
+                false,
+            ),
+        ] {
+            assert_eq!(takes(source), takes_one, "{source}");
+        }
+    }
+
+    #[test]
+    fn dynamic_is_judged_where_it_is_a_jsx_tag_and_is_a_registration_anywhere_else() {
+        for (source, takes_one) in [
+            (
+                "import { Dynamic } from '@solidjs/web'; const a = <Dynamic component=\"input\" />;",
+                false,
+            ),
+            (
+                "import { Dynamic } from '@solidjs/web'; const a = <Dynamic component=\"input\">x</Dynamic>;",
+                false,
+            ),
+            (
+                "import { Dynamic } from '@solidjs/web'; const a = createComponent(Dynamic, { component: 'input' });",
+                true,
+            ),
+            (
+                "import { Dynamic } from '@solidjs/web'; const C = Dynamic; const a = <C component=\"input\" />;",
+                true,
+            ),
+            (
+                "import { Dynamic } from '@solidjs/web'; export { Dynamic };",
+                true,
+            ),
+            (
+                "import { dynamic } from '@solidjs/web'; const D = dynamic(() => 'input', {});",
+                true,
+            ),
+        ] {
+            assert_eq!(takes(source), takes_one, "{source}");
+        }
+    }
+
+    /// 1148 round 1b: a specifier that is no runtime package's by name but resolves into a file of one (a relative path into `node_modules`, a `paths` alias)
+    /// reaches it by a name no audit lists.
+    #[test]
+    fn a_specifier_that_resolves_into_a_runtime_file_is_a_registration() {
+        let into_web: &dyn Fn(Span, &str) -> Option<String> = &|_, specifier| {
+            (specifier == "../node_modules/@solidjs/web/dist/web.js"
+                || specifier == "#web"
+                || specifier == "web-alias")
+                .then(|| "/p/node_modules/@solidjs/web/dist/web.js".to_string())
+        };
+        for (source, takes_one) in [
+            (
+                "import { addEvent } from '../node_modules/@solidjs/web/dist/web.js'; addEvent(el, 'click', h);",
+                true,
+            ),
+            (
+                "import { render } from '../node_modules/@solidjs/web/dist/web.js';",
+                true,
+            ),
+            (
+                "import { addEvent } from 'web-alias'; addEvent(el, 'click', h);",
+                true,
+            ),
+            ("export { render } from 'web-alias';", true),
+            ("const m = await import('web-alias');", true),
+            ("import x = require('web-alias');", true),
+            // The same specifiers resolve nowhere: the other scans' unread module, not this scan's.
+            ("import { x } from './local';", false),
+        ] {
+            assert_eq!(takes_with(source, into_web), takes_one, "{source}");
+        }
+        // Another package's file reached by an alias is read as source.
+        let into_lib: &dyn Fn(Span, &str) -> Option<String> =
+            &|_, _| Some("/p/node_modules/some-lib/index.js".to_string());
+        assert!(!takes_with("import { x } from 'lib-alias';", into_lib));
     }
 }

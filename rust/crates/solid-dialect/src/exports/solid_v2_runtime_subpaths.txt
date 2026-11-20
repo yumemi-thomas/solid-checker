@@ -1,0 +1,35 @@
+# Every subpath the pinned rc.21 runtime packages export (`exports` of their package.json, a pattern as written), one `<package> <subpath>` per line:
+# solid-js, @solidjs/signals and @solidjs/web at 2.0.0-rc.21 (ADR 1148). solid_2.rs `runtime_module_element_writes` audits each one (solid-dialect's test
+# `every_exported_runtime_subpath_is_audited` fails on a line it does not answer), and scripts/fuzz/runtime-exports.test.mjs holds this file against the
+# installed packages, so a release that adds a subpath fails closed until it is audited. Moving the pin means rewriting this file from the new packages.
+pin solid-js 2.0.0-rc.21
+pin @solidjs/signals 2.0.0-rc.21
+pin @solidjs/web 2.0.0-rc.21
+solid-js .
+solid-js ./refresh
+solid-js ./attribution
+solid-js ./internal
+solid-js ./internal/container-trace
+solid-js ./package.json
+@solidjs/signals .
+@solidjs/signals ./attribution
+@solidjs/signals ./package.json
+@solidjs/web .
+@solidjs/web ./jsx-runtime
+@solidjs/web ./jsx-dev-runtime
+@solidjs/web ./storage
+@solidjs/web ./performance-tracks
+@solidjs/web ./serialization
+@solidjs/web ./serialization/decode
+@solidjs/web ./server-functions
+@solidjs/web ./server-functions/server
+@solidjs/web ./server-functions/client
+@solidjs/web ./server-functions/rich-args
+@solidjs/web ./frames
+@solidjs/web ./frames/server
+@solidjs/web ./frames/client
+@solidjs/web ./frames/trace
+@solidjs/web ./frames/regions
+@solidjs/web ./frames/assets
+@solidjs/web ./frames/wire
+@solidjs/web ./types/*
