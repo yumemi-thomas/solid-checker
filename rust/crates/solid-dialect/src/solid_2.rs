@@ -2638,6 +2638,16 @@ impl Dialect for Solid2 {
         argument == 0 && primitive == Primitive::CreateProjection
     }
 
+    /// Source: rc.21 `@solidjs/web` `dist/web.dev.js` (integrity `sha512-1E9dvR3/+5fQTI3oxxACBX2Rg4rezXgrljerhWDHR5uQZ04p5Z8qXROI7dIDJKyANtsnLKYbM2OyI/p/FmjGUA==`).
+    /// `eventHandler` (1953), the document listener `delegateEvents` installs for every name of `DelegatedEvents` (36), walks from
+    /// the event's target up to its owner and calls `node[EVENT_KEY + e.type]` only `if (handler && !node.disabled)` (1975): a node
+    /// whose `disabled` property is true is passed over, for a trusted event and a dispatched one alike. A handler added with
+    /// `addEvent(…, delegate = false)` (`on:` names and the events outside `DelegatedEvents`) is the browser's listener, and the
+    /// browser's own rules for disabled controls apply to it instead (not read here).
+    fn delegated_handler_skips_disabled_node(&self) -> bool {
+        true
+    }
+
     /// Source: rc.21 `@solidjs/signals` `dist/dev.js`. `createStore` (9742) returns `createStore$1`'s `[proxy, setter]` (6885-6921) or
     /// `createStoreDerived`'s `[store, f => storeSetter(store, f)]` (7920-7922); either setter is `fn => storeSetter(proxy, fn)`, and
     /// `storeSetter` (6819) calls `fn(proxy)` with the store's own proxy, the `wrap` (4700) proxy over a new `{}`/`[]` (`createTarget`).

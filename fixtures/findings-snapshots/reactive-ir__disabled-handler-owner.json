@@ -1,0 +1,198 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "handler-on-disabled-control",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
+      "start": 485,
+      "end": 497,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
+      "start": 485,
+      "end": 497,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "handler-on-disabled-control",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
+      "start": 588,
+      "end": 600,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
+      "start": 588,
+      "end": 600,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "handler-on-disabled-control",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
+      "start": 685,
+      "end": 697,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
+      "start": 685,
+      "end": 697,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "handler-on-disabled-control",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
+      "start": 773,
+      "end": 785,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
+      "start": 773,
+      "end": 785,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
+      "start": 1175,
+      "end": 1187,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
+      "start": 1175,
+      "end": 1187,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
+      "start": 1356,
+      "end": 1368,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
+      "start": 1356,
+      "end": 1368,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
+      "start": 1508,
+      "end": 1520,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
+      "start": 1508,
+      "end": 1520,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
+      "start": 1678,
+      "end": 1690,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
+      "start": 1678,
+      "end": 1690,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
+      "start": 1796,
+      "end": 1808,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/disabled-handler-owner/App.tsx",
+      "start": 1796,
+      "end": 1808,
+      "fixes": 0
+    }
+  ]
+}
