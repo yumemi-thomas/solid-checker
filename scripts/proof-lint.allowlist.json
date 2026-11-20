@@ -337,6 +337,14 @@
       "default-on-missing": {
         "count": 1,
         "why": "pending-review"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "ADR 1123: the provider element's attribute key `value` is JSX syntax (the dialect provider form's one prop), read from the attribute fact, not a binding or callee identified by spelling"
+      },
+      "primitive-name-match": {
+        "count": 3,
+        "why": "ADR 1123: the primitive comes from the exact call resolution (`primitive_at_call`, a resolved Solid export); the enum names which of the dialect's primitives the context arm takes (createContext, useContext), no name is matched"
       }
     },
     "rust/crates/solid-reactive-ir/src/carrier_runs.rs": {
@@ -1017,6 +1025,12 @@
       "name-only-match": {
         "count": 2,
         "why": "`Object.freeze`: the receiver spelled `Object` is refused when `reference_declaration(receiver)` is some, so a shadowing binding is excluded and the global is what remains"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/overridden_handlers.rs": {
+      "default-on-missing": {
+        "count": 1,
+        "why": "ADR 1140 (spread_may_supply): a later spread whose value is neither a closed literal written in the spread nor of a complete declared key set may supply the key; answering yes there makes the earlier handler's owner row an obligation (handler-key-overridden), never a violation and never a clean"
       }
     },
     "rust/crates/solid-reactive-ir/src/owners.rs": {

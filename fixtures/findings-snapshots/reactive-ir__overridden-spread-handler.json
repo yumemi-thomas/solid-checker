@@ -1,0 +1,307 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "handler-key-overridden",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 566,
+      "end": 584,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 566,
+      "end": 584,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "handler-key-overridden",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 685,
+      "end": 703,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 685,
+      "end": 703,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "handler-spread-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 736,
+      "end": 754,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "handler-key-overridden",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 809,
+      "end": 827,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 809,
+      "end": 827,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 1224,
+      "end": 1242,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 1224,
+      "end": 1242,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 1337,
+      "end": 1355,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 1337,
+      "end": 1355,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "handler-spread-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 1388,
+      "end": 1408,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "handler-spread-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 1444,
+      "end": 1449,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 1474,
+      "end": 1492,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 1474,
+      "end": 1492,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 1575,
+      "end": 1593,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 1575,
+      "end": 1593,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "handler-key-overridden",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 1909,
+      "end": 1927,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 1909,
+      "end": 1927,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 2150,
+      "end": 2168,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 2150,
+      "end": 2168,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-root-in-helper",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 2175,
+      "end": 2176,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 2236,
+      "end": 2254,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 2236,
+      "end": 2254,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-root-in-helper",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 2261,
+      "end": 2262,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-root-in-helper",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 2476,
+      "end": 2478,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-root-in-helper",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 2563,
+      "end": 2565,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-root-in-helper",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
+      "start": 2666,
+      "end": 2668,
+      "fixes": 0
+    }
+  ]
+}

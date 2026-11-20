@@ -1312,11 +1312,9 @@ pub(crate) fn scan_shadow_roots(lookup: &super::SemanticLookup<'_>) -> bool {
         if file.ast.premise_sites.iter().any(|site| {
             // ADR 1125 (F4): a coercion or protocol hook (written on any object, a prototype reached by a route included) runs with
             // the value an operator converts as `this`, so it may run `attachShadow` on it. A route alone (`constructor`) writes nothing.
-            matches!(
-                site.clause,
-                solid_facts::ast::PremiseClause::ShadowRoot
-                    | solid_facts::ast::PremiseClause::CoercionHook
-            )
+            site.clause == solid_facts::ast::PremiseClause::ShadowRoot
+                // ADR 1133: a contained hook runs only through its own member reads (see `file_delivery_hazard`).
+                || (site.clause == solid_facts::ast::PremiseClause::CoercionHook && !site.contained)
         }) || file
             .ast
             .computed_keys
@@ -1487,8 +1485,14 @@ fn file_delivery_hazard(
             // ADR 1125 (Fable round 1, F1): a reader of own keys or values may take Solid's stored handler (`_$$click`) and call it
             // with no event; a private key names that slot.
             C::KeyReader => Some("key-reader"),
+            // ADR 1133: a dispatch the census cannot see (it counts dispatch calls as written) may deliver on any stack.
+            C::DispatchHandedOn => Some("dispatch-handed-on"),
             C::PrivateKey => Some("private-key"),
             // F4: a coercion or protocol hook runs, with the coerced value as `this`, wherever an operator converts one.
+            // ADR 1133 (#296 owed, Fable round 2 N4): a hook on a value the facts mark `contained` (a non-exported literal or class
+            // whose every reference is a static member read) runs only through those reads, which are code the scan reads; it is never
+            // the implicit hook of a value an operator or an `await` converts.
+            C::CoercionHook if site.contained => None,
             C::CoercionHook => Some("coercion-hook"),
             C::StandardKeyWrite
             | C::GlobalWrite
@@ -1502,6 +1506,15 @@ fn file_delivery_hazard(
     }
     if let Some(sink) = ast.code_sinks.first() {
         return Some(("code-from-string", format!("{:?}", sink.kind)));
+    }
+    // ADR 1133 (F7): a read under a key nothing proves whose value may be called or kept may be any definer or reader
+    // (`Object[name("define", "Property")]`), as the shadow scan already reads it.
+    if ast
+        .computed_keys
+        .iter()
+        .any(|key| !key.proven && !key.value_inert)
+    {
+        return Some(("unproven-key", String::new()));
     }
     let unread = |at: solid_facts::core::Span, specifier: &str| {
         if lookup.dialect.owns_module(specifier) {
