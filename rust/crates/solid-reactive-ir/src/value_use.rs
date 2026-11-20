@@ -3329,7 +3329,7 @@ impl<'l, 'a> Census<'l, 'a> {
             }
             // ADR 1089: `refresh(m)` reads the property the runtime set on `m` and never calls `m` or hands it on. Only a
             // function value: a holder (a store root) is a proxy whose property read is the store's.
-            // ADR 11xx-a: `affects(m)` is the same, after a read of `$TARGET` that walks the prototype chain of a function: a
+            // ADR 1146: `affects(m)` is the same, after a read of `$TARGET` that walks the prototype chain of a function: a
             // hook there is project code, so that read asks its own premise ([`untouched_target_read_is_plain`]).
             if mode == Mode::Value && dialect.argument_is_untouched_target(primitive, index) {
                 if !dialect.argument_target_read_walks_prototypes(primitive, index) {
@@ -3443,7 +3443,7 @@ impl<'l, 'a> Census<'l, 'a> {
 /// `SOLID_CHECKER_IR_ABLATE_SILENCE` turns it off (ADR 1118's gate).
 pub(crate) const UNTOUCHED_TARGET_READ: &str = "value_use.untouched_target_read";
 
-/// ADR 11xx-a: whether the runtime's read of `$TARGET` on a function value (the accessor `affects` is handed; no accessor owns that key, so
+/// ADR 1146: whether the runtime's read of `$TARGET` on a function value (the accessor `affects` is handed; no accessor owns that key, so
 /// the read walks `Function.prototype`, then `Object.prototype`) runs no project code. A hook at that key on either prototype, or a prototype
 /// the accessor's own is swapped for, is code that `affects(m)` would run in whatever scope it is written. Asked as ADR 1129's shared standard
 /// member premise, whose name census cannot hold a symbol: nothing in the program may write a prototype by a route, by a key no fact decides

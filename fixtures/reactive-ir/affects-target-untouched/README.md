@@ -1,4 +1,4 @@
-# affects-target-untouched (ADR 11xx-a)
+# affects-target-untouched (ADR 1146)
 
 `affects(target)` in rc.21 (`@solidjs/signals` 2.0.0-rc.21, `dist/dev.js:10018-10050`, `dist/prod/affects.js:56-69`) reads `target?.[$TARGET]`
 (the store half), then `target?.[$REFRESH]`, the node `accessor()` stores on every Solid accessor (`dist/dev.js:3237-3240`), registers a mark

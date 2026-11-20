@@ -1712,10 +1712,10 @@ struct LeafScopeResolution<'a, 'lookup> {
     /// a `resolve` or `until` reached under a slot that takes what its callback throws is the observer guard's plain throw (the
     /// slot takes it) or the leaf owner's refused creation (a diagnostic emitted before the throw, which the slot does not).
     leaf_has_observer: &'a Cell<bool>,
-    /// ADR 11xx-b: whether the program may run project code on the stack of a focus move (`focus_delivery`), asked at most once per
+    /// ADR 1147: whether the program may run project code on the stack of a focus move (`focus_delivery`), asked at most once per
     /// file: the first element `focus()` the walk meets decides it.
     focus_scan: &'a Cell<Option<bool>>,
-    /// ADR 11xx-b: the spans a row of this walk would stand at, outermost first: the call (or the callback named by value) of the
+    /// ADR 1147: the spans a row of this walk would stand at, outermost first: the call (or the callback named by value) of the
     /// leaf callback's own text and each call the walk then enters. A proof that removes a row names every one, since the row stands
     /// at the outermost (a helper's call), not where the proof is.
     anchors: &'a RefCell<Vec<(std::sync::Arc<str>, Span)>>,
@@ -2350,7 +2350,7 @@ fn member_call_operations(
     complete
 }
 
-/// ADR 11xx-b: whether the element `focus()` at `call` (a direct member call, `x.focus()` or `x?.focus()`) runs no project code: the
+/// ADR 1147: whether the element `focus()` at `call` (a direct member call, `x.focus()` or `x?.focus()`) runs no project code: the
 /// program holds no listener for what a focus move delivers and nothing that stands in for `focus` ([`crate::focus_delivery`]), the
 /// standard call is not withheld and its member is not replaced. The one member ADR 0329's refusal lets through.
 fn focus_delivers_nothing(

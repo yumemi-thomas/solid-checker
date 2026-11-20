@@ -8,8 +8,8 @@
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-focus-no-listener/App.tsx",
-      "start": 1828,
-      "end": 1839,
+      "start": 2085,
+      "end": 2096,
       "fixes": 0
     },
     {
@@ -19,8 +19,8 @@
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-focus-no-listener/App.tsx",
-      "start": 2046,
-      "end": 2056,
+      "start": 2303,
+      "end": 2313,
       "fixes": 0
     },
     {
@@ -30,8 +30,8 @@
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-focus-no-listener/App.tsx",
-      "start": 2210,
-      "end": 2227,
+      "start": 2467,
+      "end": 2484,
       "fixes": 0
     },
     {
@@ -41,8 +41,8 @@
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-focus-no-listener/App.tsx",
-      "start": 2416,
-      "end": 2421,
+      "start": 2673,
+      "end": 2678,
       "fixes": 0
     },
     {
@@ -52,8 +52,8 @@
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-focus-no-listener/App.tsx",
-      "start": 2780,
-      "end": 2792,
+      "start": 3037,
+      "end": 3049,
       "fixes": 0
     },
     {
@@ -63,8 +63,8 @@
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-focus-no-listener/App.tsx",
-      "start": 2959,
-      "end": 2971,
+      "start": 3216,
+      "end": 3228,
       "fixes": 0
     }
   ]
