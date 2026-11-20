@@ -150,13 +150,13 @@ pub(crate) fn discover_owner_file(
                 // the element has, so a handler a later attribute or spread may
                 // supply under its key may never be attached: no proven run.
                 let overridden = lookup.file_by_path(path).is_some_and(|holder| {
-                    crate::overridden_handlers::literal_key_of(holder, *span).is_some_and(|name| {
+                    crate::overridden_handlers::held_under(holder, *span).is_some_and(|name| {
                         crate::overridden_handlers::later_source_may_supply(
                             file,
                             lookup,
                             element,
                             spread.span,
-                            name,
+                            &name,
                         )
                     })
                 });

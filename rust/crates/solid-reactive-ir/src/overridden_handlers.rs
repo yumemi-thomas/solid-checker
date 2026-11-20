@@ -73,14 +73,13 @@ fn spread_may_supply(
     }
 }
 
-/// The key the object literal property whose value is `function` is written under, in `file`.
-pub(crate) fn literal_key_of(file: &FileFacts, function: Span) -> Option<&str> {
+/// The key the object literal property whose value is `function` is written under, in `file` (the kernel's cooked key).
+pub(crate) fn held_under(file: &FileFacts, function: Span) -> Option<String> {
     file.ast
         .object_properties
         .iter()
         .find(|property| file.ast.peel_ts_sugar_span(property.value) == function)
-        .and_then(|property| file.source_text(property.key))
-        .map(|key| key.trim_matches(['\'', '"']))
+        .and_then(|property| crate::kernel::property_key(file, property.key))
 }
 
 /// Whether the event handler written as the value of an intrinsic element's attribute at `handler` (a compiler event-handler
@@ -152,9 +151,9 @@ fn in_overridden_handler(file: &FileFacts, lookup: &SemanticLookup<'_>, site: Sp
                 targets.iter().any(|(path, function)| {
                     path.as_str() == file.path.as_str()
                         && function.contains(site)
-                        && literal_key_of(file, *function).is_some_and(|key| {
-                            event_key(key)
-                                && later_source_may_supply(file, lookup, element, spread.span, key)
+                        && held_under(file, *function).is_some_and(|key| {
+                            event_key(&key)
+                                && later_source_may_supply(file, lookup, element, spread.span, &key)
                         })
                 })
             })
