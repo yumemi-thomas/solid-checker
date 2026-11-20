@@ -35,11 +35,22 @@
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "blocker": "owner-varies-by-caller",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-held-callbacks/App.tsx",
       "start": 984,
       "end": 994,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "withheld-object-member",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/stored-throw-held-callbacks/App.tsx",
+      "start": 1050,
+      "end": 1054,
       "fixes": 0
     },
     {

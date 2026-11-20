@@ -1654,6 +1654,17 @@
       "fixes": 0
     },
     {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 5529,
+      "end": 5533,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
@@ -1761,6 +1772,17 @@
       "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
       "start": 6209,
       "end": 6214,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-named-closure-in-root/App.tsx",
+      "start": 6244,
+      "end": 6248,
       "fixes": 0
     },
     {

@@ -15,7 +15,8 @@
 //   it did not (a path gained, or the total held), each path that lost rows needs a row of its own: `{ fixture, key, path, from, to, adr,
 //   proof, fixtures }` (a clean at that path: `proved` held the key at that path at the base and holds fewer there now), or, for a row
 //   that stayed in the fixture under the same key at another path, `{ fixture, key, path, from, to, adr, kind: "moved", movedTo }`:
-//   no proof (it is no clean), and `movedTo` must gain in that fixture what `path` lost. Spans are byte offsets that move with any edit
+//   no proof (it is no clean), and `movedTo` must gain in that fixture what `path` lost. With `movedToFixture` instead (no path), the rows
+//   moved with their file to another fixture, which must gain the key by what this one lost. Spans are byte offsets that move with any edit
 //   of a fixture, so a path is the finest site that holds; scripts/guard/regress.mjs reads spans where the file is unchanged.
 // - no base is a failure, never a pass (scripts/guard/base-revision.mjs): COUNT_BASE=<rev> names one explicitly.
 // A clean needs a proof: removing an obligation to gain cleans is what this makes visible. Exit 1 on any failure.
@@ -92,6 +93,15 @@ export function checkLedger({ ledger, base, computed, decisions, read, snapshotO
     const why = `${fixture ? `${fixture} ` : ""}${key}${path ? ` at ${path}` : ""}: ${was} -> ${now}`;
     if (!adrExists(row.adr)) failures.push(`${why}: ${row.adr ?? "no ADR"} is not in docs/decisions.md`);
     if (row.kind !== undefined && row.kind !== "relabel" && row.kind !== "moved") failures.push(`${why}: kind ${row.kind} is not a kind of drop`);
+    if (row.kind === "moved" && row.movedToFixture !== undefined) {
+      // ADR 1125: the case's file moved to another fixture project (a repro case split out of a shared program): the rows stay
+      // uncertifiable there under the same key, which that fixture gained.
+      if (row.proof !== undefined || row.fixtures !== undefined) failures.push(`${why}: a moved row names no proof or fixtures`);
+      const target = snapshotOf(row.movedToFixture);
+      const gained = target ? keyCount(target, key) - (baseSnapshotOf(row.movedToFixture) ? keyCount(baseSnapshotOf(row.movedToFixture), key) : 0) : 0;
+      if (row.movedToFixture === fixture || gained < was - now) failures.push(`${why}: movedToFixture ${row.movedToFixture} gained ${gained}, not the ${was - now} that left`);
+      return;
+    }
     if (row.kind === "moved") {
       // The row stayed in the fixture under the same key, at another path: no proof to name (it is no clean), and the other path gained it.
       if (row.proof !== undefined || row.fixtures !== undefined) failures.push(`${why}: a moved row names no proof or fixtures`);
@@ -119,12 +129,19 @@ export function checkLedger({ ledger, base, computed, decisions, read, snapshotO
     if (!open || !keyCount(open, key)) failures.push(`${why}: fixtures.open ${row.fixtures?.open ?? "(none)"} is no snapshot that keeps a ${key} row`);
   };
   for (const { fixture, key, was, now } of falls) {
-    const row = (ledger.drops ?? []).find((drop) => drop.fixture === fixture && drop.path === undefined && drop.key === key && drop.from === was && drop.to === now);
-    if (!row) {
+    // ADR 1125: the same transition can be recorded twice by two changes (drops is append-only, and a later change may move a count the
+    // base had again from the same value): the fall is explained when any of its rows checks out; with none, the first row's failures stand.
+    const rows = (ledger.drops ?? []).filter((drop) => drop.fixture === fixture && drop.path === undefined && drop.key === key && drop.from === was && drop.to === now);
+    if (!rows.length) {
       failures.push(`${fixture ? `${fixture} ` : ""}${key}: ${was} -> ${now}, no drops row: name the fixture, an ADR, a proof, and a fixture on each side`);
       continue;
     }
-    checkRow(row, { fixture, key, was, now });
+    const outcomes = rows.map((row) => {
+      const before = failures.length;
+      checkRow(row, { fixture, key, was, now });
+      return failures.splice(before);
+    });
+    if (!outcomes.some((found) => found.length === 0)) failures.push(...outcomes[0]);
   }
   // A site that lost rows (ADR 0995). When the fixture total fell by exactly what its paths lost, the fixture-level row above answers
   // them; otherwise (a path gained, or the total held) a row left a site and the fixture total hides it: each such path needs its own row.

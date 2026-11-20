@@ -93,7 +93,7 @@
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "blocker": "owner-varies-by-caller",
       "severity": "error",
       "path": "fixtures/reactive-ir/owner-region-no-edge/App.tsx",
       "start": 1832,

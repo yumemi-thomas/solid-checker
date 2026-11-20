@@ -1170,8 +1170,15 @@ fn joins_real_oxc_compiler_and_tsgo_facts() {
         })
         .collect::<Vec<_>>();
     // ADR 0971 (batch 11, B2): the strict read's violation, and the two uncertifiable rows (SC3001 and SC6002) of the JSX creation `{count()}` in the
-    // open program's exported `Good`.
-    assert_eq!(findings.len(), 3, "findings = {findings:#?}");
+    // open program's exported `Good`. ADR 1125: these facts carry no attested import resolution, so no handler is proven to run only as a
+    // delivery, and `Events`' read in its `onClick` is an obligation too.
+    assert_eq!(findings.len(), 4, "findings = {findings:#?}");
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.id == "SC1001" && finding.kind == "uncertifiable"),
+        "findings = {findings:#?}"
+    );
     let violations = findings
         .iter()
         .filter(|finding| finding.kind == "violation")
@@ -1190,7 +1197,7 @@ fn joins_real_oxc_compiler_and_tsgo_facts() {
             .iter()
             .filter(|finding| finding.kind != "violation")
             .all(|finding| finding.kind == "uncertifiable"
-                && matches!(finding.id.as_str(), "SC3001" | "SC6002")),
+                && matches!(finding.id.as_str(), "SC3001" | "SC6002" | "SC1001")),
         "findings = {findings:#?}"
     );
 }

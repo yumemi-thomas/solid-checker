@@ -237,7 +237,18 @@ impl SemanticLookup<'_> {
     /// ADR 1115: whether some listener of the program may sit in a shadow tree ([`scan_shadow_roots`]), scanned once per build.
     pub(crate) fn shadow_roots_possible(&self) -> bool {
         crate::base::reads::note(crate::base::reads::Section::ShadowRoots);
-        *self.shadow_roots.get_or_init(|| scan_shadow_roots(self))
+        self.shadow_roots_answer()
+    }
+
+    /// [`Self::shadow_roots_possible`] with no section noted: for [`Self::dispatch_veto`], whose readers note
+    /// `Section::DispatchVeto` (its memo and fingerprint are the whole veto, this answer included). A section no memo stands for
+    /// would make every reader of the veto read the whole program.
+    fn shadow_roots_answer(&self) -> bool {
+        // ADR 1125: per-build existential, as `event_delivery_intact`: the section's fingerprint recomputes the scan (it reads every
+        // file's sites and loads), so the scan's raw reads are not each reader's.
+        *self
+            .shadow_roots
+            .get_or_init(|| crate::base::reads::suppress(|| scan_shadow_roots(self)))
     }
 
     /// ADR 0634: some analyzed file names `markRaw` or writes a `shallow`
@@ -351,7 +362,23 @@ impl SemanticLookup<'_> {
     /// PRIMITIVE_IN_EFFECT_CALLBACK before any later check at that creation.
     pub(crate) fn apply_delivery_in_shadow_possible(&self) -> bool {
         crate::base::reads::note(crate::base::reads::Section::DispatchVeto);
-        self.dispatch_veto().4 && self.shadow_roots_possible()
+        self.dispatch_veto().4 && (self.shadow_roots_possible() || !self.event_delivery_intact())
+    }
+
+    /// ADR 1125: whether no analysed code may make a handler run other than as a DOM delivery that sets `window.event`
+    /// ([`scan_delivery_hazard`]), scanned once per build.
+    pub(crate) fn event_delivery_intact(&self) -> bool {
+        crate::base::reads::note(crate::base::reads::Section::EventDeliveryIntact);
+        self.delivery_intact_answer()
+    }
+
+    /// [`Self::event_delivery_intact`] with no section noted, for [`Self::dispatch_veto`] (see [`Self::shadow_roots_answer`]).
+    pub(crate) fn delivery_intact_answer(&self) -> bool {
+        // Per-build existential: the section's fingerprint recomputes the whole scan (`Section::EventDeliveryIntact`), so the scan's own
+        // raw reads are not each reader's (every dispatch-veto reader asks this first).
+        !*self
+            .delivery_hazard
+            .get_or_init(|| crate::base::reads::suppress(|| scan_delivery_hazard(self)))
     }
 
     /// [`DispatchSite::withholds_flush_proofs`] of any dispatch of the program.
@@ -389,6 +416,11 @@ impl SemanticLookup<'_> {
     pub(crate) fn dispatch_veto(&self) -> (bool, bool, bool, bool, bool) {
         #[cfg(debug_assertions)]
         VetoComputation::assert_not_computing();
+        // ADR 1125: every event proof rests on handlers running only as DOM deliveries that set `window.event`. Where code may replace
+        // that global, the listener API or the nodes Solid creates, a handler may run anywhere, with no event: withhold them all.
+        if !self.delivery_intact_answer() {
+            return (true, true, true, true, true);
+        }
         if !self.hazard_present(crate::base::Hazard::SynchronousDispatch) {
             return (false, false, false, false, false);
         }
@@ -398,12 +430,15 @@ impl SemanticLookup<'_> {
             // ADR 1099: an apply's delivery has an owner only when a flush drains the queue under one. The flush census
             // asks this answer (its sites' callers), so the owner bit takes the answer before it
             // (`SemanticLookup::flush_referenced`), inside this memo.
+            // ADR 1125: an apply's delivery to a listener in a shadow tree runs it with no `window.event`, inside the apply's
+            // effect-callback window (rc.21 throws PRIMITIVE_IN_EFFECT_CALLBACK at a creation there, not a missing owner).
             sites.iter().any(DispatchSite::withholds_owner_proofs)
-                || (delivers_in_effect_apply && self.flush_referenced()),
+                || (delivers_in_effect_apply
+                    && (self.flush_referenced() || self.shadow_roots_answer())),
             // ADR 1115: a delivery's read proof that rests on its event holds only where no listener sits in a shadow tree.
             sites.iter().any(DispatchSite::withholds_read_proofs)
                 || (sites.iter().any(DispatchSite::read_proof_rests_on_event)
-                    && self.shadow_roots_possible()),
+                    && self.shadow_roots_answer()),
             sites.iter().any(DispatchSite::withholds_flush_proofs),
             sites.iter().any(DispatchSite::withholds_listener_proofs),
             delivers_in_effect_apply,
@@ -433,7 +468,8 @@ impl SemanticLookup<'_> {
                     .to_owned(),
                     caller: site.caller.map(|caller| caller.word().to_owned()),
                     withholds_owner_proofs: site.withholds_owner_proofs()
-                        || (site.delivers_in_effect_apply() && self.flush_referenced()),
+                        || (site.delivers_in_effect_apply()
+                            && (self.flush_referenced() || self.shadow_roots_answer())),
                     withholds_read_proofs: site.withholds_read_proofs(),
                 })
             })
@@ -1262,10 +1298,31 @@ pub(crate) fn scan_shadow_roots(lookup: &super::SemanticLookup<'_>) -> bool {
         .iter()
         .map(|file| file.path.as_str())
         .collect::<std::collections::HashSet<_>>();
-    lookup.files().iter().any(|file| {
+    // ADR 1125: a shadow root matters only to a listener on the same page as the code that attaches it; the page is the whole
+    // program (`realm_holds_both`), as for the delivery hazard.
+    let shadow = |file: &solid_facts::FileFacts| -> bool {
         if SHADOW_SPELLINGS
             .iter()
             .any(|name| file.source.contains(name))
+        {
+            return true;
+        }
+        // ADR 1125 (G3, G5): a spelling the facts decode (a key proven to be `"attach" + "Shadow"`), a computed key nothing proves
+        // (it may be any of them) whose value may be called or kept, and code built from a string (a string timer by any name), which no text test can read.
+        if file.ast.premise_sites.iter().any(|site| {
+            // ADR 1125 (F4): a coercion or protocol hook (written on any object, a prototype reached by a route included) runs with
+            // the value an operator converts as `this`, so it may run `attachShadow` on it. A route alone (`constructor`) writes nothing.
+            matches!(
+                site.clause,
+                solid_facts::ast::PremiseClause::ShadowRoot
+                    | solid_facts::ast::PremiseClause::CoercionHook
+            )
+        }) || file
+            .ast
+            .computed_keys
+            .iter()
+            .any(|key| !key.proven && !key.value_inert)
+            || !file.ast.code_sinks.is_empty()
         {
             return true;
         }
@@ -1304,5 +1361,181 @@ pub(crate) fn scan_shadow_roots(lookup: &super::SemanticLookup<'_>) -> bool {
                     // A load by a computed specifier may load anything.
                     None => true,
                 })
+    };
+    crate::plain_premise::realm_holds_both(lookup, &shadow, &may_hold_handler)
+}
+
+/// ADR 1125: the names under which a write may make a handler run outside a delivery, or make `window.event` no longer the event
+/// delivered: the global, the listener API, and the factories and node methods Solid's templates go through.
+const DELIVERY_KEYS: &[&str] = &[
+    "event",
+    "addEventListener",
+    "removeEventListener",
+    "dispatchEvent",
+    "handleEvent",
+    "createElement",
+    "createElementNS",
+    "createTextNode",
+    "importNode",
+    "cloneNode",
+    "appendChild",
+    "insertBefore",
+    "replaceChild",
+    "__proto__",
+    // The facts prove a timer's argument a function where it is a `new Promise` executor's parameter (`code_sinks`); a replaced global
+    // `Promise` may hand the executor a string.
+    "Promise",
+];
+
+/// The reflective routes by which code may define such a name under a key the facts do not decode.
+const DELIVERY_ROUTES: &[&str] = &[
+    "defineProperty",
+    "defineProperties",
+    "setPrototypeOf",
+    "__defineGetter__",
+    "__defineSetter__",
+];
+
+/// ADR 1125: whether some analysed code may make a handler run other than as a DOM delivery that sets `window.event` (fail closed):
+/// a write of `event` (G1: `globalThis.event = undefined` makes it an own data property no delivery sets), of a listener-API name
+/// (round 1 F2) or of a node factory (G6), by any spelling the facts decode, or under a key nothing narrows; a reflective definer or
+/// prototype setter; `Proxy`/`Reflect`; `Object.assign` onto a value not made in place; `with`; code built from a string; code from
+/// a string or a module the build does not read.
+pub(crate) fn scan_delivery_hazard(lookup: &super::SemanticLookup<'_>) -> bool {
+    delivery_hazard_reason(lookup).is_some()
+}
+
+/// Whether `file` may register an event handler: an `on*` attribute of a JSX element (or an `on:` one), a listener registration
+/// spelled anywhere in its text, or a handler property written (`el.onclick = …`; a text test, which only refuses more).
+fn may_hold_handler(file: &solid_facts::FileFacts) -> bool {
+    file.ast.jsx_elements.iter().any(|element| {
+        element.attributes.iter().any(|attribute| {
+            attribute.namespace.is_some()
+                || file
+                    .source_text(attribute.local_name)
+                    .is_some_and(|name| name.len() > 2 && name.starts_with("on"))
+        })
+    }) || ["addEventListener", "attachEvent", "handleEvent"]
+        .iter()
+        .any(|spelling| file.source.contains(spelling))
+        || writes_handler_property(&file.source)
+}
+
+/// Whether `source` writes a handler property (`.onclick =`, `.onload=`): `.on`, lowercase letters, spaces, then a lone `=`.
+fn writes_handler_property(source: &str) -> bool {
+    source.match_indices(".on").any(|(at, _)| {
+        let rest = &source[at + 3..];
+        let name = rest.bytes().take_while(u8::is_ascii_lowercase).count();
+        let after = rest[name..].trim_start();
+        name > 0 && after.starts_with('=') && !after.starts_with("==") && !after.starts_with("=>")
     })
+}
+
+/// [`scan_delivery_hazard`]'s reason: `(file, clause, key)` of the first hazard in a program that may also hold a handler, for the census.
+/// The code evaluators the type facts resolve and a missing attestation are the whole program's.
+pub(crate) fn delivery_hazard_reason(
+    lookup: &super::SemanticLookup<'_>,
+) -> Option<(String, &'static str, String)> {
+    if lookup.hazard_present(crate::base::Hazard::Eval)
+        || lookup.hazard_present(crate::base::Hazard::CodeEvaluatingCall)
+    {
+        return Some((String::new(), "eval", String::new()));
+    }
+    let Some(imports) = lookup.resolved_imports() else {
+        return Some((String::new(), "no-attestation", String::new()));
+    };
+    let program = lookup
+        .files()
+        .iter()
+        .map(|file| file.path.as_str())
+        .collect::<std::collections::HashSet<_>>();
+    let hazard =
+        |file: &solid_facts::FileFacts| file_delivery_hazard(lookup, file, imports, &program);
+    if !crate::plain_premise::realm_holds_both(
+        lookup,
+        &|file| hazard(file).is_some(),
+        &may_hold_handler,
+    ) {
+        return None;
+    }
+    lookup
+        .files()
+        .iter()
+        .find_map(|file| hazard(file).map(|(why, key)| (file.path.to_string(), why, key)))
+}
+
+/// One file's delivery hazard (module docs of [`scan_delivery_hazard`]).
+fn file_delivery_hazard(
+    lookup: &super::SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    imports: &solid_facts::AttestedImportIndex,
+    program: &std::collections::HashSet<&str>,
+) -> Option<(&'static str, String)> {
+    use solid_facts::ast::PremiseClause as C;
+    let ast = &file.ast;
+    for site in &ast.premise_sites {
+        let why = match site.clause {
+            C::ProxyOrReflect => Some("proxy"),
+            C::With => Some("with"),
+            C::ObjectAssign => Some("object-assign"),
+            C::StandardKeyWrite | C::GlobalWrite
+                if site.key == "*" || DELIVERY_KEYS.contains(&site.key.as_str()) =>
+            {
+                Some("delivery-key-write")
+            }
+            C::PrototypeRoute if DELIVERY_ROUTES.contains(&site.key.as_str()) => Some("definer"),
+            // ADR 1125 (Fable round 1, F1): a reader of own keys or values may take Solid's stored handler (`_$$click`) and call it
+            // with no event; a private key names that slot.
+            C::KeyReader => Some("key-reader"),
+            C::PrivateKey => Some("private-key"),
+            // F4: a coercion or protocol hook runs, with the coerced value as `this`, wherever an operator converts one.
+            C::CoercionHook => Some("coercion-hook"),
+            C::StandardKeyWrite
+            | C::GlobalWrite
+            | C::PrototypeRoute
+            | C::Accessor
+            | C::ShadowRoot => None,
+        };
+        if let Some(why) = why {
+            return Some((why, site.key.to_string()));
+        }
+    }
+    if let Some(sink) = ast.code_sinks.first() {
+        return Some(("code-from-string", format!("{:?}", sink.kind)));
+    }
+    let unread = |at: solid_facts::core::Span, specifier: &str| {
+        if lookup.dialect.owns_module(specifier) {
+            return false;
+        }
+        match imports.specifier(file.path.as_str(), at, specifier) {
+            solid_facts::SpecifierAttestation::Attested(row) => {
+                row.resolution == solid_facts::ImportResolution::Unresolved
+                    || !program.contains(row.resolved_path.as_ref())
+            }
+            solid_facts::SpecifierAttestation::Unattested => true,
+        }
+    };
+    let unread_load = ast
+        .imports
+        .iter()
+        .filter(|import| !import.type_only)
+        .any(|import| unread(import.span, import.module.as_str()))
+        || ast
+            .exports
+            .iter()
+            .filter(|export| !export.type_only)
+            .any(|export| {
+                export
+                    .module
+                    .as_deref()
+                    .is_some_and(|module| unread(export.span, module))
+            })
+        || ast
+            .module_loads
+            .iter()
+            .any(|load| match load.specifier.as_deref() {
+                Some(specifier) => unread(load.span, specifier),
+                None => true,
+            });
+    unread_load.then(|| ("unread-module", String::new()))
 }

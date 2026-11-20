@@ -27,12 +27,12 @@
    "held": {
     "adr": "0803",
     "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
-    "why": "certified clean before step 2, uncertifiable until the parameter and listener proofs: ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above ADR 0976 adds one more row: SC1002 `read-after-await-unaccounted` at `err.message` (after-await.tsx:22), a member of a `catch` parameter after an `await` that no fact proves plain (the full S4 rule). ADR 1097 (narrow only) and ADR 1113 each add that row at `err instanceof Error` (after-await.tsx:22), an operator after an `await` that may run code (`Symbol.hasInstance`); joined in bundle u they give one row.",
+    "why": "certified clean before step 2, uncertifiable until the parameter and listener proofs: ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above ADR 0976 adds one more row: SC1002 `read-after-await-unaccounted` at `err.message` (after-await.tsx:22), a member of a `catch` parameter after an `await` that no fact proves plain (the full S4 rule). ADR 1097 (narrow only) and ADR 1113 each add that row at `err instanceof Error` (after-await.tsx:22), an operator after an `await` that may run code (`Symbol.hasInstance`); joined in bundle u they give one row. ADR 1125 adds rows: an imported package the program does not analyse (not installed here) may replace the listener API, so every event proof of the program is withheld.",
     "expect": [
      {
       "kind": "uncertifiable",
-      "rule": "SC1002",
-      "context": "read-after-await-unaccounted"
+      "rule": "SC1001",
+      "context": ""
      },
      {
       "kind": "uncertifiable",
@@ -41,68 +41,28 @@
      },
      {
       "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
+      "rule": "SC1002",
+      "context": "read-after-await-unaccounted"
      },
      {
       "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
+      "rule": "SC1002",
+      "context": "read-after-await-unaccounted"
      },
      {
       "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
+      "rule": "SC2002",
+      "context": "package-finding-at-entry"
      },
      {
       "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      },
      {
       "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC5003",
-      "context": "pending-read-unresolved"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC5003",
-      "context": "pending-read-unresolved"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC5003",
-      "context": "pending-read-unresolved"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC5003",
-      "context": "pending-read-unresolved"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "standard-member-impostor"
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      },
      {
       "kind": "uncertifiable",
@@ -121,6 +81,36 @@
      },
      {
       "kind": "uncertifiable",
+      "rule": "SC5003",
+      "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5003",
+      "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5003",
+      "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5003",
+      "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5003",
+      "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5008",
+      "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
       "rule": "SC7002",
       "context": "package-finding-at-entry"
      },
@@ -131,8 +121,63 @@
      },
      {
       "kind": "uncertifiable",
-      "rule": "SC2002",
-      "context": "package-finding-at-entry"
+      "rule": "SC9012",
+      "context": "parameter-member-target-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "withheld-object-member"
      },
      {
       "kind": "uncertifiable",
@@ -141,8 +186,23 @@
      },
      {
       "kind": "uncertifiable",
-      "rule": "SC1002",
-      "context": "read-after-await-unaccounted"
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      },
      {
       "kind": "uncertifiable",
@@ -345,6 +405,11 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      },
      {
       "kind": "uncertifiable",
@@ -2600,27 +2665,27 @@
    "held": {
     "adr": "0803",
     "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above ADR 1125 adds rows: an imported package the program does not analyse (not installed here) may replace the listener API, so every event proof of the program is withheld.",
     "expect": [
      {
       "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      },
      {
       "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      },
      {
       "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "handed-member-read"
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      },
      {
       "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "standard-member-impostor"
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      },
      {
       "kind": "uncertifiable",
@@ -2630,6 +2695,21 @@
      {
       "kind": "uncertifiable",
       "rule": "SC9012",
+      "context": "handed-member-read"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "listener-reach"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
       "context": "standard-member-impostor"
      },
      {
@@ -2644,23 +2724,13 @@
      },
      {
       "kind": "uncertifiable",
-      "rule": "SC2002",
-      "context": "package-may-call-action"
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
      },
      {
       "kind": "uncertifiable",
-      "rule": "SC2002",
-      "context": "package-may-call-action"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC2002",
-      "context": "package-may-call-action"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC2002",
-      "context": "package-may-call-action"
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
      },
      {
       "kind": "uncertifiable",
@@ -2708,7 +2778,7 @@
   {
    "id": "callback-in-options-object",
    "kind": "uncertifiable",
-   "project": "sc1001",
+   "project": "sc1001-computed-key",
    "files": [
     "src/options-object.tsx"
    ],
@@ -4367,7 +4437,7 @@
   {
    "id": "props-object-assign",
    "kind": "uncertifiable",
-   "project": "sc1001",
+   "project": "sc1001-key-reader",
    "files": [
     "src/props-object-assign.tsx"
    ],
@@ -6458,12 +6528,12 @@
    "held": {
     "adr": "0803",
     "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above ADR 1125 adds rows: an imported package the program does not analyse (not installed here) may replace the listener API, so every event proof of the program is withheld.",
     "expect": [
      {
       "kind": "uncertifiable",
-      "rule": "SC8003",
-      "context": "spread-content-unproven"
+      "rule": "SC1001",
+      "context": ""
      },
      {
       "kind": "uncertifiable",
@@ -6472,8 +6542,23 @@
      },
      {
       "kind": "uncertifiable",
+      "rule": "SC5003",
+      "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5003",
+      "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC8003",
+      "context": "spread-content-unproven"
+     },
+     {
+      "kind": "uncertifiable",
       "rule": "SC9012",
-      "context": "value-root-in-helper"
+      "context": ""
      },
      {
       "kind": "uncertifiable",
@@ -6483,52 +6568,7 @@
      {
       "kind": "uncertifiable",
       "rule": "SC9012",
-      "context": "tuple-iteration-written"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC1001",
-      "context": ""
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": ""
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "standard-member-impostor"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC5003",
-      "context": "pending-read-unresolved"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC5003",
-      "context": "pending-read-unresolved"
+      "context": "listener-reach"
      },
      {
       "kind": "uncertifiable",
@@ -6544,11 +6584,46 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
      },
      {
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "value-in-carrier"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "value-root-in-helper"
      },
      {
       "kind": "uncertifiable",
@@ -6826,12 +6901,12 @@
    "held": {
     "adr": "0803",
     "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above ADR 1125 adds rows: an imported package the program does not analyse (not installed here) may replace the listener API, so every event proof of the program is withheld.",
     "expect": [
      {
       "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
+      "rule": "SC1001",
+      "context": ""
      },
      {
       "kind": "uncertifiable",
@@ -6840,6 +6915,16 @@
      },
      {
       "kind": "uncertifiable",
+      "rule": "SC5003",
+      "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5003",
+      "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "tuple-iteration-written"
      },
@@ -6850,13 +6935,13 @@
      },
      {
       "kind": "uncertifiable",
-      "rule": "SC5003",
-      "context": "pending-read-unresolved"
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
      },
      {
       "kind": "uncertifiable",
-      "rule": "SC5003",
-      "context": "pending-read-unresolved"
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      },
      {
       "kind": "uncertifiable",
@@ -7595,6 +7680,11 @@
       "kind": "uncertifiable",
       "rule": "SC2002",
       "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -7841,6 +7931,11 @@
       "kind": "uncertifiable",
       "rule": "SC2002",
       "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -7919,6 +8014,11 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      },
      {
       "kind": "uncertifiable",
@@ -8742,22 +8842,27 @@
    "held": {
     "adr": "0803",
     "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above ADR 1125 adds rows: an imported package the program does not analyse (not installed here) may replace the listener API, so every event proof of the program is withheld.",
     "expect": [
      {
       "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      },
      {
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
      },
      {
       "kind": "uncertifiable",
@@ -11556,6 +11661,11 @@
       "kind": "uncertifiable",
       "rule": "SC2002",
       "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -11761,38 +11871,8 @@
    "held": {
     "adr": "0803",
     "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above. ADR 0973: `props.onClose()` after `await Promise.resolve()` (line 8) is a call of a function value written after its async function's own suspension that no tracked computation walks and no role proof places yet, so it carries an uncertifiable SC1002 `read-after-await-unaccounted` row (the handler and listener role silence is a named follow-up in docs/open-work.md)",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above. ADR 0973: `props.onClose()` after `await Promise.resolve()` (line 8) is a call of a function value written after its async function's own suspension that no tracked computation walks and no role proof places yet, so it carries an uncertifiable SC1002 `read-after-await-unaccounted` row (the handler and listener role silence is a named follow-up in docs/open-work.md) ADR 1125 adds rows: an imported package the program does not analyse (not installed here) may replace the listener API, so every event proof of the program is withheld.",
     "expect": [
-     {
-      "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "standard-member-impostor"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC5003",
-      "context": "pending-read-unresolved"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "standard-member-impostor"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "standard-member-impostor"
-     },
      {
       "kind": "uncertifiable",
       "rule": "SC1002",
@@ -11817,6 +11897,41 @@
       "kind": "uncertifiable",
       "rule": "SC2002",
       "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5003",
+      "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "listener-reach"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
      },
      {
       "kind": "uncertifiable",
@@ -11930,6 +12045,11 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      },
      {
       "kind": "uncertifiable",
@@ -12461,22 +12581,37 @@
    "held": {
     "adr": "0803",
     "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above ADR 1125 adds rows: an imported package the program does not analyse (not installed here) may replace the listener API, so every event proof of the program is withheld.",
     "expect": [
      {
       "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
+      "rule": "SC1001",
+      "context": ""
      },
      {
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "closed-parameter-member-dispatch"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      },
      {
       "kind": "uncertifiable",
@@ -12646,6 +12781,11 @@
       "kind": "uncertifiable",
       "rule": "SC2002",
       "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -12703,17 +12843,12 @@
    "held": {
     "adr": "0803",
     "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above ADR 1125 adds rows: an imported package the program does not analyse (not installed here) may replace the listener API, so every event proof of the program is withheld.",
     "expect": [
      {
       "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
+      "rule": "SC5003",
+      "context": "pending-read-unresolved"
      },
      {
       "kind": "uncertifiable",
@@ -12723,17 +12858,27 @@
      {
       "kind": "uncertifiable",
       "rule": "SC9012",
-      "context": "standard-member-impostor"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC5003",
-      "context": "pending-read-unresolved"
+      "context": "listener-reach"
      },
      {
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
      },
      {
       "kind": "uncertifiable",
@@ -12839,17 +12984,17 @@
    "held": {
     "adr": "0803",
     "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above ADR 1125 adds rows: an imported package the program does not analyse (not installed here) may replace the listener API, so every event proof of the program is withheld.",
     "expect": [
      {
       "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      },
      {
       "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      },
      {
       "kind": "uncertifiable",
@@ -12865,6 +13010,21 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      },
      {
       "kind": "uncertifiable",
@@ -13126,6 +13286,16 @@
       "kind": "uncertifiable",
       "rule": "SC2002",
       "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -13183,27 +13353,47 @@
    "held": {
     "adr": "0803",
     "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above ADR 1125 adds rows: an imported package the program does not analyse (not installed here) may replace the listener API, so every event proof of the program is withheld.",
     "expect": [
      {
       "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
+      "rule": "SC1001",
+      "context": ""
      },
      {
       "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
+      "rule": "SC1001",
+      "context": ""
      },
      {
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      },
      {
       "kind": "uncertifiable",
@@ -13379,6 +13569,11 @@
       "kind": "uncertifiable",
       "rule": "SC2002",
       "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -13470,27 +13665,27 @@
    "held": {
     "adr": "0803",
     "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above ADR 1125 adds rows: an imported package the program does not analyse (not installed here) may replace the listener API, so every event proof of the program is withheld.",
     "expect": [
      {
       "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
+      "rule": "SC5003",
+      "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5003",
+      "context": "pending-read-unresolved"
      },
      {
       "kind": "uncertifiable",
       "rule": "SC9012",
-      "context": "tuple-iteration-written"
+      "context": "listener-reach"
      },
      {
       "kind": "uncertifiable",
       "rule": "SC9012",
-      "context": "tuple-iteration-written"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
+      "context": "listener-reach"
      },
      {
       "kind": "uncertifiable",
@@ -13504,13 +13699,23 @@
      },
      {
       "kind": "uncertifiable",
-      "rule": "SC5003",
-      "context": "pending-read-unresolved"
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
      },
      {
       "kind": "uncertifiable",
-      "rule": "SC5003",
-      "context": "pending-read-unresolved"
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
      },
      {
       "kind": "uncertifiable",
@@ -13662,6 +13867,11 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      },
      {
       "kind": "uncertifiable",
@@ -15407,6 +15617,11 @@
       "kind": "uncertifiable",
       "rule": "SC2002",
       "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -15482,12 +15697,27 @@
    "held": {
     "adr": "0803",
     "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
-    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "why": "ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above ADR 1125 adds rows: an imported package the program does not analyse (not installed here) may replace the listener API, so every event proof of the program is withheld.",
     "expect": [
+     {
+      "kind": "uncertifiable",
+      "rule": "SC1001",
+      "context": ""
+     },
      {
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      },
      {
       "kind": "uncertifiable",
@@ -16497,6 +16727,16 @@
       "kind": "uncertifiable",
       "rule": "SC2002",
       "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      }
     ]
    }
@@ -16633,6 +16873,11 @@
       "kind": "uncertifiable",
       "rule": "SC5003",
       "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      },
      {
       "kind": "uncertifiable",
@@ -17222,7 +17467,7 @@
      "rule": "SC9012",
      "family": "parameter-member-call",
      "context": "parameter-member-target-unresolved",
-     "cause": "SC9012/open-program-boundary/parameter-member-call/parameter-member-target-unresolved/project-type"
+     "cause": "SC9012/parameter-member-call/parameter-member-target-unresolved/project-type/member-of-call-project"
     },
     {
      "rule": "SC1001",
@@ -18360,7 +18605,7 @@
   {
    "id": "clean-omit-rest",
    "kind": "clean",
-   "project": "sc1001",
+   "project": "sc1001-computed-key",
    "files": [
     "src/clean-omit-rest.tsx"
    ],
@@ -18630,42 +18875,22 @@
    "held": {
     "adr": "0803",
     "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
-    "why": "certified clean before step 2, uncertifiable until the parameter and listener proofs: ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "why": "certified clean before step 2, uncertifiable until the parameter and listener proofs: ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above ADR 1125 adds rows: an imported package the program does not analyse (not installed here) may replace the listener API, so every event proof of the program is withheld.",
     "expect": [
      {
       "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC5006",
+      "rule": "SC1001",
       "context": ""
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
      },
      {
       "kind": "uncertifiable",
       "rule": "SC5001",
       "context": "async-read-unaccounted"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5006",
+      "context": ""
      },
      {
       "kind": "uncertifiable",
@@ -18676,6 +18901,41 @@
       "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      },
      {
       "kind": "uncertifiable",
@@ -18768,32 +19028,17 @@
    "held": {
     "adr": "0803",
     "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
-    "why": "certified clean before step 2, uncertifiable until the parameter and listener proofs: ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above",
+    "why": "certified clean before step 2, uncertifiable until the parameter and listener proofs: ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above ADR 1125 adds rows: an imported package the program does not analyse (not installed here) may replace the listener API, so every event proof of the program is withheld.",
     "expect": [
      {
       "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
+      "rule": "SC1001",
+      "context": ""
      },
      {
       "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC9012",
-      "context": "tuple-iteration-written"
+      "rule": "SC2002",
+      "context": "package-may-call-action"
      },
      {
       "kind": "uncertifiable",
@@ -18802,28 +19047,53 @@
      },
      {
       "kind": "uncertifiable",
+      "rule": "SC5003",
+      "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC5003",
+      "context": "pending-read-unresolved"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "standard-member-impostor"
+     },
+     {
+      "kind": "uncertifiable",
       "rule": "SC9012",
       "context": "tuple-iteration-written"
      },
      {
       "kind": "uncertifiable",
-      "rule": "SC5003",
-      "context": "pending-read-unresolved"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC5003",
-      "context": "pending-read-unresolved"
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
      },
      {
       "kind": "uncertifiable",
       "rule": "SC9012",
-      "context": "standard-member-impostor"
+      "context": "tuple-iteration-written"
      },
      {
       "kind": "uncertifiable",
       "rule": "SC9012",
-      "context": "standard-member-impostor"
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
+     },
+     {
+      "kind": "uncertifiable",
+      "rule": "SC9012",
+      "context": "tuple-iteration-written"
      },
      {
       "kind": "uncertifiable",

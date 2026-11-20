@@ -1102,6 +1102,7 @@ fn named_event_prop_forwarding_requires_an_exclusive_reference_census() {
         "../../../../fixtures/reactive-ir/forwarded-event-prop/variants/eval-handler/EvalHandler.tsx"
     );
     let start = eval_source.find("count();").unwrap() as u64;
+    let handler_start = eval_source.find("props.onPress").unwrap() as u64;
     let mut eval_rows = eval_findings
         .iter()
         .map(|row| {
@@ -1128,6 +1129,15 @@ fn named_event_prop_forwarding_requires_an_exclusive_reference_census() {
                 true,
                 Some(start),
                 Some(start + 7)
+            ),
+            // ADR 1125: `eval` in the program makes delivery unproven, so the handler's read is an obligation too.
+            (
+                "SC1001",
+                "uncertifiable",
+                "function-run-unplaced:handler",
+                true,
+                Some(handler_start),
+                Some(handler_start + 13)
             ),
             // ADR 0971 (batch 11, B2): the creation of `<EvalHandler .. />` in the exported `UsesEvalHandler`: an SC3001 and an SC6002 uncertifiable row.
             (
@@ -2265,16 +2275,17 @@ fn props_container_and_callback_creation_do_not_prove_nested_behavior() {
         .cloned()
         .collect::<Vec<_>>();
     let reads = findings_for_rule(&props, "strict-read-untracked");
-    assert_eq!(reads.len(), 1, "{props:#?}");
-    // ADR 0199: `Handler` invokes the prop only inside a `<button>` click
-    // handler, so both callback-prop literals run on dispatch and report
-    // nothing. The consumers that leave such a read uncertifiable are
+    // ADR 1125: `External.tsx` loads a module the build does not read, which may replace the listener API; no fact proves it never shares a page with this file (Fable round 1, F8), so no handler of this program
+    // is proven to run only as a delivery: the reads in handlers are obligations (five), and the eager component-body read keeps its
+    // violation. ADR 0199's proof (the callback-prop literals run on dispatch and report nothing) holds where delivery is intact:
     // pinned by `forwarded-event-prop`.
+    assert_eq!(reads.len(), 6, "{props:#?}");
     for line in [10, 15] {
         assert!(
-            !reads
+            reads
                 .iter()
-                .any(|read| read["primaryLocation"]["line"] == line),
+                .filter(|read| read["primaryLocation"]["line"] == line)
+                .all(|read| read["kind"] == "uncertifiable"),
             "{reads:#?}"
         );
     }
@@ -3449,9 +3460,18 @@ fn receiver_reads_keep_their_rows() {
         "const renamedOwn = {\n  renamedOwnM(): void {\n    flush();",
     ] {
         let flush = line_of(twin) + twin.lines().count() as u64 - 1;
-        for id in ["SC2006", "SC2008", "SC3001"] {
+        for id in ["SC2006", "SC3001"] {
             assert!(rows_at(flush, id).is_empty(), "{twin}: {id}");
         }
+        // ADR 1125: this program loads a module the build does not read, which may replace the listener API, so a twin's flush keeps
+        // SC2008's dispatch obligation (ADR 0709), uncertifiable; nothing else.
+        assert!(
+            rows_at(flush, "SC2008")
+                .iter()
+                .all(|row| row["kind"] == "uncertifiable"
+                    && row["analysisContext"] == "handler-dispatch-unproven"),
+            "{twin}: SC2008"
+        );
     }
 }
 
@@ -3497,7 +3517,14 @@ fn assert_flush_sites(
     }
     for twin in twins {
         for rows in flush_site_rows(findings, source, twin) {
-            assert!(rows.is_empty(), "{twin}: {rows:#?}");
+            // ADR 1125: where the program's own code may replace the listener API (an unread module, a `__proto__` write), no function
+            // is proven off every apply, and a twin's flush keeps SC2008's dispatch obligation (ADR 0709), uncertifiable; nothing else.
+            assert!(
+                rows.iter().all(|row| row["id"] == "SC2008"
+                    && row["kind"] == "uncertifiable"
+                    && row["analysisContext"] == "handler-dispatch-unproven"),
+                "{twin}: {rows:#?}"
+            );
         }
     }
 }

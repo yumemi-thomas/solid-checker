@@ -34,6 +34,17 @@
     {
       "rule": "no-write-in-pure-computation",
       "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/iteration-timer-handed-literal/App.tsx",
+      "start": 1593,
+      "end": 1618,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/iteration-timer-handed-literal/App.tsx",
