@@ -1343,3 +1343,17 @@ fn the_notice_identity_is_the_one_the_catalog_publishes() {
     );
     std::fs::remove_dir_all(&root).unwrap();
 }
+
+/// ADR 1152: the notices of a program that writes a name with an escape are the catalog's SC9012, the obligation that carries a named blocker: never a rule a project
+/// configures, and uncertifiable.
+#[cfg(feature = "dialect-v2")]
+#[test]
+fn the_escaped_name_notice_is_the_obligation_the_catalog_declares() {
+    let dialect = by_id("solid-v2").expect("the 2.0 dialect is compiled in");
+    let rule = crate::escaped_names::OBLIGATION_RULE;
+    let metadata = (dialect.rule_metadata)(rule)
+        .unwrap_or_else(|| panic!("the 2.0 catalog must declare {rule}"));
+    assert_eq!(metadata.code, "SC9012");
+    assert!(metadata.uncertifiable);
+    assert!(!metadata.configurable);
+}

@@ -242,6 +242,11 @@ export const REWRITES = {
     },
   },
 
+  escape: {
+    sound: "An identifier written with an escape (`ev\\u0061luate`), a string literal (`\"\\x65valuate\"`) and a piece of an untagged template mean what the same text without escapes means: ECMAScript reads an identifier's StringValue and a string's or a template piece's cooked value, so the file parses to the same tree (escape.mjs `sameProgram` is the proof, held for every program of the corpus by rewrite.test.mjs); an escape adds no line break, so every site keeps its line; keywords, JSX names, directives, tagged templates, type positions and module specifiers are not touched, and the twin's counters (`__` names) are not either, so the strip of the twin is exact. A checker that reads a name from the source text, not its value, answers differently on the two (ADR 1148 round 2, ADR 1152).",
+    candidates: (program) => [{ describe: "escape every identifier, string and template piece", apply: () => { if (program.escape) return false; program.escape = {}; return true; } }],
+  },
+
   "dead-decl": {
     sound: "A fresh declaration nothing reads (a number, an arrow never called, a function declaration never called) has no effect when its initializer is a literal or a function expression, and no other statement mentions its name.",
     candidates(program, fresh) {

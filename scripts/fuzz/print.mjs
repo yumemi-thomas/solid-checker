@@ -12,6 +12,7 @@
 // (the glue), `{ __h(N);` at every function entry (a statement that is itself a counted call
 // is counted by `__h(N); <statement>`), and the counter's definition appended after
 // the last line, so no line moves. The type check, the fast path and Chrome run `runText`.
+import { escapable, escapeSource } from "./escape.mjs";
 import { INSTRUMENT_PRELUDE } from "./hits.mjs";
 import { isSite, paramTsType, signalTable, walk } from "./model.mjs";
 import { AUX, MODULE, describeUse, parentSource, sourcedName, sourcedRead } from "./misuse.mjs";
@@ -60,6 +61,18 @@ const WRAPPERS = {
 /** Node kinds whose print is a call the runtime executes: each is an auto-site (glue) in the twin. */
 export const GLUE_KINDS = ["call", "set", "iife", "iter", "prim", "getOwner"];
 
+/**
+ * ADR 1152, the `escape` rewrite (rewrite.mjs): a file's names written with escapes where `program.escape` says so (`{}`: every identifier, string and template piece; `names`: only
+ * those whose cooked text is listed). Any other program's files are their own text. Applied to the clean text and to the twin alike (the twin's counters are `__` names, which
+ * escape.mjs leaves alone), so the strip of the twin still gives the clean text back.
+ */
+export function escapedText(program, filename, text) {
+  const spec = program.escape;
+  if (!spec || !escapable(filename)) return text;
+  return escapeSource(text, { filename, names: spec.names ? new Set(spec.names) : null, ...(spec.roles ? { roles: spec.roles } : {}), ...(spec.keywords ? { keywords: true } : {}) }).text;
+}
+const escapedFiles = (program, files) => (program.escape ? Object.fromEntries(Object.entries(files).map(([name, text]) => [name, typeof text === "string" ? escapedText(program, name, text) : text])) : files);
+
 /** The package helpers a program refers to, plus the `register` a referred `fire` reads from: the exports the package must have. */
 export function usedPackageHelpers(program) {
   const byName = new Map((program.helpers ?? []).filter((helper) => helper.pkg).map((helper) => [helper.name, helper]));
@@ -75,6 +88,11 @@ export function usedPackageHelpers(program) {
 
 /** The files of the program's generated package(s): `{ "fz-lib": { "index.js": ..., ... } }` (empty when it imports none). */
 export function programPackages(program) {
+  const packages = programPackagesPlain(program);
+  return program.escape ? Object.fromEntries(Object.entries(packages).map(([name, files]) => [name, escapedFiles(program, files)])) : packages;
+}
+
+function programPackagesPlain(program) {
   const files = packageFiles(usedPackageHelpers(program));
   // ADR 0940: a `use` of the context a dependency exports (misuse.mjs SOURCE_AXES `package`).
   const context = [...walk(program)].some(({ node }) => node.k === "use" && (node.ctx || node.hook || node.component || node.handed || node.holder));
@@ -104,8 +122,10 @@ export function programPackages(program) {
  */
 export function printProgram(program, { instrument = true } = {}) {
   const clean = render(program, false);
+  clean.text = escapedText(program, "App.tsx", clean.text);
   if (!instrument) return { text: clean.text, runText: clean.text, sites: clean.sites, glue: [], ledger: [], lineTable: clean.lineTable };
   const run = render(program, true);
+  run.text = escapedText(program, "App.tsx", run.text);
   const sites = clean.sites.map((site, index) => ({ ...site, hit: run.siteHits[index] }));
   const bySiteHit = new Map(sites.map((site) => [site.hit, site.id]));
   const glue = [];
@@ -935,6 +955,10 @@ function render(program, instrument) {
  * `module` source (misuse.mjs SOURCES: created at its scope, or by its hook `useVals`); empty when there are none.
  */
 export function moduleFiles(program) {
+  return escapedFiles(program, moduleFilesPlain(program));
+}
+
+function moduleFilesPlain(program) {
   const moduleHelpers = (program.helpers ?? []).filter((helper) => helper.module);
   const signals = signalTable(program);
   const used = new Set();

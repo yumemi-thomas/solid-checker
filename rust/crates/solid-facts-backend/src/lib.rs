@@ -44,6 +44,7 @@ pub mod dependency_program;
 pub mod dependency_sources;
 mod diagnostics;
 pub mod dialect;
+mod escaped_names;
 mod host_config;
 pub mod host_constants;
 mod host_inline;

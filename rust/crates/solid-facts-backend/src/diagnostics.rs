@@ -698,6 +698,17 @@ impl DiagnosticSession {
         if let Some(stage) = stage {
             stage.end(solid_reactive_ir::DropPass::CompilerRefusedFile, &findings);
         }
+        // ADR 1152: a file that writes a name with an escape (an identifier, or a string that is one word) is read by its spelling by every check that compares a name, so a
+        // violation anywhere in the program is not proven and no site of a project file reads clean: the notices span the files.
+        let stage = solid_reactive_ir::ProofStage::begin(&findings);
+        crate::escaped_names::veto(
+            facts,
+            (self.dialect.rule_metadata)(crate::escaped_names::OBLIGATION_RULE),
+            &mut findings,
+        );
+        if let Some(stage) = stage {
+            stage.end(solid_reactive_ir::DropPass::EscapedName, &findings);
+        }
         // ADR 1107: after every gate above, each destructured slot's read folds into its destructure's SC1003 row, so the row
         // takes the slot reads' final verdicts; before suppression, so a comment at the pattern applies to it.
         let stage = solid_reactive_ir::ProofStage::begin(&findings);

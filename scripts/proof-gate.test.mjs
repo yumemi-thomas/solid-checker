@@ -81,7 +81,7 @@ describe("C4: a site ended by a finding the report no longer holds (ADR 0982)", 
       assert.deepEqual(kinds([ended(10), dropped(10, pass, { premises: [{ kind: premise, at: [10, 13] }] })]), [], pass);
       assert.deepEqual(kinds([ended(10), dropped(10, pass)]), ["C4/ended-by-dropped-finding"], pass);
     }
-    for (const pass of ["InstanceField", "UndecidedComponent", "SiteUnreached", "RuntimeConfiguration", "EqualFinding", "CompilerRefusedFile"]) {
+    for (const pass of ["InstanceField", "UndecidedComponent", "SiteUnreached", "RuntimeConfiguration", "EqualFinding", "CompilerRefusedFile", "EscapedName"]) {
       assert.deepEqual(kinds([ended(10), dropped(10, pass, { premises: [{ kind: "Anything", at: [10, 13] }] })]), ["C4/ended-by-dropped-finding"], pass);
     }
     // The last drop decides: an accepted pass followed by an unaccepted one is a hit.
