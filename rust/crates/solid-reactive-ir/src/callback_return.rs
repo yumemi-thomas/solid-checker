@@ -366,8 +366,6 @@ pub(crate) const CONTEXT_PROVIDED_STORE_TUPLE: &str = "context-provided-store-tu
 pub(crate) struct ProvidedStoreTuple {
     /// The provider's value, as written (`[cart, { add }] as const`, or the `const` that holds it).
     pub(crate) value: Span,
-    /// The store root's declaration: slot 0 of the `createStore` pattern.
-    pub(crate) root: Span,
     /// The `createStore` call.
     pub(crate) created: Span,
     /// Each action: its key, the identifier the literal holds it by, and the function the identifier's `const` holds.
@@ -475,11 +473,8 @@ fn provided_store_tuple(
         attribute.namespace.is_none() && file.source_text(attribute.local_name) == Some("value")
     });
     let value_attribute = values.next()?;
-    if values.next().is_some()
-        || provider.attributes.len() != 1
-        || !provider.spreads.is_empty()
-        || value_attribute.runtime_type_escape
-    {
+    // `as const` is an assertion (`runtime_type_escape`): it changes what type-checks, not the value; the value is read by its syntax below.
+    if values.next().is_some() || provider.attributes.len() != 1 || !provider.spreads.is_empty() {
         return None;
     }
     let value = ast.peel_ts_sugar_span(value_attribute.expression?);
@@ -503,7 +498,7 @@ fn provided_store_tuple(
     {
         return None;
     }
-    let (root, created) = store_root(lookup, file, ast.peel_ts_sugar_span(literal.elements[0].span))?;
+    let (_root, created) = store_root(lookup, file, ast.peel_ts_sugar_span(literal.elements[0].span))?;
     let actions = match literal.elements.get(1) {
         Some(element) => action_object(lookup, file, ast.peel_ts_sugar_span(element.span))?,
         None => Vec::new(),
@@ -514,7 +509,6 @@ fn provided_store_tuple(
         .collect::<Option<Vec<_>>>()?;
     Some(ProvidedStoreTuple {
         value,
-        root,
         created,
         actions,
         consumers,
@@ -572,7 +566,7 @@ pub(crate) fn log_store_tuple_decisions(file: &FileFacts, plans: &[ProvidedStore
         }
         for consumer in &plan.consumers {
             decide(file.ast.bindings[consumer.binding].declaration);
-            for name in consumer.root {
+            if let Some(name) = consumer.root {
                 references(file, name).for_each(decide);
             }
             for (_, local) in &consumer.actions {

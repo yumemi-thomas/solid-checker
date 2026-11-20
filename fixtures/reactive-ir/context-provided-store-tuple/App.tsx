@@ -168,3 +168,51 @@ export function SignalApp() {
     </SignalProvider>
   );
 }
+
+// Negative (review a): an action's local used as a value, not called: handed to a scheduler.
+const QueuedContext = createContext<readonly [Store<Cart>, { add: (item: string) => void }]>();
+function QueuedProvider(props: { children?: JSX.Element }) {
+  const [cart, setCart] = createStore<Cart>({ items: [] });
+  const add = (item: string) =>
+    setCart((draft) => {
+      draft.items.push(item);
+    });
+  return <QueuedContext value={[cart, { add }] as const}>{props.children}</QueuedContext>;
+}
+function QueuedReader() {
+  const [cart, { add }] = useContext(QueuedContext);
+  const f = add;
+  queueMicrotask(() => f("date"));
+  return <span>{cart.items.length}</span>;
+}
+export function QueuedApp() {
+  return (
+    <QueuedProvider>
+      <QueuedReader />
+    </QueuedProvider>
+  );
+}
+
+// Positive, with its other rows standing (review b): the store's setter also handed to code nothing here reads. The setter's own census keeps that
+// hand-off's rows; the reader's store name is the same store, so whatever the root's census says of a write there it says of the reader's reads too.
+const LeakedContext = createContext<readonly [Store<Cart>, { add: (item: string) => void }]>();
+function LeakedProvider(props: { children?: JSX.Element }) {
+  const [cart, setCart] = createStore<Cart>({ items: [] });
+  keep(setCart);
+  const add = (item: string) =>
+    setCart((draft) => {
+      draft.items.push(item);
+    });
+  return <LeakedContext value={[cart, { add }] as const}>{props.children}</LeakedContext>;
+}
+function LeakedReader() {
+  const [cart, { add }] = useContext(LeakedContext);
+  return <button onClick={() => add("yuzu")}>{cart.items.length}</button>;
+}
+export function LeakedApp() {
+  return (
+    <LeakedProvider>
+      <LeakedReader />
+    </LeakedProvider>
+  );
+}
