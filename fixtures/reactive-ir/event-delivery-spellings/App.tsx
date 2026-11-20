@@ -49,6 +49,18 @@ export function Neighbours() {
       box.innerHTML = "<p title=\"a\">x &amp; y &times;</p>";
       frame.srcdoc = "<p>hi</p>";
       const { open, location } = props;
+      // Adjacent spellings: the attributes collection read as data, an attribute node of a plain name, commands that write no markup
+      // and make no link, and a pattern out of an alias of an ordinary object.
+      const attrs = link.attributes;
+      const titled = attrs.getNamedItem("title");
+      const total = attrs.length + (attrs as unknown as Record<string, number>).total;
+      const { title } = attrs as unknown as Record<string, Attr>;
+      document.execCommand("copy");
+      document.execCommand("insertHTML", false, "<b>x</b>");
+      const parsed = new DOMParser().parseFromString("<p>x</p>", "text/html");
+      const holder = props;
+      const { open: shown } = holder;
+      void [titled, total, title, shown, parsed];
       // K4: a plain data key under an unknown key.
       (rows as any)[key()].done = true;
       void [name, kind, open, location];

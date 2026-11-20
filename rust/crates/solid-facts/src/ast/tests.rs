@@ -3246,6 +3246,132 @@ fn a_url_or_markup_spelling_the_first_cut_missed_is_a_code_sink() {
 }
 
 #[test]
+fn an_attribute_node_by_the_collection_or_a_global_behind_an_alias_is_a_code_sink() {
+    // ADR 1133, round 1 (adjacent spellings): the attribute nodes `getAttributeNode` gives out also come out of the `attributes` collection
+    // (`getNamedItem(NS)`, `item`, a name a URL or a handler has, an index or a key nothing proves, a `const` alias of the collection),
+    // one is set into it (`setNamedItem(NS)`), `execCommand` parses markup and makes links, and a window, a document or a location behind
+    // a `const` alias is the one it stands for.
+    let source = "declare const a: any, t: any, html: string, url: string, i: number, key: string; \
+        a.attributes.getNamedItem('href')!.value = 'x'; a.attributes.getNamedItemNS(null, key); a.attributes.item(0); \
+        a.attributes.href.value = 'x'; a.attributes['onclick'].value = 'x'; a.attributes[i].value = 'x'; a.attributes[0].value = 'x'; \
+        const at = a.attributes; at.src.value = 'x'; \
+        a.attributes.setNamedItem(t); a.attributes.setNamedItemNS(t); \
+        document.execCommand('insertHTML', false, html); document.execCommand('createLink', false, url); \
+        document.execCommand(key, false, html); \
+        new DOMParser().parseFromString(html, 'text/html'); (Document as any).parseHTMLUnsafe(html);";
+    let listed = code_sink_facts(source);
+    for (text, kind) in [
+        (
+            "a.attributes.getNamedItem('href')",
+            CodeSinkKind::NavigationUrl,
+        ),
+        (
+            "a.attributes.getNamedItemNS(null, key)",
+            CodeSinkKind::NavigationUrl,
+        ),
+        ("a.attributes.item(0)", CodeSinkKind::NavigationUrl),
+        ("a.attributes.href", CodeSinkKind::NavigationUrl),
+        ("a.attributes['onclick']", CodeSinkKind::NavigationUrl),
+        ("a.attributes[i]", CodeSinkKind::NavigationUrl),
+        ("a.attributes[0]", CodeSinkKind::NavigationUrl),
+        ("at.src", CodeSinkKind::NavigationUrl),
+        ("a.attributes.setNamedItem(t)", CodeSinkKind::EventAttribute),
+        (
+            "a.attributes.setNamedItemNS(t)",
+            CodeSinkKind::EventAttribute,
+        ),
+        (
+            "document.execCommand('insertHTML', false, html)",
+            CodeSinkKind::MarkupWrite,
+        ),
+        (
+            "document.execCommand('createLink', false, url)",
+            CodeSinkKind::NavigationUrl,
+        ),
+        (
+            "document.execCommand(key, false, html)",
+            CodeSinkKind::MarkupWrite,
+        ),
+        (
+            "document.execCommand(key, false, html)",
+            CodeSinkKind::NavigationUrl,
+        ),
+        (
+            "new DOMParser().parseFromString(html, 'text/html')",
+            CodeSinkKind::MarkupWrite,
+        ),
+        (
+            "(Document as any).parseHTMLUnsafe(html)",
+            CodeSinkKind::MarkupWrite,
+        ),
+    ] {
+        assert!(has_sink(&listed, text, kind), "{text}: {listed:?}");
+    }
+    // `setNamedItem` handed on (`Reflect.apply`) is the sink its name is.
+    assert_eq!(
+        code_sink_facts(
+            "declare const a: any, t: any; Reflect.apply(a.attributes.setNamedItem, a.attributes, [t]);"
+        ),
+        vec![(
+            "a.attributes.setNamedItem".to_string(),
+            CodeSinkKind::EventAttribute
+        )]
+    );
+    // `execCommand` read as a value, and taken out of the document by a pattern.
+    let kept = "declare const el: any, parser: any; const ec = document.execCommand; const { execCommand } = document; \
+        const { getNamedItem } = el.attributes; const { setNamedItem: put } = el.attributes; \
+        const pf = parser.parseFromString; const { parseHTMLUnsafe } = Document as any;";
+    assert_eq!(
+        code_sink_facts(kept),
+        vec![
+            (
+                "document.execCommand".to_string(),
+                CodeSinkKind::MarkupWrite
+            ),
+            ("execCommand".to_string(), CodeSinkKind::MarkupWrite),
+            ("getNamedItem".to_string(), CodeSinkKind::NavigationUrl),
+            (
+                "setNamedItem: put".to_string(),
+                CodeSinkKind::EventAttribute
+            ),
+            (
+                "parser.parseFromString".to_string(),
+                CodeSinkKind::MarkupWrite
+            ),
+            ("parseHTMLUnsafe".to_string(), CodeSinkKind::MarkupWrite),
+        ]
+    );
+    // A pattern out of the collection takes the attribute node under its key; a window, a document and a location behind a `const`
+    // alias (one hop or several) are the ones they stand for, where a `let` or a parameter is no alias.
+    let patterns = "declare const el: any; const { href } = el.attributes; const { title } = el.attributes; \
+        const w = window; const { open: o } = w; const d = document; const { write } = d; const { location: l } = w; \
+        const w2 = w as Window; const w3 = w2; const { open: o3 } = w3; const loc = window.location; const { assign } = loc;";
+    let listed = code_sink_facts(patterns);
+    for (text, kind) in [
+        ("href", CodeSinkKind::NavigationUrl),
+        ("open: o", CodeSinkKind::NavigationUrl),
+        ("write", CodeSinkKind::MarkupWrite),
+        ("location: l", CodeSinkKind::NavigationUrl),
+        ("open: o3", CodeSinkKind::NavigationUrl),
+        ("assign", CodeSinkKind::NavigationUrl),
+    ] {
+        assert!(has_sink(&listed, text, kind), "{text}: {listed:?}");
+    }
+    assert!(
+        !has_sink(&listed, "title", CodeSinkKind::NavigationUrl),
+        "{listed:?}"
+    );
+    // The neighbours that run nothing: an attribute collection read as data (a literal name no URL or handler has, its length, a
+    // dotted OpenTelemetry key), a literal node name, commands that write no markup or link, and the same names off other objects.
+    let clean = "declare const a: any, item: any, props: any, span: any, p: any; \
+        a.attributes.title; a.attributes.length; item.attributes['compass.message.ids']; span.attributes.attempt; \
+        a.attributes.getNamedItem('title'); document.execCommand('copy'); document.execCommand('insertHTML', false, '<b>x</b>'); \
+        document.execCommand('createLink', false, '/x'); const q = p; const { open } = q; const { write } = props; \
+        const { title } = a.attributes; new DOMParser().parseFromString('<p>x</p>', 'text/html');";
+    assert_eq!(code_sink_facts(clean), vec![]);
+}
+
+#[test]
 fn a_native_event_attribute_of_jsx_is_a_code_sink_unless_a_function_is_written_there() {
     let source = "declare const handler: any; \
         const a = <img onerror=\"x()\" />; const b = <div onclick={handler} />; const c = <div onclick={() => {}} />; const d = <div onClick={handler} on:click={handler} />;";

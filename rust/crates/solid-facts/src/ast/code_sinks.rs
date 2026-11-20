@@ -83,18 +83,37 @@ fn write_slot_of(name: &str) -> Option<Slot> {
     }
 }
 
+/// How many `const` aliases of a window, a document, a location or an `attributes` collection are followed (`const a = window; const b = a;`).
+const ALIAS_HOPS: usize = 4;
+
+/// ADR 1133 (round 1, adjacent spellings): whether an attribute of this name, taken out of an `attributes` collection, may be written as a
+/// URL or an event handler: a URL slot's name, an `on…` name, or an index (the attribute at that position may have any name).
+fn attribute_name_is_unsafe(name: &str) -> bool {
+    slot_of(name).is_some()
+        || name
+            .get(..2)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("on"))
+        || (!name.is_empty() && name.bytes().all(|byte| byte.is_ascii_digit()))
+}
+
 /// ADR 1133 (round 1 F2): the sinks `Sinks::call` matches by a call's spelling, by member name, and the kind each is. Such a function
 /// read as a value anywhere but as the callee of a call (`Reflect.apply(el.insertAdjacentHTML, el, […])`, `doc.write.call(doc, …)`,
-/// `const w = doc.write`) runs under a name no call spells, so it is the sink its name is.
+/// `const w = doc.write`) runs under a name no call spells, so it is the sink its name is. Round 1, adjacent spellings: `execCommand`
+/// (its `insertHTML` command parses markup into the document) and an attribute node set into the `attributes` collection.
 fn call_spelled_sink(name: &str) -> Option<CodeSinkKind> {
     match name {
         "insertAdjacentHTML"
         | "write"
         | "writeln"
         | "createContextualFragment"
-        | "setHTMLUnsafe" => Some(CodeSinkKind::MarkupWrite),
+        | "setHTMLUnsafe"
+        | "execCommand"
+        | "parseFromString"
+        | "parseHTMLUnsafe" => Some(CodeSinkKind::MarkupWrite),
         "createElement" | "createElementNS" => Some(CodeSinkKind::ScriptElement),
-        "setAttributeNode" | "setAttributeNodeNS" => Some(CodeSinkKind::EventAttribute),
+        "setAttributeNode" | "setAttributeNodeNS" | "setNamedItem" | "setNamedItemNS" => {
+            Some(CodeSinkKind::EventAttribute)
+        }
         _ => None,
     }
 }
@@ -209,6 +228,14 @@ pub(super) fn code_sinks(semantic: &Semantic<'_>, resolve: bool) -> (Vec<CodeSin
                     }
                 }
             }
+            // ADR 1133 (round 1, adjacent spellings): an attribute node taken out of the `attributes` collection by a name a URL or an
+            // event handler has (`el.attributes.href.value = …`) is written in place, as `getAttributeNode`'s is.
+            AstKind::StaticMemberExpression(member)
+                if attribute_name_is_unsafe(member.property.name.as_str())
+                    && sinks.is_attributes(&member.object) =>
+            {
+                sinks.add(member.span, CodeSinkKind::NavigationUrl);
+            }
             // ADR 1133 (F5): a navigation method read anywhere but as a call's callee (`const go = location.assign`, `window.open.call(…)`,
             // `el.setAttribute.call(el, "href", url)`) may be handed a built URL; `open` is read as a value only where its value may be
             // called or kept (`if (props.open)` reads a flag). Round 1: the sinks `Sinks::call` matches by a call's spelling
@@ -266,6 +293,13 @@ pub(super) fn code_sinks(semantic: &Semantic<'_>, resolve: bool) -> (Vec<CodeSin
                         .map(|(texts, _)| texts.into_iter().map(|text| text.to_string()).collect())
                         .unwrap_or_default(),
                 };
+                // Round 1, adjacent spellings: an attribute taken out of the `attributes` collection by a name no URL or handler has is
+                // no sink; by an index or a key nothing proves, it may be any attribute's.
+                if sinks.is_attributes(&member.object)
+                    && (names.is_empty() || names.iter().any(|name| attribute_name_is_unsafe(name)))
+                {
+                    sinks.add(member.span, CodeSinkKind::NavigationUrl);
+                }
                 for name in names {
                     if let Some(kind) =
                         sinks.member_value_sink(node.id(), member.span, &member.object, &name)
@@ -520,9 +554,12 @@ impl<'a> Sinks<'_, 'a> {
             }
             // ADR 1133 (round 1 F5): the attribute node of a URL or event attribute is written in place (`.value = …`), with no call
             // that names the value: an attribute node of any name the program does not fix is a sink, one of a literal name only where
-            // that name is neither a URL slot nor an event handler.
-            "getAttributeNode" | "getAttributeNodeNS" if object.is_some() => {
-                let at = if name == "getAttributeNodeNS" { 1 } else { 0 };
+            // that name is neither a URL slot nor an event handler. Adjacent spellings: the same node out of the `attributes`
+            // collection (`getNamedItem(NS)`, `item(index)`), and one set into it (`setNamedItem(NS)`, below).
+            "getAttributeNode" | "getAttributeNodeNS" | "getNamedItem" | "getNamedItemNS"
+                if object.is_some() =>
+            {
+                let at = if name.ends_with("NS") { 1 } else { 0 };
                 if !self.argument_is_benign_text(call, at, |attribute| {
                     slot_of(attribute).is_none()
                         && !attribute
@@ -532,7 +569,44 @@ impl<'a> Sinks<'_, 'a> {
                     self.add(call.span, CodeSinkKind::NavigationUrl);
                 }
             }
+            "item" if object.is_some_and(|object| self.is_attributes(object)) => {
+                self.add(call.span, CodeSinkKind::NavigationUrl);
+            }
+            // `document.execCommand("insertHTML", false, markup)` parses the markup into the document as `insertAdjacentHTML` does, and
+            // `"createLink"` makes an anchor of its URL; a command the program does not fix may be either.
+            "execCommand" if object.is_some() => {
+                let command = call
+                    .arguments
+                    .first()
+                    .and_then(Argument::as_expression)
+                    .and_then(literal_text);
+                let is = |wanted: &str| {
+                    command
+                        .as_deref()
+                        .is_none_or(|command| command.eq_ignore_ascii_case(wanted))
+                };
+                let value = call.arguments.get(2).and_then(Argument::as_expression);
+                if is("insertHTML") && !value.is_some_and(|markup| self.inert_markup(markup)) {
+                    self.add(call.span, CodeSinkKind::MarkupWrite);
+                }
+                if is("createLink") && !value.is_some_and(|url| self.url_proven(url, 0)) {
+                    self.add(call.span, CodeSinkKind::NavigationUrl);
+                }
+            }
+            // `new DOMParser().parseFromString(markup, type)` and `Document.parseHTMLUnsafe(markup)` parse markup into a document whose nodes
+            // a program moves into the live one, where an event attribute runs: the markup is written as `innerHTML`'s is.
+            "parseFromString" | "parseHTMLUnsafe" if object.is_some() => {
+                if !call
+                    .arguments
+                    .first()
+                    .and_then(Argument::as_expression)
+                    .is_some_and(|markup| self.inert_markup(markup))
+                {
+                    self.add(call.span, CodeSinkKind::MarkupWrite);
+                }
+            }
             "setAttribute" | "setAttributeNS" | "setAttributeNode" | "setAttributeNodeNS"
+            | "setNamedItem" | "setNamedItemNS"
                 if object.is_some() =>
             {
                 let at = if name == "setAttributeNS" { 1 } else { 0 };
@@ -902,9 +976,9 @@ impl<'a> Sinks<'_, 'a> {
         declarator.init.as_ref()
     }
 
-    /// Whether the expression is the window's `location`: the global, or a member so named of anything.
+    /// Whether the expression is the window's `location`: the global, or a member so named of anything, or a `const` alias of one.
     fn is_location(&self, object: &'a Expression<'a>) -> bool {
-        match peel_ts_sugar(object) {
+        match self.through_aliases(object) {
             Expression::Identifier(identifier) => {
                 identifier.name == "location" && self.symbol_of(identifier).is_none()
             }
@@ -998,9 +1072,8 @@ impl<'a> Sinks<'_, 'a> {
         match name {
             "assign" | "replace" if self.is_location(object) => Some(CodeSinkKind::NavigationUrl),
             // An attribute node of a URL or event attribute is written in place (`getAttributeNode("href").value = …`).
-            "setAttribute" | "setAttributeNS" | "getAttributeNode" | "getAttributeNodeNS" => {
-                Some(CodeSinkKind::NavigationUrl)
-            }
+            "setAttribute" | "setAttributeNS" | "getAttributeNode" | "getAttributeNodeNS"
+            | "getNamedItem" | "getNamedItemNS" => Some(CodeSinkKind::NavigationUrl),
             "open" if !self.value_unused(id, span) => Some(CodeSinkKind::NavigationUrl),
             // `document.location`, `window.location`, `frame.contentWindow.location` kept or passed (`const loc = document.location;
             // loc.assign(url)`, `go(window.location)`): the location handed on, as the global name is.
@@ -1042,14 +1115,18 @@ impl<'a> Sinks<'_, 'a> {
     fn pattern_sink(&mut self, id: NodeId, at: oxc_span::Span, name: &str) {
         let source = self.pattern_source(id);
         let kind = match name {
-            "setAttribute" | "setAttributeNS" | "getAttributeNode" | "getAttributeNodeNS" => {
-                Some(CodeSinkKind::NavigationUrl)
-            }
+            "setAttribute" | "setAttributeNS" | "getAttributeNode" | "getAttributeNodeNS"
+            | "getNamedItem" | "getNamedItemNS" => Some(CodeSinkKind::NavigationUrl),
             "insertAdjacentHTML"
             | "createContextualFragment"
             | "setHTMLUnsafe"
             | "setAttributeNode"
-            | "setAttributeNodeNS" => call_spelled_sink(name),
+            | "setAttributeNodeNS"
+            | "setNamedItem"
+            | "setNamedItemNS"
+            | "execCommand"
+            | "parseFromString"
+            | "parseHTMLUnsafe" => call_spelled_sink(name),
             "write" | "writeln" | "createElement" | "createElementNS"
                 if source.is_some_and(|source| self.is_document(source)) =>
             {
@@ -1059,6 +1136,12 @@ impl<'a> Sinks<'_, 'a> {
                 Some(CodeSinkKind::NavigationUrl)
             }
             "assign" | "replace" if source.is_some_and(|source| self.is_location(source)) => {
+                Some(CodeSinkKind::NavigationUrl)
+            }
+            // An attribute node out of the `attributes` collection by a URL or handler name (`const { href } = el.attributes`).
+            _ if attribute_name_is_unsafe(name)
+                && source.is_some_and(|source| self.is_attributes(source)) =>
+            {
                 Some(CodeSinkKind::NavigationUrl)
             }
             _ => None,
@@ -1079,10 +1162,39 @@ impl<'a> Sinks<'_, 'a> {
         }
     }
 
+    /// ADR 1133 (round 1, adjacent spellings): the expression a `const` alias stands for (`const w = window`, then `w`), through at most
+    /// [`ALIAS_HOPS`] bindings; the expression itself where it is no such alias (a `let`, a parameter, a binding written elsewhere).
+    fn through_aliases(&self, expression: &'a Expression<'a>) -> &'a Expression<'a> {
+        let mut current = peel_ts_sugar(expression);
+        for _ in 0..ALIAS_HOPS {
+            let Expression::Identifier(identifier) = current else {
+                break;
+            };
+            let Some(init) = self.const_init(identifier) else {
+                break;
+            };
+            current = peel_ts_sugar(init);
+        }
+        current
+    }
+
+    /// Whether the expression is the `attributes` collection of an element: a member so named, by a static name or a literal key, or a
+    /// `const` alias of one.
+    fn is_attributes(&self, expression: &'a Expression<'a>) -> bool {
+        match self.through_aliases(expression) {
+            Expression::StaticMemberExpression(member) => member.property.name == "attributes",
+            Expression::ComputedMemberExpression(member) => {
+                literal_property_key(&member.expression).is_some_and(|key| key == "attributes")
+            }
+            _ => false,
+        }
+    }
+
     /// Whether the expression is a window: a global object that no binding declares, or a member named for one (`doc.defaultView`,
-    /// `frame.contentWindow`, `w.opener`).
+    /// `frame.contentWindow`, `w.opener`), or a `const` alias of one.
     fn is_window(&self, expression: &'a Expression<'a>) -> bool {
-        match peel_ts_sugar(expression) {
+        let expression = self.through_aliases(expression);
+        match expression {
             Expression::Identifier(_) => self.is_global_object(expression),
             Expression::StaticMemberExpression(member) => matches!(
                 member.property.name.as_str(),
@@ -1099,9 +1211,10 @@ impl<'a> Sinks<'_, 'a> {
         }
     }
 
-    /// Whether the expression is a document: the global, or a member named for one (`el.ownerDocument`, `frame.contentDocument`).
+    /// Whether the expression is a document: the global, or a member named for one (`el.ownerDocument`, `frame.contentDocument`), or a
+    /// `const` alias of one.
     fn is_document(&self, expression: &'a Expression<'a>) -> bool {
-        match peel_ts_sugar(expression) {
+        match self.through_aliases(expression) {
             Expression::Identifier(identifier) => {
                 identifier.name == "document" && self.symbol_of(identifier).is_none()
             }

@@ -14,5 +14,8 @@ every spelling (the closest legal forms), and the read of `Light` stays proved.
 - F4: `JSON` and `Object` by a member of the global object, an alias, a computed member or a pattern (`json-*`, `object-*`).
 - F5: a `javascript:` URL or markup by a route the first cut did not read (`location-member-*`, `href-built-key`, `attribute-node`,
   `svg-base-val`, `protocol`, `href-entity`, `srcdoc-entity`, `inner-html-entity`, `open-pattern`).
+- Adjacent spellings (found by probing, not by the review): the attribute node out of the `attributes` collection (`attributes-*`),
+  `execCommand("insertHTML")` (`exec-command`), `parseFromString` (`dom-parser`), and a window or a document behind a `const` alias (`window-alias-*`,
+  `document-alias-create-element`).
 - F6 (`variants/plain-data-key-uses`, a legal project): K4 judges the key alone; a direct call, a call through a name and `.call` of a
   member under a plain data key are alike inert.
