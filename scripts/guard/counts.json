@@ -10,7 +10,7 @@
   "SC1001 compiler-refused-file": 1,
   "SC1001 component-identity-unproven": 136,
   "SC1001 creation-throws-first": 3,
-  "SC1001 function-run-unplaced": 1690,
+  "SC1001 function-run-unplaced": 1716,
   "SC1001 function-unentered": 1,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
@@ -181,7 +181,7 @@
   "SC5003 mount-form-window": 2,
   "SC5003 mount-unresolved": 384,
   "SC5003 package-finding-at-entry": 113,
-  "SC5003 pending-read-unresolved": 782,
+  "SC5003 pending-read-unresolved": 788,
   "SC5003 root-mount-pass-unproven": 54,
   "SC5003 server-rendering-unresolved": 1,
   "SC5003 source-module-unresolved": 1,
@@ -257,7 +257,7 @@
   "SC9012 parameter-call-argument-unproven": 91,
   "SC9012 parameter-default-unresolved": 5,
   "SC9012 parameter-member-path-unresolved": 21,
-  "SC9012 parameter-member-target-unresolved": 157,
+  "SC9012 parameter-member-target-unresolved": 158,
   "SC9012 parameter-member-targets-diverge": 11,
   "SC9012 parameter-use-unmodeled": 133,
   "SC9012 primitive-alias-call": 22,
@@ -273,7 +273,7 @@
   "SC9012 solid-call-rejected-unchecked": 3,
   "SC9012 standard-member-impostor": 468,
   "SC9012 store-key-undecided": 13,
-  "SC9012 tuple-iteration-written": 1470,
+  "SC9012 tuple-iteration-written": 1476,
   "SC9012 type-only-source": 88,
   "SC9012 value-as-parameter-default": 9,
   "SC9012 value-bound-held": 6,
@@ -4828,8 +4828,66 @@
   },
   {
    "fixture": "uncertifiable-repro/sc1001",
+   "key": "SC1001 function-run-unplaced",
+   "from": 16,
+   "to": 14,
+   "adr": "ADR 1133",
+   "kind": "moved",
+   "movedToFixture": "uncertifiable-repro/sc1001-navigation-url",
+   "note": "ADR 1133: handler-factory-options.tsx and r-context-state.tsx read a member named `open` as a value (a navigation sink), so in the shared sc1001 program they withheld every handler proof of the other cases: they moved to sc1001-navigation-url, where the rows stand"
+  },
+  {
+   "fixture": "reactive-ir/handed-net",
+   "key": "SC1001 function-run-unplaced",
+   "from": 4,
+   "to": 1,
+   "adr": "ADR 1133",
+   "proof": "rust/crates/solid-facts/src/ast/premise_sites.rs::reflect_member_reads_only",
+   "fixtures": {
+    "proved": "reactive-ir/handed-net",
+    "open": "reactive-ir/handed-net"
+   }
+  },
+  {
+   "fixture": "reactive-ir/phase-handed-by-name",
+   "key": "SC9012 listener-reach",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1133",
+   "proof": "rust/crates/solid-facts/src/ast/premise_sites.rs::reflect_member_reads_only",
+   "fixtures": {
+    "proved": "reactive-ir/phase-handed-by-name",
+    "open": "reactive-ir/accessor-provenance"
+   }
+  },
+  {
+   "fixture": "reactive-ir/unplaced-site-obligations",
+   "key": "SC2005 function-run-unplaced",
+   "from": 3,
+   "to": 2,
+   "adr": "ADR 1133",
+   "proof": "rust/crates/solid-facts/src/ast/premise_sites.rs::reflect_member_reads_only",
+   "fixtures": {
+    "proved": "reactive-ir/unplaced-site-obligations",
+    "open": "reactive-ir/unplaced-site-obligations"
+   }
+  },
+  {
+   "fixture": "reactive-ir/unplaced-site-obligations",
+   "key": "SC2001 function-run-unplaced",
+   "from": 3,
+   "to": 2,
+   "adr": "ADR 1133",
+   "proof": "rust/crates/solid-facts/src/ast/premise_sites.rs::reflect_member_reads_only",
+   "fixtures": {
+    "proved": "reactive-ir/unplaced-site-obligations",
+    "open": "reactive-ir/unplaced-site-obligations"
+   }
+  },
+  {
+   "fixture": "uncertifiable-repro/sc1001",
    "key": "SC1001 callee-callback-timing",
-   "from": 28,
+   "from": 27,
    "to": 26,
    "adr": "ADR 1133",
    "kind": "moved",
@@ -4838,16 +4896,6 @@
     "uncertifiable-repro/sc1001-computed-key"
    ],
    "note": "ADR 1133: handler-factory-options.tsx and r-context-state.tsx read a member named `open` as a value (a navigation sink), so in the shared sc1001 program they withheld every handler proof of the other cases: they moved to sc1001-navigation-url, where the rows stand (r-context-state.tsx); options-object.tsx went to sc1001-computed-key in ADR 1125"
-  },
-  {
-   "fixture": "uncertifiable-repro/sc1001",
-   "key": "SC1001 function-run-unplaced",
-   "from": 16,
-   "to": 14,
-   "adr": "ADR 1133",
-   "kind": "moved",
-   "movedToFixture": "uncertifiable-repro/sc1001-navigation-url",
-   "note": "ADR 1133: handler-factory-options.tsx and r-context-state.tsx read a member named `open` as a value (a navigation sink), so in the shared sc1001 program they withheld every handler proof of the other cases: they moved to sc1001-navigation-url, where the rows stand"
   }
  ],
  "renames": []

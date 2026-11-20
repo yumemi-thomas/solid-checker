@@ -245,9 +245,17 @@ const DELIVERY_BREAKERS = ["evt-apply-event-replaced", "evt-apply-listener-patch
   // Solid's stored handler read under a key nothing proves.
   "evt-rerun-js-url", "evt-rerun-srcdoc", "evt-apply-object-alias", "evt-apply-object-member", "evt-apply-stored-unproven-key",
   // ADR 1133 (Fable round 2 of 1125, N2): the reader through an alias of `Object` and through a value's `constructor`.
-  "evt-apply-stored-values-alias", "evt-apply-stored-values-constructor"];
-/** ADR 1133: a body dispatch the census cannot see as written: `dispatchEvent` called through `.call` or `Reflect.apply`. */
-const DISPATCH_HANDED_ON = ["evt-body-dispatch-call", "evt-body-dispatch-reflect"];
+  "evt-apply-stored-values-alias", "evt-apply-stored-values-constructor",
+  // ADR 1133 round 1 (Fable review of 1133): F1 `Reflect.get` reaches `Object` by a key; F4 `JSON` by `globalThis`, an alias and a pattern, `Object` by a
+  // computed member and by patterns; F2 a markup or script sink handed to `Reflect.apply`; F5 a `javascript:` URL by the location kept, a built key, an
+  // attribute node, a character reference and a destructured `open`.
+  "evt-apply-stored-reflect-get", "evt-apply-stored-stringify-global-this", "evt-apply-stored-stringify-alias", "evt-apply-stored-stringify-pattern",
+  "evt-apply-stored-values-computed-constructor", "evt-apply-stored-values-computed-global", "evt-apply-stored-values-pattern-global", "evt-apply-stored-values-pattern-constructor",
+  "evt-rerun-reflect-markup", "evt-rerun-reflect-script", "evt-rerun-location-alias", "evt-rerun-href-built-key", "evt-rerun-attribute-node", "evt-rerun-href-entity",
+  "evt-rerun-open-pattern"];
+/** ADR 1133: a body dispatch the census cannot see as written: `dispatchEvent` called through `.call` or `Reflect.apply`; round 1 (F1, F3): through
+ * `Reflect.get`, under a key the program builds, and taken out of the element by a pattern. */
+const DISPATCH_HANDED_ON = ["evt-body-dispatch-call", "evt-body-dispatch-reflect", "evt-body-dispatch-reflect-get", "evt-body-dispatch-built-key", "evt-body-dispatch-pattern"];
 const DENIED_CONTEXTS = [...Object.keys(DENIED), ...Object.keys(DISPOSALS), ...DENIED_OTHER];
 /** `flush()` in a denied handler, with no dispatch in the program (`a04`, `b03`, `b09`): SC2008. */
 const DENIED_FLUSH = ["dny-flush-unmount", "dny-flush-load", "dny-flush-popover"];
@@ -1919,13 +1927,18 @@ function inContext(context, stmts, kit) {
     case "micro": return { body: [expr(prim("micro", fn(stmts)))], view: [] };
     case "handler": case "creates-in-handler": return { body: [], view: [button(kit.name("b"), stmts)] };
     // EVENT_CONTEXTS: a listener the program dispatches to itself, and work a handler or an apply schedules.
-    case "evt-body-dispatch-call": case "evt-body-dispatch-reflect": {
-      // The element's own `onScroll` (no delegation), the dispatch in the component body: the handler runs on the body's stack.
+    case "evt-body-dispatch-call": case "evt-body-dispatch-reflect": case "evt-body-dispatch-reflect-get": case "evt-body-dispatch-built-key": case "evt-body-dispatch-pattern": {
+      // The element's own `onScroll` (no delegation), the dispatch in the component body: the handler runs on the body's stack. Round 1 (F1, F3): the
+      // dispatcher reached by `Reflect.get`, under a key the program builds, and taken out by a destructuring pattern.
       const el = kit.name("el");
       const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onScroll", undriven: true })));
-      const fire = expr(domExpr(context === "evt-body-dispatch-call"
-        ? `(${el} as HTMLElement).dispatchEvent.call(${el} as HTMLElement, new Event("scroll"))`
-        : `Reflect.apply(EventTarget.prototype.dispatchEvent, ${el} as HTMLElement, [new Event("scroll")])`));
+      const fire = expr(domExpr({
+        "evt-body-dispatch-call": `(${el} as HTMLElement).dispatchEvent.call(${el} as HTMLElement, new Event("scroll"))`,
+        "evt-body-dispatch-reflect": `Reflect.apply(EventTarget.prototype.dispatchEvent, ${el} as HTMLElement, [new Event("scroll")])`,
+        "evt-body-dispatch-reflect-get": `(Reflect.get(${el} as HTMLElement, "dispatchEvent") as (event: Event) => boolean).call(${el} as HTMLElement, new Event("scroll"))`,
+        "evt-body-dispatch-built-key": `((${el} as unknown) as Record<string, (event: Event) => boolean>)["dispatch" + "Event"].call(${el} as HTMLElement, new Event("scroll"))`,
+        "evt-body-dispatch-pattern": `const { dispatchEvent: send } = ${el} as HTMLElement; send.call(${el} as HTMLElement, new Event("scroll"))`,
+      }[context]));
       return { body: [made, fire], view: [] };
     }
     case "evt-body-dispatch": case "evt-apply-dispatch": case "evt-handler-dispatch": {
@@ -1994,18 +2007,33 @@ function inContext(context, stmts, kit) {
     // ADR 1125, Fable round 1 F1: a reader of the element's own values takes Solid's stored delegated handler (`_$$click`) and the
     // apply calls it with no event.
     case "evt-apply-stored-values": case "evt-apply-stored-values-computed": case "evt-apply-stored-values-optional": case "evt-apply-stored-stringify-spread":
-    case "evt-apply-stored-values-alias": case "evt-apply-stored-values-constructor": {
+    case "evt-apply-stored-values-alias": case "evt-apply-stored-values-constructor":
+    // ADR 1133 round 1 (F1, F4): `Reflect.get` reaches `Object` by a key; `JSON` by `globalThis`, an alias and a pattern; `Object` by a computed member and by patterns.
+    case "evt-apply-stored-reflect-get": case "evt-apply-stored-stringify-global-this": case "evt-apply-stored-stringify-alias": case "evt-apply-stored-stringify-pattern":
+    case "evt-apply-stored-values-computed-constructor": case "evt-apply-stored-values-computed-global": case "evt-apply-stored-values-pattern-global": case "evt-apply-stored-values-pattern-constructor": {
       const el = kit.name("el");
       const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onClick", undriven: true })));
       const call = (value) => `if (typeof ${value} === "function") (${value} as (event: Event) => void)(new Event("click"))`;
       const alias = kit.name("O");
       const reader = { "evt-apply-stored-values": "Object.values", "evt-apply-stored-values-computed": 'Object["values"]', "evt-apply-stored-values-optional": '(Object as typeof Object)?.["values"]',
-        "evt-apply-stored-values-alias": `${alias}.values`, "evt-apply-stored-values-constructor": "(({}).constructor as ObjectConstructor).values" }[context];
+        "evt-apply-stored-values-alias": `${alias}.values`, "evt-apply-stored-values-constructor": "(({}).constructor as ObjectConstructor).values",
+        "evt-apply-stored-reflect-get": '(Reflect.get({}, "constructor") as ObjectConstructor).values',
+        "evt-apply-stored-values-computed-constructor": '(({}) as Record<string, ObjectConstructor>)["constructor"].values',
+        "evt-apply-stored-values-computed-global": '(globalThis as unknown as Record<string, ObjectConstructor>)["Object"].values',
+        "evt-apply-stored-values-pattern-global": `${alias}.values`, "evt-apply-stored-values-pattern-constructor": `${alias}.values` }[context];
       const aliased = context === "evt-apply-stored-values-alias" ? [decl(alias, domExpr("Object"))] : [];
+      // A pattern takes the constructor out as the loop's own statement text: a declaration beside the reader.
+      const pattern = { "evt-apply-stored-values-pattern-global": `const { Object: ${alias} } = globalThis as unknown as { Object: ObjectConstructor }; `,
+        "evt-apply-stored-values-pattern-constructor": `const { constructor: ${alias} } = {} as { constructor: ObjectConstructor }; ` }[context] ?? "";
+      const replacer = `(_key: string, value: unknown) => { ${call("value")}; return value; }`;
+      const stringify = { "evt-apply-stored-stringify-global-this": `globalThis.JSON.stringify(${el}, ${replacer})`,
+        "evt-apply-stored-stringify-alias": `${alias}.stringify(${el}, ${replacer})`,
+        "evt-apply-stored-stringify-pattern": `const { stringify } = JSON; stringify(${el}, ${replacer})` }[context];
+      const jsonAlias = context === "evt-apply-stored-stringify-alias" ? [decl(alias, domExpr("JSON"))] : [];
       const run = expr(domExpr(reader
-        ? `for (const value of ${reader}(${el} as object)) ${call("value")}`
-        : `JSON.stringify(...([${el}, (_key: string, value: unknown) => { ${call("value")}; return value; }] as [object, (key: string, value: unknown) => unknown]))`));
-      return { body: [...aliased, made, expr(prim("effect", fn([ret(num(1))]), { apply: fn([run]) }))], view: [] };
+        ? `${pattern}for (const value of ${reader}(${el} as object)) ${call("value")}`
+        : stringify ?? `JSON.stringify(...([${el}, (_key: string, value: unknown) => { ${call("value")}; return value; }] as [object, (key: string, value: unknown) => unknown]))`));
+      return { body: [...aliased, ...jsonAlias, made, expr(prim("effect", fn([ret(num(1))]), { apply: fn([run]) }))], view: [] };
     }
     // F3: the shadow root attached through an arrow's expression body under a key built at run time (`join`, which no fact decodes).
     case "evt-apply-shadow-arrow-body": {
@@ -2037,15 +2065,33 @@ function inContext(context, stmts, kit) {
     // ADR 1133 (F5): a `javascript:` URL built by concatenation (no literal is one) replaces `globalThis.event` when the navigation
     // runs, a task after the body; `srcdoc` markup built the same way runs its script when the frame loads. The apply dispatches again
     // after a button writes what its compute reads, by then with no event.
-    case "evt-rerun-js-url": case "evt-rerun-srcdoc": {
+    case "evt-rerun-js-url": case "evt-rerun-srcdoc":
+    // ADR 1133 round 1 (F2, F5): a markup or script sink handed to `Reflect.apply`; the `javascript:` URL by the location kept in a name, a key the program
+    // builds, an attribute node, a character reference and a destructured `open`.
+    case "evt-rerun-reflect-markup": case "evt-rerun-reflect-script": case "evt-rerun-location-alias": case "evt-rerun-href-built-key": case "evt-rerun-attribute-node":
+    case "evt-rerun-href-entity": case "evt-rerun-open-pattern": {
       const el = kit.name("el"), t = signal(kit.name("t"), 1, "src");
       const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onScroll", undriven: true })));
-      const frame = kit.name("frame");
-      const sink = context === "evt-rerun-js-url"
-        ? [expr(domExpr('location.href = "java" + "script:" + "void (globalThis.event = undefined)"'))]
-        : [decl(frame, domExpr('document.createElement("iframe")')),
-           expr(domExpr(`${frame}.srcdoc = "<scr" + "ipt>parent.event = undefined</scr" + "ipt>"`)),
-           expr(domExpr(`document.body.appendChild(${frame})`))];
+      const frame = kit.name("frame"), link = kit.name("link"), loc = kit.name("loc");
+      const js = '"java" + "script:" + "void (globalThis.event = undefined)"';
+      const attached = [decl(link, domExpr('document.createElement("a")')), expr(domExpr(`document.body.appendChild(${link})`))];
+      const sinks = {
+        "evt-rerun-js-url": [expr(domExpr(`location.href = ${js}`))],
+        "evt-rerun-srcdoc": [decl(frame, domExpr('document.createElement("iframe")')),
+          expr(domExpr(`${frame}.srcdoc = "<scr" + "ipt>parent.event = undefined</scr" + "ipt>"`)),
+          expr(domExpr(`document.body.appendChild(${frame})`))],
+        // F2: the sink is read as a value and handed to `Reflect.apply`; the image's `onerror` and the appended script replace `globalThis.event`.
+        "evt-rerun-reflect-markup": [expr(domExpr('Reflect.apply(document.body.insertAdjacentHTML, document.body, ["beforeend", "<img src=x on" + "error=\\"globalThis.event = undefined\\">"])'))],
+        "evt-rerun-reflect-script": [expr(domExpr('const script = Reflect.apply(document.createElement, document, ["script"]) as HTMLScriptElement; script.text = "globalThis.event = undefined"; document.head.append(script)'))],
+        // F5: the navigation runs the script when it is taken, a task after the body.
+        "evt-rerun-location-alias": [decl(loc, domExpr("document.location")), expr(domExpr(`${loc}.assign(${js})`))],
+        "evt-rerun-href-built-key": [...attached, expr(domExpr(`(${link} as unknown as Record<string, string>)["hr" + "ef"] = ${js}`)), expr(domExpr(`${link}.click()`))],
+        "evt-rerun-attribute-node": [...attached, expr(domExpr(`${link}.setAttribute("href", "/x")`)), expr(domExpr(`${link}.getAttributeNode("href")!.value = ${js}`)), expr(domExpr(`${link}.click()`))],
+        "evt-rerun-href-entity": [expr(domExpr(`document.body.insertAdjacentHTML("beforeend", '<a id="sc-link" href="&#106;avascript:void (globalThis.event = undefined)">x</a>')`)),
+          expr(domExpr('(document.getElementById("sc-link") as HTMLAnchorElement).click()'))],
+        "evt-rerun-open-pattern": [expr(domExpr(`const { open: send } = window; send(${js}, "_self")`))],
+      };
+      const sink = sinks[context];
       const fire = expr(domExpr(`(${el} as HTMLElement).dispatchEvent(new Event("scroll"))`));
       return { body: [made, ...sink, expr(prim("effect", fn([ret(read(t.name))]), { apply: fn([fire]) }))], view: [button(kit.name("b"), [expr(write(t.name, 2))])], sigs: [t] };
     }
