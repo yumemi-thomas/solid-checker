@@ -2156,3 +2156,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/vite-dev-client/variants/mismatch/node_modules/**
 !fixtures/reactive-ir/vite-dev-client/variants/vite-7/node_modules/
 !fixtures/reactive-ir/vite-dev-client/variants/vite-7/node_modules/**
+!fixtures/reactive-ir/vite-dev-client/variants/solid-plugin-patched/node_modules/
+!fixtures/reactive-ir/vite-dev-client/variants/solid-plugin-patched/node_modules/**

@@ -1692,16 +1692,93 @@ pub(crate) const VITE_CLIENTS: &[ViteClient] = &[
     },
 ];
 
-/// ADR 1144: the `define` keys a release of the Solid plugin adds to the config (read in its installed bytes; ADR 0270 pins the closure): Vite's client writes
-/// each on the page's global object (`env.mjs`). `vite-plugin-solid` re-exports `@solidjs/vite-plugin`, so the release is the one that package resolves to. A
-/// release not listed ends the premise.
-pub(crate) const SOLID_PLUGIN_DEFINES: &[(&str, &[&str])] = &[
-    // `config` returns `define: { [SERVER_COMPONENTS_DEFINE]: serverComponentsDefine }`, `JSON.stringify(serverComponents)` of a boolean (a user `define` of the key
-    // would win, and the closed grammar admits none).
-    ("3.0.0-next.51", &["__SOLID_SERVER_COMPONENTS__"]),
-    // The fixture issuer's stand-in (`fixtures/reactive-ir/node_modules/@solidjs/vite-plugin`, pinned in host-plugin-pins.json): `solid()` returns no plugin.
-    ("0.0.0-fixture", &[]),
+/// ADR 1144: one reading of a Solid plugin package's own bytes, keyed by its content digest (the package row of ADR 0270's audit: the SHA-256 of the sorted
+/// `(path, sha256)` list of every file of the package outside `node_modules`, [`package_digest`]). The reading is of what the plugin's hooks put under the
+/// config's `define`, under the options the closed grammar admits (no `start`, `ssr` and `serverFunctions` false, `extensions`, `diagnostics`): `defines`. It
+/// trusts nothing about the package's dependencies' closure (the ADR records why none of them reaches a `define`), and nothing for host inference.
+pub(crate) struct SolidPluginRead {
+    pub name: &'static str,
+    pub version: &'static str,
+    pub digest: &'static str,
+    pub defines: &'static [&'static str],
+}
+
+/// ADR 1144: every Solid plugin package whose `define` keys were read. `vite-plugin-solid` re-exports `@solidjs/vite-plugin` (its `index.mjs`, `index.cjs`), so
+/// its defines are those of the `@solidjs/vite-plugin` it resolves, which must have a row too. A package nobody read ends the premise.
+pub(crate) const SOLID_PLUGIN_READS: &[SolidPluginRead] = &[
+    // `config` (dist/esm/index.mjs:5069) returns `define: { [SERVER_COMPONENTS_DEFINE]: serverComponentsDefine }` (:5294), `JSON.stringify` of a boolean
+    // (:4801; a user `define` of the key would win, :5283, and the closed grammar admits none). The ADR names every other hook and dependency call.
+    SolidPluginRead {
+        name: "@solidjs/vite-plugin",
+        version: "3.0.0-next.51",
+        digest: "8f09539ab5c78e789a47de058ac4b9fbd5a9ad99171eda97664cabc4f75779d7",
+        defines: &["__SOLID_SERVER_COMPONENTS__"],
+    },
+    // `index.mjs` and `index.cjs` re-export `@solidjs/vite-plugin`, default and named; nothing else runs.
+    SolidPluginRead {
+        name: "vite-plugin-solid",
+        version: "3.0.0-next.27",
+        digest: "70dc711e6c4d3e675f11fd6089d2d1a2af8f0f47ed0d4d0757457fb469ec16c0",
+        defines: &[],
+    },
+    // The fixture issuer's stand-in (`fixtures/reactive-ir/node_modules/@solidjs/vite-plugin`, not published bytes): `solid()` returns no plugin.
+    SolidPluginRead {
+        name: "@solidjs/vite-plugin",
+        version: "0.0.0-fixture",
+        digest: "304ddbb6ee5afa74e509589a55cac35e2addae4be1d6071df099a3c30e5604a5",
+        defines: &[],
+    },
 ];
+
+/// ADR 1144: the content digest of the package at `root`, as ADR 0270's audit rows it (`host_plugins`): every file below the root outside a `node_modules`
+/// directory, by its path below the root and the SHA-256 of its bytes, sorted, as JSON pairs, hashed. `None` where a file cannot be read, or the tree holds a
+/// symbolic link or an entry that is no file or directory.
+fn package_digest(root: &Path) -> Option<String> {
+    fn walk(root: &Path, directory: &Path, rows: &mut BTreeMap<String, String>) -> Option<()> {
+        for entry in fs::read_dir(directory).ok()? {
+            let entry = entry.ok()?;
+            if entry.file_name() == "node_modules" {
+                continue;
+            }
+            let path = entry.path();
+            let kind = entry.file_type().ok()?;
+            if kind.is_symlink() {
+                return None;
+            }
+            if kind.is_dir() {
+                walk(root, &path, rows)?;
+            } else if kind.is_file() {
+                let below = path.strip_prefix(root).ok()?.to_str()?.replace('\\', "/");
+                rows.insert(below, crate::reviewed_packages::digest_of(&path)?);
+            } else {
+                return None;
+            }
+        }
+        Some(())
+    }
+    use sha2::{Digest, Sha256};
+    let mut rows = BTreeMap::new();
+    walk(root, root, &mut rows)?;
+    Some(format!(
+        "{:x}",
+        Sha256::digest(serde_json::to_vec(&rows.into_iter().collect::<Vec<_>>()).ok()?)
+    ))
+}
+
+/// ADR 1144: the reading of the Solid plugin package installed at `root` (named `name` by the config), where its bytes are a row of [`SOLID_PLUGIN_READS`].
+fn solid_plugin_read(root: &Path, name: &str) -> Result<&'static SolidPluginRead, String> {
+    let digest = package_digest(root)
+        .ok_or_else(|| format!("{}: the package's files cannot be read", root.display()))?;
+    SOLID_PLUGIN_READS
+        .iter()
+        .find(|read| read.name == name && read.digest == digest)
+        .ok_or_else(|| {
+            format!(
+                "{}: no reading of {name} matches its bytes (content {digest})",
+                root.display()
+            )
+        })
+}
 
 /// ADR 1144 ruling (a): a `define` key the client may write without becoming a writer of any name: a data-only new global, `__NAME__` in upper case (no standard,
 /// host or prototype binding is spelled so), with no further segment. Anything else (a prototype path, `Promise.x`, `window.x`, a key of another shape) keeps
@@ -1730,8 +1807,8 @@ pub(crate) struct ReviewedHost {
 /// - the build is a development build in a browser (the dev server's client is the code Vite puts in that page; a production build's is not read);
 /// - no program file loads `vite` or a `vite/*` subpath at run time (a type-only import loads nothing), and no load has a specifier the file does not spell;
 /// - no installed package the program holds, other than Vite, depends on `vite` by its manifest (a test runner that loads Vite into its own process, `vitest`);
-/// - every Vite config of the chain reads in the closed grammar, with no plugin but Solid's (an installed closure ADR 0270 pins, whose `define` keys
-///   [`SOLID_PLUGIN_DEFINES`] lists, each [`define_key_admitted`]) and no `package.json` script that selects another config;
+/// - every Vite config of the chain reads in the closed grammar, with no plugin but Solid's (a package whose `define` keys
+///   [`SOLID_PLUGIN_READS`] lists by its package's content, each [`define_key_admitted`]) and no `package.json` script that selects another config;
 /// - each root named `vite` is the package the configs' directory resolves, and its installed bytes are a release of [`VITE_CLIENTS`];
 /// - each global the client writes (its own and the defines') is already one the package's closure writes in the index (by name, or under any name), so every
 ///   site that reads it still meets a writer.
@@ -1858,31 +1935,23 @@ fn reviewed_host_roots(
                     path.display()
                 ));
             }
-            plugin_pinned(config_dir, plugin)?;
             let installed = installed_package(config_dir, plugin)
+                .and_then(|installed| fs::canonicalize(installed).ok())
                 .ok_or_else(|| format!("{}: {plugin} is not installed", path.display()))?;
-            let core = if plugin == "@solidjs/vite-plugin" {
-                installed
-            } else {
-                installed_package(&installed, "@solidjs/vite-plugin").ok_or_else(|| {
-                    format!(
-                        "{}: {plugin} resolves no @solidjs/vite-plugin",
-                        path.display()
-                    )
-                })?
-            };
-            let version = fs::read(core.join("package.json"))
-                .ok()
-                .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
-                .and_then(|manifest| manifest.get("version")?.as_str().map(str::to_owned))
-                .ok_or_else(|| format!("{}: no version", core.display()))?;
-            let (_, keys) = SOLID_PLUGIN_DEFINES
-                .iter()
-                .find(|(listed, _)| *listed == version)
-                .ok_or_else(|| {
-                    format!("@solidjs/vite-plugin {version}: its defines are not read")
-                })?;
-            for key in *keys {
+            let mut read = solid_plugin_read(&installed, plugin)?;
+            if plugin == "vite-plugin-solid" {
+                let core = installed_package(&installed, "@solidjs/vite-plugin")
+                    .and_then(|core| fs::canonicalize(core).ok())
+                    .ok_or_else(|| {
+                        format!(
+                            "{}: {plugin} resolves no @solidjs/vite-plugin",
+                            path.display()
+                        )
+                    })?;
+                read = solid_plugin_read(&core, "@solidjs/vite-plugin")?;
+            }
+            let (version, keys) = (read.version, read.defines);
+            for key in keys {
                 if !define_key_admitted(key) {
                     return Err(format!(
                         "@solidjs/vite-plugin {version} defines {key}, which may name an existing binding"
@@ -2018,6 +2087,41 @@ mod tests {
                 );
             }
         }
+        // The Solid plugin package helge-dev installs is the one read (its ADR 0270 row, 8f09539a…), and so is the wrapper pekochan-blog installs.
+        let plugin = apps.join("helge-dev/node_modules/@solidjs/vite-plugin");
+        assert_eq!(
+            solid_plugin_read(&plugin, "@solidjs/vite-plugin")
+                .unwrap()
+                .version,
+            "3.0.0-next.51"
+        );
+        let wrapper =
+            fs::canonicalize(apps.join("pekochan-blog/node_modules/vite-plugin-solid")).unwrap();
+        assert_eq!(
+            solid_plugin_read(&wrapper, "vite-plugin-solid")
+                .unwrap()
+                .version,
+            "3.0.0-next.27"
+        );
+    }
+
+    /// ADR 1144: a Solid plugin package is read by its content: the fixture issuer's stand-in matches its row, and a copy one line longer matches none.
+    #[test]
+    fn a_solid_plugin_reading_holds_only_for_the_bytes_it_read() {
+        let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/reactive-ir");
+        let stand_in = fixtures.join("node_modules/@solidjs/vite-plugin");
+        assert_eq!(
+            solid_plugin_read(&stand_in, "@solidjs/vite-plugin")
+                .unwrap()
+                .version,
+            "0.0.0-fixture"
+        );
+        // The name is part of the row: the same bytes under another name are no reading.
+        assert!(solid_plugin_read(&stand_in, "vite-plugin-solid").is_err());
+        let patched = fixtures.join(
+            "vite-dev-client/variants/solid-plugin-patched/node_modules/@solidjs/vite-plugin",
+        );
+        assert!(solid_plugin_read(&patched, "@solidjs/vite-plugin").is_err());
     }
 
     /// ADR 1144 ruling (a): only a data-only new global passes; a prototype path, a standard or host global's member, and any other shape keep the host a writer.
@@ -2043,8 +2147,8 @@ mod tests {
         ] {
             assert!(!define_key_admitted(refused), "{refused}");
         }
-        for (_, keys) in SOLID_PLUGIN_DEFINES {
-            assert!(keys.iter().all(|key| define_key_admitted(key)));
+        for read in SOLID_PLUGIN_READS {
+            assert!(read.defines.iter().all(|key| define_key_admitted(key)));
         }
     }
 

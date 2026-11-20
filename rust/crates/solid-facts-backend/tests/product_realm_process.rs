@@ -294,7 +294,8 @@ const HOST_CLEARED: [&str; 4] = [
     "vite-dev-client/variants/solid-plugin",
     "vite-dev-client/variants/vite-7",
 ];
-const HOST_KEPT: [&str; 5] = [
+const HOST_KEPT: [&str; 6] = [
+    "vite-dev-client/variants/solid-plugin-patched",
     "vite-dev-client/variants/runtime-import",
     "vite-dev-client/variants/plugin",
     "vite-dev-client/variants/define",
@@ -313,18 +314,55 @@ fn a_site_only_the_reviewed_vite_root_makes_ends_in_a_named_silence_and_every_tw
         let (named_rows, ablated_rows) = (rows_in(&named, "App.tsx"), rows_in(&ablated, "App.tsx"));
         let cleared = silences(&log, HOST_SILENCE);
         // `Logged`'s `console.error` meets the package as a writer of the global `console`, whose members Vite 8's client replaces: never cleared.
-        assert!(named_rows.iter().any(|row| row.contains("App.tsx:21:")), "{name}: the console read keeps its row");
-        assert!(named_rows.is_subset(&ablated_rows), "{name}: the premise only clears");
+        assert!(
+            named_rows.iter().any(|row| row.contains("App.tsx:21:")),
+            "{name}: the console read keeps its row"
+        );
+        assert!(
+            named_rows.is_subset(&ablated_rows),
+            "{name}: the premise only clears"
+        );
         if HOST_CLEARED.contains(&name) {
-            assert!(named_rows.len() < ablated_rows.len(), "{name}: the premise clears a site");
+            assert!(
+                named_rows.len() < ablated_rows.len(),
+                "{name}: the premise clears a site"
+            );
+            // Each site the premise clears, by the start of its span, is a silence of the proof log, and no silence names a site that keeps its row.
+            let starts = |findings: &[serde_json::Value]| -> BTreeSet<u64> {
+                findings
+                    .iter()
+                    .filter(|finding| {
+                        finding["id"] == "SC2002"
+                            && finding["primaryLocation"]["path"]
+                                .as_str()
+                                .is_some_and(|path| path.ends_with("/App.tsx"))
+                    })
+                    .filter_map(|finding| finding["primaryLocation"]["startByte"].as_u64())
+                    .collect()
+            };
+            let gone = starts(&ablated)
+                .difference(&starts(&named))
+                .copied()
+                .collect::<BTreeSet<_>>();
+            let named_starts = cleared
+                .iter()
+                .filter(|(path, _, _)| path.ends_with("/App.tsx"))
+                .map(|(_, start, _)| *start)
+                .collect::<BTreeSet<_>>();
             assert_eq!(
-                cleared.len(),
-                ablated_rows.len() - named_rows.len(),
+                named_starts, gone,
                 "{name}: every cleared site is named in the proof log"
             );
         } else {
-            assert_eq!(places(&named), places(&ablated), "{name}: the premise cleared a site");
-            assert!(cleared.is_empty(), "{name}: a silence was named where nothing is cleared");
+            assert_eq!(
+                places(&named),
+                places(&ablated),
+                "{name}: the premise cleared a site"
+            );
+            assert!(
+                cleared.is_empty(),
+                "{name}: a silence was named where nothing is cleared"
+            );
         }
     }
 }

@@ -9,7 +9,8 @@ No `index.html`: the product realm is unknown, and the premise holds all the sam
 
 Variants (`variants/<name>`, each a project of its own on this fixture's `node_modules`):
 - `type-import` (cleared): a `import type … from "vite"` loads nothing.
-- `solid-plugin` (cleared): the config's one plugin is the Solid plugin, the pinned stand-in of `fixtures/reactive-ir/node_modules/@solidjs/vite-plugin` (`0.0.0-fixture`, which adds no `define`).
+- `solid-plugin` (cleared): the config's one plugin is the Solid plugin, the stand-in of `fixtures/reactive-ir/node_modules/@solidjs/vite-plugin` (`0.0.0-fixture`, which adds no `define`), whose package content is a row of `SOLID_PLUGIN_READS`.
+- `solid-plugin-patched` (kept): its own copy of that stand-in, one line longer: no reading matches the package's content.
 - `vite-7` (cleared): its own `node_modules/vite` with Vite 7.3.1's published manifest and client (no console forwarding).
 - `runtime-import` (kept): `setup.ts` loads `vite` at run time.
 - `plugin` (kept): a plugin that is not Solid's; its `define` keys are not read.
