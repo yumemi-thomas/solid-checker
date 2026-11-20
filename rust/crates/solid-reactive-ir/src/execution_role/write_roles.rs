@@ -3905,8 +3905,12 @@ fn handed_to_withheld_call(
             .min_by_key(|(call, _)| call.span.end - call.span.start)
     };
     // ADR 1023: a call a closed literal dispatches to its own method withholds nothing.
+    // ADR 1114 family 3 slice G (round-2 review N4): nor does a standard call whose member a loaded package writes on a built-in's prototype, a clear
+    // package included: the replacement may run what it is handed at another time than the standard member (`then` running its callback at once).
+    // Only the role of what it is handed is withdrawn; the call stays resolved for the rules that read it.
     let withheld = |call: &solid_facts::ast::CallFact| {
-        lookup.standard_call_withheld(file, call.callee)
+        (lookup.standard_call_withheld(file, call.callee)
+            || lookup.package_written_standard_call(file, call.callee))
             && !closed_literal_dispatch(file, call.callee, lookup)
     };
     if let Some((call, _)) = nearest(function.span).filter(|(call, _)| withheld(call)) {

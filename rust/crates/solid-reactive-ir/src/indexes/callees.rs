@@ -504,6 +504,22 @@ impl<'a> SemanticLookup<'a> {
         })
     }
 
+    /// ADR 1114 family 3 slice G (round-2 review N4): whether the standard call at `callee` is of a member a loaded package, whatever it reaches,
+    /// writes by that name on a built-in's prototype (`then` of `Promise.then`).
+    pub(crate) fn package_written_standard_call(&self, file: &FileFacts, callee: Span) -> bool {
+        let Some(reach) = self.package_reach else {
+            return false;
+        };
+        self.resolved_standard_call_name(file, callee)
+            .is_some_and(|name| {
+                let member = name.rsplit_once('.').map_or(name, |(_, member)| member);
+                reach
+                    .prototype_writers
+                    .get(member)
+                    .is_some_and(|roots| !roots.is_empty())
+            })
+    }
+
     /// The standard function the call at `callee` resolves to, before any veto.
     pub(crate) fn resolved_standard_call_name(
         &self,
