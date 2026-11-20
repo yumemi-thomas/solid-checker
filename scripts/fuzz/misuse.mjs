@@ -252,7 +252,13 @@ const DELIVERY_BREAKERS = ["evt-apply-event-replaced", "evt-apply-listener-patch
   "evt-apply-stored-reflect-get", "evt-apply-stored-stringify-global-this", "evt-apply-stored-stringify-alias", "evt-apply-stored-stringify-pattern",
   "evt-apply-stored-values-computed-constructor", "evt-apply-stored-values-computed-global", "evt-apply-stored-values-pattern-global", "evt-apply-stored-values-pattern-constructor",
   "evt-rerun-reflect-markup", "evt-rerun-reflect-script", "evt-rerun-location-alias", "evt-rerun-href-built-key", "evt-rerun-attribute-node", "evt-rerun-href-entity",
-  "evt-rerun-open-pattern"];
+  "evt-rerun-open-pattern",
+  // ADR 1133 round 1, adjacent spellings (found by probing the review's F2 and F5): the attribute node out of the `attributes` collection (by `getNamedItem`, a
+  // name, an index, a `const` alias) or set into it, `parseFromString`, and `open`, `location` or `createElement` out of a `const` alias of the window or the
+  // document. (`execCommand("insertHTML")` is a sink too but has no context: any `execCommand` call makes the handler `function-run-unplaced` while a program
+  // dispatches, so no program is a rediscovery; the fixture `exec-command` and the unit tests hold it.)
+  "evt-rerun-attributes-named-item", "evt-rerun-attributes-by-name", "evt-rerun-attributes-by-index", "evt-rerun-attributes-alias", "evt-rerun-set-named-item",
+  "evt-rerun-window-alias-open", "evt-rerun-window-alias-location", "evt-rerun-document-alias-create-element", "evt-rerun-dom-parser"];
 /** ADR 1133: a body dispatch the census cannot see as written: `dispatchEvent` called through `.call` or `Reflect.apply`; round 1 (F1, F3): through
  * `Reflect.get`, under a key the program builds, and taken out of the element by a pattern. */
 const DISPATCH_HANDED_ON = ["evt-body-dispatch-call", "evt-body-dispatch-reflect", "evt-body-dispatch-reflect-get", "evt-body-dispatch-built-key", "evt-body-dispatch-pattern"];
@@ -2069,12 +2075,16 @@ function inContext(context, stmts, kit) {
     // ADR 1133 round 1 (F2, F5): a markup or script sink handed to `Reflect.apply`; the `javascript:` URL by the location kept in a name, a key the program
     // builds, an attribute node, a character reference and a destructured `open`.
     case "evt-rerun-reflect-markup": case "evt-rerun-reflect-script": case "evt-rerun-location-alias": case "evt-rerun-href-built-key": case "evt-rerun-attribute-node":
-    case "evt-rerun-href-entity": case "evt-rerun-open-pattern": {
+    case "evt-rerun-href-entity": case "evt-rerun-open-pattern":
+    // ADR 1133 round 1, adjacent spellings.
+    case "evt-rerun-attributes-named-item": case "evt-rerun-attributes-by-name": case "evt-rerun-attributes-by-index": case "evt-rerun-attributes-alias":
+    case "evt-rerun-set-named-item": case "evt-rerun-window-alias-open": case "evt-rerun-window-alias-location":
+    case "evt-rerun-document-alias-create-element": case "evt-rerun-dom-parser": {
       const el = kit.name("el"), t = signal(kit.name("t"), 1, "src");
       const made = decl(el, jsxExpr(button(kit.name("b"), stmts, { tag: "div", on: "onScroll", undriven: true })));
       const frame = kit.name("frame"), loc = kit.name("loc");
       const js = '"java" + "script:" + "void (globalThis.event = undefined)"';
-      const form = kit.name("form");
+      const form = kit.name("form"), attrs = kit.name("attrs"), node = kit.name("node"), host = kit.name("host"), win = kit.name("win");
       const formed = [decl(form, domExpr('document.createElement("form")')), expr(domExpr(`document.body.appendChild(${form})`))];
       const sinks = {
         "evt-rerun-js-url": [expr(domExpr(`location.href = ${js}`))],
@@ -2093,6 +2103,19 @@ function inContext(context, stmts, kit) {
         "evt-rerun-href-entity": [expr(domExpr(`document.body.insertAdjacentHTML("beforeend", '<form id="sc-form" action="&#106;avascript:void (globalThis.event = undefined)"></form>')`)),
           expr(domExpr('(document.getElementById("sc-form") as HTMLFormElement).submit()'))],
         "evt-rerun-open-pattern": [expr(domExpr(`const { open: send } = window; send(${js}, "_self")`))],
+        // Adjacent spellings: the form's `action` attribute node out of the `attributes` collection, written in place (by `getNamedItem`, the collection's own
+        // name, the index of the only attribute, a `const` alias of the collection), or built by `createAttribute` and set into it; `submit()` takes the URL.
+        "evt-rerun-attributes-named-item": [...formed, expr(domExpr(`${form}.setAttribute("action", "/x")`)), expr(domExpr(`${form}.attributes.getNamedItem("action")!.value = ${js}`)), expr(domExpr(`${form}.submit()`))],
+        "evt-rerun-attributes-by-name": [...formed, expr(domExpr(`${form}.setAttribute("action", "/x")`)), expr(domExpr(`(${form}.attributes as unknown as Record<string, Attr>).action.value = ${js}`)), expr(domExpr(`${form}.submit()`))],
+        "evt-rerun-attributes-by-index": [...formed, expr(domExpr(`${form}.setAttribute("action", "/x")`)), expr(domExpr(`${form}.attributes[0].value = ${js}`)), expr(domExpr(`${form}.submit()`))],
+        "evt-rerun-attributes-alias": [...formed, expr(domExpr(`${form}.setAttribute("action", "/x")`)), expr(domExpr(`const ${attrs} = ${form}.attributes as unknown as Record<string, Attr>; ${attrs}.action.value = ${js}`)), expr(domExpr(`${form}.submit()`))],
+        "evt-rerun-set-named-item": [...formed, expr(domExpr(`const ${node} = document.createAttribute("action"); ${node}.value = ${js}; ${form}.attributes.setNamedItem(${node})`)), expr(domExpr(`${form}.submit()`))],
+        // `open`, `location` and `createElement` out of a `const` alias of the window or the document, as the written pattern's.
+        "evt-rerun-window-alias-open": [expr(domExpr(`const ${win} = window; const { open: send } = ${win}; send(${js}, "_self")`))],
+        "evt-rerun-window-alias-location": [expr(domExpr(`const ${win} = window as Window; const { location: place } = ${win}; place.assign(${js})`))],
+        // `parseFromString` parses markup into a document whose first node the program moves into the live one: the image's `onerror` runs there.
+        "evt-rerun-dom-parser": [expr(domExpr(`const ${win} = new DOMParser().parseFromString("<img src=x on" + "error=\\"globalThis.event = undefined\\">", "text/html"); document.body.append(${win}.body.firstChild!)`))],
+        "evt-rerun-document-alias-create-element": [expr(domExpr(`const ${win} = document; const { createElement: make } = ${win}; const script = make.call(${win}, "script") as HTMLScriptElement; script.text = "globalThis.event = undefined"; document.head.append(script)`))],
       };
       const sink = sinks[context];
       const fire = expr(domExpr(`(${el} as HTMLElement).dispatchEvent(new Event("scroll"))`));

@@ -37097,5 +37097,30 @@
   "found": "the Fable review of ADR 1133 (coord-land/review-1133.md, probes in sc-scratch review-1133/cases) F6 (k3, k3b, k3c, k3d)",
   "fixed": "ADR 1133 round 1: the test is gone; the rule is any use of the object of a member under a plain data key",
   "outside": "the review found no misbehaving program and none exists: what a member under a plain data key holds is something the program put there (every platform function, every reader and Solid's stored handler has a standard or private name), so there is no false clean for the grids to rediscover. The rule is held by fixtures/reactive-ir/event-delivery-spellings/variants/plain-data-key-uses (certified) and the textbook program id-todo-for (`draft[index()].done = …`)"
+ },
+ {
+  "finding": "ADR 1133's round-1 build (3165f15a3) certified a read in a handler run with no event after code by routes its sinks and aliases missed: an attribute node out of the `attributes` collection (`getNamedItem`, a name, an index, a `const` alias) written in place, or one set into it (`setNamedItem`), markup parsed by `DOMParser.parseFromString` and moved into the page, `open` and `location` out of a `const` alias of the window, `createElement` out of a `const` alias of the document",
+  "found": "the author's probes of the neighbours of F2 and F5 (sc-scratch mac21b/p1133 cases2 v1-v9 and cases3 e1, e2), not the review",
+  "fixed": "ADR 1133 round 1, adjacent spellings: `getNamedItem(NS)`, `item`, `setNamedItem(NS)` and a member of the `attributes` collection under a URL or handler name, an index or an unproven key are sinks; `parseFromString` and `parseHTMLUnsafe` are markup sinks; `const` aliases (four hops) of a window, a document, a location and the collection meet the pattern and call tests",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-evt-rerun-attributes-named-item-signal-direct-none",
+   "mx-strict-read-untracked-evt-rerun-attributes-by-name-signal-direct-none",
+   "mx-strict-read-untracked-evt-rerun-attributes-by-index-signal-direct-none",
+   "mx-strict-read-untracked-evt-rerun-attributes-alias-signal-direct-none",
+   "mx-strict-read-untracked-evt-rerun-set-named-item-signal-direct-none",
+   "mx-strict-read-untracked-evt-rerun-dom-parser-signal-direct-none",
+   "mx-strict-read-untracked-evt-rerun-document-alias-create-element-signal-direct-none",
+   "mx-strict-read-untracked-evt-rerun-window-alias-open-memo-hook-do",
+   "mx-strict-read-untracked-evt-rerun-window-alias-location-memo-hook-do"
+  ],
+  "rediscovered": "focus on the nine contexts' mx-recall programs (STRICT_READ_UNTRACKED and REACTIVE_WRITE_IN_OWNED_SCOPE 20,322): the round-1 build 12,056 false cleans and 72 false positives; FIXED here (0 and 0)"
+ },
+ {
+  "finding": "`document.execCommand(\"insertHTML\", false, markup)` parses markup into the editable element (an event attribute in it runs) and `\"createLink\"` makes an anchor of its URL: ADR 1133's round-1 build read neither (an adjacent spelling of F2 and F5)",
+  "found": "the author's probe v6 (sc-scratch mac21b/p1133 cases2)",
+  "fixed": "ADR 1133 round 1, adjacent spellings: `execCommand` is a markup sink unless its command is fixed and not `insertHTML` or its markup is inert, and a navigation sink for `createLink` unless its URL is proven",
+  "outside": "a program that dispatches an event to a handler and reaches an `execCommand` call is already withheld (`function-run-unplaced`: the dispatch census reads `execCommand` as a delivering call, `dny-input-exec`), so no grid program is certified by the round-1 build; a program with no dispatch never runs the handler, so Chrome cannot show the false clean (the context `evt-rerun-exec-command` was recall-gap in 2,096 of 2,258 programs on both builds and was removed). The sink is held by `fixtures/reactive-ir/event-delivery-spellings/variants/exec-command` (the round-1 build certified it, the hardened build does not) and the unit test `an_attribute_node_by_the_collection_or_a_global_behind_an_alias_is_a_code_sink`"
  }
 ]
