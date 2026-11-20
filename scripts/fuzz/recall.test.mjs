@@ -337,6 +337,21 @@ describe("the merge/omit view spreads (recall only)", () => {
   });
 });
 
+// ADR 1129 round 2 (N1): a view literal's listener under a later attribute of the same name is never attached.
+describe("the view spread under a later listener (legal recall only)", () => {
+  it("dny-legal-view-later spreads merge({ onClick: <site> }, p0) onto a button that writes its own onClick after the spread", () => {
+    const cell = legalCells({ recall: true }).find((c) => c.code === "STRICT_READ_UNTRACKED" && c.context === "dny-legal-view-later");
+    expect(cell).toBeTruthy();
+    const shape = recallLegalShapes(cell.code, cell.context).find((s) => s.variant === "store-effect-called");
+    const app = generateLegal({ seed: 1 }, cell, shape, 0).built.files["App.tsx"];
+    expect(app).toMatch(/const ViewKid = \(p0: \{ onClick\?: \(\) => void \}\) => \{/);
+    expect(app).toMatch(/const m\d+ = merge\(\{ onClick: \(\) => \{/);
+    expect(app).toMatch(/<button data-act="b\d+" \{\.\.\.m\d+\} onClick=\{\(\) => \{\}\}>go<\/button>/);
+    expect(app).toContain("<ViewKid />");
+    expect(app).toMatch(/import \{[^}]*merge[^}]*\} from "solid-js"/);
+  });
+});
+
 describe("the callback props (recall only)", () => {
   const isCbp = (cell) => cell.context.startsWith("cbp-");
   it("are recall cells of the misuse and legal grids, never base cells", () => {
