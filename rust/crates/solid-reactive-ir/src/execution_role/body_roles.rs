@@ -602,6 +602,20 @@ pub(crate) fn try_head_await_before(
     try_head_await_with(file, span, lookup, true)
 }
 
+/// ADR 1164: whether `awaited` heads a `try` whose operand only the `Promise.resolve` reading admits (not the declaration reading
+/// [`follows_declared_try_head_await`] keeps): a proof the read roles' `Unreported` arms do not take from a climb.
+pub(crate) fn promise_resolve_try_head(
+    file: &solid_facts::FileFacts,
+    awaited: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast.try_head_awaits.iter().any(|head| {
+        head.awaited == awaited
+            && !operand_cannot_throw(file, head, lookup, false)
+            && operand_cannot_throw(file, head, lookup, true)
+    })
+}
+
 fn try_head_await_with(
     file: &solid_facts::FileFacts,
     span: Span,
@@ -1559,7 +1573,13 @@ fn layered_window_after_awaits(
     } else {
         None
     };
-    match (climb.suspended.map(|suspension| suspension.every), landing) {
+    let every = climb.suspended.map(|suspension| {
+        suspension.every
+            && !suspension
+                .after
+                .is_some_and(|awaited| promise_resolve_try_head(file, awaited, lookup))
+    });
+    match (every, landing) {
         (Some(true), _) | (_, Some(true)) if !climb.among_others && !climb.withheld => role_arm!(
             "body_roles.layered_window_after_awaits.unreported",
             ExecutionRole::Unreported
