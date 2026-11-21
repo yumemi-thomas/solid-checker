@@ -5598,10 +5598,10 @@ impl LocalAccessContext<'_, '_> {
                 || keeps(inner.span)
                 || !(crate::execution_role::hook_result_root(file, inner.callee, self.lookup)
                     .is_some()
-                    || (self
+                    || (!self
                         .lookup
                         .callee_symbol(file, inner.callee)
-                        .is_none_or(|symbol| !self.accessors.contains_key(symbol))
+                        .is_some_and(|symbol| self.accessors.contains_key(symbol))
                         && self.value_reaches_async_source(file, inner.callee).may()))
         })
     }
