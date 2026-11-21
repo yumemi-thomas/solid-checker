@@ -1,12 +1,12 @@
-import { createOptimisticStore, createStore, deep, snapshot } from "solid-js";
+import { createMemo, createOptimisticStore, createStore, deep, snapshot } from "solid-js";
 import * as S from "solid-js";
 
 // ADR 1178: a store handed whole to a reviewed standard function or primitive, with the result discarded or inert. The read is
-// the whole-store row's (ADRs 0620, 0621): in a click handler no window warns, so each is clean, census rows included.
-export function HandlerForms() {
+// the whole-store row's (ADRs 0620, 0621), tracked in a memo: clean, census rows included.
+function TrackedForms() {
   const [row] = createStore({ a: { v: 1 } });
   const [list] = createStore([1, 2]);
-  const click = () => {
+  const total = createMemo(() => {
     Object.values(row);
     Object.entries(row);
     Array.from(list);
@@ -19,13 +19,13 @@ export function HandlerForms() {
     for (const item of list) {
       void item;
     }
-    console.log(`${row}`.length);
-  };
-  return <button onClick={click} />;
+    return `${row}`.length;
+  });
+  return <p>{total()}</p>;
 }
 
 // The same forms in the body: each warns STRICT_READ_UNTRACKED on rc.21 where its row says so (snapshot and hasOwn read none).
-export function BodyForms() {
+function BodyForms() {
   const [row] = createStore({ a: { v: 1 } });
   const [list] = createStore([1, 2]);
   Object.values(row);
@@ -37,42 +37,65 @@ export function BodyForms() {
 }
 
 // The result held and read: an element may be a nested store, whose Get has no row. Uncertifiable, never clean.
-export function ResultUsed() {
+function ResultUsed() {
   const [row] = createStore({ a: { v: 1 } });
   const [list] = createStore([{ v: 1 }]);
-  const click = () => {
-    console.log(Object.values(row)[0].v);
-    const items = [...list];
-    console.log(items[0].v);
-    for (const item of list) console.log(item.v);
-    console.log(snapshot(row).a.v);
-  };
-  return <button onClick={click} />;
+  return (
+    <button
+      onClick={() => {
+        console.log(Object.values(row)[0].v);
+        const items = [...list];
+        console.log(items[0].v);
+        for (const item of list) console.log(item.v);
+        console.log(snapshot(row).a.v);
+      }}
+    />
+  );
 }
 
 // Not the reviewed forms: a shadowed `snapshot`, a pattern loop binding, a call spread, a `map` callback on the result.
-export function NotTheForms() {
+function NotTheForms() {
   const [row] = createStore({ a: { v: 1 } });
   const [list] = createStore([{ v: 1 }]);
   const local = <T,>(value: T) => value;
-  const click = () => {
-    local(row);
-    for (const { v } of list) console.log(v);
-    console.log(...list);
-    Object.values(row).map((x) => x.v);
-  };
-  return <button onClick={click} />;
+  return (
+    <button
+      onClick={() => {
+        local(row);
+        for (const { v } of list) console.log(v);
+        console.log(...list);
+        Object.values(row).map((x) => x.v);
+      }}
+    />
+  );
 }
 
 // A store that may not have settled, or whose backing is not its literal: `snapshot` and `hasOwn` stay uncertifiable.
-export function Unsettled() {
+const initial: { a: number } = { a: 1 };
+
+function Unsettled() {
   const [derived] = createStore((draft: { a: number }) => void draft, { a: 1 });
   const [optimistic] = createOptimisticStore({ a: 1 });
-  const [given] = createStore(JSON.parse('{ "a": 1 }') as { a: number });
-  const click = () => {
-    snapshot(derived);
-    snapshot(optimistic);
-    void Object.hasOwn(given, "a");
-  };
-  return <button onClick={click} />;
+  const [given] = createStore(initial);
+  return (
+    <button
+      onClick={() => {
+        snapshot(derived);
+        snapshot(optimistic);
+        void Object.hasOwn(given, "a");
+      }}
+    />
+  );
+}
+
+export function Page() {
+  return (
+    <>
+      <TrackedForms />
+      <BodyForms />
+      <ResultUsed />
+      <NotTheForms />
+      <Unsettled />
+    </>
+  );
 }
