@@ -30,3 +30,29 @@ export const shardLine = (summary) => `shard ${summary.index}/${summary.count}: 
 
 /** The key two reports must share for a gate to compare them: the shard, or "whole". */
 export const shardKey = (report) => (report.gridShard ? `${report.gridShard.index}/${report.gridShard.count}` : "whole");
+
+/**
+ * A smoke shard (`focus.mjs --smoke-shard i/N`, ADR 1156): `{ index, count }` from `i/N`, null when there is none. A pull request's `smoke` leg runs as N jobs,
+ * each judging the programs of the cover whose `shardOf` is its index, so the N jobs' programs are the cover's, split by program: the same split as
+ * `--grid-shard`, but of the covering sample (cover.mjs) and the ledger of proved verdicts within it, not of a whole grid.
+ */
+export function smokeShardOf(text) {
+  if (text === undefined || text === null) return null;
+  const match = /^(\d+)\/(\d+)$/.exec(String(text));
+  const index = match ? Number(match[1]) : NaN;
+  const count = match ? Number(match[2]) : NaN;
+  if (!match || !(count >= 1) || !(index < count)) throw new Error(`--smoke-shard takes i/N with 0 <= i < N, not ${text}`);
+  return { index, count };
+}
+
+/** Whether a program id is in the smoke shard `shard` (`smokeShardOf`); every id is in a null shard (no shard asked). */
+export const inShard = (shard, id) => !shard || shardOf(id, shard.count) === shard.index;
+
+/**
+ * One grid's proved-verdict ledger (proved.mjs `ledgerOf`: `ids` unkeyed, `entries` key -> id) restricted to the programs of a smoke shard: the shard's
+ * cover holds those programs only, so a ledger program of another shard has no row here and is not lost here: it is judged where its row is.
+ */
+export function ledgerPart(file, shard) {
+  if (!shard) return file;
+  return { ...file, ids: new Set([...file.ids].filter((id) => inShard(shard, id))), entries: new Map([...file.entries].filter(([, id]) => inShard(shard, id))) };
+}

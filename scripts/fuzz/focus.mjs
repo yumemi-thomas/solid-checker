@@ -33,6 +33,9 @@
 // check names its program, which the daemon's log lines carry.
 // `--smoke` (`make fuzz-smoke`): every code, each grid restricted to its smoke manifest (smoke.mjs, scripts/fuzz/smoke/<grid>.json),
 // plus `--sample` of its other programs picked anew each run (`--sample-seed` repeats a run's pick; the summary prints it).
+// `--smoke-shard i/N` (with `--smoke`, `--sample 0`, and grids the cover samples): this job judges the cover's programs whose id falls in part i of N (shard.mjs
+// `shardOf`, the split `--shard` makes of a whole grid), and the proved-ledger programs among them; the N jobs' programs are the cover's, so a leg that outgrew its
+// job's time runs as N jobs (fuzz-pr.yml `smoke` and `smoke-2`, ADR 1156). Every shard prints the whole cover's hash.
 // `--sample-big <fraction>` (sample.mjs): while iterating, the two codes that are ~40% of a full run (STORE_WRITE_OUTSIDE_SETTER,
 // REACTIVE_WRITE_IN_OWNED_SCOPE; `--sample-codes` names others) keep that fraction of every (code, context, layer, variant) stratum,
 // at least `--sample-big-min` (1) programs each, picked by `--sample-big-seed` (1); every other code stays whole, each grid records
@@ -72,6 +75,7 @@ import { cpus, platform, totalmem } from "node:os";
 import { cacheState, machineWindow, perfLine, samplerUnavailable, startSampler, unitPerf } from "./perf.mjs";
 import { compareLines, comparePerf, readRun } from "./perf-compare.mjs";
 import { compareRuns, reportLines } from "./boundary-twin.mjs";
+import { ledgerPart, smokeShardOf } from "./shard.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 export { GRIDS, SMOKE_LEGS } from "./focus-grids.mjs";
@@ -229,7 +233,7 @@ export function runGridProcess(script, args, { logPath, timeoutMs, heapMb, runti
     return {
       version: 1, out,
       codes: options.codes, seed: options.seed, ...(options.smoke ? { sampleSeed: options.sampleSeed } : {}),
-      selection: { grids: options.grids, ...(!options.recallFull && options.grids.split(",").some((grid) => grid.endsWith("-recall")) ? { recall: "lean" } : {}), splitCodes: Boolean(options.splitCodes), smoke: Boolean(options.smoke), ...(options.smoke ? { sample: options.sample, sampleSeed: options.sampleSeed } : {}), sampleBig: options.sampleBig ?? null, ...(options.sampleBig ? { sampleCodes: options.sampleCodes ?? null, sampleBigSeed: options.sampleBigSeed ?? "1", sampleBigMin: options.sampleBigMin ?? "1" } : {}), oracle: options.runtimeDiff === "0" ? null : { perStratum: options.runtimeDiff, axes: options.oracleAxes }, extra: options.extra },
+      selection: { grids: options.grids, ...(!options.recallFull && options.grids.split(",").some((grid) => grid.endsWith("-recall")) ? { recall: "lean" } : {}), splitCodes: Boolean(options.splitCodes), smoke: Boolean(options.smoke), ...(options.smokeShard ? { smokeShard: options.smokeShard } : {}), ...(options.smoke ? { sample: options.sample, sampleSeed: options.sampleSeed } : {}), sampleBig: options.sampleBig ?? null, ...(options.sampleBig ? { sampleCodes: options.sampleCodes ?? null, sampleBigSeed: options.sampleBigSeed ?? "1", sampleBigMin: options.sampleBigMin ?? "1" } : {}), oracle: options.runtimeDiff === "0" ? null : { perStratum: options.runtimeDiff, axes: options.oracleAxes }, extra: options.extra },
       mode: { warmChecker: Boolean(options.warmChecker), roleLog: Boolean(options.roleLog) },
       budget: { ms: Number(options.budgetMs ?? 1000), mb: Number(options.budgetMb ?? 500) },
       host: { cpus: cpus().length, memGiB: Math.round(totalmem() / 2 ** 30), platform: platform(), checkerBin: options.checkerBin ?? null },
@@ -276,7 +280,7 @@ export const hostArgs = (options = {}) => [...hostLimits(options), "--fast-host"
       const key = own[index].replace(/^--/, "").replace(/-([a-z])/g, (_, c) => c.toUpperCase());
       if (key === "smoke") { options.smoke = true; options.codes ??= "all"; index -= 1; continue; }
       if (key === "allCores" || key === "splitCodes" || key === "pruneCases" || key === "roleLog" || key === "proofLog" || key === "recallFull" || key === "recallLean" || key === "warmChecker" || key === "noWarmChecker") { options[key] = true; index -= 1; continue; }
-      if (!["cover", "coverSeed", "coverGrids", "smokeLeg", "oracleCap", "codes", "grids", "seed", "out", "runtimeDiff", "oracleAxes", "sample", "sampleSeed", "checkerBin", "typefacts", "gridTimeout", "heapMb", "rolesAgainst", "scratch", "sampleBig", "sampleCodes", "sampleBigSeed", "sampleBigMin", "budgetMs", "budgetMb", "idleStretchS", "perfAgainst", "perfThreshold", "shard", "boundary", "entry"].includes(key) || own[index + 1] === undefined) throw new Error(`focus.mjs: unknown or empty option ${own[index]}`);
+      if (!["cover", "coverSeed", "coverGrids", "smokeLeg", "oracleCap", "codes", "grids", "seed", "out", "runtimeDiff", "oracleAxes", "sample", "sampleSeed", "checkerBin", "typefacts", "gridTimeout", "heapMb", "rolesAgainst", "scratch", "sampleBig", "sampleCodes", "sampleBigSeed", "sampleBigMin", "budgetMs", "budgetMb", "idleStretchS", "perfAgainst", "perfThreshold", "shard", "smokeShard", "boundary", "entry"].includes(key) || own[index + 1] === undefined) throw new Error(`focus.mjs: unknown or empty option ${own[index]}`);
       options[key] = own[index + 1];
     }
     if (!options.codes) throw new Error("focus.mjs: --codes A,B (the codes the change touches)");
@@ -333,6 +337,16 @@ export const hostArgs = (options = {}) => [...hostLimits(options), "--fast-host"
     if (options.cover && !["all", "per-code"].includes(options.cover)) throw new Error("focus.mjs: --cover takes all or per-code");
     if (options.cover && options.codes !== "all") throw new Error("focus.mjs: --cover samples every code: it takes --codes all");
     for (const grid of options.grids.split(",")) if (!GRIDS[grid]) throw new Error(`focus.mjs: no grid ${grid} (${Object.keys(GRIDS).join(", ")})`);
+    // `--smoke-shard i/N`: this job's part of the smoke's cover (shard.mjs). The programs are the cover's, so there is no sample of other programs (`--sample`, picked by a
+    // hash of the id in each grid process, is not split by shard), and every grid the job runs is one the cover samples (the census runs whole beside a per-code cover:
+    // every shard would run all of it).
+    if (options.smokeShard !== undefined) {
+      smokeShardOf(options.smokeShard);
+      if (!options.smoke) throw new Error("focus.mjs: --smoke-shard needs --smoke");
+      if (Number(options.sample) !== 0) throw new Error("focus.mjs: --smoke-shard needs --sample 0 (a sample of other programs is picked in each grid process, not split by shard)");
+      const whole = options.grids.split(",").filter((grid) => wholeGrid(grid, options.cover));
+      if (whole.length) throw new Error(`focus.mjs: --smoke-shard cannot split ${whole.join(", ")}: this cover runs it whole, in every shard`);
+    }
     return options;
   }
 
@@ -383,6 +397,8 @@ export const hostArgs = (options = {}) => [...hostLimits(options), "--fast-host"
     const sampled = options.gridSampleAll !== undefined ? ["--grid-sample", options.gridSampleAll, "--grid-sample-seed", options.gridSampleSeed, "--grid-sample-min", "1"] : options.sampleBig === undefined ? [] : ["--grid-sample", options.sampleBig, "--grid-sample-codes", sampleCodes.join(","), "--grid-sample-seed", options.sampleBigSeed ?? "1", "--grid-sample-min", options.sampleBigMin ?? "1"];
     // `--shard i/N`: every grid keeps its part i of N (shard.mjs); the N parts of a run are the whole run.
     const shardArgs = options.shard === undefined ? [] : ["--grid-shard", options.shard];
+    // `--smoke-shard i/N`: the cover's manifests, and the proved ledger within it, hold this part's programs only (cover.mjs writeCover).
+    const smokeShard = smokeShardOf(options.smokeShard);
     const budgetArgs = [...(options.budgetMs ? ["--budget-ms", options.budgetMs] : []), ...(options.budgetMb ? ["--budget-mb", options.budgetMb] : [])];
     // The self-profile: the machine sampler (null off Linux or with SOLID_CHECKER_FUZZ_PERF=0) and each unit's record.
     const perfOn = process.env.SOLID_CHECKER_FUZZ_PERF !== "0";
@@ -399,14 +415,14 @@ export const hostArgs = (options = {}) => [...hostLimits(options), "--fast-host"
     const judgedByCode = new Map();
     let runTotal = 0;
     const against = options.rolesAgainst ? { ...JSON.parse(readFileSync(resolve(options.rolesAgainst), "utf8")), path: resolve(options.rolesAgainst) } : null;
-    console.log(`fuzz-${options.smoke ? "smoke" : "focus"}: codes ${options.codes}; output ${out}${options.smoke ? `; sample ${options.sample} of the other programs, seed ${options.sampleSeed} (--sample-seed ${options.sampleSeed} repeats it)` : ""}${sampled.length ? `; SAMPLED: ${options.sampleBig} of every stratum of ${sampleCodes.join(", ")} (seed ${options.sampleBigSeed ?? "1"}, at least ${options.sampleBigMin ?? "1"} each), not a full run` : ""}${options.shard === undefined ? "" : `; SHARD ${options.shard} of every grid, one part of the run`}`);
+    console.log(`fuzz-${options.smoke ? "smoke" : "focus"}: codes ${options.codes}; output ${out}${options.smoke ? `; sample ${options.sample} of the other programs, seed ${options.sampleSeed} (--sample-seed ${options.sampleSeed} repeats it)` : ""}${sampled.length ? `; SAMPLED: ${options.sampleBig} of every stratum of ${sampleCodes.join(", ")} (seed ${options.sampleBigSeed ?? "1"}, at least ${options.sampleBigMin ?? "1"} each), not a full run` : ""}${options.shard === undefined ? "" : `; SHARD ${options.shard} of every grid, one part of the run`}${smokeShard ? `; SMOKE SHARD ${options.smokeShard}: one part of the cover, the other parts run as other jobs` : ""}`);
     // `--codes all`: every code (the full grids); `--runtime-diff 0`: no oracle sample.
     const codes = options.codes === "all" ? undefined : options.codes.split(",");
     // What the run will judge, before it starts: each grid's programs for these codes (the ids, no program generated), and the sample's share.
     if (!options.smoke) console.log(plannedLines({ grids: options.grids.split(","), codes, full: Boolean(options.recallFull), sample: options.gridSampleAll, sampleBig: options.sampleBig }).join("\n"));
     // One grid process: its output streamed to `<dir>.log`, a deadline, then its rows judged.
     const provedLedger = readLedgerFiles(), provedChanges = readChanges();
-    const covered = options.cover ? writeSample({ perCode: options.cover === "per-code", seed: Number(options.coverSeed ?? FIXED_SEED), grids: (options.coverGrids ?? options.grids).split(",").filter((grid) => !wholeGrid(grid, options.cover)), runSeed: options.seed, dir: join(out, "cover") }) : null;
+    const covered = options.cover ? writeSample({ perCode: options.cover === "per-code", seed: Number(options.coverSeed ?? FIXED_SEED), grids: (options.coverGrids ?? options.grids).split(",").filter((grid) => !wholeGrid(grid, options.cover)), runSeed: options.seed, dir: join(out, "cover"), shard: smokeShard }) : null;
     const runUnit = (grid, script, shape, unit, manifest) => {
       // Room for the grid before it starts: a run that fills the disk midway fails late, with ENOSPC rows (ADR 0519's preflight runs at
       // sync only; a run of many codes writes a directory per program).
@@ -482,7 +498,8 @@ export const hostArgs = (options = {}) => [...hostLimits(options), "--fast-host"
       // A proved verdict (agree on a misuse grid, clean on a legal one) never goes unnamed (ADR 1012): the smoke's cover holds every program of the
       // ledger, so one that is now another outcome, or has no row, fails unless a row of proved/changes.json names it.
       if (options.smoke && options.cover && existsSync(join(unit.dir, "programs.jsonl"))) {
-        const file = provedLedger.get(grid);
+        // A shard's cover holds its part of the ledger only; the rest has no row here and is judged in the shard that has it.
+        const file = provedLedger.has(grid) ? ledgerPart(provedLedger.get(grid), smokeShard) : undefined;
         const held = file ? file.ids.size + file.entries.size : 0;
         if (held) {
           const moves = provedMoves({ grid, ids: file.ids, entries: file.entries, rows: readRows(unit.dir), changes: provedChanges, expectAll: options.cover === "all" });
