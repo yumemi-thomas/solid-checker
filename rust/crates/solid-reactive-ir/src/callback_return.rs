@@ -401,22 +401,37 @@ pub(crate) fn in_exact_provider_children(
     owned
 }
 
-/// ADR 1155 r1 (the review's N2): the child expressions of `element` the compiler wraps as a component getter (`get children() { … }`, facts
-/// `tracked_regions`, `ComponentGetter`), the outermost in each child: only those does the provider's `children()` memo evaluate. A child the compiler evaluates
-/// at the tag (no call in it: `{(new Make(), 1)}`) runs where the element is created, under that code's owner.
+/// ADR 1155 r1 (the review's N2): the children of `element` the compiler evaluates in its `children` getter, which the provider's `children()` memo calls: an
+/// expression child the compiler traces as a caller-context component child (`ComponentChild`, disposition `Deferred`, trigger `Caller`: a dynamic child, or any
+/// child of several), and an element child (getter-hosted). A lone static child (no call in it: `{(new Make(), 1)}`, traced `EagerOnce`) is evaluated at the tag,
+/// under the owner of the code that creates the element; any child the trace does not name is left out (it keeps its rows).
 fn provider_getter_regions<'f>(
     file: &'f FileFacts,
     element: &'f solid_facts::ast::JsxElementFact,
 ) -> impl Iterator<Item = Span> + 'f {
-    let getters = move || {
-        file.compiler
-            .tracked_regions
-            .iter()
-            .filter(|region| region.reason == solid_facts::compiler::RegionReason::ComponentGetter)
-            .map(|region| region.span)
-            .filter(|span| element.children.iter().any(|child| child.contains(*span)))
+    use solid_facts::compiler::{
+        CompilerExecutionDisposition, CompilerExecutionTrigger, CompilerOperationKind,
     };
-    getters().filter(move |span| !getters().any(|outer| outer != *span && outer.contains(*span)))
+    element.children.iter().filter_map(move |child| {
+        let deferred = file
+            .compiler
+            .semantic_model
+            .operations
+            .iter()
+            .find(|operation| {
+                operation.kind == CompilerOperationKind::ComponentChild
+                    && operation.execution.disposition == CompilerExecutionDisposition::Deferred
+                    && operation.execution.trigger == CompilerExecutionTrigger::Caller
+                    && child.contains(operation.span)
+            });
+        deferred.map(|operation| operation.span).or_else(|| {
+            file.ast
+                .jsx_elements
+                .iter()
+                .any(|inner| inner.span == *child)
+                .then_some(*child)
+        })
+    })
 }
 
 /// ADR 1155 (b): the child getters of the exact context providers of `file` ([`provider_getter_regions`]), owner-providing regions of the owner analysis

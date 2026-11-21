@@ -12,6 +12,7 @@ the leaf walk files no creation or cleanup there, and the effect-phase walk stop
   written `let` tag: no exact provider), `NewApp` (the review of 1155, N2: a child with no call, `{(new Make(), 1)}`, is evaluated at the tag by the compiler,
   so the cleanup its constructor runs is the timer's).
 
-Only the child expressions the compiler wraps as component getters (facts `tracked_regions`, `ComponentGetter`) are the memo's; a bare child runs at the tag.
+Only the children the compiler evaluates in the `children` getter (an expression child traced as a caller-context `ComponentChild`, or an element child) are the
+memo's; a lone static child (traced `EagerOnce`) runs at the tag.
 
 Stub: `context-provider-children-owned`'s, plus `children` (simplified from the published rc.21 typings).
