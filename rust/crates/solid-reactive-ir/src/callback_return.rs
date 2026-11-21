@@ -366,8 +366,8 @@ pub(crate) const PROVIDER_CHILDREN_MEMO_OWNER: &str = "context-provider-children
 
 /// ADR 1155 (b), the Opus review of ADR 1147 (N1): whether code at `span` is written in a child of an exact context provider ([`exact_context_provider`]) with no
 /// function between. rc.21 evaluates a provider's children only inside its `children()` memo, whose owner is
-/// that memo (created under the provider's root), so such code creates and registers cleanups under an owner wherever the provider element is created: an owner
-/// question there is answered by the memo, never by the code around the provider (a tracked effect, an effect's apply, a timer). The tag's own creation is not in its
+/// that memo (created under the provider's root), so such code creates and registers cleanups under an owner wherever the provider element is created: the memo
+/// is the owner there, never the code around the provider (a tracked effect, an effect's apply, a timer). The tag's own creation is not in its
 /// children and keeps its row; a flush or an after-await read (stack questions) must not ask this.
 pub(crate) fn in_exact_provider_children(
     lookup: &SemanticLookup<'_>,
