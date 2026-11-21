@@ -262,7 +262,9 @@ fn forwarded_leaf_scope(
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> Option<WriteRegionAdjustment> {
-    if !lookup.dialect.leaf_scopes_allow_writes() || crate::site_accounting::ablated_id(FORWARDED_LEAF_SCOPE) {
+    if !lookup.dialect.leaf_scopes_allow_writes()
+        || crate::site_accounting::ablated_id(FORWARDED_LEAF_SCOPE)
+    {
         return None;
     }
     let forwarded = super::callee_roles::forwarded_compute_slot(file, span, lookup)?;
@@ -285,7 +287,10 @@ fn forwarded_leaf_scope(
         return None;
     }
     // The proof log names the arm at the write it decides (monotone.mjs M2b).
-    let _ = role_arm!("write_roles.forwarded-leaf-scope", ExecutionRole::Unreported);
+    let _ = role_arm!(
+        "write_roles.forwarded-leaf-scope",
+        ExecutionRole::Unreported
+    );
     Some(WriteRegionAdjustment::LeafScope)
 }
 
