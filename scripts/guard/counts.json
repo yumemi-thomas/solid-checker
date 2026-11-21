@@ -5874,6 +5874,15 @@
     "proved": "reactive-ir/stored-throw-observation",
     "open": "engine/eslint-reactivity-v2"
    }
+  },
+  {
+   "fixture": "reactive-ir/context-provided-store-tuple",
+   "key": "SC9012 handed-member-dispatch",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 1155",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 handed-member-read"
   }
  ],
  "renames": []
