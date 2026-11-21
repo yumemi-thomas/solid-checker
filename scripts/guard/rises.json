@@ -8144,6 +8144,14 @@
    "to": 18,
    "adr": "ADR 1160",
    "fact": "the SC2002 row at pkg-pointer.tsx stays uncertifiable under another blocker: with `ref={name}` placed at its reference (the named function's entry), its blocker moved from package-may-call-action to package-finding-at-entry (the relabel is in counts.json drops)"
+  },
+  {
+   "fixture": "reactive-ir/context-provided-store-tuple",
+   "key": "SC9012 handed-member-read",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 1155",
+   "fact": "the SC9012 row at `add` in HandedReader (`hand(() => add(\"x\"))`, ADR 1147's F1 shape) stays uncertifiable and changes blocker from handed-member-dispatch to handed-member-read, the relabel ADR 1155 states for this fixture (counts.json drops)"
   }
  ]
 }

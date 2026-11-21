@@ -5808,6 +5808,15 @@
    "adr": "ADR 1160",
    "kind": "relabel",
    "relabeledTo": "SC2002 package-finding-at-entry"
+  },
+  {
+   "fixture": "reactive-ir/context-provided-store-tuple",
+   "key": "SC9012 handed-member-dispatch",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 1155",
+   "kind": "relabel",
+   "relabeledTo": "SC9012 handed-member-read"
   }
  ],
  "renames": []
