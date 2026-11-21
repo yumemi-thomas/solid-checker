@@ -2290,3 +2290,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/named-ref-entry/node_modules/**
 !fixtures/reactive-ir/component-prop-call-owner/node_modules/
 !fixtures/reactive-ir/component-prop-call-owner/node_modules/**
+!fixtures/reactive-ir/param-default-leaf/node_modules/
+!fixtures/reactive-ir/param-default-leaf/node_modules/**

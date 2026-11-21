@@ -1,0 +1,209 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/param-default-leaf/App.tsx",
+      "start": 294,
+      "end": 299,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/param-default-leaf/App.tsx",
+      "start": 331,
+      "end": 336,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/param-default-leaf/App.tsx",
+      "start": 416,
+      "end": 423,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/param-default-leaf/App.tsx",
+      "start": 509,
+      "end": 515,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/param-default-leaf/App.tsx",
+      "start": 627,
+      "end": 633,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/param-default-leaf/App.tsx",
+      "start": 748,
+      "end": 754,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "leaf-callback-opaque",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/param-default-leaf/App.tsx",
+      "start": 922,
+      "end": 928,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "leaf-callback-opaque",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/param-default-leaf/App.tsx",
+      "start": 1182,
+      "end": 1188,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/param-default-leaf/App.tsx",
+      "start": 1430,
+      "end": 1435,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-owner-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/param-default-leaf/App.tsx",
+      "start": 1533,
+      "end": 1540,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/param-default-leaf/App.tsx",
+      "start": 1957,
+      "end": 1962,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/param-default-leaf/App.tsx",
+      "start": 1957,
+      "end": 1962,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "leaf-callback-opaque",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/param-default-leaf/App.tsx",
+      "start": 2071,
+      "end": 2081,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "leaf-callback-opaque",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/param-default-leaf/App.tsx",
+      "start": 2264,
+      "end": 2270,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "parameter-initializer-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/param-default-leaf/App.tsx",
+      "start": 2385,
+      "end": 2395,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-as-parameter-default",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/param-default-leaf/App.tsx",
+      "start": 2385,
+      "end": 2404,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/param-default-leaf/App.tsx",
+      "start": 2442,
+      "end": 2451,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/param-default-leaf/App.tsx",
+      "start": 2552,
+      "end": 2559,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/param-default-leaf/App.tsx",
+      "start": 2672,
+      "end": 2679,
+      "fixes": 0
+    }
+  ]
+}
