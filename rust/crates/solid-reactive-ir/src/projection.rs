@@ -620,6 +620,11 @@ pub trait CatalogWording {
         let _ = code;
         false
     }
+    /// ADR 1158: whether this defect's claim is what the client runtime does, where its code's other rows claim nothing of it.
+    fn defect_claims_client_runtime(&self, defect: &StaticDefect) -> bool {
+        let _ = defect;
+        false
+    }
 }
 
 /// Projects all enabled tables and reports construction/ordering time.
@@ -959,9 +964,24 @@ pub fn project_findings(
     if let Some(stage) = stage {
         stage.end(crate::DropPass::RuntimeConfiguration, &findings);
     }
+    // ADR 1158: the rows of a static defect the catalog says claims the client runtime, by site and code.
+    let client_defects = program
+        .static_defects
+        .iter()
+        .filter(|defect| catalog.defect_claims_client_runtime(defect))
+        .map(|defect| {
+            let id = project_finding(FindingSeed::StaticDefect(defect), catalog).id;
+            (defect.location.clone(), id)
+        })
+        .collect::<std::collections::HashSet<_>>();
     let stage = crate::proof_log::ProofStage::begin(&findings);
     findings.retain_mut(|finding| {
         program.execution_paths.apply_deferred_mount(finding);
+        if !client_defects.is_empty()
+            && client_defects.contains(&(finding.primary_location.clone(), finding.id.clone()))
+        {
+            return program.execution_paths.apply(finding);
+        }
         // ADR 1107: a slot read tagged for its destructure's row is claimed as the read it is (SC1001 claims the run).
         let id = finding
             .fold_into

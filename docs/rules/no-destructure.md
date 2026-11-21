@@ -26,6 +26,10 @@ reactively stays a **violation**. When the component's call sites cannot be
 enumerated (exported, spread into, or referenced outside JSX), the finding is
 reported as **uncertifiable** — a proof obligation, not a proven runtime defect.
 
+A store's destructure claims the client's strict-read window, as `strict-read-untracked` does, so it is silent where no client
+build runs it: in a component or helper only an `isServer` arm reaches (ADR 1158); under an undecided build constant it is
+uncertifiable. A props destructure is a pattern claim of any build and stays.
+
 When every destructured property is only read (never reassigned), solid-checker
 offers a safe fix that restores the `props` parameter and rewrites the body to
 `props.<name>` accesses.
