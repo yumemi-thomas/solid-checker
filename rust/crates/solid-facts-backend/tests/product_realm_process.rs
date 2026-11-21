@@ -100,6 +100,11 @@ fn rows_in(findings: &[serde_json::Value], file: &str) -> BTreeSet<String> {
 
 /// The `silent` lines of the proof log at `log` that name the realm's silence: the file's path and the span.
 fn realm_silences(log: &Path) -> Vec<(String, u64, u64)> {
+    silences(log, SILENCE)
+}
+
+/// The `silent` lines of the proof log at `log` whose proof is `proof`: the file's path and the span.
+fn silences(log: &Path, proof: &str) -> Vec<(String, u64, u64)> {
     let mut paths = std::collections::HashMap::new();
     let mut found = Vec::new();
     for line in fs::read_to_string(log).unwrap().lines() {
@@ -111,7 +116,7 @@ fn realm_silences(log: &Path) -> Vec<(String, u64, u64)> {
                     line["f"].as_str().unwrap().to_owned(),
                 );
             }
-            Some("silent") if line["proof"] == SILENCE => {
+            Some("silent") if line["proof"] == proof => {
                 let at = (line["q"].as_u64().unwrap(), line["p"].as_u64().unwrap());
                 found.push((
                     paths[&at].clone(),
@@ -275,5 +280,98 @@ fn an_unknown_realm_or_a_writer_the_page_loads_clears_no_site() {
             realm_silences(&log).is_empty(),
             "{name}: a silence was named where nothing is cleared"
         );
+    }
+}
+
+/// ADR 1144: Vite's reviewed dev client. `HOST_SILENCE` drops the premise's typed silence (the hosts kept in every scope, as before).
+const HOST_SILENCE: &str = "package_action_calls.package_action_calls.reviewed-host";
+
+/// The projects of `fixtures/reactive-ir/vite-dev-client` where the premise holds (the root's own prototype writes clear two sites of `App.tsx`), and where
+/// it does not (every site keeps its row).
+const HOST_CLEARED: [&str; 5] = [
+    "vite-dev-client",
+    "vite-dev-client/variants/type-import",
+    "vite-dev-client/variants/solid-plugin",
+    "vite-dev-client/variants/diagnostics-on",
+    "vite-dev-client/variants/vite-7",
+];
+const HOST_KEPT: [&str; 11] = [
+    "vite-dev-client/variants/solid-plugin-patched",
+    "vite-dev-client/variants/runtime-import",
+    // Review F1: a load spelled otherwise that resolves into vite (tsconfig `paths` and a Vite alias; a Vite alias alone).
+    "vite-dev-client/variants/alias-paths",
+    "vite-dev-client/variants/alias",
+    // Review F2: a load no specifier names (`import.meta.glob`, `new URL(…, import.meta.url)`).
+    "vite-dev-client/variants/glob",
+    "vite-dev-client/variants/url",
+    // Review F4: a package the program loads depends on vite.
+    "vite-dev-client/variants/depends-on-vite",
+    "vite-dev-client/variants/plugin",
+    "vite-dev-client/variants/define",
+    "vite-dev-client/variants/production",
+    "vite-dev-client/variants/mismatch",
+];
+
+#[test]
+fn a_site_only_the_reviewed_vite_root_makes_ends_in_a_named_silence_and_every_twin_keeps_its_row() {
+    let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("arm the real Type Facts process");
+    let directory = temporary_directory("reviewed-host");
+    for name in HOST_CLEARED.into_iter().chain(HOST_KEPT) {
+        let log = directory.join(format!("{}.jsonl", name.replace('/', "-")));
+        let named = check(&typefacts, name, None, Some(&log));
+        let ablated = check(&typefacts, name, Some(HOST_SILENCE), None);
+        let (named_rows, ablated_rows) = (rows_in(&named, "App.tsx"), rows_in(&ablated, "App.tsx"));
+        let cleared = silences(&log, HOST_SILENCE);
+        // `Logged`'s `console.error` meets the package as a writer of the global `console`, whose members Vite 8's client replaces: never cleared.
+        assert!(
+            named_rows.iter().any(|row| row.contains("App.tsx:21:")),
+            "{name}: the console read keeps its row"
+        );
+        assert!(
+            named_rows.is_subset(&ablated_rows),
+            "{name}: the premise only clears"
+        );
+        if HOST_CLEARED.contains(&name) {
+            assert!(
+                named_rows.len() < ablated_rows.len(),
+                "{name}: the premise clears a site"
+            );
+            // Each site the premise clears, by the start of its span, is a silence of the proof log, and no silence names a site that keeps its row.
+            let starts = |findings: &[serde_json::Value]| -> BTreeSet<u64> {
+                findings
+                    .iter()
+                    .filter(|finding| {
+                        finding["id"] == "SC2002"
+                            && finding["primaryLocation"]["path"]
+                                .as_str()
+                                .is_some_and(|path| path.ends_with("/App.tsx"))
+                    })
+                    .filter_map(|finding| finding["primaryLocation"]["startByte"].as_u64())
+                    .collect()
+            };
+            let gone = starts(&ablated)
+                .difference(&starts(&named))
+                .copied()
+                .collect::<BTreeSet<_>>();
+            let named_starts = cleared
+                .iter()
+                .filter(|(path, _, _)| path.ends_with("/App.tsx"))
+                .map(|(_, start, _)| *start)
+                .collect::<BTreeSet<_>>();
+            assert_eq!(
+                named_starts, gone,
+                "{name}: every cleared site is named in the proof log"
+            );
+        } else {
+            assert_eq!(
+                places(&named),
+                places(&ablated),
+                "{name}: the premise cleared a site"
+            );
+            assert!(
+                cleared.is_empty(),
+                "{name}: a silence was named where nothing is cleared"
+            );
+        }
     }
 }

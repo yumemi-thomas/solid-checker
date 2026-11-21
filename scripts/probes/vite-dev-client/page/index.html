@@ -1,0 +1,25 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<script>
+// Before any module: the descriptors of every built-in prototype and of the global object, kept by identity.
+(function () {
+  const ctors = Object.getOwnPropertyNames(globalThis).filter((k) => { try { const v = globalThis[k]; return typeof v === "function" && v.prototype && typeof v.prototype === "object"; } catch { return false; } });
+  const take = () => {
+    const m = new Map();
+    for (const k of ctors) { const p = globalThis[k].prototype; for (const n of Reflect.ownKeys(p)) { const d = Object.getOwnPropertyDescriptor(p, n); m.set(k + ".prototype." + String(n), d && (d.value ?? d.get ?? d.set)); } }
+    for (const n of [Object.prototype, Function.prototype, Array.prototype]) {}
+    const g = new Map(); for (const n of Reflect.ownKeys(globalThis)) { const d = Object.getOwnPropertyDescriptor(globalThis, n); g.set(String(n), d && (d.value ?? d.get)); }
+    const c = new Map(); for (const n of Reflect.ownKeys(console)) { const d = Object.getOwnPropertyDescriptor(console, n); c.set(String(n), d && (d.get ?? d.value)); }
+    return { m, g, c };
+  };
+  window.__take = take; window.__before = take();
+})();
+</script></head>
+<body><p>blank</p>
+<script type="module">
+// After the injected client module (it is the first module script in the head).
+await new Promise((r) => setTimeout(r, 1500));
+const a = window.__before, b = window.__take();
+const diff = (x, y) => { const out = []; for (const [k, v] of y) if (!x.has(k)) out.push("added " + k); else if (!Object.is(x.get(k), v)) out.push("changed " + k); for (const k of x.keys()) if (!y.has(k)) out.push("removed " + k); return out; };
+window.__result = { prototypes: diff(a.m, b.m), globals: diff(a.g, b.g).filter((k) => !/__before|__take|__result/.test(k)), console: diff(a.c, b.c), clientLoaded: !!document.querySelector('script[src="/@vite/client"]') || performance.getEntriesByType("resource").some((e) => e.name.includes("@vite/client")) };
+</script></body></html>
