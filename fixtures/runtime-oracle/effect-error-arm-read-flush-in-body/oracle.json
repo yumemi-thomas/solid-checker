@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1163: the compute throws at creation and the body's `flush()` drains the error arm inside the component's window: Chrome reports STRICT_READ_UNTRACKED at the read, which stays uncertifiable (ADR 0613's census vetoes the drain)."
+}
