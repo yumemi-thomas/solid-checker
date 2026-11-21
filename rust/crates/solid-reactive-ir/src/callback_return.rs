@@ -524,7 +524,7 @@ fn provided_store_tuple(
     };
     let consumers = readers
         .into_iter()
-        .map(|index| store_tuple_consumer(file, index, &actions))
+        .map(|index| store_tuple_consumer(lookup, file, index, &actions))
         .collect::<Option<Vec<_>>>()?;
     Some(ProvidedStoreTuple {
         value,
@@ -644,6 +644,29 @@ pub(crate) fn store_tuple_action_entries(
     (!held.is_empty()).then_some((held, calls))
 }
 
+/// ADR 1147 (the review's F1): whether every function between the reader `reader` (its body; `None`: module scope) and an action's call at `call` is
+/// run by the dialect or the DOM where it is written: the whole argument of a dialect primitive's call, or the whole expression of an intrinsic element's
+/// attribute. A callback handed to a package (`hand(() => add("x"))`), a project function, or any other position refuses the plan: the write keeps its row.
+fn action_call_placed(lookup: &SemanticLookup<'_>, file: &FileFacts, call: Span, reader: Option<Span>) -> bool {
+    let ast = &file.ast;
+    ast.functions_containing(call)
+        .filter(|function| reader.is_none_or(|reader| function.span != reader && reader.contains(function.span)))
+        .all(|function| {
+            let primitive_argument = ast.arguments_containing(function.span).any(|(outer, index)| {
+                ast.peel_ts_sugar_span(outer.arguments[index].span) == function.span
+                    && !outer.arguments[index].spread
+                    && lookup.primitive_at_call(file, outer.span).is_some()
+            });
+            let intrinsic_attribute = ast.jsx_elements.iter().any(|element| {
+                crate::execution_role::intrinsic_element(file, element)
+                    && element.attributes.iter().any(|attribute| {
+                        attribute.expression.is_some_and(|value| ast.peel_ts_sugar_span(value) == function.span)
+                    })
+            });
+            primitive_argument || intrinsic_attribute
+        })
+}
+
 /// ADR 1147: the actions of a closed object literal at `span`: each property a data property under a plain key whose value is a `const` identifier bound to a
 /// function the binding holds now, as (key, the identifier, the function).
 fn action_object(
@@ -731,6 +754,7 @@ fn sole_local_binding(file: &FileFacts, span: Span) -> Option<&BindingFact> {
 /// ADR 1147: a reader's pattern, by the pattern elements of the binding (facts schema 62: a hole has no element): slot 0 one identifier with no default, slot 1
 /// an object pattern of plain keys of `actions`, each an identifier with no default, and nothing else; each action local only called.
 fn store_tuple_consumer(
+    lookup: &SemanticLookup<'_>,
     file: &FileFacts,
     index: usize,
     actions: &[(String, Span, Span)],
@@ -775,10 +799,12 @@ fn store_tuple_consumer(
                     {
                         return None;
                     }
-                    // The local is only called: never written, handed on or read as a value.
+                    // The local is only called: never written, handed on or read as a value; and each call is written where the dialect or the DOM runs
+                    // it (the review of 1147, F1: a call in a callback handed to a package, `hand(() => add("x"))`, runs where the package says).
+                    let reader = ast.innermost_function_owning(binding.declaration).map(|function| function.span);
                     let only_called = references(file, inner.target).all(|reference| {
                         ast.calls_with_peeled_callee(reference)
-                            .any(|call| !call.construct)
+                            .any(|call| !call.construct && action_call_placed(lookup, file, call.span, reader))
                     });
                     if !only_called {
                         return None;

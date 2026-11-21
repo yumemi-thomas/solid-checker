@@ -13,7 +13,7 @@ ADR 1137's veto), that a reader's slot-0 name is the store itself and that an ac
 Positive: `Shop` (the textbook's shape: the SC9012 rows at the value and the readers and SC2001 at `setCart` end).
 
 Negative, each keeps its rows: `WholeApp` (a reader holds the tuple whole), `AliasApp` (an action's local aliased), `HeldApp` (slot 1 bound whole),
-`KeptApp` (the value's `const` handed on), `TwiceApp` (a second provider), `SignalApp` (slot 0 a signal's accessor, no store), `QueuedApp` (an action's local aliased and handed to `queueMicrotask`), and `variants/eval` (the
+`KeptApp` (the value's `const` handed on), `TwiceApp` (a second provider), `SignalApp` (slot 0 a signal's accessor, no store), `QueuedApp` (an action's local aliased and handed to `queueMicrotask`), `HandedApp` and `OutApp` (the review's F1: an action called in a callback handed to a project helper that runs it in `createTrackedEffect`, or to a callee nothing reads; a package read as source is the same position), and `variants/eval` (the
 positive's shape in a program with a direct `eval`).
 
 Stub: `context-provider-children-owned`'s, plus the plain `createStore` form from the published rc.21 typings.
