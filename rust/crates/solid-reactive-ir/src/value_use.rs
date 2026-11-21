@@ -3728,6 +3728,9 @@ impl<'l, 'a> Census<'l, 'a> {
     }
 
     fn argument(&mut self, file: &'a FileFacts, call: usize, index: usize, mode: Mode) -> Position {
+        if let Some(answer) = self.whole_store_argument(file, call, index, mode) {
+            return answer;
+        }
         let ast = &file.ast;
         let call = &ast.calls[call];
         if call.arguments[index].spread {
@@ -3735,9 +3738,6 @@ impl<'l, 'a> Census<'l, 'a> {
         }
         if call.construct {
             return Position::Open(blockers::VALUE_THROUGH_NEW);
-        }
-        if let Some(answer) = self.whole_store_argument(file, call, index, mode) {
-            return answer;
         }
         if let Some(primitive) = self.lookup.primitive_at_call(file, call.span) {
             let dialect = self.lookup.dialect;
