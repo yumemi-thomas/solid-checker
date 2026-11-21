@@ -8144,6 +8144,22 @@
    "to": 18,
    "adr": "ADR 1160",
    "fact": "the SC2002 row at pkg-pointer.tsx stays uncertifiable under another blocker: with `ref={name}` placed at its reference (the named function's entry), its blocker moved from package-may-call-action to package-finding-at-entry (the relabel is in counts.json drops)"
+  },
+  {
+   "fixture": "reactive-ir/context-provided-store-tuple",
+   "key": "SC9012 handed-member-read",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 1155",
+   "fact": "one SC9012 row of this fixture keeps its uncertifiable finding under another blocker: handed-member-dispatch becomes handed-member-read, main 408fc4645's own reading of it (ADR 1155's evidence; the relabel is in counts.json drops)"
+  },
+  {
+   "fixture": "reactive-ir/owner-callback-prop",
+   "key": "SC4002 computation-error-unobserved",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1171",
+   "fact": "the function literal passed as a component prop and called by the child is now entered by that call (execution_role::prop_literal_call_sites), so its SC4001 function-run-unplaced row goes and what is left unproven is whether an error thrown there is observed: SC4002 computation-error-unobserved (the relabel is in counts.json drops)"
   }
  ]
 }

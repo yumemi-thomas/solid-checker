@@ -361,6 +361,112 @@ pub(crate) fn exact_context_provider(
         && exactly_resolved(lookup, file, created.callee)
 }
 
+/// ADR 1155 (b): the id `SOLID_CHECKER_IR_ABLATE_SILENCE` names to turn [`in_exact_provider_children`] off (the monotone gate's ablation).
+pub(crate) const PROVIDER_CHILDREN_MEMO_OWNER: &str = "context-provider-children-memo-owner";
+
+/// ADR 1155 (b), the Opus review of ADR 1147 (N1): whether code at `span` is written in a child of an exact context provider ([`exact_context_provider`]) with no
+/// function between. rc.21 evaluates a provider's children only inside its `children()` memo, whose owner is
+/// that memo (created under the provider's root), so such code creates and registers cleanups under an owner wherever the provider element is created: the memo
+/// is the owner there, never the code around the provider (a tracked effect, an effect's apply, a timer). The tag's own creation is not in its
+/// children and keeps its row; a flush or an after-await read (stack questions) must not ask this.
+pub(crate) fn in_exact_provider_children(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    span: Span,
+) -> bool {
+    if crate::site_accounting::ablated_id(PROVIDER_CHILDREN_MEMO_OWNER) {
+        return false;
+    }
+    let ast = &file.ast;
+    let owned = ast.jsx_elements.iter().any(|element| {
+        element.span != span
+            && provider_getter_regions(file, element).any(|region| region.contains(span))
+            && !ast
+                .functions_containing(span)
+                .any(|between| element.span.contains(between.span))
+            && exact_context_provider(lookup, file, element)
+    });
+    // The proof log names the arm where it decides (monotone.mjs M2b).
+    if owned {
+        crate::proof_log::decision(
+            "owner-call",
+            file.path.as_str(),
+            span,
+            crate::ExecutionRole::Unknown,
+            Some((PROVIDER_CHILDREN_MEMO_OWNER, false)),
+            &[PROVIDER_CHILDREN_MEMO_OWNER],
+            Some(false),
+        );
+    }
+    owned
+}
+
+/// ADR 1155 r1 (the review's N2): the children of `element` the compiler evaluates in its `children` getter, which the provider's `children()` memo calls: an
+/// expression child the compiler traces as a caller-context component child (`ComponentChild`, disposition `Deferred`, trigger `Caller`: a dynamic child, or any
+/// child of several), and an element child (getter-hosted). A lone static child (no call in it: `{(new Make(), 1)}`, traced `EagerOnce`) is evaluated at the tag,
+/// under the owner of the code that creates the element; any child the trace does not name is left out (it keeps its rows).
+fn provider_getter_regions<'f>(
+    file: &'f FileFacts,
+    element: &'f solid_facts::ast::JsxElementFact,
+) -> impl Iterator<Item = Span> + 'f {
+    use solid_facts::compiler::{
+        CompilerExecutionDisposition, CompilerExecutionTrigger, CompilerOperationKind,
+    };
+    element.children.iter().filter_map(move |child| {
+        let deferred = file
+            .compiler
+            .semantic_model
+            .operations
+            .iter()
+            .find(|operation| {
+                operation.kind == CompilerOperationKind::ComponentChild
+                    && operation.execution.disposition == CompilerExecutionDisposition::Deferred
+                    && operation.execution.trigger == CompilerExecutionTrigger::Caller
+                    && child.contains(operation.span)
+            });
+        deferred.map(|operation| operation.span).or_else(|| {
+            file.ast
+                .jsx_elements
+                .iter()
+                .any(|inner| inner.span == *child)
+                .then_some(*child)
+        })
+    })
+}
+
+/// ADR 1155 (b): the child getters of the exact context providers of `file` ([`provider_getter_regions`]), owner-providing regions of the owner analysis
+/// ([`crate::owners::OwnerFileIndex`]): each child is evaluated by the provider's children memo, under that memo's owner.
+pub(crate) fn exact_provider_child_spans(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+) -> Vec<Span> {
+    if crate::site_accounting::ablated_id(PROVIDER_CHILDREN_MEMO_OWNER) {
+        return Vec::new();
+    }
+    let spans: Vec<Span> = file
+        .ast
+        .jsx_elements
+        .iter()
+        .filter(|element| {
+            !element.children.is_empty() && exact_context_provider(lookup, file, element)
+        })
+        .flat_map(|element| provider_getter_regions(file, element).collect::<Vec<_>>())
+        .collect();
+    // The proof log names the arm at each region (monotone.mjs M2b: an owner requirement it answers lies inside one).
+    for span in &spans {
+        crate::proof_log::decision(
+            "owner-call",
+            file.path.as_str(),
+            *span,
+            crate::ExecutionRole::Unknown,
+            Some((PROVIDER_CHILDREN_MEMO_OWNER, false)),
+            &[PROVIDER_CHILDREN_MEMO_OWNER],
+            Some(false),
+        );
+    }
+    spans
+}
+
 /// ADR 1147: the store-tuple arm's id. `SOLID_CHECKER_IR_ABLATE_SILENCE=context-provided-store-tuple` switches it off (a measurement only).
 pub(crate) const CONTEXT_PROVIDED_STORE_TUPLE: &str = "context-provided-store-tuple";
 

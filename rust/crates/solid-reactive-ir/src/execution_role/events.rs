@@ -224,24 +224,121 @@ pub(super) fn component_invokes_prop_in_body(
     prop: &str,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    if component.r#async || component.generator {
-        return false;
-    }
-    let Some(parameter) = component.parameters.first() else {
+    let Some(names_props) = props_kept(file, component, prop, lookup) else {
         return false;
     };
+    file.ast.calls.iter().any(|call| {
+        crate::owners::written_directly_in(&file.ast, component, call.span)
+            && !class_within(file, component.span, call.span)
+            && !file.ast.any_jsx_containing(call.span)
+            && file.ast.members.iter().any(|member| {
+                member.span == file.ast.peel_ts_sugar_span(call.callee)
+                    && names_props(member.object)
+                    && file.source_text(member.property) == Some(prop)
+            })
+    })
+}
+
+/// ADR 1171: the calls that run a component prop's function literal, when they are all its runs: the literal is the whole value of
+/// the one attribute `prop` of an element with no spread, the element's tag renders a project component written in the same file
+/// that nothing else names (every reference of its binding is this tag, no export), and in that component `props` is kept
+/// ([`props_kept`]) and every member `props.<prop>` is the callee of a call (not `new`). Then `props.<prop>` holds the literal and
+/// nothing else, and each of those calls runs it where the call is written (none is in a class written in the component). `None` where any of that is not proven; an empty list
+/// where the component never calls it.
+pub(crate) fn prop_literal_call_sites(
+    file: &solid_facts::FileFacts,
+    literal: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Vec<Span>> {
+    if literal.name.is_some() || literal.generator || lookup.program_has_eval() {
+        return None;
+    }
+    let (element, prop) = component_prop_literal(file, literal.span)?;
+    if !element.spreads.is_empty()
+        || element
+            .attributes
+            .iter()
+            .filter(|attribute| {
+                attribute.namespace.is_none() && file.source_text(attribute.name) == Some(prop)
+            })
+            .count()
+            != 1
+    {
+        return None;
+    }
+    let (component_file, component) = rendered_component(file, element, lookup)?;
+    if component_file.path != file.path {
+        return None;
+    }
+    let binding = function_binding_name(file, component)?;
+    if file
+        .ast
+        .exports
+        .iter()
+        .any(|export| export.span.contains(binding.span) || export.span.contains(component.span))
+    {
+        return None;
+    }
+    let symbol = lookup.entities().at(file.path.as_str(), binding.span)?;
+    let references = lookup.symbol_references_if_present(symbol.as_str())?;
+    let tag = file.ast.peel_ts_sugar_span(element.name.span);
+    if !references.iter().all(|reference| {
+        reference.path.as_ref() == file.path.as_str()
+            && u32::try_from(reference.start_byte).is_ok_and(|start| {
+                start == binding.span.start
+                    || start == tag.start
+                    || element
+                        .closing_name
+                        .is_some_and(|closing| start == closing.start)
+            })
+    }) {
+        return None;
+    }
+    let names_props = props_kept(file, component, prop, lookup)?;
+    let peel = |span: Span| file.ast.peel_ts_sugar_span(span);
+    let mut calls = Vec::new();
+    for member in file.ast.members.iter().filter(|member| {
+        component.span.contains(member.span)
+            && names_props(member.object)
+            && file.source_text(member.property) == Some(prop)
+    }) {
+        let call = file
+            .ast
+            .calls
+            .iter()
+            .find(|call| !call.construct && peel(call.callee) == member.span)?;
+        // A call in a class written in the component (a field initializer, a method) runs where an instance is made or the method
+        // is called, which no owner edge from the place it is written shows.
+        if class_within(file, component.span, call.span) {
+            return None;
+        }
+        calls.push(call.span);
+    }
+    Some(calls)
+}
+
+/// The checks [`component_invokes_prop_in_body`] and [`prop_literal_call_sites`] share: `component` is synchronous, its first
+/// parameter is a plain identifier `props` that nothing writes, and every use of `props` is a static member read that is not
+/// written, deleted or called (but `props.<prop>`'s call), with no write of a member named `prop` (or a computed one) anywhere in
+/// it. Returns the test that a span names `props`.
+fn props_kept<'l>(
+    file: &'l solid_facts::FileFacts,
+    component: &solid_facts::ast::FunctionFact,
+    prop: &str,
+    lookup: &'l SemanticLookup<'_>,
+) -> Option<impl Fn(Span) -> bool + 'l> {
+    if component.r#async || component.generator {
+        return None;
+    }
+    let parameter = component.parameters.first()?;
     if parameter.shape != solid_facts::ast::BindingShape::Identifier
         || parameter.initializer.is_some()
     {
-        return false;
+        return None;
     }
-    let Some(name) = parameter.names.first() else {
-        return false;
-    };
-    let Some(symbol) = lookup.entities().at(file.path.as_str(), name.span) else {
-        return false;
-    };
-    let names_props = |span: Span| {
+    let name = parameter.names.first()?;
+    let symbol = lookup.entities().at(file.path.as_str(), name.span)?;
+    let names_props = move |span: Span| {
         lookup
             .entities()
             .at(file.path.as_str(), file.ast.peel_ts_sugar_span(span))
@@ -257,7 +354,7 @@ pub(super) fn component_invokes_prop_in_body(
                         && file.source_text(member.property) == Some(prop)
                 }))
     }) {
-        return false;
+        return None;
     }
     // Every use of `props` in the component must be a static member read
     // that is not written, deleted, or called (a call hands `props` over as
@@ -281,7 +378,7 @@ pub(super) fn component_invokes_prop_in_body(
     };
     // A redeclaration (`var props = …`) or any write of the parameter itself.
     if crate::indexes::binding_written(file, name.span) {
-        return false;
+        return None;
     }
     // `arguments[0]` is `props` under another name, and `eval` can name it.
     if file.ast.identifiers.iter().any(|identifier| {
@@ -291,7 +388,7 @@ pub(super) fn component_invokes_prop_in_body(
                 Some("arguments" | "eval")
             )
     }) {
-        return false;
+        return None;
     }
     if file
         .ast
@@ -319,18 +416,9 @@ pub(super) fn component_invokes_prop_in_body(
                 && member_static_key(file, member).is_none_or(|key| key == prop)
         })
     {
-        return false;
+        return None;
     }
-    file.ast.calls.iter().any(|call| {
-        crate::owners::written_directly_in(&file.ast, component, call.span)
-            && !class_within(file, component.span, call.span)
-            && !file.ast.any_jsx_containing(call.span)
-            && file.ast.members.iter().any(|member| {
-                member.span == file.ast.peel_ts_sugar_span(call.callee)
-                    && names_props(member.object)
-                    && file.source_text(member.property) == Some(prop)
-            })
-    })
+    Some(names_props)
 }
 
 /// The project component element and prop name a function literal is

@@ -1,0 +1,4 @@
+{
+  "note": "ADR 1171: a component prop's literal the child calls in its body runs under the child's render owner (`Body`: quiet, the checker silent on SC4001); the same literal called in an effect's apply runs with no owner (`Apply`: NO_OWNER_CLEANUP, an SC4001 violation, uncertifiable on main). `Never`, `Twice`, `Held` and `Spread` keep their uncertifiable rows (`Held` runs the literal from a timer: NO_OWNER_CLEANUP, covered by its row).",
+  "programBoundary": "closed"
+}

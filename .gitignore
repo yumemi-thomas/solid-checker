@@ -2284,3 +2284,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/owner-call-effect-creation/variants/inline-handler/node_modules/**
 !fixtures/reactive-ir/named-ref-entry/node_modules/
 !fixtures/reactive-ir/named-ref-entry/node_modules/**
+!fixtures/reactive-ir/component-prop-call-owner/node_modules/
+!fixtures/reactive-ir/component-prop-call-owner/node_modules/**

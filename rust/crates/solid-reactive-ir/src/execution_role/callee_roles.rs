@@ -727,7 +727,40 @@ pub(super) fn semantic_role_before_awaits(
             )
         };
     }
-    if let Some(role) = forwarded_tracked_compute_role(file, span, lookup) {
+    if let Some((role, also_at_call)) = forwarded_tracked_compute_role(
+        file,
+        span,
+        lookup,
+        classifying.contains(&write_classification_marker()),
+    ) {
+        // ADR 1155 r2: the literal may also run through `arguments[k]()` on the stack of the wrapper's call: the tracked role holds only where that
+        // call's own role is the same; otherwise the literal's runs differ and it is unplaced.
+        if let Some(at) = also_at_call
+            && role != ExecutionRole::Unknown
+        {
+            let key = (file.path.to_string(), at);
+            let at_call = if classifying.insert(key.clone()) {
+                let at_call = semantic_execution_role_within(
+                    file,
+                    at,
+                    allowed,
+                    entities,
+                    symbol_names,
+                    lookup,
+                    classifying,
+                );
+                classifying.remove(&key);
+                Some(at_call)
+            } else {
+                None
+            };
+            if at_call != Some(role) {
+                return role_arm!(
+                    "callee_roles.forwarded-tracked-compute-arguments-differ",
+                    ExecutionRole::Unknown
+                );
+            }
+        }
         return role_arm!("callee_roles.forwarded-tracked-compute", role);
     }
     // ADR 0927: a flow element's children callback written inside an allowed
@@ -2244,11 +2277,11 @@ pub(super) fn forwarded_component_prop(
 /// tracked compute, as it would written there itself. A parameter referenced
 /// any other way can run the literal somewhere else as well, so it proves
 /// nothing.
-pub(super) fn forwarded_tracked_compute_role(
+pub(super) fn forwarded_compute_slot<'a>(
     file: &solid_facts::FileFacts,
     span: Span,
-    lookup: &SemanticLookup<'_>,
-) -> Option<ExecutionRole> {
+    lookup: &SemanticLookup<'a>,
+) -> Option<ForwardedCompute<'a>> {
     let literal = containing_ast_function(&file.ast, span)?;
     let (call, index) = file.ast.arguments_containing(span).find(|(call, index)| {
         let argument = &call.arguments[*index];
@@ -2263,6 +2296,18 @@ pub(super) fn forwarded_tracked_compute_role(
     if wrapper.r#async || wrapper.generator {
         return None;
     }
+    // ADR 1155 r1 (the review's F1): a function that is no arrow reaches its arguments through `arguments` too (`arguments[0]()`), which no reference of
+    // the parameter shows. r2: each such use must be written directly in the wrapper's body as `arguments.length` (runs nothing) or a direct call
+    // `arguments[k]()` (runs the argument on the wrapper call's own stack); then the literal may also run where the wrapper's call runs
+    // ([`ForwardedCompute::also_at_call`]), which each consumer asks. Any other use (handed on, stored, in a nested function) refuses.
+    let also_at_call = if wrapper.kind != solid_facts::ast::FunctionKind::Arrow
+        && crate::value_use::reads_arguments(wrapper_file, wrapper.span)
+    {
+        // `arguments.length` alone runs nothing: no other run.
+        arguments_runs_in_place(wrapper_file, wrapper)?.then_some(call.span)
+    } else {
+        None
+    };
     let parameter = wrapper.parameters.get(index)?;
     if parameter.shape != solid_facts::ast::BindingShape::Identifier
         || parameter.initializer.is_some()
@@ -2270,10 +2315,15 @@ pub(super) fn forwarded_tracked_compute_role(
         return None;
     }
     let name = parameter.names.first()?;
+    // A written parameter may hold another function at a call (every reference below is a call, which a write's target is not; stated for the reader).
+    if crate::indexes::binding_written(wrapper_file, name.span) {
+        return None;
+    }
     let symbol = lookup
         .entities()
         .at(wrapper_file.path.as_str(), name.span)?;
     let mut compute: Option<Span> = None;
+    let mut invoke: Option<Span> = None;
     for reference in lookup.symbol_references(symbol.as_str()) {
         if reference.path.as_ref() != wrapper_file.path.as_str() {
             return None;
@@ -2302,6 +2352,7 @@ pub(super) fn forwarded_tracked_compute_role(
             return None;
         }
         compute = Some(owner.span);
+        invoke.get_or_insert(reference);
     }
     let compute = compute?;
     // `compute` is the whole argument of a call written directly in the
@@ -2316,21 +2367,190 @@ pub(super) fn forwarded_tracked_compute_role(
     if !crate::owners::owned_by_body(&wrapper_file.ast, wrapper, outer.span) {
         return None;
     }
-    let tracked = match lookup.primitive_at_call(wrapper_file, outer.span) {
-        Some(primitive) => {
-            callback_execution_at_call(wrapper_file, outer, primitive, slot, lookup).is_some()
-                && lookup
-                    .dialect
-                    .callback_semantics_at(primitive, slot, outer.arguments.len())
-                    .tracks_reads
-        }
-        None => false,
-    };
+    let primitive = lookup.primitive_at_call(wrapper_file, outer.span)?;
+    callback_execution_at_call(wrapper_file, outer, primitive, slot, lookup)?;
+    Some(ForwardedCompute {
+        literal: call.arguments[index].span,
+        wrapper_file,
+        outer,
+        slot,
+        primitive,
+        also_at_call,
+        invoke: invoke?,
+    })
+}
+
+/// ADR 1155 r2: every `arguments` reference of the non-arrow `wrapper` is written directly in its body (an arrow nested in it shares its
+/// `arguments`, so a reference there is refused) as `arguments.length`, read only, or `arguments[k]()`, a direct call: an argument it reaches runs
+/// there, on the stack of the wrapper's call, or not at all. `None` for any other use; else whether some use is such a call.
+fn arguments_runs_in_place(
+    file: &solid_facts::FileFacts,
+    wrapper: &solid_facts::ast::FunctionFact,
+) -> Option<bool> {
+    let ast = &file.ast;
+    let mut called = false;
+    let all = ast
+        .identifiers_within(wrapper.span)
+        .filter(|identifier| {
+            identifier.role == solid_facts::ast::IdentifierRole::Reference
+                && file.source_text(identifier.span) == Some("arguments")
+        })
+        .all(|identifier| {
+            if !matches!(
+                crate::owners::owning_function(ast, identifier.span),
+                Some(owner) if owner.span == wrapper.span
+            ) {
+                return false;
+            }
+            let Some(member) = ast
+                .members
+                .iter()
+                .find(|member| ast.peel_ts_sugar_span(member.object) == identifier.span)
+            else {
+                return false;
+            };
+            let computed = ast.computed_members.binary_search(&member.span).is_ok();
+            if ast.optional_members.binary_search(&member.span).is_ok()
+                || ast.write_targets.binary_search(&member.span).is_ok()
+                || ast.is_no_get_target(member.span)
+            {
+                return false;
+            }
+            if computed {
+                let run = ast
+                    .calls_with_peeled_callee(member.span)
+                    .any(|call| !call.construct)
+                    && !ast.members.iter().any(|outer| outer.object == member.span)
+                    && ast
+                        .arguments_containing(member.span)
+                        .all(|(call, index)| !call.arguments[index].span.contains(member.span));
+                called |= run;
+                run
+            } else {
+                file.source_text(member.property) == Some("length")
+                    && ast.calls_with_peeled_callee(member.span).next().is_none()
+            }
+        });
+    all.then_some(called)
+}
+
+/// ADR 1155 (a): what [`forwarded_compute_slot`] proves: the literal at `literal` (the whole argument of a call of a project or read-package function)
+/// runs only as the callback at `slot` of the primitive call `outer` that function writes directly in its body.
+pub(super) struct ForwardedCompute<'a> {
+    pub(super) literal: Span,
+    pub(super) wrapper_file: &'a solid_facts::FileFacts,
+    pub(super) outer: &'a solid_facts::ast::CallFact,
+    pub(super) slot: usize,
+    pub(super) primitive: solid_dialect::Primitive,
+    /// ADR 1155 r2: the wrapper also reaches its arguments through `arguments[k]()` in its own body, so the literal may run, besides at `slot`,
+    /// on the stack of this call of the wrapper (in the literal's file).
+    pub(super) also_at_call: Option<Span>,
+    /// ADR 1155 r3: a call of the parameter in the slot's callback (in `wrapper_file`): where the literal's code runs, as if written there.
+    pub(super) invoke: Span,
+}
+
+/// ADR 1155 r3: where an async read in a literal ADR 0200 forwards to a computation's slot ([`forwarded_compute_slot`]) runs, for the
+/// pending rules: at the wrapper's call of its parameter inside that slot's callback, so the read takes the role, the computation and
+/// the leaf owner a read written there has.
+pub(crate) enum ForwardedAsyncSite<'a> {
+    /// The call of the parameter in the slot's callback, in its file.
+    At(&'a solid_facts::FileFacts, Span),
+    /// The slot is a leaf whose owner needs an owned call site (`onSettled`) the literal's file cannot gate: unplaced.
+    Unplaced,
+}
+
+/// ADR 1155 r3: the code at `span` is written directly in a literal ADR 0200's proof forwards to a leaf owner's slot
+/// (`hand(fn) { createTrackedEffect(() => { fn(); }); }`), and the wrapper reaches it no other way (no `arguments[k]()`): every run is
+/// in that leaf callback, so a primitive created there meets the leaf's refusal first (`PRIMITIVE_IN_FORBIDDEN_SCOPE`).
+pub(crate) fn forwarded_only_into_leaf(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    forwarded_compute_slot(file, span, lookup).is_some_and(|forwarded| {
+        forwarded.also_at_call.is_none()
+            && !lookup
+                .dialect
+                .leaf_owner_requires_owned_call_site(forwarded.primitive)
+            && callback_owner_at_call(
+                forwarded.wrapper_file,
+                forwarded.outer,
+                forwarded.primitive,
+                forwarded.slot,
+                lookup,
+            ) == Some(solid_dialect::CallbackOwner::Leaf)
+    })
+}
+
+/// ADR 1155 r3: [`ForwardedAsyncSite`] of the read at `span`, when ADR 0200's proof forwards the literal around it.
+pub(crate) fn forwarded_async_site<'a>(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'a>,
+) -> Option<ForwardedAsyncSite<'a>> {
+    let forwarded = forwarded_compute_slot(file, span, lookup)?;
+    // The literal also runs on the wrapper call's stack (`arguments[k]()`), where r2 places the read (`ViaArgumentsId`), or the slot is
+    // an async boundary's held content (the read is under its hold, which the boundary rules answer): the forwarded role stands.
+    if forwarded.also_at_call.is_some()
+        || lookup.dialect.async_boundary_shape().is_some_and(|shape| {
+            shape.primitive == forwarded.primitive && shape.held_argument == forwarded.slot
+        })
+    {
+        return None;
+    }
+    if lookup
+        .dialect
+        .leaf_owner_requires_owned_call_site(forwarded.primitive)
+    {
+        return Some(ForwardedAsyncSite::Unplaced);
+    }
+    Some(ForwardedAsyncSite::At(
+        forwarded.wrapper_file,
+        forwarded.invoke,
+    ))
+}
+
+/// ADR 0200 (the proof: [`forwarded_compute_slot`]): code directly in such a literal, forwarded to a slot that tracks its callback's reads, takes the tracked role.
+/// ADR 1155 r2: with the wrapper's call where `arguments[k]()` may also run the literal, which the caller places.
+pub(super) fn forwarded_tracked_compute_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    classifying_write: bool,
+) -> Option<(ExecutionRole, Option<Span>)> {
+    let ForwardedCompute {
+        literal,
+        wrapper_file,
+        outer,
+        slot,
+        primitive,
+        also_at_call,
+        ..
+    } = forwarded_compute_slot(file, span, lookup)?;
+    let tracked = lookup
+        .dialect
+        .callback_semantics_at(primitive, slot, outer.arguments.len())
+        .tracks_reads;
     if !tracked {
         return None;
     }
-    Some(
-        if attribute_function_within(file, call.arguments[index].span, span, lookup) {
+    // ADR 1155 r2: a leaf slot's write is exempt there, so a write's verdict would rest on the `arguments[k]()` run alone, which nothing proves
+    // runs (it may be conditional): unplaced.
+    if also_at_call.is_some()
+        && classifying_write
+        && callback_owner_at_call(wrapper_file, outer, primitive, slot, lookup)
+            == Some(solid_dialect::CallbackOwner::Leaf)
+    {
+        return Some((
+            role_arm!(
+                "callee_roles.forwarded_tracked_compute_role.leaf-arguments-run",
+                ExecutionRole::Unknown
+            ),
+            None,
+        ));
+    }
+    Some((
+        if attribute_function_within(file, literal, span, lookup) {
             role_arm!(
                 "callee_roles.forwarded_tracked_compute_role.attribute-function",
                 ExecutionRole::Unknown
@@ -2341,7 +2561,8 @@ pub(super) fn forwarded_tracked_compute_role(
                 ExecutionRole::TrackedJsx
             )
         },
-    )
+        also_at_call,
+    ))
 }
 
 /// [`ExecutionRole::DeferredCallback`] for code in a callback that a reviewed

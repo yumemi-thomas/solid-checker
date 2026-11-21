@@ -34,6 +34,12 @@
 //     barm-ctxstore-memo    misuse  the reader calls `a()` in a `createMemo`: the write runs in the memo's compute
 //     barm-ctxstore-handler legal   the reader calls `a()` in a click handler
 //     barm-ctxstore-alias   misuse  the memo twin through an alias (`const f = a`): the arm refuses it (an action local used as a value), so it stays uncertifiable
+//   a write forwarded to a leaf owner's callback (ADR 1155 (a), the Opus review of ADR 1147, F1's root)   the site is in `hand(() => { <site> })`, `hand` an
+//                           export of the shipped package `fz-hand` (read as source) that calls its parameter in a leaf or a memo
+//     barm-fwdleaf-tracked  legal   `hand` runs it in `createTrackedEffect`'s compute: the leaf's write guard exempts it (main reported SC2001)
+//     barm-fwdleaf-memo     misuse  `handMemo` runs it in `createMemo`'s compute: REACTIVE_WRITE_IN_OWNED_SCOPE
+//     barm-fwdleaf-args     misuse  `handArgs`, called in a `createMemo`, runs it in `createTrackedEffect` and again through `arguments[0]()` in the memo
+//                                   (the review of 1155, F1: ADR 0200's proof refuses a wrapper that reads `arguments`)
 //
 // Recall contexts only, base shapes (misuse.mjs BASE_ONLY_CONTEXTS): the question is the host's run, not the spelling at the site.
 import { awaitStmt, button, contain, ctl, expr, flowEl, fn, iife, domExpr, mounted } from "./model.mjs";
@@ -46,6 +52,7 @@ export const ARM_CONTEXTS = {
   "barm-carried-body": "misuse", "barm-carried-handler": "legal",
   "barm-strpatch-eval": "misuse", "barm-strpatch-newfn": "misuse", "barm-strpatch-none": "legal",
   "barm-ctxstore-memo": "misuse", "barm-ctxstore-handler": "legal", "barm-ctxstore-alias": "misuse",
+  "barm-fwdleaf-tracked": "legal", "barm-fwdleaf-memo": "misuse", "barm-fwdleaf-args": "misuse",
 };
 export const ARM_CONTEXT_NAMES = Object.keys(ARM_CONTEXTS);
 
@@ -54,7 +61,7 @@ export const ARM_CODES = {
   STRICT_READ_UNTRACKED: ["barm-gen-spread", "barm-gen-handler", "barm-gen-never", "barm-climb-sync", "barm-climb-await", "barm-carried-body", "barm-carried-handler",
     "barm-strpatch-eval", "barm-strpatch-newfn", "barm-strpatch-none"],
   REACTIVE_WRITE_IN_OWNED_SCOPE: ["barm-gen-spread", "barm-gen-handler", "barm-gen-never", "barm-gen-drain", "barm-gen-await",
-    "barm-ctxstore-memo", "barm-ctxstore-handler", "barm-ctxstore-alias"],
+    "barm-ctxstore-memo", "barm-ctxstore-handler", "barm-ctxstore-alias", "barm-fwdleaf-tracked", "barm-fwdleaf-memo", "barm-fwdleaf-args"],
   ACTION_CALLED_IN_OWNED_SCOPE: ["barm-gen-spread", "barm-gen-handler", "barm-gen-never", "barm-gen-drain", "barm-gen-await"],
 };
 
@@ -118,6 +125,22 @@ const ctxStore = (kit, stmts, use) => {
   };
 };
 
+/** ADR 1155 (a): the shipped package of the forwarded-leaf pair, read as source (it imports `solid-js`). */
+export const FWD_PACKAGE = "fz-hand";
+const fwdPackageFiles = () => ({
+  "package.json": `${JSON.stringify({ name: FWD_PACKAGE, version: "1.0.0", type: "module", peerDependencies: { "solid-js": "^2.0.0-rc.21" }, exports: { ".": { types: "./index.d.ts", default: "./index.js" } } }, null, 2)}\n`,
+  "index.js": 'import { createMemo, createTrackedEffect } from "solid-js";\n\nexport function hand(fn) {\n  createTrackedEffect(() => {\n    fn();\n  });\n}\n\nexport function handMemo(fn) {\n  createMemo(() => {\n    fn();\n    return 0;\n  });\n}\n\nexport function handArgs(fn) {\n  createTrackedEffect(() => {\n    fn();\n  });\n  arguments[0]();\n}\n',
+  "index.d.ts": "export declare function hand(fn: () => void): void;\nexport declare function handMemo(fn: () => void): void;\nexport declare function handArgs(fn: () => void): void;\n",
+});
+const fwdLeaf = (stmts, callee, inMemo = false) => ({
+  body: [contain("frame", 0, stmts, inMemo
+    ? { head: `createMemo(() => { ${callee}(() => `, close: "); return 0; });", imports: ["createMemo"] }
+    : { head: `${callee}(() => `, close: ");" })],
+  view: [],
+  packages: { [FWD_PACKAGE]: fwdPackageFiles() },
+  importLines: [`import { ${callee} } from "${FWD_PACKAGE}";`],
+});
+
 /** The placement of `stmts` for a `barm-*` context (`{ body, view }`), or undefined for any other. */
 export function armContext(context, stmts, kit) {
   if (!ARM_CONTEXTS[context]) return undefined;
@@ -143,6 +166,9 @@ export function armContext(context, stmts, kit) {
     case "barm-ctxstore-memo": return ctxStore(kit, stmts, "memo");
     case "barm-ctxstore-handler": return ctxStore(kit, stmts, "handler");
     case "barm-ctxstore-alias": return ctxStore(kit, stmts, "alias");
+    case "barm-fwdleaf-tracked": return fwdLeaf(stmts, "hand");
+    case "barm-fwdleaf-memo": return fwdLeaf(stmts, "handMemo");
+    case "barm-fwdleaf-args": return fwdLeaf(stmts, "handArgs", true);
     default: return undefined;
   }
 }

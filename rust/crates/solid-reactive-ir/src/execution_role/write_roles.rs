@@ -246,6 +246,56 @@ pub(super) fn write_region_adjustment(
         .or_else(|| drained_bundle_member(file, span, lookup))
         .or_else(|| detached_in_place(file, span, lookup))
         .or_else(|| nested_in_leaf_scope(file, span, lookup))
+        .or_else(|| forwarded_leaf_scope(file, span, lookup))
+}
+
+/// ADR 1155 (a): the id `SOLID_CHECKER_IR_ABLATE_SILENCE` names to turn [`forwarded_leaf_scope`] off (the monotone gate's ablation).
+pub(crate) const FORWARDED_LEAF_SCOPE: &str = "write_roles.forwarded-leaf-scope";
+
+/// ADR 1155 (a), the Opus review of ADR 1147 (F1's root): a write directly in a function literal handed, as the whole argument, to a project or read-package
+/// function that only ever calls that parameter directly in one literal it hands, written directly in its body, to a leaf owner's slot
+/// (`hand(fn) { createTrackedEffect(() => { fn(); }); }`: ADR 0200's exact proof, [`super::callee_roles::forwarded_compute_slot`]) runs only inside that leaf
+/// callback, which the runtime's write guard exempts, as it does the leaf's own literal ([`WriteRegionAdjustment::LeafScope`]). Any other forwarding (an unread
+/// function, a parameter used another way, a memo's compute: `hand(fn) { createMemo(() => fn()) }` keeps its violation) is no proof here.
+fn forwarded_leaf_scope(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<WriteRegionAdjustment> {
+    if !lookup.dialect.leaf_scopes_allow_writes()
+        || crate::site_accounting::ablated_id(FORWARDED_LEAF_SCOPE)
+    {
+        return None;
+    }
+    let forwarded = super::callee_roles::forwarded_compute_slot(file, span, lookup)?;
+    // ADR 1155 r2: the wrapper may also run the literal through `arguments[k]()` on its call's stack, outside the leaf (ArgsApp): no leaf scope.
+    if forwarded.also_at_call.is_some() {
+        return None;
+    }
+    // ADR 0613: `onSettled`'s queued run is the drain's, whichever owner its call has (as for the leaf's own literal).
+    if lookup
+        .dialect
+        .leaf_owner_requires_owned_call_site(forwarded.primitive)
+        && drained_under_owner(forwarded.primitive, forwarded.slot, lookup)
+    {
+        return None;
+    }
+    let leaf = callback_owner_at_call(
+        forwarded.wrapper_file,
+        forwarded.outer,
+        forwarded.primitive,
+        forwarded.slot,
+        lookup,
+    ) == Some(solid_dialect::CallbackOwner::Leaf);
+    if !leaf {
+        return None;
+    }
+    // The proof log names the arm at the write it decides (monotone.mjs M2b).
+    let _ = role_arm!(
+        "write_roles.forwarded-leaf-scope",
+        ExecutionRole::Unreported
+    );
+    Some(WriteRegionAdjustment::LeafScope)
 }
 
 /// ADR 0613: the cleanup an effect's apply returns runs on a rerun from

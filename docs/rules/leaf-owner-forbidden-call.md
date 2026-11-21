@@ -220,6 +220,10 @@ package hand-off then places the child (a package that reads the provider's valu
 site. The flush code is a stack question: where the memo is read decides it, so a flush in a provider's child keeps its row
 (`context-provider-children-owned`'s `FlushStoredApp`, `FlushInnerApp`).
 
+ADR 1155 (b): the leaf walk files no creation and no cleanup written directly in an exact context provider's child: the child runs under the children memo, no
+leaf owner. The provider's tag (its own creation) keeps its row, and a flush there keeps its own (a stack question; fixture `provider-children-memo-owner`,
+patterns `ctxmemo/p8-tracked-project`).
+
 ## Related
 
 - [missing-owner](missing-owner.md) — operations with no owner at all

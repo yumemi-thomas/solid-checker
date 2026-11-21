@@ -250,6 +250,10 @@ export const ARM_GAPS = [
     reason: "ADR 1163: a read written directly in an effect bundle's `error` member (`createEffect(c, { effect, error: () => { r1(); } })`) is a deferred callback while no drain of the program has a window (`error_arm_drains_unwindowed`). No registered pair reaches the arm: `boundary.mjs verify` (318 pairs) sees it silent in no clean legal cell. The recall grid's `*error-arm*` contexts do reach it (116 lg-recall programs moved with the ADR), and the fixture `effect-error-arm-read` holds its cases, four clean reads and the named, spread and `flush` variants that stay uncertifiable, which Chrome agrees with (`runtime-oracle/effect-error-arm-read*`).",
     arms: ["callee_roles.allowed-error-arm"],
   },
+  {
+    reason: "ADR 1155 (a): a write in a literal ADR 0200's exact proof forwards to a leaf owner's slot. No registered pair forwards a callback through a package or project function; the arm-shape contexts do (`barm-fwdleaf-tracked`, legal, 3 clean on lg-recall; its misuse twins `barm-fwdleaf-memo` and `barm-fwdleaf-args`, 3 violations and 3 uncertifiable on mx-recall, Chrome-confirmed), with the fixture `forwarded-leaf-write` (HandApp silent; MemoApp, ArgsApp, SwapApp kept) and the pattern `ctxmemo/s11-hand-direct`.",
+    arms: ["write_roles.forwarded-leaf-scope"],
+  },
 
 ];
 // </arm-gaps>
