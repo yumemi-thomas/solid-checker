@@ -423,3 +423,7 @@ A handler Solid never calls is no run: an operation written in a delegated event
 The same holds where a helper an effect's apply and another caller both run creates the effect (SC6002's `effect-owner-unproven`: the apply's run throws the guard and halts).
 
 A handler the element never attaches is no run either (ADR 1140): where an intrinsic element has a spread, rc.21's `spread` skips a key that a later source of the element has, so a literal-spread handler, or an attribute handler, that a later attribute, a later spread or a later `onClick={undefined}` may supply under its key is never installed. An owner row written in such a handler is the obligation `handler-key-overridden`, and a helper it calls has no proven-unowned run from it. A later spread proves it does not supply the key only as a closed object literal without it or with a complete declared key set without it.
+
+ADR 1155 (b): code written in a child of an exact context provider (ADR 1147's test) runs inside the provider's `children()` memo, under that memo's owner: an
+owner operation there (a cleanup, a creation, written JSX) has an owner whatever code creates the provider element, so no SC4001 row stands at it (the
+provider's own tag keeps its rows; fixture `provider-children-memo-owner`, patterns `ctxmemo/p14b-timeout-control`, `p9-apply-project`).

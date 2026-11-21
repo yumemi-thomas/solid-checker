@@ -356,6 +356,11 @@ ADR 1147 (arm 3): a write in an action of a context's `[store, { actions }]` lit
 is placed by its readers' calls (`const [, { add }] = useContext(Ctx)`, each local only called): the write-role walk folds those calls beside the call
 graph's, and the literal's reference is the entry they account for ([reactive-dispatch-unresolved](reactive-dispatch-unresolved.md) names the premises).
 
+ADR 1155 (a): a write in a function literal handed, as the whole argument, to a function that only calls that parameter directly in one literal it hands to a leaf
+owner's callback slot (`hand(fn) { createTrackedEffect(() => { fn(); }); }`: ADR 0200's exact forwarding, a project function or a package read as source) runs
+only in that leaf callback, which rc.21's write guard exempts as it does the leaf's own literal: it is legal. Forwarded to a memo's compute it keeps its
+violation; any other forwarding keeps the row it had (fixture `forwarded-leaf-write`, patterns `ctxmemo/s11-hand-direct`).
+
 ## Why is this bad?
 
 Writing under a children-capable owner creates feedback loops: the write
