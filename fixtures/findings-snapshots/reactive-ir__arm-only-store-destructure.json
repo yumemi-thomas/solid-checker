@@ -1,0 +1,332 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 744,
+      "end": 749,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "blocker": "build-constant-arm",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 873,
+      "end": 878,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1004,
+      "end": 1009,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1144,
+      "end": 1149,
+      "fixes": 1
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1266,
+      "end": 1281,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1266,
+      "end": 1281,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1354,
+      "end": 1385,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1365,
+      "end": 1378,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1401,
+      "end": 1435,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1412,
+      "end": 1428,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1451,
+      "end": 1485,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1462,
+      "end": 1478,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1501,
+      "end": 1538,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1512,
+      "end": 1531,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1554,
+      "end": 1592,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1554,
+      "end": 1592,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1554,
+      "end": 1592,
+      "fixes": 0
+    },
+    {
+      "rule": "prefer-show",
+      "code": "SC8015",
+      "kind": "uncertifiable",
+      "blocker": "preference-read-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1554,
+      "end": 1592,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1569,
+      "end": 1585,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1608,
+      "end": 1646,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1619,
+      "end": 1631,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1634,
+      "end": 1646,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1634,
+      "end": 1646,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1662,
+      "end": 1718,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1694,
+      "end": 1711,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1694,
+      "end": 1711,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1734,
+      "end": 1776,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1745,
+      "end": 1769,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1788,
+      "end": 1800,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/arm-only-store-destructure/App.tsx",
+      "start": 1788,
+      "end": 1800,
+      "fixes": 0
+    }
+  ]
+}

@@ -42500,5 +42500,27 @@
    "mx-strict-read-untracked-evt-apply-dispatch-shadow-named-signal-direct-none-s-prop-value-cast"
   ],
   "rediscovered": "the old judge on main 5c1435e8c: nothing needs a look; ADR 1146's judge on the same build: needs a look (2)"
+ },
+ {
+  "finding": "ADR 1158: a store's destructure in a component only `isServer ? <K1 /> : null` renders kept SC1003's violation (Chrome never runs the site): a store's SC1003 row claims the strict-read window as SC1001 does, but only rows whose code claims the client runtime met the build arms (ADR 0677), and SC1003's props form claims none",
+  "found": "the r3 catalog of unproven simple programs (2026-11-21): focus listed 12 none-layer programs as unexecuted-violation",
+  "fixed": "ADR 1158 (CatalogWording::defect_claims_client_runtime: a store destructure's row meets ExecutionPaths::apply)",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-arm-tag-store-dstr-object-direct-none",
+   "lg-strict-read-untracked-arm-tag-store-dstr-object-alias-none",
+   "lg-strict-read-untracked-arm-tag-store-dstr-empty-sub-direct-none",
+   "lg-strict-read-untracked-arm-tag-store-dstr-empty-sub-alias-none",
+   "lg-strict-read-untracked-arm-tag-store-dstr-empty-items-direct-none",
+   "lg-strict-read-untracked-arm-tag-store-dstr-empty-items-alias-none",
+   "lg-strict-read-untracked-arm-tag-store-dstr-empty-sibling-direct-none",
+   "lg-strict-read-untracked-arm-tag-store-dstr-empty-sibling-alias-none",
+   "lg-strict-read-untracked-arm-tag-store-dstr-then-first-direct-none",
+   "lg-strict-read-untracked-arm-tag-store-dstr-then-first-alias-none",
+   "lg-strict-read-untracked-arm-tag-store-dstr-quoted-direct-none",
+   "lg-strict-read-untracked-arm-tag-store-dstr-quoted-alias-none"
+  ],
+  "rediscovered": "focus.mjs --grids lg-recall --codes STRICT_READ_UNTRACKED --recall-full -- --contexts arm-tag (3,748 programs), release builds: main b600297eb 40 unexecuted-violation (needs a look, exit 1); this build none, exit 0 (40 unexecuted and 166 uncertifiable to clean, nothing else)"
  }
 ]

@@ -2258,3 +2258,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/named-handler-prop-read/node_modules/**
 !fixtures/reactive-ir/named-handler-prop-read/variants/quiet/node_modules/
 !fixtures/reactive-ir/named-handler-prop-read/variants/quiet/node_modules/**
+!fixtures/reactive-ir/arm-only-store-destructure/node_modules/
+!fixtures/reactive-ir/arm-only-store-destructure/node_modules/**

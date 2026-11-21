@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1158: a store destructure in a tag only `isServer ? <X /> : null` renders never runs in a client build: no dev diagnostic, so SC1003 there is proved silent, as SC1001 is (ADR 0677). `BothArms` and `ShadowedTag` run and are reported (STRICT_READ_UNTRACKED); `UnderConstant` runs in the browser (`typeof window` is defined) and is uncertifiable, `build-constant-arm`. The reactive-ir fixture of the same name adds a props destructure in the arm, a pattern claim no run observes."
+}
