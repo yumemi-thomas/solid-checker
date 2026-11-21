@@ -1490,18 +1490,24 @@ enum Handler {
 /// Turns the reads reported since `mark` into proof obligations for `reason`;
 /// a read that is one already keeps its own (inner) reason (ADR 0595).
 fn mark_uncertain(draft: &mut ProgramDraft, mark: usize, reason: &AfterAwaitObligation) {
-    for defect in &mut draft.static_defects[mark..] {
-        if let StaticDefectKind::ReactiveReadAfterAwait { obligation, .. } = &mut defect.kind {
-            defect.uncertain = true;
-            obligation.get_or_insert_with(|| reason.clone());
-            if *reason == AfterAwaitObligation::GeneratorStepped
-                && !crate::blockers::named(&defect.analysis_context)
-            {
-                defect.analysis_context = crate::blockers::with_detail(
-                    crate::blockers::GENERATOR_STEPPED,
-                    &defect.analysis_context,
-                );
-            }
+    for index in mark..draft.static_defects.len() {
+        mark_uncertain_one(draft, index, reason);
+    }
+}
+
+/// [`mark_uncertain`] for the one defect at `index`.
+fn mark_uncertain_one(draft: &mut ProgramDraft, index: usize, reason: &AfterAwaitObligation) {
+    let defect = &mut draft.static_defects[index];
+    if let StaticDefectKind::ReactiveReadAfterAwait { obligation, .. } = &mut defect.kind {
+        defect.uncertain = true;
+        obligation.get_or_insert_with(|| reason.clone());
+        if *reason == AfterAwaitObligation::GeneratorStepped
+            && !crate::blockers::named(&defect.analysis_context)
+        {
+            defect.analysis_context = crate::blockers::with_detail(
+                crate::blockers::GENERATOR_STEPPED,
+                &defect.analysis_context,
+            );
         }
     }
 }
@@ -2452,7 +2458,65 @@ impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
         } else {
             AfterAwaitObligation::SuspensionUnplaced
         };
-        mark_uncertain(draft, mark, &reason);
+        // ADR 1164: a read written directly in the body of a `for await` that provably runs it is placed: every run of the body follows
+        // the loop's await of its first `next()` (ADR 1038), and the body runs at least once.
+        let running_bodies = self.for_await_bodies_that_run(file, function);
+        if running_bodies.is_empty() {
+            mark_uncertain(draft, mark, &reason);
+            return;
+        }
+        let path = file.path.as_str();
+        let mut index = mark;
+        while index < draft.static_defects.len() {
+            let location = &draft.static_defects[index].location;
+            let site = u32::try_from(location.start_byte)
+                .ok()
+                .zip(u32::try_from(location.end_byte).ok())
+                .map(|(start, end)| Span::new(start, end));
+            let in_body = &*location.path == path
+                && site.is_some_and(|site| {
+                    running_bodies.iter().any(|body| body.contains(site))
+                        && written_directly_in(&file.ast, function, site)
+                });
+            if !in_body {
+                mark_uncertain_one(draft, index, &reason);
+            }
+            index += 1;
+        }
+    }
+
+    /// ADR 1164: the bodies (the rest of the loop past the iterable) of the `for await` statements written directly in `function`, an async
+    /// non-generator function, whose iterable is an array literal whose first element is a decimal integer, boolean or `null` literal (so
+    /// the iterator's first `next()` fulfills with a value and the body runs), while no visible write reaches the array iterator. Each run of
+    /// such a body follows the loop's suspension (ADR 1038).
+    fn for_await_bodies_that_run(&self, file: &FileFacts, function: &FunctionFact) -> Vec<Span> {
+        if !function.r#async
+            || function.generator
+            || !self.ctx.semantic_lookup.array_iteration_intact()
+        {
+            return Vec::new();
+        }
+        let ast = &file.ast;
+        ast.implicit_suspensions
+            .iter()
+            .filter(|suspension| written_directly_in(ast, function, **suspension))
+            .filter_map(|suspension| {
+                let statement = ast.loop_statements.iter().find(|statement| {
+                    statement.start == suspension.start && statement.end > suspension.end
+                })?;
+                let iterable = ast.iterated_operands.iter().copied().find(|operand| {
+                    statement.contains(*operand) && operand.end == suspension.end
+                })?;
+                let array = ast.array_literal_at(iterable)?;
+                let first = array.elements.first()?;
+                let literal = first.kind == solid_facts::ast::ArrayElementKind::Value
+                    && file.source_text(first.span).is_some_and(|text| {
+                        matches!(text, "true" | "false" | "null")
+                            || (!text.is_empty() && text.bytes().all(|byte| byte.is_ascii_digit()))
+                    });
+                literal.then(|| Span::new(suspension.end, statement.end))
+            })
+            .collect()
     }
 
     /// ADR 0870: an `await` a branch may skip dominates nothing, so no fact

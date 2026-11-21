@@ -133,7 +133,7 @@ pub(crate) fn unwindowed_role_at_call(
         steps += 1;
         if follows_unconditional_await(file, at)
             || follows_dominating_await(file, at)
-            || follows_try_head_await(file, at, lookup)
+            || follows_declared_try_head_await(file, at, lookup)
         {
             return role_arm!(
                 "callee_roles.unwindowed_role_at_call.unreported-2",

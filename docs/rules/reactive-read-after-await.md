@@ -188,7 +188,11 @@ Each of these keeps it from applying:
   not proven the way an `await`'s dominance is. The loop's body is: it runs
   only after the first `next()` was awaited, so the proofs that ask whether
   code follows an await read it as they read the rest of an await's block
-  ([ADR 1038](../decisions.md#adr-1038)).
+  ([ADR 1038](../decisions.md#adr-1038)). A read written directly in the
+  body of a `for await` over an array literal whose first element is a
+  number, boolean or `null` literal is a violation: the body runs, past the
+  suspension ([ADR 1164](../decisions.md#adr-1164)); over any other iterable
+  it stays an obligation.
   Member reads, callbacks and helpers reached there are obligations too.
 
 **The feasible-path premise.** A read is reported where the code is written to
