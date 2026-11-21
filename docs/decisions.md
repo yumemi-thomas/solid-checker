@@ -4845,4 +4845,7 @@ G1 of the R3 catalog (S half). ADR 1038 already reads a `for await` body as past
   - the eight counterexamples stay U.
 - `write-past-layered-await` `Named`'s write in the `finally`: U to clean.
 - Chrome (`runtime-oracle/after-await-for-await-finally`): UNTRACKED_READ_AFTER_AWAIT at the three violations (`covered-violation`) and at every uncertifiable read that runs (`covered-uncertifiable`); nothing at the clean writes.
-- Probe, release, VM, main b600297eb against this branch: PROBE_RESULT.
+- Probe, release, VM, main b600297eb against this branch: 2,160 programs of mx-recall and lg-recall in the `*-for-await` and `*-finally` contexts, every code, layers none, closure, iife and helper, stratified by code, context, variant and binding. Results:
+  - 188 moves: 93 legal U to clean (SC2001, SC2006, SC2008 and SC3001 writes, actions and leaf calls in a `finally`; 5 SC1002 closure reads in a handler-only function's `finally`) and 95 misuse recall-gap to agree;
+  - the agree moves are 89 NO_OWNER_* and SETTLED_CLEANUP_UNOWNED in a `finally` (the owner proof takes the try head) and 6 UNTRACKED_READ_AFTER_AWAIT in a `for await` body;
+  - nothing else moved, and nothing needs a look on either build.
