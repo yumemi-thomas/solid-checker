@@ -887,6 +887,12 @@ packages/wasm/owned/
 !fixtures/reactive-ir/flush-write-path/node_modules/**
 !fixtures/reactive-ir/flush-closure-called-once/node_modules/
 !fixtures/reactive-ir/flush-closure-called-once/node_modules/**
+!fixtures/reactive-ir/effect-error-arm-read/node_modules/
+!fixtures/reactive-ir/effect-error-arm-read/node_modules/**
+!fixtures/reactive-ir/effect-error-arm-read/variants/flush-in-root/node_modules/
+!fixtures/reactive-ir/effect-error-arm-read/variants/flush-in-root/node_modules/**
+!fixtures/reactive-ir/effect-error-arm-read/variants/flush-in-body/node_modules/
+!fixtures/reactive-ir/effect-error-arm-read/variants/flush-in-body/node_modules/**
 !fixtures/reactive-ir/walk-bounds/node_modules/
 !fixtures/reactive-ir/walk-bounds/node_modules/**
 !fixtures/reactive-ir/dynamic-entry-limit/node_modules/
