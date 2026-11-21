@@ -2857,12 +2857,16 @@ fn function_forbidden_operations(
         // pattern, a default the call passes a value for, or one under a condition stays possible.
         let omitted_default = (!helper.generator)
             .then(|| {
-                helper.parameters.iter().enumerate().find(|(index, parameter)| {
-                    passed.is_some_and(|passed| *index >= passed)
-                        && parameter.initializer.is_some_and(|initializer| {
-                            helper_file.ast.peel_ts_sugar_span(initializer) == inner.span
-                        })
-                })
+                helper
+                    .parameters
+                    .iter()
+                    .enumerate()
+                    .find(|(index, parameter)| {
+                        passed.is_some_and(|passed| *index >= passed)
+                            && parameter.initializer.is_some_and(|initializer| {
+                                helper_file.ast.peel_ts_sugar_span(initializer) == inner.span
+                            })
+                    })
             })
             .flatten();
         if let Some((index, parameter)) = omitted_default {
