@@ -5536,6 +5536,76 @@ impl LocalAccessContext<'_, '_> {
     /// read of a pending source, on its stack, and every other read that might
     /// throw sits in a `try` that keeps it: an uncaught throw leaves the pass,
     /// which then never completes with a value.
+    /// ADR 1176: whether `call` calls a `const`-bound arrow or function expression of this file, neither `async` nor a
+    /// generator, written in the computation's own file, with no nested function, whose every identifier that names an
+    /// accessor that may throw and every call that may reach an async source lies in a block `keeps` accepts (a `try`
+    /// whose handler does not rethrow). Such a call reads nothing outside a kept block, so it is no other throw of the pass.
+    fn call_of_kept_closure(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        keeps: &dyn Fn(solid_facts::core::Span) -> bool,
+    ) -> bool {
+        if call.construct || !call.arguments.is_empty() {
+            return false;
+        }
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        let Some(declaration) = file.ast.reference_declaration(callee) else {
+            return false;
+        };
+        let Some(binding) = file.ast.bindings.iter().find(|binding| {
+            binding.immutable
+                && binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding
+                    .names
+                    .first()
+                    .is_some_and(|name| name.span == declaration)
+        }) else {
+            return false;
+        };
+        let Some(closure) = binding.initializer.and_then(|initializer| {
+            file.ast
+                .function_at(file.ast.peel_ts_sugar_span(initializer))
+        }) else {
+            return false;
+        };
+        if closure.r#async
+            || closure.generator
+            || crate::indexes::binding_written(file, declaration)
+            || file
+                .ast
+                .functions
+                .iter()
+                .any(|nested| nested.span != closure.span && closure.span.contains(nested.span))
+        {
+            return false;
+        }
+        file.ast.identifiers.iter().all(|identifier| {
+            !closure.span.contains(identifier.span)
+                || keeps(identifier.span)
+                || file.ast.reference_declaration(identifier.span).is_none()
+                || crate::source_discovery::reference_symbol(
+                    file,
+                    identifier.span,
+                    self.entities,
+                    self.lookup,
+                )
+                .is_some_and(|other| {
+                    !self.accessors.contains_key(&other) || self.caught_read_silent(&other)
+                })
+        }) && file.ast.calls.iter().all(|inner| {
+            !closure.span.contains(inner.span)
+                || keeps(inner.span)
+                || !(crate::execution_role::hook_result_root(file, inner.callee, self.lookup)
+                    .is_some()
+                    || (self
+                        .lookup
+                        .callee_symbol(file, inner.callee)
+                        .is_none_or(|symbol| !self.accessors.contains_key(symbol))
+                        && self.value_reaches_async_source(file, inner.callee).may()))
+        })
+    }
+
     fn caught_read_proven(
         &self,
         file: &solid_facts::FileFacts,
@@ -5582,6 +5652,9 @@ impl LocalAccessContext<'_, '_> {
                     && file.ast.calls.iter().all(|call| {
                         !compute.body.contains(call.span)
                             || keeps(call.span)
+                            // ADR 1176: a call of a local closure whose every read that may throw is kept by a `try` (the
+                            // closure written around the read: `const f = () => { try { a(); } catch {} }; f();`).
+                            || self.call_of_kept_closure(file, call, &keeps)
                             || !(crate::execution_role::hook_result_root(
                                 file,
                                 call.callee,
