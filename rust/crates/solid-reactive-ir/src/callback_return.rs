@@ -644,23 +644,36 @@ pub(crate) fn store_tuple_action_entries(
     (!held.is_empty()).then_some((held, calls))
 }
 
-/// ADR 1147 (the review's F1): whether every function between the reader `reader` (its body; `None`: module scope) and an action's call at `call` is
+/// ADR 1147 (the review's F1): whether every function between the reader `reader` (its function; `None`, module scope, refuses) and an action's call at `call` is
 /// run by the dialect or the DOM where it is written: the whole argument of a dialect primitive's call, or the whole expression of an intrinsic element's
 /// attribute. A callback handed to a package (`hand(() => add("x"))`), a project function, or any other position refuses the plan: the write keeps its row.
-fn action_call_placed(lookup: &SemanticLookup<'_>, file: &FileFacts, call: Span, reader: Option<Span>) -> bool {
+fn action_call_placed(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    call: Span,
+    reader: Option<Span>,
+) -> bool {
+    // A reader with no function of its own (module scope) is no component: refused.
+    let Some(reader) = reader else {
+        return false;
+    };
     let ast = &file.ast;
     ast.functions_containing(call)
-        .filter(|function| reader.is_none_or(|reader| function.span != reader && reader.contains(function.span)))
+        .filter(|function| function.span != reader && reader.contains(function.span))
         .all(|function| {
-            let primitive_argument = ast.arguments_containing(function.span).any(|(outer, index)| {
-                ast.peel_ts_sugar_span(outer.arguments[index].span) == function.span
-                    && !outer.arguments[index].spread
-                    && lookup.primitive_at_call(file, outer.span).is_some()
-            });
+            let primitive_argument =
+                ast.arguments_containing(function.span)
+                    .any(|(outer, index)| {
+                        ast.peel_ts_sugar_span(outer.arguments[index].span) == function.span
+                            && !outer.arguments[index].spread
+                            && lookup.primitive_at_call(file, outer.span).is_some()
+                    });
             let intrinsic_attribute = ast.jsx_elements.iter().any(|element| {
                 crate::execution_role::intrinsic_element(file, element)
                     && element.attributes.iter().any(|attribute| {
-                        attribute.expression.is_some_and(|value| ast.peel_ts_sugar_span(value) == function.span)
+                        attribute
+                            .expression
+                            .is_some_and(|value| ast.peel_ts_sugar_span(value) == function.span)
                     })
             });
             primitive_argument || intrinsic_attribute
@@ -801,10 +814,13 @@ fn store_tuple_consumer(
                     }
                     // The local is only called: never written, handed on or read as a value; and each call is written where the dialect or the DOM runs
                     // it (the review of 1147, F1: a call in a callback handed to a package, `hand(() => add("x"))`, runs where the package says).
-                    let reader = ast.innermost_function_owning(binding.declaration).map(|function| function.span);
+                    let reader = ast
+                        .innermost_function_owning(binding.declaration)
+                        .map(|function| function.span);
                     let only_called = references(file, inner.target).all(|reference| {
-                        ast.calls_with_peeled_callee(reference)
-                            .any(|call| !call.construct && action_call_placed(lookup, file, call.span, reader))
+                        ast.calls_with_peeled_callee(reference).any(|call| {
+                            !call.construct && action_call_placed(lookup, file, call.span, reader)
+                        })
                     });
                     if !only_called {
                         return None;
