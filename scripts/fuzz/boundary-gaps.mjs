@@ -64,6 +64,10 @@ export const TABLE_GAP_GROUPS = [
 // <arm-gaps>
 export const ARM_GAPS = [
   {
+    reason: "ADR 1167: a read in the cleanup a never-rerunning effect's inline apply returns is placed at its disposal (DeferredCallback, reads only, unless the project may dispose an owner). The registered pairs have no cleanup cell; the separating pair is the generator's `effect-cleanup-rerun` (misuse: the compute tracks, a rerun runs the cleanup in the window) against `effect-cleanup-show`/`-for` (legal: only a disposal runs it), held as the fixtures `effect-cleanup-disposal-only` (clean, and its `TwinComputeTracks` uncertifiable) and `effect-cleanup-disposal-reachable`, with Chrome rc.21 on both; a registry pair and a snapshot rerun (`boundary.mjs verify --update`) are not run here.",
+    arms: ["execution_role.read_execution_role.returned-cleanup-disposal"],
+  },
+  {
     reason: "ADR 1037: a setter or `refresh` in the cleanup an inline apply returns. The generator's cleanup cells (`effect-cleanup-*`, legal; `effect-cleanup-flush-rerun`, misuse) never run clean: the effect's own creation in the component keeps its SC3001/SC6002 rows (`boundary.mjs verify --only returned-cleanup-write`, 2026-11-17: 15 programs, the arm seen silent in no clean cell). The fixtures `effect-cleanup-write-role` (silent) and `effect-cleanup-write-role-flush` (kept) separate it, with the Chrome oracle case `effect-cleanup-write-role`.",
     arms: ["write_roles.returned-cleanup-write"],
   },
