@@ -4327,24 +4327,50 @@ pub(crate) fn runs_nothing_before_in_layers(
     apply: Span,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
+    runs_nothing_before_in_layers_with(file, site, apply, false, lookup)
+}
+
+/// [`runs_nothing_before_in_layers`]; with `unrun_function_arguments` (ADR 1175), the body of a function literal written as one
+/// of the site's own arguments is not code the site runs first: evaluating the argument makes a closure, and the site's callee
+/// (an optimistic setter, which checks its source before it calls the updater) throws before calling it.
+fn runs_nothing_before_in_layers_with(
+    file: &solid_facts::FileFacts,
+    site: Span,
+    apply: Span,
+    unrun_function_arguments: bool,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
     let ast = &file.ast;
     // The site's own arguments are evaluated before it (and a member among
     // them may throw; the callee's own member is the read).
     let callee = ast
         .call_at(site)
         .map(|call| ast.peel_ts_sugar_span(call.callee));
+    let unrun = ast
+        .call_at(site)
+        .filter(|_| unrun_function_arguments)
+        .map(|call| {
+            call.arguments
+                .iter()
+                .filter(|argument| !argument.spread)
+                .filter_map(|argument| ast.function_at(ast.peel_ts_sugar_span(argument.span)))
+                .map(|function| function.span)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let evaluated = |span: Span| site.contains(span) && !unrun.iter().any(|body| body.contains(span));
     if ast
         .calls
         .iter()
-        .any(|other| other.span != site && site.contains(other.span))
+        .any(|other| other.span != site && evaluated(other.span))
         || ast.members.iter().any(|member| {
-            Some(member.span) != callee && site.contains(member.span) && member.span != site
+            Some(member.span) != callee && evaluated(member.span) && member.span != site
         })
         || ast
             .computed_members
             .iter()
-            .any(|member| site.contains(*member))
-        || ast.spreads.iter().any(|spread| site.contains(spread.span))
+            .any(|member| evaluated(*member))
+        || ast.spreads.iter().any(|spread| evaluated(spread.span))
     {
         return false;
     }
@@ -4463,7 +4489,7 @@ pub(crate) fn pending_apply_first_read_from(
     declaration: &typefacts::Location,
     lookup: &SemanticLookup<'_>,
 ) -> Option<Span> {
-    pending_apply_first_run(file, site, lookup, |component, call| {
+    pending_apply_first_run(file, site, false, lookup, |component, call| {
         apply_source_pending(file, origin, component, call, declaration, lookup)
     })
 }
@@ -4521,7 +4547,8 @@ pub(crate) fn pending_apply_first_write(
     {
         return None;
     }
-    pending_apply_first_run(file, site, lookup, |component, call| {
+    // rc.21's optimistic setters check the source first (`dist/dev.js:3257`, `:8695-8699`): an updater literal runs after.
+    pending_apply_first_run(file, site, true, lookup, |component, call| {
         crate::owners::containing_ast_function(ast, binding.declaration)
             .is_some_and(|function| function.span == component.span)
             && binding.declaration.end <= call.span.start
@@ -4546,6 +4573,7 @@ pub(crate) fn pending_apply_first_write(
 fn pending_apply_first_run(
     file: &solid_facts::FileFacts,
     site: Span,
+    unrun_function_arguments: bool,
     lookup: &SemanticLookup<'_>,
     source_pending: impl FnOnce(&solid_facts::ast::FunctionFact, &solid_facts::ast::CallFact) -> bool,
 ) -> Option<Span> {
@@ -4583,7 +4611,13 @@ fn pending_apply_first_run(
                 && crate::owners::containing_ast_function(ast, other.span)
                     .is_some_and(|function| function.span == apply.span)
         })
-        || !runs_nothing_before_in_layers(file, site, apply.span, lookup)
+        || !runs_nothing_before_in_layers_with(
+            file,
+            site,
+            apply.span,
+            unrun_function_arguments,
+            lookup,
+        )
     {
         return None;
     }
