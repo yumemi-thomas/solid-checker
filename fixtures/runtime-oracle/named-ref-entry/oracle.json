@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1160: a named function whose only reference is an intrinsic element's `ref={name}` runs at the ref's application, untracked and with no owner the setter guard refuses: `RefWrite` is quiet and the checker silent (main: SC2001 uncertifiable). `AlsoCalled` and `ComponentRef` write during setup (REACTIVE_WRITE_IN_OWNED_SCOPE, SC2001 violations); `RefRead` warns STRICT_READ_UNTRACKED (SC1001)."
+}
