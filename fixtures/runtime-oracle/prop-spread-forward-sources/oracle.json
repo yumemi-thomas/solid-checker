@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1173: a setter handed through a `{...props}` forward: called in the receiving component's body Chrome reports REACTIVE_WRITE_IN_OWNED_SCOPE (`Body`, an SC2001 violation; main SC9012), called in an effect's apply it is quiet (`Apply`, silent). `Override` and `Rest` keep uncertifiable rows."
+}

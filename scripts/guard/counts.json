@@ -238,7 +238,7 @@
   "SC9005 host-input-unreadable": 3,
   "SC9005 package-source-unavailable": 67,
   "SC9012 async-prop-getter": 3,
-  "SC9012 closed-parameter-member-dispatch": 75,
+  "SC9012 closed-parameter-member-dispatch": 77,
   "SC9012 composite-callee-unresolved": 10,
   "SC9012 computed-call-target-unresolved": 29,
   "SC9012 created-accessor-read-unproven": 1,
@@ -288,11 +288,11 @@
   "SC9012 value-bound-held": 6,
   "SC9012 value-escaped-from-untrack": 8,
   "SC9012 value-exported-unnamed": 6,
-  "SC9012 value-forwarded": 286,
+  "SC9012 value-forwarded": 292,
   "SC9012 value-from-primitive-callback": 26,
   "SC9012 value-held-in-binding": 130,
   "SC9012 value-held-in-member": 30,
-  "SC9012 value-in-carrier": 445,
+  "SC9012 value-in-carrier": 448,
   "SC9012 value-in-class-field": 14,
   "SC9012 value-pending-in-jsx": 3,
   "SC9012 value-read-under-untrack": 1,
@@ -5808,6 +5808,30 @@
    "adr": "ADR 1160",
    "kind": "relabel",
    "relabeledTo": "SC2002 package-finding-at-entry"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC1001 read-backing-unproven",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 1173",
+   "proof": "rust/crates/solid-reactive-ir/src/source_discovery/props_reactivity.rs::forwarded_use",
+   "fixtures": {
+    "proved": "reactive-ir/competing-check-sync-memo",
+    "open": "reactive-ir/competing-check-sync-memo"
+   }
+  },
+  {
+   "fixture": "reactive-ir/spread-prop-backing",
+   "key": "SC1001 read-backing-unproven",
+   "from": 13,
+   "to": 12,
+   "adr": "ADR 1173",
+   "proof": "rust/crates/solid-reactive-ir/src/source_discovery/props_reactivity.rs::forwarded_use",
+   "fixtures": {
+    "proved": "reactive-ir/spread-prop-backing",
+    "open": "reactive-ir/spread-prop-backing"
+   }
   }
  ],
  "renames": []

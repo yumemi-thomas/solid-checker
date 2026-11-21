@@ -1475,8 +1475,8 @@
     },
     "rust/crates/solid-reactive-ir/src/source_discovery/props_reactivity.rs": {
       "default-on-missing": {
-        "count": 3,
-        "why": "pending-review"
+        "count": 5,
+        "why": "pending-review (3); ADR 1173's two in passed_sources_into: a component whose sites pass no value under the name adds no source and leaves the set complete, ADR 0509's polarity before it (a call of the prop then has no witness to report with)"
       },
       "name-only-match": {
         "count": 1,
