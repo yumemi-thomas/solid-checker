@@ -413,7 +413,7 @@ pub(crate) struct Census<'l, 'a> {
     carried: Carried,
     /// ADR 1104 (1b): the walked root is a component's props, not a store: a value read out of it is a value, not a root.
     props_root: bool,
-    /// ADR 1178: the walked root is a store that has settled from its creation ([`settled_literal_store`]): a read of its raw
+    /// ADR 1178: the walked root is a store that has settled from its creation ([`Census::settled_literal_store`]): a read of its raw
     /// backing or of its own keys runs no trap that reads.
     settled_store: bool,
     steps: usize,
@@ -703,10 +703,12 @@ impl<'l, 'a> Census<'l, 'a> {
         reference: &Location,
         async_source: bool,
         props: bool,
-        settled: bool,
+        store_declaration: Option<&Location>,
     ) -> StartAnswer {
         self.props_root = props;
-        self.settled_store = settled && !props && !async_source;
+        self.settled_store = !props
+            && !async_source
+            && store_declaration.is_some_and(|declaration| self.settled_literal_store(declaration));
         let open = self.root_use(reference, async_source);
         self.props_root = false;
         self.settled_store = false;
@@ -3485,6 +3487,50 @@ impl<'l, 'a> Census<'l, 'a> {
         answer
     }
 
+    /// ADR 1178: the store declared at `declaration` has settled from its creation: an exact `createStore` (no derive, optimistic store
+    /// or projection) whose first argument is an array or closed object literal, held by the first slot of a `const` tuple pattern
+    /// whose value is a proxy (ADR 0634). Its traps answer no pending first answer (ADR 0635), and its raw backing is what it holds.
+    fn settled_literal_store(&self, declaration: &Location) -> bool {
+        let Some((file, span)) = self.place(declaration) else {
+            return false;
+        };
+        let lookup = self.lookup;
+        let Some(binding) = file.ast.bindings.iter().find(|binding| {
+            binding.immutable
+                && binding.shape == solid_facts::ast::BindingShape::Array
+                && binding
+                    .array_slots
+                    .first()
+                    .is_some_and(|slot| slot.as_ref().is_some_and(|name| name.span == span))
+        }) else {
+            return false;
+        };
+        let Some(call) = binding
+            .call_initializer
+            .and_then(|initializer| file.ast.call_at(initializer))
+            .filter(|call| binding.initializer.map(|value| file.ast.peel_ts_sugar_span(value)) == Some(call.span))
+        else {
+            return false;
+        };
+        if !lookup
+            .primitive_at_call(file, call.span)
+            .is_some_and(|primitive| lookup.dialect.creates_settled_store_from_value(primitive))
+            || lookup.store_value_may_be_raw(file, binding)
+        {
+            return false;
+        }
+        let Some(first) = call.arguments.first().filter(|argument| !argument.spread) else {
+            return false;
+        };
+        let value = file.ast.peel_ts_sugar_span(first.span);
+        file.ast.array_literals.contains(&value)
+            || file
+                .ast
+                .object_get_shapes
+                .iter()
+                .any(|shape| shape.span == value && shape.closed)
+    }
+
     /// ADR 1178: whether a read row stands exactly at `span`: the read a whole-store form makes there has its row, whatever that
     /// row's verdict.
     fn rowed_exactly(&self, file: &FileFacts, span: Span) -> bool {
@@ -3870,54 +3916,6 @@ fn coercion_is_plain(lookup: &SemanticLookup<'_>) -> bool {
     ]
     .into_iter()
     .all(|name| !crate::interproc::accessor_provenance::standard_member_replaced(lookup, name))
-}
-
-/// ADR 1178: the store declared at `declaration` has settled from its creation: an exact `createStore` (no derive, optimistic store
-/// or projection) whose first argument is an array or closed object literal, held by the first slot of a `const` tuple pattern
-/// whose value is a proxy (ADR 0634). Its traps answer no pending first answer (ADR 0635), and its raw backing is what it holds.
-pub(crate) fn settled_literal_store(lookup: &SemanticLookup<'_>, declaration: &Location) -> bool {
-    let Some(file) = lookup.file_by_path(declaration.path.as_ref()) else {
-        return false;
-    };
-    let (Ok(start), Ok(end)) = (
-        u32::try_from(declaration.start_byte),
-        u32::try_from(declaration.end_byte),
-    ) else {
-        return false;
-    };
-    let span = Span::new(start, end);
-    let Some(binding) = file.ast.bindings.iter().find(|binding| {
-        binding.immutable
-            && binding.shape == solid_facts::ast::BindingShape::Array
-            && binding
-                .array_slots
-                .first()
-                .is_some_and(|slot| slot.as_ref().is_some_and(|name| name.span == span))
-    }) else {
-        return false;
-    };
-    let Some(call) = binding
-        .call_initializer
-        .and_then(|initializer| file.ast.call_at(initializer))
-        .filter(|call| binding.initializer.map(|value| file.ast.peel_ts_sugar_span(value)) == Some(call.span))
-    else {
-        return false;
-    };
-    if lookup.primitive_at_call(file, call.span) != Some(solid_dialect::Primitive::CreateStore)
-        || lookup.store_value_may_be_raw(file, binding)
-    {
-        return false;
-    }
-    let Some(first) = call.arguments.first().filter(|argument| !argument.spread) else {
-        return false;
-    };
-    let value = file.ast.peel_ts_sugar_span(first.span);
-    file.ast.array_literals.contains(&value)
-        || file
-            .ast
-            .object_get_shapes
-            .iter()
-            .any(|shape| shape.span == value && shape.closed)
 }
 
 /// ADR 1178: the names a `for…of` over `operand` declares, when each is a plain identifier binding: a pattern would read the element

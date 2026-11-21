@@ -1720,6 +1720,14 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// ADR 1178: whether `primitive` called with a first argument that is no function (an array or object literal) makes a plain
+    /// store whose backing is that value from the call on: no derive, no optimistic layer, no projection. The value-use census reads
+    /// a settled store's raw backing and own keys as reading nothing.
+    fn creates_settled_store_from_value(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        false
+    }
+
     /// ADR 1178: what `primitive` does with a store handed whole at
     /// `argument`, when the runtime's code for it is reviewed: it reads the
     /// store there and hands nothing of it on but what it answers. `None`:

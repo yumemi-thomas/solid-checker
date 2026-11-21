@@ -65,10 +65,10 @@ export function NotTheForms() {
 }
 
 // A store that may not have settled, or whose backing is not its literal: `snapshot` and `hasOwn` stay uncertifiable.
-export function Unsettled(props: { init: { a: number } }) {
+export function Unsettled() {
   const [derived] = createStore((draft: { a: number }) => void draft, { a: 1 });
   const [optimistic] = createOptimisticStore({ a: 1 });
-  const [given] = createStore(props.init);
+  const [given] = createStore(JSON.parse('{ "a": 1 }') as { a: number });
   const click = () => {
     snapshot(derived);
     snapshot(optimistic);

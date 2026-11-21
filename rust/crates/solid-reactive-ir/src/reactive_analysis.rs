@@ -524,13 +524,13 @@ pub(crate) fn collect_project<'facts>(
                 let root = props || store;
                 let pending = ctx.async_sources.contains(*symbol);
                 if root {
-                    // ADR 1178: a store settled from its creation reads nothing through its raw backing or its own keys.
-                    let settled = store
-                        && !pending
-                        && ctx.accessors.get(*symbol).is_some_and(|(_, declaration)| {
-                            crate::value_use::settled_literal_store(ctx.semantic_lookup, declaration)
-                        });
-                    census.root_start(reference, pending, props && !store, settled)
+                    // ADR 1178: a store's declaration, for whether it settled from its creation.
+                    let declaration = ctx
+                        .accessors
+                        .get(*symbol)
+                        .filter(|_| store)
+                        .map(|(_, declaration)| declaration);
+                    census.root_start(reference, pending, props && !store, declaration)
                 } else {
                     census.callable_start(reference, ctx.accessors.contains_key(*symbol), pending)
                 }

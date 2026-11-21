@@ -2627,6 +2627,13 @@ impl Dialect for Solid2 {
         argument == 0 && matches!(primitive, Primitive::Refresh | Primitive::Affects)
     }
 
+    /// rc.21 `createStore(value)` (`@solidjs/signals` `dist/dev.js:9742-9744`): a value that is no function makes a plain store
+    /// over it (`createStoreDerived` only for a function). `createOptimisticStore` adds an optimistic layer and `createProjection`
+    /// derives: neither is this.
+    fn creates_settled_store_from_value(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::CreateStore
+    }
+
     /// rc.21 `deep(value)` (`@solidjs/signals` `dist/dev.js:6983-7060`): `value?.[$TARGET]`, then a walk of every key the
     /// store reaches (`read(getDeepNode(t))` per record, so a strict-read window warns at the call, ADR 0620), answering a
     /// snapshot (`snapshotRecord`/`snapshotWalk`). rc.21 `snapshot(value)` (`:7062-7068`): `value?.[$TARGET]` and a walk of
@@ -2636,10 +2643,10 @@ impl Dialect for Solid2 {
         &self,
         primitive: Primitive,
         argument: usize,
-    ) -> Option<WholeStoreArgument> {
+    ) -> Option<crate::WholeStoreArgument> {
         match (primitive, argument) {
-            (Primitive::Deep, 0) => Some(WholeStoreArgument::ReadsEveryKey),
-            (Primitive::Snapshot, 0) => Some(WholeStoreArgument::ReadsRawBacking),
+            (Primitive::Deep, 0) => Some(crate::WholeStoreArgument::ReadsEveryKey),
+            (Primitive::Snapshot, 0) => Some(crate::WholeStoreArgument::ReadsRawBacking),
             _ => None,
         }
     }
