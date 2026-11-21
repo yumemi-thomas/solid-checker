@@ -1869,7 +1869,7 @@ pub use summary_semantics::{CallbackSchedule, CallbackSummary, ReturnSummary};
 /// ADR 1107: a slot of a store destructure SC1003 hands over (`static_rules::delegated_destructure_slots`).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DestructureSlot {
-    /// The slot's local binding: where its synthetic member read stands.
+    /// The slot's property (ADR 1162): where its synthetic member read stands.
     pub slot: Location,
     /// The destructure's pattern: where SC1003's row stands.
     pub pattern: Location,

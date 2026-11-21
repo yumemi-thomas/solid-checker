@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1162: a store destructure in an effect's apply with a quoted key, an empty nested object or array pattern, an empty sibling, a renamed slot with a default (namespace import too): Chrome reports STRICT_READ_UNTRACKED at each and SC1003 is a violation. A `then` key renamed, quoted, defaulted or with an empty nested pattern, over a literal `then` nothing writes, is silent in Chrome and clean. A handler's slots, a written backing, a non-empty nested pattern under `then` and a computed key stay uncertifiable."
+}

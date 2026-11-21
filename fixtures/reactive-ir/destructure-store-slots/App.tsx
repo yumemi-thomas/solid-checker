@@ -52,7 +52,7 @@ function EmptySubPattern() {
   return <i />;
 }
 
-// Round 2 (F1): a sibling sub-pattern is not handed over with the named slot (the counts matched by coincidence).
+// Round 2 (F1): a sibling sub-pattern reads its property. ADR 1162 hands it over with the named slot: a helper read, as `{ v }` is.
 function SiblingEmptyInHelper() {
   const [store] = createStore({ v: 0, a: { b: 1 } });
   const read = () => {

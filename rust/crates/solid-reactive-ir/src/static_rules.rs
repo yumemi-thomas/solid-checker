@@ -628,26 +628,9 @@ fn component_props_destructure_into(
             // ADR 1106: a deferred role a destructure takes from the named callback around it holds only where it is written in
             // that callback itself. In a function nested in it (`const f1 = () => { const { v } = s1; }; f1();` in a ref
             // callback), the callback's own pass may run it (ADR 0585): fresh is not proven.
-            let nested_in_named_callback = role == crate::ExecutionRole::DeferredCallback
-                && crate::execution_role::named_callback_containing(
-                    file,
-                    binding.pattern,
-                    ctx.semantic_lookup,
-                )
-                .is_some_and(|callback| {
-                    crate::owners::containing_ast_function(&file.ast, binding.pattern)
-                        .is_some_and(|inner| inner.span != callback.span)
-                });
-            if !nested_in_named_callback
-                && matches!(
-                    role,
-                    crate::ExecutionRole::TrackedJsx
-                        | crate::ExecutionRole::EventCallback
-                        | crate::ExecutionRole::DeferredCallback
-                        // No strict-read window is open there (after an await, a timer, a disposal or an error arm).
-                        | crate::ExecutionRole::UntrackedUnwindowed
-                )
-            {
+            let nested_in_named_callback =
+                nested_in_named_callback(ctx.semantic_lookup, file, binding.pattern, role);
+            if destructure_role_does_not_report(ctx.semantic_lookup, file, binding.pattern, role) {
                 // ADR 1114 family 2: the slots are read sites of the universe; this role reports no untracked read there, named so.
                 ends.role_silent(
                     file,
@@ -770,6 +753,43 @@ fn component_props_destructure_into(
     defects
 }
 
+/// ADR 1106: a deferred role a destructure takes from the named callback around it holds only where it is written in that
+/// callback itself. In a function nested in it (`const f1 = () => { const { v } = s1; }; f1();` in a ref callback), the
+/// callback's own pass may run it (ADR 0585): fresh is not proven.
+fn nested_in_named_callback(
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    pattern: Span,
+    role: crate::ExecutionRole,
+) -> bool {
+    role == crate::ExecutionRole::DeferredCallback
+        && crate::execution_role::named_callback_containing(file, pattern, lookup).is_some_and(
+            |callback| {
+                crate::owners::containing_ast_function(&file.ast, pattern)
+                    .is_some_and(|inner| inner.span != callback.span)
+            },
+        )
+}
+
+/// Fresh-at-call-time contexts where SC1003 ends a destructure silently (`DestructureRoleDoesNotReport`): tracked scopes
+/// re-run and re-subscribe, event handlers and deferred callbacks read current values, and no strict-read window is open after
+/// an await, a timer, a disposal or an error arm.
+fn destructure_role_does_not_report(
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    pattern: Span,
+    role: crate::ExecutionRole,
+) -> bool {
+    !nested_in_named_callback(lookup, file, pattern, role)
+        && matches!(
+            role,
+            crate::ExecutionRole::TrackedJsx
+                | crate::ExecutionRole::EventCallback
+                | crate::ExecutionRole::DeferredCallback
+                | crate::ExecutionRole::UntrackedUnwindowed
+        )
+}
+
 /// ADR 1106: the roles a strict-read window may be open in, or nothing is known of: setup, an `untrack` callback, an effect's
 /// apply, a directive's, module initialization, and an unknown role.
 fn window_may_be_open(role: crate::ExecutionRole) -> bool {
@@ -877,14 +897,14 @@ fn helper_runs_only_fresh(
 }
 
 /// ADR 1107: every slot of every destructure `delegated_destructure_slots` hands over, with its pattern. A read row can stand at a
-/// slot's local binding only when it is the slot's synthetic member read (`LocalAccess`), so a destructure of no store adds none.
+/// slot's property only when it is the slot's synthetic member read (`LocalAccess`), so a destructure of no store adds none.
 pub(crate) fn destructure_slots(
     lookup: &crate::indexes::SemanticLookup<'_>,
 ) -> Vec<crate::DestructureSlot> {
     let mut out = Vec::new();
     for file in lookup.files() {
         for binding in &file.ast.bindings {
-            let Some(slots) = delegated_destructure_slots(lookup, file, binding) else {
+            let Some(slots) = handed_over_slots(lookup, file, binding) else {
                 continue;
             };
             let source = binding
@@ -893,7 +913,7 @@ pub(crate) fn destructure_slots(
                 .unwrap_or("reactive object")
                 .to_owned();
             let label = enclosing_function_label(file, binding.pattern);
-            for slot in slots {
+            for (slot, _) in slots {
                 out.push(crate::DestructureSlot {
                     slot: location(file.path.shared(), slot),
                     pattern: location(file.path.shared(), binding.pattern),
@@ -907,42 +927,147 @@ pub(crate) fn destructure_slots(
 }
 
 /// ADR 1107: the slots of an object destructure that SC1001 reads as members, when the destructure hands its claim over: the
-/// initializer is a plain identifier, every slot has a static key (`{ a, b: c, d = 1 }`; no rest, no nested pattern, no computed
-/// key), and it is not written directly in setup (`written_directly_in_setup`: a component's body or module scope, through
-/// immediately invoked functions only). SC1001's placement decides everything else, including a helper the body calls in place.
-/// The slots' local spans, each a member read `x.a` at the slot. Whether the identifier holds a store each caller asks itself.
+/// initializer is a plain identifier, every property's Get is exact (`destructure_slot_keys`), and it is not written directly in
+/// setup (`written_directly_in_setup`: a component's body or module scope, through immediately invoked functions only). SC1001's
+/// placement decides everything else, including a helper the body calls in place. Each slot as a member read `x.a`: the
+/// property's span (where the read stands) and its key's (whose text is the key). Whether the identifier holds a store each
+/// caller asks itself.
 pub(crate) fn delegated_destructure_slots(
     lookup: &crate::indexes::SemanticLookup<'_>,
     file: &solid_facts::FileFacts,
     binding: &solid_facts::ast::BindingFact,
-) -> Option<Vec<solid_facts::core::Span>> {
-    if binding.shape != solid_facts::ast::BindingShape::Object
-        || binding.initializer_identifier.is_none()
-        || binding.object_slots.is_empty()
-        || binding.names.len() != binding.object_slots.len()
-        // Round 2 (F1): the slot counts match by coincidence when a sub-pattern binds no name (`{ v, a: {} }`), whose
-        // property no slot reads: a pattern with a nested value, a default, a computed key or a rest element is not handed
-        // over (ADR 1122: by the pattern's properties).
-        || binding.pattern_rest
-        || binding.object_properties.len() != binding.object_slots.len()
-        || binding
-            .object_properties
-            .iter()
-            .any(|property| property.nested || property.has_default || property.computed)
+) -> Option<Vec<(solid_facts::core::Span, solid_facts::core::Span)>> {
+    let slots = handed_over_slots(lookup, file, binding)?;
+    // ADR 1162: a form ADR 1107 did not hand over (a quoted, renamed or defaulted slot, an empty nested pattern) keeps the
+    // silence SC1003's own role proves for it (`destructure_role_does_not_report`), as before: the member twin's placement may
+    // be coarser there (a helper reached through a `let` copy in a handler).
+    if !slots_by_local_name(file, binding) {
+        let allowed = allowed_callback_spans(file, lookup);
+        let role = semantic_execution_role(
+            file,
+            binding.pattern,
+            &allowed,
+            lookup.entities(),
+            lookup.symbol_names(),
+            lookup,
+        );
+        if destructure_role_does_not_report(lookup, file, binding.pattern, role) {
+            return None;
+        }
+    }
+    Some(slots)
+}
+
+/// `delegated_destructure_slots` before ADR 1162's role check: a superset of it, for the fold's map from a slot read to its
+/// pattern (a slot no read stands at maps nothing).
+fn handed_over_slots(
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    binding: &solid_facts::ast::BindingFact,
+) -> Option<Vec<(solid_facts::core::Span, solid_facts::core::Span)>> {
+    if binding.initializer_identifier.is_none()
         || written_directly_in_setup(lookup, file, binding.pattern)
     {
         return None;
     }
-    // The synthetic member reads its key from the slot's local name as written, so only a slot whose key, by the parser's
-    // value, is that text is handed over: not a renamed slot (`{ then: w }`), nor an escaped spelling (`{ th\u0065n }`,
-    // ADR 1122).
+    Some(
+        destructure_slot_keys(file, binding)?
+            .into_iter()
+            .map(|slot| (slot.property, slot.key))
+            .collect(),
+    )
+}
+
+/// ADR 1107's form: every property a shorthand name with no default (`{ v, then }`), the key its local's text.
+fn slots_by_local_name(
+    file: &solid_facts::FileFacts,
+    binding: &solid_facts::ast::BindingFact,
+) -> bool {
+    binding.object_properties.iter().all(|property| {
+        !property.nested
+            && !property.has_default
+            && !property.computed
+            && property.local.as_ref().is_some_and(|local| {
+                local.span == property.span
+                    && file.source_text(local.span) == property.key.as_deref()
+            })
+    })
+}
+
+/// ADR 1162: one property of an object destructure as the Get it makes (`destructure_slot_keys`).
+pub(crate) struct DestructureSlotKey<'a> {
+    /// The whole property (`"v": x`, `a: {}`, `v = 1`): where the Get's read stands.
+    pub(crate) property: solid_facts::core::Span,
+    /// The key as written, with no quotes: its source text is `name`.
+    pub(crate) key: solid_facts::core::Span,
+    pub(crate) name: &'a str,
+}
+
+/// ADR 1107, ADR 1162: each property of an object destructure as the one Get it makes, with the span whose source text is the
+/// key the runtime reads (facts schema 100, the parser's value). `None` unless every property is exact: no rest
+/// element, no computed key, a key spelled as its value (`{ v }`, `{ then: w }`, `{ v = 1 }`, or quoted with no escape:
+/// `{ "v": x }`; not `{ th\u0065n }`), and a value that is a binding name (with or without a default) or an empty nested
+/// pattern (`{ a: {} }`, `{ items: [] }`), which reads nothing past the key (its RequireObjectCoercible runs no Get). A
+/// default changes nothing of the Get: it is evaluated after it, as its own code. A non-empty nested pattern reads past the key
+/// (a chained Get) and is not handed over.
+pub(crate) fn destructure_slot_keys<'a>(
+    file: &'a solid_facts::FileFacts,
+    binding: &'a solid_facts::ast::BindingFact,
+) -> Option<Vec<DestructureSlotKey<'a>>> {
+    if binding.shape != solid_facts::ast::BindingShape::Object
+        || binding.pattern_rest
+        || binding.object_properties.is_empty()
+    {
+        return None;
+    }
     binding
         .object_properties
         .iter()
         .map(|property| {
-            let local = property.local.as_ref()?;
-            (property.key.is_some() && property.key.as_deref() == file.source_text(local.span))
-                .then_some(local.span)
+            if property.computed {
+                return None;
+            }
+            let key = property.key.as_deref()?;
+            let width = u32::try_from(key.len()).ok()?;
+            let start = property.span.start;
+            let plain = solid_facts::core::Span::new(start, start.checked_add(width)?);
+            let quote = file.source_text(solid_facts::core::Span::new(start, start + 1));
+            let slot = |span| DestructureSlotKey {
+                property: property.span,
+                key: span,
+                name: key,
+            };
+            let span = if file.source_text(plain) == Some(key) {
+                plain
+            } else if let Some(quote @ ("\"" | "'")) = quote {
+                let inner = solid_facts::core::Span::new(start + 1, start + 1 + width);
+                let close = solid_facts::core::Span::new(inner.end, inner.end + 1);
+                (file.source_text(inner) == Some(key) && file.source_text(close) == Some(quote))
+                    .then_some(inner)?
+            } else {
+                return None;
+            };
+            let key_end = if span == plain {
+                span.end
+            } else {
+                span.end + 1
+            };
+            if !property.nested {
+                // A binding name, shorthand (its local is the key) or after the key's colon.
+                let local = property.local.as_ref()?;
+                return (local.span.start >= start && local.span.end <= property.span.end)
+                    .then(|| slot(span));
+            }
+            if property.has_default {
+                return None;
+            }
+            let value =
+                file.source_text(solid_facts::core::Span::new(key_end, property.span.end))?;
+            let compact = value
+                .chars()
+                .filter(|c| !c.is_whitespace())
+                .collect::<String>();
+            matches!(compact.as_str(), ":{}" | ":[]").then(|| slot(span))
         })
         .collect()
 }
