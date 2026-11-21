@@ -872,7 +872,7 @@ pub(crate) fn reporting_run_role(
     if !CLASSIFYING_RUNS.with(|set| set.borrow_mut().insert(key.clone())) {
         return None;
     }
-    let mut unconditional: Option<Vec<Span>> = None;
+    let mut unconditional: Option<Option<Vec<Span>>> = None;
     let mut found = None;
     for reference in references
         .iter()
@@ -901,8 +901,8 @@ pub(crate) fn reporting_run_role(
         let Some(run) = run else {
             continue;
         };
-        if crate::owners::containing_body_function(&file.ast, run)
-            .is_none_or(|owner| owner.span != declarer.span)
+        if !crate::owners::containing_body_function(&file.ast, run)
+            .is_some_and(|owner| owner.span == declarer.span)
         {
             continue;
         }
@@ -913,9 +913,9 @@ pub(crate) fn reporting_run_role(
                 declarer.span,
                 &[],
             )
-            .unwrap_or_default()
         });
-        if !every.contains(&run) {
+        // A source that does not parse proves no run unconditional.
+        if !every.as_ref().is_some_and(|every| every.contains(&run)) {
             continue;
         }
         let role = super::read_execution_role(file, run, allowed, entities, symbol_names, lookup);
