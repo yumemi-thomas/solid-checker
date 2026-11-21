@@ -259,7 +259,7 @@
   "SC9012 handed-read-after-await": 12,
   "SC9012 import-unresolved": 50,
   "SC9012 installed-member": 137,
-  "SC9012 leaf-callback-opaque": 244,
+  "SC9012 leaf-callback-opaque": 245,
   "SC9012 listener-reach": 128,
   "SC9012 package-callee": 28,
   "SC9012 package-finding-at-entry": 232,

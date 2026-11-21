@@ -727,7 +727,40 @@ pub(super) fn semantic_role_before_awaits(
             )
         };
     }
-    if let Some(role) = forwarded_tracked_compute_role(file, span, lookup) {
+    if let Some((role, also_at_call)) = forwarded_tracked_compute_role(
+        file,
+        span,
+        lookup,
+        classifying.contains(&write_classification_marker()),
+    ) {
+        // ADR 1155 r2: the literal may also run through `arguments[k]()` on the stack of the wrapper's call: the tracked role holds only where that
+        // call's own role is the same; otherwise the literal's runs differ and it is unplaced.
+        if let Some(at) = also_at_call
+            && role != ExecutionRole::Unknown
+        {
+            let key = (file.path.to_string(), at);
+            let at_call = if classifying.insert(key.clone()) {
+                let at_call = semantic_execution_role_within(
+                    file,
+                    at,
+                    allowed,
+                    entities,
+                    symbol_names,
+                    lookup,
+                    classifying,
+                );
+                classifying.remove(&key);
+                Some(at_call)
+            } else {
+                None
+            };
+            if at_call != Some(role) {
+                return role_arm!(
+                    "callee_roles.forwarded-tracked-compute-arguments-differ",
+                    ExecutionRole::Unknown
+                );
+            }
+        }
         return role_arm!("callee_roles.forwarded-tracked-compute", role);
     }
     // ADR 0927: a flow element's children callback written inside an allowed
@@ -2260,15 +2293,21 @@ pub(super) fn forwarded_compute_slot<'a>(
         .callee_symbol(file, call.callee)
         .and_then(|symbol| lookup.function_for_symbol(symbol))
         .or_else(|| lookup.function_called_at(file.path.as_str(), call.callee))?;
-    // ADR 1155 r1 (the review's F1): a function that is no arrow reaches its arguments through `arguments` too (`arguments[0]()`), which no reference of
-    // the parameter shows: it may run the literal anywhere.
-    if wrapper.r#async
-        || wrapper.generator
-        || (wrapper.kind != solid_facts::ast::FunctionKind::Arrow
-            && crate::value_use::reads_arguments(wrapper_file, wrapper.span))
-    {
+    if wrapper.r#async || wrapper.generator {
         return None;
     }
+    // ADR 1155 r1 (the review's F1): a function that is no arrow reaches its arguments through `arguments` too (`arguments[0]()`), which no reference of
+    // the parameter shows. r2: each such use must be written directly in the wrapper's body as `arguments.length` (runs nothing) or a direct call
+    // `arguments[k]()` (runs the argument on the wrapper call's own stack); then the literal may also run where the wrapper's call runs
+    // ([`ForwardedCompute::also_at_call`]), which each consumer asks. Any other use (handed on, stored, in a nested function) refuses.
+    let also_at_call = if wrapper.kind != solid_facts::ast::FunctionKind::Arrow
+        && crate::value_use::reads_arguments(wrapper_file, wrapper.span)
+    {
+        // `arguments.length` alone runs nothing: no other run.
+        arguments_runs_in_place(wrapper_file, wrapper)?.then_some(call.span)
+    } else {
+        None
+    };
     let parameter = wrapper.parameters.get(index)?;
     if parameter.shape != solid_facts::ast::BindingShape::Identifier
         || parameter.initializer.is_some()
@@ -2334,7 +2373,62 @@ pub(super) fn forwarded_compute_slot<'a>(
         outer,
         slot,
         primitive,
+        also_at_call,
     })
+}
+
+/// ADR 1155 r2: every `arguments` reference of the non-arrow `wrapper` is written directly in its body (an arrow nested in it shares its
+/// `arguments`, so a reference there is refused) as `arguments.length`, read only, or `arguments[k]()`, a direct call: an argument it reaches runs
+/// there, on the stack of the wrapper's call, or not at all. `None` for any other use; else whether some use is such a call.
+fn arguments_runs_in_place(
+    file: &solid_facts::FileFacts,
+    wrapper: &solid_facts::ast::FunctionFact,
+) -> Option<bool> {
+    let ast = &file.ast;
+    let mut called = false;
+    let all = ast
+        .identifiers_within(wrapper.span)
+        .filter(|identifier| {
+            identifier.role == solid_facts::ast::IdentifierRole::Reference
+                && file.source_text(identifier.span) == Some("arguments")
+        })
+        .all(|identifier| {
+            if !matches!(
+                crate::owners::owning_function(ast, identifier.span),
+                Some(owner) if owner.span == wrapper.span
+            ) {
+                return false;
+            }
+            let Some(member) = ast
+                .members
+                .iter()
+                .find(|member| ast.peel_ts_sugar_span(member.object) == identifier.span)
+            else {
+                return false;
+            };
+            let computed = ast.computed_members.binary_search(&member.span).is_ok();
+            if ast.optional_members.binary_search(&member.span).is_ok()
+                || ast.write_targets.binary_search(&member.span).is_ok()
+                || ast.is_no_get_target(member.span)
+            {
+                return false;
+            }
+            if computed {
+                let run = ast
+                    .calls_with_peeled_callee(member.span)
+                    .any(|call| !call.construct)
+                    && !ast.members.iter().any(|outer| outer.object == member.span)
+                    && ast
+                        .arguments_containing(member.span)
+                        .all(|(call, index)| !call.arguments[index].span.contains(member.span));
+                called |= run;
+                run
+            } else {
+                file.source_text(member.property) == Some("length")
+                    && ast.calls_with_peeled_callee(member.span).next().is_none()
+            }
+        });
+    all.then_some(called)
 }
 
 /// ADR 1155 (a): what [`forwarded_compute_slot`] proves: the literal at `literal` (the whole argument of a call of a project or read-package function)
@@ -2345,20 +2439,26 @@ pub(super) struct ForwardedCompute<'a> {
     pub(super) outer: &'a solid_facts::ast::CallFact,
     pub(super) slot: usize,
     pub(super) primitive: solid_dialect::Primitive,
+    /// ADR 1155 r2: the wrapper also reaches its arguments through `arguments[k]()` in its own body, so the literal may run, besides at `slot`,
+    /// on the stack of this call of the wrapper (in the literal's file).
+    pub(super) also_at_call: Option<Span>,
 }
 
 /// ADR 0200 (the proof: [`forwarded_compute_slot`]): code directly in such a literal, forwarded to a slot that tracks its callback's reads, takes the tracked role.
+/// ADR 1155 r2: with the wrapper's call where `arguments[k]()` may also run the literal, which the caller places.
 pub(super) fn forwarded_tracked_compute_role(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,
-) -> Option<ExecutionRole> {
+    classifying_write: bool,
+) -> Option<(ExecutionRole, Option<Span>)> {
     let ForwardedCompute {
         literal,
+        wrapper_file,
         outer,
         slot,
         primitive,
-        ..
+        also_at_call,
     } = forwarded_compute_slot(file, span, lookup)?;
     let tracked = lookup
         .dialect
@@ -2367,17 +2467,35 @@ pub(super) fn forwarded_tracked_compute_role(
     if !tracked {
         return None;
     }
-    Some(if attribute_function_within(file, literal, span, lookup) {
-        role_arm!(
-            "callee_roles.forwarded_tracked_compute_role.attribute-function",
-            ExecutionRole::Unknown
-        )
-    } else {
-        role_arm!(
-            "callee_roles.forwarded_tracked_compute_role.tracked-compute",
-            ExecutionRole::TrackedJsx
-        )
-    })
+    // ADR 1155 r2: a leaf slot's write is exempt there, so a write's verdict would rest on the `arguments[k]()` run alone, which nothing proves
+    // runs (it may be conditional): unplaced.
+    if also_at_call.is_some()
+        && classifying_write
+        && callback_owner_at_call(wrapper_file, outer, primitive, slot, lookup)
+            == Some(solid_dialect::CallbackOwner::Leaf)
+    {
+        return Some((
+            role_arm!(
+                "callee_roles.forwarded_tracked_compute_role.leaf-arguments-run",
+                ExecutionRole::Unknown
+            ),
+            None,
+        ));
+    }
+    Some((
+        if attribute_function_within(file, literal, span, lookup) {
+            role_arm!(
+                "callee_roles.forwarded_tracked_compute_role.attribute-function",
+                ExecutionRole::Unknown
+            )
+        } else {
+            role_arm!(
+                "callee_roles.forwarded_tracked_compute_role.tracked-compute",
+                ExecutionRole::TrackedJsx
+            )
+        },
+        also_at_call,
+    ))
 }
 
 /// [`ExecutionRole::DeferredCallback`] for code in a callback that a reviewed
