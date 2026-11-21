@@ -42628,5 +42628,21 @@
   "grid": "mx-src",
   "code": "STRICT_READ_UNTRACKED",
   "outside": "the read grids (flip-read.mjs store variants) do not cross a store variant with a prop or context source, so no STRICT_READ_UNTRACKED cell writes through a prop store's alias; mx-src and mx-pairs do generate the program (`mx-store-write-outside-setter-body-nested-assign-alias-none-s-prop`, `const useIt = props.s1; useIt.a.v = 7`), but judge it for STORE_WRITE_OUTSIDE_SETTER only, where SC2003 claims the write. Crossing the store read variants with the prop and context sources would generate it; not built in this fix"
+ },
+ {
+  "finding": "ADR 0200 forwarding resolved its wrapper through function_for_symbol / function_called_at, which name the first value of a reassigned `let` or the literal handed to a factory whose result is called: a write in a literal forwarded by such a name into createMemo`s compute was an SC2001 violation where the function the call runs never calls the literal (Chrome silent)",
+  "found": "ADR 1155 r3 (Mac 27): loading-member-callee WrapLet and ViaWrap, violations by coincidence; the fixture forwarded-wrapper-exact`s DropApp, FactoryDropApp and MemberDropApp are false positives on main a63e1302e (Chrome silent)",
+  "fixed": "ADR 1179: callee_roles::forwarded_compute_slot resolves the wrapper with project_callee_at_parameter and requires it exact (a written let, a call`s result, a replaced member or a spread forwards nothing); object_members::memo::literal_function follows a data slot naming a function declaration (`{ hand: handDecl }`)",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-barm-fwdwrap-let-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-barm-fwdwrap-let-store-direct-none",
+   "lg-reactive-write-in-owned-scope-barm-fwdwrap-let-refresh-direct-none",
+   "lg-reactive-write-in-owned-scope-barm-fwdwrap-factory-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-barm-fwdwrap-factory-store-direct-none",
+   "lg-reactive-write-in-owned-scope-barm-fwdwrap-factory-refresh-direct-none"
+  ],
+  "rediscovered": "new arm-shape contexts barm-fwdwrap-let and barm-fwdwrap-factory (legal): main a63e1302e 6 unexecuted violations (SC2001 at a write that never runs), ADR 1179 6 uncertifiable; the barm-fwdleaf cells (lg-recall 3, mx-recall 6, mx-census 210) unchanged"
  }
 ]
