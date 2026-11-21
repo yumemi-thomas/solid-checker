@@ -1,0 +1,3 @@
+{
+  "note": "A store link held whole in a `const` and read through it (`const held = s1.a; void held.v`): Chrome reports STRICT_READ_UNTRACKED at the Get through the alias, as at its member twin (`s1.a.v`, an SC1001 violation). Main had no row at the alias's Get (unproven-clean); it has an SC9012 value-held-in-binding row now."
+}

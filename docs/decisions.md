@@ -4921,3 +4921,13 @@ Each write meets the proxy's `set` trap, which warns whatever the value (rc.21 `
 The component must read its props only through static members, or a pattern of static keys with no rest, default or nested value. `handed_container_write` then proves the links from the store's own binding (`handed_links_wrappable`, same strictNullChecks and optional-link conditions as ADR 0491).
 *Measured* (release, against main b06a4e71a; Chrome cached). R4's 1,441 N1 programs plus the 396 legal STORE_WRITE programs of lg-recall: U to V 428 (mx-src 208, mx-pairs 208, mx-combo 12); no legal row moved; no V lost. Fixture `store-write-through-prop`: 4 violations, 4 uncertifiable (a setter read and called, the prop handed on, props used whole, the store also leaving the parent). Chrome covers all eight. Coverage: `store-handed-root` `Nested` goes from uncertifiable to violation (Chrome-confirmed on a scratch case of it).
 *Not covered.* A context, `merge`/`omit` view or spread hand-off; a component in another file; a write in the setter's callback reached through a prop (R4 N1's legal `in-setter` rows stay uncertifiable); an SC1001 violation at an alias's Get (part 1's SC9012 row stands).
+
+<a id="adr-1169"></a>
+## ADR 1169 — Part 1: a Get through a held store link has a row
+**The defect** (main 14469fac2 and ADR 1172's tip; found starting this ADR). `const held = s1.a; void held.v` had no row of any rule at the Get `held.v`. Chrome warns STRICT_READ_UNTRACKED there (`runtime-oracle/store-link-alias-get`, unproven-clean on both). The value-use census answered a store root's own member chain (`Mode::Root`, the root's own reference) where the chain ended, and never walked a binding that holds the chain's link.
+**Decision.** `value_use::Census::member`: the root's own static chain, held whole in an identifier binding, is walked on as the root. Its uses are then an alias's: a Get with no read row stands open as SC9012 `value-held-in-binding` (fail closed). Part 2 proves the exact alias as the store's link.
+**Evidence.**
+- Fixture `store-link-alias-get`: two alias Gets go from no row to uncertifiable; the member twin stays an SC1001 violation. Chrome covers them.
+- Coverage: SC9012 rises only, in 11 existing fixtures (named in rises.json; no finding removed).
+- Probe (release, 1,998 programs: mx-recall `nested-held`/`sw-let`/`nested-assign`/`nested-push`, lg-recall `store-*`): no outcome worse. The U to clean rows are ADR 1162's, counted against R3's older base.
+- Rediscovery: an `outside` row (no read variant holds a link; generator work deferred).
