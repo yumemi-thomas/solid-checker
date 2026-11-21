@@ -448,7 +448,23 @@ pub(crate) fn read_execution_role(
     lookup: &SemanticLookup<'_>,
 ) -> ExecutionRole {
     crate::role_log::decide("read", file.path.as_str(), span, || {
-        read_execution_role_unlogged(file, span, allowed, entities, symbol_names, lookup)
+        let role =
+            read_execution_role_unlogged(file, span, allowed, entities, symbol_names, lookup);
+        // ADR 1166: a read a named callback's open entries leave unplaced still runs untracked where a run of the callback
+        // provably executes it at a reporting role; reads only, every other site keeps its unplaced role.
+        if role == ExecutionRole::Unknown
+            && let Some(reporting) = named_callbacks::reporting_run_role(
+                file,
+                span,
+                allowed,
+                entities,
+                symbol_names,
+                lookup,
+            )
+        {
+            return role_arm!("execution_role.read_execution_role.reporting-run", reporting);
+        }
+        role
     })
 }
 

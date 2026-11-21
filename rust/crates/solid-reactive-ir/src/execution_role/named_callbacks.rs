@@ -810,6 +810,169 @@ pub(super) fn carried_call_role(
     role
 }
 
+thread_local! {
+    /// The callbacks [`reporting_run_role`] is classifying the runs of on this thread: one reached again (a run of it is classified
+    /// inside its own run) answers nothing, never recursed into.
+    static CLASSIFYING_RUNS: std::cell::RefCell<HashSet<(String, Span)>> = std::cell::RefCell::new(HashSet::default());
+}
+
+/// ADR 1166: the reporting role of a run that provably executes the read at `span`, for a read left unplaced
+/// ([`ExecutionRole::Unknown`]) because the named callback around it has an entry besides its by-name positions (ADR 0517, 1111,
+/// 1119). A read rule asks whether *some* run of the read is untracked, so one such run is enough, whatever the other entries do:
+/// - the read is written in the callback's own body (not a nested function, an instance field or a parameter default) and the
+///   callback is neither `async` nor a generator, so every call of it runs the read synchronously on the caller's stack;
+/// - the callback is the whole initializer of a `const` binding (`const cb = () => …`, `const cb = function inner() {…}`), so the
+///   binding always holds it;
+/// - the run is a direct call of that binding (`cb()`), or a `forEach`/`map` over a literal that carries it (ADR 1124,
+///   [`super::write_roles::foreach_carried_call`]) whose parameter call runs on every completion of the inline arrow;
+/// - the run is written in the function that declares the binding, after the declarator, and runs on every completion of that
+///   function ([`solid_facts::ast::synchronously_unconditional_calls`]): no condition, loop or early exit (a dead `if (false) cb()`)
+///   stands between the code that creates the callback and the run;
+/// - a read written at the run would report ([`super::read_execution_role`] at the call reports an untracked read).
+///
+/// Anything else is `None` and the read stays unplaced.
+pub(crate) fn reporting_run_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> Option<ExecutionRole> {
+    let callback = crate::owners::containing_body_function(&file.ast, span)?;
+    if callback.r#async
+        || callback.generator
+        || callback.method_name.is_some()
+        || !callback.body.contains(span)
+        || super::events::inside_instance_field(file, span)
+    {
+        return None;
+    }
+    let binding = file
+        .ast
+        .bindings_initializer_containing(callback.span)
+        .find(|binding| {
+            binding.immutable
+                && binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding
+                    .initializer
+                    .is_some_and(|initializer| file.ast.peel_ts_sugar_span(initializer) == callback.span)
+        })?;
+    let [name] = binding.names.as_slice() else {
+        return None;
+    };
+    let declarer = crate::owners::containing_body_function(&file.ast, binding.declaration)?;
+    if declarer.r#async || declarer.generator {
+        return None;
+    }
+    let symbol = lookup.entities().at(file.path.as_str(), name.span)?;
+    let references = lookup.symbol_references_if_present(symbol.as_str())?;
+    let key = (file.path.to_string(), callback.span);
+    if !CLASSIFYING_RUNS.with(|set| set.borrow_mut().insert(key.clone())) {
+        return None;
+    }
+    let mut unconditional: Option<Vec<Span>> = None;
+    let mut found = None;
+    for reference in references
+        .iter()
+        .filter(|reference| reference.path.as_ref() == file.path.as_str())
+    {
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(reference.start_byte),
+            u32::try_from(reference.end_byte),
+        ) else {
+            continue;
+        };
+        let at = Span::new(start, end);
+        if at == name.span || at.start < binding.declaration.end {
+            continue;
+        }
+        let run = file
+            .ast
+            .calls
+            .iter()
+            .find(|call| !call.construct && file.ast.peel_ts_sugar_span(call.callee) == at)
+            .map(|call| call.span)
+            .or_else(|| {
+                super::write_roles::foreach_carried_call(file, at, lookup)
+                    .filter(|carried| carried_run_unconditional(file, *carried, lookup))
+            });
+        let Some(run) = run else {
+            continue;
+        };
+        if crate::owners::containing_body_function(&file.ast, run)
+            .is_none_or(|owner| owner.span != declarer.span)
+        {
+            continue;
+        }
+        let every = unconditional.get_or_insert_with(|| {
+            solid_facts::ast::synchronously_unconditional_calls(
+                std::path::Path::new(file.path.as_str()),
+                &file.source,
+                declarer.span,
+                &[],
+            )
+            .unwrap_or_default()
+        });
+        if !every.contains(&run) {
+            continue;
+        }
+        let role = super::read_execution_role(file, run, allowed, entities, symbol_names, lookup);
+        if role.reports_untracked_read() && !super::callee_callback_timing(file, run, role, lookup) {
+            found = Some(role);
+            break;
+        }
+    }
+    CLASSIFYING_RUNS.with(|set| set.borrow_mut().remove(&key));
+    found
+}
+
+/// ADR 1166: whether the inline arrow a carried `forEach`/`map` call ([`super::write_roles::foreach_carried_call`]) hands the
+/// element to calls its parameter on every completion of the arrow (`(g) => g()`, not `(g) => { if (c) g(); }`).
+fn carried_run_unconditional(
+    file: &solid_facts::FileFacts,
+    carried: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    let Some(call) = ast.calls.iter().find(|call| call.span == carried) else {
+        return false;
+    };
+    let Some(arrow) = call
+        .arguments
+        .first()
+        .and_then(|argument| ast.functions.iter().find(|function| function.span == ast.peel_ts_sugar_span(argument.span)))
+    else {
+        return false;
+    };
+    let Some(parameter) = arrow.parameters.first().and_then(|parameter| parameter.names.first()) else {
+        return false;
+    };
+    let Some(every) = solid_facts::ast::synchronously_unconditional_calls(
+        std::path::Path::new(file.path.as_str()),
+        &file.source,
+        arrow.span,
+        &[],
+    ) else {
+        return false;
+    };
+    let Some(symbol) = lookup.entities().at(file.path.as_str(), parameter.span) else {
+        return false;
+    };
+    let Some(references) = lookup.symbol_references_if_present(symbol.as_str()) else {
+        return false;
+    };
+    ast.calls.iter().any(|inner| {
+        !inner.construct
+            && every.contains(&inner.span)
+            && references.iter().any(|reference| {
+                reference.path.as_ref() == file.path.as_str()
+                    && u64::from(ast.peel_ts_sugar_span(inner.callee).start) == reference.start_byte
+                    && reference.start_byte != u64::from(parameter.span.start)
+            })
+    })
+}
+
 /// ADR 0933, 0936: the argument positions that name the innermost
 /// function around `span` at a position that tracks its reads, the facts
 /// [`named_at_tracked_position`] answers from.

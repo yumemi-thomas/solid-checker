@@ -8106,7 +8106,16 @@ impl LocalAccessContext<'_, '_> {
                         )
                     },
                 );
-                execution = ExecutionRole::Unknown;
+                // ADR 1166: unless a run of the named callback around the read provably executes it where it reports.
+                execution = crate::execution_role::reporting_run_role(
+                    file,
+                    member.span,
+                    allowed,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                )
+                .unwrap_or(ExecutionRole::Unknown);
             }
         }
         // ADR 0294: a Get of a typed store candidate. `Store<T>` is `T`,

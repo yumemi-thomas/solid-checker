@@ -2684,8 +2684,10 @@ pub(super) fn callee_callback_timing_within(
             // Only the lexical rendering role places code by where it is
             // written; a role a dialect arm proved for this position (an
             // effect's apply callback, an untrack callback) is not.
+            // ADR 1166: a named callback a reporting run provably executes runs the read there, at that run's timing.
             return execution == ExecutionRole::UntrackedRendering
-                && literal_invocation_unproven(file, literal, execution, lookup, following);
+                && literal_invocation_unproven(file, literal, execution, lookup, following)
+                && !reporting_run_places(file, span, execution, lookup);
         };
         if lookup.primitive_at_call(file, call.span).is_some() {
             // A primitive's own callback argument is classified by the
@@ -2740,6 +2742,25 @@ pub(super) fn callee_callback_timing_within(
         }
         return true;
     }
+}
+
+/// ADR 1166: whether [`super::named_callbacks::reporting_run_role`] places the read at `span` at `execution`: a run of its named
+/// callback provably executes it there, a run whose own timing [`callee_callback_timing`] already accepted.
+fn reporting_run_places(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    execution: ExecutionRole,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let allowed = super::read_context::allowed_callback_spans(file, lookup);
+    super::named_callbacks::reporting_run_role(
+        file,
+        span,
+        &allowed,
+        lookup.entities(),
+        lookup.symbol_names(),
+        lookup,
+    ) == Some(execution)
 }
 
 /// ADR 0323's at-call role of a callback that runs synchronously at its call

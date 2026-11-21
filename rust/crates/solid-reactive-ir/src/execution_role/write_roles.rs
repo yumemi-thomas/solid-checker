@@ -3459,7 +3459,7 @@ pub(crate) fn foreach_carried_call(
     )?;
     if !matches!(
         declaration.qualified_name.as_ref(),
-        "Array.forEach" | "ReadonlyArray.forEach"
+        "Array.forEach" | "ReadonlyArray.forEach" | "Array.map" | "ReadonlyArray.map"
     ) || lookup.standard_call_withheld(file, call.callee)
     {
         return None;
