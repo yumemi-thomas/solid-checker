@@ -64,10 +64,6 @@ export const TABLE_GAP_GROUPS = [
 // <arm-gaps>
 export const ARM_GAPS = [
   {
-    reason: "ADR 1176 (N8): the arm returns the role at the call of an in-place layer inside a callback that reports untracked reads, and only when that role reports an untracked read (`reports_untracked_read`, checked before it answers): computed, so the inventory counts it, but never a silent role; a wrong answer is a false positive, which the grids' judge and Chrome find (fixture `reaction-closure-read`).",
-    arms: ["callee_roles.untracked-argument-climb"],
-  },
-  {
     reason: "ADR 1037: a setter or `refresh` in the cleanup an inline apply returns. The generator's cleanup cells (`effect-cleanup-*`, legal; `effect-cleanup-flush-rerun`, misuse) never run clean: the effect's own creation in the component keeps its SC3001/SC6002 rows (`boundary.mjs verify --only returned-cleanup-write`, 2026-11-17: 15 programs, the arm seen silent in no clean cell). The fixtures `effect-cleanup-write-role` (silent) and `effect-cleanup-write-role-flush` (kept) separate it, with the Chrome oracle case `effect-cleanup-write-role`.",
     arms: ["write_roles.returned-cleanup-write"],
   },

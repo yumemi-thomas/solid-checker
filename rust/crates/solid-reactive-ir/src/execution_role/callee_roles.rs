@@ -727,57 +727,6 @@ pub(super) fn semantic_role_before_awaits(
             )
         };
     }
-    // ADR 1176 (N8): a read in a layer that runs in place (an IIFE, an inline carrier, a local closure the callback calls,
-    // `climb_in_place_layers`) inside a callback that reports untracked reads (a `createReaction` effect, an apply) runs at
-    // the layer's call in that callback: a read written there would report, and so does this one. Only a reporting role
-    // answers here (anything else falls through as before); reads only.
-    if !classifying.contains(&write_classification_marker())
-        && let Some(climb) = super::write_roles::climb_in_place_layers(file, span, lookup)
-        && !climb.bound()
-        && climb.suspended.is_none()
-        && climb.in_list.is_none()
-        && climb.at != span
-        && file
-            .ast
-            .arguments_containing(climb.at)
-            .any(|(call, index)| {
-                crate::call_primitive_name_cached(
-                    lookup,
-                    file,
-                    call,
-                    entities,
-                    symbol_names,
-                    dialect,
-                )
-                .as_ref()
-                .and_then(PrimitiveName::primitive)
-                .is_some_and(|primitive| {
-                    callback_execution_at_call(file, call, primitive, index, lookup).is_some()
-                        && dialect.reports_untracked_reads_at(
-                            primitive,
-                            index,
-                            call.arguments.len(),
-                        )
-                        && !dialect.callback_runs_untracked_without_window(primitive, index)
-                        && direct_callback_contains(file, call.arguments[index].span, climb.at)
-                        && !super::bundle_error_member(dialect, primitive, call, index)
-                            .is_some_and(|error| error.contains(climb.at))
-                })
-            })
-    {
-        let role = semantic_execution_role_within(
-            file,
-            climb.at,
-            allowed,
-            entities,
-            symbol_names,
-            lookup,
-            classifying,
-        );
-        if role.reports_untracked_read() {
-            return role_arm!("callee_roles.untracked-argument-climb", role);
-        }
-    }
     if let Some((role, also_at_call)) = forwarded_tracked_compute_role(
         file,
         span,
