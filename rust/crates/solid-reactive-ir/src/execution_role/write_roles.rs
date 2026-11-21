@@ -268,6 +268,10 @@ fn forwarded_leaf_scope(
         return None;
     }
     let forwarded = super::callee_roles::forwarded_compute_slot(file, span, lookup)?;
+    // ADR 1155 r2: the wrapper may also run the literal through `arguments[k]()` on its call's stack, outside the leaf (ArgsApp): no leaf scope.
+    if forwarded.also_at_call.is_some() {
+        return None;
+    }
     // ADR 0613: `onSettled`'s queued run is the drain's, whichever owner its call has (as for the leaf's own literal).
     if lookup
         .dialect
