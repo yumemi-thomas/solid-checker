@@ -15,8 +15,8 @@ export function WriteInBody() {
   createEffect(() => m(), () => {});
   return <p />;
 }
-// An owner-requiring call past the suspension has no owner (Chrome: NO_OWNER_CLEANUP). Uncertifiable here: an exported component's callers are not
-// enumerated; the fuzz program that mounts it is a violation (`mx-no-owner-cleanup-memo-async-for-await-*`).
+// An owner-requiring call past the suspension has no owner (Chrome: NO_OWNER_CLEANUP). A violation since ADR 1165: the body over `[1]` runs, each
+// run past the loop's await, whoever calls the component (also `mx-no-owner-cleanup-memo-async-for-await-*`).
 export function CleanupInBody() {
   const m = createMemo(async () => {
     for await (const _x of [1]) {

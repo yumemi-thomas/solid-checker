@@ -4867,4 +4867,6 @@ G4 of the R3 catalog (S half), on ADR 1164. The owner pass places an operation p
   - `HelperInBody` and `CleanupInFinally` (ADR 1164) stay V;
   - the four counterexamples stay U.
 - Chrome: `runtime-oracle/owner-after-await-for-await`.
-- Probe, release, VM, ADR 1164's build against this branch: PROBE_RESULT.
+- `for-await-body` `CleanupInBody` moves from U to V. It was uncertifiable only because an exported component's callers are not enumerated; past the suspension, no caller gives an owner.
+- Chrome (`runtime-oracle/owner-after-await-for-await`): NO_OWNER_EFFECT and NO_OWNER_CLEANUP at the violations (`covered-violation`), and NO_OWNER_CLEANUP at the uncertifiable sites that run. SETTLED_CLEANUP_UNOWNED is raised unattributed (no application frame), so `SettledInBody` reads static-only there; the one-site fuzz programs judge it agree.
+- Probe, release, VM, ADR 1164's build against this branch, the same 2,160 programs: 22 misuse recall-gap to agree (NO_OWNER_EFFECT 9, NO_OWNER_CLEANUP 9, NO_OWNER_BOUNDARY 2, SETTLED_CLEANUP_UNOWNED 2, all in `memo-`/`effect-async-for-await`). Nothing else moved, and nothing needs a look. Against main b600297eb: 210 moves, ADR 1164's 188 and these 22.
