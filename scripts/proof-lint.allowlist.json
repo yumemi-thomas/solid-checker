@@ -1635,7 +1635,7 @@
     },
     "rust/crates/solid-reactive-ir/src/upstream_compat/shared_reactivity.rs": {
       "default-on-missing": {
-        "count": 13,
+        "count": 12,
         "why": "pending-review"
       },
       "finding-filter": {

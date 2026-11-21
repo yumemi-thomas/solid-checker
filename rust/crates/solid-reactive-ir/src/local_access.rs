@@ -2599,6 +2599,50 @@ impl LocalAccessContext<'_, '_> {
                 self.discover_member(file, &member, &allowed, &mut result, &mut slot_seen);
             }
         }
+        // ADR 1169: a Get through an exact `const` alias of a store link (`const held = s1.a; held.v`), the alias proven to hold that
+        // link's wrapped proxy (ADR 0491's proof, `exact_link_alias_chain`), is the store's Get `s1.a.v` at the alias's member: placed
+        // as any other member read.
+        for member in &file.ast.members {
+            let object = file.ast.peel_ts_sugar_span(member.object);
+            if file
+                .ast
+                .computed_members
+                .binary_search(&member.span)
+                .is_ok()
+                || file
+                    .ast
+                    .optional_members
+                    .binary_search(&member.span)
+                    .is_ok()
+                || !file.ast.identifiers.iter().any(|identifier| {
+                    identifier.span == object
+                        && identifier.role == solid_facts::ast::IdentifierRole::Reference
+                })
+            {
+                continue;
+            }
+            let Some(chain) = crate::upstream_compat::exact_link_alias_chain(
+                file,
+                self.lookup,
+                self.entities,
+                self.source_primitives,
+                object,
+            ) else {
+                continue;
+            };
+            // The store's own identifier is the receiver (a store path's Get is found from its head); the Get's key is the
+            // alias member's own.
+            let Some(head) = crate::upstream_compat::member_root_span(file, chain) else {
+                continue;
+            };
+            let synthetic = solid_facts::ast::MemberFact {
+                span: member.span,
+                object: head,
+                property: member.property,
+            };
+            let mut alias_seen = HashSet::default();
+            self.discover_member(file, &synthetic, &allowed, &mut result, &mut alias_seen);
+        }
         self.discover_spreads(file, &allowed, &mut result);
         self.discover_whole_store_reads(file, &allowed, &mut result);
         self.discover_caught_reads(file, &allowed, &mut result);
@@ -8548,7 +8592,9 @@ impl LocalAccessContext<'_, '_> {
         let timing_at = placed_at
             .or_else(|| self.running_setter_call(file, member.span))
             .unwrap_or(member.span);
-        let accessor = if prop_head {
+        // ADR 1169: a Get through a store link's alias stands for the store's path but is written as `held.v`: name it as written.
+        let through_alias = !member.span.contains(member.object);
+        let accessor = if prop_head || through_alias {
             // Name the Get we proved, including brackets/optional syntax,
             // rather than a suffix's property or an invented dotted key.
             file.source_text(member.span)

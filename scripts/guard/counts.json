@@ -86,9 +86,9 @@
   "SC2003 package-finding-at-entry": 50,
   "SC2003 search-depth-limit": 1,
   "SC2003 store-handed-to-package": 1,
-  "SC2003 store-operation-may-not-write": 46,
-  "SC2003 store-write-unproven": 104,
-  "SC2003 unproven-container-root": 152,
+  "SC2003 store-operation-may-not-write": 47,
+  "SC2003 store-write-unproven": 111,
+  "SC2003 unproven-container-root": 147,
   "SC2004 async-slot-unmodelled": 4,
   "SC2004 component-identity-unproven": 1,
   "SC2004 computation-error-unobserved": 26,
@@ -290,7 +290,7 @@
   "SC9012 value-exported-unnamed": 6,
   "SC9012 value-forwarded": 287,
   "SC9012 value-from-primitive-callback": 34,
-  "SC9012 value-held-in-binding": 168,
+  "SC9012 value-held-in-binding": 167,
   "SC9012 value-held-in-member": 30,
   "SC9012 value-in-carrier": 460,
   "SC9012 value-in-class-field": 14,
@@ -5967,6 +5967,39 @@
     "proved": "reactive-ir/store-standard-library-writes",
     "open": "reactive-ir/store-whole-standard-census"
    }
+  },
+  {
+   "fixture": "reactive-ir/after-await-read-first-writes",
+   "key": "SC2003 unproven-container-root",
+   "from": 4,
+   "to": 0,
+   "adr": "ADR 1169",
+   "kind": "relabel",
+   "relabeledTo": [
+    "SC2003 store-write-unproven",
+    "SC2003 store-operation-may-not-write"
+   ]
+  },
+  {
+   "fixture": "reactive-ir/flush-write-path",
+   "key": "SC2003 unproven-container-root",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1169",
+   "proof": "rust/crates/solid-reactive-ir/src/upstream_compat/shared_reactivity.rs::link_alias_literal",
+   "fixtures": {
+    "proved": "reactive-ir/flush-write-path",
+    "open": "reactive-ir/store-link-alias-write"
+   }
+  },
+  {
+   "fixture": "reactive-ir/store-sub-value-flow",
+   "key": "SC2003 unproven-container-root",
+   "from": 11,
+   "to": 10,
+   "adr": "ADR 1169",
+   "kind": "relabel",
+   "relabeledTo": "SC2003 store-write-unproven"
   }
  ],
  "renames": []
