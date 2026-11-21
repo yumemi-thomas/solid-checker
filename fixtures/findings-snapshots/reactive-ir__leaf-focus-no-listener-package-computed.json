@@ -1,0 +1,49 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "package-finding-at-entry",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-focus-no-listener/variants/package-computed/App.tsx",
+      "start": 56,
+      "end": 78,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "leaf-callback-opaque",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-focus-no-listener/variants/package-computed/App.tsx",
+      "start": 331,
+      "end": 343,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-focus-no-listener/variants/package-computed/App.tsx",
+      "start": 362,
+      "end": 420,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "uncertifiable",
+      "blocker": "package-may-call-action",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-focus-no-listener/variants/package-computed/App.tsx",
+      "start": 374,
+      "end": 416,
+      "fixes": 0
+    }
+  ]
+}

@@ -11,6 +11,10 @@
       "private-judgment": {
         "count": 2,
         "why": "pending-review"
+      },
+      "silent-unmatched-slot": {
+        "count": 2,
+        "why": "`runtime_module_element_writes` (ADR 1148) and `runtime_module_listener_registrations` (ADR 1151): a specifier no release was audited for answers `None`, which the engine reads as unknown (a retype, a registration), never as clean (ADR 0027)"
       }
     },
     "rust/crates/solid-dialect/src/solid_2/releases.rs": {
@@ -353,6 +357,24 @@
         "why": "pending-review"
       }
     },
+    "rust/crates/solid-reactive-ir/src/change_delivery.rs": {
+      "default-on-missing": {
+        "count": 3,
+        "why": "the three yes-on-missing answers of `takes_runtime_writer`: a binding whose export name no fact gives (`export.is_none_or(..)`), an `import()` or `require()` with no literal specifier, and one whose result escapes unnamed, may reach any export of the module (or any module), so the answer to 'may this file take a module that writes an element' is yes, and yes withdraws the `change` proof (the veto, never a clean); a missing fact can only refuse"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "the tag `input` of an intrinsic JSX element: `intrinsic_element(..)` has already refused a component, a dotted name and a custom element, and a lowercase JSX tag is the DOM's element of that name, never a binding, so the spelling is the syntax; a miss only refuses the proof"
+      },
+      "private-judgment": {
+        "count": 1,
+        "why": "a JSX attribute string is read as written (no JS escape or HTML entity is decoded here), and only the exact letters `checkbox` or `radio` in any ASCII case match: an escaped or entity-encoded spelling does not, so the answer can only be no; the kernel's `cooked_key` decodes JS escapes a JSX attribute string does not have, which would turn `type=\"check\\x62ox\"` (the browser's invalid type, a text control) into a checkbox"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "the walk over a control's attributes: an attribute other than `type`, `ref`, `is` and a namespaced one neither retypes nor hands out an `<input>`, so the unmatched case is a no-op by design; the answer is yes only after exactly one plain `type` of checkbox or radio was seen, and every other outcome (a second `type`, a non-literal one, `ref`, `is`, an unlisted namespace, a spread) returns false"
+      }
+    },
     "rust/crates/solid-reactive-ir/src/cleanup.rs": {
       "default-on-missing": {
         "count": 1,
@@ -645,6 +667,20 @@
       "finding-filter": {
         "count": 2,
         "why": "`findings.dedup()` after the total ordering removes only a finding equal in every field (id, rule, kind, message, location, evidence) to its neighbour: the same row twice; `fold_destructure_findings` (ADR 1107) removes only the slot reads tagged `fold_into` and pushes for each pattern one SC1003 row in their place, a violation if any slot read is one, else an obligation: no verdict leaves the report"
+      }
+    },
+    "rust/crates/solid-reactive-ir/src/focus_delivery.rs": {
+      "default-on-missing": {
+        "count": 4,
+        "why": "the unknown answers of the dialect's audit and the facts: a module or an export the dialect has not audited, a name no fact reads and an attribute no fact names answer `registers` (`Any | None`, `is_none_or`, `None => true`): the answer is `may run code on a focus move`, which withholds the proof and never ends a row (ADR 0027, ADR 1151)"
+      },
+      "name-only-match": {
+        "count": 1,
+        "why": "`import.meta` is a meta property, a keyword no program binds (`.glob` and `.globEager` load files by a pattern the program may not hold): the spelling only WIDENS what the proof withholds, and no row ends on it (ADR 1151)"
+      },
+      "private-judgment": {
+        "count": 1,
+        "why": "`registrar_call_is_inert` composes the kernel's answers (constant evaluation through `constant_text`, K5 `markup_is_inert`) with the proof's own event and name lists: a registrar call is exempt only for a cooked constant outside those lists, and it decides no value's inertness itself (ADR 1151)"
       }
     },
     "rust/crates/solid-reactive-ir/src/hosts.rs": {

@@ -1,0 +1,16 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/change-escaped-benign/App.tsx",
+      "start": 0,
+      "end": 1267,
+      "fixes": 0
+    }
+  ]
+}

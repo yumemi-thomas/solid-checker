@@ -503,6 +503,10 @@ impl PackageBoundary {
                     text(hash, root);
                 }
             }
+            // ADR 1151: whether a project HTML page may run code no analysed file holds. Added only where it may, so a boundary without keeps its digest.
+            if index.page_may_run_code {
+                hash.update(b"package-page-may-run-code-v1");
+            }
             // ADR 0974: where each closure may define an accessor.
             hash.update((index.accessors.len() as u64).to_be_bytes());
             for (root, facts) in &index.accessors {

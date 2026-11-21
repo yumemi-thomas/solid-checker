@@ -348,7 +348,8 @@ impl<'a> SemanticLookup<'a> {
         // A function literal the compiler wires as an element's event handler
         // runs from the delivery (the owner graph's own unowned edge for it,
         // `owner_discovery`), in an open program as in a closed one.
-        if inline_event_handler_call(file, call.span) && !self.synchronous_event_dispatch_present()
+        if inline_event_handler_call(self, file, call.span)
+            && !self.synchronous_event_dispatch_present()
         {
             return Some(DispatchCaller::EventHandler);
         }
@@ -365,7 +366,11 @@ impl<'a> SemanticLookup<'a> {
 /// Whether `span` is written directly in the body of a function literal the
 /// compiler reports as an element's event handler (not in a nested function,
 /// not in JSX inside it), which is not a generator: the delivery runs it.
-fn inline_event_handler_call(file: &solid_facts::FileFacts, span: Span) -> bool {
+fn inline_event_handler_call(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    span: Span,
+) -> bool {
     if file.compiler.withheld() {
         return false;
     }
@@ -381,6 +386,6 @@ fn inline_event_handler_call(file: &solid_facts::FileFacts, span: Span) -> bool 
         && file.compiler.callback_roles.iter().any(|callback| {
             callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
                 && file.ast.peel_ts_sugar_span(callback.span) == function.span
-                && !crate::execution_role::handler_event_denied(file, callback.span)
+                && !crate::execution_role::handler_event_denied(lookup, file, callback.span)
         })
 }

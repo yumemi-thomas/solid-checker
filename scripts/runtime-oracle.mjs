@@ -72,6 +72,7 @@ import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { NODE } from "./lib/node-runtime.mjs";
+import { lastLine } from "./fuzz/finding-lines.mjs";
 import { enteredExports } from "./fuzz/checker.mjs";
 import { placelessExcess, siteKey } from "./fuzz/site-judge.mjs";
 import { PHASE_SELECTOR, phaseAtFailure } from "./fuzz/hits.mjs";
@@ -839,7 +840,7 @@ async function runCase(id, slot) {
     .filter((finding) => caseFile(finding.primaryLocation?.path))
     .map((finding) => ({
       file: caseFile(finding.primaryLocation.path), rule: finding.rule, id: finding.id, kind: finding.kind,
-      line: finding.primaryLocation.line, column: finding.primaryLocation.column, endLine: finding.primaryLocation.endLine ?? finding.primaryLocation.line,
+      line: finding.primaryLocation.line, column: finding.primaryLocation.column, endLine: lastLine(finding),
     }));
   const seen = new Set();
   // An uncaught error a coded rule claims, as a diagnostic row at its mapped

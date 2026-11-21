@@ -1,0 +1,1 @@
+{"note": "an installed package with a declaration file registers a focus listener: its runtime source is not among the analysed files", "packages": ["fz-typed-listener"]}

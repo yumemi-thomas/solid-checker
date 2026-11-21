@@ -1387,7 +1387,7 @@ impl Slot {
 }
 
 /// Whether markup written as a string holds no script, no event attribute and no `javascript:` URL. Text with no tag in it is inert.
-fn markup_is_inert(markup: &str) -> bool {
+pub(crate) fn markup_is_inert(markup: &str) -> bool {
     if !markup.contains('<') {
         return true;
     }

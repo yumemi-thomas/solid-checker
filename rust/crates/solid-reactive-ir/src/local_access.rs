@@ -1977,9 +1977,15 @@ impl LocalAccessContext<'_, '_> {
         if file.compiler.callback_roles.iter().any(|callback| {
             callback.span == reference
                 && callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
-                && !crate::execution_role::handler_event_denied(file, callback.span)
+                && !crate::execution_role::handler_event_denied(self.lookup, file, callback.span)
         }) {
-            return Some(ExecutionRole::EventCallback);
+            // ADR 1146: a handler is a deferred delivery only while no visible dispatch can run it in a strict-read window (the read veto,
+            // as `named_callbacks` asks for a named handler and `body_roles` for an inline one); under the veto its run is unplaced.
+            return Some(if self.lookup.synchronous_event_read_dispatch_present() {
+                ExecutionRole::Unknown
+            } else {
+                ExecutionRole::EventCallback
+            });
         }
         file.ast
             .arguments_containing(reference)
@@ -2078,7 +2084,7 @@ impl LocalAccessContext<'_, '_> {
     ) -> bool {
         if file.compiler.callback_roles.iter().any(|callback| {
             callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
-                && !crate::execution_role::handler_event_denied(file, callback.span)
+                && !crate::execution_role::handler_event_denied(self.lookup, file, callback.span)
                 && crate::owners::yielded_value_contains(file, callback.span, caller.span)
                 && file
                     .ast
@@ -2189,6 +2195,11 @@ impl LocalAccessContext<'_, '_> {
                 {
                     if !execution.reports_untracked_read() && !execution.reports_unplaced() {
                         silent_slots.push(reference.span);
+                    }
+                    // ADR 1146: a slot that runs the helper where no role is proven is a use nothing follows: the read is unplaced at its
+                    // definition, never ended by the calls the helper's other references account for.
+                    if execution.reports_unplaced() {
+                        unproven_use = true;
                     }
                     if execution.reports_untracked_read() {
                         let mut attributed = read.clone();

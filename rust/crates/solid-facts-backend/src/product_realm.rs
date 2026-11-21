@@ -427,6 +427,66 @@ fn other_page(directory: &Path) -> Result<Option<PathBuf>, String> {
     Ok(None)
 }
 
+/// ADR 1151 (round 1): whether an HTML page of the project may run code that no analysed file holds, for a proof that nothing in the program registers a
+/// listener ([`PackageReachIndex::page_may_run_code`]). The pages are the product realm's own: the `index.html` beside the project and any other HTML file of the
+/// project that can run code ([`other_page`]).
+///
+/// The premise is the closed world (ADR 0640, ADR 1080): with no project HTML there is no page code the program does not hold, and a page of markup alone holds
+/// none. Where there is an `index.html`, host discovery's own grammar must read it (which refuses an inline `on*` handler, a classic script that may interfere, a
+/// module script with a body, an element it does not name: [`crate::inferred_host::html_module_entries`], no second parser), it must hold no `<script>` but the
+/// module entries that grammar names (an inline or a classic script is another script), and every entry must be a file of the program. A page that cannot be
+/// read, a second page that can run code, and a tree too large to look in all end the premise.
+pub(crate) fn page_may_run_code(directory: &Path, facts: &ProjectFacts) -> bool {
+    let program = facts
+        .files
+        .iter()
+        .map(|file| file.path.as_str())
+        .collect::<BTreeSet<_>>();
+    page_may_run_code_in(directory, &|path| program.contains(path))
+}
+
+fn page_may_run_code_in(directory: &Path, in_program: &dyn Fn(&str) -> bool) -> bool {
+    let index = directory.join("index.html");
+    match fs::symlink_metadata(&index) {
+        Ok(_) => {
+            if index_page_may_run_code(directory, &index, in_program) {
+                return true;
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        // A page that exists and cannot be looked at.
+        Err(_) => return true,
+    }
+    !matches!(other_page(directory), Ok(None))
+}
+
+/// [`page_may_run_code`] for the `index.html` at `index`: true when its code is not exactly the program's module entries.
+fn index_page_may_run_code(
+    directory: &Path,
+    index: &Path,
+    in_program: &dyn Fn(&str) -> bool,
+) -> bool {
+    let Ok(bytes) = fs::read(index) else {
+        return true;
+    };
+    let Ok(source) = String::from_utf8(bytes) else {
+        return true;
+    };
+    let Ok(entries) = crate::inferred_host::html_module_entries(index, &source) else {
+        return true;
+    };
+    // Every script element is one of the entries the grammar named: an inline script, a classic script and a second reading of the page differ in the count.
+    if source.to_ascii_lowercase().matches("<script").count() != entries.len() {
+        return true;
+    }
+    entries.iter().any(|entry| {
+        let relative = entry.trim_start_matches('/');
+        relative.is_empty()
+            || relative.contains("://")
+            || !in_program(program_path(&directory.join(relative)).as_str())
+    })
+}
+
 /// The runtime targets of an `exports` value: every string leaf outside a `types` condition. A pattern (`*`) names files this reader cannot list.
 fn exports_targets(value: &serde_json::Value, targets: &mut Vec<String>) -> Result<(), String> {
     match value {
@@ -1894,6 +1954,169 @@ mod tests {
             "<html><body><a href='/'onclick='go()'>x</a></body></html>"
         ));
         assert!(!other("<html><body><p>hi</p></body></html>"));
+    }
+
+    #[test]
+    fn the_page_may_run_code_unless_it_is_no_page_or_holds_only_the_programs_module_entries() {
+        let held = |root: &Path| program(root, &["src/main.tsx"]);
+        let verdict = |root: &Path| {
+            let files = held(root);
+            page_may_run_code_in(root, &|path| files.contains(path))
+        };
+        // No project HTML: the closed world.
+        let none = scratch("page-none");
+        write(&none, "src/main.tsx", "export {};");
+        assert!(!verdict(&none));
+        // A page whose only script is the module entry the program holds.
+        let clean = scratch("page-clean");
+        write(&clean, "index.html", PAGE);
+        write(&clean, "src/main.tsx", "export {};");
+        assert!(!verdict(&clean));
+        // An inline `on*` handler (the grammar refuses it), a handler on a body, an inline script, a classic script, a second module script, an entry
+        // the program does not hold, and a page the grammar does not read: each may run code.
+        for (name, page) in [
+            (
+                "handler",
+                PAGE.replace("<div id=\"root\">", "<div id=\"root\" onfocus=\"hook()\">"),
+            ),
+            (
+                "body-handler",
+                PAGE.replace("<body>", "<body onfocus=\"hook()\">"),
+            ),
+            (
+                "inline",
+                PAGE.replace("</body>", "<script>hook();</script></body>"),
+            ),
+            (
+                "classic",
+                PAGE.replace("</body>", "<script src=\"/vendor.js\"></script></body>"),
+            ),
+            (
+                "second",
+                PAGE.replace(
+                    "</body>",
+                    "<script type=\"module\" src=\"/src/other.tsx\"></script></body>",
+                ),
+            ),
+            ("not-held", PAGE.replace("/src/main.tsx", "/src/absent.tsx")),
+            (
+                "element",
+                PAGE.replace("<div id=\"root\">", "<input id=\"root\">"),
+            ),
+            (
+                "no-script",
+                "<!doctype html><html><body></body></html>".to_string(),
+            ),
+            (
+                "escaped-script",
+                PAGE.replace("</body>", "<SCRIPT>hook();</SCRIPT></body>"),
+            ),
+        ] {
+            let root = scratch(&format!("page-{name}"));
+            write(&root, "index.html", &page);
+            write(&root, "src/main.tsx", "export {};");
+            assert!(verdict(&root), "{name}");
+        }
+        // A page that cannot be read as text.
+        let binary = scratch("page-binary");
+        fs::write(binary.join("index.html"), [0xff_u8, 0xfe, 0x00]).unwrap();
+        write(&binary, "src/main.tsx", "export {};");
+        assert!(verdict(&binary));
+        // Another page that can run code ends the premise; one of markup alone does not.
+        let second = scratch("page-second");
+        write(&second, "index.html", PAGE);
+        write(&second, "src/main.tsx", "export {};");
+        write(
+            &second,
+            "docs/static.html",
+            "<html><body><p>hi</p></body></html>",
+        );
+        assert!(!verdict(&second));
+        write(
+            &second,
+            "docs/live.html",
+            "<html><body onload=\"hook()\"></body></html>",
+        );
+        assert!(verdict(&second));
+        // A page of installed code or build output is not the project's.
+        let installed = scratch("page-installed");
+        write(&installed, "index.html", PAGE);
+        write(&installed, "src/main.tsx", "export {};");
+        write(
+            &installed,
+            "node_modules/pkg/page.html",
+            "<script>hook()</script>",
+        );
+        assert!(!verdict(&installed));
+    }
+
+    /// ADR 1151 (round 2, N1): the focus proof's page verdict reads a handler after a solidus in the index and in a public page, in upper case, and a comment HTML ends at
+    /// `--!>`, as it reads one after a space (the grammar is ADR 1154's).
+    #[test]
+    fn the_page_verdict_reads_a_handler_after_a_solidus_in_the_index_and_in_a_public_page() {
+        let held = |root: &Path| program(root, &["src/main.tsx"]);
+        let verdict = |root: &Path| {
+            let files = held(root);
+            page_may_run_code_in(root, &|path| files.contains(path))
+        };
+        for (name, page) in [
+            (
+                "body-solidus",
+                PAGE.replace("<body>", "<body/onfocusin=\"hook()\">"),
+            ),
+            (
+                "div-solidus",
+                PAGE.replace(
+                    "<div id=\"root\">",
+                    "<div id=\"root\"/onfocusin=\"hook()\">",
+                ),
+            ),
+            (
+                "upper",
+                PAGE.replace("<body>", "<body ONFOCUSIN=\"hook()\">"),
+            ),
+            (
+                "upper-solidus",
+                PAGE.replace("<body>", "<BODY/ONFOCUSIN=\"hook()\">"),
+            ),
+            (
+                "bang-comment",
+                PAGE.replace("<body>", "<!-- x --!><body onfocusin=\"hook()\"> -->"),
+            ),
+        ] {
+            let root = scratch(&format!("page-n1-{name}"));
+            write(&root, "index.html", &page);
+            write(&root, "src/main.tsx", "export {};");
+            assert!(verdict(&root), "{name}");
+        }
+        for (name, other, runs) in [
+            (
+                "public-solidus",
+                "<html><body/onfocus=\"parent.hook()\"></body></html>",
+                true,
+            ),
+            (
+                "public-upper",
+                "<HTML><BODY ONFOCUS=\"parent.hook()\"></BODY></HTML>",
+                true,
+            ),
+            (
+                "public-quote",
+                "<html><body><a href='/'onclick='go()'>x</a></body></html>",
+                true,
+            ),
+            (
+                "public-static",
+                "<html><body><p>hi</p></body></html>",
+                false,
+            ),
+        ] {
+            let root = scratch(&format!("page-n1-{name}"));
+            write(&root, "index.html", PAGE);
+            write(&root, "src/main.tsx", "export {};");
+            write(&root, "public/frame.html", other);
+            assert_eq!(verdict(&root), runs, "{name}");
+        }
     }
 
     #[test]

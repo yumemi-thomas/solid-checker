@@ -1,0 +1,4 @@
+{
+  "note": "a loaded package registers a focusin listener whose handler registers a cleanup: delivered on the stack of the leaf callback's focus().",
+  "packages": ["fz-focus-listener"]
+}

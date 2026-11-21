@@ -57,7 +57,9 @@ export function buildCase(program, { id = `fuzz-${program.seed}`, note } = {}) {
   const packageFiles = Object.fromEntries(packageNames.flatMap((name) => Object.entries(packages[name]).map(([file, text]) => [`node_modules/${name}/${file}`, text])));
   const description = note ?? `differential fuzzer, generator ${GENERATOR_VERSION}, seed ${program.seed}`;
   // ADR 0501: the exported components, which the entry renders by name (the oracle's `mount`).
-  const mount = [...text.matchAll(/^export function ([A-Z][A-Za-z0-9_]*)\b/gm)].map((match) => match[1]);
+  // The names are read from the plain text: an `escape` variant (rewrite.mjs) writes them with escapes, and the entry must still render the same components.
+  const plain = program.escape ? printProgram({ ...program, escape: undefined }, { instrument: false }).text : text;
+  const mount = [...plain.matchAll(/^export function ([A-Z][A-Za-z0-9_]*)\b/gm)].map((match) => match[1]);
   // R2 of the re-review of #221 (em-shapes.mjs `nso`): a component that asks for an OPEN program (the oracle's `programBoundary`, which the checker's project reads from a manifest).
   const boundary = program.components?.find((component) => component.boundary)?.boundary;
   // `program` is not enumerable: the judge reads it for registering positions, nothing serialises it.

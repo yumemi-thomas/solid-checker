@@ -1,0 +1,1 @@
+{ "note": "ADR 1146: a prop read in a named handler an effect apply delivers into a shadow tree warns STRICT_READ_UNTRACKED; the checker keeps it uncertifiable (main certified it)." }

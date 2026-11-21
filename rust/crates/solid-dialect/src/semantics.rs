@@ -447,3 +447,36 @@ pub enum ComponentEntry {
     /// creates has an owner, and its reads are tracked there.
     ReadTrackedUnderOwner,
 }
+
+/// ADR 1151: what importing one module of a dialect's own runtime lets a program register for a focus move to deliver to, or write as markup or a property
+/// under a name it chooses ([`Dialect::runtime_module_listener_registrations`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ListenerRegistrations {
+    /// Audited: no export of the module registers a listener for an event a focus move delivers (the focus family, `change`, composition and input events),
+    /// writes markup, or writes a property or an attribute of a node under a name the caller gives.
+    None,
+    /// Audited: only these exports do, each by its [`RuntimeListenerRole`], as the module declares it (an alias is the program's, never the export's); every other
+    /// export of the module is audited and does none of them.
+    Exports(&'static [(&'static str, RuntimeListenerRole)]),
+    /// Audited: the module attaches listeners or writes markup by a route no export names (the frames tier fills the page from the server's markup and wires
+    /// listeners as it loads), so any import of it may register one.
+    Any,
+}
+
+/// How an export of a dialect's own runtime registers a listener or writes markup ([`ListenerRegistrations::Exports`]), read from the runtime's pinned source.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RuntimeListenerRole {
+    /// Makes an element from a tag it is handed and writes the props it is handed onto it (`Dynamic`): the element's attributes and spreads are the ones the JSX
+    /// that renders it writes, so a use as a JSX tag is judged there, and any other reference to the export is a use the engine cannot read.
+    Forwards,
+    /// Registers a listener (or the delegated slot of one) for the event type the string at `argument` names (`addEvent(node, name, handler, delegate)`).
+    Event { argument: usize },
+    /// Writes a property or an attribute of its node under the name the string at `argument` gives (`setProperty(node, name, value)`): a handler (`onfocus`),
+    /// markup (`innerHTML`) or a stand-in for a method (`focus`) when the name is one.
+    Named { argument: usize },
+    /// Writes the markup the string at `argument` holds (`template(html)`): an inline handler or a script in it runs where the nodes live.
+    Markup { argument: usize },
+    /// Registers a listener or writes markup by a route no argument names (the keys of an object, a replay of queued events, a script or an asset, a hydration
+    /// claim): every use is one.
+    Opaque,
+}

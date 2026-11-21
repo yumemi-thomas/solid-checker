@@ -82,6 +82,9 @@ pub fn extract(path: impl Into<String>, source: &str) -> Result<AstFacts, AstFac
     facts.computed_keys = computed_keys::computed_keys(&semantic, follows_names);
     (facts.code_sinks, facts.uses_receiver) = code_sinks::code_sinks(&semantic, follows_names);
     facts.premise_sites = premise_sites::premise_sites(&semantic, follows_names);
+    facts.escaped_words = escaped_words::escaped_words(&semantic, source);
+    facts.escaped_names = escaped_names::escaped_names(&semantic, source);
+    facts.escaped_strings = escaped_strings::escaped_strings(&semantic, source);
     if execution_semantics_valid {
         (facts.host_execution, facts.host_defaults) = host_execution::host_execution(&semantic);
         facts.host_undefined_arguments = host_execution::undefined_values(&semantic);
@@ -781,6 +784,9 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             // Read from the semantic model after the walk (`computed_keys::computed_keys`).
             computed_keys: Vec::new(),
             premise_sites: Vec::new(),
+            escaped_words: Vec::new(),
+            escaped_names: Vec::new(),
+            escaped_strings: Vec::new(),
             code_sinks: Vec::new(),
             uses_receiver: false,
             awaits: self.awaits,

@@ -1,0 +1,49 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "compiler-refused-source",
+      "code": "SC9015",
+      "kind": "uncertifiable",
+      "blocker": "compiler-facts",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/change-attr-namespace/App.tsx",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/change-attr-namespace/App.tsx",
+      "start": 354,
+      "end": 366,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/change-attr-namespace/App.tsx",
+      "start": 354,
+      "end": 366,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/change-attr-namespace/App.tsx",
+      "start": 373,
+      "end": 376,
+      "fixes": 0
+    }
+  ]
+}

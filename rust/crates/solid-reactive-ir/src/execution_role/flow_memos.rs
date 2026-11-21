@@ -497,6 +497,16 @@ impl<'w> FlowWorld<'w> for CtxFlow<'_, '_, 'w> {
         self.ctx.hazard(Hazard::Eval)
     }
 
+    fn handler_event_denied(&self, file: &'w FileFacts, callback: Span) -> bool {
+        // The event's name decides without a read; only a `change` handler of a literal checkbox or radio asks the program (ADR 1148), and that answer is the
+        // whole program's, recorded as such for just those handlers.
+        crate::execution_role::handler_event_denied_by_name(file, callback)
+            && !(crate::change_delivery::checkable_change_handler(file, callback)
+                && self.project(|lookup, _| {
+                    crate::change_delivery::program_keeps_control_types(lookup)
+                }))
+    }
+
     fn component_status(
         &self,
         file: &'w FileFacts,

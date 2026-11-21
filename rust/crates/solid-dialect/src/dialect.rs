@@ -247,6 +247,33 @@ pub trait Dialect: Sync {
     /// never to grant a package semantics.
     fn ecosystem_scopes(&self) -> &'static [&'static str];
 
+    /// ADR 1148: what a program that imports one module of this dialect's own runtime
+    /// packages ([`Dialect::primitive_defining_packages`]) may do to an element's
+    /// properties and attributes, asked per module specifier as a program writes it, the
+    /// root and every subpath alike (`@solidjs/web`, `@solidjs/web/frames/client`).
+    ///
+    /// The engine asks it of an import, a re-export or a dynamic load of such a module.
+    /// `None`: this dialect has not audited that specifier, and the program is taken to
+    /// retype (ADR 0027: missing native behaviour is unknown, never "no effects"), so a
+    /// subpath a later release adds withdraws the proof until it is audited.
+    fn runtime_module_element_writes(&self, specifier: &str) -> Option<ElementWrites>;
+
+    /// ADR 1151: what a program that imports one module of this dialect's own runtime packages ([`Dialect::primitive_defining_packages`]) may register for a focus
+    /// move to deliver to, or write as markup or a property under a name it chooses, asked per module specifier as a program writes it, the root and every subpath
+    /// alike (`@solidjs/web`, `@solidjs/web/frames/client`).
+    ///
+    /// The engine asks it of an import, a re-export or a dynamic load of such a module, and of a specifier that resolves into a file of one. `None`: this dialect has
+    /// not audited that specifier, and the program is taken to register one (ADR 0027: missing native behaviour is unknown, never "no effects"), so a subpath or an
+    /// export a later release adds withdraws a proof that nothing listens until it is audited. A sibling of ADR 1148's question about element writes; the two are
+    /// separate answers (a module may write a property and register no listener).
+    fn runtime_module_listener_registrations(
+        &self,
+        specifier: &str,
+    ) -> Option<ListenerRegistrations> {
+        let _ = specifier;
+        None
+    }
+
     /// Resolves an exported name to a primitive, or `None` when this dialect
     /// does not export it.
     fn primitive(&self, name: &str) -> Option<Primitive>;
@@ -1678,6 +1705,15 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether the property read [`Dialect::argument_is_untouched_target`] names may reach a key the argument does not own: the
+    /// runtime first asks the value for a key only a store carries, so on a function the read walks its prototype chain
+    /// (`Function.prototype`, `Object.prototype`) and a hook installed there would run project code. The IR asks the
+    /// standard-member premise (nothing may write those prototypes under a key no fact decides) before it ends a walk there.
+    fn argument_target_read_walks_prototypes(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
     /// How a callback passed to the function returned by `primitive` runs.
     ///
     /// This is deliberately separate from [`Dialect::callback_execution_at`]:
@@ -2263,4 +2299,18 @@ pub trait Dialect: Sync {
     fn is_async_boundary(&self, tag: &str) -> bool {
         self.boundary_kind(tag) == Some(Boundary::Async)
     }
+}
+
+/// What importing one module of a dialect's own runtime lets a program do to an element's properties and attributes
+/// ([`Dialect::runtime_module_element_writes`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ElementWrites {
+    /// Audited: no export of the module writes a property or an attribute of an element.
+    None,
+    /// Audited: only these exports write a property or an attribute of the element they are handed under a name the caller gives
+    /// (`setProperty(el, "type", "text")`), each as the module declares it (an alias is the program's, never the export's).
+    Exports(&'static [&'static str]),
+    /// Audited: the module finds elements and rewrites them (a morph of the existing children from server markup), so any import of
+    /// it may retype an element it was never handed.
+    Any,
 }

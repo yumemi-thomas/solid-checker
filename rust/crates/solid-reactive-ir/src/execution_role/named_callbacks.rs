@@ -537,14 +537,14 @@ pub(crate) fn named_callback_roles(
         .iter()
         .filter(|callback| {
             callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
-                && super::handler_event_denied(file, callback.span)
+                && super::handler_event_denied(lookup, file, callback.span)
         })
         .flat_map(|callback| index.identity_at(file, entities, callback.span))
         .map(|candidate| index.functions[*candidate])
         .collect::<HashSet<_>>();
     for callback in &file.compiler.callback_roles {
         if callback.role != solid_facts::compiler::CallbackRoleKind::EventHandler
-            || super::handler_event_denied(file, callback.span)
+            || super::handler_event_denied(lookup, file, callback.span)
         {
             continue;
         }

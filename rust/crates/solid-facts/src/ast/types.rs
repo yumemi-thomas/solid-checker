@@ -169,6 +169,22 @@ pub struct AstFacts {
     /// that holds none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub premise_sites: Vec<PremiseSiteFact>,
+    /// ADR 1148 round 2 (facts schema 107): the words of the decoded text of every identifier, string literal and template piece the file writes with an escape
+    /// (`document.ev\u0061luate`, `el["\u0061ttributes"]`), sorted: a name a scan of the source text cannot see. A word written without an escape is the source text's
+    /// own and is not listed. Nothing is listed for a file that writes no escape.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub escaped_words: Vec<CompactString>,
+    /// ADR 1152 (facts schema 108): each span that is one identifier written with an escape (`ev\u0061l`), or a chain of names that holds one (`window.add\u0045ventListener`), with the
+    /// text the program means (`eval`, `window.addEventListener`), sorted by span: the name a check that compares a name to a literal, takes its first letter or looks it up in a list
+    /// has to read, where the span's source text is the spelling. Nothing is listed for a file that writes no escape.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub escaped_names: Vec<EscapedNameFact>,
+    /// ADR 1152 (facts schema 108): each string or template without a substitution that the file writes with an escape and whose whole value is one word (ASCII letters and digits
+    /// with `_ $ - : .` among them: `click`, `__proto__`, `data-id`), sorted by span, with the value: a text a check may read as a name (a key, an event name, an option's name),
+    /// where the source text is the spelling. A string that is no word (`"\n"`, a sentence, one character) is a plain value and is not listed. Nothing is listed for a file
+    /// that writes no such string.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub escaped_strings: Vec<EscapedStringFact>,
     pub awaits: Vec<Span>,
     /// The subset of [`AstFacts::awaits`] proven to execute on every run of
     /// their innermost enclosing function (or of module evaluation): awaits
@@ -1791,6 +1807,25 @@ pub struct MemberFact {
     pub property: Span,
 }
 
+/// A span that is a name written with an escape and the text the program means (facts schema 108): [`AstFacts::escaped_names`].
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EscapedNameFact {
+    pub span: Span,
+    pub name: CompactString,
+}
+
+/// A string or a template without a substitution that the file writes with an escape and whose whole value is one word, with the value (facts schema 108):
+/// [`AstFacts::escaped_strings`].
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EscapedStringFact {
+    /// The literal's own span, its quotes or backticks included.
+    pub span: Span,
+    /// The decoded value.
+    pub text: CompactString,
+}
+
 /// A computed member access whose key is a literal naming one property: the
 /// member's span and that property key. See
 /// [`AstFacts::literal_computed_members`].
@@ -2737,6 +2772,9 @@ impl AstFacts {
             assignment_pattern_keys: Vec::new(),
             computed_keys: Vec::new(),
             premise_sites: Vec::new(),
+            escaped_words: Vec::new(),
+            escaped_names: Vec::new(),
+            escaped_strings: Vec::new(),
             code_sinks: Vec::new(),
             uses_receiver: false,
             awaits: Vec::new(),

@@ -713,9 +713,19 @@ impl FileFacts {
     ///
     /// Fact consumers use this instead of retaining owned copies of verbatim
     /// source names. Invalid or non-character-boundary spans fail closed.
+    ///
+    /// With the `raw-name-trace` feature (a measurement, off in every build that
+    /// ships), a read of a text that spells a name with an escape is recorded with
+    /// its caller (ADR 1152, `raw_name_trace`).
     #[must_use]
+    #[cfg_attr(feature = "raw-name-trace", track_caller)]
     pub fn source_text(&self, span: Span) -> Option<&str> {
-        self.source.get(span.start as usize..span.end as usize)
+        let text = self.source.get(span.start as usize..span.end as usize);
+        #[cfg(feature = "raw-name-trace")]
+        if let Some(text) = text {
+            crate::raw_name_trace::note(self.path.as_str(), text, std::panic::Location::caller());
+        }
+        text
     }
 
     /// The expression inside any parentheses around `span`; `None` when a type

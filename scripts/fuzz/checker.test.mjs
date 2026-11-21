@@ -122,6 +122,14 @@ describe("parseFindings and siteVerdicts", () => {
     expect(findings.map((f) => `${f.rule}:${f.line}-${f.endLine}`)).toEqual(["no-write-in-pure-computation:8-8", "strict-read-untracked:18-22", "prefer-show:30-30"]);
     expect(() => parseFindings({}, dir)).toThrow();
   });
+  it("holds every line under a file-wide obligation (ADR 1152's notice), whose span is the file", () => {
+    const findings = parseFindings({ findings: [
+      { rule: "reactive-dispatch-unresolved", id: "SC9012", kind: "uncertifiable", subjectKind: "file", primaryLocation: { path: `${dir}/App.tsx`, line: 1, column: 1, startByte: 0, endByte: 900 } },
+      { rule: "no-write-in-pure-computation", id: "SC2001", kind: "violation", primaryLocation: { path: `${dir}/App.tsx`, line: 8 } },
+    ] }, dir);
+    const verdicts = siteVerdicts([{ id: "s1", line: 8, kind: "write" }, { id: "s2", line: 44, kind: "read" }], findings);
+    expect(verdicts.map((v) => [v.siteId, v.verdict])).toEqual([["s1", "violation"], ["s2", "uncertifiable"]]);
+  });
   it("reduces findings to violation / uncertifiable / none per site, leaving ignored style rules out", () => {
     const sites = [{ id: "s1", line: 8, kind: "write" }, { id: "s2", line: 20, kind: "read" }, { id: "s3", line: 30, kind: "write" }, { id: "s4", line: 40, kind: "write" }];
     const verdicts = siteVerdicts(sites, parseFindings(analysis, dir));

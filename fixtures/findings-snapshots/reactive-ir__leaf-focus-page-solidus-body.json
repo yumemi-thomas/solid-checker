@@ -1,0 +1,16 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "leaf-callback-opaque",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-focus-page-solidus-body/App.tsx",
+      "start": 201,
+      "end": 213,
+      "fixes": 0
+    }
+  ]
+}

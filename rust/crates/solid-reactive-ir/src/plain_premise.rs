@@ -133,13 +133,23 @@ fn package_files(resolved: &str, program: &BTreeSet<&str>) -> Option<Vec<String>
 /// The loads of a file. The bundler's own resolution answers when the host obtained it (ADR 0220; a missing row is unknown, never
 /// TypeScript's); without it, TypeScript's attested resolution, where a declaration file is no runtime module.
 fn loads(lookup: &SemanticLookup<'_>, file: &FileFacts, program: &BTreeSet<&str>) -> Vec<Load> {
+    loads_skipping(lookup, file, program, &|_| false)
+}
+
+/// [`loads`], leaving out the specifiers `skip` answers for (the caller reads them another way).
+fn loads_skipping(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    program: &BTreeSet<&str>,
+    skip: &dyn Fn(&str) -> bool,
+) -> Vec<Load> {
     let runtime = lookup.runtime_resolutions();
     let imports = lookup.resolved_imports();
     let resolve = |declaration: solid_facts::core::Span,
                    at: Option<solid_facts::core::Span>,
                    specifier: &str|
      -> Option<Load> {
-        if lookup.dialect.owns_module(specifier) {
+        if lookup.dialect.owns_module(specifier) || skip(specifier) {
             return None;
         }
         let read = |path: &str| {
@@ -253,7 +263,7 @@ fn file_hazards(
 }
 
 /// The package a file of `node_modules` belongs to (a scoped name being two segments).
-fn package_name(path: &str) -> Option<&str> {
+pub(crate) fn package_name(path: &str) -> Option<&str> {
     let (_, rest) = path.rsplit_once("/node_modules/")?;
     let first = rest.split('/').next()?;
     if first.starts_with('@') {
@@ -267,7 +277,7 @@ fn package_name(path: &str) -> Option<&str> {
     }
 }
 
-fn is_package(path: &str) -> bool {
+pub(crate) fn is_package(path: &str) -> bool {
     path.contains("/node_modules/")
 }
 
@@ -504,4 +514,31 @@ pub(crate) fn program_may_write_standard_member(lookup: &SemanticLookup<'_>, mem
                     .iter()
                     .any(|load| matches!(load, Load::Unread(_) | Load::Asset(_)))
         })
+}
+
+/// ADR 1151: whether `file` loads code a proof that nothing in the program registers a listener does not read: a module the build does not read, an asset (a
+/// bundler plugin may make it code) or a package whose analysed files are declarations alone (TypeScript resolved the load to the package's `.d.ts` and its
+/// runtime source is not among the program's files, so the code the load runs was never scanned). A style sheet loads no code. `skip` answers for the specifiers
+/// the caller reads another way (the dialect's own runtime, by its audited answers).
+pub(crate) fn loads_unscanned_code(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    program: &BTreeSet<&str>,
+    skip: &dyn Fn(&str) -> bool,
+) -> bool {
+    loads_skipping(lookup, file, program, skip)
+        .iter()
+        .any(|load| match load {
+            Load::Read(path) => is_declaration_file(path),
+            Load::Package(paths) => paths.iter().all(|path| is_declaration_file(path)),
+            Load::Style(_) => false,
+            Load::Asset(_) | Load::Unread(_) => true,
+        })
+}
+
+/// Whether `path` is a declaration file (`.d.ts`, `.d.mts`, `.d.cts`): types only, no code.
+fn is_declaration_file(path: &str) -> bool {
+    [".d.ts", ".d.mts", ".d.cts"]
+        .iter()
+        .any(|suffix| path.ends_with(suffix))
 }

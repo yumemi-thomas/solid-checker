@@ -1121,6 +1121,380 @@ fn the_any_file_vetoes_follow_what_the_project_writes() {
     assert!(iterator.4 && !iterator.5);
 }
 
+/// ADR 1148: whether any project file may write the `type` of an element.
+#[test]
+fn the_retype_veto_follows_what_the_project_writes() {
+    let veto = |source: &str| {
+        let facts = project(source);
+        let store = crate::base::memo::build::MemoStore::new(true, true);
+        memo_build(&facts, &store, &[], |lookup| {
+            lookup.element_retype_possible()
+        })
+        .0
+    };
+    // Writes of other keys, and reads, retype nothing: a flow row's store update, a proven key, a call's argument, a `type` read.
+    for source in [
+        "export const answer = 1;",
+        "export function f(el: HTMLInputElement) { el.value = 'x'; el.checked = true; }",
+        "export function f(el: any) { const key = 'disabled'; el[key] = false; }",
+        "export function f(draft: any, index: () => number) { draft[index()].done = !draft[index()].done; }",
+        "export function f(el: HTMLInputElement) { return el.type + String(el.type === 'text'); }",
+        "export function f(el: any) { el['value'] = 1; el.typeName = 'x'; }",
+        "export function f(o: { type: string }) { const { type } = o; return type; }",
+        "export function f(n: number) { let type = 'a'; type += String(n); return type; }",
+    ] {
+        assert!(!veto(source), "{source}");
+    }
+    // A write whose key is `type`, by any spelling a write has, or one no proof narrows away from it.
+    for source in [
+        "export function f(el: HTMLInputElement) { el.type = 'text'; }",
+        "export function f(el: any) { el['type'] = 'text'; }",
+        "export function f(el: any) { el.type += 'x'; }",
+        "export function f(el: any) { delete el.type; }",
+        "export function f(el: any, o: any) { ({ a: el.type } = o); }",
+        "export function f(el: any) { [el.type] = ['x']; }",
+        "export function f(el: any, k: string) { el[k] = 1; }",
+        "export function f(el: any) { const k = 'type'; el[k] = 1; }",
+        "export function f(el: any, c: boolean) { const k = c ? 'type' : 'value'; el[k] = 1; }",
+        "export function f(el: any) { (el as HTMLInputElement).type = 'text'; }",
+    ] {
+        assert!(veto(source), "{source}");
+    }
+    // A name of the DOM's attribute API, spelled anywhere: a call, an alias, a pattern key, a node's value.
+    for source in [
+        "export function f(el: HTMLElement) { el.setAttribute('a', 'b'); }",
+        "export function f(el: HTMLElement) { el.removeAttribute('type'); }",
+        "export function f(el: HTMLElement) { const { setAttribute } = el; setAttribute('a', 'b'); }",
+        "export function f(el: HTMLElement) { return el.attributes.length; }",
+        "export function f(el: HTMLElement) { el.getAttributeNode('type')!.value = 'text'; }",
+    ] {
+        assert!(veto(source), "{source}");
+    }
+    // Every route to the control's `Attr` node, whose `value`, `nodeValue` or `textContent` is the attribute: no key `type` is written, and no attribute-API
+    // name but the route's own is spelled (`document.evaluate("//input/@type", …).singleNodeValue.value = "text"` retypes the control in Chrome).
+    for source in [
+        "export function f() { const a = document.evaluate('//input/@type', document, null, 9, null).singleNodeValue as Attr; a.value = 'text'; }",
+        "export function f() { const a = document.evaluate('//input/@type', document, null, 9, null).singleNodeValue as Attr; a.nodeValue = 'text'; }",
+        "export function f() { const a = document.evaluate('//input/@type', document, null, 9, null).singleNodeValue as Attr; a.textContent = 'text'; }",
+        "export function f() { return new XPathEvaluator(); }",
+        "export function f() { return document.createExpression('//input/@type'); }",
+        "export function f(r: XPathResult) { return r.iterateNext(); }",
+        "export function f(r: XPathResult) { return r.snapshotItem(0); }",
+        "export function f(r: XPathResult) { return r.singleNodeValue; }",
+        "export function f() { return document.createAttribute('type'); }",
+        "export function f() { return document.createAttributeNS(null, 'type'); }",
+        "export function f(d: any) { return d['eval' + 'uate']('//input/@type', d, null, 9, null); }",
+    ] {
+        assert!(veto(source), "{source}");
+    }
+    // The accessor lookups hand out the `type` setter itself; a name a computed key folds to is spelled nowhere, and the key's proof names it.
+    for source in [
+        "export function f(el: any) { (HTMLInputElement.prototype as any).__lookupSetter__('type').call(el, 'text'); }",
+        "export function f(el: any) { const g = (HTMLInputElement.prototype as any).__lookupGetter__; return g; }",
+        "export function f(el: any) { el['set' + 'Attribute']('type', 'text'); }",
+        "export function f(el: any) { const name = 'remove' + 'Attribute'; el[name]('type'); }",
+        "export function f(el: any) { const { ['set' + 'Attribute']: set } = el; set.call(el, 'type', 'text'); }",
+        "export function f(el: any, c: boolean) { el[c ? 'setAttribute' : 'focus']('type', 'text'); }",
+    ] {
+        assert!(veto(source), "{source}");
+    }
+    // A folded key that names an API's reader, or an unrelated method, retypes nothing.
+    for source in [
+        "export function f(el: any) { return el['get' + 'Attribute']('type'); }",
+        "export function f(el: any) { const name = 'fo' + 'cus'; el[name](); }",
+    ] {
+        assert!(!veto(source), "{source}");
+    }
+    // A longer identifier is no such name.
+    assert!(!veto(
+        "export function mySetAttribute() { return 1; }\nexport const attributesList = [];\nexport const evaluated = 1;\nexport function evaluateAll() { return 2; }"
+    ));
+}
+
+/// A project of several files, each `(path, source)`: a dependency's source is one of them when its path lies under `node_modules`.
+fn project_files(files: &[(&str, &str)]) -> ProjectFacts {
+    let mut facts = project("");
+    let generation = Generation::new(1).unwrap();
+    facts.files = files
+        .iter()
+        .map(|&(path, source)| FileFacts {
+            generation,
+            path: SourcePath::new(path).unwrap(),
+            source_hash: SourceHash::of(source),
+            source: Arc::from(source),
+            ast: Arc::new(solid_facts::ast::extract(path, source).unwrap()),
+            compiler: Arc::new(ExecutionMap {
+                compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
+                source_hash: SourceHash::of(source),
+                semantic_model: Default::default(),
+                tracked_regions: Vec::new(),
+                untracked_regions: Vec::new(),
+                discarded_regions: Vec::new(),
+                ownership_regions: Vec::new(),
+                callback_roles: Vec::new(),
+                jsx_operations: Vec::new(),
+            }),
+        })
+        .collect();
+    facts
+}
+
+/// [`project_files`], with the build's attested resolution of the listed specifiers: `(importer, specifier text, resolved path)`, each found as the quoted literal
+/// in the importer's source.
+fn project_files_resolved(
+    files: &[(&str, &str)],
+    resolutions: &[(&str, &str, &str)],
+) -> ProjectFacts {
+    let mut facts = project_files(files);
+    let mut index = solid_facts::AttestedImportIndex::default();
+    for (importer, source) in files {
+        let rows = resolutions
+            .iter()
+            .filter(|(path, _, _)| path == importer)
+            .map(|(_, text, resolved)| {
+                let at = ['"', '\'']
+                    .iter()
+                    .find_map(|quote| source.find(&format!("{quote}{text}{quote}")))
+                    .expect("the specifier is written in the source");
+                solid_facts::AttestedImport {
+                    span: Span::new(
+                        u32::try_from(at).unwrap(),
+                        u32::try_from(at + text.len() + 2).unwrap(),
+                    ),
+                    text: (*text).into(),
+                    resolution: if resolved.is_empty() {
+                        solid_facts::ImportResolution::Unresolved
+                    } else {
+                        solid_facts::ImportResolution::NodeModules
+                    },
+                    resolved_path: (*resolved).into(),
+                    included_path: "".into(),
+                    symlink_path: "".into(),
+                    extension: ".js".into(),
+                    package_name: None,
+                    package_version: None,
+                    package_manifest: None,
+                    resolver_package_name: None,
+                    resolver_package_version: None,
+                }
+            })
+            .collect::<Vec<_>>();
+        index.insert_file(*importer, rows);
+    }
+    facts.resolved_imports = Some(index);
+    facts
+}
+
+/// ADR 1148 (round 1): a specifier that is no runtime package's by name but resolves into a file of one (a relative path into `node_modules`, a `paths` alias) reaches that
+/// file by a name no audit lists, so it is unknown and taken as writing; a specifier that resolves anywhere else is read as the program's own or a dependency's source.
+#[test]
+fn the_retype_veto_follows_a_specifier_into_a_runtime_file() {
+    let veto = |source: &str, specifier: &str, resolved: &str| {
+        let facts = project_files_resolved(
+            &[("proj/app.tsx", source)],
+            &[("proj/app.tsx", specifier, resolved)],
+        );
+        let store = crate::base::memo::build::MemoStore::new(true, true);
+        memo_build(&facts, &store, &[], |lookup| {
+            lookup.element_retype_possible()
+        })
+        .0
+    };
+    let frames = "proj/node_modules/@solidjs/web/frames/dist/client.js";
+    for (source, specifier) in [
+        (
+            "import { createFrame } from './node_modules/@solidjs/web/frames/dist/client.js';\nexport const f = createFrame;",
+            "./node_modules/@solidjs/web/frames/dist/client.js",
+        ),
+        (
+            "import { createFrame } from '@frames/client';\nexport const f = createFrame;",
+            "@frames/client",
+        ),
+        (
+            "import '@frames/client';\nexport const f = 1;",
+            "@frames/client",
+        ),
+        (
+            "export { createFrame } from '@frames/client';",
+            "@frames/client",
+        ),
+        ("export * from '@frames/client';", "@frames/client"),
+        (
+            "export async function f() { return import('@frames/client'); }",
+            "@frames/client",
+        ),
+        (
+            "export const f = require('@frames/client');",
+            "@frames/client",
+        ),
+        (
+            "import frames = require('@frames/client');\nexport const f = frames;",
+            "@frames/client",
+        ),
+    ] {
+        assert!(veto(source, specifier, frames), "{source}");
+    }
+    // Resolved anywhere else, the import is no runtime's: the program's own file, a dependency's (read as source), a runtime package's own audited specifier, or no
+    // resolution at all (the delivery premise's unread module).
+    for (source, specifier, resolved) in [
+        (
+            "import { x } from './local.js';\nexport const f = x;",
+            "./local.js",
+            "proj/local.js",
+        ),
+        (
+            "import { x } from './node_modules/dep/index.js';\nexport const f = x;",
+            "./node_modules/dep/index.js",
+            "proj/node_modules/dep/index.js",
+        ),
+        (
+            "import { render } from '@solidjs/web';\nexport const f = render;",
+            "@solidjs/web",
+            "proj/node_modules/@solidjs/web/dist/web.js",
+        ),
+        (
+            "import { x } from '@frames/client';\nexport const f = x;",
+            "@frames/client",
+            "",
+        ),
+    ] {
+        assert!(!veto(source, specifier, resolved), "{source}");
+    }
+}
+
+/// ADR 1148: the retype veto reads every file the program runs, a dependency's source as the project's, and not the dialect's own runtime packages.
+#[test]
+fn the_retype_veto_reads_the_dependencies_the_program_runs() {
+    let veto = |files: &[(&str, &str)]| {
+        let facts = project_files(files);
+        let store = crate::base::memo::build::MemoStore::new(true, true);
+        memo_build(&facts, &store, &[], |lookup| {
+            lookup.element_retype_possible()
+        })
+        .0
+    };
+    let app = ("proj/app.tsx", "export const App = () => 1;");
+    // A dependency needs no element handed to it: it retypes what it queries, writes through a name it is given, or calls the attribute API.
+    for source in [
+        "export function retypeAll() { document.querySelectorAll('input').forEach((i) => { i.type = 'text'; }); }",
+        "export function f(el) { el.setAttribute('type', 'text'); }",
+        "export function f(el) { el['set' + 'Attribute']('type', 'text'); }",
+        "export const prop = (el, name, value) => { el[name] = value; };",
+        "export class Field { constructor(type) { this.type = type; } }",
+    ] {
+        assert!(
+            veto(&[app, ("proj/node_modules/dep/index.js", source)]),
+            "{source}"
+        );
+    }
+    // An ecosystem package is a consumer of the runtime, read like any other.
+    assert!(veto(&[
+        app,
+        (
+            "proj/node_modules/@solidjs/router/dist/index.js",
+            "export function f(el) { el.setAttribute('aria-current', 'page'); }"
+        )
+    ]));
+    // A dependency that writes nothing of the kind leaves the answer to the project.
+    assert!(!veto(&[
+        app,
+        (
+            "proj/node_modules/dep/index.js",
+            "export const double = (n) => n * 2;"
+        )
+    ]));
+    // The dialect's own runtime packages are not read, by their name at any depth of a store layout.
+    let runtime = "export function setAttribute(node, name, value) { node.setAttribute(name, value); }\nexport function assignProp(node, prop, value) { node[prop] = value; }";
+    for path in [
+        "proj/node_modules/@solidjs/web/dist/web.js",
+        "proj/node_modules/.pnpm/@solidjs+web@2.0.0-rc.21/node_modules/@solidjs/web/dist/web.js",
+        "proj/node_modules/@solidjs/signals/dist/index.js",
+        "proj/node_modules/solid-js/dist/solid.js",
+    ] {
+        assert!(!veto(&[app, (path, runtime)]), "{path}");
+    }
+    // The dialect's runtime exports that write under a name the caller gives are matched as exact imported symbols, in a project file and in a dependency: an alias,
+    // a namespace or default import of the module, a re-export, an `export *`, a dynamic import that names one or escapes, a `require`, an `import = require`.
+    for source in [
+        "import { setProperty } from '@solidjs/web';\nexport function f(el: HTMLInputElement) { setProperty(el, 'type', 'text'); }",
+        "import { setProperty } from '@solidjs/web/jsx-runtime';\nexport const f = setProperty;",
+        "import { setProperty as sp } from '@solidjs/web';\nexport function f(el: HTMLInputElement) { sp(el, 'type', 'text'); }",
+        "import { setStatefulProperty as put } from '@solidjs/web';\nexport const f = put;",
+        "import { spread } from '@solidjs/web';\nexport function f(el: HTMLInputElement) { spread(el, { type: 'text' }); }",
+        "import { assign } from '@solidjs/web';\nexport const f = assign;",
+        "import { setAttributeNS } from '@solidjs/web';\nexport const f = setAttributeNS;",
+        "import * as web from '@solidjs/web';\nexport function f(el: HTMLInputElement) { web.assign(el, { a: 1 }); }",
+        "import web from '@solidjs/web';\nexport const f = web;",
+        "export { setProperty } from '@solidjs/web';",
+        "export { setProperty as sp } from '@solidjs/web';",
+        "export * from '@solidjs/web';",
+        "export * as web from '@solidjs/web';",
+        "export async function f(el: HTMLInputElement) { const { setProperty } = await import('@solidjs/web'); setProperty(el, 'type', 'text'); }",
+        "export async function f() { return (await import('@solidjs/web')).spread; }",
+        "export async function f() { return import('@solidjs/web'); }",
+        "export const web = require('@solidjs/web');",
+        "import web = require('@solidjs/web');\nexport const f = web;",
+    ] {
+        assert!(veto(&[("proj/app.tsx", source)]), "{source}");
+    }
+    assert!(veto(&[
+        app,
+        (
+            "proj/node_modules/dep/index.js",
+            "import { spread } from '@solidjs/web';\nexport const f = (el) => spread(el, { type: 'text' });"
+        )
+    ]));
+    // The frames tier morphs the children it finds with the server's attributes, `type` included (`frames/dist/wire.js` `morphAttributes`), and a specifier no release was
+    // audited for is unknown: any way into either takes a module that may write an element, whatever is named, and so does merely loading it.
+    for source in [
+        "import { createFrame } from '@solidjs/web/frames/client';\nexport const f = createFrame;",
+        "import { render } from '@solidjs/web/frames/client';\nexport const f = render;",
+        "import * as frames from '@solidjs/web/frames';\nexport const f = frames;",
+        "import frames from '@solidjs/web/frames/wire';\nexport const f = frames;",
+        "import '@solidjs/web/frames/client';\nexport const f = 1;",
+        "export * from '@solidjs/web/frames';",
+        "export { createFrame } from '@solidjs/web/frames/client';",
+        "export async function f() { return import('@solidjs/web/frames/regions'); }",
+        "export async function f() { const { createFrame } = await import('@solidjs/web/frames/client'); return createFrame; }",
+        "export const f = require('@solidjs/web/frames/assets');",
+        "import web = require('@solidjs/web/frames/trace');\nexport const f = web;",
+        "import { x } from '@solidjs/web/new-tier';\nexport const f = x;",
+        "import '@solidjs/web/new-tier';\nexport const f = 1;",
+        "import { y } from '@solidjs/web/dist/web.js';\nexport const f = y;",
+        "import { z } from 'solid-js/web';\nexport const f = z;",
+    ] {
+        assert!(veto(&[("proj/app.tsx", source)]), "{source}");
+    }
+    assert!(veto(&[
+        app,
+        (
+            "proj/node_modules/dep/index.js",
+            "import { createFrame } from '@solidjs/web/frames/client';\nexport const f = createFrame;"
+        )
+    ]));
+    // No import of a writer, whatever the names: the ordinary imports, a type import, a side-effect import, a module that is not the dialect's, and a function the program
+    // declares under a writer's name (the proof is not refused by a name).
+    for source in [
+        "import { render, For, Show, insert, template, className, style } from '@solidjs/web';\nexport const f = [render, For, Show, insert, template, className, style];",
+        "import { createSignal } from 'solid-js';\nexport const f = createSignal;",
+        "import type { setProperty } from '@solidjs/web';\nexport type F = typeof setProperty;",
+        "import { x } from '@solidjs/web/storage';\nexport const f = x;",
+        "import * as S from 'solid-js';\nexport const f = S;",
+        "import { createSignal } from '@solidjs/signals';\nexport const f = createSignal;",
+        "import pkg from 'solid-js/package.json';\nexport const f = pkg;",
+        "import { type spread, render } from '@solidjs/web';\nexport const f = render;",
+        "import '@solidjs/web';\nexport const f = 1;",
+        "import { setProperty } from 'some-lib';\nexport const f = setProperty;",
+        "import { setProperty } from './web';\nexport const f = setProperty;",
+        "export { render } from '@solidjs/web';",
+        "export async function f() { const { render } = await import('@solidjs/web'); return render; }",
+        "export function setProperty(counter: { count: number }, value: number) { counter.count = value; }\nexport function assign(a: number) { return a; }\nexport const spread = [1, 2];",
+        "export const spreadsheet = 1;\nexport const assigned = 2;\nexport function setPropertyName() { return 3; }",
+    ] {
+        assert!(!veto(&[("proj/app.tsx", source)]), "{source}");
+    }
+}
+
 /// ADR 0931: a `const` arrow is initialized at every run of a forwarder
 /// written after its declarator, unless a hoisted declaration lies between
 /// or the declarator sits in a `switch` clause.
@@ -1849,4 +2223,164 @@ fn every_match_on_a_climbs_stop_names_every_stop() {
         matches >= 10,
         "{matches} matches found: the deciding consumers are matched"
     );
+}
+
+/// A lookup over `facts` with the dialect and, where given, the backend's package verdicts, handed to `body`: the program-wide scans that record no memo.
+fn with_program_lookup<T>(
+    facts: &ProjectFacts,
+    reach: Option<&solid_facts::package_reach::PackageReachIndex>,
+    body: impl FnOnce(&SemanticLookup<'_>) -> T,
+) -> T {
+    let entities = entity_symbols(facts, &[]);
+    let ast_indexes = HashMap::default();
+    let symbol_names = HashMap::default();
+    let dialect = solid_dialect::Solid2;
+    let lookup = SemanticLookup::new(
+        facts,
+        &ast_indexes,
+        &entities,
+        &symbol_names,
+        &dialect,
+        false,
+    )
+    .with_package_reach(reach);
+    body(&lookup)
+}
+
+/// ADR 1151 (round 1): the focus proof reads every analysed file, a dependency's source as the project's, except the dialect's own runtime packages (whose registrars are asked at
+/// the import, `Dialect::runtime_module_listener_registrations`): a copy of the runtime's own `addEventListener(name, …)` with a variable type would end the proof of a program whose
+/// files include `@solidjs/web`'s, and what a program registers through the runtime is what its imports ask.
+#[test]
+fn the_focus_proof_reads_every_file_but_the_dialects_runtime() {
+    let may = |files: &[(&str, &str)]| {
+        with_program_lookup(
+            &project_files(files),
+            None,
+            crate::focus_delivery::program_may_run_code_on_focus,
+        )
+    };
+    let app = ("proj/app.tsx", "export const App = () => 1;");
+    let registers =
+        "export function addEvent(node, name, handler) { node.addEventListener(name, handler); }";
+    // The runtime's own files, by the package the path names (a store layout's real path included).
+    for path in [
+        "proj/node_modules/@solidjs/web/dist/web.js",
+        "proj/node_modules/.pnpm/@solidjs+web@2.0.0-rc.21/node_modules/@solidjs/web/dist/web.js",
+        "proj/node_modules/solid-js/dist/solid.js",
+        "proj/node_modules/@solidjs/signals/dist/dev.js",
+    ] {
+        assert!(!may(&[app, (path, registers)]), "{path}");
+    }
+    // The same code in any other package (an ecosystem package included: a consumer of the runtime, not part of it) is read like the project's.
+    for path in [
+        "proj/node_modules/dep/index.js",
+        "proj/node_modules/@solidjs/router/dist/index.js",
+        "proj/node_modules/@solidjs/webish/dist/index.js",
+    ] {
+        assert!(may(&[app, (path, registers)]), "{path}");
+    }
+    // A dependency's computed registration, its markup write, its handler property and its stand-in for `focus` end the proof as the project's would.
+    for source in [
+        "const m = 'add' + 'EventListener'; export const reg = (el, f) => el[m]('focus', f);",
+        "export const reg = (el, f) => el['\\u0061ddEventListener']('focus', f);",
+        "export const html = (el, v) => { el.innerHTML = v; };",
+        "export const on = (el, f) => { el.onfocus = f; };",
+        "export class Field extends HTMLElement { focus() {} }",
+    ] {
+        assert!(
+            may(&[app, ("proj/node_modules/dep/index.js", source)]),
+            "{source}"
+        );
+    }
+    assert!(!may(&[
+        app,
+        (
+            "proj/node_modules/dep/index.js",
+            "export const add = (a, b) => a + b;"
+        ),
+    ]));
+}
+
+/// ADR 1151 (round 1): a registrar of the runtime taken into any file of the program, and a specifier that reaches a file of the runtime by a name no audit lists, end the proof.
+#[test]
+fn the_focus_proof_asks_the_dialect_at_every_import_of_the_runtime() {
+    let may = |source: &str, specifier: &str, resolved: &str| {
+        let facts = project_files_resolved(
+            &[
+                ("proj/app.tsx", source),
+                ("proj/lib/x.ts", "export const x = 1;"),
+            ],
+            &[("proj/app.tsx", specifier, resolved)],
+        );
+        with_program_lookup(
+            &facts,
+            None,
+            crate::focus_delivery::program_may_run_code_on_focus,
+        )
+    };
+    let web = "proj/node_modules/@solidjs/web/dist/web.js";
+    for (source, specifier, resolved, expected) in [
+        // The registrar by the runtime's own specifier, and the quiet call the dialect exempts.
+        (
+            "import { addEvent } from '@solidjs/web';\nexport const f = (el, h) => addEvent(el, 'focus', h, false);",
+            "@solidjs/web",
+            web,
+            true,
+        ),
+        (
+            "import { addEvent } from '@solidjs/web';\nexport const f = (el, h) => addEvent(el, 'click', h, false);",
+            "@solidjs/web",
+            web,
+            false,
+        ),
+        (
+            "import { render } from '@solidjs/web';\nexport const f = render;",
+            "@solidjs/web",
+            web,
+            false,
+        ),
+        // The same quiet call through a relative path into the runtime's file, and through an alias: the specifier names no audited module.
+        (
+            "import { addEvent } from './node_modules/@solidjs/web/dist/web.js';\nexport const f = (el, h) => addEvent(el, 'click', h, false);",
+            "./node_modules/@solidjs/web/dist/web.js",
+            web,
+            true,
+        ),
+        (
+            "import { addEvent } from '@web/web';\nexport const f = (el, h) => addEvent(el, 'click', h, false);",
+            "@web/web",
+            web,
+            true,
+        ),
+        // An alias that lands elsewhere is that file's own question.
+        (
+            "import { x } from '@lib/x';\nexport const f = x;",
+            "@lib/x",
+            "proj/lib/x.ts",
+            false,
+        ),
+    ] {
+        assert_eq!(may(source, specifier, resolved), expected, "{source}");
+    }
+}
+
+/// ADR 1151 (round 1): the project's HTML is the backend's verdict ([`solid_facts::package_reach::PackageReachIndex::page_may_run_code`]); no verdict is the closed world.
+#[test]
+fn the_focus_proof_reads_the_pages_verdict() {
+    let files = project_files(&[("proj/app.tsx", "export const App = () => 1;")]);
+    let may = |reach: Option<&solid_facts::package_reach::PackageReachIndex>| {
+        with_program_lookup(
+            &files,
+            reach,
+            crate::focus_delivery::program_may_run_code_on_focus,
+        )
+    };
+    assert!(!may(None));
+    let clean = solid_facts::package_reach::PackageReachIndex::default();
+    assert!(!may(Some(&clean)));
+    let page = solid_facts::package_reach::PackageReachIndex {
+        page_may_run_code: true,
+        ..Default::default()
+    };
+    assert!(may(Some(&page)));
 }

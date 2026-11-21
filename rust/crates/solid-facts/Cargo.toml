@@ -9,6 +9,11 @@ rust-version.workspace = true
 [lints]
 workspace = true
 
+[features]
+# ADR 1152: a measurement build. Every read of a name's source text that holds an escape (`FileFacts::source_text`) is recorded with the Rust call site that made it
+# (`SOLID_CHECKER_RAW_NAME_TRACE=<file>`). Never in `default`; the sweep (scripts/fuzz/escape-sweep.mjs) builds it to name the sites that read a name as written.
+raw-name-trace = []
+
 [dependencies]
 compact_str.workspace = true
 oxc_allocator.workspace = true

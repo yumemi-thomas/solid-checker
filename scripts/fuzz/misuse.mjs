@@ -214,12 +214,33 @@ const RENDER_LEGAL = ["rnd-handler", "rnd-timer", "rnd-await", "rnd-shadow"];
 /** ADR 0645: what `program_listens_for_click` missed, and the elements ADR 0640's exclusion took: each `flush()`es on the apply's stack. */
 const ANCHOR_MISSES = ["evt-anchor-apply-bare", "evt-anchor-apply-alias", "evt-anchor-apply-computed", "evt-created-label", "evt-created-checkbox"];
 /**
+ * ADR 1148 (round 2, N1): a literal checkbox whose `type` the program rewrites to text before the user's step (focus, typed text) and the later root's body
+ * disables it, so the control delivers `change` as a text control does, inside that body: the handler runs owned (Chrome: REACTIVE_WRITE_IN_OWNED_SCOPE at a
+ * write, STRICT_READ_UNTRACKED at a read). ADR 1148 keeps the delivery proof of a checkbox's `change` handler only where no file the program runs may write an
+ * element's `type`; each context is one spelling of that write. `retyped` is the plain one (withdrawn since the first cut); the others write a name the engine
+ * decodes and no text spells (the Opus re-check of d0c1d494e: `document.ev\u0061luate`, a string, a template, a member, a method), which a scan of the source
+ * text missed and the facts' decoded words (`escaped_words`) answer. `xpath` is the reviewer's n1. A program that certifies one of these is a false clean.
+ */
+export const CHECKBOX_RETYPES = {
+  "dny-change-checkbox-retyped": 'EL.type = "text"',
+  "dny-change-checkbox-esc-member": 'EL.t\\u0079pe = "text"',
+  "dny-change-checkbox-esc-string": 'EL["t\\u0079pe"] = "text"',
+  "dny-change-checkbox-esc-method": 'EL.s\\u0065tAttribute("type", "text")',
+  "dny-change-checkbox-esc-collection": 'EL["\\u0061ttributes"].type.value = "text"',
+  "dny-change-checkbox-esc-collection-ident": 'EL.\\u0061ttributes.type.value = "text"',
+  "dny-change-checkbox-esc-collection-template": 'EL[`\\u0061ttributes`].type.value = "text"',
+  "dny-change-checkbox-esc-xpath": '(document.ev\\u0061luate("//input[@type=\'checkbox\']/@type", document, null, 9, null).singleNodeV\\u0061lue as Attr).value = "text"',
+};
+const CHECKBOX_RETYPE_CELLS = Object.fromEntries(Object.entries(CHECKBOX_RETYPES).map(([context, retype]) => [context,
+  { tag: "input", on: "onChange", attrs: 'type="checkbox"', prep: [retype, "EL.focus()", 'document.execCommand("insertText", false, "x")'], trigger: "EL.disabled = true" }]));
+/**
  * The denied events (ADR 0642, the ruling's section 3): delivered by a state change, on the stack of whatever made it, with no dedicated
  * method. Each `dny-*` runs a user's step on an empty stack (`prep`: a real focus, text typed with `execCommand`, a click that opens a
  * popover), then mounts a later root whose body makes the change (`trigger`). An IME composition needs CDP input, which the page cannot
  * make: `compositionend` stays in fixtures.
  */
 const DENIED = {
+  ...CHECKBOX_RETYPE_CELLS,
   "dny-blur-disabled": { tag: "button", on: "onBlur", prep: ["EL.focus()"], trigger: "EL.disabled = true" },
   "dny-blur-replace": { tag: "input", on: "onBlur", prep: ["EL.focus()"], trigger: 'EL.replaceWith(document.createElement("span"))' },
   "dny-blur-move": { tag: "input", on: "onBlur", prep: ["EL.focus()"], trigger: "document.body.append(EL)" },
@@ -1794,7 +1815,7 @@ function laterRoot(kit, prep, trigger, solid, web) {
  * Playwright waits out its actionability check (12 of 29 sampled `dny-*` programs were `harness-error` in Chrome, every time, so these
  * contexts had no oracle at all). `undriven` takes it off the click plan; the trigger, not the driver, is what these contexts measure.
  */
-const TAKEN_AWAY = new Set(["dny-blur-disabled", "dny-blur-replace", "dny-focusout-replace", "dny-change-typed", "dny-blur-select-remove",
+const TAKEN_AWAY = new Set(["dny-blur-disabled", "dny-blur-replace", "dny-focusout-replace", "dny-change-typed", "dny-blur-select-remove", ...Object.keys(CHECKBOX_RETYPES),
   ...Object.keys(DISPOSALS), "dny-unmount-flush-body", "dny-unmount-flush-root", "dny-insert-body", "dny-shared-fn", "dny-chain-click",
   "dny-flush-unmount", "dny-blur-spread", "dny-blur-dynamic", "dny-portal-dispose", "dny-blur-lowercase", "dny-legal-keydown", "dny-legal-click", "dny-legal-pointer", "dny-legal-mount-disabled", "dny-legal-mount-disabled-spread"]);
 function undriven(tree, id) {

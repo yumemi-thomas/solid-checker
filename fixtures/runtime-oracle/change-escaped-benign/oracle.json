@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1148 (round 2, N1): escapes that spell no name of the retype family (`\"tab\\there\\u00e9\"`, `caf\\u00e9`, `` `a\\u0042c` ``) retype nothing; the control stays a checkbox, which Grab's textContent write removes without delivering anything. Chrome is quiet; the checker certifies it (no row)."
+}

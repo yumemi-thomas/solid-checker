@@ -1,0 +1,71 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-focus-no-listener/variants/escaped-event-template/App.tsx",
+      "start": 0,
+      "end": 385,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-focus-no-listener/variants/escaped-event-template/App.tsx",
+      "start": 147,
+      "end": 156,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-focus-no-listener/variants/escaped-event-template/App.tsx",
+      "start": 147,
+      "end": 156,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "listener-reach",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-focus-no-listener/variants/escaped-event-template/App.tsx",
+      "start": 263,
+      "end": 277,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "leaf-callback-opaque",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-focus-no-listener/variants/escaped-event-template/App.tsx",
+      "start": 263,
+      "end": 275,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "listener-reach",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-focus-no-listener/variants/escaped-event-template/App.tsx",
+      "start": 336,
+      "end": 372,
+      "fixes": 0
+    }
+  ]
+}

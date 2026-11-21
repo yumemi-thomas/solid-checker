@@ -1,0 +1,49 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "escaped-name-unresolved",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-focus-no-listener/variants/escaped-document-listener/App.tsx",
+      "start": 0,
+      "end": 406,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-focus-no-listener/variants/escaped-document-listener/App.tsx",
+      "start": 160,
+      "end": 169,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-focus-no-listener/variants/escaped-document-listener/App.tsx",
+      "start": 160,
+      "end": 169,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "leaf-callback-opaque",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-focus-no-listener/variants/escaped-document-listener/App.tsx",
+      "start": 276,
+      "end": 288,
+      "fixes": 0
+    }
+  ]
+}
