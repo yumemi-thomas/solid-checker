@@ -103,40 +103,6 @@
  ],
  "patterns": [
   {
-   "id": "ctxmemo/p14b-timeout-control",
-   "item": "ADR 1155 (b), the Opus review of ADR 1147 (N1, Chrome-confirmed, rc.21): onCleanup in a context provider's child, the provider created in a setTimeout callback, is SC4001 a violation at the child; the child runs under the provider's children memo, and Chrome reports NO_OWNER_CLEANUP only at the control outside (L11)",
-   "outcome": "false-positive",
-   "codes": [
-    "NO_OWNER_CLEANUP"
-   ],
-   "certified": false
-  },
-  {
-   "id": "ctxmemo/p2-render-apply",
-   "item": "ADR 1155 (b), N1: a createMemo in a provider's child, the provider created in a package's effect apply (RenderApply), is SC6002 a violation at the child; Chrome reports PRIMITIVE_IN_EFFECT_CALLBACK at the provider tag (L8) only",
-   "outcome": "false-positive",
-   "codes": [
-    "PRIMITIVE_IN_EFFECT_CALLBACK"
-   ],
-   "certified": false
-  },
-  {
-   "id": "ctxmemo/p8-tracked-project",
-   "item": "ADR 1155 (b), N1: a createMemo in a provider's child, the provider created in createTrackedEffect, is SC3001 a violation at the child; Chrome reports PRIMITIVE_IN_FORBIDDEN_SCOPE at the provider tag (L8) only",
-   "outcome": "false-positive",
-   "codes": [
-    "PRIMITIVE_IN_FORBIDDEN_SCOPE"
-   ],
-   "certified": false
-  },
-  {
-   "id": "ctxmemo/s11-hand-direct",
-   "item": "ADR 1155 (a), the Opus review of ADR 1147 (F1's root, Chrome-confirmed, rc.21): a write in a callback a read package runs in createTrackedEffect's compute (`hand(() => setN(1))`) is SC2001 a violation; rc.21's write guard exempts the leaf callback, so Chrome is quiet",
-   "outcome": "false-positive",
-   "codes": [],
-   "certified": false
-  },
-  {
    "id": "pkgaction/global-route-contentwindow-parent",
    "item": "ADR 1108 part 2 named miss (Chrome-confirmed, rc.21): a frame's `contentWindow.parent` (the window that holds the frame)",
    "outcome": "false-clean",
