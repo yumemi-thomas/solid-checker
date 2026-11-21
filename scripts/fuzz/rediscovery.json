@@ -42522,5 +42522,18 @@
    "lg-strict-read-untracked-arm-tag-store-dstr-quoted-alias-none"
   ],
   "rediscovered": "focus.mjs --grids lg-recall --codes STRICT_READ_UNTRACKED --recall-full -- --contexts arm-tag (3,748 programs), release builds: main b600297eb 40 unexecuted-violation (needs a look, exit 1); this build none, exit 0 (40 unexecuted and 166 uncertifiable to clean, nothing else)"
+ },
+ {
+  "finding": "ADR 1177: a default-less context read in an onLoad, onBeforeToggle or onBlur handler a later flush reaches got SC4002 (ContextNotFoundError) where Chrome throws NO_OWNER_CONTEXT first: ADR 0577's owned-run-first premise held for a body call, not for a handler literal whose deliveries are owned on one stack and unowned on another",
+  "found": "the mx-census false-positive rows held in open-defects.json (Mac 23)",
+  "fixed": "ADR 1177 (competing_checks: maybe_unowned_reads, a handler-literal read whose owner varies or may be null)",
+  "grid": "mx-census",
+  "code": "CONTEXT_NOT_FOUND",
+  "ids": [
+   "mx-context-not-found-dny-flush-load-x-direct-none",
+   "mx-context-not-found-dny-flush-popover-x-direct-none",
+   "mx-context-not-found-dny-flush-unmount-x-direct-none"
+  ],
+  "rediscovered": "focus.mjs --codes CONTEXT_NOT_FOUND,NO_OWNER_CONTEXT --grids mx-census, release builds: 14469fac2 three false-positive (known open); this build none, the three not-fired"
  }
 ]

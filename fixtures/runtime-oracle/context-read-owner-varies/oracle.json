@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1177: `Varies`' `onLoad` runs first as a delivery with no owner, so Chrome throws NO_OWNER_CONTEXT, not CONTEXT_NOT_FOUND: the checker's SC4002 there is uncertifiable (main: a violation Chrome never reaches) and SC4001 covers it. `Body` throws CONTEXT_NOT_FOUND, an SC4002 violation."
+}

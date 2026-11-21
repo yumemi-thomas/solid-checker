@@ -49,7 +49,9 @@ to a project wrapper and called later stays SC4001's obligation. A read with no 
 is uncertain is SC4001's uncertifiable result. A read in a function that runs
 both under an owner and with none (called in the body and handed to `onClick`)
 is reported here, since the owned run throws first, and SC4001's claim there is
-an obligation (ADR 0577). So is a read in a function with an entry the owner graph holds no
+an obligation (ADR 0577). A read written in a JSX handler whose deliveries run owned on one stack and
+unowned on another (`load` on an insertion, `blur` on an unmount) has no run proven first: it is
+uncertifiable, `owner-check-throws-first` (ADR 1177). So is a read in a function with an entry the owner graph holds no
 edge for (carried on by `[f].forEach((g) => g())`, stored, handed to a call, a member):
 the owned run is reported here and SC4001 keeps an obligation for the run with no owner
 (`owner-callers-unenumerated`, ADR 1142). A read in a lazy memo nothing proves is read
