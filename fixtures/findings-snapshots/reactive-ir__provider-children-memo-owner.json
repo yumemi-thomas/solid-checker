@@ -182,6 +182,28 @@
       "start": 2857,
       "end": 2866,
       "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/provider-children-memo-owner/App.tsx",
+      "start": 3218,
+      "end": 3227,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/provider-children-memo-owner/App.tsx",
+      "start": 3218,
+      "end": 3227,
+      "fixes": 0
     }
   ]
 }
