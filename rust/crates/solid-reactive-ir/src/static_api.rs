@@ -1652,49 +1652,10 @@ impl StaticApiContext<'_> {
         if target.spread {
             return None;
         }
-        let ast = &file.ast;
-        let member =
-            ast.member_at(ast.peel_ts_sugar_span(target.value_span.unwrap_or(target.span)))?;
-        if ast.computed_members.binary_search(&member.span).is_ok()
-            || ast.optional_members.binary_search(&member.span).is_ok()
-        {
-            return None;
-        }
-        let object = ast.peel_ts_sugar_span(member.object);
-        if !ast.identifiers.iter().any(|identifier| {
-            identifier.span == object
-                && identifier.role == solid_facts::ast::IdentifierRole::Reference
-        }) {
-            return None;
-        }
-        let root = self.entities.get(&location(file.path.shared(), object))?;
-        if self.tables.source_kind(root).is_some() {
-            return None;
-        }
-        let (_, declaration) = self.tables.prop_source(root)?;
-        let parameter = self.entities.get(declaration)?;
-        if parameter != root
-            || !crate::local_access::props_root_is_current(
-                file,
-                declaration,
-                parameter,
-                self.entities,
-                self.lookup,
-            )
-            || !crate::local_access::props_root_attachments_are_views(
-                file,
-                &self.tables.props_attachments(declaration, parameter),
-                declaration,
-                parameter,
-                self.entities,
-                self.lookup,
-            )
-        {
-            return None;
-        }
-        let name = file.source_text(member.property)?;
-        let (sources, plain, forwards) =
-            self.tables.props_passed_on_every_site(declaration, name)?;
+        let (declaration, name) = self.props_target_slot(file, target)?;
+        let (sources, plain, forwards) = self
+            .tables
+            .props_passed_on_every_site(&declaration, &name)?;
         let [source] = sources.as_slice() else {
             return None;
         };
@@ -1712,6 +1673,91 @@ impl StaticApiContext<'_> {
             accessor_declaration.clone(),
             self.tables.source_owned_write(source).unwrap_or_default(),
         ))
+    }
+
+    /// ADR 1174: the props declaration and slot name a `refresh` target names: `props.name` on a component's own props
+    /// parameter, current and with only views attached, or `name` bound by a slot of a destructured props parameter that is
+    /// never written (the pattern addresses the classification, as `local_access::props_callee_through`'s).
+    fn props_target_slot(
+        &self,
+        file: &FileFacts,
+        target: &solid_facts::ast::ArgumentFact,
+    ) -> Option<(Location, String)> {
+        let ast = &file.ast;
+        let at = ast.peel_ts_sugar_span(target.value_span.unwrap_or(target.span));
+        if let Some(member) = ast.member_at(at) {
+            if ast.computed_members.binary_search(&member.span).is_ok()
+                || ast.optional_members.binary_search(&member.span).is_ok()
+            {
+                return None;
+            }
+            let object = ast.peel_ts_sugar_span(member.object);
+            if !ast.identifiers.iter().any(|identifier| {
+                identifier.span == object
+                    && identifier.role == solid_facts::ast::IdentifierRole::Reference
+            }) {
+                return None;
+            }
+            let root = self.entities.get(&location(file.path.shared(), object))?;
+            if self.tables.source_kind(root).is_some() {
+                return None;
+            }
+            let (_, declaration) = self.tables.prop_source(root)?;
+            let parameter = self.entities.get(declaration)?;
+            if parameter != root
+                || !crate::local_access::props_root_is_current(
+                    file,
+                    declaration,
+                    parameter,
+                    self.entities,
+                    self.lookup,
+                )
+                || !crate::local_access::props_root_attachments_are_views(
+                    file,
+                    &self.tables.props_attachments(declaration, parameter),
+                    declaration,
+                    parameter,
+                    self.entities,
+                    self.lookup,
+                )
+            {
+                return None;
+            }
+            return Some((
+                declaration.clone(),
+                file.source_text(member.property)?.to_owned(),
+            ));
+        }
+        if !ast.identifiers.iter().any(|identifier| {
+            identifier.span == at && identifier.role == solid_facts::ast::IdentifierRole::Reference
+        }) {
+            return None;
+        }
+        let declaration = ast.reference_declaration(at)?;
+        let mut owner = crate::owners::containing_ast_function(ast, at);
+        while let Some(function) = owner {
+            if let Some(parameter) = function.parameters.first()
+                && parameter.shape == solid_facts::ast::BindingShape::Object
+                && let Some(slot) = parameter
+                    .object_slots
+                    .iter()
+                    .find(|slot| slot.local.span == declaration)
+            {
+                if crate::indexes::binding_written(file, declaration) {
+                    return None;
+                }
+                return Some((
+                    location(file.path.shared(), parameter.pattern),
+                    slot.property.to_string(),
+                ));
+            }
+            owner = ast
+                .functions
+                .iter()
+                .filter(|outer| outer.span != function.span && outer.span.contains(function.span))
+                .min_by_key(|outer| outer.span.end - outer.span.start);
+        }
+        None
     }
 
     /// ADR 0883: JSX creating a computation or a root on an apply's stack, as

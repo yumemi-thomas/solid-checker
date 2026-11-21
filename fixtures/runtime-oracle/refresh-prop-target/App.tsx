@@ -35,6 +35,20 @@ export function EffectParent() {
   return <InEffectCompute m1={m1} />;
 }
 
+function Destructured({ m1 }: { m1: SourceAccessor<number> }) {
+  const m2 = createMemo(() => {
+    refresh(m1);
+    return 1;
+  });
+  return <p>{m2()}</p>;
+}
+
+// Violation: a destructured props slot is the passed memo too.
+export function DestructuredParent() {
+  const m1 = createMemo(() => 1);
+  return <Destructured m1={m1} />;
+}
+
 function InHandler(props: { m1: SourceAccessor<number> }) {
   return <button onClick={() => void refresh(props.m1)}>x</button>;
 }
