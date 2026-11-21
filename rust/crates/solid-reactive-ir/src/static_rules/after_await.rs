@@ -2460,8 +2460,8 @@ impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
         };
         // ADR 1164: a read written directly in the body of a `for await` that provably runs it is placed: every run of the body follows
         // the loop's await of its first `next()` (ADR 1038), and the body runs at least once.
-        let placed = self.for_await_bodies_that_run(file, function);
-        if placed.is_empty() {
+        let running_bodies = self.for_await_bodies_that_run(file, function);
+        if running_bodies.is_empty() {
             mark_uncertain(draft, mark, &reason);
             return;
         }
@@ -2475,7 +2475,7 @@ impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
                 .map(|(start, end)| Span::new(start, end));
             let in_body = &*location.path == path
                 && site.is_some_and(|site| {
-                    placed.iter().any(|body| body.contains(site))
+                    running_bodies.iter().any(|body| body.contains(site))
                         && written_directly_in(&file.ast, function, site)
                 });
             if !in_body {
