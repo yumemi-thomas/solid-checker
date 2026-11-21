@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1153: a signal write directly in the body of an `Errored` fallback is a write in the owned computed the boundary runs it in: REACTIVE_WRITE_IN_OWNED_SCOPE, thrown to the enclosing boundary. The owner edge changes no SC2001 row there (covered-uncertifiable before and after)."
+}

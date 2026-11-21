@@ -85,17 +85,6 @@
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/stored-throw-render-run/App.tsx",
-      "start": 1926,
-      "end": 1941,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
       "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-render-run/App.tsx",
@@ -107,33 +96,11 @@
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/stored-throw-render-run/App.tsx",
-      "start": 2117,
-      "end": 2132,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
       "blocker": "computation-error-unobserved",
       "severity": "error",
       "path": "fixtures/reactive-ir/stored-throw-render-run/App.tsx",
       "start": 2189,
       "end": 2199,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/stored-throw-render-run/App.tsx",
-      "start": 2334,
-      "end": 2349,
       "fixes": 0
     },
     {

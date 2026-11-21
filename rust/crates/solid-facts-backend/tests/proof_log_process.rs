@@ -841,3 +841,229 @@ fn the_candidates_are_listed_only_when_asked_and_move_no_answer() {
     );
     fs::remove_dir_all(directory).ok();
 }
+
+// ADR 1153: `Errored`'s `fallback`, written in place as the whole value of a plain prop of the exact tag, on an element with no spread, runs in a computation of its own (rc.21
+// `createBoundary`, `fallback(b)`). One `silent` line of SC4001 per such function names the proof `owners.control_flow_prop_function`; a function that is not that (a spread on the
+// element, an `async` function, a conditional, a name, a function that stores itself, a user component's prop, a shadowing local component) gets none. With the silence ablated
+// the rows come back, and every row that differs lies inside one of the functions or in a helper the functions call: an uncertifiable row the edge silenced, or (a callback the fallback defers) the SC4001 violation that replaces one.
+#[test]
+fn an_errored_fallback_written_in_place_is_an_owned_run() {
+    let typefacts = env::var("SOLID_TYPEFACTS_BIN").expect("arm the real Type Facts process");
+    let directory = temporary_directory("proof-log-errored-fallback");
+    let name = "errored-fallback-owner";
+    let proof = "owners.control_flow_prop_function";
+    let source = fs::read_to_string(fixture(name).join("App.tsx")).unwrap();
+    let log = directory.join("owned.jsonl");
+    let report = check(&typefacts, name, Some(&log));
+    let silences = lines(&log)
+        .into_iter()
+        .filter(|line| line["k"] == "silent" && line["proof"] == proof)
+        .collect::<Vec<_>>();
+    // (anchor, skip): the function starts where `skip` ends in the first occurrence of `anchor`.
+    let at = |anchor: &str, skip: &str| {
+        (source
+            .find(anchor)
+            .unwrap_or_else(|| panic!("no `{anchor}`"))
+            + skip.len()) as u64
+    };
+    let owned = [
+        (
+            "function Message() {\n  return (\n    <Errored fallback={(error)",
+            "function Message() {\n  return (\n    <Errored fallback={",
+            "the textbook shape",
+        ),
+        (
+            "function Parenthesized() {\n  return (\n    <Errored fallback={((error)",
+            "function Parenthesized() {\n  return (\n    <Errored fallback={(",
+            "parentheses around the literal",
+        ),
+        (
+            "function Creates() {\n  return (\n    <Errored\n      fallback={(error) => {\n        onCleanup",
+            "function Creates() {\n  return (\n    <Errored\n      fallback={",
+            "creation sites in the body",
+        ),
+        (
+            "function ViaHelper() {\n  return (\n    <Errored\n      fallback={() => {\n        release();",
+            "function ViaHelper() {\n  return (\n    <Errored\n      fallback={",
+            "a callee only the fallback calls",
+        ),
+        (
+            "<S.Errored fallback={(error)",
+            "<S.Errored fallback={",
+            "the namespace form",
+        ),
+        (
+            "fallback={function show(error)",
+            "fallback={",
+            "a named function expression that never uses its name",
+        ),
+        (
+            "function Nested() {\n  return (\n    <Errored\n      fallback={() => {\n        createEffect(",
+            "function Nested() {\n  return (\n    <Errored\n      fallback={",
+            "the function itself, whose inner layers are their own",
+        ),
+        (
+            "function Deferred() {\n  return (\n    <Errored\n      fallback={() => {\n        setTimeout(releaseLater",
+            "function Deferred() {\n  return (\n    <Errored\n      fallback={",
+            "a function that hands a helper to a timer",
+        ),
+        (
+            "function DeferredThen() {\n  return (\n    <Errored\n      fallback={() => {\n        const run",
+            "function DeferredThen() {\n  return (\n    <Errored\n      fallback={",
+            "a function that hands an arrow to a promise",
+        ),
+    ];
+    let kept = [
+        (
+            "<Errored {...rest} fallback={(error)",
+            "<Errored {...rest} fallback={",
+            "a spread on the element",
+        ),
+        ("fallback={async (error)", "fallback={", "an async function"),
+        (
+            "props.flag ? (error) =>",
+            "props.flag ? ",
+            "a function that is not the whole value of the prop",
+        ),
+        (
+            "fallback={function fb(error",
+            "fallback={",
+            "a function that stores itself",
+        ),
+        (
+            "<Guard\n      fallback={() => {\n        onCleanup",
+            "<Guard\n      fallback={",
+            "a user component's prop",
+        ),
+        (
+            "<Errored\n      fallback={() => {\n        onCleanup(() => {});\n        return <p>shadowed",
+            "<Errored\n      fallback={",
+            "a local component of the same name",
+        ),
+    ];
+    for (anchor, skip, what) in owned {
+        let start = at(anchor, skip);
+        let named = silences
+            .iter()
+            .filter(|line| line["s"] == start && line["rule"] == "SC4001")
+            .count();
+        assert_eq!(named, 1, "{what}: one silence of SC4001 names the function");
+    }
+    for (anchor, skip, what) in kept {
+        let start = at(anchor, skip);
+        assert!(
+            !silences.iter().any(|line| line["s"] == start),
+            "{what}: no silence"
+        );
+    }
+    // Every line is inside one of the nine functions or in a helper they call: the function is named at its own span, the walk of a callee that ended at the function's stop names
+    // the arm at the callee's site, and so does an edge out of the function to a callee it defers (ADR 1118's M2b asks the proof log which arm moved a row).
+    let helpers = ["function release()", "function releaseLater()"]
+        .iter()
+        .map(|head| {
+            let from = source.find(head).unwrap() as u64;
+            (
+                from,
+                from + source[from as usize..].find("\n}\n").unwrap() as u64 + 3,
+            )
+        })
+        .collect::<Vec<_>>();
+    let in_helper = |start: u64, end: u64| {
+        helpers
+            .iter()
+            .any(|(from, to)| *from <= start && end <= *to)
+    };
+    let spans = owned
+        .iter()
+        .map(|(anchor, skip, _)| {
+            let start = at(anchor, skip);
+            let line = silences.iter().find(|line| line["s"] == start).unwrap();
+            (start, line["e"].as_u64().unwrap())
+        })
+        .collect::<Vec<_>>();
+    for line in &silences {
+        let (start, end) = (line["s"].as_u64().unwrap(), line["e"].as_u64().unwrap());
+        assert!(
+            in_helper(start, end) || spans.iter().any(|(from, to)| *from <= start && end <= *to),
+            "a line outside the nine functions and the helpers: {line}"
+        );
+    }
+    // A callee only a fallback calls, and one it defers, are named at their own sites.
+    for (prefix, what) in [
+        (
+            "function release() {\n  ",
+            "the callee only the fallback calls",
+        ),
+        (
+            "function releaseLater() {\n  ",
+            "the callee the fallback hands to a timer",
+        ),
+    ] {
+        let site = (source.find(prefix).unwrap() + prefix.len()) as u64;
+        assert!(
+            silences
+                .iter()
+                .any(|line| line["s"].as_u64().unwrap() <= site
+                    && site < line["e"].as_u64().unwrap()),
+            "{what} is named at its own site"
+        );
+    }
+    // The ablation: no line, and the rows are the build's own plus the ones the edge silenced, all inside the functions and the helpers.
+    let ablated_log = directory.join("ablated.jsonl");
+    let ablated = check_with(
+        &typefacts,
+        name,
+        Some(&ablated_log),
+        &[("SOLID_CHECKER_IR_ABLATE_SILENCE", proof)],
+    );
+    assert!(
+        !lines(&ablated_log)
+            .iter()
+            .any(|line| line["k"] == "silent" && line["proof"] == proof),
+        "an ablated edge names nothing"
+    );
+    let key = |finding: &serde_json::Value| finding.to_string();
+    let with_edge = report["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(key)
+        .collect::<BTreeSet<_>>();
+    let without_edge = ablated["findings"].as_array().unwrap();
+    assert!(
+        with_edge.len() < without_edge.len(),
+        "the edge silences rows ({} of {})",
+        with_edge.len(),
+        without_edge.len()
+    );
+    let inside = |finding: &serde_json::Value| {
+        let at = finding["primaryLocation"]["startByte"].as_u64().unwrap();
+        in_helper(at, at)
+            || silences
+                .iter()
+                .any(|line| line["s"].as_u64().unwrap() <= at && at < line["e"].as_u64().unwrap())
+    };
+    for finding in without_edge {
+        if !with_edge.contains(&key(finding)) {
+            assert!(
+                inside(finding),
+                "a row the edge changed lies outside every function it names and the helpers: {finding}"
+            );
+        }
+    }
+    // The only rows the build with the edge has and the ablated one lacks are the violations that replace an uncertifiable row at a deferred callback: the callback runs later with
+    // no owner (Chrome rc.21: NO_OWNER_CLEANUP), unknown while the function's own owner was.
+    let mut deferred = 0;
+    for finding in report["findings"].as_array().unwrap() {
+        if without_edge.iter().any(|other| other == finding) {
+            continue;
+        }
+        assert!(
+            finding["id"] == "SC4001" && finding["kind"] == "violation" && inside(finding),
+            "a row only the build with the edge has: {finding}"
+        );
+        deferred += 1;
+    }
+    assert_eq!(deferred, 2, "the two deferred callbacks");
+    fs::remove_dir_all(directory).ok();
+}

@@ -142,6 +142,16 @@ export async function programsOf(set, { install }) {
   return rows.map((row) => ({ id: `${grid[1]}/${row.id}`, prepare: () => work(materializeForChecker(buildRow(row), install, `monotone-${row.id}`)) }));
 }
 
+/**
+ * The programs of every `--set`, in the order the sets were named. A loop, not `programs.push(...set)`: a whole grid is hundreds of thousands of programs
+ * (lg-recall has 744,797) and spreading that many arguments overflows the stack (`Maximum call stack size exceeded`), so no big grid could be a set.
+ */
+export async function collectPrograms(sets, load) {
+  const programs = [];
+  for (const set of sets) for (const program of await load(set)) programs.push(program);
+  return programs;
+}
+
 async function main(argv) {
   const values = (name) => argv.flatMap((arg, at) => (arg === name ? [argv[at + 1]] : []));
   const value = (name) => values(name)[0];
@@ -153,8 +163,7 @@ async function main(argv) {
   if (baseAblated && !ablate) throw new Error("--base-ablated needs --ablate-arm or --ablate-silence");
   const arms = new Set([...(value("--ablate-arm") ?? "").split(","), ...(value("--ablate-silence") ?? "").split(",")].filter(Boolean));
   const install = resolve(value("--install") ?? join(ROOT, "scripts", "fuzz", "install"));
-  const programs = [];
-  for (const set of values("--set")) programs.push(...(await programsOf(set, { install })));
+  const programs = await collectPrograms(values("--set"), (set) => programsOf(set, { install }));
   if (!programs.length) throw new Error("no programs: name a --set");
   const started = Date.now();
   const results = await mapPoolSettled(programs, async (program) => {

@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1153, negative: a local component named `Errored` is not the dialect's primitive, so no owner edge: NO_OWNER_CLEANUP when its handler calls the function."
+}

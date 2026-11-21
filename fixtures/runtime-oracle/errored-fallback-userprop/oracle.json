@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1153, negative: a user component's `fallback` prop is no `Errored` fallback: its handler calls the function with no owner (NO_OWNER_CLEANUP). The edge is the dialect primitive's only."
+}

@@ -13,7 +13,7 @@ export function Pages() {
       <button type="button" onClick={() => setPage((n) => n + 1)}>
         next page
       </button>
-      <Errored fallback={(error) => <p>{String(error)}</p>}>
+      <Errored fallback={(error) => <p>{String(error())}</p>}>
         <Loading fallback={<p>loading</p>}>
           <p>{items().join(", ")}</p>
         </Loading>

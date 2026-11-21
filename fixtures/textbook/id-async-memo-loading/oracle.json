@@ -1,6 +1,17 @@
 {
-  "note": "Our idiom: an async memo under Loading and Errored, refetched when its input changes.",
-  "steps": [],
+  "note": "Our idiom: an async memo under Loading and Errored, refetched when its input changes. The click step makes page 4 (the default driver's two passes stop at page 3), whose load throws, so the Errored fallback runs and shows the message (`String(error())`: the fallback's first argument is an accessor).",
+  "steps": [
+    {
+      "action": "click",
+      "selector": "button"
+    },
+    {
+      "action": "assert-text",
+      "id": "fallback-shows-message",
+      "selector": "div > p",
+      "text": "Error: no more pages"
+    }
+  ],
   "mount": [
     "Pages"
   ]

@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1153: a module helper that does `onCleanup`, called synchronously by the fallback, runs in the fallback's computation: quiet."
+}

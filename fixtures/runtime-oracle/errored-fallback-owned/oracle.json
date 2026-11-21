@@ -1,0 +1,11 @@
+{
+  "note": "ADR 1153: the function `Errored` runs for its fallback runs in a lazy computed of its own under the owner that encloses the tag (rc.21 `createBoundary`, `fallback(b)`): `onCleanup`, `useContext`, `createMemo`, `createEffect` and JSX written directly in it are owned and quiet, and a read in its body is tracked (the function runs again when `tick` changes). The step's `assert-text` is recorded in the case's report.json (`execution.assertions`), not gated by the oracle: `provided:2:2:4:function` is two runs, the provider's value found, the memo working and the first argument an accessor.",
+  "steps": [
+    {
+      "action": "assert-text",
+      "id": "fallback-ran-tracked-owned",
+      "selector": "#fb",
+      "text": "provided:2:2:4:function"
+    }
+  ]
+}
