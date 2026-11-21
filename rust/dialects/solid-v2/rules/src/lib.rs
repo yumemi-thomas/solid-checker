@@ -91,6 +91,18 @@ impl CatalogWording for Catalog {
         )
     }
 
+    /// ADR 1158: a store's destructure rests on the strict-read window (ADR 1106: Chrome reports STRICT_READ_UNTRACKED there),
+    /// SC1001's claim; a props destructure is a pattern rule, and holds in any build.
+    fn defect_claims_client_runtime(&self, defect: &StaticDefect) -> bool {
+        matches!(
+            defect.kind,
+            StaticDefectKind::ReactiveObjectDestructure {
+                component_props: false,
+                ..
+            }
+        )
+    }
+
     fn wording(&self, seed: FindingSeed<'_>) -> FindingWording {
         match seed {
             FindingSeed::StrictRead {

@@ -242,6 +242,14 @@ export const ARM_GAPS = [
       "write_roles.generator-steps",
     ],
   },
+  {
+    reason: "ADR 1161: `flush(fn)` in a closure that only in-place layers run (`const f1 = () => { flush(() => { r1(); }); }; f1();`) takes the role of that run's call (`callback_standing::in_place_call_role`). No registered pair reaches the arm: `boundary.mjs verify` (318 pairs) sees it silent in no clean legal cell. The recall grid's `*flush*` contexts do reach it (112 mx-recall programs moved with the ADR), and the fixture `flush-closure-called-once` holds its cases, four violations and two clean, which Chrome agrees with (`runtime-oracle/flush-closure-called-once`).",
+    arms: ["callback_standing.inline_callback_execution_role.in-place-call"],
+  },
+  {
+    reason: "ADR 1163: a read written directly in an effect bundle's `error` member (`createEffect(c, { effect, error: () => { r1(); } })`) is a deferred callback while no drain of the program has a window (`error_arm_drains_unwindowed`). No registered pair reaches the arm: `boundary.mjs verify` (318 pairs) sees it silent in no clean legal cell. The recall grid's `*error-arm*` contexts do reach it (116 lg-recall programs moved with the ADR), and the fixture `effect-error-arm-read` holds its cases, four clean reads and the named, spread and `flush` variants that stay uncertifiable, which Chrome agrees with (`runtime-oracle/effect-error-arm-read*`).",
+    arms: ["callee_roles.allowed-error-arm"],
+  },
 
 ];
 // </arm-gaps>

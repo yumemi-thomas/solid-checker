@@ -8112,6 +8112,30 @@
    "to": 8,
    "adr": "ADR 1146",
    "fact": "a helper handed to an event-handler slot under the read veto is an unproven use (local_access helper_value_execution: Unknown under synchronous_event_read_dispatch_present)"
+  },
+  {
+   "fixture": "reactive-ir/destructure-store-slots",
+   "key": "SC1003 summary-read-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1162",
+   "fact": "SiblingEmptyInHelper (a store destructure with an empty nested sibling beside `v`, written in a helper) stays uncertifiable both ways: its row moved from props-callers-unenumerated to summary-read-unplaced, as its `{ v }` twin (the relabel is in counts.json drops); the helper's summary does not place the read"
+  },
+  {
+   "fixture": "reactive-ir/owner-call-effect-creation",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 1159",
+   "fact": "the new case PropHandler: a handler handed to a component is a prop value, no element's handler, and Kid calls it in an effect's apply, so the creation runs there (an SC6002 violation, Chrome PRIMITIVE_IN_EFFECT_CALLBACK); SC3001's leaf operation for the same creation stays unaccounted"
+  },
+  {
+   "fixture": "reactive-ir/owner-call-effect-creation",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 3,
+   "to": 4,
+   "adr": "ADR 1159",
+   "fact": "the new case ApplyBranchAwait: a creation after an `await` that some run may skip (`if (wait) await ...`) proves nothing, so it keeps effect-creation-unaccounted; only an await every run reaches first puts the creation on a microtask off the apply (ADR 1159 (2))"
   }
  ]
 }

@@ -1230,6 +1230,59 @@ pub(super) fn layer_entry_open_by_reference(
     open
 }
 
+/// ADR 1159: whether the site at `span` runs on a delivery of an element's inline event handler literal and only there: the innermost layers around it, out
+/// to such a literal ([`delivered_handler_literal`]), are each an unnamed function called where it is written (an IIFE), which runs on its writer's stack.
+/// The literal has no binding, so its delivery is its one entry; the layers outside it only decide whether it is created. A named layer, a generator, a method
+/// or a function handed to a call answers nothing here (the site keeps the entry walk's answer): an exported helper a handler calls is also entered by
+/// importers the program does not show.
+pub(super) fn runs_in_delivered_handler(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    if lookup.program_has_eval() {
+        return false;
+    }
+    let mut layers = file.ast.functions_owning(span).collect::<Vec<_>>();
+    layers.sort_by_key(|function| function.span.end - function.span.start);
+    for function in layers {
+        if delivered_handler_literal(file, function, lookup) {
+            return true;
+        }
+        let in_place = file
+            .ast
+            .calls_with_peeled_callee(function.span)
+            .next()
+            .is_some();
+        if function.generator
+            || function.method_name.is_some()
+            || function_binding_name(file, function).is_some()
+            || !in_place
+        {
+            return false;
+        }
+    }
+    false
+}
+
+/// ADR 1159: whether `function` is an element's inline event handler literal the host delivers: the compiler's `EventHandler` callback at its span, no generator,
+/// an event no fact denies, in a program where no effect's apply may dispatch an event (`apply_dispatch_possible`, failing closed): a delivery from an apply
+/// into a shadow tree runs the handler inside the apply's effect-callback window (ADR 1139). A withheld compiler result answers nothing.
+fn delivered_handler_literal(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    !file.compiler.withheld()
+        && !function.generator
+        && !lookup.apply_dispatch_possible()
+        && file.compiler.callback_roles.iter().any(|callback| {
+            callback.role == solid_facts::compiler::CallbackRoleKind::EventHandler
+                && file.ast.peel_ts_sugar_span(callback.span) == function.span
+                && !crate::execution_role::handler_event_denied(lookup, file, callback.span)
+        })
+}
+
 /// Whether nothing references `function` but the position that enters it (N2): a callback with no binding (an arrow, an anonymous function) cannot be, and a
 /// named function expression can hand itself on (`createRoot(function f() { if (!saved) { saved = f; return; } … })`, then `saved()` from an effect's apply),
 /// after which a run the primitive does not make has no owner. A name whose references cannot be listed is referenced.

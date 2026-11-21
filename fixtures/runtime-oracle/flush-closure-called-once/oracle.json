@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1161: `flush(fn)` in a closure called once by name. In the body (directly, through an IIFE, a store member, the namespace's `flush`) Chrome reports STRICT_READ_UNTRACKED and SC1001 is a violation. Called once in a JSX expression or a handler it is silent and clean. Also handed to a timer, called twice, or handed to `forEach`: uncertifiable (the body's call in the first two reports in Chrome)."
+}

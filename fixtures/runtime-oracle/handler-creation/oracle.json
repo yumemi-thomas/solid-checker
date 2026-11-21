@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1159: a creation (`createMemo`, `resolve`) in an element's inline event handler literal, or in an arrow it calls where it is written, runs on the event's delivery: no PRIMITIVE_IN_EFFECT_CALLBACK when the buttons are clicked, and the checker is silent there (main: effect-creation-unaccounted). No apply in the program may dispatch an event."
+}

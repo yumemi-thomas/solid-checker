@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1163: a read written directly in an effect's or a reaction's bundle `error` member (also through the namespace, and a store member). Clicking makes the compute throw; rc.21 runs the error arm from the scheduled drain, outside any strict-read window: silent, and the checker is clean there. A named bundle and a spread bundle stay uncertifiable."
+}

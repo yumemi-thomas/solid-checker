@@ -1073,6 +1073,26 @@ fn nested_unplaced_role(
     classifying: &mut HashSet<(String, Span)>,
 ) -> ExecutionRole {
     let dialect = lookup.dialect;
+    // ADR 1163: a read written directly in an exact effect bundle's `error` member. The runtime runs it from the queue's drain,
+    // before the effect's own window opens (`Dialect::bundle_error_member_runs_unowned`), so it reads in the window of the
+    // stack that drains: none, while every drain of the program is windowless (`error_arm_drains_unwindowed`). It reads fresh
+    // values when the engine runs it, as a disposal's cleanup does (`allowed-nested-disposal`): a deferred callback.
+    if !classifying.contains(&write_classification_marker())
+        && let Some(function) = crate::owners::containing_ast_function(&file.ast, span)
+        && bundle_error_function(file, function.span, lookup)
+    {
+        return if error_arm_drains_unwindowed(lookup) {
+            role_arm!(
+                "callee_roles.allowed-error-arm",
+                ExecutionRole::DeferredCallback
+            )
+        } else {
+            role_arm!(
+                "callee_roles.allowed-error-arm-drain-open",
+                ExecutionRole::Unknown
+            )
+        };
+    }
     // ADR 0516: the climb stops at a generator, whose body runs when its
     // iterator is stepped, not when it is created: no deferral is proven.
     // One stepped at its own call (`(function* () { … })().next()`) runs
@@ -1304,6 +1324,43 @@ fn nested_unplaced_role(
         "callee_roles.allowed-unplaced-nested",
         ExecutionRole::Unknown
     )
+}
+
+/// ADR 1163: whether `function` is the `error` member of an exact effect bundle a dialect primitive takes
+/// (`bundle_error_member`): written as that member's value, not handed in by name, spread or computed.
+fn bundle_error_function(
+    file: &solid_facts::FileFacts,
+    function: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast
+        .arguments_containing(function)
+        .any(|(call, index)| {
+            lookup
+                .primitive_at_call(file, call.span)
+                .and_then(|primitive| {
+                    super::bundle_error_member(lookup.dialect, primitive, call, index)
+                })
+                .is_some_and(|error| file.ast.peel_ts_sugar_span(error) == function)
+        })
+}
+
+/// ADR 1163: whether every stack that may drain the effect queue has no strict-read window open, so an error arm reads in none.
+/// rc.21's `flush()` drains on its caller's stack and leaves `strictRead` as it found it (`@solidjs/signals` `dist/dev-shared.js`
+/// `:3032-3110`), as do `render` and `hydrate` (ADR 0644). The premise, from sections each reader already binds:
+/// - every drain the program calls runs at an ownerless caller or drains nothing (ADR 0613's census,
+///   `flush_drains_under_owner`). Of those callers only `runWithOwner(null, …)`'s keeps the enclosing window, so a program
+///   naming `runWithOwner` is refused;
+/// - no action steps (an action's `inTransaction` drains on the stack that calls it, `dist/dev.js:2196-2206`);
+/// - no synchronous event dispatch a read could ride in a window (`synchronous_event_read_dispatch_present`).
+///
+/// A drain a dependency makes is ADR 0613's documented premise: the scheduler's microtask, the delegated event's own stack,
+/// hydration at the entry.
+fn error_arm_drains_unwindowed(lookup: &SemanticLookup<'_>) -> bool {
+    !lookup.flush_drains_under_owner()
+        && !lookup.project_names_primitive(solid_dialect::Primitive::RunWithOwner)
+        && !lookup.project_steps_action_callbacks()
+        && !lookup.synchronous_event_read_dispatch_present()
 }
 
 /// The `classifying` entry that marks a write-legality classification, which

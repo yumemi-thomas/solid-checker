@@ -288,7 +288,8 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   there (probed on every published rc.0-rc.9 client build). `untrack` is the
   wrapper that clears the listener. A layer that runs in place inside `fn` (an IIFE)
   answers as `fn` does, and in a helper not proven to run in the body the read is
-  uncertifiable (ADR 0859).
+  uncertifiable (ADR 0859). A closure called once by name and referenced nowhere
+  else runs `flush` on that call's stack, which places it ([ADR 1161](../decisions.md#adr-1161)).
 - **Props follow their callers.** `devComponent` wraps the body in
   `untrack(() => Comp(props), '<Name>')`, and the warning fires only when a prop
   *getter* reads reactive state in that window. A prop that every visible call
@@ -362,8 +363,13 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   apply returns is uncertifiable: a rerun runs it in the window, a disposal
   outside it (ADR 0539). A compute with no call, no reference and a literal
   return never reruns, and its cleanup is silent. A read in an exact bundle's
-  `error` member is silent: rc.17 runs it before the window opens (ADR 0540),
-  a `createReaction` bundle's too (ADR 0548).
+  `error` member is silent: rc.17 and rc.21 run it before the effect's window
+  opens (ADR 0540), a `createReaction` bundle's too (ADR 0548). It runs in
+  the window of the stack that drains the queue, so a read written directly
+  in the member is silent only while no drain the program makes can have a
+  window (no owned `flush`/`render`/`hydrate`, no `runWithOwner`, no action,
+  no synchronous event dispatch); otherwise it is uncertifiable
+  ([ADR 1163](../decisions.md#adr-1163)).
   An action body's read before its first suspending `yield` runs on the
   stack of the action's call, in that caller's window: called from an effect
   apply or a `createReaction` callback it is reported; from a handler, an

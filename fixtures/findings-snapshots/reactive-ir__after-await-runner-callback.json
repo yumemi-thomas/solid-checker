@@ -90,28 +90,6 @@
       "fixes": 0
     },
     {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/after-await-runner-callback/App.test.tsx",
-      "start": 2606,
-      "end": 2616,
-      "fixes": 0
-    },
-    {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/after-await-runner-callback/App.test.tsx",
-      "start": 2912,
-      "end": 2922,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "violation",

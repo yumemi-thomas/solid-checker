@@ -3095,7 +3095,10 @@ impl Dialect for Solid2 {
     /// `createEffect` there warns NO_OWNER_EFFECT, `onCleanup`
     /// NO_OWNER_CLEANUP, `useContext` throws; a read, a write, `createRoot` and
     /// an action call are silent. `createRenderEffect` takes no bundle.
-    /// Read on rc.17 only.
+    /// ADR 1163, read on rc.21 too: `runEffect` (`dist/dev.js:2737-2758`) runs
+    /// `_errorFn` before `setStrictRead` (`:2767`), from the drain
+    /// `notifyEffectStatus` queues it on (`:2660-2668`); `createEffect` passes
+    /// `effectFn.error` (`:3349`), `createReaction` too (`:3495`).
     fn bundle_error_member_runs_unowned(&self, primitive: Primitive, argument: usize) -> bool {
         matches!(
             (primitive, argument),

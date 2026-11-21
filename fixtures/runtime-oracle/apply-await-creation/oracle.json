@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1159: in an async function an effect's apply runs in place, a creation after an `await` every run reaches runs from a microtask and is quiet (the checker silent, main: effect-creation-unaccounted); before the `await` Chrome reports PRIMITIVE_IN_EFFECT_CALLBACK (SC6002 violation); after an `await` only a branch reaches it is reported when the branch is skipped (SC6002 uncertifiable). `PropHandler`'s handler is a component's prop that `Kid` calls in an effect's apply: PRIMITIVE_IN_EFFECT_CALLBACK, covered by SC6002."
+}

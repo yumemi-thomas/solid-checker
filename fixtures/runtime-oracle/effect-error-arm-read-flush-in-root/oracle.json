@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1163: the error arm drained by a `flush()` the program calls inside `createRoot` (ADR 0613's census vetoes): the read stays uncertifiable."
+}
