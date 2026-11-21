@@ -12,14 +12,13 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-held-in-binding",
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-link-alias-get/App.tsx",
       "start": 583,
-      "end": 587,
+      "end": 589,
       "fixes": 0
     },
     {
@@ -43,14 +42,13 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-held-in-binding",
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-link-alias-get/App.tsx",
       "start": 909,
-      "end": 913,
+      "end": 915,
       "fixes": 0
     }
   ]

@@ -7,7 +7,7 @@
 //   with no snapshots falls back to the totals, rows without `fixture`); the ADR exists in docs/decisions.md, `proof` is `file::symbol`
 //   with the symbol declared in that file, the `proved` fixture's snapshot held the key at the base and holds fewer now, and the `open`
 //   one holds it now. A row with `kind: "relabel"` { fixture, key, from, to, adr, kind, relabeledTo } instead records rows that kept their
-//   finding under another blocker: it names no proof or fixtures, and `relabeledTo` must gain, in that fixture, what `key` lost. It is no
+//   finding under another blocker: it names no proof or fixtures, and `relabeledTo` (a key, or a list whose gains add up) must gain, in that fixture, what `key` lost. It is no
 //   clean. A rename needs a `renames` row { from, to, adr } with equal counts.
 // - `drops` and `renames` are append-only against the base.
 // - a row that left a SITE is a fall too (ADR 0995): counted per (fixture, key, path), so a key whose fixture total holds because another
@@ -116,8 +116,10 @@ export function checkLedger({ ledger, base, computed, decisions, read, snapshotO
     if (row.kind === "relabel") {
       // The rows stay uncertifiable under another blocker: no proof to name, and naming one would record a relabel as a clean.
       if (row.proof !== undefined || row.fixtures !== undefined) failures.push(`${why}: a relabel names no proof or fixtures`);
-      const gained = keyCount(snapshotOf(fixture), row.relabeledTo) - keyCount(baseSnapshotOf(fixture), row.relabeledTo);
-      if (!fixture || !row.relabeledTo || gained < was - now) failures.push(`${why}: relabeledTo ${row.relabeledTo ?? "(none)"} gained ${gained} in the fixture, not the ${was - now} that left`);
+      // ADR 1169: a list when the rows went to several blockers of the fixture (their gains add up), as ADR 1133's `movedToFixture`.
+      const targets = [row.relabeledTo ?? []].flat();
+      const gained = targets.reduce((sum, target) => sum + keyCount(snapshotOf(fixture), target) - keyCount(baseSnapshotOf(fixture), target), 0);
+      if (!fixture || !targets.length || targets.includes(key) || gained < was - now) failures.push(`${why}: relabeledTo ${targets.join(", ") || "(none)"} gained ${gained} in the fixture, not the ${was - now} that left`);
       return;
     }
     const [file, symbol, ...rest] = String(row.proof ?? "").split("::");

@@ -8272,6 +8272,30 @@
    "to": 1,
    "adr": "ADR 1169",
    "fact": "value_use::Census::member: a store link the root's own static chain hands whole to a binding is walked on as the root, so a Get through the alias has a row (SC9012 value-held-in-binding) where none stood; Chrome warns STRICT_READ_UNTRACKED at such a Get (runtime-oracle store-link-alias-get)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-read-first-writes",
+   "key": "SC2003 store-operation-may-not-write",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1169",
+   "fact": "relabels, not new rows: container_root::handed_root now resolves a write through a const alias of a store link to the store (HandedRoot::Store below > 0), so a write ADR 0491's proof does not reach is SC2003 store-write-unproven / store-operation-may-not-write where it was unproven-container-root"
+  },
+  {
+   "fixture": "reactive-ir/after-await-read-first-writes",
+   "key": "SC2003 store-write-unproven",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 1169",
+   "fact": "relabels, not new rows: container_root::handed_root now resolves a write through a const alias of a store link to the store (HandedRoot::Store below > 0), so a write ADR 0491's proof does not reach is SC2003 store-write-unproven / store-operation-may-not-write where it was unproven-container-root"
+  },
+  {
+   "fixture": "reactive-ir/store-sub-value-flow",
+   "key": "SC2003 store-write-unproven",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1169",
+   "fact": "relabels, not new rows: container_root::handed_root now resolves a write through a const alias of a store link to the store (HandedRoot::Store below > 0), so a write ADR 0491's proof does not reach is SC2003 store-write-unproven / store-operation-may-not-write where it was unproven-container-root"
   }
  ]
 }

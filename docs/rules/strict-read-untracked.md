@@ -323,7 +323,11 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   `count()` is, for an accessor, a memo, an async memo and a store. A mention
   that may run before the alias's declarator throws there and is
   uncertifiable. A `let`, conditional, parameter, imported or exported alias is
-  not followed.
+  not followed. A `const` alias of a store link (`const held = s1.a`) is the
+  link where ADR 0491's literal proof holds for the store: `held.v` is reported
+  as `s1.a.v` is. Any other Get through a held link or a prop's alias has an
+  SC9012 `value-held-in-binding` row ([ADR 1169](../decisions.md#adr-1169),
+  [ADR 1172](../decisions.md#adr-1172) part 1).
 - **A read in JSX a callback writes is tracked where the compiler tracks it (ADR 0470).**
   `createRoot(() => <div>{r()}</div>)`, an attribute, a component prop or
   child in a `createRoot`, `runWithOwner`, `untrack` or handler callback:
