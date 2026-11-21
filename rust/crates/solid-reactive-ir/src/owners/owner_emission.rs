@@ -1497,6 +1497,40 @@ fn layer_entry_open(
                 }
                 continue;
             }
+            // ADR 1171: a component prop's literal whose every run is a call `props.<prop>()` the component writes
+            // (`prop_literal_call_sites`) is entered by those calls alone, each as it is entered. A literal it never calls
+            // has no entry to prove anything by: open.
+            if let Some(calls) =
+                crate::execution_role::prop_literal_call_sites(file, function, lookup)
+                && !calls.is_empty()
+            {
+                if !walked
+                    .visited
+                    .insert((file.path.as_str().to_owned(), function.span))
+                {
+                    continue;
+                }
+                if depth == 0 {
+                    return true;
+                }
+                for call in calls {
+                    if caller_unplaced(file, call)
+                        || crate::owners::written_in_getter(file, lookup, call)
+                        || layer_entry_open(
+                            file,
+                            call,
+                            None,
+                            lookup,
+                            caller_unplaced,
+                            walked,
+                            depth - 1,
+                        )
+                    {
+                        return true;
+                    }
+                }
+                continue;
+            }
             return true;
         }
         let Some(local) = crate::local_access::function_reference_hand_offs(file, function, lookup)

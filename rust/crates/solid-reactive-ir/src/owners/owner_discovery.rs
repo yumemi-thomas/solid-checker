@@ -191,6 +191,18 @@ pub(crate) fn discover_owner_file(
             }
         }
     }
+    // ADR 1171: the calls `props.<prop>()` that run a component prop's function literal, when they are all its runs
+    // (`prop_literal_call_sites`): each runs the literal where it is written, as a direct call of it would.
+    let prop_calls = file
+        .ast
+        .functions
+        .iter()
+        .filter_map(|function| {
+            crate::execution_role::prop_literal_call_sites(file, function, lookup)
+                .map(|calls| (function.span, calls))
+        })
+        .flat_map(|(literal, calls)| calls.into_iter().map(move |call| (call, literal)))
+        .collect::<std::collections::HashMap<_, _>>();
     for (call_index, call) in file.ast.calls.iter().enumerate() {
         let owner = owner_at(call.span);
         let target = lookup
@@ -228,6 +240,18 @@ pub(crate) fn discover_owner_file(
                 (None, OwnerEdgeKind::MayBeUnowned)
             }
         };
+        if let Some(literal) = prop_calls.get(&call.span) {
+            let (source, kind) = if kind == OwnerEdgeKind::Preserve && !runs_every_time(call.span) {
+                may_run()
+            } else {
+                (source.clone(), kind)
+            };
+            edges.push(SymbolicOwnerEdge {
+                source,
+                target: OwnerTarget::LocalSpan(*literal),
+                kind,
+            });
+        }
         // ADR 0468: a comma, conditional or logical callee (`(c && f)()`)
         // names no target, so it had no edge, and a function it may evaluate
         // to no owner context: proof that its body never runs. Each identifier
