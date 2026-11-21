@@ -215,6 +215,78 @@
    "count": 4,
    "adr": "ADR 1040",
    "why": "ADR 1040 (b) lifts ADR 0803's slot withdrawal (SC9012 tuple-iteration-written) in this project: the router's window hand-offs reach only seen code, so its open writes are no longer visible iteration writes. The setter calls and reads it held are asked again and stay uncertifiable under this rule's own blocker (function-run-unplaced, read-after-await-unaccounted, async-read-unaccounted): every such file held a tuple-iteration-written row at the base, a relabel across rules, never clean. Measured in the sc VM on the frozen rc.21 corpus (fed4aa902 against the ADR 1040 build), both runtime builds alike."
+  },
+  {
+   "project": "compass-ui/apps/ui/tsconfig.json",
+   "rule": "SC9012",
+   "kind": "newly-uncertifiable",
+   "build": "std",
+   "count": 1,
+   "adr": "ADR 1169",
+   "why": "ADR 1169 part 1 (a Get through a held store link has a row: `value_use::Census::member` walks the root's own member chain, held whole in an identifier binding, as the root, and a Get with no read row stands open as SC9012): in this file the Get or use of the held link or of what a reader answers had no SC9012 row on main (a silent clean the checker could not prove) and now stands open as SC9012 uncertifiable, as the file's other rows of the family already did elsewhere. Corpus-wide the bundle adds 805 SC9012 rows (value-held-in-binding 372, value-in-carrier 182, value-to-unresolved-callee 104, value-root-in-helper 96, value-through-logical 24, value-use-unclassified 15, value-from-primitive-callback 8, value-through-new 4) and drops 26 others; six of them are places with no SC9012 row at the base (this row's). Checked before naming them: none replaces a violation (violations lost 0, added 0; no added row sits on a span where the old build had a violation) and none sits where the old build's proof log names a value_use proof (decision or silent); uncertifiable is internal, nothing a user sees."
+  },
+  {
+   "project": "compass-ui/apps/ui/tsconfig.json",
+   "rule": "SC9012",
+   "kind": "newly-uncertifiable",
+   "build": "dev",
+   "count": 1,
+   "adr": "ADR 1169",
+   "why": "ADR 1169 part 1 (a Get through a held store link has a row: `value_use::Census::member` walks the root's own member chain, held whole in an identifier binding, as the root, and a Get with no read row stands open as SC9012): in this file the Get or use of the held link or of what a reader answers had no SC9012 row on main (a silent clean the checker could not prove) and now stands open as SC9012 uncertifiable, as the file's other rows of the family already did elsewhere. Corpus-wide the bundle adds 805 SC9012 rows (value-held-in-binding 372, value-in-carrier 182, value-to-unresolved-callee 104, value-root-in-helper 96, value-through-logical 24, value-use-unclassified 15, value-from-primitive-callback 8, value-through-new 4) and drops 26 others; six of them are places with no SC9012 row at the base (this row's). Checked before naming them: none replaces a violation (violations lost 0, added 0; no added row sits on a span where the old build had a violation) and none sits where the old build's proof log names a value_use proof (decision or silent); uncertifiable is internal, nothing a user sees."
+  },
+  {
+   "project": "inferay/tsconfig.json",
+   "rule": "SC9012",
+   "kind": "newly-uncertifiable",
+   "build": "std",
+   "count": 1,
+   "adr": "ADR 1169",
+   "why": "ADR 1169 part 1 (a Get through a held store link has a row: `value_use::Census::member` walks the root's own member chain, held whole in an identifier binding, as the root, and a Get with no read row stands open as SC9012): in this file the Get or use of the held link or of what a reader answers had no SC9012 row on main (a silent clean the checker could not prove) and now stands open as SC9012 uncertifiable, as the file's other rows of the family already did elsewhere. Corpus-wide the bundle adds 805 SC9012 rows (value-held-in-binding 372, value-in-carrier 182, value-to-unresolved-callee 104, value-root-in-helper 96, value-through-logical 24, value-use-unclassified 15, value-from-primitive-callback 8, value-through-new 4) and drops 26 others; six of them are places with no SC9012 row at the base (this row's). Checked before naming them: none replaces a violation (violations lost 0, added 0; no added row sits on a span where the old build had a violation) and none sits where the old build's proof log names a value_use proof (decision or silent); uncertifiable is internal, nothing a user sees."
+  },
+  {
+   "project": "inferay/tsconfig.json",
+   "rule": "SC9012",
+   "kind": "newly-uncertifiable",
+   "build": "dev",
+   "count": 1,
+   "adr": "ADR 1169",
+   "why": "ADR 1169 part 1 (a Get through a held store link has a row: `value_use::Census::member` walks the root's own member chain, held whole in an identifier binding, as the root, and a Get with no read row stands open as SC9012): in this file the Get or use of the held link or of what a reader answers had no SC9012 row on main (a silent clean the checker could not prove) and now stands open as SC9012 uncertifiable, as the file's other rows of the family already did elsewhere. Corpus-wide the bundle adds 805 SC9012 rows (value-held-in-binding 372, value-in-carrier 182, value-to-unresolved-callee 104, value-root-in-helper 96, value-through-logical 24, value-use-unclassified 15, value-from-primitive-callback 8, value-through-new 4) and drops 26 others; six of them are places with no SC9012 row at the base (this row's). Checked before naming them: none replaces a violation (violations lost 0, added 0; no added row sits on a span where the old build had a violation) and none sits where the old build's proof log names a value_use proof (decision or silent); uncertifiable is internal, nothing a user sees."
+  },
+  {
+   "project": "kui/frontend/packages/feature-clusters/tsconfig.json",
+   "rule": "SC9012",
+   "kind": "newly-uncertifiable",
+   "build": "std",
+   "count": 1,
+   "adr": "ADR 1169",
+   "why": "ADR 1169 part 1 (a Get through a held store link has a row: `value_use::Census::member` walks the root's own member chain, held whole in an identifier binding, as the root, and a Get with no read row stands open as SC9012): in this file the Get or use of the held link or of what a reader answers had no SC9012 row on main (a silent clean the checker could not prove) and now stands open as SC9012 uncertifiable, as the file's other rows of the family already did elsewhere. Corpus-wide the bundle adds 805 SC9012 rows (value-held-in-binding 372, value-in-carrier 182, value-to-unresolved-callee 104, value-root-in-helper 96, value-through-logical 24, value-use-unclassified 15, value-from-primitive-callback 8, value-through-new 4) and drops 26 others; six of them are places with no SC9012 row at the base (this row's). Checked before naming them: none replaces a violation (violations lost 0, added 0; no added row sits on a span where the old build had a violation) and none sits where the old build's proof log names a value_use proof (decision or silent); uncertifiable is internal, nothing a user sees."
+  },
+  {
+   "project": "kui/frontend/packages/feature-clusters/tsconfig.json",
+   "rule": "SC9012",
+   "kind": "newly-uncertifiable",
+   "build": "dev",
+   "count": 1,
+   "adr": "ADR 1169",
+   "why": "ADR 1169 part 1 (a Get through a held store link has a row: `value_use::Census::member` walks the root's own member chain, held whole in an identifier binding, as the root, and a Get with no read row stands open as SC9012): in this file the Get or use of the held link or of what a reader answers had no SC9012 row on main (a silent clean the checker could not prove) and now stands open as SC9012 uncertifiable, as the file's other rows of the family already did elsewhere. Corpus-wide the bundle adds 805 SC9012 rows (value-held-in-binding 372, value-in-carrier 182, value-to-unresolved-callee 104, value-root-in-helper 96, value-through-logical 24, value-use-unclassified 15, value-from-primitive-callback 8, value-through-new 4) and drops 26 others; six of them are places with no SC9012 row at the base (this row's). Checked before naming them: none replaces a violation (violations lost 0, added 0; no added row sits on a span where the old build had a violation) and none sits where the old build's proof log names a value_use proof (decision or silent); uncertifiable is internal, nothing a user sees."
+  },
+  {
+   "project": "kui/frontend/packages/shell/tsconfig.json",
+   "rule": "SC9012",
+   "kind": "newly-uncertifiable",
+   "build": "std",
+   "count": 3,
+   "adr": "ADR 1169",
+   "why": "ADR 1169 part 1 (a Get through a held store link has a row: `value_use::Census::member` walks the root's own member chain, held whole in an identifier binding, as the root, and a Get with no read row stands open as SC9012): in this file the Get or use of the held link or of what a reader answers had no SC9012 row on main (a silent clean the checker could not prove) and now stands open as SC9012 uncertifiable, as the file's other rows of the family already did elsewhere. Corpus-wide the bundle adds 805 SC9012 rows (value-held-in-binding 372, value-in-carrier 182, value-to-unresolved-callee 104, value-root-in-helper 96, value-through-logical 24, value-use-unclassified 15, value-from-primitive-callback 8, value-through-new 4) and drops 26 others; six of them are places with no SC9012 row at the base (this row's). Checked before naming them: none replaces a violation (violations lost 0, added 0; no added row sits on a span where the old build had a violation) and none sits where the old build's proof log names a value_use proof (decision or silent); uncertifiable is internal, nothing a user sees."
+  },
+  {
+   "project": "kui/frontend/packages/shell/tsconfig.json",
+   "rule": "SC9012",
+   "kind": "newly-uncertifiable",
+   "build": "dev",
+   "count": 3,
+   "adr": "ADR 1169",
+   "why": "ADR 1169 part 1 (a Get through a held store link has a row: `value_use::Census::member` walks the root's own member chain, held whole in an identifier binding, as the root, and a Get with no read row stands open as SC9012): in this file the Get or use of the held link or of what a reader answers had no SC9012 row on main (a silent clean the checker could not prove) and now stands open as SC9012 uncertifiable, as the file's other rows of the family already did elsewhere. Corpus-wide the bundle adds 805 SC9012 rows (value-held-in-binding 372, value-in-carrier 182, value-to-unresolved-callee 104, value-root-in-helper 96, value-through-logical 24, value-use-unclassified 15, value-from-primitive-callback 8, value-through-new 4) and drops 26 others; six of them are places with no SC9012 row at the base (this row's). Checked before naming them: none replaces a violation (violations lost 0, added 0; no added row sits on a span where the old build had a violation) and none sits where the old build's proof log names a value_use proof (decision or silent); uncertifiable is internal, nothing a user sees."
   }
  ]
 }
