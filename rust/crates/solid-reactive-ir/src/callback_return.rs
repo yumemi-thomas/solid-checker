@@ -410,14 +410,28 @@ pub(crate) fn exact_provider_child_spans(
     if crate::site_accounting::ablated_id(PROVIDER_CHILDREN_MEMO_OWNER) {
         return Vec::new();
     }
-    file.ast
+    let spans: Vec<Span> = file
+        .ast
         .jsx_elements
         .iter()
         .filter(|element| {
             !element.children.is_empty() && exact_context_provider(lookup, file, element)
         })
         .flat_map(|element| element.children.iter().copied())
-        .collect()
+        .collect();
+    // The proof log names the arm at each region (monotone.mjs M2b: an owner requirement it answers lies inside one).
+    for span in &spans {
+        crate::proof_log::decision(
+            "owner-call",
+            file.path.as_str(),
+            *span,
+            crate::ExecutionRole::Unknown,
+            Some((PROVIDER_CHILDREN_MEMO_OWNER, false)),
+            &[PROVIDER_CHILDREN_MEMO_OWNER],
+            Some(false),
+        );
+    }
+    spans
 }
 
 /// ADR 1147: the store-tuple arm's id. `SOLID_CHECKER_IR_ABLATE_SILENCE=context-provided-store-tuple` switches it off (a measurement only).
