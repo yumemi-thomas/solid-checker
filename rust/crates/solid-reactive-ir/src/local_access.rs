@@ -7673,6 +7673,57 @@ impl LocalAccessContext<'_, '_> {
                         self.lookup,
                     )
                 };
+            // ADR 1155 r3: a read whose tracked role is ADR 0200's forwarding runs in the slot's callback, not in a render: it takes the role,
+            // the computation and the leaf owner of a read written at the wrapper's call of its parameter there (a memo's compute: no render
+            // read; `createTrackedEffect`'s: its leaf), or is unplaced.
+            let forwarded = (placed_at.is_none()
+                && !computation_read
+                && async_execution == ExecutionRole::TrackedJsx)
+                .then(|| {
+                    crate::execution_role::forwarded_async_site(file, call.callee, self.lookup)
+                })
+                .flatten();
+            let (async_execution, computation_read, forwarded_leaf_owner) = match forwarded {
+                None => (async_execution, computation_read, None),
+                Some(crate::execution_role::ForwardedAsyncSite::Unplaced) => (
+                    crate::role_log::role_arm!(
+                        "local_access.push_async_read.forwarded-unplaced",
+                        ExecutionRole::Unknown
+                    ),
+                    false,
+                    None,
+                ),
+                Some(crate::execution_role::ForwardedAsyncSite::At(wrapper_file, invoke)) => {
+                    self.lookup.note_file_read(wrapper_file);
+                    (
+                        crate::role_log::role_arm!(
+                            "local_access.push_async_read.forwarded-slot",
+                            async_read_role(
+                                wrapper_file,
+                                invoke,
+                                ExecutionRole::TrackedJsx,
+                                self.entities,
+                                self.symbol_names,
+                                self.lookup,
+                            )
+                        ),
+                        crate::execution_role::computation_read_suspends(
+                            wrapper_file,
+                            invoke,
+                            self.entities,
+                            self.symbol_names,
+                            self.lookup,
+                        ),
+                        Some(crate::owners::containing_leaf_owner(
+                            wrapper_file,
+                            invoke,
+                            self.entities,
+                            self.symbol_names,
+                            self.lookup,
+                        )),
+                    )
+                }
+            };
             // ADR 0619, ADR 0628: rc.21 keeps the pending throw through an
             // unlabelled `untrack` for a source the strict body itself created.
             let async_execution = if async_provenance {
@@ -7709,14 +7760,18 @@ impl LocalAccessContext<'_, '_> {
                 .flatten();
             // ADR 0580: a read in a named function run by inline carriers
             // is under the leaf owner of the carrier that runs it.
-            let (leaf_owner, leaf_carrier_unproven) = carried_leaf_owner(
-                file,
-                call.callee,
-                self.entities,
-                self.symbol_names,
-                self.lookup,
-                CARRIED_LEAF_DEPTH,
-            );
+            let (leaf_owner, leaf_carrier_unproven) = match forwarded_leaf_owner {
+                // ADR 1155 r3: the forwarded slot's leaf owner, or none (a memo's compute).
+                Some(owner) => (owner, false),
+                None => carried_leaf_owner(
+                    file,
+                    call.callee,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                    CARRIED_LEAF_DEPTH,
+                ),
+            };
             // ADR 0778: a pending read on a later task throws with no code, and
             // whether the source has settled by then is unknown. The projector
             // takes no such role: the read is unplaced, as a handler's is. A

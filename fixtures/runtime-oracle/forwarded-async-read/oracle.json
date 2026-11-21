@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1155 r3: a pending read forwarded by a project function to createMemo's compute (MemoApp: silent, uncertifiable) and to createTrackedEffect's (TrackedApp: PENDING_ASYNC_FORBIDDEN_SCOPE, SC5001 a violation as the direct twin), and a `sync: true` createEffect forwarded into the leaf (SyncApp: PRIMITIVE_IN_FORBIDDEN_SCOPE first; SC7002 uncertifiable)."
+}
