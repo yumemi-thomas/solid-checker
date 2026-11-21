@@ -28,11 +28,11 @@
   "SC1002 function-run-unplaced": 87,
   "SC1002 function-unentered": 4,
   "SC1002 generator-stepped": 11,
-  "SC1002 handed-read-after-await": 190,
+  "SC1002 handed-read-after-await": 196,
   "SC1002 package-finding-at-entry": 17,
   "SC1002 package-operation-after-await": 3,
   "SC1002 parameter-initializer-unplaced": 8,
-  "SC1002 read-after-await-unaccounted": 789,
+  "SC1002 read-after-await-unaccounted": 791,
   "SC1002 search-depth-limit": 1,
   "SC1002 site-reach-undecided": 1,
   "SC1002 standard-member-impostor": 3,
@@ -59,7 +59,7 @@
   "SC2001 binding-before-initialization": 3,
   "SC2001 component-identity-unproven": 10,
   "SC2001 escaped-name-unresolved": 4,
-  "SC2001 function-run-unplaced": 572,
+  "SC2001 function-run-unplaced": 575,
   "SC2001 function-unentered": 13,
   "SC2001 lazy-compute-unread": 7,
   "SC2001 owned-write-option-unread": 4,
@@ -5487,6 +5487,18 @@
    "fixtures": {
     "proved": "uncertifiable-repro/sc1001",
     "open": "uncertifiable-repro/sc1001"
+   }
+  },
+  {
+   "fixture": "reactive-ir/write-past-layered-await",
+   "key": "SC2001 function-run-unplaced",
+   "from": 3,
+   "to": 2,
+   "adr": "ADR 1164",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/body_roles.rs::operand_cannot_throw",
+   "fixtures": {
+    "proved": "reactive-ir/write-past-layered-await",
+    "open": "reactive-ir/write-past-layered-await"
    }
   }
  ],
