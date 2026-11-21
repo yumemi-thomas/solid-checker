@@ -84,3 +84,18 @@ export function WrittenApp() {
   }, 0);
   return <p />;
 }
+
+// Negative (the review of 1155, N2, Chrome: NO_OWNER_CLEANUP): a child with no call in it is evaluated at the tag by the compiler, not in the children memo,
+// so a cleanup a constructor runs there is the timer's: no owner, its row stays.
+class Make {
+  constructor() {
+    onCleanup(() => {});
+  }
+}
+export function NewApp() {
+  setTimeout(() => {
+    const made = <Ctx value={1}>{(new Make(), 1)}</Ctx>;
+    children(() => made)();
+  }, 0);
+  return <p />;
+}

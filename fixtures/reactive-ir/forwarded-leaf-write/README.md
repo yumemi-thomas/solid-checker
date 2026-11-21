@@ -7,7 +7,9 @@ proof reaching a `CallbackOwner::Leaf` slot, the write takes the leaf scope (`wr
 
 - Positive (clean): `HandApp` (the forwarding to `createTrackedEffect`).
 - Negative: `MemoApp` (forwarded to a memo's compute: the violation stays; Chrome reports REACTIVE_WRITE_IN_OWNED_SCOPE), `TwiceApp` (the parameter also handed to
-  a timer: no exact proof, the row it had stays).
+  a timer: no exact proof, the row it had stays), `ArgsApp` (the review of 1155, F1: a non-arrow wrapper that also calls `arguments[0]()`, in the memo
+  that calls it; Chrome reports REACTIVE_WRITE_IN_OWNED_SCOPE, so ADR 0200's proof refuses a wrapper that reads `arguments`), `SwapApp` (the parameter
+  reassigned: refused).
 
 The forwarding functions are the project's: a package read as source takes the same proof (`callee_roles::forwarded_compute_slot` resolves the callee to its
 function either way), held against the real install by patterns `ctxmemo/s11-hand-direct` and the generator's `barm-fwdleaf-tracked`/`-memo`. Stub:
