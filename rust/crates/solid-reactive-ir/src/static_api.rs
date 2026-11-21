@@ -1441,6 +1441,9 @@ impl StaticApiContext<'_> {
                         None => role,
                     };
                     if role.reports_disallowed_write() || role.reports_unplaced() {
+                        // ADR 1174: a `props.name` target every caller passes one exact refreshable source for is that
+                        // source: the write is placed by its role, as the resolved target's below.
+                        let passed = self.props_refresh_source(file, target);
                         // One record standing for every reachable path.
                         if multiplicity > 0 {
                             let write = ReactiveWrite {
@@ -1450,11 +1453,23 @@ impl StaticApiContext<'_> {
                                 )
                                 .into(),
                                 operation: crate::ReactiveWriteOperation::Refresh,
-                                source_kind: ReactiveSourceKind::Accessor,
+                                source_kind: passed
+                                    .as_ref()
+                                    .map_or(ReactiveSourceKind::Accessor, |passed| passed.1),
                                 location: location(file.path.as_str(), call.span),
-                                declaration: location(file.path.as_str(), target.span),
-                                execution: crate::ExecutionRole::Unknown,
-                                owned_write: Default::default(),
+                                declaration: passed.as_ref().map_or_else(
+                                    || location(file.path.as_str(), target.span),
+                                    |passed| passed.2.clone(),
+                                ),
+                                execution: if passed.is_some() {
+                                    role
+                                } else {
+                                    crate::ExecutionRole::Unknown
+                                },
+                                owned_write: passed
+                                    .as_ref()
+                                    .map(|passed| passed.3)
+                                    .unwrap_or_default(),
                                 context: analysis_context(
                                     file,
                                     call.span,
@@ -1614,6 +1629,135 @@ impl StaticApiContext<'_> {
         }
         self.check_jsx_in_effect_phase(file, &mut result);
         result
+    }
+
+    /// ADR 1174: the one exact source behind a `refresh(props.name)` target, with its kind, declaration and `ownedWrite`
+    /// option: `props` is a component's own props parameter, current (never replaced or escaping) and with no attachment but
+    /// views (`local_access::props_root_is_current`, `props_root_attachments_are_views`), and every caller is enumerated and
+    /// passes `name` that one source and nothing else (ADR 0919 `passed_on_every_site`: no plain value, no function, no
+    /// forwarding). The source is refreshable as the resolved target's must be: an accessor, or a store that is not of the
+    /// value form. rc.21's `refresh` checks the target's brand and then, in an owned scope, throws
+    /// REACTIVE_WRITE_IN_OWNED_SCOPE unless the node was created with `ownedWrite` (`dist/dev-shared.js` `markRefresh`):
+    /// the source's option goes with the write. Anything else is `None`, and the write stays unplaced.
+    fn props_refresh_source(
+        &self,
+        file: &FileFacts,
+        target: &solid_facts::ast::ArgumentFact,
+    ) -> Option<(
+        SymbolId,
+        ReactiveSourceKind,
+        Location,
+        crate::OwnedWriteOption,
+    )> {
+        if target.spread {
+            return None;
+        }
+        let (declaration, name) = self.props_target_slot(file, target)?;
+        let (sources, plain, forwards) = self
+            .tables
+            .props_passed_on_every_site(&declaration, &name)?;
+        let [source] = sources.as_slice() else {
+            return None;
+        };
+        if plain || !forwards.is_empty() {
+            return None;
+        }
+        let kind = *self.tables.source_kind(source)?;
+        if kind == ReactiveSourceKind::Store && self.tables.value_form_store(source) {
+            return None;
+        }
+        let (_, accessor_declaration) = self.tables.accessor(source)?;
+        Some((
+            source.clone(),
+            kind,
+            accessor_declaration.clone(),
+            self.tables.source_owned_write(source).unwrap_or_default(),
+        ))
+    }
+
+    /// ADR 1174: the props declaration and slot name a `refresh` target names: `props.name` on a component's own props
+    /// parameter, current and with only views attached, or `name` bound by a slot of a destructured props parameter that is
+    /// never written (the pattern addresses the classification, as `local_access::props_callee_through`'s).
+    fn props_target_slot(
+        &self,
+        file: &FileFacts,
+        target: &solid_facts::ast::ArgumentFact,
+    ) -> Option<(Location, String)> {
+        let ast = &file.ast;
+        let at = ast.peel_ts_sugar_span(target.value_span.unwrap_or(target.span));
+        if let Some(member) = ast.member_at(at) {
+            if ast.computed_members.binary_search(&member.span).is_ok()
+                || ast.optional_members.binary_search(&member.span).is_ok()
+            {
+                return None;
+            }
+            let object = ast.peel_ts_sugar_span(member.object);
+            if !ast.identifiers.iter().any(|identifier| {
+                identifier.span == object
+                    && identifier.role == solid_facts::ast::IdentifierRole::Reference
+            }) {
+                return None;
+            }
+            let root = self.entities.get(&location(file.path.shared(), object))?;
+            if self.tables.source_kind(root).is_some() {
+                return None;
+            }
+            let (_, declaration) = self.tables.prop_source(root)?;
+            let parameter = self.entities.get(declaration)?;
+            if parameter != root
+                || !crate::local_access::props_root_is_current(
+                    file,
+                    declaration,
+                    parameter,
+                    self.entities,
+                    self.lookup,
+                )
+                || !crate::local_access::props_root_attachments_are_views(
+                    file,
+                    &self.tables.props_attachments(declaration, parameter),
+                    declaration,
+                    parameter,
+                    self.entities,
+                    self.lookup,
+                )
+            {
+                return None;
+            }
+            return Some((
+                declaration.clone(),
+                file.source_text(member.property)?.to_owned(),
+            ));
+        }
+        if !ast.identifiers.iter().any(|identifier| {
+            identifier.span == at && identifier.role == solid_facts::ast::IdentifierRole::Reference
+        }) {
+            return None;
+        }
+        let declaration = ast.reference_declaration(at)?;
+        let mut owner = crate::owners::containing_ast_function(ast, at);
+        while let Some(function) = owner {
+            if let Some(parameter) = function.parameters.first()
+                && parameter.shape == solid_facts::ast::BindingShape::Object
+                && let Some(slot) = parameter
+                    .object_slots
+                    .iter()
+                    .find(|slot| slot.local.span == declaration)
+            {
+                if crate::indexes::binding_written(file, declaration) {
+                    return None;
+                }
+                return Some((
+                    location(file.path.shared(), parameter.pattern),
+                    slot.property.to_string(),
+                ));
+            }
+            owner = ast
+                .functions
+                .iter()
+                .filter(|outer| outer.span != function.span && outer.span.contains(function.span))
+                .min_by_key(|outer| outer.span.end - outer.span.start);
+        }
+        None
     }
 
     /// ADR 0883: JSX creating a computation or a root on an apply's stack, as
