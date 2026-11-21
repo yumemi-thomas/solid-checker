@@ -10,17 +10,6 @@
       "start": 169,
       "end": 181,
       "fixes": 0
-    },
-    {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/change-local-setproperty/App.tsx",
-      "start": 169,
-      "end": 181,
-      "fixes": 0
     }
   ]
 }

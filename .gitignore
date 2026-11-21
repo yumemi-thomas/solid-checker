@@ -2278,3 +2278,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/vite-dev-client/variants/depends-on-vite/node_modules/**
 !fixtures/reactive-ir/arm-only-store-destructure/node_modules/
 !fixtures/reactive-ir/arm-only-store-destructure/node_modules/**
+!fixtures/reactive-ir/owner-call-effect-creation/variants/inline-handler/node_modules/
+!fixtures/reactive-ir/owner-call-effect-creation/variants/inline-handler/node_modules/**

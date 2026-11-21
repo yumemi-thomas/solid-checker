@@ -220,6 +220,9 @@ site_silences! {
     /// A creation the dialect says throws on an effect's apply, written where the role engine places it off every effect's apply (a handler, a deferred
     /// callback, a directive apply, rendering, module code, discarded code).
     EffectCreationRunsOffApply => "leaf_universe.account.effect-creation-runs-off-apply",
+    /// ADR 1159: a creation the dialect says throws on an effect's apply, after an `await` of its own async function that every run reaches first: it runs
+    /// from that await's continuation, a microtask on an empty stack, never inside an apply's synchronous run.
+    EffectCreationAfterAwait => "leaf_universe.account.effect-creation-after-await",
     /// A creation the dialect says throws on an effect's apply, inside the callback of an exact owner-setting primitive (`runWithOwner`, `createRoot`, a
     /// computation's compute): an owner is current.
     EffectCreationOwnerSetAround => "leaf_universe.account.effect-creation-owner-set-around",
@@ -368,6 +371,7 @@ impl SiteSilence {
             }
             Self::OwnerCurrent
             | Self::EffectCreationRunsOffApply
+            | Self::EffectCreationAfterAwait
             | Self::EffectCreationOwnerSetAround => &[EffectCreation],
             // ADR 0987: the `loading-on` universe's two codes, each ended by its own rule's finding or its own silence.
             Self::LoadingOnNamesNothing | Self::LoadingHoldsNoAsyncSource => {
