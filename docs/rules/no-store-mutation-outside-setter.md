@@ -45,7 +45,11 @@ symbol:
   standard library's `Array` method, so a project method of the same name, a
   typed array's `fill` and an unresolved receiver are silent (upstream's
   `no-store-mutation-outside-setter` matches the method name); `sort`,
-  `reverse`, `fill` and `copyWithin` may write nothing: uncertifiable (ADR 0718);
+  `reverse`, `fill` and `copyWithin` may write nothing: uncertifiable (ADR 0718),
+  unless the store's own literal (ADR 0491) proves the call writes: two or more
+  elements for `reverse`, number literals for `sort` with no comparator or
+  `(a, b) => b - a`, a non-empty integer-literal range for `fill` and
+  `copyWithin` ([ADR 1170](../decisions.md#adr-1170));
 - the same writes through a `createProjection` result, reported as a
   projection write (it has no setter to name).
 
