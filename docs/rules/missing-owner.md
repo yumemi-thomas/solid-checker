@@ -309,7 +309,11 @@ that run in place there (an IIFE, a project helper's callback, a function bound
 to a name and called once) when the outermost layer's call follows an `await` on
 every path (ADR 0493). In an async memo or effect compute too: a compute's region
 owns its synchronous run only (ADR 0612). A `catch` or `finally` counts only past a
-`try` head that cannot throw before it suspends. An operation in a literal that a
+`try` head that cannot throw before it suspends (an async function declaration's
+call, or the global `Promise.resolve` with literal arguments, ADR 1164). The body
+of a `for await` over an array literal led by a number, boolean or `null` literal
+runs, every run past the loop's await (ADR 1165); over another iterable it is
+uncertifiable. An operation in a literal that a
 synchronous guard invokes is guarded: `if (getOwner()) (() => { … })()` runs
 only under an owner, so it is not reported; the guard must be Solid's
 `getOwner`, and no suspension may separate it from the operation (ADR 0347): an

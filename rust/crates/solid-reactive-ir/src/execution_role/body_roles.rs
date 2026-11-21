@@ -517,6 +517,47 @@ fn for_await_body_suspension(file: &solid_facts::FileFacts, span: Span) -> Optio
     })
 }
 
+/// ADR 1165: whether `span` is in the body of a `for await` ([`for_await_body_suspension`], in `span`'s own continuation function) that
+/// provably runs its body: the iterable is an array literal whose first element is a decimal integer, boolean or `null` literal (the first
+/// `next()` fulfills with that value), while no visible write reaches the array iterator. Every run of `span` follows the loop's
+/// suspension, and the body runs (no dead site, ADR 1018). ADR 1164 asks the same of the after-await read walk.
+pub(crate) fn in_for_await_body_that_runs(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some(function) = continuation_function(file, span) else {
+        return false;
+    };
+    let ast = &file.ast;
+    lookup.array_iteration_intact()
+        && ast.implicit_suspensions.iter().any(|suspension| {
+            containing_ast_function(ast, *suspension)
+                .is_some_and(|owner| owner.span == function.span)
+                && ast.loop_statements.iter().any(|statement| {
+                    statement.start == suspension.start
+                        && statement.end > suspension.end
+                        && Span::new(suspension.end, statement.end).contains(span)
+                        && ast
+                            .iterated_operands
+                            .iter()
+                            .find(|operand| {
+                                statement.contains(**operand) && operand.end == suspension.end
+                            })
+                            .and_then(|iterable| ast.array_literal_at(*iterable))
+                            .and_then(|array| array.elements.first())
+                            .is_some_and(|first| {
+                                first.kind == solid_facts::ast::ArrayElementKind::Value
+                                    && file.source_text(first.span).is_some_and(|text| {
+                                        matches!(text, "true" | "false" | "null")
+                                            || (!text.is_empty()
+                                                && text.bytes().all(|byte| byte.is_ascii_digit()))
+                                    })
+                            })
+                })
+        })
+}
+
 /// The async, non-generator function whose continuation `span` would run in,
 /// when nothing at `span` runs later under an owner instead: an instance
 /// field initializer (it runs at construction), a JSX expression or a

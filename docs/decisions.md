@@ -4984,3 +4984,24 @@ G1 of the R3 catalog (S half). ADR 1038 already reads a `for await` body as past
   - 188 moves: 93 legal U to clean (SC2001, SC2006, SC2008 and SC3001 writes, actions and leaf calls in a `finally`; 5 SC1002 closure reads in a handler-only function's `finally`) and 95 misuse recall-gap to agree;
   - the agree moves are 89 NO_OWNER_* and SETTLED_CLEANUP_UNOWNED in a `finally` (the owner proof takes the try head) and 6 UNTRACKED_READ_AFTER_AWAIT in a `for await` body;
   - nothing else moved, and nothing needs a look on either build.
+
+<a id="adr-1165"></a>
+## ADR 1165 — An owner call in a `for await` body that runs is past the await
+G4 of the R3 catalog (S half), on ADR 1164. The owner pass places an operation past an await from the producer's `calls_after_await` (statement awaits only), climbed layers (ADR 0493) and ADR 1164's try head. It never read ADR 1038's `for await` body: `createMemo(async () => { for await (const _x of [1]) { createEffect(…); } })` kept both an owned and an unowned context (`owner-varies-by-caller`) where Chrome reports NO_OWNER_EFFECT.
+
+**Decision.** `owner_emission.rs` also counts as after-await an operation (effect, cleanup, context read, boundary call) or an `onSettled` call that `body_roles::in_for_await_body_that_runs` places. That predicate is the ADR 1164 condition: written in the body of a `for await` in its own async non-generator function, the iterable an array literal led by a number, boolean or `null` literal, and the array iterator intact. The function must not probe `getOwner()`, as `call_owner_edge` requires.
+
+**Not changed.**
+- An empty literal (a dead site, ADR 1018), a named iterable, a `finally` around the loop, and a `getOwner()` guard (`flw-guard-for-await`) stay uncertifiable.
+- The counted loop with an `i > 0` guard (G4's M half) is not built.
+- SC6002's `effect-creation-unaccounted` row at a creation stays beside the new SC4001 violation.
+
+**Evidence.**
+- Fixture `owner-after-await-for-await`:
+  - `EffectInBody`, `CleanupInBody` and `SettledInBody` move from SC4001 U to V;
+  - `HelperInBody` and `CleanupInFinally` (ADR 1164) stay V;
+  - the four counterexamples stay U.
+- Chrome: `runtime-oracle/owner-after-await-for-await`.
+- `for-await-body` `CleanupInBody` moves from U to V. It was uncertifiable only because an exported component's callers are not enumerated; past the suspension, no caller gives an owner.
+- Chrome (`runtime-oracle/owner-after-await-for-await`): NO_OWNER_EFFECT and NO_OWNER_CLEANUP at the violations (`covered-violation`), and NO_OWNER_CLEANUP at the uncertifiable sites that run. SETTLED_CLEANUP_UNOWNED is raised unattributed (no application frame), so `SettledInBody` reads static-only there; the one-site fuzz programs judge it agree.
+- Probe, release, VM, ADR 1164's build against this branch, the same 2,160 programs: 22 misuse recall-gap to agree (NO_OWNER_EFFECT 9, NO_OWNER_CLEANUP 9, NO_OWNER_BOUNDARY 2, SETTLED_CLEANUP_UNOWNED 2, all in `memo-`/`effect-async-for-await`). Nothing else moved, and nothing needs a look. Against main b600297eb: 210 moves, ADR 1164's 188 and these 22.
