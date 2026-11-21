@@ -413,6 +413,9 @@ pub(crate) struct Census<'l, 'a> {
     carried: Carried,
     /// ADR 1104 (1b): the walked root is a component's props, not a store: a value read out of it is a value, not a root.
     props_root: bool,
+    /// ADR 1178: the walked root is a store that has settled from its creation ([`settled_literal_store`]): a read of its raw
+    /// backing or of its own keys runs no trap that reads.
+    settled_store: bool,
     steps: usize,
     parameter_hops: usize,
     return_hops: usize,
@@ -536,6 +539,7 @@ impl<'l, 'a> Census<'l, 'a> {
             late: Vec::new(),
             late_rows: Vec::new(),
             props_root: false,
+            settled_store: false,
             escaped_uses: Vec::new(),
             reached: Vec::new(),
             allowed: HashMap::default(),
@@ -584,7 +588,7 @@ impl<'l, 'a> Census<'l, 'a> {
     ///   `allowed`, `decided_writes`, the exported-callers graph);
     /// - the start's own state: empty or zero here, whatever the start before
     ///   it walked. The entry point sets what the start is about (`carried`,
-    ///   `async_walk`, `props_root`, `package_value`) before it begins.
+    ///   `async_walk`, `props_root`, `settled_store`, `package_value`) before it begins.
     ///
     /// A queue a start leaves is no other start's work. ADR 1128's leak was the
     /// late walks and rows the walks past a withheld call queued: nothing ran
@@ -612,6 +616,7 @@ impl<'l, 'a> Census<'l, 'a> {
             exported: _,
             carried: _,
             props_root: _,
+            settled_store: _,
             async_walk: _,
             package_value: _,
             walked,
@@ -698,10 +703,13 @@ impl<'l, 'a> Census<'l, 'a> {
         reference: &Location,
         async_source: bool,
         props: bool,
+        settled: bool,
     ) -> StartAnswer {
         self.props_root = props;
+        self.settled_store = settled && !props && !async_source;
         let open = self.root_use(reference, async_source);
         self.props_root = false;
+        self.settled_store = false;
         self.end_start(open)
     }
 
@@ -1470,6 +1478,15 @@ impl<'l, 'a> Census<'l, 'a> {
     #[deny(clippy::wildcard_enum_match_arm)]
     fn through(&mut self, file: &'a FileFacts, at: Span, row: Holder, mode: Mode) -> Position {
         let ast = &file.ast;
+        if mode == Mode::Root
+            && matches!(
+                row,
+                Holder::Spread | Holder::ObjectSpread(_) | Holder::Iterated | Holder::Coerced
+            )
+            && let Some(answer) = self.whole_store_form(file, at, row, mode)
+        {
+            return answer;
+        }
         match row {
             Holder::Callee(call) => {
                 if ast.calls[call].construct {
@@ -3468,6 +3485,202 @@ impl<'l, 'a> Census<'l, 'a> {
         answer
     }
 
+    /// ADR 1178: whether a read row stands exactly at `span`: the read a whole-store form makes there has its row, whatever that
+    /// row's verdict.
+    fn rowed_exactly(&self, file: &FileFacts, span: Span) -> bool {
+        let (start, end) = (u64::from(span.start), u64::from(span.end));
+        self.rows.get(file.path.as_str()).is_some_and(|rows| {
+            rows.iter()
+                .any(|(row_start, row_end)| *row_start == start && *row_end == end)
+        })
+    }
+
+    /// ADR 1178: a store root handed whole (argument 0, no spread, no other argument than the form takes) to a standard function or
+    /// a dialect primitive whose runtime code is reviewed. The call reads the store there and hands nothing of it on but what it
+    /// answers, which the walk goes on through:
+    ///
+    /// - `Object.values(s)`, `Object.entries(s)`, `Array.from(s)` read through the store's traps at the call (ADR 0621's row
+    ///   there must stand) and answer a fresh array of what they read: each element may be a nested store, held as a root's slot
+    ///   is (`[s]`), so a Get of an element has a row only where one stands;
+    /// - `Object.hasOwn(s, k)` runs `getOwnPropertyDescriptor` only, which reads nothing on a settled store; on any other it needs
+    ///   the key probe's row (ADR 0635). It answers a boolean;
+    /// - `deep(s)` (the dialect's [`WholeStoreArgument::ReadsEveryKey`]) reads at the call (ADR 0620's row must stand), and
+    ///   `snapshot(s)` ([`WholeStoreArgument::ReadsRawBacking`]) reads the raw backing of a settled store only. Each answers a copy
+    ///   or the backing, walked as the root itself would be.
+    ///
+    /// A standard callee is the exact default-library declaration, not withheld (ADR 0840's impostor census, ADR 0876, ADR 1137) and
+    /// not replaced (ADR 1129's premise); iteration (`Array.from`) asks the same premise of the iterator's members. `None`: any other
+    /// call, a props root, a root a helper received, and every other mode: the caller's rows as before.
+    fn whole_store_argument(
+        &mut self,
+        file: &'a FileFacts,
+        call: usize,
+        index: usize,
+        mode: Mode,
+    ) -> Option<Position> {
+        if mode != Mode::Root || self.props_root || index != 0 {
+            return None;
+        }
+        if crate::site_accounting::ablated_id(WHOLE_STORE_ARGUMENT) {
+            return None;
+        }
+        let ast = &file.ast;
+        let fact = &ast.calls[call];
+        if fact.construct || fact.arguments.iter().any(|argument| argument.spread) {
+            return None;
+        }
+        let rowed = self.rowed_exactly(file, fact.span);
+        let answer = if let Some(primitive) = self.lookup.primitive_at_call(file, fact.span) {
+            if fact.arguments.len() != 1 {
+                return None;
+            }
+            match self.lookup.dialect.whole_store_argument(primitive, index)? {
+                solid_dialect::WholeStoreArgument::ReadsEveryKey if rowed => Mode::Root,
+                solid_dialect::WholeStoreArgument::ReadsRawBacking
+                    if self.settled_store && untouched_target_read_is_plain(self.lookup) =>
+                {
+                    Mode::Root
+                }
+                _ => return None,
+            }
+        } else {
+            let resolved = self
+                .lookup
+                .resolved_callee_call(file, fact.callee)
+                .filter(|resolved| {
+                    resolved
+                        .declaration
+                        .as_ref()
+                        .is_some_and(|declaration| declaration.standard_library)
+                })?;
+            let name = crate::runtime_semantics::standard_call_name(resolved)?;
+            if self.lookup.standard_call_withheld(file, fact.callee)
+                || crate::interproc::accessor_provenance::standard_member_replaced(self.lookup, name)
+            {
+                return None;
+            }
+            match (name, fact.arguments.len()) {
+                ("ObjectConstructor.values" | "ObjectConstructor.entries", 1) if rowed => {
+                    Mode::RootHolder(Slot::Any)
+                }
+                ("ArrayConstructor.from", 1) if rowed && iteration_is_plain(self.lookup) => {
+                    Mode::RootHolder(Slot::Any)
+                }
+                ("ObjectConstructor.hasOwn", 2) if rowed || self.settled_store => {
+                    self.whole_store_proof(file, fact.span);
+                    return Some(Position::Followed);
+                }
+                _ => return None,
+            }
+        };
+        let position = self.position(file, fact.span, answer);
+        if position == Position::Followed {
+            self.whole_store_proof(file, fact.span);
+        }
+        Some(position)
+    }
+
+    /// ADR 1178: the proof log's line where a whole-store form ended the walk at its argument.
+    fn whole_store_proof(&self, file: &FileFacts, at: Span) {
+        crate::proof_log::silent(
+            "SC9012",
+            &at.location(file.path.as_str()),
+            WHOLE_STORE_ARGUMENT,
+            &[],
+        );
+    }
+
+    /// ADR 1178 (step 2): a store root iterated, spread or put in a template, where the form's read row stands: `[...s]` holds what it
+    /// read in the literal (as `[s]` holds a root's slot), `{ ...s }` in the object literal, `for (const x of s)` in its binding's
+    /// name (as a root is held), and `${s}` answers a string. The iteration asks ADR 1129's premise of the iterator's members, the
+    /// template of the coercion's. `None`: any other form or mode.
+    fn whole_store_form(
+        &mut self,
+        file: &'a FileFacts,
+        at: Span,
+        row: Holder,
+        mode: Mode,
+    ) -> Option<Position> {
+        if mode != Mode::Root || self.props_root {
+            return None;
+        }
+        if crate::site_accounting::ablated_id(WHOLE_STORE_ARGUMENT) {
+            return None;
+        }
+        let ast = &file.ast;
+        let spread = || ast.spreads.iter().find(|spread| spread.argument == at);
+        let array_literal = || {
+            ast.array_literal_elements
+                .iter()
+                .find(|literal| {
+                    literal.elements.iter().any(|element| {
+                        element.kind == solid_facts::ast::ArrayElementKind::Spread
+                            && ast.peel_ts_sugar_span(element.span) == at
+                    })
+                })
+                .map(|literal| literal.span)
+        };
+        let position = match row {
+            // `[...s]`: the literal's own row answers; the spread and the iteration name the same use.
+            Holder::Spread => {
+                let (spread, literal) = (spread()?, array_literal()?);
+                if !self.rowed_exactly(file, spread.span) || !iteration_is_plain(self.lookup) {
+                    return None;
+                }
+                self.position(file, literal, Mode::RootHolder(Slot::Any))
+            }
+            Holder::ObjectSpread(span) => {
+                if array_literal().is_some() {
+                    return Some(Position::Followed);
+                }
+                // A call's spread (`f(...s)`) is no literal's.
+                if ast.iterated_operands.contains(&at) {
+                    return None;
+                }
+                let literal = object_spread_literal(file, span)?;
+                if literal_reads_this(file, literal) || !self.rowed_exactly(file, span) {
+                    return None;
+                }
+                self.position(file, literal, Mode::RootHolder(Slot::Any))
+            }
+            Holder::Iterated => {
+                if array_literal().is_some() && spread().is_some() {
+                    return Some(Position::Followed);
+                }
+                let names = for_of_identifier_names(file, at)?;
+                if !self.rowed_exactly(file, at) || !iteration_is_plain(self.lookup) {
+                    return None;
+                }
+                let mut answer = Position::Followed;
+                for name in names {
+                    let position = self.name_uses(file, name, Mode::Root);
+                    if answer == Position::Followed {
+                        answer = position;
+                    }
+                }
+                answer
+            }
+            Holder::Coerced => {
+                let in_template = ast
+                    .template_literals
+                    .iter()
+                    .any(|template| template.expressions.contains(&at));
+                if !in_template
+                    || !self.rowed_exactly(file, at)
+                    || !coercion_is_plain(self.lookup)
+                {
+                    return None;
+                }
+                Position::Followed
+            }
+            _ => return None,
+        };
+        if position == Position::Followed {
+            self.whole_store_proof(file, at);
+        }
+        Some(position)
+    }
+
     fn argument(&mut self, file: &'a FileFacts, call: usize, index: usize, mode: Mode) -> Position {
         let ast = &file.ast;
         let call = &ast.calls[call];
@@ -3476,6 +3689,9 @@ impl<'l, 'a> Census<'l, 'a> {
         }
         if call.construct {
             return Position::Open(blockers::VALUE_THROUGH_NEW);
+        }
+        if let Some(answer) = self.whole_store_argument(file, call, index, mode) {
+            return answer;
         }
         if let Some(primitive) = self.lookup.primitive_at_call(file, call.span) {
             let dialect = self.lookup.dialect;
@@ -3620,6 +3836,131 @@ impl<'l, 'a> Census<'l, 'a> {
 /// The proof's id for the read an `affects` call makes of its target: the proof log's `silent` lines name it, and
 /// `SOLID_CHECKER_IR_ABLATE_SILENCE` turns it off (ADR 1118's gate).
 pub(crate) const UNTOUCHED_TARGET_READ: &str = "value_use.untouched_target_read";
+
+/// ADR 1178: the proof's id for a store root a whole-store form reads where its row stands ([`Census::whole_store_argument`],
+/// [`Census::whole_store_form`]): the proof log's `silent` lines name it, and `SOLID_CHECKER_IR_ABLATE_SILENCE` turns it off.
+pub(crate) const WHOLE_STORE_ARGUMENT: &str = "value_use.whole_store_argument";
+
+/// ADR 1178: whether an iteration of a store (`[...s]`, `for…of`, `Array.from`) runs only the standard iterator: the store proxy's
+/// `Symbol.iterator` Get answers its target's prototype member (`Array.prototype[Symbol.iterator]`, or `Object.prototype`'s for an
+/// object), whose iterator's `next` (and `return` on an early exit) Gets `length` and each index through the store's traps. ADR
+/// 1129's premise for each: a hook there is project code run with the store as `this`, which no row sees.
+fn iteration_is_plain(lookup: &SemanticLookup<'_>) -> bool {
+    [
+        "Array.@@symbol",
+        "Object.@@symbol",
+        "ArrayIterator.next",
+        "ArrayIterator.return",
+    ]
+    .into_iter()
+    .all(|name| !crate::interproc::accessor_provenance::standard_member_replaced(lookup, name))
+}
+
+/// ADR 1178: whether a template's coercion of a store (`${s}`) runs only the standard conversion: `Symbol.toPrimitive`, then
+/// `toString` and `valueOf` (an array's `toString` calls `join`), each a Get through the store's traps that ADR 0621's row covers,
+/// each a prototype member a hook could replace.
+fn coercion_is_plain(lookup: &SemanticLookup<'_>) -> bool {
+    [
+        "Object.@@symbol",
+        "Array.@@symbol",
+        "Object.toString",
+        "Object.valueOf",
+        "Array.toString",
+        "Array.join",
+    ]
+    .into_iter()
+    .all(|name| !crate::interproc::accessor_provenance::standard_member_replaced(lookup, name))
+}
+
+/// ADR 1178: the store declared at `declaration` has settled from its creation: an exact `createStore` (no derive, optimistic store
+/// or projection) whose first argument is an array or closed object literal, held by the first slot of a `const` tuple pattern
+/// whose value is a proxy (ADR 0634). Its traps answer no pending first answer (ADR 0635), and its raw backing is what it holds.
+pub(crate) fn settled_literal_store(lookup: &SemanticLookup<'_>, declaration: &Location) -> bool {
+    let Some(file) = lookup.file_by_path(declaration.path.as_ref()) else {
+        return false;
+    };
+    let (Ok(start), Ok(end)) = (
+        u32::try_from(declaration.start_byte),
+        u32::try_from(declaration.end_byte),
+    ) else {
+        return false;
+    };
+    let span = Span::new(start, end);
+    let Some(binding) = file.ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Array
+            && binding
+                .array_slots
+                .first()
+                .is_some_and(|slot| slot.as_ref().is_some_and(|name| name.span == span))
+    }) else {
+        return false;
+    };
+    let Some(call) = binding
+        .call_initializer
+        .and_then(|initializer| file.ast.call_at(initializer))
+        .filter(|call| binding.initializer.map(|value| file.ast.peel_ts_sugar_span(value)) == Some(call.span))
+    else {
+        return false;
+    };
+    if lookup.primitive_at_call(file, call.span) != Some(solid_dialect::Primitive::CreateStore)
+        || lookup.store_value_may_be_raw(file, binding)
+    {
+        return false;
+    }
+    let Some(first) = call.arguments.first().filter(|argument| !argument.spread) else {
+        return false;
+    };
+    let value = file.ast.peel_ts_sugar_span(first.span);
+    file.ast.array_literals.contains(&value)
+        || file
+            .ast
+            .object_get_shapes
+            .iter()
+            .any(|shape| shape.span == value && shape.closed)
+}
+
+/// ADR 1178: the names a `for…of` over `operand` declares, when each is a plain identifier binding: a pattern would read the element
+/// there, where no row stands. An assigned target (`for (x of s)`) is no declared name; a `for await` awaits each element (a `then`
+/// Get of a nested store).
+fn for_of_identifier_names(file: &FileFacts, operand: Span) -> Option<Vec<Span>> {
+    let ast = &file.ast;
+    let (looped, left) = ast.loop_repeats.iter().find(|(looped, left)| {
+        left.end == operand.start
+            && left.start > looped.start
+            && ast.loop_statements.contains(looped)
+            && ast.iterated_operands.contains(&operand)
+    })?;
+    if ast
+        .implicit_suspensions
+        .iter()
+        .any(|suspension| suspension.start == looped.start && suspension.end == operand.end)
+    {
+        return None;
+    }
+    let bindings = ast
+        .bindings
+        .iter()
+        .filter(|binding| {
+            looped.contains(binding.pattern)
+                && left.contains(binding.pattern)
+                && binding.initializer.is_none()
+        })
+        .collect::<Vec<_>>();
+    if bindings.is_empty()
+        || bindings
+            .iter()
+            .any(|binding| binding.shape != solid_facts::ast::BindingShape::Identifier)
+    {
+        return None;
+    }
+    Some(
+        bindings
+            .iter()
+            .flat_map(|binding| binding.names.iter().map(|name| name.span))
+            .collect(),
+    )
+}
 
 /// ADR 1150: whether the runtime's read of `$TARGET` on a function value (the accessor `affects` is handed; no accessor owns that key, so
 /// the read walks `Function.prototype`, then `Object.prototype`) runs no project code. A hook at that key on either prototype, or a prototype

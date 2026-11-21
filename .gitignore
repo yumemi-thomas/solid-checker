@@ -931,6 +931,10 @@ packages/wasm/owned/
 !fixtures/reactive-ir/after-await-async-source/node_modules/**
 !fixtures/reactive-ir/rc21-whole-store-reads/node_modules/
 !fixtures/reactive-ir/rc21-whole-store-reads/node_modules/**
+!fixtures/reactive-ir/store-whole-standard-census/node_modules/
+!fixtures/reactive-ir/store-whole-standard-census/node_modules/**
+!fixtures/reactive-ir/store-whole-standard-census-impostor/node_modules/
+!fixtures/reactive-ir/store-whole-standard-census-impostor/node_modules/**
 !fixtures/reactive-ir/rc21-untrack-own-pending/node_modules/
 !fixtures/reactive-ir/rc21-untrack-own-pending/node_modules/**
 !fixtures/reactive-ir/rc21-on-flush/node_modules/

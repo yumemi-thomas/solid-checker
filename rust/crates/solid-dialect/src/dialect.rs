@@ -18,6 +18,21 @@ pub(crate) fn shared_owner_requirement_role(primitive: Primitive) -> Option<Owne
     }
 }
 
+/// ADR 1178: [`Dialect::whole_store_argument`]. What a primitive does with a
+/// store handed whole at an argument.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WholeStoreArgument {
+    /// It reads every key the store reaches through its traps, in its own
+    /// frame (a strict-read window warns at the call), and answers an
+    /// unwrapped copy.
+    ReadsEveryKey,
+    /// It reads the store's raw backing through its target: no trap with a
+    /// string key runs, nothing is tracked, and it answers an unwrapped copy
+    /// or the backing itself. A store that has not settled (a derive's first
+    /// answer) is not this question's.
+    ReadsRawBacking,
+}
+
 /// ADR 0978: [`Dialect::async_boundary_shape`]. The props the boundary
 /// component reads and the primitive it calls, with the position of each
 /// argument that primitive takes.
@@ -1703,6 +1718,19 @@ pub trait Dialect: Sync {
     fn argument_is_untouched_target(&self, primitive: Primitive, argument: usize) -> bool {
         let _ = (primitive, argument);
         false
+    }
+
+    /// ADR 1178: what `primitive` does with a store handed whole at
+    /// `argument`, when the runtime's code for it is reviewed: it reads the
+    /// store there and hands nothing of it on but what it answers. `None`:
+    /// anything else, which the value-use census keeps open.
+    fn whole_store_argument(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+    ) -> Option<WholeStoreArgument> {
+        let _ = (primitive, argument);
+        None
     }
 
     /// Whether the property read [`Dialect::argument_is_untouched_target`] names may reach a key the argument does not own: the

@@ -2627,6 +2627,23 @@ impl Dialect for Solid2 {
         argument == 0 && matches!(primitive, Primitive::Refresh | Primitive::Affects)
     }
 
+    /// rc.21 `deep(value)` (`@solidjs/signals` `dist/dev.js:6983-7060`): `value?.[$TARGET]`, then a walk of every key the
+    /// store reaches (`read(getDeepNode(t))` per record, so a strict-read window warns at the call, ADR 0620), answering a
+    /// snapshot (`snapshotRecord`/`snapshotWalk`). rc.21 `snapshot(value)` (`:7062-7068`): `value?.[$TARGET]` and a walk of
+    /// the raw backing (`snapshotBacking`, `Reflect.ownKeys` and `Object.getOwnPropertyDescriptor` on the raw object), no
+    /// trap with a string key and no `read`. Neither stores the value or calls into it.
+    fn whole_store_argument(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+    ) -> Option<WholeStoreArgument> {
+        match (primitive, argument) {
+            (Primitive::Deep, 0) => Some(WholeStoreArgument::ReadsEveryKey),
+            (Primitive::Snapshot, 0) => Some(WholeStoreArgument::ReadsRawBacking),
+            _ => None,
+        }
+    }
+
     /// `affects` asks for `$TARGET` first, which no accessor owns: on a function value that read walks `Function.prototype` and
     /// `Object.prototype`. `refresh` reads `$REFRESH` only, an own property.
     fn argument_target_read_walks_prototypes(&self, primitive: Primitive, argument: usize) -> bool {
