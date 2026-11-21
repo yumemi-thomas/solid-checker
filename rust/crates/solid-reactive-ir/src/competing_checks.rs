@@ -129,8 +129,7 @@ pub(crate) fn mark(
         })
         .map(|defect| defect.location.clone())
         .collect();
-    // Context reads proven to run with no owner: a missing-owner violation of the read. Its obligation is no proof: a
-    // read whose owner varies by caller is reported `CONTEXT_NOT_FOUND` by Chrome as often as `NO_OWNER_CONTEXT`.
+    // Context reads proven to run with no owner: a missing-owner violation of the read.
     let unowned_reads: Vec<Location> = program
         .missing_owners
         .iter()
@@ -138,6 +137,22 @@ pub(crate) fn mark(
             requirement.report
                 && !requirement.uncertain
                 && requirement.operation == OwnerRequirementOperation::ContextRead
+        })
+        .map(|requirement| requirement.location.clone())
+        .collect();
+    // ADR 1177 (census `dny-flush-*`): a read written in a JSX handler runs only as the handler's deliveries. Where they run
+    // with an owner on some stack and with none on another (`owner-varies-by-caller`, or an owner that may be null: `load` on an
+    // insertion, `blur` on an unmount, a state change with no call to name), nothing orders the owned run first (ADR 0577's body
+    // call does: it runs before the handler exists). With no owner Solid throws `NO_OWNER_CONTEXT` before it looks for a
+    // provider (Chrome: an `onLoad` under a `Show` a timer opens), so no provider claim there.
+    let maybe_unowned_reads: Vec<Location> = program
+        .missing_owners
+        .iter()
+        .filter(|requirement| {
+            requirement.report
+                && requirement.operation == OwnerRequirementOperation::ContextRead
+                && (requirement.owner_varies_by_caller || requirement.conditional_owner)
+                && in_jsx_handler(&requirement.location, lookup)
         })
         .map(|requirement| requirement.location.clone())
         .collect();
@@ -151,6 +166,7 @@ pub(crate) fn mark(
             OwnerRequirementOperation::ContextProvider => {
                 unowned_reads
                     .iter()
+                    .chain(&maybe_unowned_reads)
                     .any(|read| same_call(read, &requirement.location))
                     || later_render_apply_run_only(&requirement.location, lookup)
                     || in_handler_the_veto_may_leave_unowned(&requirement.location, lookup)
