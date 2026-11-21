@@ -292,7 +292,7 @@
   "SC9012 value-from-primitive-callback": 29,
   "SC9012 value-held-in-binding": 152,
   "SC9012 value-held-in-member": 30,
-  "SC9012 value-in-carrier": 470,
+  "SC9012 value-in-carrier": 456,
   "SC9012 value-in-class-field": 14,
   "SC9012 value-pending-in-jsx": 3,
   "SC9012 value-read-under-untrack": 1,
@@ -5966,6 +5966,18 @@
    "fixtures": {
     "proved": "reactive-ir/store-standard-library-writes",
     "open": "reactive-ir/store-whole-standard-census"
+   }
+  },
+  {
+   "fixture": "reactive-ir/callback-runs-1109",
+   "key": "SC9012 value-in-carrier",
+   "from": 5,
+   "to": 2,
+   "adr": "ADR 1181",
+   "proof": "rust/crates/solid-reactive-ir/src/value_use.rs::carried_parameter_rowed",
+   "fixtures": {
+    "proved": "reactive-ir/callback-runs-1109",
+    "open": "reactive-ir/callback-runs-1109"
    }
   }
  ],

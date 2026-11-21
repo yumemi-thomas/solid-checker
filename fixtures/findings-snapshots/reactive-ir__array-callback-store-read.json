@@ -2,28 +2,6 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/array-callback-store-read/App.tsx",
-      "start": 428,
-      "end": 431,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/array-callback-store-read/App.tsx",
-      "start": 429,
-      "end": 430,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -31,39 +9,6 @@
       "path": "fixtures/reactive-ir/array-callback-store-read/App.tsx",
       "start": 443,
       "end": 446,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/array-callback-store-read/App.tsx",
-      "start": 443,
-      "end": 446,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/array-callback-store-read/App.tsx",
-      "start": 543,
-      "end": 546,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/array-callback-store-read/App.tsx",
-      "start": 544,
-      "end": 545,
       "fixes": 0
     },
     {
@@ -77,53 +22,9 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/array-callback-store-read/App.tsx",
-      "start": 573,
-      "end": 576,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/array-callback-store-read/App.tsx",
-      "start": 675,
-      "end": 678,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/array-callback-store-read/App.tsx",
-      "start": 676,
-      "end": 677,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/array-callback-store-read/App.tsx",
-      "start": 691,
-      "end": 694,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/array-callback-store-read/App.tsx",
       "start": 691,
@@ -150,28 +51,6 @@
       "path": "fixtures/reactive-ir/array-callback-store-read/App.tsx",
       "start": 847,
       "end": 857,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/array-callback-store-read/App.tsx",
-      "start": 864,
-      "end": 867,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/array-callback-store-read/App.tsx",
-      "start": 865,
-      "end": 866,
       "fixes": 0
     },
     {
