@@ -288,7 +288,8 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   there (probed on every published rc.0-rc.9 client build). `untrack` is the
   wrapper that clears the listener. A layer that runs in place inside `fn` (an IIFE)
   answers as `fn` does, and in a helper not proven to run in the body the read is
-  uncertifiable (ADR 0859).
+  uncertifiable (ADR 0859). A closure called once by name and referenced nowhere
+  else runs `flush` on that call's stack, which places it ([ADR 1161](../decisions.md#adr-1161)).
 - **Props follow their callers.** `devComponent` wraps the body in
   `untrack(() => Comp(props), '<Name>')`, and the warning fires only when a prop
   *getter* reads reactive state in that window. A prop that every visible call
