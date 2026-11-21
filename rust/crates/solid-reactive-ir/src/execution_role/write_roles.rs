@@ -4358,7 +4358,8 @@ fn runs_nothing_before_in_layers_with(
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    let evaluated = |span: Span| site.contains(span) && !unrun.iter().any(|body| body.contains(span));
+    let evaluated =
+        |span: Span| site.contains(span) && !unrun.iter().any(|body| body.contains(span));
     if ast
         .calls
         .iter()
@@ -4366,10 +4367,7 @@ fn runs_nothing_before_in_layers_with(
         || ast.members.iter().any(|member| {
             Some(member.span) != callee && evaluated(member.span) && member.span != site
         })
-        || ast
-            .computed_members
-            .iter()
-            .any(|member| evaluated(*member))
+        || ast.computed_members.iter().any(|member| evaluated(*member))
         || ast.spreads.iter().any(|spread| evaluated(spread.span))
     {
         return false;
@@ -4552,7 +4550,12 @@ pub(crate) fn pending_apply_first_write(
         crate::owners::containing_ast_function(ast, binding.declaration)
             .is_some_and(|function| function.span == component.span)
             && binding.declaration.end <= call.span.start
-            && crate::interproc::site_on_every_completion(lookup, file, component.span, creation.span)
+            && crate::interproc::site_on_every_completion(
+                lookup,
+                file,
+                component.span,
+                creation.span,
+            )
             && body_runs_nothing_between(
                 file,
                 component,
@@ -4562,7 +4565,7 @@ pub(crate) fn pending_apply_first_write(
                 lookup,
             )
             && (lookup.primitive_at_call(file, call.span) == Some(Primitive::CreateRenderEffect)
-                || user_apply_runs_in_mount_flush(file, component, call, creation, lookup))
+                || optimistic_apply_runs_in_mount_flush(file, component, call, creation, lookup))
     })
 }
 
@@ -4719,17 +4722,78 @@ fn user_apply_runs_in_mount_flush(
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     memo_compute_is_literal(file, memo)
-        && user_apply_flush_premises(
-            file,
-            component,
-            effect,
-            Some(memo),
-            BodyAdmits::default(),
-            lookup,
-        )
-        && crate::owners::module_render_sites(lookup, file, component)
-            .into_iter()
-            .any(|site| render_runs_first(lookup, site.entry, site.render))
+        && mount_flush_premises(file, component, effect, memo, lookup)
+}
+
+/// ADR 1175: [`user_apply_runs_in_mount_flush`] for an optimistic creation, whose compute may also answer a fresh object
+/// literal of primitive literals (a store's `async () => ({ v: 1 })`): evaluating it runs no code either.
+fn optimistic_apply_runs_in_mount_flush(
+    file: &solid_facts::FileFacts,
+    component: &solid_facts::ast::FunctionFact,
+    effect: &solid_facts::ast::CallFact,
+    creation: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    (memo_compute_is_literal(file, creation) || compute_is_primitive_object(file, creation))
+        && mount_flush_premises(file, component, effect, creation, lookup)
+}
+
+/// ADR 1175: the creation's compute is an arrow of no parameter whose expression body is a closed object literal of data
+/// properties, each a static key and a primitive literal value.
+fn compute_is_primitive_object(
+    file: &solid_facts::FileFacts,
+    creation: &solid_facts::ast::CallFact,
+) -> bool {
+    let ast = &file.ast;
+    let Some(compute) = creation
+        .arguments
+        .first()
+        .and_then(|argument| ast.function_at(ast.peel_ts_sugar_span(argument.span)))
+    else {
+        return false;
+    };
+    let literal = ast.peel_ts_sugar_span(compute.body);
+    compute.expression_body
+        && compute.parameters.is_empty()
+        && !compute.rest_parameter
+        && ast.object_get_shapes.iter().any(|shape| {
+            shape.span == literal
+                && shape.closed
+                && shape.properties.iter().all(|p| p.getter.is_none())
+        })
+        && ast
+            .object_properties
+            .iter()
+            .filter(|property| literal.contains(property.span))
+            .all(|property| {
+                property.data
+                    && !property.method
+                    && !property.computed
+                    && file
+                        .source_text(property.value)
+                        .is_some_and(primitive_literal_body)
+            })
+}
+
+/// ADR 0505's premises past the compute: the component's own (a static tree, a body that runs nothing else) and a module-scope
+/// `render` that mounts it first.
+fn mount_flush_premises(
+    file: &solid_facts::FileFacts,
+    component: &solid_facts::ast::FunctionFact,
+    effect: &solid_facts::ast::CallFact,
+    memo: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    user_apply_flush_premises(
+        file,
+        component,
+        effect,
+        Some(memo),
+        BodyAdmits::default(),
+        lookup,
+    ) && crate::owners::module_render_sites(lookup, file, component)
+        .into_iter()
+        .any(|site| render_runs_first(lookup, site.entry, site.render))
 }
 
 /// ADR 0510: what a component body may name or call beyond ADR 0505's inert
