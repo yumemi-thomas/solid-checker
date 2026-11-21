@@ -855,9 +855,9 @@ pub(crate) fn reporting_run_role(
         .find(|binding| {
             binding.immutable
                 && binding.shape == solid_facts::ast::BindingShape::Identifier
-                && binding
-                    .initializer
-                    .is_some_and(|initializer| file.ast.peel_ts_sugar_span(initializer) == callback.span)
+                && binding.initializer.is_some_and(|initializer| {
+                    file.ast.peel_ts_sugar_span(initializer) == callback.span
+                })
         })?;
     let [name] = binding.names.as_slice() else {
         return None;
@@ -952,14 +952,18 @@ fn carried_run_unconditional(
     let Some(call) = ast.calls.iter().find(|call| call.span == carried) else {
         return false;
     };
-    let Some(arrow) = call
-        .arguments
-        .first()
-        .and_then(|argument| ast.functions.iter().find(|function| function.span == ast.peel_ts_sugar_span(argument.span)))
-    else {
+    let Some(arrow) = call.arguments.first().and_then(|argument| {
+        ast.functions
+            .iter()
+            .find(|function| function.span == ast.peel_ts_sugar_span(argument.span))
+    }) else {
         return false;
     };
-    let Some(parameter) = arrow.parameters.first().and_then(|parameter| parameter.names.first()) else {
+    let Some(parameter) = arrow
+        .parameters
+        .first()
+        .and_then(|parameter| parameter.names.first())
+    else {
         return false;
     };
     let Some(every) = solid_facts::ast::synchronously_unconditional_calls(

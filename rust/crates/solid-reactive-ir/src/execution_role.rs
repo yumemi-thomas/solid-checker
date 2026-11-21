@@ -462,7 +462,10 @@ pub(crate) fn read_execution_role(
                 lookup,
             )
         {
-            return role_arm!("execution_role.read_execution_role.reporting-run", reporting);
+            return role_arm!(
+                "execution_role.read_execution_role.reporting-run",
+                reporting
+            );
         }
         role
     })
