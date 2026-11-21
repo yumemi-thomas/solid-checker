@@ -1172,6 +1172,10 @@ fn site_runs_during_local_call(
             .any(|assignment| assignment.target.contains(site))
 }
 
+/// ADR 1175: the proof id of an optimistic setter written in an effect apply's first run before the first answer
+/// (`LocalAccess::written_in_pending_apply`).
+pub(crate) const OPTIMISTIC_PENDING_APPLY: &str = "local_access.optimistic_pending_apply";
+
 /// How many named local functions an async read is followed through to the
 /// rendered call that runs it (ADR 0462).
 const CALL_ATTRIBUTED_DEPTH: usize = 4;
@@ -5267,8 +5271,26 @@ impl LocalAccessContext<'_, '_> {
             location: location(file.path.shared(), call.span),
             analysis_context: String::new(),
             fixes: vec![],
-            uncertain: !self.written_in_creating_pass(file, call, declaration),
+            // ADR 1175: or in an effect apply's first run, which comes while the source is still uninitialized.
+            uncertain: !self.written_in_creating_pass(file, call, declaration)
+                && !self.written_in_pending_apply(file, call, declaration),
         });
+    }
+
+    /// ADR 1175: the setter call runs in the first run of an effect apply that comes before its source's first answer
+    /// ([`crate::execution_role::pending_apply_first_write`]), and no `loadingValue` answers first. Proof id
+    /// `local_access.optimistic_pending_apply`, ablated by `SOLID_CHECKER_IR_ABLATE_SILENCE`.
+    fn written_in_pending_apply(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        declaration: &Location,
+    ) -> bool {
+        if crate::site_accounting::ablated_id(OPTIMISTIC_PENDING_APPLY) {
+            return false;
+        }
+        crate::execution_role::pending_apply_first_write(file, call.span, declaration, self.lookup)
+            .is_some()
     }
 
     /// ADR 0636: rc.21 throws whatever the role, on the first answer alone, so

@@ -2290,3 +2290,13 @@ packages/wasm/owned/
 !fixtures/reactive-ir/named-ref-entry/node_modules/**
 !fixtures/reactive-ir/component-prop-call-owner/node_modules/
 !fixtures/reactive-ir/component-prop-call-owner/node_modules/**
+!fixtures/reactive-ir/optimistic-apply-before-load/node_modules/
+!fixtures/reactive-ir/optimistic-apply-before-load/node_modules/**
+!fixtures/reactive-ir/optimistic-apply-before-load-render/node_modules/
+!fixtures/reactive-ir/optimistic-apply-before-load-render/node_modules/**
+!fixtures/reactive-ir/optimistic-apply-before-load-guarded/node_modules/
+!fixtures/reactive-ir/optimistic-apply-before-load-guarded/node_modules/**
+!fixtures/reactive-ir/optimistic-apply-before-load-declared/node_modules/
+!fixtures/reactive-ir/optimistic-apply-before-load-declared/node_modules/**
+!fixtures/reactive-ir/optimistic-apply-before-load-reads/node_modules/
+!fixtures/reactive-ir/optimistic-apply-before-load-reads/node_modules/**

@@ -4463,6 +4463,95 @@ pub(crate) fn pending_apply_first_read_from(
     declaration: &typefacts::Location,
     lookup: &SemanticLookup<'_>,
 ) -> Option<Span> {
+    pending_apply_first_run(file, site, lookup, |component, call| {
+        apply_source_pending(file, origin, component, call, declaration, lookup)
+    })
+}
+
+/// ADR 1175: the optimistic setter call at `site` runs in the first run of an effect apply while its source is still
+/// uninitialized, so rc.21 throws `OPTIMISTIC_WRITE_BEFORE_LOAD` there. The apply half is ADR 0504's
+/// ([`pending_apply_first_run`]); the source half is ADR 0504/0505's own-body arm, for an optimistic creation in place of a memo:
+/// the setter (`declaration`) is slot 1 of a `const` array pattern of the component's own body whose whole initializer is the
+/// dialect's optimistic creation ([`solid_dialect::Dialect::optimistic_unanswered_arguments`]) of an async function literal (no
+/// generator) and no `loadingValue`, created on every completion before the effect's call with nothing run between them; a
+/// `createEffect` also needs ADR 0505's mount flush ([`user_apply_runs_in_mount_flush`]: a static tree, a body that runs nothing
+/// else, a compute that is one primitive literal, mounted first by a module-scope `render`). The answer lands in a microtask
+/// at the earliest, and the first apply runs in `render`'s synchronous tail flush (`@solidjs/web` `dist/web.dev.js:540-551`).
+pub(crate) fn pending_apply_first_write(
+    file: &solid_facts::FileFacts,
+    site: Span,
+    declaration: &typefacts::Location,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    use solid_dialect::Primitive;
+    if declaration.path.as_ref() != file.path.as_str() {
+        return None;
+    }
+    let declared = Span::new(
+        u32::try_from(declaration.start_byte).ok()?,
+        u32::try_from(declaration.end_byte).ok()?,
+    );
+    let ast = &file.ast;
+    let binding = ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Array
+            && binding
+                .array_slots
+                .get(1)
+                .is_some_and(|slot| slot.as_ref().is_some_and(|name| name.span == declared))
+    })?;
+    let creation = binding
+        .call_initializer
+        .and_then(|initializer| ast.call_at(initializer))
+        .filter(|creation| {
+            binding
+                .initializer
+                .map(|value| ast.peel_ts_sugar_span(value))
+                == Some(creation.span)
+        })?;
+    let allowed = lookup
+        .primitive_at_call(file, creation.span)
+        .and_then(|primitive| lookup.dialect.optimistic_unanswered_arguments(primitive))?;
+    let async_compute = creation
+        .arguments
+        .first()
+        .filter(|compute| !compute.spread)
+        .and_then(|compute| ast.function_at(ast.peel_ts_sugar_span(compute.span)))
+        .is_some_and(|compute| compute.r#async && !compute.generator);
+    if !async_compute
+        || creation.arguments.len() > allowed
+        || creation.arguments.iter().any(|argument| argument.spread)
+    {
+        return None;
+    }
+    pending_apply_first_run(file, site, lookup, |component, call| {
+        crate::owners::containing_ast_function(ast, binding.declaration)
+            .is_some_and(|function| function.span == component.span)
+            && binding.declaration.end <= call.span.start
+            && crate::interproc::site_on_every_completion(lookup, file, component.span, creation.span)
+            && body_runs_nothing_between(
+                file,
+                component,
+                creation.span.end,
+                call.span.start,
+                BodyAdmits::default(),
+                lookup,
+            )
+            && (lookup.primitive_at_call(file, call.span) == Some(Primitive::CreateRenderEffect)
+                || user_apply_runs_in_mount_flush(file, component, call, creation, lookup))
+    })
+}
+
+/// ADR 0504 (split by ADR 1175): the apply half of [`pending_apply_first_read_from`]. `site` is in the first run of an effect
+/// apply that the call runs at its creation, on every completion of that run and after no other call of it; `source_pending`
+/// answers, for the component body and the effect's call, whether the source is still pending when that first run comes.
+/// Answers the apply's span.
+fn pending_apply_first_run(
+    file: &solid_facts::FileFacts,
+    site: Span,
+    lookup: &SemanticLookup<'_>,
+    source_pending: impl FnOnce(&solid_facts::ast::FunctionFact, &solid_facts::ast::CallFact) -> bool,
+) -> Option<Span> {
     use solid_dialect::Primitive;
     let ast = &file.ast;
     let at = match climb_in_place_layers(file, site, lookup) {
@@ -4502,12 +4591,35 @@ pub(crate) fn pending_apply_first_read_from(
         return None;
     }
     let component = crate::owners::containing_ast_function(ast, call.span)?;
-    let declared = Span::new(
-        u32::try_from(declaration.start_byte).ok()?,
-        u32::try_from(declaration.end_byte).ok()?,
-    );
-    let source_file = lookup.file_by_path(declaration.path.as_ref())?;
-    let (binding, memo) = async_memo_at(source_file, declared, lookup)?;
+    source_pending(component, call).then_some(apply.span)
+}
+
+/// ADR 0504/0510/0511: the source half of [`pending_apply_first_read_from`]: the async memo declared at `declaration` is still
+/// pending when the effect at `call` (in `component`) first runs its apply.
+#[allow(clippy::too_many_arguments)]
+fn apply_source_pending(
+    file: &solid_facts::FileFacts,
+    origin: Span,
+    component: &solid_facts::ast::FunctionFact,
+    call: &solid_facts::ast::CallFact,
+    declaration: &typefacts::Location,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    use solid_dialect::Primitive;
+    let ast = &file.ast;
+    let (Ok(start), Ok(end)) = (
+        u32::try_from(declaration.start_byte),
+        u32::try_from(declaration.end_byte),
+    ) else {
+        return false;
+    };
+    let declared = Span::new(start, end);
+    let Some(source_file) = lookup.file_by_path(declaration.path.as_ref()) else {
+        return false;
+    };
+    let Some((binding, memo)) = async_memo_at(source_file, declared, lookup) else {
+        return false;
+    };
     let own_body = source_file.path == file.path
         && crate::owners::containing_ast_function(ast, binding.declaration)
             .is_some_and(|function| function.span == component.span);
@@ -4550,7 +4662,7 @@ pub(crate) fn pending_apply_first_read_from(
             lookup,
         )
     };
-    ok.then_some(apply.span)
+    ok
 }
 
 /// ADR 0505: a user effect's first apply (`createEffect`) runs in the tail

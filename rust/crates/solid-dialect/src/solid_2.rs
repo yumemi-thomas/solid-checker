@@ -2627,6 +2627,17 @@ impl Dialect for Solid2 {
         argument == 0 && matches!(primitive, Primitive::Refresh | Primitive::Affects)
     }
 
+    /// rc.21 `createOptimistic(fn, options?)` and `createOptimisticStore(fn, seed?, options?)` (`@solidjs/signals`): the setter
+    /// calls `devGuardOptimisticBeforeLoad` (`dist/dev-shared.js:753-767`), which throws while the node is `STATUS_UNINITIALIZED`;
+    /// only `options.loadingValue` answers before the compute does. A store's seed is no answer (ADR 0636).
+    fn optimistic_unanswered_arguments(&self, primitive: Primitive) -> Option<usize> {
+        match primitive {
+            Primitive::CreateOptimistic => Some(1),
+            Primitive::CreateOptimisticStore => Some(2),
+            _ => None,
+        }
+    }
+
     /// `affects` asks for `$TARGET` first, which no accessor owns: on a function value that read walks `Function.prototype` and
     /// `Object.prototype`. `refresh` reads `$REFRESH` only, an own property.
     fn argument_target_read_walks_prototypes(&self, primitive: Primitive, argument: usize) -> bool {
