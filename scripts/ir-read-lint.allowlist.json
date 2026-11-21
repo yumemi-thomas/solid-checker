@@ -70,7 +70,8 @@
       "file_by_path rose 6 -> 7 (--allow-rise): unreviewed",
       "file_by_path rose 7 -> 8 (--allow-rise): unreviewed",
       "file_by_path rose 8 -> 9 (--allow-rise): unreviewed",
-      "file_by_path rose 9 -> 10 (--allow-rise): unreviewed"
+      "file_by_path rose 9 -> 10 (--allow-rise): unreviewed",
+      "file_by_path site replaced (--allow-rise): unreviewed `let file = lookup.file_by_path(site.path.as_ref())?;`"
     ]
   },
   "rust/crates/solid-reactive-ir/src/development_feedback.rs": {

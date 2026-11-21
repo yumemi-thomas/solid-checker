@@ -2323,6 +2323,7 @@ pub(super) fn forwarded_compute_slot<'a>(
         .entities()
         .at(wrapper_file.path.as_str(), name.span)?;
     let mut compute: Option<Span> = None;
+    let mut invoke: Option<Span> = None;
     for reference in lookup.symbol_references(symbol.as_str()) {
         if reference.path.as_ref() != wrapper_file.path.as_str() {
             return None;
@@ -2351,6 +2352,7 @@ pub(super) fn forwarded_compute_slot<'a>(
             return None;
         }
         compute = Some(owner.span);
+        invoke.get_or_insert(reference);
     }
     let compute = compute?;
     // `compute` is the whole argument of a call written directly in the
@@ -2374,6 +2376,7 @@ pub(super) fn forwarded_compute_slot<'a>(
         slot,
         primitive,
         also_at_call,
+        invoke: invoke?,
     })
 }
 
@@ -2442,6 +2445,69 @@ pub(super) struct ForwardedCompute<'a> {
     /// ADR 1155 r2: the wrapper also reaches its arguments through `arguments[k]()` in its own body, so the literal may run, besides at `slot`,
     /// on the stack of this call of the wrapper (in the literal's file).
     pub(super) also_at_call: Option<Span>,
+    /// ADR 1155 r3: a call of the parameter in the slot's callback (in `wrapper_file`): where the literal's code runs, as if written there.
+    pub(super) invoke: Span,
+}
+
+/// ADR 1155 r3: where an async read in a literal ADR 0200 forwards to a computation's slot ([`forwarded_compute_slot`]) runs, for the
+/// pending rules: at the wrapper's call of its parameter inside that slot's callback, so the read takes the role, the computation and
+/// the leaf owner a read written there has.
+pub(crate) enum ForwardedAsyncSite<'a> {
+    /// The call of the parameter in the slot's callback, in its file.
+    At(&'a solid_facts::FileFacts, Span),
+    /// The slot is a leaf whose owner needs an owned call site (`onSettled`) the literal's file cannot gate: unplaced.
+    Unplaced,
+}
+
+/// ADR 1155 r3: the code at `span` is written directly in a literal ADR 0200's proof forwards to a leaf owner's slot
+/// (`hand(fn) { createTrackedEffect(() => { fn(); }); }`), and the wrapper reaches it no other way (no `arguments[k]()`): every run is
+/// in that leaf callback, so a primitive created there meets the leaf's refusal first (`PRIMITIVE_IN_FORBIDDEN_SCOPE`).
+pub(crate) fn forwarded_only_into_leaf(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    forwarded_compute_slot(file, span, lookup).is_some_and(|forwarded| {
+        forwarded.also_at_call.is_none()
+            && !lookup
+                .dialect
+                .leaf_owner_requires_owned_call_site(forwarded.primitive)
+            && callback_owner_at_call(
+                forwarded.wrapper_file,
+                forwarded.outer,
+                forwarded.primitive,
+                forwarded.slot,
+                lookup,
+            ) == Some(solid_dialect::CallbackOwner::Leaf)
+    })
+}
+
+/// ADR 1155 r3: [`ForwardedAsyncSite`] of the read at `span`, when ADR 0200's proof forwards the literal around it.
+pub(crate) fn forwarded_async_site<'a>(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'a>,
+) -> Option<ForwardedAsyncSite<'a>> {
+    let forwarded = forwarded_compute_slot(file, span, lookup)?;
+    // The literal also runs on the wrapper call's stack (`arguments[k]()`), where r2 places the read (`ViaArgumentsId`), or the slot is
+    // an async boundary's held content (the read is under its hold, which the boundary rules answer): the forwarded role stands.
+    if forwarded.also_at_call.is_some()
+        || lookup.dialect.async_boundary_shape().is_some_and(|shape| {
+            shape.primitive == forwarded.primitive && shape.held_argument == forwarded.slot
+        })
+    {
+        return None;
+    }
+    if lookup
+        .dialect
+        .leaf_owner_requires_owned_call_site(forwarded.primitive)
+    {
+        return Some(ForwardedAsyncSite::Unplaced);
+    }
+    Some(ForwardedAsyncSite::At(
+        forwarded.wrapper_file,
+        forwarded.invoke,
+    ))
 }
 
 /// ADR 0200 (the proof: [`forwarded_compute_slot`]): code directly in such a literal, forwarded to a slot that tracks its callback's reads, takes the tracked role.
@@ -2459,6 +2525,7 @@ pub(super) fn forwarded_tracked_compute_role(
         slot,
         primitive,
         also_at_call,
+        ..
     } = forwarded_compute_slot(file, span, lookup)?;
     let tracked = lookup
         .dialect

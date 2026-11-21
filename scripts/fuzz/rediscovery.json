@@ -42560,5 +42560,65 @@
   "found": "review-1155 N2 (Chrome: NO_OWNER_CLEANUP for a constructor's onCleanup in such a child)",
   "fixed": "ADR 1155 r1: callback_return::provider_getter_regions counts only a child the compiler's trace places in the children getter (a caller-context ComponentChild, or an element child)",
   "outside": "latent on every build: a child the compiler evaluates at the tag holds no call, so a creation or a cleanup in it is reached only through code the checker cannot place (a constructor, a getter, a tagged template), which is uncertifiable on 1155's head, r1 and main alike; no generated program can show a different finding. Fixture reactive-ir/provider-children-memo-owner NewApp pins the shape"
+ },
+ {
+  "finding": "Bundle o's census smoke (Mac 24c, 2026-11-21; on main b06a4e71a too): an async read in a literal ADR 0200 forwards through a package function to a computation's slot (`hand(() => { a1(); })` to createTrackedEffect's compute, `handMemo` to createMemo's) took the forwarded TrackedJsx role and was an SC5003 async-outside-loading-boundary violation; a `sync: true` creation forwarded into createTrackedEffect was an SC7002 violation. Chrome: quiet on the memo twins; PENDING_ASYNC_FORBIDDEN_SCOPE (or PRIMITIVE_IN_FORBIDDEN_SCOPE and REACTIVITY_HALTED) on the tracked twins",
+  "found": "census smoke of bundle o (mac24/o-census-fp.md, Chrome-confirmed): ten false positives, the same on main",
+  "fixed": "ADR 1155 r3: local_access::push_async_read places a forwarded read at the wrapper's call of its parameter in the slot's callback (callee_roles::forwarded_async_site: the role, computation and leaf owner of a read written there; unplaced past an `arguments` run or an owned-call-site leaf); competing_checks: SC7002 at a creation forwarded only into a leaf is creation-throws-first",
+  "grid": "mx-census",
+  "code": "PENDING_ASYNC_UNTRACKED_READ",
+  "ids": [
+   "mx-pending-async-untracked-read-barm-fwdleaf-memo-x-direct-none",
+   "mx-pending-async-untracked-read-barm-fwdleaf-tracked-x-direct-none"
+  ],
+  "rediscovered": "1155's arm-shape contexts barm-fwdleaf-{memo,tracked} in the census: main b06a4e71a and 1155 r2 false positives on all ten, r3 none (memo twins uncertifiable, tracked twins SC5001 a violation where Chrome reports PENDING_ASYNC_FORBIDDEN_SCOPE, SC7002 uncertifiable)"
+ },
+ {
+  "finding": "Bundle o's census smoke (Mac 24c, 2026-11-21; on main b06a4e71a too): an async read in a literal ADR 0200 forwards through a package function to a computation's slot (`hand(() => { a1(); })` to createTrackedEffect's compute, `handMemo` to createMemo's) took the forwarded TrackedJsx role and was an SC5003 async-outside-loading-boundary violation; a `sync: true` creation forwarded into createTrackedEffect was an SC7002 violation. Chrome: quiet on the memo twins; PENDING_ASYNC_FORBIDDEN_SCOPE (or PRIMITIVE_IN_FORBIDDEN_SCOPE and REACTIVITY_HALTED) on the tracked twins",
+  "found": "census smoke of bundle o (mac24/o-census-fp.md, Chrome-confirmed): ten false positives, the same on main",
+  "fixed": "ADR 1155 r3: local_access::push_async_read places a forwarded read at the wrapper's call of its parameter in the slot's callback (callee_roles::forwarded_async_site: the role, computation and leaf owner of a read written there; unplaced past an `arguments` run or an owned-call-site leaf); competing_checks: SC7002 at a creation forwarded only into a leaf is creation-throws-first",
+  "grid": "mx-census",
+  "code": "PENDING_ASYNC_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-pending-async-forbidden-scope-barm-fwdleaf-memo-x-direct-none",
+   "mx-pending-async-forbidden-scope-barm-fwdleaf-tracked-x-direct-none"
+  ],
+  "rediscovered": "1155's arm-shape contexts barm-fwdleaf-{memo,tracked} in the census: main b06a4e71a and 1155 r2 false positives on all ten, r3 none (memo twins uncertifiable, tracked twins SC5001 a violation where Chrome reports PENDING_ASYNC_FORBIDDEN_SCOPE, SC7002 uncertifiable)"
+ },
+ {
+  "finding": "Bundle o's census smoke (Mac 24c, 2026-11-21; on main b06a4e71a too): an async read in a literal ADR 0200 forwards through a package function to a computation's slot (`hand(() => { a1(); })` to createTrackedEffect's compute, `handMemo` to createMemo's) took the forwarded TrackedJsx role and was an SC5003 async-outside-loading-boundary violation; a `sync: true` creation forwarded into createTrackedEffect was an SC7002 violation. Chrome: quiet on the memo twins; PENDING_ASYNC_FORBIDDEN_SCOPE (or PRIMITIVE_IN_FORBIDDEN_SCOPE and REACTIVITY_HALTED) on the tracked twins",
+  "found": "census smoke of bundle o (mac24/o-census-fp.md, Chrome-confirmed): ten false positives, the same on main",
+  "fixed": "ADR 1155 r3: local_access::push_async_read places a forwarded read at the wrapper's call of its parameter in the slot's callback (callee_roles::forwarded_async_site: the role, computation and leaf owner of a read written there; unplaced past an `arguments` run or an owned-call-site leaf); competing_checks: SC7002 at a creation forwarded only into a leaf is creation-throws-first",
+  "grid": "mx-census",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-barm-fwdleaf-memo-x-direct-none",
+   "mx-async-outside-loading-boundary-barm-fwdleaf-tracked-x-direct-none"
+  ],
+  "rediscovered": "1155's arm-shape contexts barm-fwdleaf-{memo,tracked} in the census: main b06a4e71a and 1155 r2 false positives on all ten, r3 none (memo twins uncertifiable, tracked twins SC5001 a violation where Chrome reports PENDING_ASYNC_FORBIDDEN_SCOPE, SC7002 uncertifiable)"
+ },
+ {
+  "finding": "Bundle o's census smoke (Mac 24c, 2026-11-21; on main b06a4e71a too): an async read in a literal ADR 0200 forwards through a package function to a computation's slot (`hand(() => { a1(); })` to createTrackedEffect's compute, `handMemo` to createMemo's) took the forwarded TrackedJsx role and was an SC5003 async-outside-loading-boundary violation; a `sync: true` creation forwarded into createTrackedEffect was an SC7002 violation. Chrome: quiet on the memo twins; PENDING_ASYNC_FORBIDDEN_SCOPE (or PRIMITIVE_IN_FORBIDDEN_SCOPE and REACTIVITY_HALTED) on the tracked twins",
+  "found": "census smoke of bundle o (mac24/o-census-fp.md, Chrome-confirmed): ten false positives, the same on main",
+  "fixed": "ADR 1155 r3: local_access::push_async_read places a forwarded read at the wrapper's call of its parameter in the slot's callback (callee_roles::forwarded_async_site: the role, computation and leaf owner of a read written there; unplaced past an `arguments` run or an owned-call-site leaf); competing_checks: SC7002 at a creation forwarded only into a leaf is creation-throws-first",
+  "grid": "mx-census",
+  "code": "LOADING_ON_OUTSIDE_HOLD",
+  "ids": [
+   "mx-loading-on-outside-hold-barm-fwdleaf-memo-x-direct-none",
+   "mx-loading-on-outside-hold-barm-fwdleaf-tracked-x-direct-none"
+  ],
+  "rediscovered": "1155's arm-shape contexts barm-fwdleaf-{memo,tracked} in the census: main b06a4e71a and 1155 r2 false positives on all ten, r3 none (memo twins uncertifiable, tracked twins SC5001 a violation where Chrome reports PENDING_ASYNC_FORBIDDEN_SCOPE, SC7002 uncertifiable)"
+ },
+ {
+  "finding": "Bundle o's census smoke (Mac 24c, 2026-11-21; on main b06a4e71a too): an async read in a literal ADR 0200 forwards through a package function to a computation's slot (`hand(() => { a1(); })` to createTrackedEffect's compute, `handMemo` to createMemo's) took the forwarded TrackedJsx role and was an SC5003 async-outside-loading-boundary violation; a `sync: true` creation forwarded into createTrackedEffect was an SC7002 violation. Chrome: quiet on the memo twins; PENDING_ASYNC_FORBIDDEN_SCOPE (or PRIMITIVE_IN_FORBIDDEN_SCOPE and REACTIVITY_HALTED) on the tracked twins",
+  "found": "census smoke of bundle o (mac24/o-census-fp.md, Chrome-confirmed): ten false positives, the same on main",
+  "fixed": "ADR 1155 r3: local_access::push_async_read places a forwarded read at the wrapper's call of its parameter in the slot's callback (callee_roles::forwarded_async_site: the role, computation and leaf owner of a read written there; unplaced past an `arguments` run or an owned-call-site leaf); competing_checks: SC7002 at a creation forwarded only into a leaf is creation-throws-first",
+  "grid": "mx-census",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "mx-sync-node-received-async-barm-fwdleaf-tracked-effect-direct-none",
+   "mx-sync-node-received-async-barm-fwdleaf-tracked-memo-direct-none"
+  ],
+  "rediscovered": "1155's arm-shape contexts barm-fwdleaf-{memo,tracked} in the census: main b06a4e71a and 1155 r2 false positives on all ten, r3 none (memo twins uncertifiable, tracked twins SC5001 a violation where Chrome reports PENDING_ASYNC_FORBIDDEN_SCOPE, SC7002 uncertifiable)"
  }
 ]
