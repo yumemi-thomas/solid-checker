@@ -2679,6 +2679,27 @@ impl<'l, 'a> Census<'l, 'a> {
             // one only where a row stands on its chain (W's review H4).
             Mode::Root => {
                 if self.steps <= 1 {
+                    // A link the root's own static chain hands whole to a binding (`const held = s1.a`) is the store's proxy
+                    // below it: its uses are walked as an alias's, so a Get through it (`held.v`, STRICT_READ_UNTRACKED in rc.21)
+                    // has a row where none stands (the store's own member rows end at the chain).
+                    let mut top = member.span;
+                    while let Some(parent) = ast.members.iter().find(|parent| {
+                        ast.peel_ts_sugar_span(parent.object) == top
+                            && !ast.computed_members.contains(&parent.span)
+                            && !ast.optional_members.contains(&parent.span)
+                    }) {
+                        top = parent.span;
+                    }
+                    if !ast.computed_members.contains(&member.span)
+                        && ast.bindings.iter().any(|binding| {
+                            binding.shape == solid_facts::ast::BindingShape::Identifier
+                                && binding.initializer.is_some_and(|initializer| {
+                                    ast.peel_ts_sugar_span(initializer) == top
+                                })
+                        })
+                    {
+                        return self.position(file, top, Mode::Root);
+                    }
                     return Position::Followed;
                 }
                 let (start, end) = (u64::from(member.span.start), u64::from(member.span.end));

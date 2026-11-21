@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1169 (R3 G15): a write through an exact `const` alias of a store link (in an IIFE, a timer, a deeper link) and a Get through it: Chrome reports STORE_WRITE_OUTSIDE_SETTER and STRICT_READ_UNTRACKED, and SC2003 / SC1001 are violations. A referenced setter, an alias handed on, a `let` alias and an array link stay uncertifiable."
+}

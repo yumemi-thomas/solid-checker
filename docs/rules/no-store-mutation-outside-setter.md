@@ -107,7 +107,9 @@ literal holds a primitive serves each literal link wrapped, so `store.a.v = 1`
 is a violation. A store handed as a JSX attribute to an exact local component
 that reads that prop only as such a path (an exact `const` alias included), and a
 setter handed to one that never reads it, keep the proof, so `props.s1.a.v = 7`
-there is a violation too ([ADR 1172](../decisions.md#adr-1172)); any other reference that hands a proxy out, a non-literal or open
+there is a violation too ([ADR 1172](../decisions.md#adr-1172)). An exact `const` alias of a link
+(`const held = s1.a`, every use of it such a path) holds that link's proxy, so
+`held.v = 7` is a violation ([ADR 1169](../decisions.md#adr-1169)); any other reference that hands a proxy out, a non-literal or open
 literal, a getter, a used setter or a module-scope store leaves it
 uncertifiable. Fixtures `store-write-chain-links`,
 `store-write-chain-links-loose`, `store-setter-extent`, `store-write-literal-links`.

@@ -17,8 +17,14 @@ use super::*;
 /// What a handed container holds on every route ([`handed_root`]).
 pub(super) enum HandedRoot {
     /// One proven `createStore` store on every route; `root` is the prefix of
-    /// the written chain that holds it.
-    Store { symbol: crate::SymbolId, root: Span },
+    /// the written chain that holds it. ADR 1169: `below` > 0 when the chain's
+    /// own root already holds a link that many keys inside the store (a `const`
+    /// alias of `store.a`): every write through it is past the store's root.
+    Store {
+        symbol: crate::SymbolId,
+        root: Span,
+        below: usize,
+    },
     /// A plain value on every route: no proxy can drop the write. The places
     /// of those values, one per route (ADR 0936: the facts the silence rests on).
     Plain(Vec<PlainAt>),
@@ -90,7 +96,7 @@ pub(super) fn handed_root(
         leaves: Vec::new(),
     };
     routes.value(file, root, &names, ROUTE_DEPTH);
-    let mut store: Option<(crate::SymbolId, usize)> = None;
+    let mut store: Option<(crate::SymbolId, isize)> = None;
     let mut plain = Vec::new();
     for leaf in &routes.leaves {
         match leaf {
@@ -99,10 +105,11 @@ pub(super) fn handed_root(
             Leaf::Source(symbol, rest) => {
                 if plain_createstore(context, symbol) {
                     // A store reached with more names to read than the
-                    // chain holds: the container is a link inside it.
-                    let Some(consumed) = names.len().checked_sub(*rest) else {
-                        return HandedRoot::Open;
-                    };
+                    // chain holds: the container is a link inside it. ADR
+                    // 1169: the chain's root itself is then `rest - names`
+                    // keys below the store (an alias of a link); the
+                    // offset is kept as a negative consumption.
+                    let consumed = names.len() as isize - *rest as isize;
                     match &store {
                         Some(found) if *found != (symbol.clone(), consumed) => {
                             return HandedRoot::Open;
@@ -123,8 +130,20 @@ pub(super) fn handed_root(
         }
     }
     match (store, plain.is_empty()) {
-        (Some((symbol, consumed)), true) => match prefixes.get(consumed) {
-            Some(&root) => HandedRoot::Store { symbol, root },
+        (Some((symbol, consumed)), true) if consumed < 0 => match prefixes.first() {
+            Some(&root) => HandedRoot::Store {
+                symbol,
+                root,
+                below: consumed.unsigned_abs(),
+            },
+            None => HandedRoot::Open,
+        },
+        (Some((symbol, consumed)), true) => match prefixes.get(consumed.unsigned_abs()) {
+            Some(&root) => HandedRoot::Store {
+                symbol,
+                root,
+                below: 0,
+            },
             None => HandedRoot::Open,
         },
         (None, false) => HandedRoot::Plain(plain),
