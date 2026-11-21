@@ -243,7 +243,7 @@ export const ARM_GAPS = [
     ],
   },
   {
-    reason: "ADR 1161:`flush(fn)` in a closure that only in-place layers run (`const f1 = () => { flush(() => { r1(); }); }; f1();`) takes the role of that run's call (`callback_standing::in_place_call_role`). No registered pair reaches the arm: `boundary.mjs verify` (318 pairs) sees it silent in no clean legal cell. The recall grid's `*flush*` contexts do reach it (112 mx-recall programs moved with the ADR), and the fixture `flush-closure-called-once` holds its cases, four violations and two clean, which Chrome agrees with (`runtime-oracle/flush-closure-called-once`).",
+    reason: "ADR 1161: `flush(fn)` in a closure that only in-place layers run (`const f1 = () => { flush(() => { r1(); }); }; f1();`) takes the role of that run's call (`callback_standing::in_place_call_role`). No registered pair reaches the arm: `boundary.mjs verify` (318 pairs) sees it silent in no clean legal cell. The recall grid's `*flush*` contexts do reach it (112 mx-recall programs moved with the ADR), and the fixture `flush-closure-called-once` holds its cases, four violations and two clean, which Chrome agrees with (`runtime-oracle/flush-closure-called-once`).",
     arms: ["callback_standing.inline_callback_execution_role.in-place-call"],
   },
   {
@@ -251,7 +251,7 @@ export const ARM_GAPS = [
     arms: ["callee_roles.allowed-error-arm"],
   },
   {
-    reason: "ADR 1155 (a):a write in a literal ADR 0200's exact proof forwards to a leaf owner's slot. No registered pair forwards a callback through a package or project function; the arm-shape contexts do (`barm-fwdleaf-tracked`, legal, 3 clean on lg-recall; its misuse twins `barm-fwdleaf-memo` and `barm-fwdleaf-args`, 3 violations and 3 uncertifiable on mx-recall, Chrome-confirmed), with the fixture `forwarded-leaf-write` (HandApp silent; MemoApp, ArgsApp, SwapApp kept) and the pattern `ctxmemo/s11-hand-direct`.",
+    reason: "ADR 1155 (a): a write in a literal ADR 0200's exact proof forwards to a leaf owner's slot. No registered pair forwards a callback through a package or project function; the arm-shape contexts do (`barm-fwdleaf-tracked`, legal, 3 clean on lg-recall; its misuse twins `barm-fwdleaf-memo` and `barm-fwdleaf-args`, 3 violations and 3 uncertifiable on mx-recall, Chrome-confirmed), with the fixture `forwarded-leaf-write` (HandApp silent; MemoApp, ArgsApp, SwapApp kept) and the pattern `ctxmemo/s11-hand-direct`.",
     arms: ["write_roles.forwarded-leaf-scope"],
   },
 
