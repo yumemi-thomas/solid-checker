@@ -11,7 +11,7 @@
   "SC1001 component-identity-unproven": 136,
   "SC1001 creation-throws-first": 3,
   "SC1001 escaped-name-unresolved": 19,
-  "SC1001 function-run-unplaced": 1770,
+  "SC1001 function-run-unplaced": 1777,
   "SC1001 function-unentered": 1,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
@@ -40,7 +40,7 @@
   "SC1002 unresolved-invocation": 121,
   "SC1003 build-constant-arm": 1,
   "SC1003 callee-callback-timing": 3,
-  "SC1003 destructure-root-unproven": 30,
+  "SC1003 destructure-root-unproven": 31,
   "SC1003 escaped-name-unresolved": 1,
   "SC1003 function-run-unplaced": 2,
   "SC1003 function-unentered": 2,
@@ -188,7 +188,7 @@
   "SC5003 mount-form-window": 2,
   "SC5003 mount-unresolved": 384,
   "SC5003 package-finding-at-entry": 113,
-  "SC5003 pending-read-unresolved": 824,
+  "SC5003 pending-read-unresolved": 827,
   "SC5003 root-mount-pass-unproven": 54,
   "SC5003 server-rendering-unresolved": 1,
   "SC5003 source-module-unresolved": 1,
@@ -280,23 +280,23 @@
   "SC9012 returned-callable-outside-source-universe": 47,
   "SC9012 search-depth-limit": 6,
   "SC9012 solid-call-rejected-unchecked": 3,
-  "SC9012 standard-member-impostor": 520,
+  "SC9012 standard-member-impostor": 521,
   "SC9012 store-key-undecided": 16,
-  "SC9012 tuple-iteration-written": 1500,
+  "SC9012 tuple-iteration-written": 1503,
   "SC9012 type-only-source": 98,
   "SC9012 value-as-parameter-default": 9,
   "SC9012 value-bound-held": 6,
   "SC9012 value-escaped-from-untrack": 8,
   "SC9012 value-exported-unnamed": 6,
   "SC9012 value-forwarded": 286,
-  "SC9012 value-from-primitive-callback": 26,
-  "SC9012 value-held-in-binding": 130,
+  "SC9012 value-from-primitive-callback": 29,
+  "SC9012 value-held-in-binding": 137,
   "SC9012 value-held-in-member": 30,
-  "SC9012 value-in-carrier": 445,
+  "SC9012 value-in-carrier": 449,
   "SC9012 value-in-class-field": 14,
   "SC9012 value-pending-in-jsx": 3,
   "SC9012 value-read-under-untrack": 1,
-  "SC9012 value-root-in-helper": 38,
+  "SC9012 value-root-in-helper": 39,
   "SC9012 value-through-await": 5,
   "SC9012 value-through-generator": 5,
   "SC9012 value-through-logical": 37,
@@ -5798,6 +5798,30 @@
    "fixtures": {
     "proved": "reactive-ir/test-runner-suites-mocha-module",
     "open": "reactive-ir/test-runner-suites-mocha-module"
+   }
+  },
+  {
+   "fixture": "reactive-ir/store-element-flow",
+   "key": "SC9012 value-in-carrier",
+   "from": 7,
+   "to": 4,
+   "adr": "ADR 1178",
+   "proof": "rust/crates/solid-reactive-ir/src/value_use.rs::whole_store_argument",
+   "fixtures": {
+    "proved": "reactive-ir/store-element-flow",
+    "open": "reactive-ir/store-whole-standard-census"
+   }
+  },
+  {
+   "fixture": "reactive-ir/store-standard-library-writes",
+   "key": "SC9012 value-in-carrier",
+   "from": 30,
+   "to": 29,
+   "adr": "ADR 1178",
+   "proof": "rust/crates/solid-reactive-ir/src/value_use.rs::whole_store_form",
+   "fixtures": {
+    "proved": "reactive-ir/store-standard-library-writes",
+    "open": "reactive-ir/store-whole-standard-census"
    }
   }
  ],
