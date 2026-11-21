@@ -1635,6 +1635,15 @@ pub(super) fn inline_callback_execution_role(
                 lookup,
             )
         {
+            // ADR 1161: the call is in a function only in-place layers run (a closure called once by name, an IIFE): the
+            // callback runs on the stack of the outermost layer's call, which places it.
+            if let Some(placed) = in_place_call_role(file, call.span, allowed, lookup, classifying)
+            {
+                return Some(role_arm!(
+                    "callback_standing.inline_callback_execution_role.in-place-call",
+                    placed
+                ));
+            }
             return Some(role_arm!(
                 "callback_standing.inline_callback_execution_role.unknown",
                 ExecutionRole::Unknown
@@ -1650,6 +1659,55 @@ pub(super) fn inline_callback_execution_role(
         }
         Some(role)
     })
+}
+
+/// ADR 1161: the role of the call that runs `call` through in-place layers only (`climb_in_place_layers`: a closure called once
+/// by name and referenced nowhere else, an IIFE, an inline standard-library callback), when the climb crosses one: no bound, no
+/// parameter list, no await on the way, no other run of a layer, no withheld call. A rendering role there holds only where that
+/// call runs during the body, as for the call itself. `None` when nothing places it.
+fn in_place_call_role(
+    file: &solid_facts::FileFacts,
+    call: Span,
+    allowed: &[Span],
+    lookup: &SemanticLookup<'_>,
+    classifying: &mut HashSet<(String, Span)>,
+) -> Option<ExecutionRole> {
+    let climb = super::write_roles::climb_in_place_layers(file, call, lookup).filter(|climb| {
+        !climb.bound()
+            && climb.in_list.is_none()
+            && climb.suspended.is_none()
+            && !climb.among_others
+            && !climb.withheld
+    })?;
+    let key = (file.path.to_string(), climb.at);
+    if !classifying.insert(key.clone()) {
+        return None;
+    }
+    let role = semantic_execution_role_within(
+        file,
+        climb.at,
+        allowed,
+        lookup.entities(),
+        lookup.symbol_names(),
+        lookup,
+        classifying,
+    );
+    classifying.remove(&key);
+    match role {
+        ExecutionRole::Unknown => None,
+        ExecutionRole::UntrackedRendering
+            if !nested_literal_runs_during_body(
+                file,
+                climb.at,
+                lookup.entities(),
+                lookup.symbol_names(),
+                lookup,
+            ) =>
+        {
+            None
+        }
+        role => Some(role),
+    }
 }
 
 /// Compose an inline callback of a higher-order factory with the proven use of

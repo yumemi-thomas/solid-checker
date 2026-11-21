@@ -21,7 +21,7 @@ export function InJsxDirect() {
   return <p>{(() => { [1].forEach(k); return 1; })()}</p>;
 }
 
-// Chrome warns, but a helper's call is no proof the IIFE runs in the body: open.
+// Chrome warns. ADR 1161: `k` is called once, in the body, and nowhere else referenced.
 export function HelperInBody() {
   const [s] = createSignal(1);
   const k = () => { flush(() => { (() => { s(); })(); }); return 1; };
