@@ -1679,7 +1679,9 @@ pub(crate) fn returned_cleanup_rerun_reached(
             return false;
         };
         if initializer.construct
-            || lookup.primitive_at_call(file, initializer.span) != Some(solid_dialect::Primitive::CreateSignal)
+            || !lookup
+                .primitive_at_call(file, initializer.span)
+                .is_some_and(|primitive| lookup.dialect.signal_creation_options(primitive).is_some())
         {
             return false;
         }
