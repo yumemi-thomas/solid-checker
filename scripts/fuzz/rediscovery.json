@@ -42522,5 +42522,13 @@
    "lg-strict-read-untracked-arm-tag-store-dstr-quoted-alias-none"
   ],
   "rediscovered": "focus.mjs --grids lg-recall --codes STRICT_READ_UNTRACKED --recall-full -- --contexts arm-tag (3,748 programs), release builds: main b600297eb 40 unexecuted-violation (needs a look, exit 1); this build none, exit 0 (40 unexecuted and 166 uncertifiable to clean, nothing else)"
+ },
+ {
+  "finding": "A store handed by prop and held in a `const` alias (`const held = props.s1; held.a.v = 9`): the Get `held.a` had no row of any rule though rc.21 warns STRICT_READ_UNTRACKED there (main b06a4e71a, Chrome-confirmed: runtime-oracle prop-alias-link-get on main is unproven-clean). The value-use census counted the deeper write's SC2003 row as answering every member on its chain (`write_decided`); the same Get alone (`void held.a`) kept its SC9012 row",
+  "found": "Mac 27, building ADR 1172's fixture store-write-through-prop (AliasChild): the runtime oracle's unproven-clean at the alias's Get",
+  "fixed": "value_use::Census::member: a decided write answers a member reached through an alias only where it is that member's own Set (`write_decided_target`); a deeper write leaves its Get open (SC9012 value-held-in-binding). Fixture reactive-ir/prop-alias-link-get",
+  "grid": "mx-src",
+  "code": "STRICT_READ_UNTRACKED",
+  "outside": "the read grids (flip-read.mjs store variants) do not cross a store variant with a prop or context source, so no STRICT_READ_UNTRACKED cell writes through a prop store's alias; mx-src and mx-pairs do generate the program (`mx-store-write-outside-setter-body-nested-assign-alias-none-s-prop`, `const useIt = props.s1; useIt.a.v = 7`), but judge it for STORE_WRITE_OUTSIDE_SETTER only, where SC2003 claims the write. Crossing the store read variants with the prop and context sources would generate it; not built in this fix"
  }
 ]

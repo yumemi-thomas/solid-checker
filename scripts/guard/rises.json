@@ -8144,6 +8144,22 @@
    "to": 18,
    "adr": "ADR 1160",
    "fact": "the SC2002 row at pkg-pointer.tsx stays uncertifiable under another blocker: with `ref={name}` placed at its reference (the named function's entry), its blocker moved from package-may-call-action to package-finding-at-entry (the relabel is in counts.json drops)"
+  },
+  {
+   "fixture": "reactive-ir/local-alias-member-reads",
+   "key": "SC9012 value-held-in-binding",
+   "from": 2,
+   "to": 4,
+   "adr": "ADR 1172",
+   "fact": "value_use::Census::member: a decided write answers a member reached through an alias only where it is that member's own Set; the Get of a link inside a deeper write (holder.state.nested, thing.useIt.a, held.a) keeps an SC9012 value-held-in-binding row (Chrome warns STRICT_READ_UNTRACKED at such a Get; main had no row)"
+  },
+  {
+   "fixture": "reactive-ir/store-write-literal-links",
+   "key": "SC9012 value-held-in-binding",
+   "from": 0,
+   "to": 5,
+   "adr": "ADR 1172",
+   "fact": "value_use::Census::member: a decided write answers a member reached through an alias only where it is that member's own Set; the Get of a link inside a deeper write (holder.state.nested, thing.useIt.a, held.a) keeps an SC9012 value-held-in-binding row (Chrome warns STRICT_READ_UNTRACKED at such a Get; main had no row)"
   }
  ]
 }
