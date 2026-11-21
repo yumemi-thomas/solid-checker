@@ -4160,6 +4160,21 @@ impl InPlaceClimb {
         self.suspended.is_some_and(|suspension| suspension.every)
     }
 
+    /// [`Self::suspended_on_every_path`] for the read roles that answer `Unreported`: not on ADR 1164's `Promise.resolve` try head
+    /// ([`super::body_roles::follows_declared_try_head_await`] says why).
+    pub(crate) fn suspended_on_every_path_declared(
+        &self,
+        file: &solid_facts::FileFacts,
+        lookup: &SemanticLookup<'_>,
+    ) -> bool {
+        self.suspended.is_some_and(|suspension| {
+            suspension.every
+                && !suspension.after.is_some_and(|awaited| {
+                    super::body_roles::promise_resolve_try_head(file, awaited, lookup)
+                })
+        })
+    }
+
     /// The merge of the next segment of one longer climb into this one: the flags of both (the stops are the caller's).
     pub(crate) fn merge_flags(&mut self, next: &Self) {
         self.in_list = self.in_list.or(next.in_list);

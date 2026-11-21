@@ -4958,3 +4958,29 @@ Each write meets the proxy's `set` trap, which warns whatever the value (rc.21 `
 The component must read its props only through static members, or a pattern of static keys with no rest, default or nested value. `handed_container_write` then proves the links from the store's own binding (`handed_links_wrappable`, same strictNullChecks and optional-link conditions as ADR 0491).
 *Measured* (release, against main b06a4e71a; Chrome cached). R4's 1,441 N1 programs plus the 396 legal STORE_WRITE programs of lg-recall: U to V 428 (mx-src 208, mx-pairs 208, mx-combo 12); no legal row moved; no V lost. Fixture `store-write-through-prop`: 4 violations, 4 uncertifiable (a setter read and called, the prop handed on, props used whole, the store also leaving the parent). Chrome covers all eight. Coverage: `store-handed-root` `Nested` goes from uncertifiable to violation (Chrome-confirmed on a scratch case of it).
 *Not covered.* A context, `merge`/`omit` view or spread hand-off; a component in another file; a write in the setter's callback reached through a prop (R4 N1's legal `in-setter` rows stay uncertifiable); an SC1001 violation at an alias's Get (part 1's SC9012 row stands).
+
+<a id="adr-1164"></a>
+## ADR 1164 — A read in a `for await` body that runs, and a `finally` after `await Promise.resolve()`, are past the await
+G1 of the R3 catalog (S half). ADR 1038 already reads a `for await` body as past the loop's suspension, so what stayed uncertifiable was two things. The SC1002 walk marked every read after an implicit suspension as an obligation (`after_implicit_suspension`, `SuspensionUnplaced`). The try-head proof (`follows_try_head_await`, ADR 0612) took only a call of an async function declaration, not the `await Promise.resolve()` every generated `finally` uses.
+
+**Decision.**
+- *`for await`* (`after_await.rs` `for_await_bodies_that_run`): a read written directly in the body of a `for await`, in the walked async non-generator function, is not marked when the iterable is an array literal whose first element is a decimal integer, boolean or `null` literal and no visible write reaches the array iterator. The first `next()` then fulfills and the body runs, every run past the loop's await, in the computation's flight. Its row is a violation unless an obligation of its own (an earlier tracked read, ADR 0195) stands.
+- *`finally`* (`body_roles.rs` `operand_cannot_throw`): a `try` head may also await the global `Promise.resolve(…)` with literal arguments only. That means no shadowing declaration and no computed member, the call resolving to `PromiseConstructor.resolve`, and the Promise intrinsics intact. Such a call returns a native promise and runs no project code. A `new` operand is refused for both forms (`new` of an async function throws).
+- The read roles that answer `Unreported` past an await keep the declaration-only proof (`follows_declared_try_head_await`, and a climb whose suspension rests on such a head: `window_after_awaits`, `layered_window_after_awaits`, `unwindowed_role_at_call`, `inherits_callback_role`). As ADR 1112 says of a `for await` body, `Unreported` silences SC1002 too, and a compute the tracked-computation walk does not find is asked by nothing else. The write, owner, hand-off and reach proofs take the wider one.
+
+**Not changed.**
+- A stream, a named or spread iterable, a promise element, a read in a closure or helper the body runs, and code after the loop keep their obligations.
+- So does a `try` head with a name argument, `globalThis.Promise`, or code before its await.
+- A read past an await in an async function that only a handler or the component body calls stays SC1002 `read-after-await-unaccounted`: no "no flight" reason exists (owner ruling 5 of ADR 0973). The legal half of G1 is not built.
+
+**Evidence.**
+- Fixture `after-await-for-await-finally`:
+  - `ForAwaitRead` and `ForAwaitReadGuarded` move from SC1002 U to V;
+  - `FinallyWrite` and `FinallyWriteLiteral` move from SC2001 U to clean;
+  - the eight counterexamples stay U.
+- `write-past-layered-await` `Named`'s write in the `finally`: U to clean.
+- Chrome (`runtime-oracle/after-await-for-await-finally`): UNTRACKED_READ_AFTER_AWAIT at the three violations (`covered-violation`) and at every uncertifiable read that runs (`covered-uncertifiable`); nothing at the clean writes.
+- Probe, release, VM, main b600297eb against this branch: 2,160 programs of mx-recall and lg-recall in the `*-for-await` and `*-finally` contexts, every code, layers none, closure, iife and helper, stratified by code, context, variant and binding. Results:
+  - 188 moves: 93 legal U to clean (SC2001, SC2006, SC2008 and SC3001 writes, actions and leaf calls in a `finally`; 5 SC1002 closure reads in a handler-only function's `finally`) and 95 misuse recall-gap to agree;
+  - the agree moves are 89 NO_OWNER_* and SETTLED_CLEANUP_UNOWNED in a `finally` (the owner proof takes the try head) and 6 UNTRACKED_READ_AFTER_AWAIT in a `for await` body;
+  - nothing else moved, and nothing needs a look on either build.

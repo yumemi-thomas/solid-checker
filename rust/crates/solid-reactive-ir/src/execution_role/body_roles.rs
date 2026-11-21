@@ -570,6 +570,10 @@ pub(crate) fn runs_with_its_function(
 /// await adopts without running project code (review round 1: a `let`/`const`
 /// argument may still be in its temporal dead zone, and awaiting an arbitrary
 /// value reads its `constructor`, which a getter can make throw).
+///
+/// ADR 1164: or a call of the global `Promise`'s `resolve` (no shadowing declaration, not a computed member), with the same arguments,
+/// while no visible write reaches the Promise intrinsics: `Promise.resolve(v)` of a non-object `v` returns a new native promise and runs no
+/// project code, and the await adopts it without any.
 pub(crate) fn follows_try_head_await(
     file: &solid_facts::FileFacts,
     span: Span,
@@ -578,11 +582,45 @@ pub(crate) fn follows_try_head_await(
     try_head_await_before(file, span, lookup).is_some()
 }
 
+/// [`follows_try_head_await`] without ADR 1164's `Promise.resolve` operand, for the read roles that answer
+/// [`ExecutionRole::Unreported`] past the await: the after-await read rule asks a computation's flight, and as ADR 1112 says of a
+/// `for await` body, a compute held where the tracked-computation walk does not find it (an object member) is asked by nothing else.
+pub(crate) fn follows_declared_try_head_await(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    try_head_await_with(file, span, lookup, false).is_some()
+}
+
 /// [`follows_try_head_await`]'s proof: the `await` at the head of the `try` whose `catch` or `finally` holds `span`.
 pub(crate) fn try_head_await_before(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    try_head_await_with(file, span, lookup, true)
+}
+
+/// ADR 1164: whether `awaited` heads a `try` whose operand only the `Promise.resolve` reading admits (not the declaration reading
+/// [`follows_declared_try_head_await`] keeps): a proof the read roles' `Unreported` arms do not take from a climb.
+pub(crate) fn promise_resolve_try_head(
+    file: &solid_facts::FileFacts,
+    awaited: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    file.ast.try_head_awaits.iter().any(|head| {
+        head.awaited == awaited
+            && !operand_cannot_throw(file, head, lookup, false)
+            && operand_cannot_throw(file, head, lookup, true)
+    })
+}
+
+fn try_head_await_with(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    promise_resolve: bool,
 ) -> Option<Span> {
     let function = continuation_function(file, span)?;
     file.ast
@@ -592,7 +630,7 @@ pub(crate) fn try_head_await_before(
             head.regions.iter().any(|region| region.contains(span))
                 && containing_ast_function(&file.ast, head.awaited)
                     .is_some_and(|owner| owner.span == function.span)
-                && operand_cannot_throw(file, head, lookup)
+                && operand_cannot_throw(file, head, lookup, promise_resolve)
         })
         .map(|head| head.awaited)
 }
@@ -601,6 +639,7 @@ fn operand_cannot_throw(
     file: &solid_facts::FileFacts,
     head: &solid_facts::ast::TryHeadAwaitFact,
     lookup: &SemanticLookup<'_>,
+    promise_resolve: bool,
 ) -> bool {
     let ast = &file.ast;
     let awaited = head.awaited;
@@ -632,12 +671,36 @@ fn operand_cannot_throw(
             })
     };
     let callee = ast.peel_ts_sugar_span(call.callee);
-    if !reference(callee)
-        || !call.arguments.iter().all(|argument| {
-            !argument.spread
-                && (parameter(argument.span) || literal_arguments.contains(&argument.span))
+    let arguments_cannot_throw = call.arguments.iter().all(|argument| {
+        !argument.spread && (parameter(argument.span) || literal_arguments.contains(&argument.span))
+    });
+    // `new` of an async function throws (it is no constructor), as does `new Promise.resolve()`.
+    if !arguments_cannot_throw || call.construct {
+        return false;
+    }
+    // ADR 1164: `Promise.resolve(…)` of the global. A parameter may hold an object (a thenable whose `then` the adoption calls on a later
+    // job, or one whose `constructor` getter throws now): only literal arguments.
+    if promise_resolve
+        && call
+            .arguments
+            .iter()
+            .all(|argument| literal_arguments.contains(&argument.span))
+        && !ast.computed_members.contains(&callee)
+        && ast.member_at(callee).is_some_and(|member| {
+            let object = ast.peel_ts_sugar_span(member.object);
+            file.source_text(object) == Some("Promise")
+                && reference(object)
+                && ast.reference_declaration(object).is_none()
         })
+        && lookup
+            .resolved_callee_call(file, call.callee)
+            .and_then(crate::runtime_semantics::standard_call_name)
+            == Some("PromiseConstructor.resolve")
+        && lookup.promise_intrinsics_intact()
     {
+        return true;
+    }
+    if !reference(callee) {
         return false;
     }
     let Some((declared_file, declared)) = lookup.function_called_at(file.path.as_str(), callee)
@@ -1455,7 +1518,7 @@ pub(super) fn window_after_awaits(
     if role.reports_untracked_read()
         && (follows_unconditional_await(file, span)
             || follows_dominating_await_statement(file, span)
-            || follows_try_head_await(file, span, lookup))
+            || follows_declared_try_head_await(file, span, lookup))
     {
         return role_arm!(
             "body_roles.window_after_awaits.unreported",
@@ -1502,7 +1565,7 @@ fn layered_window_after_awaits(
     }
     let landing = if follows_unconditional_await(file, climb.at)
         || follows_dominating_await(file, climb.at)
-        || follows_try_head_await(file, climb.at, lookup)
+        || follows_declared_try_head_await(file, climb.at, lookup)
     {
         Some(true)
     } else if follows_any_suspension(file, climb.at) || may_follow_own_await(file, climb.at) {
@@ -1510,7 +1573,13 @@ fn layered_window_after_awaits(
     } else {
         None
     };
-    match (climb.suspended.map(|suspension| suspension.every), landing) {
+    let every = climb.suspended.map(|suspension| {
+        suspension.every
+            && !suspension
+                .after
+                .is_some_and(|awaited| promise_resolve_try_head(file, awaited, lookup))
+    });
+    match (every, landing) {
         (Some(true), _) | (_, Some(true)) if !climb.among_others && !climb.withheld => role_arm!(
             "body_roles.layered_window_after_awaits.unreported",
             ExecutionRole::Unreported
