@@ -3508,7 +3508,12 @@ impl<'l, 'a> Census<'l, 'a> {
         let Some(call) = binding
             .call_initializer
             .and_then(|initializer| file.ast.call_at(initializer))
-            .filter(|call| binding.initializer.map(|value| file.ast.peel_ts_sugar_span(value)) == Some(call.span))
+            .filter(|call| {
+                binding
+                    .initializer
+                    .map(|value| file.ast.peel_ts_sugar_span(value))
+                    == Some(call.span)
+            })
         else {
             return false;
         };
@@ -3590,18 +3595,21 @@ impl<'l, 'a> Census<'l, 'a> {
                 _ => return None,
             }
         } else {
-            let resolved = self
-                .lookup
-                .resolved_callee_call(file, fact.callee)
-                .filter(|resolved| {
-                    resolved
-                        .declaration
-                        .as_ref()
-                        .is_some_and(|declaration| declaration.standard_library)
-                })?;
+            let resolved =
+                self.lookup
+                    .resolved_callee_call(file, fact.callee)
+                    .filter(|resolved| {
+                        resolved
+                            .declaration
+                            .as_ref()
+                            .is_some_and(|declaration| declaration.standard_library)
+                    })?;
             let name = crate::runtime_semantics::standard_call_name(resolved)?;
             if self.lookup.standard_call_withheld(file, fact.callee)
-                || crate::interproc::accessor_provenance::standard_member_replaced(self.lookup, name)
+                || crate::interproc::accessor_provenance::standard_member_replaced(
+                    self.lookup,
+                    name,
+                )
             {
                 return None;
             }
@@ -3711,9 +3719,7 @@ impl<'l, 'a> Census<'l, 'a> {
                     .template_literals
                     .iter()
                     .any(|template| template.expressions.contains(&at));
-                if !in_template
-                    || !self.rowed_exactly(file, at)
-                    || !coercion_is_plain(self.lookup)
+                if !in_template || !self.rowed_exactly(file, at) || !coercion_is_plain(self.lookup)
                 {
                     return None;
                 }
