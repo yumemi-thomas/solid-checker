@@ -1,0 +1,6 @@
+{
+  "note": "ADR 1147, arm 1 (context-provider-children-owned): rc.21's provider evaluates its children only in its children() memo, whose owner is the memo wherever the memo is read. A child that creates a memo and registers a cleanup (Kid) runs quietly when the provider's value is stored and handed to a package that reads it in a tracked effect (StoredLeaf), one component down (InnerLeaf, the review's k9 form), or in an effect's apply (StoredApply). So the owner codes (SC3001's creation and cleanup, SC6002's creation) at a provider's child do not depend on where the provider's value goes; the flush twin is context-provider-children-placed (FLUSH_IN_TRACKED_QUEUE_CALLBACK). Checker-side pin: fixture reactive-ir/context-provider-children-owned.",
+  "packages": [
+    "r1147-leaf"
+  ]
+}

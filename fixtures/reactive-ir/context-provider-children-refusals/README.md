@@ -9,3 +9,10 @@ Every case keeps its SC3001 and SC6002 rows (uncertifiable), as any component's 
 - N1, the provider is the whole return of a component and that component's element goes elsewhere: `ReturnedStoredApp`, `ArrayHandedApp`, `NestedStoredApp`.
 
 Stub: `context-provider-proof`'s. Chrome: runtime-oracle `context-provider-children-handed`, `-package` and `-placed`.
+
+**ADR 1147 (arm 1, `context-provider-children-owned`).** Every child here creates a memo, an owner code (SC3001's PRIMITIVE_IN_FORBIDDEN_SCOPE, SC6002's
+PRIMITIVE_IN_EFFECT_CALLBACK). rc.21 runs a provider's children inside its `children()` memo, whose owner is the memo wherever the memo is read, so the owner
+codes do not depend on where the provider's value goes: arm 1 ends them at every child of an exact provider (the F3 and N1 cases too; Chrome:
+`context-provider-children-owned`), and the F2 cases keep them (no exact provider). This fixture stays the stack acceptance set (arm 2: a flush, SC2006,
+SC2008, SC1002, where only `ReturnedApp` and `NestedApp` may certify); the stack pins are `context-provider-children-owned`'s `FlushStoredApp` and
+`FlushInnerApp` and the Chrome case `context-provider-children-placed`.
