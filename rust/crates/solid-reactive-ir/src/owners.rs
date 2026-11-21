@@ -1006,6 +1006,8 @@ impl OwnerFileIndex {
                     })
                     .map(|region| region.span),
             )
+            // ADR 1155 (b): an exact context provider's children run under its children memo (owner questions only: the owner requirements read these).
+            .chain(crate::callback_return::exact_provider_child_spans(lookup, file))
             .collect();
         Self {
             call_primitives,

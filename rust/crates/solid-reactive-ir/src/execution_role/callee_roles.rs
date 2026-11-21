@@ -2187,11 +2187,11 @@ pub(super) fn forwarded_component_prop(
 /// tracked compute, as it would written there itself. A parameter referenced
 /// any other way can run the literal somewhere else as well, so it proves
 /// nothing.
-pub(super) fn forwarded_tracked_compute_role(
+pub(super) fn forwarded_compute_slot<'a>(
     file: &solid_facts::FileFacts,
     span: Span,
-    lookup: &SemanticLookup<'_>,
-) -> Option<ExecutionRole> {
+    lookup: &SemanticLookup<'a>,
+) -> Option<ForwardedCompute<'a>> {
     let literal = containing_ast_function(&file.ast, span)?;
     let (call, index) = file.ast.arguments_containing(span).find(|(call, index)| {
         let argument = &call.arguments[*index];
@@ -2259,21 +2259,49 @@ pub(super) fn forwarded_tracked_compute_role(
     if !crate::owners::owned_by_body(&wrapper_file.ast, wrapper, outer.span) {
         return None;
     }
-    let tracked = match lookup.primitive_at_call(wrapper_file, outer.span) {
-        Some(primitive) => {
-            callback_execution_at_call(wrapper_file, outer, primitive, slot, lookup).is_some()
-                && lookup
-                    .dialect
-                    .callback_semantics_at(primitive, slot, outer.arguments.len())
-                    .tracks_reads
-        }
-        None => false,
-    };
+    let primitive = lookup.primitive_at_call(wrapper_file, outer.span)?;
+    callback_execution_at_call(wrapper_file, outer, primitive, slot, lookup)?;
+    Some(ForwardedCompute {
+        literal: call.arguments[index].span,
+        wrapper_file,
+        outer,
+        slot,
+        primitive,
+    })
+}
+
+/// ADR 1155 (a): what [`forwarded_compute_slot`] proves: the literal at `literal` (the whole argument of a call of a project or read-package function)
+/// runs only as the callback at `slot` of the primitive call `outer` that function writes directly in its body.
+pub(super) struct ForwardedCompute<'a> {
+    pub(super) literal: Span,
+    pub(super) wrapper_file: &'a solid_facts::FileFacts,
+    pub(super) outer: &'a solid_facts::ast::CallFact,
+    pub(super) slot: usize,
+    pub(super) primitive: solid_dialect::Primitive,
+}
+
+/// ADR 0200 (the proof: [`forwarded_compute_slot`]): code directly in such a literal, forwarded to a slot that tracks its callback's reads, takes the tracked role.
+pub(super) fn forwarded_tracked_compute_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<ExecutionRole> {
+    let ForwardedCompute {
+        literal,
+        outer,
+        slot,
+        primitive,
+        ..
+    } = forwarded_compute_slot(file, span, lookup)?;
+    let tracked = lookup
+        .dialect
+        .callback_semantics_at(primitive, slot, outer.arguments.len())
+        .tracks_reads;
     if !tracked {
         return None;
     }
     Some(
-        if attribute_function_within(file, call.arguments[index].span, span, lookup) {
+        if attribute_function_within(file, literal, span, lookup) {
             role_arm!(
                 "callee_roles.forwarded_tracked_compute_role.attribute-function",
                 ExecutionRole::Unknown

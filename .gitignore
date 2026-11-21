@@ -2152,3 +2152,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation-eval/node_modules/**
 !fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation-package/node_modules/
 !fixtures/reactive-ir/event-dispatch-shadow/variants/shadow-creation-package/node_modules/**
+!fixtures/reactive-ir/forwarded-leaf-write/node_modules/
+!fixtures/reactive-ir/forwarded-leaf-write/node_modules/**
