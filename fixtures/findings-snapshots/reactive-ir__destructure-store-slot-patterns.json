@@ -1,0 +1,120 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructure-store-slot-patterns/App.tsx",
+      "start": 622,
+      "end": 632,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructure-store-slot-patterns/App.tsx",
+      "start": 798,
+      "end": 807,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructure-store-slot-patterns/App.tsx",
+      "start": 962,
+      "end": 975,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructure-store-slot-patterns/App.tsx",
+      "start": 1139,
+      "end": 1151,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructure-store-slot-patterns/App.tsx",
+      "start": 1334,
+      "end": 1346,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructure-store-slot-patterns/App.tsx",
+      "start": 1575,
+      "end": 1585,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructure-store-slot-patterns/App.tsx",
+      "start": 2734,
+      "end": 2751,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "store-key-undecided",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/destructure-store-slot-patterns/App.tsx",
+      "start": 3077,
+      "end": 3084,
+      "fixes": 0
+    },
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructure-store-slot-patterns/App.tsx",
+      "start": 3146,
+      "end": 3183,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "blocker": "store-key-undecided",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructure-store-slot-patterns/App.tsx",
+      "start": 3430,
+      "end": 3445,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "uncertifiable",
+      "blocker": "store-key-undecided",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/destructure-store-slot-patterns/App.tsx",
+      "start": 3685,
+      "end": 3697,
+      "fixes": 0
+    }
+  ]
+}

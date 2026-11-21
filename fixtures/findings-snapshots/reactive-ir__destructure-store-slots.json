@@ -67,11 +67,11 @@
       "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
-      "blocker": "props-callers-unenumerated",
+      "blocker": "summary-read-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/destructure-store-slots/App.tsx",
-      "start": 1813,
-      "end": 1825,
+      "start": 1831,
+      "end": 1843,
       "fixes": 0
     },
     {
@@ -80,19 +80,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/destructure-store-slots/App.tsx",
-      "start": 2079,
-      "end": 2090,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "store-key-undecided",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/destructure-store-slots/App.tsx",
-      "start": 2081,
-      "end": 2085,
+      "start": 2097,
+      "end": 2108,
       "fixes": 0
     },
     {
@@ -101,8 +90,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/destructure-store-slots/App.tsx",
-      "start": 2282,
-      "end": 2292,
+      "start": 2300,
+      "end": 2310,
       "fixes": 0
     }
   ]

@@ -2587,11 +2587,11 @@ impl LocalAccessContext<'_, '_> {
             else {
                 continue;
             };
-            for slot in slots {
+            for (slot, key) in slots {
                 let member = solid_facts::ast::MemberFact {
                     span: slot,
                     object: identifier.span,
-                    property: slot,
+                    property: key,
                 };
                 // Round 2 (P1): every slot shares the store identifier as its receiver, which `seen` keys on; each slot is
                 // its own Get, so each gets its own set (`{ then, v }` read only `then`).
@@ -9598,20 +9598,27 @@ pub(crate) enum StoreHeadGet {
 /// The chain's head Get decides: it runs first, on the store proxy itself.
 /// A warning head warns whatever follows it; an exempt one decides only a
 /// chain of one Get. `span` is any member of the chain.
+/// ADR 1162: the key of the destructure slot whose Get stands at `span` (`static_rules::destructure_slot_keys`).
+fn destructure_slot_key(
+    file: &solid_facts::FileFacts,
+    span: solid_facts::core::Span,
+) -> Option<&str> {
+    file.ast.bindings.iter().find_map(|binding| {
+        crate::static_rules::destructure_slot_keys(file, binding)?
+            .into_iter()
+            .find_map(|slot| (slot.property == span).then_some(slot.name))
+    })
+}
+
 pub(crate) fn store_head_get(
     file: &solid_facts::FileFacts,
     span: solid_facts::core::Span,
     dialect: &dyn solid_dialect::Dialect,
 ) -> StoreHeadGet {
     let Some(mut head) = file.ast.member_at(span) else {
-        // ADR 1107: a destructure's shorthand slot (`const { v } = store`) is the Get of its static key, read once.
-        let slot = file.ast.bindings.iter().find_map(|binding| {
-            binding
-                .object_slots
-                .iter()
-                .find(|slot| slot.plain_identifier_key && slot.local.span == span)
-        });
-        return match slot.map(|slot| slot.property.as_str()) {
+        // ADR 1107, ADR 1162: a destructure's slot (`const { v } = store`, `{ "v": x }`, `{ a: {} }`) is the Get of its
+        // static key, read once.
+        return match destructure_slot_key(file, span) {
             Some(key) if dialect.store_key_may_skip_strict_read(key) => StoreHeadGet::Exempt,
             Some(_) => StoreHeadGet::Warns,
             None => StoreHeadGet::Undecided("the store Get's key is not a known string"),
@@ -9759,22 +9766,23 @@ fn exempt_store_get_runs_nothing(
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     use solid_facts::ast::RuntimeValueKind;
-    let Some(member) = file.ast.member_at(span) else {
-        return false;
-    };
-    let key = if file
-        .ast
-        .computed_members
-        .binary_search(&member.span)
-        .is_ok()
-    {
-        file.ast
-            .literal_computed_members
-            .iter()
-            .find(|literal| literal.span == member.span)
-            .map(|literal| literal.key.as_ref())
-    } else {
-        file.source_text(member.property)
+    let key = match file.ast.member_at(span) {
+        Some(member)
+            if file
+                .ast
+                .computed_members
+                .binary_search(&member.span)
+                .is_ok() =>
+        {
+            file.ast
+                .literal_computed_members
+                .iter()
+                .find(|literal| literal.span == member.span)
+                .map(|literal| literal.key.as_ref())
+        }
+        Some(member) => file.source_text(member.property),
+        // ADR 1162: a destructure's slot is the Get of its key.
+        None => destructure_slot_key(file, span),
     };
     let Some(key) = key else {
         return false;

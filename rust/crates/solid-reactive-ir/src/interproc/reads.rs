@@ -253,10 +253,10 @@ pub(super) fn direct_reference_contributions(
                     crate::static_rules::delegated_destructure_slots(lookup, file, binding)
                 })
                 .flatten()
-                .map(|slot| solid_facts::ast::MemberFact {
+                .map(|(slot, key)| solid_facts::ast::MemberFact {
                     span: slot,
                     object: reference_span,
-                    property: slot,
+                    property: key,
                 })
                 .collect();
             contributions.extend(
