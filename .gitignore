@@ -885,6 +885,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/undecided-flush-closure/node_modules/**
 !fixtures/reactive-ir/flush-write-path/node_modules/
 !fixtures/reactive-ir/flush-write-path/node_modules/**
+!fixtures/reactive-ir/store-array-mutators-literal/node_modules/
+!fixtures/reactive-ir/store-array-mutators-literal/node_modules/**
 !fixtures/reactive-ir/walk-bounds/node_modules/
 !fixtures/reactive-ir/walk-bounds/node_modules/**
 !fixtures/reactive-ir/dynamic-entry-limit/node_modules/

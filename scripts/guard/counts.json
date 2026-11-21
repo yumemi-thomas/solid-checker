@@ -85,7 +85,7 @@
   "SC2003 package-finding-at-entry": 50,
   "SC2003 search-depth-limit": 1,
   "SC2003 store-handed-to-package": 1,
-  "SC2003 store-operation-may-not-write": 39,
+  "SC2003 store-operation-may-not-write": 46,
   "SC2003 store-write-unproven": 100,
   "SC2003 unproven-container-root": 152,
   "SC2004 async-slot-unmodelled": 4,
