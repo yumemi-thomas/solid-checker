@@ -4471,7 +4471,7 @@ pub(crate) fn pending_apply_first_read_from(
 /// ADR 1175: the optimistic setter call at `site` runs in the first run of an effect apply while its source is still
 /// uninitialized, so rc.21 throws `OPTIMISTIC_WRITE_BEFORE_LOAD` there. The apply half is ADR 0504's
 /// ([`pending_apply_first_run`]); the source half is ADR 0504/0505's own-body arm, for an optimistic creation in place of a memo:
-/// the setter (`declaration`) is slot 1 of a `const` array pattern of the component's own body whose whole initializer is the
+/// the setter's row (`declaration`) names a slot of a `const` array pattern of the component's own body whose whole initializer is the
 /// dialect's optimistic creation ([`solid_dialect::Dialect::optimistic_unanswered_arguments`]) of an async function literal (no
 /// generator) and no `loadingValue`, created on every completion before the effect's call with nothing run between them; a
 /// `createEffect` also needs ADR 0505's mount flush ([`user_apply_runs_in_mount_flush`]: a static tree, a body that runs nothing
@@ -4495,10 +4495,7 @@ pub(crate) fn pending_apply_first_write(
     let binding = ast.bindings.iter().find(|binding| {
         binding.immutable
             && binding.shape == solid_facts::ast::BindingShape::Array
-            && binding
-                .array_slots
-                .get(1)
-                .is_some_and(|slot| slot.as_ref().is_some_and(|name| name.span == declared))
+            && binding.names.iter().any(|name| name.span == declared)
     })?;
     let creation = binding
         .call_initializer

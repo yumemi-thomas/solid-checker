@@ -14,6 +14,19 @@ with a literal `async` compute, entered after it and past no await: in the same 
 in closures, helpers' callbacks, `untrack` or `createRoot` on that stack, in a handler that
 creates the source too, at module scope (ADR 0636).
 
+Proven too (ADR 1175): the setter call is in the first run of an effect's apply that comes
+before the answer. The apply half is ADR 0504's (the call on every completion of the apply's
+first run, after no other call of it; an effect with no options and a compute that is one
+primitive literal, created on every completion of a component a module-scope `render` mounts),
+and the source half is ADR 0505's own-body arm with the optimistic creation in place of the
+memo: a `const` tuple of the same body, a literal `async` compute, no `loadingValue`, nothing
+run between the creation and the effect. A `createEffect` also needs ADR 0505's mount flush (a
+static tree, a body that runs nothing else, a compute that is one primitive literal); a
+`createRenderEffect` runs its apply at creation. The answer lands a microtask later at the
+earliest, while `render` flushes synchronously. A guarded write, a `loadingValue`, an apply
+whose compute reads the source (it waits for the answer), a deferred effect, a write handed to
+a timer and a namespace import of the primitives stay uncertifiable.
+
 Anywhere else it is uncertifiable: a handler or action that did not create the source may run
 before the answer lands or after it, and no fact tells which. So is a compute that is not a
 literal `async` one, a source a hook creates, and a setter a `let` or `var` holds.
