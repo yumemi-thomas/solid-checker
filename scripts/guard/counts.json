@@ -11,7 +11,7 @@
   "SC1001 component-identity-unproven": 136,
   "SC1001 creation-throws-first": 3,
   "SC1001 escaped-name-unresolved": 19,
-  "SC1001 function-run-unplaced": 1770,
+  "SC1001 function-run-unplaced": 1772,
   "SC1001 function-unentered": 1,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
@@ -128,7 +128,7 @@
   "SC3001 function-run-unplaced": 38,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 7,
-  "SC3001 leaf-operation-unaccounted": 7050,
+  "SC3001 leaf-operation-unaccounted": 7061,
   "SC3001 leaf-owner-unproven": 67,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
@@ -144,7 +144,7 @@
   "SC4001 handler-on-disabled-control": 7,
   "SC4001 handler-spread-unresolved": 84,
   "SC4001 owner-allocation-unproven": 24,
-  "SC4001 owner-callers-unenumerated": 3630,
+  "SC4001 owner-callers-unenumerated": 3635,
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 4,
@@ -204,7 +204,7 @@
   "SC5008 pending-read-unresolved": 24,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5442,
+  "SC6002 effect-creation-unaccounted": 5453,
   "SC6002 effect-owner-unproven": 53,
   "SC6002 function-run-unplaced": 64,
   "SC6002 generator-step-unplaced": 1,
@@ -5798,6 +5798,30 @@
    "fixtures": {
     "proved": "reactive-ir/test-runner-suites-mocha-module",
     "open": "reactive-ir/test-runner-suites-mocha-module"
+   }
+  },
+  {
+   "fixture": "reactive-ir/async-read-under-jsx",
+   "key": "SC1001 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1167",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs::returned_cleanup_disposal_only",
+   "fixtures": {
+    "proved": "reactive-ir/async-read-under-jsx",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/effect-cleanup-rerun-read",
+   "key": "SC1001 function-run-unplaced",
+   "from": 9,
+   "to": 7,
+   "adr": "ADR 1167",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs::returned_cleanup_disposal_only",
+   "fixtures": {
+    "proved": "reactive-ir/effect-cleanup-rerun-read",
+    "open": "reactive-ir/effect-cleanup-rerun-read"
    }
   }
  ],

@@ -8,5 +8,5 @@ answer; a `For` row's disposal runs the cleanup owned, which owner codes read di
 
 Clean: `ShowRemoved`, `ForRowRemoved`, `RenderEffectCleanup` (a signal read). Uncertifiable: `TwinComputeTracks` (a rerun may call it
 in the apply's window), `TwinNamedApply`, `TwinNestedRead`, `TwinAsyncCleanup`; and `effect-cleanup-disposal-reachable`, where a
-`createRoot` that takes `dispose` makes every disposal reachable from project code (disposed in the body, in its window). Chrome:
-`runtime-oracle/effect-cleanup-disposal-only`. Stub: `foreach-carrier`'s, plus `createStore`, `Show`, `For` and `createRoot`'s `dispose`.
+`createRoot` that takes `dispose` makes every disposal reachable from project code (ADR 0695's premise stands down). Chrome rc.21
+(`runtime-oracle/effect-cleanup-disposal-only`): quiet at the three clean reads, STRICT_READ_UNTRACKED at `TwinComputeTracks` after the click. Stub: `foreach-carrier`'s, plus `createStore`, `Show`, `For` and `createRoot`'s `dispose`.

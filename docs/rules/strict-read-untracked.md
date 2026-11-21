@@ -362,7 +362,9 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
 - **An effect's returned cleanup and its error arm.** A read in the cleanup an
   apply returns is uncertifiable: a rerun runs it in the window, a disposal
   outside it (ADR 0539). A compute with no call, no reference and a literal
-  return never reruns, and its cleanup is silent. A read in an exact bundle's
+  return never reruns, and a read written in its cleanup's own body is silent:
+  only the effect's disposal runs it, as an `onCleanup` callback, unless project
+  code may dispose an owner on a stack of its own (ADR 0695, ADR 1167). A read in an exact bundle's
   `error` member is silent: rc.17 and rc.21 run it before the effect's window
   opens (ADR 0540), a `createReaction` bundle's too (ADR 0548). It runs in
   the window of the stack that drains the queue, so a read written directly

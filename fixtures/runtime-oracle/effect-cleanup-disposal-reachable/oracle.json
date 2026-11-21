@@ -1,1 +1,1 @@
-{ "note": "ADR 1167 counterexample: a createRoot dispose called in the component body runs the never-rerunning effect's returned cleanup in the body's strict-read window; SC1001 uncertifiable." }
+{ "note": "ADR 1167: a createRoot dispose called in the component body disposes a never-rerunning effect; its returned cleanup reads a store. Chrome is quiet; SC1001 stays uncertifiable (project code may dispose on a stack of its own, ADR 0695)." }
