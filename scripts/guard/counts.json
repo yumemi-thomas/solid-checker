@@ -28,11 +28,11 @@
   "SC1002 function-run-unplaced": 87,
   "SC1002 function-unentered": 4,
   "SC1002 generator-stepped": 11,
-  "SC1002 handed-read-after-await": 190,
+  "SC1002 handed-read-after-await": 196,
   "SC1002 package-finding-at-entry": 17,
   "SC1002 package-operation-after-await": 3,
   "SC1002 parameter-initializer-unplaced": 8,
-  "SC1002 read-after-await-unaccounted": 789,
+  "SC1002 read-after-await-unaccounted": 791,
   "SC1002 search-depth-limit": 1,
   "SC1002 site-reach-undecided": 1,
   "SC1002 standard-member-impostor": 3,
@@ -60,7 +60,7 @@
   "SC2001 binding-before-initialization": 3,
   "SC2001 component-identity-unproven": 10,
   "SC2001 escaped-name-unresolved": 4,
-  "SC2001 function-run-unplaced": 576,
+  "SC2001 function-run-unplaced": 579,
   "SC2001 function-unentered": 13,
   "SC2001 lazy-compute-unread": 7,
   "SC2001 owned-write-option-unread": 4,
@@ -128,7 +128,7 @@
   "SC3001 function-run-unplaced": 39,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 7,
-  "SC3001 leaf-operation-unaccounted": 7072,
+  "SC3001 leaf-operation-unaccounted": 7080,
   "SC3001 leaf-owner-unproven": 67,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
@@ -148,7 +148,7 @@
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 4,
-  "SC4001 owner-varies-by-caller": 176,
+  "SC4001 owner-varies-by-caller": 179,
   "SC4001 package-finding-at-entry": 76,
   "SC4001 unreached-dead-code": 2,
   "SC4002 component-identity-unproven": 2,
@@ -204,7 +204,7 @@
   "SC5008 pending-read-unresolved": 24,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5456,
+  "SC6002 effect-creation-unaccounted": 5457,
   "SC6002 effect-owner-unproven": 54,
   "SC6002 function-run-unplaced": 64,
   "SC6002 generator-step-unplaced": 1,
@@ -5918,6 +5918,30 @@
    "fixtures": {
     "proved": "reactive-ir/effect-cleanup-rerun-read",
     "open": "reactive-ir/effect-cleanup-rerun-read"
+   }
+  },
+  {
+   "fixture": "reactive-ir/write-past-layered-await",
+   "key": "SC2001 function-run-unplaced",
+   "from": 3,
+   "to": 2,
+   "adr": "ADR 1164",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/body_roles.rs::operand_cannot_throw",
+   "fixtures": {
+    "proved": "reactive-ir/write-past-layered-await",
+    "open": "reactive-ir/write-past-layered-await"
+   }
+  },
+  {
+   "fixture": "reactive-ir/for-await-body",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1165",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/body_roles.rs::in_for_await_body_that_runs",
+   "fixtures": {
+    "proved": "reactive-ir/for-await-body",
+    "open": "reactive-ir/change-delivery-hazard"
    }
   }
  ],
