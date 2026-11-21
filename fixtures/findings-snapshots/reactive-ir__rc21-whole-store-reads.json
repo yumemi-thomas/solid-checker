@@ -12,17 +12,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/rc21-whole-store-reads/App.tsx",
-      "start": 282,
-      "end": 285,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -235,17 +224,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/rc21-whole-store-reads/App.tsx",
-      "start": 560,
-      "end": 564,
-      "fixes": 0
-    },
-    {
       "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
@@ -320,6 +298,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-whole-store-reads/App.tsx",
+      "start": 721,
+      "end": 743,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -336,8 +325,8 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-whole-store-reads/App.tsx",
-      "start": 738,
-      "end": 741,
+      "start": 733,
+      "end": 742,
       "fixes": 0
     },
     {
@@ -374,23 +363,23 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/rc21-whole-store-reads/App.tsx",
-      "start": 1003,
-      "end": 1010,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-whole-store-reads/App.tsx",
-      "start": 1006,
+      "start": 813,
+      "end": 819,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-whole-store-reads/App.tsx",
+      "start": 1003,
       "end": 1010,
       "fixes": 0
     },
@@ -530,7 +519,18 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
+      "blocker": "value-from-primitive-callback",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-whole-store-reads/App.tsx",
+      "start": 1572,
+      "end": 1581,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-from-primitive-callback",
       "severity": "warning",
       "path": "fixtures/reactive-ir/rc21-whole-store-reads/App.tsx",
       "start": 1577,
@@ -670,6 +670,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-from-primitive-callback",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-whole-store-reads/App.tsx",
+      "start": 1717,
+      "end": 1723,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -799,6 +810,28 @@
       "path": "fixtures/reactive-ir/rc21-whole-store-reads/App.tsx",
       "start": 2172,
       "end": 2202,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-whole-store-reads/App.tsx",
+      "start": 2173,
+      "end": 2176,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/rc21-whole-store-reads/App.tsx",
+      "start": 2178,
+      "end": 2181,
       "fixes": 0
     },
     {

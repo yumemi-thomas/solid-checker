@@ -42628,5 +42628,26 @@
   "grid": "mx-src",
   "code": "STRICT_READ_UNTRACKED",
   "outside": "the read grids (flip-read.mjs store variants) do not cross a store variant with a prop or context source, so no STRICT_READ_UNTRACKED cell writes through a prop store's alias; mx-src and mx-pairs do generate the program (`mx-store-write-outside-setter-body-nested-assign-alias-none-s-prop`, `const useIt = props.s1; useIt.a.v = 7`), but judge it for STORE_WRITE_OUTSIDE_SETTER only, where SC2003 claims the write. Crossing the store read variants with the prop and context sources would generate it; not built in this fix"
+ },
+ {
+  "finding": "ADR 1178 (R3 catalog G6): a store handed whole to Object.values, Object.entries, Array.from, Object.hasOwn, deep or snapshot, spread, iterated by a for…of or put in a template stood as SC9012 value-in-carrier at the reference, so a legal program whose read is tracked (a memo, a compute, untrack, a deferred callback) was uncertifiable where Chrome is silent",
+  "found": "research R5 on the R3 catalog of unproven simple programs (2026-11-21): the per-callee read rows (ADRs 0620, 0621, 0635) existed, the census table did not",
+  "fixed": "ADR 1178 (value_use.rs whole_store_argument, whole_store_form; Dialect::whole_store_argument, creates_settled_store_from_value)",
+  "grid": "lg-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "lg-strict-read-untracked-memo-store-empty-spread-wrapper-none",
+   "lg-strict-read-untracked-effect-compute-store-deep-direct-none",
+   "lg-strict-read-untracked-effect-compute-store-template-alias-none",
+   "lg-strict-read-untracked-effect-compute-store-for-of-direct-none",
+   "lg-strict-read-untracked-render-compute-store-values-direct-none",
+   "lg-strict-read-untracked-render-compute-store-array-from-direct-none",
+   "lg-strict-read-untracked-render-compute-store-has-own-alias-none",
+   "lg-strict-read-untracked-jsx-helper-store-empty-values-direct-none",
+   "lg-strict-read-untracked-untrack-store-array-spread-direct-none",
+   "lg-strict-read-untracked-micro-from-handler-store-snapshot-wrapper-none",
+   "lg-strict-read-untracked-timer-from-apply-store-entries-direct-none"
+  ],
+  "rediscovered": "focus.mjs --grids lg-recall,mx-recall --codes all on 2,000 store-* whole-store programs picked by the base's value-in-carrier rows (release builds, Chrome cached): base b06a4e71a lg-recall 1,092 uncertifiable; this build 613 uncertifiable to clean, 479 stay, 0 violations; mx-recall 139 agree and 749 recall-gap unchanged"
  }
 ]

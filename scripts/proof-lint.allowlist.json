@@ -1689,8 +1689,8 @@
         "why": "pending-review"
       },
       "silent-unmatched-slot": {
-        "count": 1,
-        "why": "pending-review"
+        "count": 4,
+        "why": "pending-review (1); ADR 1178 (3): the `_ => return None` arms of `whole_store_argument` and `whole_store_form` answer that the form is none of the reviewed readers, and `None` sends the caller on to the rows it placed before (the argument or carrier stays `value-in-carrier`): an unmatched case is the old obligation, never a silence"
       }
     }
   }
