@@ -515,8 +515,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 2922,
-      "end": 2932,
+      "start": 2995,
+      "end": 3005,
       "fixes": 0
     },
     {
@@ -526,8 +526,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 2922,
-      "end": 2932,
+      "start": 2995,
+      "end": 3005,
       "fixes": 0
     },
     {
@@ -537,8 +537,8 @@
       "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 2945,
-      "end": 2955,
+      "start": 3018,
+      "end": 3028,
       "fixes": 0
     },
     {
@@ -548,19 +548,18 @@
       "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 2945,
-      "end": 2957,
+      "start": 3018,
+      "end": 3030,
       "fixes": 0
     },
     {
       "rule": "no-store-mutation-outside-setter",
       "code": "SC2003",
-      "kind": "uncertifiable",
-      "blocker": "store-write-unproven",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 2945,
-      "end": 2959,
+      "start": 3018,
+      "end": 3032,
       "fixes": 0
     },
     {
@@ -570,8 +569,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 3215,
-      "end": 3222,
+      "start": 3288,
+      "end": 3295,
       "fixes": 0
     },
     {
@@ -581,8 +580,8 @@
       "blocker": "store-write-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 3215,
-      "end": 3224,
+      "start": 3288,
+      "end": 3297,
       "fixes": 0
     },
     {
@@ -592,8 +591,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 3378,
-      "end": 3388,
+      "start": 3451,
+      "end": 3461,
       "fixes": 0
     },
     {
@@ -603,8 +602,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 3378,
-      "end": 3388,
+      "start": 3451,
+      "end": 3461,
       "fixes": 0
     },
     {
@@ -614,8 +613,8 @@
       "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 3401,
-      "end": 3408,
+      "start": 3474,
+      "end": 3481,
       "fixes": 0
     },
     {
@@ -625,8 +624,8 @@
       "blocker": "unproven-container-root",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 3401,
-      "end": 3410,
+      "start": 3474,
+      "end": 3483,
       "fixes": 0
     },
     {
@@ -636,8 +635,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 3603,
-      "end": 3613,
+      "start": 3676,
+      "end": 3686,
       "fixes": 0
     },
     {
@@ -647,8 +646,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 3603,
-      "end": 3613,
+      "start": 3676,
+      "end": 3686,
       "fixes": 0
     },
     {
@@ -658,8 +657,8 @@
       "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 3626,
-      "end": 3633,
+      "start": 3699,
+      "end": 3706,
       "fixes": 0
     },
     {
@@ -669,8 +668,8 @@
       "blocker": "unproven-container-root",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 3626,
-      "end": 3635,
+      "start": 3699,
+      "end": 3708,
       "fixes": 0
     },
     {
@@ -680,8 +679,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 3874,
-      "end": 3884,
+      "start": 3947,
+      "end": 3957,
       "fixes": 0
     },
     {
@@ -691,8 +690,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 3874,
-      "end": 3884,
+      "start": 3947,
+      "end": 3957,
       "fixes": 0
     },
     {
@@ -701,8 +700,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 3897,
-      "end": 3900,
+      "start": 3970,
+      "end": 3973,
       "fixes": 0
     },
     {
@@ -712,8 +711,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 4095,
-      "end": 4105,
+      "start": 4168,
+      "end": 4178,
       "fixes": 0
     },
     {
@@ -723,8 +722,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 4095,
-      "end": 4105,
+      "start": 4168,
+      "end": 4178,
       "fixes": 0
     },
     {
@@ -734,8 +733,8 @@
       "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 4262,
-      "end": 4269,
+      "start": 4335,
+      "end": 4342,
       "fixes": 0
     },
     {
@@ -745,8 +744,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 4306,
-      "end": 4316,
+      "start": 4379,
+      "end": 4389,
       "fixes": 0
     },
     {
@@ -756,8 +755,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 4306,
-      "end": 4316,
+      "start": 4379,
+      "end": 4389,
       "fixes": 0
     },
     {
@@ -766,8 +765,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 4329,
-      "end": 4333,
+      "start": 4402,
+      "end": 4406,
       "fixes": 0
     },
     {
@@ -777,8 +776,8 @@
       "blocker": "value-held-in-binding",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 4472,
-      "end": 4478,
+      "start": 4545,
+      "end": 4551,
       "fixes": 0
     },
     {
@@ -788,8 +787,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 4482,
-      "end": 4492,
+      "start": 4555,
+      "end": 4565,
       "fixes": 0
     },
     {
@@ -799,8 +798,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 4482,
-      "end": 4492,
+      "start": 4555,
+      "end": 4565,
       "fixes": 0
     },
     {
@@ -810,8 +809,8 @@
       "blocker": "value-held-in-binding",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 4505,
-      "end": 4510,
+      "start": 4578,
+      "end": 4583,
       "fixes": 0
     },
     {
@@ -821,8 +820,8 @@
       "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 4651,
-      "end": 4658,
+      "start": 4724,
+      "end": 4731,
       "fixes": 0
     },
     {
@@ -832,8 +831,8 @@
       "blocker": "store-write-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 4651,
-      "end": 4660,
+      "start": 4724,
+      "end": 4733,
       "fixes": 0
     },
     {
@@ -842,8 +841,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 4900,
-      "end": 4950,
+      "start": 4973,
+      "end": 5023,
       "fixes": 0
     },
     {
@@ -853,8 +852,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 4924,
-      "end": 4943,
+      "start": 4997,
+      "end": 5016,
       "fixes": 0
     },
     {
@@ -864,8 +863,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 4924,
-      "end": 4943,
+      "start": 4997,
+      "end": 5016,
       "fixes": 0
     },
     {
@@ -875,8 +874,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 4979,
-      "end": 5013,
+      "start": 5052,
+      "end": 5086,
       "fixes": 0
     },
     {
@@ -886,8 +885,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 4979,
-      "end": 5013,
+      "start": 5052,
+      "end": 5086,
       "fixes": 0
     },
     {
@@ -897,8 +896,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5020,
-      "end": 5052,
+      "start": 5093,
+      "end": 5125,
       "fixes": 0
     },
     {
@@ -908,8 +907,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5020,
-      "end": 5052,
+      "start": 5093,
+      "end": 5125,
       "fixes": 0
     },
     {
@@ -919,8 +918,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5059,
-      "end": 5092,
+      "start": 5132,
+      "end": 5165,
       "fixes": 0
     },
     {
@@ -930,8 +929,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5059,
-      "end": 5092,
+      "start": 5132,
+      "end": 5165,
       "fixes": 0
     },
     {
@@ -941,8 +940,8 @@
       "blocker": "value-forwarded",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5073,
-      "end": 5075,
+      "start": 5146,
+      "end": 5148,
       "fixes": 0
     },
     {
@@ -952,8 +951,8 @@
       "blocker": "value-forwarded",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5083,
-      "end": 5088,
+      "start": 5156,
+      "end": 5161,
       "fixes": 0
     },
     {
@@ -963,8 +962,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5099,
-      "end": 5141,
+      "start": 5172,
+      "end": 5214,
       "fixes": 0
     },
     {
@@ -974,8 +973,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5099,
-      "end": 5141,
+      "start": 5172,
+      "end": 5214,
       "fixes": 0
     },
     {
@@ -985,8 +984,8 @@
       "blocker": "value-forwarded",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5112,
-      "end": 5114,
+      "start": 5185,
+      "end": 5187,
       "fixes": 0
     },
     {
@@ -996,8 +995,8 @@
       "blocker": "value-forwarded",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5122,
-      "end": 5127,
+      "start": 5195,
+      "end": 5200,
       "fixes": 0
     },
     {
@@ -1007,8 +1006,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5148,
-      "end": 5179,
+      "start": 5221,
+      "end": 5252,
       "fixes": 0
     },
     {
@@ -1018,8 +1017,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5148,
-      "end": 5179,
+      "start": 5221,
+      "end": 5252,
       "fixes": 0
     },
     {
@@ -1029,8 +1028,8 @@
       "blocker": "value-forwarded",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5160,
-      "end": 5162,
+      "start": 5233,
+      "end": 5235,
       "fixes": 0
     },
     {
@@ -1040,8 +1039,8 @@
       "blocker": "value-forwarded",
       "severity": "warning",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5170,
-      "end": 5175,
+      "start": 5243,
+      "end": 5248,
       "fixes": 0
     },
     {
@@ -1051,8 +1050,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5186,
-      "end": 5198,
+      "start": 5259,
+      "end": 5271,
       "fixes": 0
     },
     {
@@ -1062,8 +1061,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5186,
-      "end": 5198,
+      "start": 5259,
+      "end": 5271,
       "fixes": 0
     },
     {
@@ -1073,8 +1072,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5205,
-      "end": 5219,
+      "start": 5278,
+      "end": 5292,
       "fixes": 0
     },
     {
@@ -1084,8 +1083,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5205,
-      "end": 5219,
+      "start": 5278,
+      "end": 5292,
       "fixes": 0
     },
     {
@@ -1095,8 +1094,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5226,
-      "end": 5299,
+      "start": 5299,
+      "end": 5372,
       "fixes": 0
     },
     {
@@ -1106,8 +1105,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5226,
-      "end": 5299,
+      "start": 5299,
+      "end": 5372,
       "fixes": 0
     },
     {
@@ -1117,8 +1116,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5306,
-      "end": 5318,
+      "start": 5379,
+      "end": 5391,
       "fixes": 0
     },
     {
@@ -1128,8 +1127,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5306,
-      "end": 5318,
+      "start": 5379,
+      "end": 5391,
       "fixes": 0
     },
     {
@@ -1139,8 +1138,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5325,
-      "end": 5353,
+      "start": 5398,
+      "end": 5426,
       "fixes": 0
     },
     {
@@ -1150,8 +1149,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5325,
-      "end": 5353,
+      "start": 5398,
+      "end": 5426,
       "fixes": 0
     },
     {
@@ -1161,8 +1160,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5360,
-      "end": 5389,
+      "start": 5433,
+      "end": 5462,
       "fixes": 0
     },
     {
@@ -1172,8 +1171,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5360,
-      "end": 5389,
+      "start": 5433,
+      "end": 5462,
       "fixes": 0
     },
     {
@@ -1183,8 +1182,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5396,
-      "end": 5414,
+      "start": 5469,
+      "end": 5487,
       "fixes": 0
     },
     {
@@ -1194,8 +1193,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5396,
-      "end": 5414,
+      "start": 5469,
+      "end": 5487,
       "fixes": 0
     },
     {
@@ -1205,8 +1204,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5421,
-      "end": 5445,
+      "start": 5494,
+      "end": 5518,
       "fixes": 0
     },
     {
@@ -1216,8 +1215,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5421,
-      "end": 5445,
+      "start": 5494,
+      "end": 5518,
       "fixes": 0
     },
     {
@@ -1227,8 +1226,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5452,
-      "end": 5484,
+      "start": 5525,
+      "end": 5557,
       "fixes": 0
     },
     {
@@ -1238,8 +1237,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5452,
-      "end": 5484,
+      "start": 5525,
+      "end": 5557,
       "fixes": 0
     },
     {
@@ -1249,8 +1248,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5491,
-      "end": 5511,
+      "start": 5564,
+      "end": 5584,
       "fixes": 0
     },
     {
@@ -1260,8 +1259,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5491,
-      "end": 5511,
+      "start": 5564,
+      "end": 5584,
       "fixes": 0
     },
     {
@@ -1271,8 +1270,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5518,
-      "end": 5550,
+      "start": 5591,
+      "end": 5623,
       "fixes": 0
     },
     {
@@ -1282,8 +1281,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5518,
-      "end": 5550,
+      "start": 5591,
+      "end": 5623,
       "fixes": 0
     },
     {
@@ -1293,8 +1292,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5557,
-      "end": 5576,
+      "start": 5630,
+      "end": 5649,
       "fixes": 0
     },
     {
@@ -1304,8 +1303,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5557,
-      "end": 5576,
+      "start": 5630,
+      "end": 5649,
       "fixes": 0
     },
     {
@@ -1315,8 +1314,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5583,
-      "end": 5595,
+      "start": 5656,
+      "end": 5668,
       "fixes": 0
     },
     {
@@ -1326,8 +1325,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5583,
-      "end": 5595,
+      "start": 5656,
+      "end": 5668,
       "fixes": 0
     },
     {
@@ -1337,8 +1336,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5602,
-      "end": 5681,
+      "start": 5675,
+      "end": 5754,
       "fixes": 0
     },
     {
@@ -1348,8 +1347,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5602,
-      "end": 5681,
+      "start": 5675,
+      "end": 5754,
       "fixes": 0
     },
     {
@@ -1359,8 +1358,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5688,
-      "end": 5717,
+      "start": 5761,
+      "end": 5790,
       "fixes": 0
     },
     {
@@ -1370,8 +1369,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5688,
-      "end": 5717,
+      "start": 5761,
+      "end": 5790,
       "fixes": 0
     },
     {
@@ -1381,8 +1380,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5724,
-      "end": 5737,
+      "start": 5797,
+      "end": 5810,
       "fixes": 0
     },
     {
@@ -1392,8 +1391,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-handed-root/App.tsx",
-      "start": 5724,
-      "end": 5737,
+      "start": 5797,
+      "end": 5810,
       "fixes": 0
     },
     {

@@ -2616,15 +2616,14 @@ impl<'l, 'a> Census<'l, 'a> {
         self
     }
 
-    /// ADR 0811: whether a store member write SC2003 decided stands on the
-    /// chain of `member`.
-    fn write_decided(&mut self, file: &FileFacts, member: Span) -> bool {
+    /// ADR 0811: whether a store member write SC2003 decided is the write of `member` itself (its Set, no Get of it). A deeper
+    /// write on its chain (`held.a.v = 9` for `held.a`) leaves the Get of `member` to the read rules.
+    fn write_decided_target(&mut self, file: &FileFacts, member: Span) -> bool {
         let member_writes = &self.member_writes;
         crate::get_or_insert_with_str(&mut self.decided_writes, file.path.as_str(), || {
             member_writes(file)
         })
-        .iter()
-        .any(|written| written.start == member.start && written.end >= member.end)
+        .contains(&member)
     }
 
     /// Whether the call at `callee` runs where the rules of what it may do do
@@ -2664,10 +2663,13 @@ impl<'l, 'a> Census<'l, 'a> {
                     return Position::Followed;
                 }
                 let (start, end) = (u64::from(member.span.start), u64::from(member.span.end));
+                // A decided write covers this member only where it is the written target itself: in a deeper write
+                // (`held.a.v = 9`) this member is a Get of its own (rc.21 warns STRICT_READ_UNTRACKED at it), which the write's row
+                // does not answer (the SC1001 false clean found with ADR 1172).
                 let rowed = self.rows.get(file.path.as_str()).is_some_and(|rows| {
                     rows.iter()
                         .any(|(row_start, row_end)| *row_start == start && *row_end >= end)
-                }) || self.write_decided(file, member.span);
+                }) || self.write_decided_target(file, member.span);
                 return if rowed {
                     Position::Followed
                 } else {

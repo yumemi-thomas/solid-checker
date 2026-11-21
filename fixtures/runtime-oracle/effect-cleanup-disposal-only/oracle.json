@@ -1,0 +1,1 @@
+{ "note": "ADR 1167: an effect or render effect whose compute tracks nothing returns a cleanup that reads a store or a signal; it runs at a Show branch or For row disposal: Chrome quiet, SC1001 clean. The twins (a tracking compute, a named apply, a nested read, an async cleanup) stay uncertifiable." }
