@@ -242,6 +242,10 @@ export const ARM_GAPS = [
       "write_roles.generator-steps",
     ],
   },
+  {
+    reason: "ADR 1155 (a): a write in a literal ADR 0200's exact proof forwards to a leaf owner's slot. No registered pair forwards a callback through a package or project function; the arm-shape contexts do (`barm-fwdleaf-tracked`, legal, 3 clean on lg-recall; its misuse twins `barm-fwdleaf-memo` and `barm-fwdleaf-args`, 3 violations and 3 uncertifiable on mx-recall, Chrome-confirmed), with the fixture `forwarded-leaf-write` (HandApp silent; MemoApp, ArgsApp, SwapApp kept) and the pattern `ctxmemo/s11-hand-direct`.",
+    arms: ["write_roles.forwarded-leaf-scope"],
+  },
 
 ];
 // </arm-gaps>
