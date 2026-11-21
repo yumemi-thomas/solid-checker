@@ -8112,6 +8112,14 @@
    "to": 8,
    "adr": "ADR 1146",
    "fact": "a helper handed to an event-handler slot under the read veto is an unproven use (local_access helper_value_execution: Unknown under synchronous_event_read_dispatch_present)"
+  },
+  {
+   "fixture": "reactive-ir/foreach-carrier",
+   "key": "SC1001 read-backing-unproven",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 1166",
+   "fact": "the four carried signal reads of this fixture stay uncertifiable under another blocker: with a carried forEach or map run placing the read at its reporting run (named_callbacks::reporting_run_role), function-run-unplaced becomes read-backing-unproven, the program-wide SC9012 tuple withdrawal that holds every signal read (the relabel is in counts.json drops)"
   }
  ]
 }

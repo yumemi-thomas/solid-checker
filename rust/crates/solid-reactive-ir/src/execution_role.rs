@@ -448,27 +448,34 @@ pub(crate) fn read_execution_role(
     lookup: &SemanticLookup<'_>,
 ) -> ExecutionRole {
     crate::role_log::decide("read", file.path.as_str(), span, || {
-        let role =
-            read_execution_role_unlogged(file, span, allowed, entities, symbol_names, lookup);
-        // ADR 1166: a read a named callback's open entries leave unplaced still runs untracked where a run of the callback
-        // provably executes it at a reporting role; reads only, every other site keeps its unplaced role.
-        if role == ExecutionRole::Unknown
-            && let Some(reporting) = named_callbacks::reporting_run_role(
-                file,
-                span,
-                allowed,
-                entities,
-                symbol_names,
-                lookup,
-            )
-        {
-            return role_arm!(
-                "execution_role.read_execution_role.reporting-run",
-                reporting
-            );
-        }
-        role
+        read_execution_role_unlogged(file, span, allowed, entities, symbol_names, lookup)
     })
+}
+
+/// ADR 1166 r2: the role of a strict read (SC1001's untracked-read claim, a warning that every untracked run raises on its own):
+/// [`read_execution_role`], or, where that leaves the read unplaced, the reporting role of a run of its named callback that
+/// provably executes it ([`named_callbacks::reporting_run_role`]). One such run is a witness for this claim only: a rule that
+/// throws (a pending read, `resolve`/`until`, an owner operation) or fires on a tracked run asks [`read_execution_role`], where a
+/// function with several runs keeps every run's role, so its other runs stay unplaced.
+pub(crate) fn strict_read_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    role: ExecutionRole,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> ExecutionRole {
+    if role != ExecutionRole::Unknown {
+        return role;
+    }
+    match named_callbacks::reporting_run_role(file, span, allowed, entities, symbol_names, lookup) {
+        Some(reporting) => role_arm!(
+            "execution_role.read_execution_role.reporting-run",
+            reporting
+        ),
+        None => role,
+    }
 }
 
 fn read_execution_role_unlogged(

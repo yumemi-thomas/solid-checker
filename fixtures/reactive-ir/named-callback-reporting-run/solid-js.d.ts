@@ -3,6 +3,11 @@ declare namespace JSX {
 }
 
 declare module "solid-js" {
+  // `@solidjs/signals@2.0.0-rc.21` `dist/types/signals.d.ts:552`, `:587`, `:605` (UntilOptions reduced to `timeout`), `:642`.
+  export function resolve<T>(fn: () => T): Promise<T>;
+  export type Truthy<T> = Exclude<T, false | 0 | 0n | "" | null | undefined>;
+  export interface UntilOptions { timeout?: number }
+  export function until<T>(fn: () => T, options?: UntilOptions): Promise<Truthy<T>>;
   export type Store<T> = T;
   export type StoreSetter<T> = (fn: (draft: T) => T | void) => void;
   export function createStore<T extends object>(value: T, options?: { shallow?: boolean }): [Store<T>, StoreSetter<T>];

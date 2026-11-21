@@ -2684,10 +2684,8 @@ pub(super) fn callee_callback_timing_within(
             // Only the lexical rendering role places code by where it is
             // written; a role a dialect arm proved for this position (an
             // effect's apply callback, an untrack callback) is not.
-            // ADR 1166: a named callback a reporting run provably executes runs the read there, at that run's timing.
             return execution == ExecutionRole::UntrackedRendering
-                && literal_invocation_unproven(file, literal, execution, lookup, following)
-                && !reporting_run_places(file, span, execution, lookup);
+                && literal_invocation_unproven(file, literal, execution, lookup, following);
         };
         if lookup.primitive_at_call(file, call.span).is_some() {
             // A primitive's own callback argument is classified by the
@@ -2742,6 +2740,19 @@ pub(super) fn callee_callback_timing_within(
         }
         return true;
     }
+}
+
+/// ADR 1166 r2: [`callee_callback_timing`] of a strict read (SC1001's row only, as [`super::strict_read_role`]): a named callback
+/// a reporting run provably executes runs the read there, at that run's timing. Every other rule keeps the generic answer, where a
+/// function with several runs has no one timing.
+pub(crate) fn strict_read_callee_timing(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    execution: ExecutionRole,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    callee_callback_timing(file, span, execution, lookup)
+        && !reporting_run_places(file, span, execution, lookup)
 }
 
 /// ADR 1166: whether [`super::named_callbacks::reporting_run_role`] places the read at `span` at `execution`: a run of its named

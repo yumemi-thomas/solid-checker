@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, createStore, onSettled } from "solid-js";
+import { createEffect, createMemo, createSignal, createStore, onSettled, resolve, until } from "solid-js";
 
 // ADR 1166: a read in the body of a `const`-bound callback is read untracked where a run of the callback provably executes it
 // there: a direct call or a literal `forEach`/`map` carrier, written after the declarator in the function that declares it,
@@ -163,4 +163,25 @@ export function TwinDestructureListed() {
   const l = [f];
   l.forEach((g) => g());
   return <div>{m()}</div>;
+}
+
+// ADR 1166 r2 (census false cleans `barm-carried-body`): `resolve`/`until` in a function an effect's compute runs tracked and a
+// carried `forEach` runs untracked. The compute run throws (RESOLVE/UNTIL_IN_REACTIVE_SCOPE); the untracked run proves nothing
+// about it, so SC2004/SC2005 keep their uncertifiable row (`function-run-unplaced`), never silent.
+export function TwinResolveComputeCarried() {
+  const f1 = () => {
+    resolve(() => 1);
+  };
+  createEffect(f1, () => {});
+  [f1].forEach((g) => g());
+  return <div />;
+}
+
+export function TwinUntilComputeCarried() {
+  const f1 = () => {
+    until(() => 1);
+  };
+  createEffect(f1, () => {});
+  [f1].forEach((g) => g());
+  return <div />;
 }

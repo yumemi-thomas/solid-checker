@@ -13,5 +13,5 @@ Violations: `StoreMemoCalledInBody` (it had a violation from the call summary an
 Uncertifiable twins: `TwinDeadCall` (`if (false) f()`), `TwinConditionalCarrier`, `TwinLoopCall`, `TwinFilter` (no carrier),
 `TwinLetBinding` (the binding is reassigned), `TwinNestedRead` (the read is in a nested function the run does not execute), `TwinDestructureListed` (SC1003 too: a non-literal list), `TwinApplyCreationFirst` (in an effect's apply, outside
 the body's rendering, a call before the run, here `createMemo(f)`, throws PRIMITIVE_IN_EFFECT_CALLBACK first: no call may stand
-between the declarator and such a run).
+between the declarator and such a run). `TwinResolveComputeCarried`, `TwinUntilComputeCarried` (r2, the census false cleans): `resolve`/`until` in a function an effect's compute runs tracked and a carried `forEach` runs untracked keep SC2004/SC2005 uncertifiable (`function-run-unplaced`): the reporting run places the strict read (SC1001) only.
 Chrome: `runtime-oracle/named-callback-reporting-run`. Stub: `foreach-carrier`'s, plus `createStore`.

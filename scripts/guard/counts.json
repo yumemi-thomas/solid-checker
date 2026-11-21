@@ -11,7 +11,7 @@
   "SC1001 component-identity-unproven": 136,
   "SC1001 creation-throws-first": 3,
   "SC1001 escaped-name-unresolved": 19,
-  "SC1001 function-run-unplaced": 1761,
+  "SC1001 function-run-unplaced": 1758,
   "SC1001 function-unentered": 1,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
@@ -92,12 +92,12 @@
   "SC2004 async-slot-unmodelled": 4,
   "SC2004 component-identity-unproven": 1,
   "SC2004 computation-error-unobserved": 26,
-  "SC2004 function-run-unplaced": 21,
+  "SC2004 function-run-unplaced": 22,
   "SC2004 package-finding-at-entry": 1,
   "SC2004 search-depth-limit": 1,
   "SC2005 async-slot-unmodelled": 2,
   "SC2005 computation-error-unobserved": 6,
-  "SC2005 function-run-unplaced": 6,
+  "SC2005 function-run-unplaced": 7,
   "SC2006 flush-in-action-unaccounted": 475,
   "SC2006 function-run-unplaced": 45,
   "SC2006 package-finding-at-entry": 1,
@@ -128,7 +128,7 @@
   "SC3001 function-run-unplaced": 38,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 7,
-  "SC3001 leaf-operation-unaccounted": 7049,
+  "SC3001 leaf-operation-unaccounted": 7053,
   "SC3001 leaf-owner-unproven": 67,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
@@ -144,7 +144,7 @@
   "SC4001 handler-on-disabled-control": 7,
   "SC4001 handler-spread-unresolved": 84,
   "SC4001 owner-allocation-unproven": 24,
-  "SC4001 owner-callers-unenumerated": 3635,
+  "SC4001 owner-callers-unenumerated": 3637,
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 4,
@@ -204,7 +204,7 @@
   "SC5008 pending-read-unresolved": 24,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5484,
+  "SC6002 effect-creation-unaccounted": 5488,
   "SC6002 effect-owner-unproven": 53,
   "SC6002 function-run-unplaced": 64,
   "SC6002 generator-step-unplaced": 1,
@@ -5557,6 +5557,30 @@
    "fixtures": {
     "proved": "reactive-ir/named-fn-expr-calls",
     "open": "reactive-ir/named-fn-expr-calls"
+   }
+  },
+  {
+   "fixture": "reactive-ir/construct-only-class",
+   "key": "SC1001 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1166",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role.rs::strict_read_role",
+   "fixtures": {
+    "proved": "reactive-ir/construct-only-class",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/named-callback-escaped-entry",
+   "key": "SC1001 function-run-unplaced",
+   "from": 8,
+   "to": 2,
+   "adr": "ADR 1166",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role.rs::strict_read_role",
+   "fixtures": {
+    "proved": "reactive-ir/named-callback-escaped-entry",
+    "open": "reactive-ir/named-callback-escaped-entry"
    }
   }
  ],

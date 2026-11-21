@@ -243,5 +243,9 @@ export const ARM_GAPS = [
     ],
   },
 
+  {
+    reason: "ADR 1166: a strict read (SC1001's row only, r2) in the body of a `const`-bound function that a direct call or a carried `forEach`/`map` runs in the declaring function, after the declarator, on every completion, at a reporting position, takes that run's role where the open entries left it unplaced (`named_callbacks::reporting_run_role` through `strict_read_role`). Every other rule keeps the function's several runs unplaced. No pair of the registry's snapshot separates the arm. Fixture `named-callback-reporting-run` does (7 violations; twins that stay uncertifiable: a dead run, a conditional carrier, a loop, `filter`, a `let` binding, a nested read, a creation before the run in an effect's apply, and `resolve`/`until` in a function an effect's compute and a carried run both run; a clean handler `map`), with Chrome (`runtime-oracle/named-callback-reporting-run`), and so do the recall grids' `byname*` store variants.",
+    arms: ["execution_role.read_execution_role.reporting-run"],
+  },
 ];
 // </arm-gaps>
