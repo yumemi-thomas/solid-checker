@@ -1157,7 +1157,7 @@ fn inherits_callback_role(
         if climb.suspended_on_every_path()
             || follows_unconditional_await(file, at)
             || follows_dominating_await(file, at)
-            || follows_try_head_await(file, at, lookup)
+            || follows_declared_try_head_await(file, at, lookup)
         {
             return Some(role_arm!(
                 "named_callbacks.inherits_callback_role.unreported",
