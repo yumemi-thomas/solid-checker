@@ -588,7 +588,27 @@ pub(crate) fn named_callback_roles(
             let entry = roles.entry(function.span);
             entry.admitted = true;
             entry.ref_applied = true;
-            roles.admit_at(function.span, element.name.span);
+            // ADR 1160: a `ref` whose expression is the function's own name (`ref={rf1}`) is entered at that reference, so the
+            // entry census accounts for it as this position; any other expression keeps the element as the position.
+            let binding = function_binding_name(file, function).map(|name| name.span);
+            let named = crate::owners::ref_applications_of(file, function, lookup)
+                .into_iter()
+                .map(|applied| file.ast.peel_ts_sugar_span(applied))
+                .filter(|applied| {
+                    binding.is_some()
+                        && file.ast.identifiers.iter().any(|identifier| {
+                            identifier.span == *applied
+                                && identifier.role == solid_facts::ast::IdentifierRole::Reference
+                        })
+                        && file.ast.reference_declaration(*applied) == binding
+                })
+                .collect::<Vec<_>>();
+            if named.is_empty() {
+                roles.admit_at(function.span, element.name.span);
+            }
+            for applied in named {
+                roles.admit_at(function.span, applied);
+            }
         }
     }
     for (element_index, element) in file.ast.jsx_elements.iter().enumerate() {
