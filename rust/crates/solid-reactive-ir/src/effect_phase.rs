@@ -352,6 +352,11 @@ impl<'l, 'a> Walk<'l, 'a> {
         {
             return None;
         }
+        // ADR 1155 (b): code in an exact context provider's children runs under the provider's children memo: an owner is set there, so no
+        // apply's stack reaches it with none.
+        if crate::callback_return::in_exact_provider_children(self.lookup, file, span, literal) {
+            return None;
+        }
         // A method or accessor is reached through a receiver this walk does
         // not resolve. Calling a generator runs none of its body; stepping
         // its iterator runs it (ADR 0516), so one called in place keeps the
