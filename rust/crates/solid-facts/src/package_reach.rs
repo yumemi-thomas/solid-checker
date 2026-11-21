@@ -220,6 +220,11 @@ pub struct PackageReachIndex {
     /// one), that names an entry the program does not analyse, or that cannot be read; or another HTML file of the project with a script or an inline handler. Where
     /// there is no project HTML the program is closed (ADR 0640, ADR 1080), so `false`. A proof that nothing listens for an event reads it (`focus_delivery`).
     pub page_may_run_code: bool,
+    /// ADR 1144: the installed package roots that are a page's host and not a writer of its built-ins' prototypes, each with the id of the reviewed premise that says
+    /// so: the root of `vite` where no program file loads it and the dev client its server injects is a release whose bytes were read
+    /// (`solid_facts_backend::product_realm::VITE_CLIENTS`). What the walk found in the package's own closure runs in the dev server's process, not in the page, so
+    /// the scopes a site's prototype writers are judged in leave these roots out ([`Self::full_scope`], [`Self::product_scope`]); every other query keeps them.
+    pub reviewed_hosts: BTreeMap<String, String>,
 }
 
 /// ADR 1145: the product realm of a program whose real entries are read from its build configuration (an HTML page's module scripts, a package's `exports`): the
@@ -245,20 +250,53 @@ pub struct WriterScope<'a> {
     index: &'a PackageReachIndex,
     named: &'a BTreeMap<String, BTreeSet<String>>,
     any: &'a BTreeSet<String>,
+    /// ADR 1144: whether the reviewed hosts ([`PackageReachIndex::reviewed_hosts`]) are left out.
+    hosts_out: bool,
 }
 
 impl<'a> WriterScope<'a> {
+    fn held(&self, root: &str) -> bool {
+        !(self.hosts_out && self.index.reviewed_hosts.contains_key(root))
+    }
+
     fn counts(&self, root: &str) -> bool {
-        self.index
-            .by_root
-            .get(root)
-            .is_none_or(|reach| !reach.is_clear())
+        self.held(root)
+            && self
+                .index
+                .by_root
+                .get(root)
+                .is_none_or(|reach| !reach.is_clear())
     }
 
     /// Whether no package writes a built-in's prototype, by name or under a name nothing decides, in this scope (clear packages included).
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.named.is_empty() && self.any.is_empty()
+        self.named
+            .values()
+            .flatten()
+            .chain(self.any.iter())
+            .all(|root| !self.held(root))
+    }
+
+    /// ADR 1144: this scope with the reviewed hosts kept: the writers a site was judged against before the premise.
+    #[must_use]
+    pub fn with_hosts(self) -> Self {
+        Self {
+            hosts_out: false,
+            ..self
+        }
+    }
+
+    /// ADR 1144: whether a reviewed host is left out of this scope that writes a prototype here.
+    #[must_use]
+    pub fn leaves_out_a_host(&self) -> bool {
+        self.hosts_out
+            && self
+                .named
+                .values()
+                .flatten()
+                .chain(self.any.iter())
+                .any(|root| self.index.reviewed_hosts.contains_key(root))
     }
 
     /// [`PackageReachIndex::prototype_writers_by_name`] in this scope.
@@ -349,6 +387,7 @@ impl PackageReachIndex {
             index: self,
             named: &self.prototype_writers,
             any: &self.prototype_writers_any,
+            hosts_out: true,
         }
     }
 
@@ -364,6 +403,7 @@ impl PackageReachIndex {
             index: self,
             named: &product.prototype_writers,
             any: &product.prototype_writers_any,
+            hosts_out: true,
         })
     }
 

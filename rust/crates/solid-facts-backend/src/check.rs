@@ -384,7 +384,12 @@ pub fn package_inputs(
     let applied = crate::product_realm::apply(&realm, &mut reach);
     // ADR 1151: whether a project HTML page may run code the analysed files do not hold, read once beside the realm (the same grammar, no second parser).
     reach.page_may_run_code = crate::product_realm::page_may_run_code(directory, facts);
-    crate::product_realm::write_census(&realm, &applied, &reach, directory);
+    // ADR 1144: Vite's dev client premise, at the root of the unloaded `vite` package, whatever the realm decided.
+    let host = crate::product_realm::reviewed_host(directory, facts, runtime, &reach);
+    if let Some(Ok(host)) = &host {
+        reach.reviewed_hosts.clone_from(&host.roots);
+    }
+    crate::product_realm::write_census(&realm, &applied, &reach, directory, host.as_ref());
     boundary.set_package_reach(reach);
     let inferred =
         crate::inferred_project_host_with_note(directory, runtime, dialect.vocabulary, facts)?;
