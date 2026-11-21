@@ -11,7 +11,7 @@
   "SC1001 component-identity-unproven": 136,
   "SC1001 creation-throws-first": 3,
   "SC1001 escaped-name-unresolved": 19,
-  "SC1001 function-run-unplaced": 1768,
+  "SC1001 function-run-unplaced": 1770,
   "SC1001 function-unentered": 1,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
@@ -5509,6 +5509,18 @@
    "fixtures": {
     "proved": "reactive-ir/destructure-store-slots",
     "open": "reactive-ir/destructure-store-slot-patterns"
+   }
+  },
+  {
+   "fixture": "reactive-ir/read-flush-layer-placed",
+   "key": "SC1001 function-run-unplaced",
+   "from": 5,
+   "to": 4,
+   "adr": "ADR 1161",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/callback_standing.rs::in_place_call_role",
+   "fixtures": {
+    "proved": "reactive-ir/read-flush-layer-placed",
+    "open": "reactive-ir/flush-closure-called-once"
    }
   }
  ],
