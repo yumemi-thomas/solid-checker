@@ -4,7 +4,7 @@
 
 | component | outcome |
 |---|---|
-| `HandedAndCalled` (a function handed by name to `createMemo` and also called by the body) | SC1003 uncertifiable (was silent) |
+| `HandedAndCalled` (a function handed by name to `createMemo` and also called by the body) | SC1003 violation (ADR 1166: the body's call runs the destructure; it was uncertifiable, and silent before ADR 1107) |
 | `SlotWithDefault` (`{ v = 1 }`: the slot is still read), `RestElement` (the rest reads the whole object) | SC1003 violation |
 | `EmptyPattern` (`const {} = store` reads nothing) | no row |
 | `ComputedKey` (a key no fact names: a symbol or `then` would not warn) | SC1003 uncertifiable `store-key-undecided` |

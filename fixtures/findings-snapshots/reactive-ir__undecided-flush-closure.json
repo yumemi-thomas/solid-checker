@@ -135,7 +135,7 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "blocker": "component-identity-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/undecided-flush-closure/App.tsx",
       "start": 1361,
