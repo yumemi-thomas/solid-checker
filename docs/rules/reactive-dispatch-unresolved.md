@@ -222,6 +222,13 @@ A primitive's slot that takes a target it never calls nor hands on (`Dialect::ar
 
 A call reached by walking must have a read, write or action row, or, for an accessor, a tracked position. The row stands at the reference and, too, at each use the walk ends at, in any file: an IIFE's result, a `let` and a class field are walked on to their uses (ADR 0831). Links are not this census: `const t = s.a; t.x = 1` is SC2003's forward flow.
 
+ADR 1147 (arm 3, `context-provided-store-tuple`): a context whose one value is a fresh `[store, { actions }]` literal (`<Ctx value={[cart, { add }] as const}>`,
+the context an unwritten, unexported `const` of the dialect's `createContext` with no argument, one provider, every reference the provider's tag or an
+exact `useContext` a `const` array pattern takes apart at once, no code built from a string) is followed to its readers: a reader's slot-0 name is the
+store itself (a store source, as a hook's returned store is), the census gives a reader only the names of the slot it walks, and an action's local, only
+called, is the function the literal holds. A tuple held whole, an action local used as a value, slot 1 bound whole, a value `const` handed on, a second
+provider, a signal in slot 0 or a program that builds code keep the census's rows (fixture `context-provided-store-tuple`).
+
 ## What keeps a leaf callback open
 
 The leaf walk follows each call in the callback's synchronous extent to a

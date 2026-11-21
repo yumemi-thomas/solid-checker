@@ -248,6 +248,11 @@ pub(crate) struct UnreadPackageHandOff<'l, 'a> {
     packages_unseen: std::cell::OnceCell<bool>,
     /// Whether a file of the program can name `Object.prototype` or runs code it builds (`files_name_object_prototype`).
     files_name_prototype: std::cell::OnceCell<bool>,
+    /// ADR 1147: the question is asked for the owner codes only (SC3001's creation and cleanup, SC6002's creation: the leaf universe). A child of an exact
+    /// context provider ([`crate::callback_return::exact_context_provider`]) runs inside the provider's `children()` memo, whose owner is set wherever the memo is
+    /// read, so a package that reads the provider's value runs the child under that owner: no owner question changes. The stack questions (a flush, an
+    /// after-await read) never ask in this mode: where the memo is read is their question.
+    owner_questions: bool,
 }
 
 /// The keys under which an object literal of the program holds another object literal directly (`{ sub: { … } }`), and whether one holds it under a key the program does not
@@ -289,7 +294,30 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             object_prototype_written: std::cell::OnceCell::new(),
             packages_unseen: std::cell::OnceCell::new(),
             files_name_prototype: std::cell::OnceCell::new(),
+            owner_questions: false,
         }
+    }
+
+    /// ADR 1147: the question for the owner codes only (the leaf universe): a child of an exact context provider is placed under the provider's children memo
+    /// ([`Self::owner_questions`]). The flush accounting and the after-await accounting use [`Self::new`].
+    pub(crate) fn for_owner_questions(
+        lookup: &'l SemanticLookup<'a>,
+        files: &'l HashMap<&'l str, &'a FileFacts>,
+    ) -> Self {
+        Self {
+            owner_questions: !crate::site_accounting::ablated_id(
+                crate::callback_return::CONTEXT_PROVIDER_CHILDREN_OWNED,
+            ),
+            ..Self::new(lookup, files)
+        }
+    }
+
+    /// ADR 1147: whether the value at `at`, carried by a child of `element` (no function between), is placed under an exact context provider's children memo:
+    /// the owner mode only.
+    fn provider_child_owned(&self, file: &'a FileFacts, element: &JsxElementFact) -> bool {
+        self.owner_questions
+            && !is_intrinsic_tag(file, element)
+            && crate::callback_return::exact_context_provider(self.lookup, file, element)
     }
 
     /// Whether a function that owns `span` (or one that, through exact call edges, runs it) may be run by a package nothing here reads, or the element whose prop or
@@ -1944,6 +1972,12 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         {
             return false;
         }
+        // ADR 1147 (owner mode): a child expression of an exact context provider is evaluated by the provider's children memo only, under the memo's owner.
+        if self.provider_child_owned(file, element)
+            && element.children.iter().any(|child| child.contains(at))
+        {
+            return false;
+        }
         if self.element_created_in(file, element.span, walk) {
             return true;
         }
@@ -2769,6 +2803,12 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         {
             placed = true;
         }
+        // ADR 1147 (owner mode): a child of an exact context provider is evaluated by the provider's children memo only, under the memo's owner: placed.
+        let in_children = element.children.iter().any(|child| child_holds(*child));
+        let provider_owned = in_children && self.provider_child_owned(file, element);
+        if provider_owned {
+            placed = true;
+        }
         let component_gets_it = element
             .attributes
             .iter()
@@ -2778,7 +2818,7 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
                 .spreads
                 .iter()
                 .any(|spread| carried(spread.argument))
-            || element.children.iter().any(|child| child_holds(*child));
+            || (in_children && !provider_owned);
         if component_gets_it {
             placed = true;
             let receiver = self.element_receiver(file, index, element);

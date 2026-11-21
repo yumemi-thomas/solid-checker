@@ -154,9 +154,14 @@ pub(super) fn silences(
         .iter()
         .map(|file| (file.path.as_str(), file))
         .collect();
-    let unread = crate::package_hand_off::UnreadPackageHandOff::new(lookup, &by_path);
+    // ADR 1147: the owner codes' question: a child of an exact context provider runs under the provider's children memo, wherever it is read.
+    let unread =
+        crate::package_hand_off::UnreadPackageHandOff::for_owner_questions(lookup, &by_path);
     let no_leaf_opener = !lookup.project_opens_leaf_scope();
     let logging = crate::proof_log::enabled();
+    // ADR 1147: under the proof log only, the question without the owner arm, to name the arm where a site ends that it alone let through (monotone.mjs M2b).
+    let plain =
+        logging.then(|| crate::package_hand_off::UnreadPackageHandOff::new(lookup, &by_path));
     // ADR 1031: the path id of each listed file, for a getter answered at reads written in another file.
     let pids: std::collections::HashMap<&str, PathId> = files
         .iter()
@@ -258,6 +263,8 @@ pub(super) fn silences(
                 );
                 continue;
             }
+            // The spans the hand-off is asked at: the reads of a getter, or the site itself.
+            let mut asked_at: Vec<(&solid_facts::FileFacts, Span)> = vec![(file, span)];
             let answers = if getter {
                 // A getter's JSX or creating call runs where the component reads the prop (the review of #225, F2): the function that holds it, module evaluation and
                 // every entry of that function say nothing of that stack. ADR 1031: where every read of the prop in the project component the element renders is on the
@@ -265,6 +272,7 @@ pub(super) fn silences(
                 // and ends only where every read that may run ends it.
                 match crate::owners::getter_read_sites(file, lookup, span) {
                     Some(reads) => {
+                        asked_at = reads.clone();
                         answer_at_reads(&question, &reads, leaf, effect, &mut allowed_by_path)
                     }
                     None => Answers {
@@ -292,6 +300,25 @@ pub(super) fn silences(
                     None => {}
                     Some(Err(reason)) => decline(group, reason),
                     Some(Ok((silence, premises))) => {
+                        // ADR 1147: the arm names itself where the question without it declines (a package may run the code).
+                        if let Some(plain) = &plain
+                            && asked_at
+                                .iter()
+                                .any(|(at_file, at)| plain.may_run(at_file, *at))
+                        {
+                            crate::proof_log::decision(
+                                "owner-call",
+                                file.path.as_str(),
+                                site,
+                                crate::ExecutionRole::Unknown,
+                                Some((
+                                    crate::callback_return::CONTEXT_PROVIDER_CHILDREN_OWNED,
+                                    false,
+                                )),
+                                &[crate::callback_return::CONTEXT_PROVIDER_CHILDREN_OWNED],
+                                Some(false),
+                            );
+                        }
                         ends.end_with(file, site, silence, || premises);
                     }
                 }

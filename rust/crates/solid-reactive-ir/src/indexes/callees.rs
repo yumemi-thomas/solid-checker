@@ -483,10 +483,15 @@ impl<'a> SemanticLookup<'a> {
     /// ADR 1137: whether the standard call at `callee` may run a member code built from a string replaced: some analyzed file builds code from a string
     /// (a direct `eval`, a call resolved to `eval` or the `Function` constructor, or [`crate::base::Hazard::StringCode`]'s other spellings).
     pub(crate) fn string_code_patch_withheld(&self, file: &FileFacts, callee: Span) -> bool {
-        (self.hazard_present(crate::base::Hazard::Eval)
+        self.program_builds_code() && self.resolved_standard_call_name(file, callee).is_some()
+    }
+
+    /// ADR 1137's veto: some analyzed file builds code from a string (a direct `eval`, a call resolved to `eval` or the `Function` constructor, or
+    /// [`crate::base::Hazard::StringCode`]'s other spellings), which may rewrite whatever no text of the program shows. ADR 1147's store-tuple arm asks it too.
+    pub(crate) fn program_builds_code(&self) -> bool {
+        self.hazard_present(crate::base::Hazard::Eval)
             || self.hazard_present(crate::base::Hazard::CodeEvaluatingCall)
-            || self.hazard_present(crate::base::Hazard::StringCode))
-            && self.resolved_standard_call_name(file, callee).is_some()
+            || self.hazard_present(crate::base::Hazard::StringCode)
     }
 
     /// ADR 0876: whether a write some chain reaches may have replaced the
