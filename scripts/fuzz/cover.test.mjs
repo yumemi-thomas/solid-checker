@@ -1,5 +1,8 @@
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { censusIds, coverHash, cover, familyIds, gridRows, ledgerIds, requiredIds, sample, wholeGrid } from "./cover.mjs";
+import { censusIds, coverHash, cover, familyIds, gridRows, ledgerIds, requiredIds, sample, wholeGrid, writeCover } from "./cover.mjs";
 
 const row = (id, code, context, variant, layer) => ({ id, side: "misuse", code, context, variant, binding: "direct", layer });
 
@@ -98,3 +101,30 @@ describe("the two jobs of the smoke (ADR 1001)", () => {
   });
 });
 
+
+describe("the shards of a smoke leg (ADR 1156)", () => {
+  it("write the one sample split by program: the shards' manifests partition the cover, each in the cover's order, and the hash still names the whole", () => {
+    const grids = ["mx-base", "lg-base", "mx-census"];
+    const drawn = sample({ grids, codes: ["STRICT_READ_UNTRACKED", "NO_OWNER_EFFECT"] });
+    const dir = mkdtempSync(join(tmpdir(), "cover-shard-"));
+    const whole = writeCover(drawn.byGrid, { runSeed: "1", dir: join(dir, "whole") });
+    const parts = [0, 1, 2].map((index) => writeCover(drawn.byGrid, { runSeed: "1", dir: join(dir, `part-${index}`), shard: { index, count: 3 } }));
+    for (const grid of grids) {
+      expect(drawn.byGrid[grid].length).toBeGreaterThan(0);
+      expect(whole[grid].ids).toEqual(drawn.byGrid[grid]);
+      const union = parts.flatMap((written) => written[grid].ids);
+      expect([...union].sort()).toEqual([...drawn.byGrid[grid]].sort());
+      expect(new Set(union).size).toBe(union.length);
+      for (const written of parts) {
+        const file = JSON.parse(readFileSync(written[grid].path, "utf8"));
+        expect(file.ids).toEqual(written[grid].ids);
+        expect(file).toMatchObject({ seed: 1 });
+        expect(file.generator).toBe(JSON.parse(readFileSync(whole[grid].path, "utf8")).generator);
+        expect(written[grid].ids).toEqual(drawn.byGrid[grid].filter((id) => written[grid].ids.includes(id)));
+      }
+    }
+    // the sample's hash is of the whole list, so the shards of a leg print the line the other leg and the unsharded run print
+    expect(coverHash(Object.fromEntries(grids.map((grid) => [grid, { ids: drawn.byGrid[grid] }])))).toBe(coverHash(whole));
+    expect(coverHash(parts[0])).not.toBe(coverHash(whole));
+  });
+});

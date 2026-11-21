@@ -17,6 +17,7 @@ import { cellList, censusCells, censusShapes, combined, gridShapes, mountsOption
 import { sourcesOption } from "./misuse.mjs";
 import { OPEN_ROWS, answers, readOpenDefects } from "./open-defects.mjs";
 import { fnv } from "./rng.mjs";
+import { inShard } from "./shard.mjs";
 import { readLedger } from "./proved.mjs";
 import { readRediscovery } from "./smoke.mjs";
 
@@ -179,17 +180,31 @@ export function sample({ perCode = false, seed = FIXED_SEED, required = [], grid
 /** A hash of a sample's every id, grid by grid in the grids' order: two jobs that print the same one drew the same sample (ADR 1001). */
 export const coverHash = (written) => createHash("sha256").update(JSON.stringify(Object.entries(written).map(([grid, { ids }]) => [grid, ids]))).digest("hex").slice(0, 16);
 
-/** A sample as `--ids` manifests, one per grid, in `dir`: `{ grid: { path, ids } }`. */
-export function writeSample({ perCode, seed, grids, runSeed, dir }) {
-  const started = Date.now();
-  const { byGrid, programs, population, features } = sample({ perCode, seed, grids, required: requiredIds() });
+/**
+ * A drawn sample (`sample`'s `byGrid`) as `--ids` manifests, one per grid, in `dir`: `{ grid: { path, ids } }`. `shard` (shard.mjs `smokeShardOf`): each
+ * manifest holds the ids of that part of the sample only, the programs whose `shardOf` is its index, so the N shards' manifests partition the sample.
+ */
+export function writeCover(byGrid, { runSeed, dir, shard = null }) {
   mkdirSync(dir, { recursive: true });
   const written = {};
-  for (const [grid, ids] of Object.entries(byGrid)) {
+  for (const [grid, drawn] of Object.entries(byGrid)) {
+    const ids = shard ? drawn.filter((id) => inShard(shard, id)) : drawn;
     const path = join(dir, `${grid}.json`);
     writeFileSync(path, `${JSON.stringify({ generator: GENERATOR_VERSION, seed: Number(runSeed), ids })}\n`);
     written[grid] = { path, ids };
   }
-  console.log(`cover: ${perCode ? "per-code" : "all"} pairs, seed ${seed}: ${programs} of ${population} programs for ${features} pairs, chosen in ${Math.round((Date.now() - started) / 1000)}s, sha256 ${coverHash(written)}`);
+  return written;
+}
+
+/**
+ * A sample as `--ids` manifests, one per grid, in `dir`: `{ grid: { path, ids } }`. The hash names the whole sample, so every shard prints the same one
+ * (a second line says which part this run took).
+ */
+export function writeSample({ perCode, seed, grids, runSeed, dir, shard = null }) {
+  const started = Date.now();
+  const { byGrid, programs, population, features } = sample({ perCode, seed, grids, required: requiredIds() });
+  const written = writeCover(byGrid, { runSeed, dir, shard });
+  console.log(`cover: ${perCode ? "per-code" : "all"} pairs, seed ${seed}: ${programs} of ${population} programs for ${features} pairs, chosen in ${Math.round((Date.now() - started) / 1000)}s, sha256 ${coverHash(Object.fromEntries(Object.entries(byGrid).map(([grid, ids]) => [grid, { ids }])))}`);
+  if (shard) console.log(`cover shard ${shard.index}/${shard.count}: ${Object.values(written).reduce((sum, { ids }) => sum + ids.length, 0)} of ${programs} programs, the ones whose id falls in part ${shard.index} of ${shard.count} (shard.mjs shardOf)`);
   return written;
 }

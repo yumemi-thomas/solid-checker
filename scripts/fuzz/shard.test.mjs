@@ -1,8 +1,9 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { parse } from "./focus.mjs";
+import { SMOKE_LEGS, parse } from "./focus.mjs";
 import { cellList, combined, gate, generateShape, gridShapes, recallShapes, shapeId } from "./matrix.mjs";
 import { generateLegal, legalCells, legalId, legalShapes } from "./legal.mjs";
-import { gridShardOptions, shardEntries, shardKey, shardLine, shardOf } from "./shard.mjs";
+import { gridShardOptions, inShard, ledgerPart, shardEntries, shardKey, shardLine, shardOf, smokeShardOf } from "./shard.mjs";
 
 // Grid entries as matrix.mjs and legal.mjs hold them: a cell and the built case's id.
 const grid = (n = 500) => Array.from({ length: n }, (_, i) => ({ cell: { code: i % 3 ? "A" : "B", context: "memo" }, built: { id: `case-${i}` } }));
@@ -74,5 +75,81 @@ describe("the grid shard", () => {
     for (const [cell, shape] of legal) expect(generateLegal(options, cell, { shape }).built.id).toBe(legalId(cell, { shape }));
     const [cell] = legalCells({ codes: ["FLUSH_IN_ACTION"] });
     expect(generateLegal(options, cell, { index: 3 }).built.id).toBe(legalId(cell, { index: 3 }));
+  });
+});
+
+describe("the smoke shard (ADR 1156)", () => {
+  const ids = Array.from({ length: 600 }, (_, i) => `mx-case-${i}`);
+  const shards = [0, 1].map((index) => ({ index, count: 2 }));
+  const parts = shards.map((shard) => ids.filter((id) => inShard(shard, id)));
+
+  it("reads --smoke-shard i/N and refuses anything else", () => {
+    expect(smokeShardOf(undefined)).toBeNull();
+    expect(smokeShardOf("1/2")).toEqual({ index: 1, count: 2 });
+    for (const bad of ["2/2", "0/0", "-1/2", "a/2", "1", "0/2/3"]) expect(() => smokeShardOf(bad)).toThrow(/--smoke-shard takes i\/N/);
+  });
+
+  it("splits a sample's programs by the grid shard's pick: every program in exactly one shard", () => {
+    expect([...parts[0], ...parts[1]].sort()).toEqual([...ids].sort());
+    expect(new Set([...parts[0], ...parts[1]]).size).toBe(ids.length);
+    for (const part of parts) expect(part.length).toBeGreaterThan(250);
+    for (const [index, part] of parts.entries()) for (const id of part) expect(shardOf(id, 2)).toBe(index);
+    // no shard asked: every id is in
+    expect(ids.every((id) => inShard(null, id))).toBe(true);
+  });
+
+  it("holds each ledger program in the shard its id is in: the shards' ledgers partition the ledger, so no shard judges another's program lost", () => {
+    const ledger = { grid: "mx-base", ids: new Set(ids.slice(0, 100)), entries: new Map(ids.slice(100, 300).map((id, i) => [`key-${String(i).padStart(3, "0")}`, id])), retired: new Map([["gone", "mx-case-599"]]) };
+    const ledgers = shards.map((shard) => ledgerPart(ledger, shard));
+    expect([...ledgers[0].ids, ...ledgers[1].ids].sort()).toEqual([...ledger.ids].sort());
+    expect([...ledgers[0].entries, ...ledgers[1].entries].sort()).toEqual([...ledger.entries].sort());
+    for (const [index, part] of ledgers.entries()) {
+      expect(part.ids.size).toBeGreaterThan(0);
+      expect(part.entries.size).toBeGreaterThan(0);
+      for (const id of part.ids) expect(parts[index]).toContain(id);
+      for (const [, id] of part.entries) expect(parts[index]).toContain(id);
+      expect(part.retired).toBe(ledger.retired);
+    }
+    expect(ledgerPart(ledger, null)).toBe(ledger);
+  });
+
+  it("is asked of focus.mjs with --smoke-shard i/N: with --smoke and --sample 0, on grids the cover samples", () => {
+    const leg = ["--smoke", "--smoke-leg", "rest", "--sample", "0"];
+    expect(parse([...leg, "--smoke-shard", "1/2"]).smokeShard).toBe("1/2");
+    expect(parse(leg).smokeShard).toBeUndefined();
+    expect(() => parse([...leg, "--smoke-shard", "2/2"])).toThrow(/--smoke-shard takes i\/N/);
+    expect(() => parse(["--codes", "all", "--smoke-shard", "0/2"])).toThrow(/needs --smoke/);
+    expect(() => parse(["--smoke", "--smoke-leg", "rest", "--smoke-shard", "0/2"])).toThrow(/needs --sample 0/);
+    // the census is sampled like the rest in the pull request's cover (all), and runs whole beside a per-code one: every shard would run all of it
+    expect(parse(["--smoke", "--smoke-leg", "census", "--sample", "0", "--smoke-shard", "0/2"]).smokeShard).toBe("0/2");
+    expect(() => parse(["--smoke", "--smoke-leg", "census", "--cover", "per-code", "--sample", "0", "--smoke-shard", "0/2"])).toThrow(/cannot split mx-census/);
+    expect(parse(["--smoke", "--smoke-leg", "rest", "--cover", "per-code", "--sample", "0", "--smoke-shard", "0/2"]).smokeShard).toBe("0/2");
+  });
+
+  it("is run by fuzz-pr.yml as every part of each leg, so the jobs' union is the cover: a dropped or renumbered part fails here, not silently", () => {
+    const workflow = readFileSync(new URL("../../.github/workflows/fuzz-pr.yml", import.meta.url), "utf8");
+    // the matrix's one-line mappings: `- { leg: rest, shard: "0/2", cache: rest-0, name: smoke }`
+    const jobs = [...workflow.matchAll(/^ +- \{ (leg: [^}]*) \}$/gm)].map(([, body]) => Object.fromEntries(body.split(",").map((pair) => {
+      const [key, ...value] = pair.split(":");
+      return [key.trim(), value.join(":").trim().replace(/^"(.*)"$/, "$1")];
+    })));
+    expect(jobs.length).toBeGreaterThan(1);
+    // every leg runs, and nothing else does
+    expect([...new Set(jobs.map((job) => job.leg))].sort()).toEqual(Object.keys(SMOKE_LEGS).sort());
+    for (const leg of Object.keys(SMOKE_LEGS)) {
+      const shards = jobs.filter((job) => job.leg === leg).map((job) => smokeShardOf(job.shard));
+      // a leg in one job runs whole, and never beside a part of itself
+      if (shards.includes(null)) { expect(shards).toHaveLength(1); continue; }
+      // a leg in several jobs: one N, each index once
+      const { count } = shards[0];
+      expect(shards.every((shard) => shard.count === count)).toBe(true);
+      expect(shards.map((shard) => shard.index).sort()).toEqual(Array.from({ length: count }, (_, index) => index));
+    }
+    // a name and a cache of its own: two jobs sharing one would overwrite each other's artifacts and runtime cache
+    expect(new Set(jobs.map((job) => job.name)).size).toBe(jobs.length);
+    expect(new Set(jobs.map((job) => job.cache)).size).toBe(jobs.length);
+    // the Smoke step hands the matrix's part to focus.mjs
+    expect(workflow).toContain("SHARD: ${{ matrix.shard }}");
+    expect(workflow).toContain('--smoke-shard "$SHARD"');
   });
 });

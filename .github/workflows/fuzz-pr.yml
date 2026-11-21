@@ -51,17 +51,20 @@ env:
   RUST_VERSION: 1.99.1
 
 jobs:
-  # Two jobs, one sample (ADR 1001): the cover is computed over every grid in both and each runs its own grids (focus.mjs --smoke-leg, SMOKE_LEGS):
-  # `rest` (the check that was called smoke) every grid but the census, `census` the census. Each has its own installs, cache restore and build, and a
-  # runtime cache of its own; both print the cover's hash, which is the same line. Neither cancels the other.
+  # Three jobs, one sample (ADRs 1001, 1156): the cover is computed over every grid in each and each runs its own grids (focus.mjs --smoke-leg, SMOKE_LEGS):
+  # `rest` (the check that was called smoke) every grid but the census, `census` the census. The `rest` leg is two jobs, `smoke` and `smoke-2`: the cover's
+  # programs split by id (focus.mjs --smoke-shard i/N), so the union of the two is today's set; its one job outgrew the 60 minutes of a pull request (setup 8
+  # to 16, the step 50 and more, the cover growing with every bundle). Each job has its own installs, cache restore and build, and a runtime cache of its own;
+  # all print the cover's hash, which is the same line. None cancels another.
   smoke:
     name: ${{ matrix.name }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { leg: rest, name: smoke }
-          - { leg: census, name: smoke-census }
+          - { leg: rest, shard: "0/2", cache: rest-0, name: smoke }
+          - { leg: rest, shard: "1/2", cache: rest-1, name: smoke-2 }
+          - { leg: census, cache: census, name: smoke-census }
     # ubuntu-22.04 x64 so the release dependency cache CI's rust-package job writes on main restores here.
     runs-on: ubuntu-22.04
     timeout-minutes: ${{ github.event_name == 'pull_request' && 60 || 180 }}
@@ -97,9 +100,11 @@ jobs:
         background: true
         with:
           path: ~/fuzz-cache
-          key: fuzz-pr-runtime-${{ matrix.leg }}-${{ github.sha }}
-          # The leg's own cache, then any (the one cache both legs shared before the split, `fuzz-pr-runtime-<sha>`: records are keyed by program bytes).
+          key: fuzz-pr-runtime-${{ matrix.cache }}-${{ github.sha }}
+          # The job's own cache, then its leg's (`fuzz-pr-runtime-rest-<sha>`, the one cache the `rest` leg kept before its shards, or the other shard's), then any
+          # (the one cache both legs shared before the split, `fuzz-pr-runtime-<sha>`): records are keyed by program bytes, so any of them serves any program.
           restore-keys: |
+            fuzz-pr-runtime-${{ matrix.cache }}-
             fuzz-pr-runtime-${{ matrix.leg }}-
             fuzz-pr-runtime-
       - id: tsrs-cache
@@ -132,10 +137,14 @@ jobs:
           # Only the nightly lane rotates: a day's seed, printed by the run, so a failure can be run again.
           COVER_SEED: ${{ github.event_name == 'schedule' && 'day' || '1' }}
           LEG: ${{ matrix.leg }}
+          # i/N of a leg that runs as N jobs (ADR 1156): the cover's programs whose id falls in part i, and the proved ledger within them; empty for the census.
+          SHARD: ${{ matrix.shard }}
         run: |
           seed=$COVER_SEED
           [ "$seed" = day ] && seed=$(date -u +%Y%j)
-          node scripts/fuzz/focus.mjs --smoke --smoke-leg "$LEG" --cover "$COVER" --cover-seed "$seed" --sample 0 --out "$RUNNER_TEMP/out" \
+          shard=()
+          [ -n "$SHARD" ] && shard=(--smoke-shard "$SHARD")
+          node scripts/fuzz/focus.mjs --smoke --smoke-leg "$LEG" "${shard[@]}" --cover "$COVER" --cover-seed "$seed" --sample 0 --out "$RUNNER_TEMP/out" \
             --checker-bin "$PWD/rust/target/release/solid-checker-rust" --typefacts "$PWD/bin/solid-typefacts" -- --cache-dir "$HOME/fuzz-cache"
       # ADR 1118: the textbook tier (fixtures/textbook against scripts/fuzz/proved/textbook.json), its rate in every PR's summary; checker only,
       # 21 programs, once (the census leg). A violation, a lost proved (site, code) or a lost certification fails.
@@ -146,24 +155,28 @@ jobs:
           node scripts/fuzz/textbook.mjs check --checker "$PWD/rust/target/release/solid-checker-rust" --typefacts "$PWD/bin/solid-typefacts" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Keep the runtime cache entries this leg used
         if: github.event_name == 'push' && !cancelled()
+        env:
+          SHARD: ${{ matrix.shard }}
         run: |
           [ -f "$RUNNER_TEMP/cache-mark" ] || { echo "no mark: the cache is saved as restored"; exit 0; }
           used=$(find ~/fuzz-cache -type f -anewer "$RUNNER_TEMP/cache-mark" | wc -l)
           total=$(find ~/fuzz-cache -type f | wc -l)
-          echo "runtime cache: $used of $total files read or written by this leg, $(du -sm ~/fuzz-cache | cut -f1) MB"
-          # A leg of this cover reads or writes more than 20,000 entries; fewer means the marker or the run is wrong: save it whole.
-          if [ "$used" -lt 20000 ]; then echo "::warning::only $used entries used: the cache is saved as restored"; exit 0; fi
+          echo "runtime cache: $used of $total files read or written by this job, $(du -sm ~/fuzz-cache | cut -f1) MB"
+          # A leg of this cover reads or writes more than 20,000 entries, a job of N shards of it 1/N of that; fewer means the marker or the run is wrong: save it whole.
+          shards=${SHARD##*/}
+          min=$((20000 / ${shards:-1}))
+          if [ "$used" -lt "$min" ]; then echo "::warning::only $used entries used (of at least $min): the cache is saved as restored"; exit 0; fi
           find ~/fuzz-cache -type f ! -anewer "$RUNNER_TEMP/cache-mark" -delete
           echo "runtime cache kept: $(find ~/fuzz-cache -type f | wc -l) files, $(du -sm ~/fuzz-cache | cut -f1) MB"
       - uses: actions/cache/save@v4
         if: github.event_name == 'push' && always()
         with:
           path: ~/fuzz-cache
-          key: fuzz-pr-runtime-${{ matrix.leg }}-${{ github.sha }}
+          key: fuzz-pr-runtime-${{ matrix.cache }}-${{ github.sha }}
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: fuzz-smoke-${{ matrix.leg }}
+          name: fuzz-smoke-${{ matrix.cache }}
           path: |
             ${{ runner.temp }}/out/**/*.json
             ${{ runner.temp }}/out/**/*.jsonl
