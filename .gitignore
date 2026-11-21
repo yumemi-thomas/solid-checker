@@ -885,6 +885,10 @@ packages/wasm/owned/
 !fixtures/reactive-ir/undecided-flush-closure/node_modules/**
 !fixtures/reactive-ir/flush-write-path/node_modules/
 !fixtures/reactive-ir/flush-write-path/node_modules/**
+!fixtures/reactive-ir/prop-alias-link-get/node_modules/
+!fixtures/reactive-ir/prop-alias-link-get/node_modules/**
+!fixtures/reactive-ir/store-write-through-prop/node_modules/
+!fixtures/reactive-ir/store-write-through-prop/node_modules/**
 !fixtures/reactive-ir/flush-closure-called-once/node_modules/
 !fixtures/reactive-ir/flush-closure-called-once/node_modules/**
 !fixtures/reactive-ir/effect-error-arm-read/node_modules/

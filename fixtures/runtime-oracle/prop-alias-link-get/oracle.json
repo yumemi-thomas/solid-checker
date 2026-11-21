@@ -1,0 +1,3 @@
+{
+  "note": "A store handed by prop and held in a `const` alias: Chrome reports STRICT_READ_UNTRACKED at the Get `held.a`, alone (ReadChild) and inside a deeper write (WriteChild, a silent clean on main b06a4e71a: the write's SC2003 row stood for the chain), and STORE_WRITE_OUTSIDE_SETTER at the writes. Each Get has an uncertifiable row now (SC9012 value-held-in-binding)."
+}
