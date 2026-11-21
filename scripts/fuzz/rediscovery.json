@@ -42522,5 +42522,111 @@
    "lg-strict-read-untracked-arm-tag-store-dstr-quoted-alias-none"
   ],
   "rediscovered": "focus.mjs --grids lg-recall --codes STRICT_READ_UNTRACKED --recall-full -- --contexts arm-tag (3,748 programs), release builds: main b600297eb 40 unexecuted-violation (needs a look, exit 1); this build none, exit 0 (40 unexecuted and 166 uncertifiable to clean, nothing else)"
+ },
+ {
+  "finding": "The Opus review of ADR 1147, F1's root (on main): a write in a callback a package read as source (or a project function) forwards to createTrackedEffect's compute (`hand(() => setN(1))`, `hand(fn) { createTrackedEffect(() => { fn(); }); }`) was SC2001 a violation; rc.21's write guard exempts every write in the leaf callback, and Chrome is quiet",
+  "found": "review-1147 F1 (s11-hand-direct, Chrome-confirmed); patterns ctxmemo/s11-hand-direct (main 408fc4645: a new false positive)",
+  "fixed": "ADR 1155 (a) (write_roles::forwarded_leaf_scope over callee_roles::forwarded_compute_slot, ADR 0200's proof: a leaf owner's slot takes the leaf scope)",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-barm-fwdleaf-tracked-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-barm-fwdleaf-tracked-store-direct-none",
+   "lg-reactive-write-in-owned-scope-barm-fwdleaf-tracked-refresh-direct-none"
+  ],
+  "rediscovered": "new arm-shape contexts barm-fwdleaf-tracked (legal) and barm-fwdleaf-memo (misuse, its twin through createMemo): main 408fc4645 3 false positives on the legal cells, ADR 1155 3 clean; the misuse twin agrees with Chrome on both builds"
+ },
+ {
+  "finding": "The Opus review of ADR 1147, N1 (on main): a creation or a cleanup written in a context provider's child was a violation of the code around the provider element (SC4001 in a timer or an effect's apply, SC3001 in a tracked effect, SC6002 on a package's apply); rc.21 runs a provider's children in its children() memo, whose owner is that memo, and Chrome reports only at the tag or the control",
+  "found": "review-1147 N1 (p14b-timeout-control, p9-apply-project, p8-tracked-project, p2-render-apply, Chrome-confirmed); patterns ctxmemo/* (main 408fc4645: three new false positives, p9 judged fine by the lane's rule family)",
+  "fixed": "ADR 1155 (b) (callback_return::in_exact_provider_children and exact_provider_child_spans: owner-providing regions, the leaf walk and the effect-phase walk, for ADR 1147's exact provider only)",
+  "outside": "a grid program is judged at its cell's site, and these false rows sit beside the tag's own (correct) row in a program Chrome reports at the tag, so no legal cell has the shape and a misuse cell at the tag agrees either way; the patterns lane judges every violation of a program, and holds the four shapes (ctxmemo/p14b-timeout-control, p9-apply-project, p8-tracked-project, p2-render-apply); fixture reactive-ir/provider-children-memo-owner pins them and the stack-question negatives"
+ },
+ {
+  "finding": "The Opus review of ADR 1155, F1 (a false clean on 1155's head 310d126d0): a non-arrow wrapper that forwards its parameter to createTrackedEffect's compute and also calls `arguments[0]()` (`function hand(fn){ createTrackedEffect(() => { fn(); }); arguments[0](); }`, called in a createMemo) gave the literal the leaf scope, so the write's run in the memo was clean; Chrome reports REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "found": "review-1155 F1 (Chrome-confirmed)",
+  "fixed": "ADR 1155 r1: callee_roles::forwarded_compute_slot (ADR 0200's proof, so its tracked role too) refuses a non-arrow wrapper that reads `arguments` and a parameter that is written",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-barm-fwdleaf-args-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-barm-fwdleaf-args-store-direct-none",
+   "mx-reactive-write-in-owned-scope-barm-fwdleaf-args-refresh-direct-none"
+  ],
+  "rediscovered": "new arm-shape context barm-fwdleaf-args (misuse, Chrome-confirmed): 1155's head (1fb197f70 code) 3 false cleans, r1 3 uncertifiable (the run through `arguments` is unplaced), main 408fc4645 3 violations"
+ },
+ {
+  "finding": "The Opus review of ADR 1155, N2 (latent): ADR 1155 (b) made every child of an exact provider an owner region, but the compiler evaluates a lone static child (no call in it, `{(new Make(), 1)}`) at the tag, under the owner of the code that creates the element",
+  "found": "review-1155 N2 (Chrome: NO_OWNER_CLEANUP for a constructor's onCleanup in such a child)",
+  "fixed": "ADR 1155 r1: callback_return::provider_getter_regions counts only a child the compiler's trace places in the children getter (a caller-context ComponentChild, or an element child)",
+  "outside": "latent on every build: a child the compiler evaluates at the tag holds no call, so a creation or a cleanup in it is reached only through code the checker cannot place (a constructor, a getter, a tagged template), which is uncertifiable on 1155's head, r1 and main alike; no generated program can show a different finding. Fixture reactive-ir/provider-children-memo-owner NewApp pins the shape"
+ },
+ {
+  "finding": "Bundle o's census smoke (Mac 24c, 2026-11-21; on main b06a4e71a too): an async read in a literal ADR 0200 forwards through a package function to a computation's slot (`hand(() => { a1(); })` to createTrackedEffect's compute, `handMemo` to createMemo's) took the forwarded TrackedJsx role and was an SC5003 async-outside-loading-boundary violation; a `sync: true` creation forwarded into createTrackedEffect was an SC7002 violation. Chrome: quiet on the memo twins; PENDING_ASYNC_FORBIDDEN_SCOPE (or PRIMITIVE_IN_FORBIDDEN_SCOPE and REACTIVITY_HALTED) on the tracked twins",
+  "found": "census smoke of bundle o (mac24/o-census-fp.md, Chrome-confirmed): ten false positives, the same on main",
+  "fixed": "ADR 1155 r3: local_access::push_async_read places a forwarded read at the wrapper's call of its parameter in the slot's callback (callee_roles::forwarded_async_site: the role, computation and leaf owner of a read written there; unplaced past an `arguments` run or an owned-call-site leaf); competing_checks: SC7002 at a creation forwarded only into a leaf is creation-throws-first",
+  "grid": "mx-census",
+  "code": "PENDING_ASYNC_UNTRACKED_READ",
+  "ids": [
+   "mx-pending-async-untracked-read-barm-fwdleaf-memo-x-direct-none",
+   "mx-pending-async-untracked-read-barm-fwdleaf-tracked-x-direct-none"
+  ],
+  "rediscovered": "1155's arm-shape contexts barm-fwdleaf-{memo,tracked} in the census: main b06a4e71a and 1155 r2 false positives on all ten, r3 none (memo twins uncertifiable, tracked twins SC5001 a violation where Chrome reports PENDING_ASYNC_FORBIDDEN_SCOPE, SC7002 uncertifiable)"
+ },
+ {
+  "finding": "Bundle o's census smoke (Mac 24c, 2026-11-21; on main b06a4e71a too): an async read in a literal ADR 0200 forwards through a package function to a computation's slot (`hand(() => { a1(); })` to createTrackedEffect's compute, `handMemo` to createMemo's) took the forwarded TrackedJsx role and was an SC5003 async-outside-loading-boundary violation; a `sync: true` creation forwarded into createTrackedEffect was an SC7002 violation. Chrome: quiet on the memo twins; PENDING_ASYNC_FORBIDDEN_SCOPE (or PRIMITIVE_IN_FORBIDDEN_SCOPE and REACTIVITY_HALTED) on the tracked twins",
+  "found": "census smoke of bundle o (mac24/o-census-fp.md, Chrome-confirmed): ten false positives, the same on main",
+  "fixed": "ADR 1155 r3: local_access::push_async_read places a forwarded read at the wrapper's call of its parameter in the slot's callback (callee_roles::forwarded_async_site: the role, computation and leaf owner of a read written there; unplaced past an `arguments` run or an owned-call-site leaf); competing_checks: SC7002 at a creation forwarded only into a leaf is creation-throws-first",
+  "grid": "mx-census",
+  "code": "PENDING_ASYNC_FORBIDDEN_SCOPE",
+  "ids": [
+   "mx-pending-async-forbidden-scope-barm-fwdleaf-memo-x-direct-none",
+   "mx-pending-async-forbidden-scope-barm-fwdleaf-tracked-x-direct-none"
+  ],
+  "rediscovered": "1155's arm-shape contexts barm-fwdleaf-{memo,tracked} in the census: main b06a4e71a and 1155 r2 false positives on all ten, r3 none (memo twins uncertifiable, tracked twins SC5001 a violation where Chrome reports PENDING_ASYNC_FORBIDDEN_SCOPE, SC7002 uncertifiable)"
+ },
+ {
+  "finding": "Bundle o's census smoke (Mac 24c, 2026-11-21; on main b06a4e71a too): an async read in a literal ADR 0200 forwards through a package function to a computation's slot (`hand(() => { a1(); })` to createTrackedEffect's compute, `handMemo` to createMemo's) took the forwarded TrackedJsx role and was an SC5003 async-outside-loading-boundary violation; a `sync: true` creation forwarded into createTrackedEffect was an SC7002 violation. Chrome: quiet on the memo twins; PENDING_ASYNC_FORBIDDEN_SCOPE (or PRIMITIVE_IN_FORBIDDEN_SCOPE and REACTIVITY_HALTED) on the tracked twins",
+  "found": "census smoke of bundle o (mac24/o-census-fp.md, Chrome-confirmed): ten false positives, the same on main",
+  "fixed": "ADR 1155 r3: local_access::push_async_read places a forwarded read at the wrapper's call of its parameter in the slot's callback (callee_roles::forwarded_async_site: the role, computation and leaf owner of a read written there; unplaced past an `arguments` run or an owned-call-site leaf); competing_checks: SC7002 at a creation forwarded only into a leaf is creation-throws-first",
+  "grid": "mx-census",
+  "code": "ASYNC_OUTSIDE_LOADING_BOUNDARY",
+  "ids": [
+   "mx-async-outside-loading-boundary-barm-fwdleaf-memo-x-direct-none",
+   "mx-async-outside-loading-boundary-barm-fwdleaf-tracked-x-direct-none"
+  ],
+  "rediscovered": "1155's arm-shape contexts barm-fwdleaf-{memo,tracked} in the census: main b06a4e71a and 1155 r2 false positives on all ten, r3 none (memo twins uncertifiable, tracked twins SC5001 a violation where Chrome reports PENDING_ASYNC_FORBIDDEN_SCOPE, SC7002 uncertifiable)"
+ },
+ {
+  "finding": "Bundle o's census smoke (Mac 24c, 2026-11-21; on main b06a4e71a too): an async read in a literal ADR 0200 forwards through a package function to a computation's slot (`hand(() => { a1(); })` to createTrackedEffect's compute, `handMemo` to createMemo's) took the forwarded TrackedJsx role and was an SC5003 async-outside-loading-boundary violation; a `sync: true` creation forwarded into createTrackedEffect was an SC7002 violation. Chrome: quiet on the memo twins; PENDING_ASYNC_FORBIDDEN_SCOPE (or PRIMITIVE_IN_FORBIDDEN_SCOPE and REACTIVITY_HALTED) on the tracked twins",
+  "found": "census smoke of bundle o (mac24/o-census-fp.md, Chrome-confirmed): ten false positives, the same on main",
+  "fixed": "ADR 1155 r3: local_access::push_async_read places a forwarded read at the wrapper's call of its parameter in the slot's callback (callee_roles::forwarded_async_site: the role, computation and leaf owner of a read written there; unplaced past an `arguments` run or an owned-call-site leaf); competing_checks: SC7002 at a creation forwarded only into a leaf is creation-throws-first",
+  "grid": "mx-census",
+  "code": "LOADING_ON_OUTSIDE_HOLD",
+  "ids": [
+   "mx-loading-on-outside-hold-barm-fwdleaf-memo-x-direct-none",
+   "mx-loading-on-outside-hold-barm-fwdleaf-tracked-x-direct-none"
+  ],
+  "rediscovered": "1155's arm-shape contexts barm-fwdleaf-{memo,tracked} in the census: main b06a4e71a and 1155 r2 false positives on all ten, r3 none (memo twins uncertifiable, tracked twins SC5001 a violation where Chrome reports PENDING_ASYNC_FORBIDDEN_SCOPE, SC7002 uncertifiable)"
+ },
+ {
+  "finding": "Bundle o's census smoke (Mac 24c, 2026-11-21; on main b06a4e71a too): an async read in a literal ADR 0200 forwards through a package function to a computation's slot (`hand(() => { a1(); })` to createTrackedEffect's compute, `handMemo` to createMemo's) took the forwarded TrackedJsx role and was an SC5003 async-outside-loading-boundary violation; a `sync: true` creation forwarded into createTrackedEffect was an SC7002 violation. Chrome: quiet on the memo twins; PENDING_ASYNC_FORBIDDEN_SCOPE (or PRIMITIVE_IN_FORBIDDEN_SCOPE and REACTIVITY_HALTED) on the tracked twins",
+  "found": "census smoke of bundle o (mac24/o-census-fp.md, Chrome-confirmed): ten false positives, the same on main",
+  "fixed": "ADR 1155 r3: local_access::push_async_read places a forwarded read at the wrapper's call of its parameter in the slot's callback (callee_roles::forwarded_async_site: the role, computation and leaf owner of a read written there; unplaced past an `arguments` run or an owned-call-site leaf); competing_checks: SC7002 at a creation forwarded only into a leaf is creation-throws-first",
+  "grid": "mx-census",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "mx-sync-node-received-async-barm-fwdleaf-tracked-effect-direct-none",
+   "mx-sync-node-received-async-barm-fwdleaf-tracked-memo-direct-none"
+  ],
+  "rediscovered": "1155's arm-shape contexts barm-fwdleaf-{memo,tracked} in the census: main b06a4e71a and 1155 r2 false positives on all ten, r3 none (memo twins uncertifiable, tracked twins SC5001 a violation where Chrome reports PENDING_ASYNC_FORBIDDEN_SCOPE, SC7002 uncertifiable)"
+ },
+ {
+  "finding": "A store handed by prop and held in a `const` alias (`const held = props.s1; held.a.v = 9`): the Get `held.a` had no row of any rule though rc.21 warns STRICT_READ_UNTRACKED there (main b06a4e71a, Chrome-confirmed: runtime-oracle prop-alias-link-get on main is unproven-clean). The value-use census counted the deeper write's SC2003 row as answering every member on its chain (`write_decided`); the same Get alone (`void held.a`) kept its SC9012 row",
+  "found": "Mac 27, building ADR 1172's fixture store-write-through-prop (AliasChild): the runtime oracle's unproven-clean at the alias's Get",
+  "fixed": "value_use::Census::member: a decided write answers a member reached through an alias only where it is that member's own Set (`write_decided_target`); a deeper write leaves its Get open (SC9012 value-held-in-binding). Fixture reactive-ir/prop-alias-link-get",
+  "grid": "mx-src",
+  "code": "STRICT_READ_UNTRACKED",
+  "outside": "the read grids (flip-read.mjs store variants) do not cross a store variant with a prop or context source, so no STRICT_READ_UNTRACKED cell writes through a prop store's alias; mx-src and mx-pairs do generate the program (`mx-store-write-outside-setter-body-nested-assign-alias-none-s-prop`, `const useIt = props.s1; useIt.a.v = 7`), but judge it for STORE_WRITE_OUTSIDE_SETTER only, where SC2003 claims the write. Crossing the store read variants with the prop and context sources would generate it; not built in this fix"
  }
 ]

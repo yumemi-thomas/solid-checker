@@ -1980,6 +1980,9 @@ fn handed_container_write(
             else {
                 return true;
             };
+            // ADR 1172: the store's own literal, named by its symbol, proves the links past the handed root.
+            let past_root = past_root
+                && !handed_links_wrappable(file, context, &symbol, sink.member, store_root);
             let past_root = past_root || (sink.linked && member != store_root);
             let standing = container_root::handed_store_standing(file, context, site);
             let proven = !sink_open
@@ -2010,6 +2013,45 @@ fn handed_container_write(
             true
         }
     }
+}
+
+/// ADR 1172: the links of the write at `member` past `store_root` (a handed root, `props.s1`, holding the store `symbol` on every
+/// route, ADR 0919) are wrapped: the store is declared in this file and ADR 0491's proof holds from its own binding
+/// ([`store_literal_untouched_at`]), under strictNullChecks in a file `tsc` checks, with no optional link.
+fn handed_links_wrappable(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    symbol: &crate::SymbolId,
+    member: Span,
+    store_root: Span,
+) -> bool {
+    let ast = &file.ast;
+    if context.strict_null_checks() != Some(true) || !tsc_reports_in(file) {
+        return false;
+    }
+    let member = ast.peel_ts_sugar_span(member);
+    let mut links = ast.member_chain_links(member);
+    links.retain(|&link| !store_root.contains(ast.peel_ts_sugar_span(link)));
+    if !optional_free(ast, member, &links) {
+        return false;
+    }
+    let Some((_, declaration)) = context.accessors.get(symbol) else {
+        return false;
+    };
+    let (Ok(start), Ok(end)) = (
+        u32::try_from(declaration.start_byte),
+        u32::try_from(declaration.end_byte),
+    ) else {
+        return false;
+    };
+    if declaration.path.as_ref() != file.path.as_str() {
+        return false;
+    }
+    let Some(initial) = store_literal_untouched_at(file, context, Span::new(start, end), false)
+    else {
+        return false;
+    };
+    links_wrappable_in(file, member, ast.peel_ts_sugar_span(store_root), initial)
 }
 
 /// ADR 0790: the source a write's chain root names, only when the root,
@@ -4808,10 +4850,15 @@ fn links_proven_wrappable(
     member: Span,
     root: Span,
 ) -> bool {
-    let ast = &file.ast;
     let Some(initial) = store_literal_untouched(file, context, root, false) else {
         return false;
     };
+    links_wrappable_in(file, member, root, initial)
+}
+
+/// [`links_proven_wrappable`] once the store's literal `initial` is known untouched.
+fn links_wrappable_in(file: &FileFacts, member: Span, root: Span, initial: Span) -> bool {
+    let ast = &file.ast;
     // The written path's links resolve to literals (the use check already
     // walked it; this pins the links themselves).
     let member = ast.peel_ts_sugar_span(member);
@@ -4863,6 +4910,21 @@ fn store_literal_untouched(
         .local_alias_member(ast.peel_ts_sugar_span(root))
         .map(|alias| alias.source)
         .or_else(|| ast.reference_declaration(ast.peel_ts_sugar_span(root)))?;
+    store_literal_untouched_at(file, context, root_declaration, module_scope)
+}
+
+/// [`store_literal_untouched`] from the declared name of the store or of one of its exact `const` aliases (ADR 1172: a store a
+/// component receives by prop names its own binding through its symbol, not through the write's root).
+fn store_literal_untouched_at(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    root_declaration: Span,
+    module_scope: bool,
+) -> Option<Span> {
+    let ast = &file.ast;
+    if crate::interproc::property_gets::direct_eval_in(file, Span::new(0, u32::MAX)) {
+        return None;
+    }
     // The store pattern and its exact `const` aliases, by declared name span.
     let mut names = vec![root_declaration];
     let mut store = None;
@@ -4929,7 +4991,20 @@ fn store_literal_untouched(
                 && ast.reference_declaration(identifier.span) == Some(declaration)
         })
     };
-    if slot(1).is_some_and(|setter| referenced(setter.span)) {
+    // ADR 1172: a setter handed to an exact local component that never reads that prop is called by no code either.
+    if slot(1).is_some_and(|setter| {
+        referenced(setter.span)
+            && !ast.identifiers.iter().all(|identifier| {
+                identifier.role != solid_facts::ast::IdentifierRole::Reference
+                    || ast.reference_declaration(identifier.span) != Some(setter.span)
+                    || handed_component_prop(file, context, identifier.span).is_some_and(
+                        |(component, prop)| {
+                            component_prop_reads(file, component, prop)
+                                .is_some_and(|reads| reads.is_empty())
+                        },
+                    )
+            })
+    }) {
         return None;
     }
     // ADR 0497: every exact alias of the store, not only those on the root's
@@ -4992,6 +5067,7 @@ fn store_literal_untouched(
         }
         if !contained_store_use(file, identifier.span, initial)
             && !consumed_by_alias_slots(file, identifier.span, &names, initial)
+            && !handed_to_contained_prop(file, context, identifier.span, initial)
         {
             return None;
         }
@@ -5360,6 +5436,168 @@ fn static_path(file: &FileFacts, member: Span, root: Span) -> Option<Vec<Span>> 
     }
     path.reverse();
     Some(path)
+}
+
+/// ADR 1172: the exact component and prop name a store or setter reference is handed to: `reference` is the whole expression of a
+/// plain attribute (`s1={s1}`) of a JSX element whose tag resolves to a function of this file. A member tag, a namespaced attribute and
+/// an intrinsic element hand nothing to a component this can read.
+fn handed_component_prop<'f>(
+    file: &'f FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    reference: Span,
+) -> Option<(&'f solid_facts::ast::FunctionFact, &'f str)> {
+    let ast = &file.ast;
+    let (element, attribute) = ast.jsx_elements.iter().find_map(|element| {
+        element
+            .attributes
+            .iter()
+            .find(|attribute| {
+                attribute.namespace.is_none()
+                    && attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::Expression
+                    && attribute
+                        .expression
+                        .is_some_and(|expression| ast.peel_ts_sugar_span(expression) == reference)
+            })
+            .map(|attribute| (element, attribute))
+    })?;
+    if element.member_object.is_some() {
+        return None;
+    }
+    let (target, function) = context
+        .lookup
+        .function_called_at(file.path.as_str(), element.name.span)?;
+    if target.path != file.path {
+        return None;
+    }
+    let function = ast
+        .functions
+        .iter()
+        .find(|candidate| candidate.span == function.span)?;
+    Some((function, file.source_text(attribute.name)?))
+}
+
+/// ADR 1172: every read of prop `prop` in `component`, when its props object is used only through static keys: a props parameter
+/// every reference of which is the object of a static, non-optional member (each `props.<prop>` collected), or an object pattern with
+/// static keys, no rest, no default and no nested value (the references of `prop`'s local). `None` for any other use: the props
+/// object handed on, spread, written, a computed or optional key, a second parameter.
+fn component_prop_reads(
+    file: &FileFacts,
+    component: &solid_facts::ast::FunctionFact,
+    prop: &str,
+) -> Option<Vec<Span>> {
+    let ast = &file.ast;
+    let [parameter] = component.parameters.as_slice() else {
+        return None;
+    };
+    if parameter.initializer.is_some() || component.rest_parameter {
+        return None;
+    }
+    let references = |declaration: Span| {
+        ast.identifiers
+            .iter()
+            .filter(move |identifier| {
+                identifier.role == solid_facts::ast::IdentifierRole::Reference
+                    && ast.reference_declaration(identifier.span) == Some(declaration)
+            })
+            .map(|identifier| identifier.span)
+    };
+    match parameter.shape {
+        solid_facts::ast::BindingShape::Identifier => {
+            let name = parameter.names.first()?;
+            let mut reads = Vec::new();
+            for reference in references(name.span) {
+                let member = ast
+                    .members
+                    .iter()
+                    .find(|member| ast.peel_ts_sugar_span(member.object) == reference)?;
+                if ast.computed_members.binary_search(&member.span).is_ok()
+                    || ast.optional_members.binary_search(&member.span).is_ok()
+                    || ast.write_targets.binary_search(&member.span).is_ok()
+                    || ast.is_no_get_target(member.span)
+                {
+                    return None;
+                }
+                if file.source_text(member.property)? == prop {
+                    reads.push(member.span);
+                }
+            }
+            Some(reads)
+        }
+        solid_facts::ast::BindingShape::Object => {
+            if parameter.pattern_rest {
+                return None;
+            }
+            let mut reads = Vec::new();
+            for property in &parameter.object_properties {
+                if property.computed || property.nested || property.has_default {
+                    return None;
+                }
+                let key = property.key.as_deref()?;
+                let local = property.local.as_ref()?;
+                if key == prop {
+                    reads.extend(references(local.span));
+                }
+            }
+            Some(reads)
+        }
+        solid_facts::ast::BindingShape::Array => None,
+    }
+}
+
+/// ADR 1172: the store reference `reference` is handed to an exact local component's prop ([`handed_component_prop`]) whose every read
+/// ([`component_prop_reads`]) is itself a contained use of the store ([`contained_store_use`]): the proxy goes nowhere else.
+fn handed_to_contained_prop(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    reference: Span,
+    initial: Span,
+) -> bool {
+    handed_component_prop(file, context, reference).is_some_and(|(component, prop)| {
+        component_prop_reads(file, component, prop).is_some_and(|reads| {
+            const_alias_reads(file, reads).is_some_and(|reads| {
+                reads
+                    .iter()
+                    .all(|read| contained_store_use(file, *read, initial))
+            })
+        })
+    })
+}
+
+/// ADR 1172: `reads` with each read that is the whole initializer of a `const` identifier binding (`const useIt = props.s1`) replaced by
+/// that binding's references, to four levels; `None` past them.
+fn const_alias_reads(file: &FileFacts, reads: Vec<Span>) -> Option<Vec<Span>> {
+    let ast = &file.ast;
+    let mut pending = reads;
+    let mut out = Vec::new();
+    for _ in 0..4 {
+        let mut next = Vec::new();
+        for read in pending {
+            let alias = ast.bindings.iter().find(|binding| {
+                binding.immutable
+                    && binding.shape == solid_facts::ast::BindingShape::Identifier
+                    && binding.names.len() == 1
+                    && binding
+                        .initializer
+                        .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == read)
+            });
+            match alias {
+                Some(binding) => {
+                    let name = binding.names[0].span;
+                    next.extend(ast.identifiers.iter().filter_map(|identifier| {
+                        (identifier.role == solid_facts::ast::IdentifierRole::Reference
+                            && ast.reference_declaration(identifier.span) == Some(name))
+                        .then_some(identifier.span)
+                    }));
+                }
+                None => out.push(read),
+            }
+        }
+        if next.is_empty() {
+            return Some(out);
+        }
+        pending = next;
+    }
+    None
 }
 
 /// The reference `reference` to a store whose initializer is the closed

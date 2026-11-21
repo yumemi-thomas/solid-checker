@@ -224,6 +224,7 @@ pub(crate) fn mark(
             || (!anchors.is_empty() && every_run_refused(&violation.location, &anchors, lookup))
             || later_render_apply_run_only(&violation.location, lookup)
             || in_rerun_cleanup(&violation.location, lookup)
+            || forwarded_into_leaf(&violation.location, lookup)
             // ADR 1052 part 8: a render effect's apply is no such run here, since its first run is owned and reaches the probe.
             || in_slot_called_only_in_applies(&violation.location, false, lookup)
             || prop_runs_only_in_owned_leaf(&violation.location, settled_gates, lookup)
@@ -622,23 +623,35 @@ fn action_binding(
     Some(binding.names[0].span)
 }
 
+/// ADR 1155 r3: the creation at `site` runs only in a leaf callback ADR 0200's proof forwards it to
+/// ([`crate::execution_role::forwarded_only_into_leaf`]): the leaf refuses it before the result probe.
+fn forwarded_into_leaf(site: &Location, lookup: &SemanticLookup<'_>) -> bool {
+    site_in_file(site, lookup).is_some_and(|(file, span)| {
+        crate::execution_role::forwarded_only_into_leaf(file, span, lookup)
+    })
+}
+
+/// The analyzed file and span of `site`: one read site for [`in_rerun_cleanup`] and [`forwarded_into_leaf`].
+fn site_in_file<'a>(
+    site: &Location,
+    lookup: &SemanticLookup<'a>,
+) -> Option<(&'a solid_facts::FileFacts, solid_facts::core::Span)> {
+    let file = lookup.file_by_path(site.path.as_ref())?;
+    let (Ok(start), Ok(end)) = (u32::try_from(site.start_byte), u32::try_from(site.end_byte))
+    else {
+        return None;
+    };
+    Some((file, solid_facts::core::Span::new(start, end)))
+}
+
 /// ADR 1052 part 6: `site` is written directly in the cleanup an effect's apply returns, and the effect may rerun
 /// (`directly_in_rerun_effect_cleanup`, ADR 0539's `WindowedCleanup::MayRerun`): a rerun calls the cleanup inside the effect
 /// callback, where a creation meets the guard first, and nothing orders that rerun against the disposal that would run it
 /// outside. An effect whose compute provably tracks nothing never reruns and is not this.
 fn in_rerun_cleanup(site: &Location, lookup: &SemanticLookup<'_>) -> bool {
-    let Some(file) = lookup.file_by_path(site.path.as_ref()) else {
-        return false;
-    };
-    let (Ok(start), Ok(end)) = (u32::try_from(site.start_byte), u32::try_from(site.end_byte))
-    else {
-        return false;
-    };
-    crate::execution_role::directly_in_rerun_effect_cleanup(
-        file,
-        solid_facts::core::Span::new(start, end),
-        lookup,
-    )
+    site_in_file(site, lookup).is_some_and(|(file, span)| {
+        crate::execution_role::directly_in_rerun_effect_cleanup(file, span, lookup)
+    })
 }
 
 /// ADR 1052 part 7: `site` is written directly in a function that is the value of a data property of an object literal a

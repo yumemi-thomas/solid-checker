@@ -246,6 +246,56 @@ pub(super) fn write_region_adjustment(
         .or_else(|| drained_bundle_member(file, span, lookup))
         .or_else(|| detached_in_place(file, span, lookup))
         .or_else(|| nested_in_leaf_scope(file, span, lookup))
+        .or_else(|| forwarded_leaf_scope(file, span, lookup))
+}
+
+/// ADR 1155 (a): the id `SOLID_CHECKER_IR_ABLATE_SILENCE` names to turn [`forwarded_leaf_scope`] off (the monotone gate's ablation).
+pub(crate) const FORWARDED_LEAF_SCOPE: &str = "write_roles.forwarded-leaf-scope";
+
+/// ADR 1155 (a), the Opus review of ADR 1147 (F1's root): a write directly in a function literal handed, as the whole argument, to a project or read-package
+/// function that only ever calls that parameter directly in one literal it hands, written directly in its body, to a leaf owner's slot
+/// (`hand(fn) { createTrackedEffect(() => { fn(); }); }`: ADR 0200's exact proof, [`super::callee_roles::forwarded_compute_slot`]) runs only inside that leaf
+/// callback, which the runtime's write guard exempts, as it does the leaf's own literal ([`WriteRegionAdjustment::LeafScope`]). Any other forwarding (an unread
+/// function, a parameter used another way, a memo's compute: `hand(fn) { createMemo(() => fn()) }` keeps its violation) is no proof here.
+fn forwarded_leaf_scope(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<WriteRegionAdjustment> {
+    if !lookup.dialect.leaf_scopes_allow_writes()
+        || crate::site_accounting::ablated_id(FORWARDED_LEAF_SCOPE)
+    {
+        return None;
+    }
+    let forwarded = super::callee_roles::forwarded_compute_slot(file, span, lookup)?;
+    // ADR 1155 r2: the wrapper may also run the literal through `arguments[k]()` on its call's stack, outside the leaf (ArgsApp): no leaf scope.
+    if forwarded.also_at_call.is_some() {
+        return None;
+    }
+    // ADR 0613: `onSettled`'s queued run is the drain's, whichever owner its call has (as for the leaf's own literal).
+    if lookup
+        .dialect
+        .leaf_owner_requires_owned_call_site(forwarded.primitive)
+        && drained_under_owner(forwarded.primitive, forwarded.slot, lookup)
+    {
+        return None;
+    }
+    let leaf = callback_owner_at_call(
+        forwarded.wrapper_file,
+        forwarded.outer,
+        forwarded.primitive,
+        forwarded.slot,
+        lookup,
+    ) == Some(solid_dialect::CallbackOwner::Leaf);
+    if !leaf {
+        return None;
+    }
+    // The proof log names the arm at the write it decides (monotone.mjs M2b).
+    let _ = role_arm!(
+        "write_roles.forwarded-leaf-scope",
+        ExecutionRole::Unreported
+    );
+    Some(WriteRegionAdjustment::LeafScope)
 }
 
 /// ADR 0613: the cleanup an effect's apply returns runs on a rerun from
@@ -1345,6 +1395,29 @@ pub(super) fn windowed_returned_cleanup(
         return Some(WindowedCleanup::MayRerun);
     }
     answer
+}
+
+/// ADR 1167: whether the read at `span` is written in the body of a cleanup an effect's inline apply returns
+/// ([`windowed_returned_cleanup`] [`WindowedCleanup::NeverReruns`]: the apply is the literal at the effect's own apply slot and its
+/// compute provably tracks nothing), so that the cleanup runs only when the effect's owner is disposed: the cleanup is a literal the
+/// apply returns, which no other code can name, and with no rerun nothing else calls it. A disposal runs it outside any strict-read
+/// window unless code in the project can dispose an owner on a stack of its own ([`SemanticLookup::project_may_dispose`], ADR 0695,
+/// the premise `onCleanup`'s callbacks rest on). The cleanup is neither `async` nor a generator, and the read is in its own body
+/// (no nested function, instance field or parameter default). A read only: where a row of a `For` is disposed the cleanup runs owned,
+/// which owner codes would read differently, so nothing but the read role takes this answer.
+pub(crate) fn returned_cleanup_disposal_only(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some(cleanup) = crate::owners::containing_body_function(&file.ast, span) else {
+        return false;
+    };
+    !cleanup.r#async
+        && !cleanup.generator
+        && !super::events::inside_instance_field(file, span)
+        && windowed_returned_cleanup(file, cleanup, lookup) == Some(WindowedCleanup::NeverReruns)
+        && !lookup.project_may_dispose()
 }
 
 /// Whether the effect's compute (its first argument, an inline function the

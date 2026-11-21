@@ -221,9 +221,8 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "kind": "violation",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/errored-fallback-owner/App.tsx",
       "start": 5484,
       "end": 5493,
@@ -243,9 +242,8 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
+      "kind": "violation",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/errored-fallback-owner/App.tsx",
       "start": 5955,
       "end": 5964,
