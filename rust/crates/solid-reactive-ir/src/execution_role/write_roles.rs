@@ -4983,6 +4983,11 @@ fn body_runs_nothing_else(
                     .call_initializer
                     .and_then(|span| ast.call_at(span))
                     .is_some_and(|call| inert_creation(file, call, lookup))
+                // ADR 1175: the source's own tuple, an array literal its creation returns.
+                || (memo.is_some_and(|memo| {
+                    binding.call_initializer == Some(memo.span)
+                        && binding.initializer.map(|value| ast.peel_ts_sugar_span(value)) == Some(memo.span)
+                }) && plain_tuple_pattern(file, binding, lookup))
         });
     calls && nested && quiet && references && destructuring
 }
