@@ -380,7 +380,7 @@ pub(crate) fn in_exact_provider_children(
     let ast = &file.ast;
     let owned = ast.jsx_elements.iter().any(|element| {
         element.span != span
-            && element.children.iter().any(|child| child.contains(span))
+            && provider_getter_regions(file, element).any(|region| region.contains(span))
             && !ast
                 .functions_containing(span)
                 .any(|between| element.span.contains(between.span))
@@ -401,7 +401,25 @@ pub(crate) fn in_exact_provider_children(
     owned
 }
 
-/// ADR 1155 (b): the child spans of the exact context providers of `file`, owner-providing regions of the owner analysis
+/// ADR 1155 r1 (the review's N2): the child expressions of `element` the compiler wraps as a component getter (`get children() { … }`, facts
+/// `tracked_regions`, `ComponentGetter`), the outermost in each child: only those does the provider's `children()` memo evaluate. A child the compiler evaluates
+/// at the tag (no call in it: `{(new Make(), 1)}`) runs where the element is created, under that code's owner.
+fn provider_getter_regions<'f>(
+    file: &'f FileFacts,
+    element: &'f solid_facts::ast::JsxElementFact,
+) -> impl Iterator<Item = Span> + 'f {
+    let getters = move || {
+        file.compiler
+            .tracked_regions
+            .iter()
+            .filter(|region| region.reason == solid_facts::compiler::RegionReason::ComponentGetter)
+            .map(|region| region.span)
+            .filter(|span| element.children.iter().any(|child| child.contains(*span)))
+    };
+    getters().filter(move |span| !getters().any(|outer| outer != *span && outer.contains(*span)))
+}
+
+/// ADR 1155 (b): the child getters of the exact context providers of `file` ([`provider_getter_regions`]), owner-providing regions of the owner analysis
 /// ([`crate::owners::OwnerFileIndex`]): each child is evaluated by the provider's children memo, under that memo's owner.
 pub(crate) fn exact_provider_child_spans(
     lookup: &SemanticLookup<'_>,
@@ -417,7 +435,7 @@ pub(crate) fn exact_provider_child_spans(
         .filter(|element| {
             !element.children.is_empty() && exact_context_provider(lookup, file, element)
         })
-        .flat_map(|element| element.children.iter().copied())
+        .flat_map(|element| provider_getter_regions(file, element).collect::<Vec<_>>())
         .collect();
     // The proof log names the arm at each region (monotone.mjs M2b: an owner requirement it answers lies inside one).
     for span in &spans {

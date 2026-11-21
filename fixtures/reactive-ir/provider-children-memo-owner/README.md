@@ -9,6 +9,9 @@ the leaf walk files no creation or cleanup there, and the effect-phase walk stop
 - Positive (the child's row goes; the tag's stays): `TimeoutApp` (p14b), `ApplyApp` (p9), `TrackedApp` (p8), `RenderApplyApp` (p2, the package's component
   written in the project).
 - Negative (rows stay): `FlushApp` (a flush in the child: a stack question), `HandedApp` (a cleanup in a function the child hands to a timer), `WrittenApp` (a
-  written `let` tag: no exact provider).
+  written `let` tag: no exact provider), `NewApp` (the review of 1155, N2: a child with no call, `{(new Make(), 1)}`, is evaluated at the tag by the compiler,
+  so the cleanup its constructor runs is the timer's).
+
+Only the child expressions the compiler wraps as component getters (facts `tracked_regions`, `ComponentGetter`) are the memo's; a bare child runs at the tag.
 
 Stub: `context-provider-children-owned`'s, plus `children` (simplified from the published rc.21 typings).
