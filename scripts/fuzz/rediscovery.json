@@ -42541,5 +42541,24 @@
   "found": "review-1147 N1 (p14b-timeout-control, p9-apply-project, p8-tracked-project, p2-render-apply, Chrome-confirmed); patterns ctxmemo/* (main 408fc4645: three new false positives, p9 judged fine by the lane's rule family)",
   "fixed": "ADR 1155 (b) (callback_return::in_exact_provider_children and exact_provider_child_spans: owner-providing regions, the leaf walk and the effect-phase walk, for ADR 1147's exact provider only)",
   "outside": "a grid program is judged at its cell's site, and these false rows sit beside the tag's own (correct) row in a program Chrome reports at the tag, so no legal cell has the shape and a misuse cell at the tag agrees either way; the patterns lane judges every violation of a program, and holds the four shapes (ctxmemo/p14b-timeout-control, p9-apply-project, p8-tracked-project, p2-render-apply); fixture reactive-ir/provider-children-memo-owner pins them and the stack-question negatives"
+ },
+ {
+  "finding": "The Opus review of ADR 1155, F1 (a false clean on 1155's head 310d126d0): a non-arrow wrapper that forwards its parameter to createTrackedEffect's compute and also calls `arguments[0]()` (`function hand(fn){ createTrackedEffect(() => { fn(); }); arguments[0](); }`, called in a createMemo) gave the literal the leaf scope, so the write's run in the memo was clean; Chrome reports REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "found": "review-1155 F1 (Chrome-confirmed)",
+  "fixed": "ADR 1155 r1: callee_roles::forwarded_compute_slot (ADR 0200's proof, so its tracked role too) refuses a non-arrow wrapper that reads `arguments` and a parameter that is written",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-barm-fwdleaf-args-signal-direct-none",
+   "mx-reactive-write-in-owned-scope-barm-fwdleaf-args-store-direct-none",
+   "mx-reactive-write-in-owned-scope-barm-fwdleaf-args-refresh-direct-none"
+  ],
+  "rediscovered": "new arm-shape context barm-fwdleaf-args (misuse, Chrome-confirmed): 1155's head (1fb197f70 code) 3 false cleans, r1 3 uncertifiable (the run through `arguments` is unplaced), main 408fc4645 3 violations"
+ },
+ {
+  "finding": "The Opus review of ADR 1155, N2 (latent): ADR 1155 (b) made every child of an exact provider an owner region, but the compiler evaluates a lone static child (no call in it, `{(new Make(), 1)}`) at the tag, under the owner of the code that creates the element",
+  "found": "review-1155 N2 (Chrome: NO_OWNER_CLEANUP for a constructor's onCleanup in such a child)",
+  "fixed": "ADR 1155 r1: callback_return::provider_getter_regions counts only a child the compiler's trace places in the children getter (a caller-context ComponentChild, or an element child)",
+  "outside": "latent on every build: a child the compiler evaluates at the tag holds no call, so a creation or a cleanup in it is reached only through code the checker cannot place (a constructor, a getter, a tagged template), which is uncertifiable on 1155's head, r1 and main alike; no generated program can show a different finding. Fixture reactive-ir/provider-children-memo-owner NewApp pins the shape"
  }
 ]
