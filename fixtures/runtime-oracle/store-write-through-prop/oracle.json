@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1172: a store handed by prop to an exact local component (identifier props, a destructured prop, the namespace's createStore, a `const` alias of the prop) and written past its root there: Chrome reports STORE_WRITE_OUTSIDE_SETTER and SC2003 is a violation. A child that calls the handed setter, hands the prop's value on, uses props whole, or a store that also leaves the parent as a value stay uncertifiable. The alias's Get (`held.a`, STRICT_READ_UNTRACKED) has an SC9012 row since part 1."
+}

@@ -1635,8 +1635,8 @@
         "why": "pending-review"
       },
       "finding-filter": {
-        "count": 2,
-        "why": "ported from eslint-plugin-solid (ADR 0919): the member-chain links at or inside the root expression are not past it; a link list of the walk, not rows"
+        "count": 3,
+        "why": "the member-chain links at or inside the root expression are not past it (ADR 0919's `chain_links_verdict`, and ADR 1172's `handed_links_wrappable` for a handed root): a link list of the walk, not rows; nothing a report holds is dropped"
       },
       "name-only-match": {
         "count": 7,

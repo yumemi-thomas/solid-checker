@@ -104,7 +104,10 @@ function-local `const [store] = createStore({ a: { v: 0 } })` whose setter is
 never referenced and whose every reference is a static member path that is
 written, deleted, called as a callback-free array mutator, or read where the
 literal holds a primitive serves each literal link wrapped, so `store.a.v = 1`
-is a violation; any reference that hands a proxy out, a non-literal or open
+is a violation. A store handed as a JSX attribute to an exact local component
+that reads that prop only as such a path (an exact `const` alias included), and a
+setter handed to one that never reads it, keep the proof, so `props.s1.a.v = 7`
+there is a violation too ([ADR 1172](../decisions.md#adr-1172)); any other reference that hands a proxy out, a non-literal or open
 literal, a getter, a used setter or a module-scope store leaves it
 uncertifiable. Fixtures `store-write-chain-links`,
 `store-write-chain-links-loose`, `store-setter-extent`, `store-write-literal-links`.

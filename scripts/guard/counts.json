@@ -19,7 +19,7 @@
   "SC1001 no-hydration-subtree": 2,
   "SC1001 package-finding-at-entry": 141,
   "SC1001 package-value-read": 182,
-  "SC1001 read-backing-unproven": 397,
+  "SC1001 read-backing-unproven": 412,
   "SC1001 store-handed-to-package": 1,
   "SC1001 strict-read-unaccounted": 18,
   "SC1001 summary-read-unplaced": 96,
@@ -46,7 +46,7 @@
   "SC1003 function-unentered": 2,
   "SC1003 host-callback-timing": 1,
   "SC1003 package-finding-at-entry": 13,
-  "SC1003 props-callers-unenumerated": 18,
+  "SC1003 props-callers-unenumerated": 19,
   "SC1003 store-key-undecided": 11,
   "SC1003 summary-read-unplaced": 2,
   "SC1004 component-identity-unproven": 1,
@@ -87,7 +87,7 @@
   "SC2003 search-depth-limit": 1,
   "SC2003 store-handed-to-package": 1,
   "SC2003 store-operation-may-not-write": 46,
-  "SC2003 store-write-unproven": 101,
+  "SC2003 store-write-unproven": 104,
   "SC2003 unproven-container-root": 152,
   "SC2004 async-slot-unmodelled": 4,
   "SC2004 component-identity-unproven": 1,
@@ -288,9 +288,9 @@
   "SC9012 value-bound-held": 6,
   "SC9012 value-escaped-from-untrack": 8,
   "SC9012 value-exported-unnamed": 6,
-  "SC9012 value-forwarded": 286,
+  "SC9012 value-forwarded": 287,
   "SC9012 value-from-primitive-callback": 26,
-  "SC9012 value-held-in-binding": 141,
+  "SC9012 value-held-in-binding": 145,
   "SC9012 value-held-in-member": 30,
   "SC9012 value-in-carrier": 445,
   "SC9012 value-in-class-field": 14,
@@ -5808,6 +5808,18 @@
    "adr": "ADR 1160",
    "kind": "relabel",
    "relabeledTo": "SC2002 package-finding-at-entry"
+  },
+  {
+   "fixture": "reactive-ir/store-handed-root",
+   "key": "SC2003 store-write-unproven",
+   "from": 4,
+   "to": 3,
+   "adr": "ADR 1172",
+   "proof": "rust/crates/solid-reactive-ir/src/upstream_compat/shared_reactivity.rs::handed_links_wrappable",
+   "fixtures": {
+    "proved": "reactive-ir/store-handed-root",
+    "open": "reactive-ir/store-write-through-prop"
+   }
   }
  ],
  "renames": []

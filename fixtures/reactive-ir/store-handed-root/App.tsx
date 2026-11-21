@@ -130,7 +130,7 @@ function InSetter(props: Props) {
   return <div />;
 }
 
-// Uncertain: a link past the store (ADR 0465).
+// Violation (ADR 1172): a link past the store, proven by its own literal (ADR 0491) across the hand-off (Chrome warns).
 function Nested(props: { deep: { a: V } }) {
   createRoot(() => {
     props.deep.a.v = 14;
