@@ -80,3 +80,16 @@ export function SwapApp() {
   });
   return <i>{n()}</i>;
 }
+
+// Positive (ADR 1155 r2): a non-arrow wrapper that reads only `arguments.length` runs no argument through it: the forwarding to the leaf stands, clean.
+function handLength(fn: () => void) {
+  createTrackedEffect(() => {
+    fn();
+  });
+  void arguments.length;
+}
+export function LengthApp() {
+  const [n, setN] = createSignal(0);
+  handLength(() => setN(6));
+  return <i>{n()}</i>;
+}

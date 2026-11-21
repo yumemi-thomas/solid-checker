@@ -480,6 +480,10 @@
         "count": 3,
         "why": "pending-review"
       },
+      "name-only-match": {
+        "count": 2,
+        "why": "ADR 1155 r2 (`arguments_runs_in_place`): `arguments` is the language's implicit binding of a non-arrow function, which no declaration fact names (`value_use::reads_arguments` reads it the same way); every such reference must be a direct call `arguments[k]()` or a read of the static key `length`, compared as every static key is. A use matching neither refuses the proof, so the match only narrows what is accepted."
+      },
       "primitive-name-match": {
         "count": 3,
         "why": "pending-review"

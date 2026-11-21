@@ -76,6 +76,17 @@
       "start": 2428,
       "end": 2435,
       "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "leaf-callback-opaque",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-leaf-write/App.tsx",
+      "start": 2731,
+      "end": 2733,
+      "fixes": 0
     }
   ]
 }

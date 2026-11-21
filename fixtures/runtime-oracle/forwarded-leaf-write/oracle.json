@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1155: a write forwarded to createTrackedEffect's compute (HandApp, LengthApp: a non-arrow wrapper reading only `arguments.length`) is silent; forwarded to a memo (MemoApp) or also run by `arguments[0]()` in the memo (ArgsApp) Chrome reports REACTIVE_WRITE_IN_OWNED_SCOPE (ArgsApp's row is uncertifiable: the leaf slot's write rests on that run alone)."
+}
