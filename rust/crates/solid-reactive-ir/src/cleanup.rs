@@ -1291,6 +1291,55 @@ pub(super) fn leaf_owner_operations_for_file(
             }
         }
     }
+    // ADR 1155 follow-up: a forbidden call written directly in a literal ADR 0200's proof forwards only into a leaf callback
+    // (`hand(() => createEffect(…))`, `hand(fn) { createTrackedEffect(() => { fn(); }); }`) runs only on that callback's stack, as if
+    // written at the wrapper's call of its parameter there (`callee_roles::forwarded_leaf_call`). The walk above stops at that call
+    // (`fn()`, opaque in the wrapper); the site is reported here, where it is written.
+    for call in &file.ast.calls {
+        if crate::execution_role::discarded_region_contains(file, call.span) {
+            continue;
+        }
+        let Some(primitive) =
+            crate::call_primitive_name_cached(lookup, file, call, entities, symbol_names, dialect)
+        else {
+            continue;
+        };
+        let Some(kind) = forbidden_operation_kind(dialect, file, call, &primitive) else {
+            continue;
+        };
+        let Some((wrapper_file, leaf_call)) =
+            crate::execution_role::forwarded_leaf_call(file, call.span, lookup)
+        else {
+            continue;
+        };
+        let Some(owner) = crate::call_primitive_name_cached(
+            lookup,
+            wrapper_file,
+            leaf_call,
+            entities,
+            symbol_names,
+            dialect,
+        ) else {
+            continue;
+        };
+        let identity_proven = primitive_identity_proven(dialect, file, call, &primitive);
+        operations.push(LeafOwnerOperation {
+            kind,
+            owner: owner.to_string(),
+            location: location(file.path.shared(), call.callee),
+            fix: None,
+            call_site_gate: None,
+            uncertain: !identity_proven,
+            possible: false,
+            via: None,
+            identity_unproven: !identity_proven,
+            sites: Vec::new(),
+            computation_error_unobserved: false,
+            stop: None,
+            through_async: false,
+            earlier_check_throws: false,
+        });
+    }
     // An operation in an instance field initializer runs when an instance is
     // constructed, not while the leaf callback the class is written in runs
     // (review round 2): no proven forbidden call.

@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1155 r4: a call the leaf refuses, written directly in a literal a project function forwards only into createTrackedEffect's callback, throws there (PRIMITIVE_IN_FORBIDDEN_SCOPE, CLEANUP_IN_FORBIDDEN_SCOPE, the flush guard): SC3001 a violation at SyncApp, MemoApp, CleanupApp, FlushApp, NamespaceApp and MemberApp. BothApp, SettledApp and RelayApp throw too and stay uncertifiable; the rest is silent."
+}
