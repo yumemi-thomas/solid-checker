@@ -442,6 +442,16 @@ pub(super) fn emit_file(
         // the function the climb ends in probes `getOwner()` at all: a guard
         // around a layer (`if (getOwner()) run(() => …)`) skips it with no
         // owner, and the push-time guard test follows only IIFEs.
+        // Whether the function that holds `site` probes `getOwner()` anywhere: a guard may skip the site with no owner.
+        let probes_owner = |site: Span| {
+            crate::owners::owning_function(&file.ast, site).is_some_and(|outer| {
+                file.ast.calls.iter().any(|call| {
+                    outer.span.contains(call.span)
+                        && lookup.primitive_at_call(file, call.span)
+                            == Some(solid_dialect::Primitive::GetOwner)
+                })
+            })
+        };
         let climbed_after_await = |site: Span| {
             crate::execution_role::climb_in_place_layers(file, site, lookup).is_some_and(|climb| {
                 !climb.bound()
@@ -450,13 +460,7 @@ pub(super) fn emit_file(
                     && !crate::execution_role::climb_crosses_library_callback(
                         file, site, climb.at, lookup,
                     )
-                    && !crate::owners::owning_function(&file.ast, climb.at).is_some_and(|outer| {
-                        file.ast.calls.iter().any(|call| {
-                            outer.span.contains(call.span)
-                                && lookup.primitive_at_call(file, call.span)
-                                    == Some(solid_dialect::Primitive::GetOwner)
-                        })
-                    })
+                    && !probes_owner(climb.at)
             })
         };
         // ADR 0488: a settled cleanup's `onSettled` call runs after the await
@@ -466,13 +470,7 @@ pub(super) fn emit_file(
         // `call_owner_edge`).
         let for_await_body = |site: Span| {
             crate::execution_role::in_for_await_body_that_runs(file, site, lookup)
-                && !crate::owners::owning_function(&file.ast, site).is_some_and(|outer| {
-                    file.ast.calls.iter().any(|call| {
-                        outer.span.contains(call.span)
-                            && lookup.primitive_at_call(file, call.span)
-                                == Some(solid_dialect::Primitive::GetOwner)
-                    })
-                })
+                && !probes_owner(site)
         };
         let settled_after_await = settled_call.is_some_and(|call| {
             starts.contains(&u64::from(call.callee.start))
