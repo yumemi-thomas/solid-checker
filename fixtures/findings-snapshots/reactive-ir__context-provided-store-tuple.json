@@ -390,7 +390,7 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "handed-member-dispatch",
+      "blocker": "handed-member-read",
       "severity": "warning",
       "path": "fixtures/reactive-ir/context-provided-store-tuple/App.tsx",
       "start": 8669,

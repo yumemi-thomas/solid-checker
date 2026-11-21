@@ -120,6 +120,9 @@ ADR 1147 (arm 1, `context-provider-children-owned`): a child of an exact context
 that memo wherever it is read, so `context === null` never holds there: the package hand-off places the child, and the role engine and the graph answer
 as for any site (a provider created in an effect's apply still declines: `context-provider-children-owned`'s `ApplyApp`).
 
+ADR 1155 (b): the walk from a creation to an effect's apply stops at an exact context provider's child (an owner, the children memo, is set there): a creation in
+a provider rendered on an apply's stack is no violation at the child; the provider's tag keeps its own row (patterns `ctxmemo/p2-render-apply`, `p9-apply-project`).
+
 ## How to fix
 
 Create the computation in the effect's compute function or in the component
