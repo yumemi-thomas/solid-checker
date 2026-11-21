@@ -11,7 +11,7 @@
   "SC1001 component-identity-unproven": 136,
   "SC1001 creation-throws-first": 3,
   "SC1001 escaped-name-unresolved": 19,
-  "SC1001 function-run-unplaced": 1765,
+  "SC1001 function-run-unplaced": 1761,
   "SC1001 function-unentered": 1,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
@@ -19,10 +19,11 @@
   "SC1001 no-hydration-subtree": 2,
   "SC1001 package-finding-at-entry": 141,
   "SC1001 package-value-read": 182,
-  "SC1001 read-backing-unproven": 394,
+  "SC1001 read-backing-unproven": 399,
   "SC1001 store-handed-to-package": 1,
   "SC1001 strict-read-unaccounted": 18,
   "SC1001 summary-read-unplaced": 96,
+  "SC1001 unreached-dead-code": 1,
   "SC1001 write-path-read-unproven": 13,
   "SC1002 field-initializer-unplaced": 3,
   "SC1002 function-run-unplaced": 87,
@@ -127,7 +128,7 @@
   "SC3001 function-run-unplaced": 38,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 7,
-  "SC3001 leaf-operation-unaccounted": 7020,
+  "SC3001 leaf-operation-unaccounted": 7049,
   "SC3001 leaf-owner-unproven": 67,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
@@ -143,7 +144,7 @@
   "SC4001 handler-on-disabled-control": 7,
   "SC4001 handler-spread-unresolved": 84,
   "SC4001 owner-allocation-unproven": 24,
-  "SC4001 owner-callers-unenumerated": 3620,
+  "SC4001 owner-callers-unenumerated": 3635,
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 4,
@@ -203,7 +204,7 @@
   "SC5008 pending-read-unresolved": 24,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5455,
+  "SC6002 effect-creation-unaccounted": 5484,
   "SC6002 effect-owner-unproven": 53,
   "SC6002 function-run-unplaced": 64,
   "SC6002 generator-step-unplaced": 1,
@@ -5487,6 +5488,75 @@
    "fixtures": {
     "proved": "uncertifiable-repro/sc1001",
     "open": "uncertifiable-repro/sc1001"
+   }
+  },
+  {
+   "fixture": "reactive-ir/accessor-provenance",
+   "key": "SC1001 function-run-unplaced",
+   "from": 17,
+   "to": 16,
+   "adr": "ADR 1166",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/named_callbacks.rs::reporting_run_role",
+   "fixtures": {
+    "proved": "reactive-ir/accessor-provenance",
+    "open": "reactive-ir/accessor-provenance"
+   }
+  },
+  {
+   "fixture": "reactive-ir/destructure-store-slots",
+   "key": "SC1003 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1166",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/named_callbacks.rs::reporting_run_role",
+   "fixtures": {
+    "proved": "reactive-ir/destructure-store-slots",
+    "open": "reactive-ir/named-callback-reporting-run"
+   }
+  },
+  {
+   "fixture": "reactive-ir/effect-compute-also-called",
+   "key": "SC1001 function-run-unplaced",
+   "from": 3,
+   "to": 2,
+   "adr": "ADR 1166",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/named_callbacks.rs::reporting_run_role",
+   "fixtures": {
+    "proved": "reactive-ir/effect-compute-also-called",
+    "open": "reactive-ir/effect-compute-also-called"
+   }
+  },
+  {
+   "fixture": "reactive-ir/foreach-carrier",
+   "key": "SC1001 function-run-unplaced",
+   "from": 17,
+   "to": 13,
+   "adr": "ADR 1166",
+   "kind": "relabel",
+   "relabeledTo": "SC1001 read-backing-unproven"
+  },
+  {
+   "fixture": "reactive-ir/named-callback-escaped-entry",
+   "key": "SC1001 function-run-unplaced",
+   "from": 8,
+   "to": 5,
+   "adr": "ADR 1166",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/named_callbacks.rs::reporting_run_role",
+   "fixtures": {
+    "proved": "reactive-ir/named-callback-escaped-entry",
+    "open": "reactive-ir/named-callback-escaped-entry"
+   }
+  },
+  {
+   "fixture": "reactive-ir/named-fn-expr-calls",
+   "key": "SC1001 function-run-unplaced",
+   "from": 3,
+   "to": 1,
+   "adr": "ADR 1166",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/named_callbacks.rs::reporting_run_role",
+   "fixtures": {
+    "proved": "reactive-ir/named-fn-expr-calls",
+    "open": "reactive-ir/named-fn-expr-calls"
    }
   }
  ],

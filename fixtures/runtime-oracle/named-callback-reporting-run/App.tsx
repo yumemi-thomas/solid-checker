@@ -151,3 +151,16 @@ export function TwinNestedRead() {
   [f].forEach((g) => g());
   return <div>{m()()}</div>;
 }
+
+// Uncertifiable (SC1003 too): a destructure in a callback a non-literal list carries; no run is proven.
+export function TwinDestructureListed() {
+  const [s] = createStore({ v: 0 });
+  const f = () => {
+    const { v } = s;
+    return v;
+  };
+  const m = createMemo(f);
+  const l = [f];
+  l.forEach((g) => g());
+  return <div>{m()}</div>;
+}

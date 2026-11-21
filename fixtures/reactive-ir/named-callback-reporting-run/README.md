@@ -11,7 +11,7 @@ Violations: `StoreMemoCalledInBody` (it had a violation from the call summary an
 `StoreMemoCarriedInBody`, `StoreMemoMappedInBody`, `StoreSettledCarriedInBody`, `StoreEffectComputeCarriedInBody`,
 `StoreNamedExpressionCarriedInApply`, `SignalMemoCarriedInBody`. Clean: `StoreMemoMappedInHandler` (the `map` run is in a handler).
 Uncertifiable twins: `TwinDeadCall` (`if (false) f()`), `TwinConditionalCarrier`, `TwinLoopCall`, `TwinFilter` (no carrier),
-`TwinLetBinding` (the binding is reassigned), `TwinNestedRead` (the read is in a nested function the run does not execute), `TwinApplyCreationFirst` (in an effect's apply, outside
+`TwinLetBinding` (the binding is reassigned), `TwinNestedRead` (the read is in a nested function the run does not execute), `TwinDestructureListed` (SC1003 too: a non-literal list), `TwinApplyCreationFirst` (in an effect's apply, outside
 the body's rendering, a call before the run, here `createMemo(f)`, throws PRIMITIVE_IN_EFFECT_CALLBACK first: no call may stand
 between the declarator and such a run).
 Chrome: `runtime-oracle/named-callback-reporting-run`. Stub: `foreach-carrier`'s, plus `createStore`.
