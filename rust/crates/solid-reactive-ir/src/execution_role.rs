@@ -460,6 +460,16 @@ pub(crate) fn read_execution_role(
                 ExecutionRole::DeferredCallback
             );
         }
+        // ADR 1183: a read in a returned cleanup that a reached write reruns while the owner is alive runs in the apply's window;
+        // reads only.
+        if role == ExecutionRole::Unknown
+            && write_roles::returned_cleanup_rerun_reached(file, span, lookup)
+        {
+            return role_arm!(
+                "execution_role.read_execution_role.returned-cleanup-rerun",
+                ExecutionRole::EffectApply
+            );
+        }
         role
     })
 }
