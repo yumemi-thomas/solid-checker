@@ -19,7 +19,7 @@
   "SC1001 no-hydration-subtree": 2,
   "SC1001 package-finding-at-entry": 141,
   "SC1001 package-value-read": 182,
-  "SC1001 read-backing-unproven": 394,
+  "SC1001 read-backing-unproven": 395,
   "SC1001 store-handed-to-package": 1,
   "SC1001 strict-read-unaccounted": 18,
   "SC1001 summary-read-unplaced": 96,
@@ -128,7 +128,7 @@
   "SC3001 function-run-unplaced": 38,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 7,
-  "SC3001 leaf-operation-unaccounted": 7051,
+  "SC3001 leaf-operation-unaccounted": 7055,
   "SC3001 leaf-owner-unproven": 67,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
@@ -144,7 +144,7 @@
   "SC4001 handler-on-disabled-control": 7,
   "SC4001 handler-spread-unresolved": 84,
   "SC4001 owner-allocation-unproven": 24,
-  "SC4001 owner-callers-unenumerated": 3630,
+  "SC4001 owner-callers-unenumerated": 3626,
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 4,
@@ -152,7 +152,7 @@
   "SC4001 package-finding-at-entry": 76,
   "SC4001 unreached-dead-code": 2,
   "SC4002 component-identity-unproven": 2,
-  "SC4002 computation-error-unobserved": 31,
+  "SC4002 computation-error-unobserved": 32,
   "SC4002 function-unentered": 4,
   "SC4002 lazy-compute-unread": 2,
   "SC4002 owner-unproven": 8,
@@ -238,7 +238,7 @@
   "SC9005 host-input-unreadable": 3,
   "SC9005 package-source-unavailable": 67,
   "SC9012 async-prop-getter": 3,
-  "SC9012 closed-parameter-member-dispatch": 75,
+  "SC9012 closed-parameter-member-dispatch": 76,
   "SC9012 composite-callee-unresolved": 10,
   "SC9012 computed-call-target-unresolved": 29,
   "SC9012 created-accessor-read-unproven": 1,
@@ -5808,6 +5808,72 @@
    "adr": "ADR 1160",
    "kind": "relabel",
    "relabeledTo": "SC2002 package-finding-at-entry"
+  },
+  {
+   "fixture": "reactive-ir/errored-fallback-owner",
+   "key": "SC4001 function-run-unplaced",
+   "from": 5,
+   "to": 3,
+   "adr": "ADR 1171",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/events.rs::prop_literal_call_sites",
+   "fixtures": {
+    "proved": "reactive-ir/errored-fallback-owner",
+    "open": "reactive-ir/errored-fallback-owner"
+   }
+  },
+  {
+   "fixture": "reactive-ir/fp-owner-component-ref",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 1171",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/events.rs::prop_literal_call_sites",
+   "fixtures": {
+    "proved": "reactive-ir/fp-owner-component-ref",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/owner-callback-prop",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 5,
+   "to": 4,
+   "adr": "ADR 1171",
+   "kind": "relabel",
+   "relabeledTo": "SC4002 computation-error-unobserved"
+  },
+  {
+   "fixture": "reactive-ir/owner-callback-prop",
+   "key": "SC4001 function-run-unplaced",
+   "from": 5,
+   "to": 4,
+   "adr": "ADR 1171",
+   "kind": "relabel",
+   "relabeledTo": "SC4002 computation-error-unobserved"
+  },
+  {
+   "fixture": "reactive-ir/prop-body-call-guard",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 3,
+   "to": 2,
+   "adr": "ADR 1171",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/events.rs::prop_literal_call_sites",
+   "fixtures": {
+    "proved": "reactive-ir/prop-body-call-guard",
+    "open": "reactive-ir/prop-body-call-guard"
+   }
+  },
+  {
+   "fixture": "reactive-ir/stored-throw-observation",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1171",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/events.rs::prop_literal_call_sites",
+   "fixtures": {
+    "proved": "reactive-ir/stored-throw-observation",
+    "open": "engine/eslint-reactivity-v2"
+   }
   }
  ],
  "renames": []
