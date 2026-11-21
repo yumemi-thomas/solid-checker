@@ -288,15 +288,24 @@ const HOST_SILENCE: &str = "package_action_calls.package_action_calls.reviewed-h
 
 /// The projects of `fixtures/reactive-ir/vite-dev-client` where the premise holds (the root's own prototype writes clear two sites of `App.tsx`), and where
 /// it does not (every site keeps its row).
-const HOST_CLEARED: [&str; 4] = [
+const HOST_CLEARED: [&str; 5] = [
     "vite-dev-client",
     "vite-dev-client/variants/type-import",
     "vite-dev-client/variants/solid-plugin",
+    "vite-dev-client/variants/diagnostics-on",
     "vite-dev-client/variants/vite-7",
 ];
-const HOST_KEPT: [&str; 6] = [
+const HOST_KEPT: [&str; 11] = [
     "vite-dev-client/variants/solid-plugin-patched",
     "vite-dev-client/variants/runtime-import",
+    // Review F1: a load spelled otherwise that resolves into vite (tsconfig `paths` and a Vite alias; a Vite alias alone).
+    "vite-dev-client/variants/alias-paths",
+    "vite-dev-client/variants/alias",
+    // Review F2: a load no specifier names (`import.meta.glob`, `new URL(…, import.meta.url)`).
+    "vite-dev-client/variants/glob",
+    "vite-dev-client/variants/url",
+    // Review F4: a package the program loads depends on vite.
+    "vite-dev-client/variants/depends-on-vite",
     "vite-dev-client/variants/plugin",
     "vite-dev-client/variants/define",
     "vite-dev-client/variants/production",
