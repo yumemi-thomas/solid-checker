@@ -15,6 +15,8 @@
 //!   guard (`inEffectCallback && context === null`) does not meet the creation (SC6002);
 //! - [`SiteSilence::EffectCreationRunsOffApply`]: the role engine places the site off every effect's apply (a handler, a deferred callback, a directive apply,
 //!   rendering, module code, discarded code), and every layer around it is entered only the way that role says (SC6002);
+//! - [`SiteSilence::EffectCreationAfterAwait`]: the site follows an `await` of its own async function that every run reaches first, so it runs from a
+//!   microtask, never on an effect's apply (SC6002; ADR 1159);
 //! - [`SiteSilence::EffectCreationOwnerSetAround`]: an exact primitive whose callback creates an owner wraps the site, every layer the climb crosses running in
 //!   the primitive's synchronous run (SC6002).
 //!
@@ -399,6 +401,26 @@ impl<'a> Question<'_, '_, 'a> {
         if !open_leaf && !open_effect {
             return (leaf_answer, effect_answer);
         }
+        // ADR 1159: a creation after an `await` of its own async function that every run reaches first runs from that await's continuation, a microtask on
+        // an empty stack: never inside an effect's apply, whose callback flag is set only for its synchronous run. Written directly in that function: not in
+        // JSX (a later render runs it), not in an instance field's initializer.
+        if open_effect
+            && !crate::execution_role::inside_instance_field(file, span)
+            && !ast
+                .jsx_containing(span)
+                .any(|element| function.span.contains(element.span))
+            && let Some(awaited) = crate::execution_role::unconditional_await_before(file, span)
+        {
+            effect_answer = Some(Ok((
+                SiteSilence::EffectCreationAfterAwait,
+                PremiseKind::AfterAwait,
+                awaited,
+            )));
+            open_effect = false;
+            if !open_leaf {
+                return (leaf_answer, effect_answer);
+            }
+        }
         // Every answer below speaks for the site only where it is plain: the graph's context and the role engine's placement say where code written
         // directly in a function runs, not a parameter list, a generator's body or a later task.
         let plain = if crate::owners::in_parameter_list(ast, span) {
@@ -453,7 +475,8 @@ impl<'a> Question<'_, '_, 'a> {
                 self.entities,
                 self.symbol_names,
                 self.lookup,
-            ) && !entry_open()
+            ) && (super::owner_emission::runs_in_delivered_handler(file, span, self.lookup)
+                || !entry_open())
             {
                 effect_answer = Some(Ok((
                     SiteSilence::EffectCreationRunsOffApply,

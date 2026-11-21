@@ -377,7 +377,7 @@ impl SemanticLookup<'_> {
     /// nothing reads that an apply may run (`eval`, a code-evaluating call, a module the build does not read anywhere), or a call in an
     /// apply that names no project function, no Solid primitive and no standard call (a stored callback, a computed member, a package's
     /// export), which may dispatch.
-    fn apply_dispatch_possible(&self) -> bool {
+    pub(crate) fn apply_dispatch_possible(&self) -> bool {
         if self.hazard_present(crate::base::Hazard::Eval)
             || self.hazard_present(crate::base::Hazard::CodeEvaluatingCall)
         {

@@ -127,7 +127,7 @@
   "SC3001 function-run-unplaced": 38,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 7,
-  "SC3001 leaf-operation-unaccounted": 7020,
+  "SC3001 leaf-operation-unaccounted": 7021,
   "SC3001 leaf-owner-unproven": 67,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
@@ -203,7 +203,7 @@
   "SC5008 pending-read-unresolved": 24,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5455,
+  "SC6002 effect-creation-unaccounted": 5423,
   "SC6002 effect-owner-unproven": 53,
   "SC6002 function-run-unplaced": 64,
   "SC6002 generator-step-unplaced": 1,
@@ -5488,6 +5488,270 @@
    "fixtures": {
     "proved": "uncertifiable-repro/sc1001",
     "open": "uncertifiable-repro/sc1001"
+   }
+  },
+  {
+   "fixture": "reactive-ir/after-await-runner-callback",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 3,
+   "to": 1,
+   "adr": "ADR 1159",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/body_roles.rs::unconditional_await_before",
+   "fixtures": {
+    "proved": "reactive-ir/after-await-runner-callback",
+    "open": "reactive-ir/after-await-runner-callback"
+   }
+  },
+  {
+   "fixture": "reactive-ir/change-checkbox-misuse",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 1159",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::runs_in_delivered_handler",
+   "fixtures": {
+    "proved": "reactive-ir/change-checkbox-misuse",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/change-dependency-plain",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1159",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::runs_in_delivered_handler",
+   "fixtures": {
+    "proved": "reactive-ir/change-dependency-plain",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/change-local-setproperty",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1159",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::runs_in_delivered_handler",
+   "fixtures": {
+    "proved": "reactive-ir/change-local-setproperty",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/context-provider-children-owned",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 4,
+   "to": 3,
+   "adr": "ADR 1159",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::runs_in_delivered_handler",
+   "fixtures": {
+    "proved": "reactive-ir/context-provider-children-owned",
+    "open": "reactive-ir/context-provider-children-owned"
+   }
+  },
+  {
+   "fixture": "reactive-ir/disabled-handler-owner-enabled",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1159",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::runs_in_delivered_handler",
+   "fixtures": {
+    "proved": "reactive-ir/disabled-handler-owner-enabled",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/disabled-handler-owner",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 8,
+   "to": 0,
+   "adr": "ADR 1159",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::runs_in_delivered_handler",
+   "fixtures": {
+    "proved": "reactive-ir/disabled-handler-owner",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/disabled-spread-handler-owner",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 7,
+   "to": 3,
+   "adr": "ADR 1159",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::runs_in_delivered_handler",
+   "fixtures": {
+    "proved": "reactive-ir/disabled-spread-handler-owner",
+    "open": "reactive-ir/disabled-spread-handler-owner"
+   }
+  },
+  {
+   "fixture": "reactive-ir/event-dispatch-await-continuation",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1159",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::runs_in_delivered_handler",
+   "fixtures": {
+    "proved": "reactive-ir/event-dispatch-await-continuation",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/event-dispatch-document",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1159",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::runs_in_delivered_handler",
+   "fixtures": {
+    "proved": "reactive-ir/event-dispatch-document",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/event-dispatch-handler-children",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1159",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::runs_in_delivered_handler",
+   "fixtures": {
+    "proved": "reactive-ir/event-dispatch-handler-children",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/event-dispatch-handler-helper",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1159",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::runs_in_delivered_handler",
+   "fixtures": {
+    "proved": "reactive-ir/event-dispatch-handler-helper",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/event-dispatch-handler-inline",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1159",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::runs_in_delivered_handler",
+   "fixtures": {
+    "proved": "reactive-ir/event-dispatch-handler-inline",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/event-dispatch-handler-literal",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1159",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::runs_in_delivered_handler",
+   "fixtures": {
+    "proved": "reactive-ir/event-dispatch-handler-literal",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/event-dispatch-module-scope",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1159",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::runs_in_delivered_handler",
+   "fixtures": {
+    "proved": "reactive-ir/event-dispatch-module-scope",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/event-dispatch-timeout",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1159",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::runs_in_delivered_handler",
+   "fixtures": {
+    "proved": "reactive-ir/event-dispatch-timeout",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/event-dispatch-window",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1159",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::runs_in_delivered_handler",
+   "fixtures": {
+    "proved": "reactive-ir/event-dispatch-window",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/overridden-spread-handler",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 10,
+   "to": 9,
+   "adr": "ADR 1159",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::runs_in_delivered_handler",
+   "fixtures": {
+    "proved": "reactive-ir/overridden-spread-handler",
+    "open": "reactive-ir/overridden-spread-handler"
+   }
+  },
+  {
+   "fixture": "reactive-ir/root-window-reads",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 3,
+   "to": 1,
+   "adr": "ADR 1159",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::runs_in_delivered_handler",
+   "fixtures": {
+    "proved": "reactive-ir/root-window-reads",
+    "open": "reactive-ir/root-window-reads"
+   }
+  },
+  {
+   "fixture": "reactive-ir/test-runner-suites-jest-module",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 1159",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::runs_in_delivered_handler",
+   "fixtures": {
+    "proved": "reactive-ir/test-runner-suites-jest-module",
+    "open": "reactive-ir/test-runner-suites-jest-module"
+   }
+  },
+  {
+   "fixture": "reactive-ir/test-runner-suites-jest-test",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1159",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::runs_in_delivered_handler",
+   "fixtures": {
+    "proved": "reactive-ir/test-runner-suites-jest-test",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/test-runner-suites-mocha-module",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 1159",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::runs_in_delivered_handler",
+   "fixtures": {
+    "proved": "reactive-ir/test-runner-suites-mocha-module",
+    "open": "reactive-ir/test-runner-suites-mocha-module"
    }
   }
  ],

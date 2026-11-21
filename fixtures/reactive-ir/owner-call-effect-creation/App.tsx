@@ -48,7 +48,8 @@ export function Body() {
 }
 
 // An event handler: it runs on the browser's own stack, never on an effect's apply (no synchronous dispatch in this program). The role silence also asks that no layer around the
-// site is entered by a reference that is no direct call, and an inline handler is a function value no binding names that is no whole argument of a call: the row stands (Chrome is quiet).
+// site is entered by a reference that is no direct call. An inline handler literal is entered by its event alone (ADR 1159) only where no effect's apply may
+// dispatch an event; here `Kid`'s apply calls a function no fact names (a prop), which may: the row stands (Chrome is quiet). `variants/inline-handler` is silent.
 export function Handler() {
   return (
     <button
@@ -58,6 +59,67 @@ export function Handler() {
     >
       x
     </button>
+  );
+}
+
+// ADR 1159: an async function the apply runs in place: what it creates after an `await` every run reaches runs from a microtask, off the apply's
+// synchronous run: silent (`effect-creation-after-await`). Before the `await` it is on the apply's stack: SC6002. After an `await` only one arm
+// reaches, it may run on the apply's stack: no silence from the await.
+export function ApplyAfterAwait() {
+  createEffect(
+    () => 0,
+    () => {
+      void (async () => {
+        await Promise.resolve();
+        createMemo(() => 16);
+      })();
+    },
+  );
+  return <p>after</p>;
+}
+export function ApplyBeforeAwait() {
+  createEffect(
+    () => 0,
+    () => {
+      void (async () => {
+        createMemo(() => 17);
+        await Promise.resolve();
+      })();
+    },
+  );
+  return <p>before</p>;
+}
+export function ApplyBranchAwait(props: { wait: boolean }) {
+  createEffect(
+    () => props.wait,
+    (wait) => {
+      void (async () => {
+        if (wait) await Promise.resolve();
+        createMemo(() => 18);
+      })();
+    },
+  );
+  return <p>branch</p>;
+}
+
+// ADR 1159's boundary: a handler handed to a component is a prop value, no element's handler. `Kid` calls it in an effect's apply, so the creation runs there:
+// no silence (Chrome: PRIMITIVE_IN_EFFECT_CALLBACK).
+function Kid(props: { onClick: () => void }) {
+  createEffect(
+    () => 0,
+    () => {
+      props.onClick();
+    },
+  );
+  return <p>kid</p>;
+}
+export function PropHandler() {
+  return (
+    <Kid
+      onClick={() => {
+        createMemo(() => 15);
+      }}
+    />
   );
 }
 
@@ -116,6 +178,10 @@ function App() {
       <RootInMemo />
       <Body />
       <Handler />
+      <PropHandler />
+      <ApplyAfterAwait />
+      <ApplyBeforeAwait />
+      <ApplyBranchAwait wait={true} />
       <Timer />
       <Fielded />
       <SharedBody />
