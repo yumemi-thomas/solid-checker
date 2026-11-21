@@ -461,8 +461,23 @@ pub(super) fn emit_file(
         };
         // ADR 0488: a settled cleanup's `onSettled` call runs after the await
         // when its callee does, also through in-place layers (ADR 0493).
+        // ADR 1165: an operation (or the `onSettled` call) in the body of a `for await` that provably runs it follows the loop's
+        // suspension on every run (ADR 1038), as one past a dominating await does; not where the function probes `getOwner()` (as
+        // `call_owner_edge`).
+        let for_await_body = |site: Span| {
+            crate::execution_role::in_for_await_body_that_runs(file, site, lookup)
+                && !crate::owners::owning_function(&file.ast, site).is_some_and(|outer| {
+                    file.ast.calls.iter().any(|call| {
+                        outer.span.contains(call.span)
+                            && lookup.primitive_at_call(file, call.span)
+                                == Some(solid_dialect::Primitive::GetOwner)
+                    })
+                })
+        };
         let settled_after_await = settled_call.is_some_and(|call| {
-            starts.contains(&u64::from(call.callee.start)) || climbed_after_await(call.span)
+            starts.contains(&u64::from(call.callee.start))
+                || climbed_after_await(call.span)
+                || for_await_body(call.span)
         });
         // ADR 0612: a `catch` or `finally` runs unsuspended where the `try` head
         // throws before it suspends, under the owner of the function's stack;
@@ -478,7 +493,8 @@ pub(super) fn emit_file(
             || (continuation_placed
                 && ((starts.contains(&u64::from(candidate.operation_span.start))
                     && !try_tail_unproven(candidate.operation_span))
-                    || climbed_after_await(candidate.operation_span)));
+                    || climbed_after_await(candidate.operation_span)
+                    || for_await_body(candidate.operation_span)));
         // ADR 0516: a settled cleanup's `onSettled` call that may follow an
         // await (a later loop iteration, a skippable await) may run with no
         // owner: its possible continuation is the call's, not the callback's.
