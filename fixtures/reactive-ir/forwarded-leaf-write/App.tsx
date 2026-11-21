@@ -44,3 +44,39 @@ export function TwiceApp() {
   handTwice(() => setN(3));
   return <i>{n()}</i>;
 }
+
+// Negative (the review of 1155, F1, Chrome: REACTIVE_WRITE_IN_OWNED_SCOPE): a non-arrow wrapper also calls its argument through `arguments`, here in the memo
+// that calls it. The parameter's references are not the argument's only reads: no exact forwarding, the violation stays.
+function handArgs(fn: () => void) {
+  createTrackedEffect(() => {
+    fn();
+  });
+  arguments[0]();
+}
+export function ArgsApp() {
+  const [n, setN] = createSignal(0);
+  createMemo(() => {
+    handArgs(() => setN(4));
+    return 0;
+  });
+  return <i>{n()}</i>;
+}
+
+// Negative (F1): the parameter reassigned in the wrapper: the slot may run another function, the literal's own run is not placed: the row it had stays.
+function handSwap(fn: () => void, other: () => void) {
+  fn = other;
+  createTrackedEffect(() => {
+    fn();
+  });
+}
+export function SwapApp() {
+  const [n, setN] = createSignal(0);
+  createMemo(() => {
+    handSwap(
+      () => setN(5),
+      () => {},
+    );
+    return 0;
+  });
+  return <i>{n()}</i>;
+}

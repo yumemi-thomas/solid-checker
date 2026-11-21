@@ -2260,7 +2260,13 @@ pub(super) fn forwarded_compute_slot<'a>(
         .callee_symbol(file, call.callee)
         .and_then(|symbol| lookup.function_for_symbol(symbol))
         .or_else(|| lookup.function_called_at(file.path.as_str(), call.callee))?;
-    if wrapper.r#async || wrapper.generator {
+    // ADR 1155 r1 (the review's F1): a function that is no arrow reaches its arguments through `arguments` too (`arguments[0]()`), which no reference of
+    // the parameter shows: it may run the literal anywhere.
+    if wrapper.r#async
+        || wrapper.generator
+        || (wrapper.kind != solid_facts::ast::FunctionKind::Arrow
+            && crate::value_use::reads_arguments(wrapper_file, wrapper.span))
+    {
         return None;
     }
     let parameter = wrapper.parameters.get(index)?;
@@ -2270,6 +2276,10 @@ pub(super) fn forwarded_compute_slot<'a>(
         return None;
     }
     let name = parameter.names.first()?;
+    // A written parameter may hold another function at a call (every reference below is a call, which a write's target is not; stated for the reader).
+    if crate::indexes::binding_written(wrapper_file, name.span) {
+        return None;
+    }
     let symbol = lookup
         .entities()
         .at(wrapper_file.path.as_str(), name.span)?;
