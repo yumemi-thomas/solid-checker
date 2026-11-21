@@ -448,7 +448,19 @@ pub(crate) fn read_execution_role(
     lookup: &SemanticLookup<'_>,
 ) -> ExecutionRole {
     crate::role_log::decide("read", file.path.as_str(), span, || {
-        read_execution_role_unlogged(file, span, allowed, entities, symbol_names, lookup)
+        let role =
+            read_execution_role_unlogged(file, span, allowed, entities, symbol_names, lookup);
+        // ADR 1167: a read in the cleanup an effect's inline apply returns, where the compute provably tracks nothing, runs only at the
+        // effect's disposal, as an `onCleanup` callback's (ADR 0695); reads only, every other site keeps its unplaced role.
+        if role == ExecutionRole::Unknown
+            && write_roles::returned_cleanup_disposal_only(file, span, lookup)
+        {
+            return role_arm!(
+                "execution_role.read_execution_role.returned-cleanup-disposal",
+                ExecutionRole::DeferredCallback
+            );
+        }
+        role
     })
 }
 

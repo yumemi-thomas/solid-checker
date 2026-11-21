@@ -1,0 +1,1 @@
+{ "note": "ADR 1167 counterexample: a createRoot dispose called in the component body runs the never-rerunning effect's returned cleanup in the body's strict-read window; SC1001 uncertifiable." }
