@@ -1908,7 +1908,7 @@ fn reviewed_host_roots(
                 || manifest_name(Path::new(root)).as_deref() == Some("vite")
         })
     };
-    // Review F1/F2: a program load that reaches Vite's own code is decided by the attested resolution, never by the specifier's spelling, and a load the
+    // Review F1/F2: whether a program load reaches Vite's own code follows from the attested resolution of the load, never from the specifier's spelling, and a load the
     // resolution cannot answer (a hidden load, a computed specifier, a row no attestation gives, a specifier that resolves nowhere) ends the premise.
     let imports = facts.resolved_imports.as_ref();
     for file in &facts.files {
