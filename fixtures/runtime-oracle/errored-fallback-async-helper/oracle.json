@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1153, negative: a helper an `async` fallback calls after its first `await` runs with no owner: NO_OWNER_CLEANUP inside the helper, covered by the helper's SC4001 uncertifiable row before and after."
+}

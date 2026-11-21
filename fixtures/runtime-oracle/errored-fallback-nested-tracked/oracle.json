@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1153: a layer written inside an Errored fallback is its own. An `onCleanup` in the callback of a tracked effect the fallback creates raises CLEANUP_IN_FORBIDDEN_SCOPE; only the creation of the effect, written directly in the fallback, is owned (fixture errored-fallback-owner `Nested`). covered-violation before and after the owner edge. A separate case from -nested-apply: the apply's throw halts the reactive system before this callback runs."
+}

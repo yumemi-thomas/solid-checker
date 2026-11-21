@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1153, control: `onCleanup` in an event handler (no owner) raises NO_OWNER_CLEANUP, so the quiet `onCleanup` of errored-fallback-owned has an owner."
+}

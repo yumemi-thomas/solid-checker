@@ -52,6 +52,12 @@
 //             namedrow  the site is DIRECTLY in the body of a NAMED function expression that `For` is handed and that stores itself, `{function row() { sv = row; <site>; return <p /> }}`
 //                     (B1, the re-review of #225): the in-place rule took any function handed to a dialect element for one the element calls, but a function that hands itself on runs
 //                     where it is called
+//             namedfb   the site is DIRECTLY in the body of a NAMED function expression that `Errored` is handed as its `fallback` and that stores itself, `<Errored fallback={function fb() { sv = fb; <site>; return <p /> }}><Broken /></Errored>`
+//                     (ADR 1153, the owner edge's twin of `namedrow`): the boundary calls a fallback written in place at mount, in a computation of its own (rc.21 `createBoundary`, `fallback(b)`), so the site
+//                     there has an owner, but a function that hands itself on runs where it is called, on the apply's stack with no owner set. The child throws at mount, so the fallback runs and saves its name
+//             fbnest    the site is in an ARROW written INSIDE an `Errored` fallback written in place and stored by it, `<Errored fallback={() => { sv = () => { <site> }; return <p /> }}><Broken /></Errored>`
+//                     (ADR 1153): the fallback itself runs in a computation of its own, but a function written inside it runs where it is called, which the host's apply does through the variable
+//                     (the owner edge of the fallback must not reach the layer; module-level component the host's view renders, as `rownest`)
 //             whenfn  the site is in a function written in `Show`'s `when`, `<Show keyed when={() => { <site>; return 1; }}>{(view) => { sv = view; ... }}</Show>` (B2): `Show` hands the
 //                     value to its function child and never calls it; the rule took any function-valued prop for one the element calls
 //             classfield  the site is the initializer of an instance field of a class written in a function, `class H { f = <site> }`, stored (`sv = H`) and constructed by the host,
@@ -63,7 +69,7 @@
 // contexts, the direct binding bare (`erShape`), not crossed by the census, out of api-fire's plan.
 import { cbProp, contain, decl, domExpr, expr, fn, iife, jsx, namedButton, num, prim, propEl, ref, ret } from "./model.mjs";
 
-export const ER_ROUTES = ["view", "array", "saved", "timer", "generator", "root", "genlayer", "genuntrack", "genhelper", "rootself", "prop", "slot", "children", "slotcall", "childcall", "slothelper", "childhelper", "rownest", "shownest", "getteriife", "gettermap", "providernest", "namedrow", "whenfn", "classfield", "matchout"];
+export const ER_ROUTES = ["view", "array", "saved", "timer", "generator", "root", "genlayer", "genuntrack", "genhelper", "rootself", "prop", "slot", "children", "slotcall", "childcall", "slothelper", "childhelper", "rownest", "shownest", "getteriife", "gettermap", "providernest", "namedrow", "whenfn", "classfield", "matchout", "namedfb", "fbnest"];
 export const ER_HOSTS = ["apply", "tracked", "settled"];
 /** The (route, host) pairs the grid places: every route on an apply, and the `view` route on the two leaf hosts. */
 const PLACED = [...ER_ROUTES.map((route) => [route, "apply"]), ["view", "tracked"], ["view", "settled"]];
@@ -216,31 +222,35 @@ export function erContext(context, stmts, kit) {
       const element = inSlot ? `<${kid} slot={${h}()} />` : `<${kid}>{${h}()}</${kid}>`;
       return { hoisted: [kidDecl(kid, read), helper, expr(domExpr(`createRoot(() => { void (${element}); })`, undefined, ["createRoot"]))], body: [], view: [] };
     }
-    case "rownest": case "shownest": case "getteriife": case "gettermap": case "providernest": {
+    case "rownest": case "shownest": case "getteriife": case "gettermap": case "providernest": case "fbnest": {
       // The site is in an arrow stored by code written inside a dialect element's function or in-place getter; the host's apply calls the stored arrow (the twin never does). Written
       // in module code, so B3 files no row: `Show` evaluates its function child and its children as it is created, so a module-level `createRoot` runs them; `For` and a context
       // provider evaluate theirs when the result is READ, so there the element is written in a module-level component that the host's view renders.
       const sv = kit.name("sv");
       const ctx = kit.name("Ctx");
       const rn = kit.name("Rows");
+      const broken = kit.name("Broken");
       const [open, close] = {
         rownest: [`<For each={[1]}>{() => { ${sv} = () => `, `; return <p>r</p>; }}</For>`],
         shownest: [`<Show when={1}>{(v) => { void v; ${sv} = () => `, `; return <p>s</p>; }}</Show>`],
         getteriife: [`<Show when={1}>{(() => { ${sv} = () => `, `; return <p>i</p>; })()}</Show>`],
         gettermap: [`<Show when={1}>{[1].map(() => { ${sv} = () => `, `; return <p>m</p>; })}</Show>`],
         providernest: [`<${ctx} value={1}>{(() => { ${sv} = () => `, `; return <p>c</p>; })()}</${ctx}>`],
+        // ADR 1153: `Errored` calls its fallback at mount in a computation of its own, and the child throws at mount so it does; the stored arrow is called later by the host's apply.
+        fbnest: [`<Errored fallback={() => { ${sv} = () => `, `; return <p>f</p>; }}><${broken} /></Errored>`],
       }[route];
-      const rendered = route === "rownest" || route === "providernest";
+      const rendered = route === "rownest" || route === "providernest" || route === "fbnest";
       const frame = contain("frame", 9, stmts, {
         head: rendered ? `function ${rn}(_props: { a?: unknown }) { return <p>${open}` : `createRoot(() => { void (${open}`,
         close: rendered ? `${close}</p>; }` : `${close}); });`,
-        imports: [...(rendered ? [] : ["createRoot"]), ...(route === "rownest" ? ["For"] : route === "providernest" ? ["createContext"] : ["Show"])],
+        imports: [...(rendered ? [] : ["createRoot"]), ...(route === "rownest" ? ["For"] : route === "providernest" ? ["createContext"] : route === "fbnest" ? ["Errored"] : ["Show"])],
       });
       const hoisted = [expr(domExpr(`let ${sv}: (() => void) | undefined`))];
       if (route === "providernest") hoisted.push(expr(domExpr(`const ${ctx} = createContext(1)`, undefined, ["createContext"])));
+      if (route === "fbnest") hoisted.push(expr(domExpr(`function ${broken}(): never { throw new Error("boom"); }`)));
       return { hoisted: [...hoisted, frame], body: [placeIn(host, runs(sv, `${sv}!()`))], view: rendered ? [propEl(rn, num(1))] : [] };
     }
-    case "namedrow": case "whenfn": case "classfield": case "matchout": {
+    case "namedrow": case "namedfb": case "whenfn": case "classfield": case "matchout": {
       // The review of #225's re-review (B1-B4). Module-level components the host's view renders (`For`, `Show` and a provider evaluate what they hold when the result is read, a class is
       // made when a component runs), so B3's row at everything written inside an exported component stays off the site.
       const sv = kit.name("sv");
@@ -255,6 +265,19 @@ export function erContext(context, stmts, kit) {
           imports: ["For"],
         });
         return { hoisted: [expr(domExpr(`let ${sv}: (() => void) | undefined`)), frame], body: [placeIn(host, runs(sv, `${sv}!()`))], view: rendered };
+      }
+      if (route === "namedfb") {
+        // ADR 1153: `Errored` calls a fallback written in place at mount, in a computation of its own, where the site has an owner and is quiet; one that stores itself is also called where the host
+        // calls it, on the apply's stack with no owner set. The child throws at mount, so the boundary shows the fallback (and the name is saved) before the apply runs.
+        const fb = kit.name("fb");
+        const broken = kit.name("Broken");
+        const frame = contain("frame", 9, [expr(domExpr(`${sv} = ${fb}`)), ...stmts], {
+          head: `function ${rn}(_props: { a?: unknown }) { return <p><Errored fallback={function ${fb}() `,
+          close: `}><${broken} /></Errored></p>; }`,
+          after: ["return <p>f</p>;"],
+          imports: ["Errored"],
+        });
+        return { hoisted: [expr(domExpr(`let ${sv}: (() => void) | undefined`)), expr(domExpr(`function ${broken}(): never { throw new Error("boom"); }`)), frame], body: [placeIn(host, runs(sv, `${sv}!()`))], view: rendered };
       }
       if (route === "whenfn") {
         const frame = contain("frame", 9, stmts, {

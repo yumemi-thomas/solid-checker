@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1153, negative: a named fallback stores a nested arrow that an effect's apply runs later with no owner (NO_OWNER_CLEANUP at the nested arrow). The nested arrow is its own layer, so the owner edge leaves its row."
+}

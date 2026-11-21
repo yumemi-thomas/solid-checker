@@ -96,7 +96,18 @@ pub(crate) fn discover_file_sources(
     symbol_names: &HashMap<SymbolId, SymbolId>,
 ) -> SourceDiscoveryContribution {
     let mut result = SourceDiscoveryContribution::default();
-    for binding in &file.ast.bindings {
+    // ADR 1147 (arm 3): the readers of a context whose one value is a fresh `[store, { actions }]` literal.
+    let store_tuples = crate::callback_return::provided_store_tuples(lookup, file);
+    crate::callback_return::log_store_tuple_decisions(file, &store_tuples);
+    for (index, binding) in file.ast.bindings.iter().enumerate() {
+        if let Some(consumer) = store_tuples
+            .iter()
+            .flat_map(|plan| plan.consumers.iter().map(move |consumer| (plan, consumer)))
+            .find(|(_, consumer)| consumer.binding == index)
+        {
+            push_context_store_source(&mut result, lookup, file, entities, consumer.0, consumer.1);
+            continue;
+        }
         let Some(initializer) = binding.call_initializer else {
             continue;
         };
@@ -811,4 +822,58 @@ pub(super) fn dynamic_key_form(
     }
     // Boolean-typed, computed, or unresolved: refuse to fabricate.
     solid_dialect::KeyForm::DynamicFlag
+}
+
+/// ADR 1147 (arm 3): a reader's slot-0 name is the provided store itself (the literal holds the root, and no holder can replace it): a store source of
+/// its own, as a store a hook returns is (ADR 0628), with the creation's facts.
+fn push_context_store_source(
+    result: &mut SourceDiscoveryContribution,
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    entities: &EntitySymbols,
+    plan: &crate::callback_return::ProvidedStoreTuple,
+    consumer: &crate::callback_return::StoreTupleConsumer,
+) {
+    let Some(name) = consumer.root else {
+        return;
+    };
+    let Some(created) = file.ast.call_at(plan.created) else {
+        return;
+    };
+    let Some(symbol) = entities.at(file.path.as_str(), name) else {
+        return;
+    };
+    let declaration = location(file.path.shared(), name);
+    result.array_slot_sources.push(symbol.clone());
+    result.accessors.push((
+        symbol.clone(),
+        (
+            symbol_id(file.source_text(name).unwrap_or_default()),
+            declaration,
+        ),
+    ));
+    result
+        .source_kinds
+        .push((symbol.clone(), ReactiveSourceKind::Store));
+    result.source_phases.push((symbol.clone(), 1));
+    if let Some(spelling) = lookup.dialect.name_of(Primitive::CreateStore) {
+        result
+            .source_primitives
+            .push((symbol.clone(), spelling.into()));
+    }
+    let facts = returned_source_facts(lookup, file, created, Primitive::CreateStore);
+    result
+        .source_owned_write
+        .push((symbol.clone(), facts.owned_write));
+    if facts.value_form {
+        result.value_form_stores.push(symbol.clone());
+    }
+    if facts.async_options != AsyncSourceOptions::default() {
+        result
+            .source_async_options
+            .push((symbol.clone(), facts.async_options));
+    }
+    if facts.async_source {
+        result.async_sources.push(symbol.clone());
+    }
 }

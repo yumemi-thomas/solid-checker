@@ -28,9 +28,15 @@
 //     barm-strpatch-eval    misuse  the patch through indirect `eval`
 //     barm-strpatch-newfn   misuse  the patch through `new Function`
 //     barm-strpatch-none    legal   no patch: the callback runs inside `untrack`, where a read is legal
+//   an action of a context's `[store, { actions }]` literal (ADR 1147, arm 3, `context-provided-store-tuple`)   the site is the body of `const act = () => { <site> }`,
+//                           provided as `<Cx value={[st, { act }] as const}>` around a local reader `R` that takes `const [, { act: a }] = useContext(Cx)`: the
+//                           arm places the action's runs at the reader's calls of `a`
+//     barm-ctxstore-memo    misuse  the reader calls `a()` in a `createMemo`: the write runs in the memo's compute
+//     barm-ctxstore-handler legal   the reader calls `a()` in a click handler
+//     barm-ctxstore-alias   misuse  the memo twin through an alias (`const f = a`): the arm refuses it (an action local used as a value), so it stays uncertifiable
 //
 // Recall contexts only, base shapes (misuse.mjs BASE_ONLY_CONTEXTS): the question is the host's run, not the spelling at the site.
-import { awaitStmt, button, contain, ctl, expr, flowEl, fn, iife, domExpr } from "./model.mjs";
+import { awaitStmt, button, contain, ctl, expr, flowEl, fn, iife, domExpr, mounted } from "./model.mjs";
 
 /** `{ [context]: "misuse" | "legal" }`, the side a context is on for the codes it is placed for (`ARM_CODES`). */
 export const ARM_CONTEXTS = {
@@ -39,6 +45,7 @@ export const ARM_CONTEXTS = {
   "barm-climb-sync": "misuse", "barm-climb-await": "legal",
   "barm-carried-body": "misuse", "barm-carried-handler": "legal",
   "barm-strpatch-eval": "misuse", "barm-strpatch-newfn": "misuse", "barm-strpatch-none": "legal",
+  "barm-ctxstore-memo": "misuse", "barm-ctxstore-handler": "legal", "barm-ctxstore-alias": "misuse",
 };
 export const ARM_CONTEXT_NAMES = Object.keys(ARM_CONTEXTS);
 
@@ -46,7 +53,8 @@ export const ARM_CONTEXT_NAMES = Object.keys(ARM_CONTEXTS);
 export const ARM_CODES = {
   STRICT_READ_UNTRACKED: ["barm-gen-spread", "barm-gen-handler", "barm-gen-never", "barm-climb-sync", "barm-climb-await", "barm-carried-body", "barm-carried-handler",
     "barm-strpatch-eval", "barm-strpatch-newfn", "barm-strpatch-none"],
-  REACTIVE_WRITE_IN_OWNED_SCOPE: ["barm-gen-spread", "barm-gen-handler", "barm-gen-never", "barm-gen-drain", "barm-gen-await"],
+  REACTIVE_WRITE_IN_OWNED_SCOPE: ["barm-gen-spread", "barm-gen-handler", "barm-gen-never", "barm-gen-drain", "barm-gen-await",
+    "barm-ctxstore-memo", "barm-ctxstore-handler", "barm-ctxstore-alias"],
   ACTION_CALLED_IN_OWNED_SCOPE: ["barm-gen-spread", "barm-gen-handler", "barm-gen-never", "barm-gen-drain", "barm-gen-await"],
 };
 
@@ -87,6 +95,29 @@ const strPatch = (kit, stmts, install) => {
   });
 };
 
+/**
+ * ADR 1147 (arm 3): the context-store pair. The site is the action's body; the reader `R` destructures the provided literal's slot 1 and calls the action's local
+ * in a memo (`use` "memo"), through an alias in a memo ("alias"), or in a click handler ("handler").
+ */
+const ctxStore = (kit, stmts, use) => {
+  const cx = kit.name("Cx");
+  const st = kit.name("st");
+  const act = kit.name("act");
+  const r = `R${kit.name("r")}`;
+  const a = kit.name("ax");
+  const run = use === "alias" ? `const ${a}f = ${a}; createMemo(() => { ${a}f(); return 0; });` : use === "memo" ? `createMemo(() => { ${a}(); return 0; });` : "";
+  const out = use === "handler" ? `<button data-act="${kit.name("ab")}" onClick={() => ${a}()}>go</button>` : "<i />";
+  return {
+    body: [contain("frame", 0, stmts, {
+      head: `const ${cx} = createContext<readonly [{ n: number }, { ${act}: () => void }]>();\nconst [${st}] = createStore({ n: 0 });\nconst ${act} = () => `,
+      close: ";",
+      then: [`function ${r}() { const [, { ${act}: ${a} }] = useContext(${cx}); ${run} return ${out}; }`],
+      imports: ["createContext", "createStore", "useContext", ...(use === "handler" ? [] : ["createMemo"])],
+    })],
+    view: [mounted(kit.name("v"), domExpr(`<${cx} value={[${st}, { ${act} }] as const}><${r} /></${cx}>`))],
+  };
+};
+
 /** The placement of `stmts` for a `barm-*` context (`{ body, view }`), or undefined for any other. */
 export function armContext(context, stmts, kit) {
   if (!ARM_CONTEXTS[context]) return undefined;
@@ -109,6 +140,9 @@ export function armContext(context, stmts, kit) {
     case "barm-strpatch-eval": return { body: [strPatch(kit, stmts, (code) => `(0, eval)(${JSON.stringify(code)});`)], view: [] };
     case "barm-strpatch-newfn": return { body: [strPatch(kit, stmts, (code) => `new Function(${JSON.stringify(code)})();`)], view: [] };
     case "barm-strpatch-none": return { body: [strPatch(kit, stmts, null)], view: [] };
+    case "barm-ctxstore-memo": return ctxStore(kit, stmts, "memo");
+    case "barm-ctxstore-handler": return ctxStore(kit, stmts, "handler");
+    case "barm-ctxstore-alias": return ctxStore(kit, stmts, "alias");
     default: return undefined;
   }
 }

@@ -352,6 +352,10 @@ error.
 
 A write that no row, discard or named silence ends is uncertifiable: `write-unaccounted` (ADR 0936).
 
+ADR 1147 (arm 3): a write in an action of a context's `[store, { actions }]` literal (`const add = (item) => setCart(…)`, `value={[cart, { add }] as const}`)
+is placed by its readers' calls (`const [, { add }] = useContext(Ctx)`, each local only called): the write-role walk folds those calls beside the call
+graph's, and the literal's reference is the entry they account for ([reactive-dispatch-unresolved](reactive-dispatch-unresolved.md) names the premises).
+
 ## Why is this bad?
 
 Writing under a children-capable owner creates feedback loops: the write

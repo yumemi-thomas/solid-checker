@@ -141,6 +141,9 @@ fn walk_aliases(
     (calls, truncated)
 }
 
+/// ADR 1147 (arm 3): one file's readers of a context's `[store, { actions }]` literal, by binding index: the slot-0 name and the action locals.
+type StoreTupleReaders = HashMap<usize, (Option<Span>, Vec<Span>)>;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Position {
     Followed,
@@ -420,6 +423,8 @@ pub(crate) struct Census<'l, 'a> {
     /// pattern past it has none. Kept per start: a hop another start made
     /// says nothing about this start's walk (ADR 0909).
     hop_starts: HashSet<(String, Span)>,
+    /// ADR 1147 (arm 3): per file, the readers of a context's `[store, { actions }]` literal, by binding index: the slot-0 name and the action locals.
+    store_tuple_readers: HashMap<String, StoreTupleReaders>,
     /// The walked source may be pending: a tracked position is SC5003's and
     /// SC5001's question then, which only a row answers (W's review H3).
     async_walk: bool,
@@ -522,6 +527,7 @@ impl<'l, 'a> Census<'l, 'a> {
             return_hops: 0,
             exported,
             hop_starts: HashSet::default(),
+            store_tuple_readers: HashMap::default(),
             async_walk: true,
             uses: Vec::new(),
             cut: false,
@@ -599,6 +605,8 @@ impl<'l, 'a> Census<'l, 'a> {
             member_writes: _,
             files: _,
             keys: _,
+            // ADR 1147: per file, a function of the file and the lookup alone (no start reads or writes it).
+            store_tuple_readers: _,
             decided_writes: _,
             allowed: _,
             exported: _,
@@ -3069,7 +3077,8 @@ impl<'l, 'a> Census<'l, 'a> {
             Mode::RootHolder(_) if !identifier => Mode::Root,
             other => other,
         };
-        let Some(names) = self.slot_names(binding, mode) else {
+        let reader = self.store_tuple_reader(file, index, mode);
+        let Some(names) = reader.or_else(|| self.slot_names(binding, mode)) else {
             self.escape(file, at, row, mode, blockers::VALUE_IN_CARRIER);
             return held(Position::Open(blockers::VALUE_IN_CARRIER));
         };
@@ -3232,6 +3241,60 @@ impl<'l, 'a> Census<'l, 'a> {
 
     /// The names that may hold the walked slot: all of them, but for a static
     /// key the pattern names. `None`: a rest element holds a holder of its own.
+    /// ADR 1147 (arm 3): the names a reader of a context's `[store, { actions }]` literal binds from the slot the walk holds: the store name from slot 0, the
+    /// action locals from slot 1, nothing from any other (its pattern names no other slot). `None` for any binding that is no such reader.
+    fn store_tuple_reader(
+        &mut self,
+        file: &'a FileFacts,
+        index: usize,
+        mode: Mode,
+    ) -> Option<Vec<&'a solid_facts::ast::NamedSpan>> {
+        let (Mode::Holder(slot) | Mode::RootHolder(slot)) = mode else {
+            return None;
+        };
+        let lookup = self.lookup;
+        let readers = self
+            .store_tuple_readers
+            .entry(file.path.to_string())
+            .or_insert_with(|| {
+                crate::callback_return::provided_store_tuples(lookup, file)
+                    .into_iter()
+                    .flat_map(|plan| plan.consumers)
+                    .map(|consumer| {
+                        (
+                            consumer.binding,
+                            (
+                                consumer.root,
+                                consumer
+                                    .actions
+                                    .into_iter()
+                                    .map(|(_, local)| local)
+                                    .collect(),
+                            ),
+                        )
+                    })
+                    .collect()
+            });
+        let (root, actions) = readers.get(&index)?.clone();
+        let binding = &file.ast.bindings[index];
+        let named = |spans: Vec<Span>| {
+            binding
+                .names
+                .iter()
+                .filter(|name| spans.contains(&name.span))
+                .collect::<Vec<_>>()
+        };
+        Some(if slot == Slot::Any {
+            binding.names.iter().collect()
+        } else if slot == self.key("0") {
+            named(root.into_iter().collect())
+        } else if slot == self.key("1") {
+            named(actions)
+        } else {
+            Vec::new()
+        })
+    }
+
     fn slot_names(
         &mut self,
         binding: &'a solid_facts::ast::BindingFact,

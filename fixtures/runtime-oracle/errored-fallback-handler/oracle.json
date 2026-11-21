@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1153: the cheatsheet's shape: the fallback returns a button whose handler writes and calls `reset()`, and reads the error accessor in its JSX: quiet."
+}

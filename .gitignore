@@ -503,6 +503,8 @@ packages/wasm/owned/
 !fixtures/runtime-oracle/context-provider-children-package/node_modules/**
 !fixtures/runtime-oracle/context-provider-children-placed/node_modules/
 !fixtures/runtime-oracle/context-provider-children-placed/node_modules/**
+!fixtures/runtime-oracle/context-provider-children-owned/node_modules/
+!fixtures/runtime-oracle/context-provider-children-owned/node_modules/**
 !fixtures/reactive-ir/context-member-namespace-provider/node_modules/
 !fixtures/reactive-ir/context-member-namespace-provider/node_modules/**
 !fixtures/reactive-ir/own-setter-wrapper-identity/node_modules/
@@ -1653,6 +1655,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/owner-call-inplace-nested/node_modules/**
 !fixtures/reactive-ir/owner-call-inplace-escapes/node_modules/
 !fixtures/reactive-ir/owner-call-inplace-escapes/node_modules/**
+!fixtures/reactive-ir/errored-fallback-owner/node_modules/
+!fixtures/reactive-ir/errored-fallback-owner/node_modules/**
 !fixtures/reactive-ir/owner-call-getter-helper/node_modules/
 !fixtures/reactive-ir/owner-call-getter-helper/node_modules/**
 !fixtures/reactive-ir/flush-universe-package-prop-arrow/node_modules/

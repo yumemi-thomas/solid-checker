@@ -22,10 +22,10 @@ const textOf = (code, context, variant) => {
 };
 
 describe("the er contexts (a function reached by a reference)", () => {
-  it("are twenty-six routes on an apply and the view route on the two leaf hosts, each with a twin that never runs the site, each name parsed back", () => {
-    expect(ER_ROUTES).toEqual(["view", "array", "saved", "timer", "generator", "root", "genlayer", "genuntrack", "genhelper", "rootself", "prop", "slot", "children", "slotcall", "childcall", "slothelper", "childhelper", "rownest", "shownest", "getteriife", "gettermap", "providernest", "namedrow", "whenfn", "classfield", "matchout"]);
+  it("are twenty-eight routes on an apply and the view route on the two leaf hosts, each with a twin that never runs the site, each name parsed back", () => {
+    expect(ER_ROUTES).toEqual(["view", "array", "saved", "timer", "generator", "root", "genlayer", "genuntrack", "genhelper", "rootself", "prop", "slot", "children", "slotcall", "childcall", "slothelper", "childhelper", "rownest", "shownest", "getteriife", "gettermap", "providernest", "namedrow", "whenfn", "classfield", "matchout", "namedfb", "fbnest"]);
     expect(ER_HOSTS).toEqual(["apply", "tracked", "settled"]);
-    expect(ER_CONTEXT_NAMES).toHaveLength(2 * (26 + 2));
+    expect(ER_CONTEXT_NAMES).toHaveLength(2 * (28 + 2));
     for (const name of ER_CONTEXT_NAMES) {
       const parts = erParts(name);
       expect(parts, name).not.toBeNull();
@@ -209,7 +209,7 @@ describe("the er contexts (a function reached by a reference)", () => {
     expect(provider.findIndex((line) => line.startsWith("function Rows1(_props: { a?: unknown }) { return <p><Ctx1 value={1}>{(() => { sv1 = () => {"))).toBeGreaterThan(-1);
     expect(provider.join(" ")).toContain("}; return <p>c</p>; })()}</Ctx1></p>; }");
     expect(provider.join("\n")).toContain("<Rows1 a={1} />");
-    for (const route of ["rownest", "shownest", "getteriife", "gettermap", "providernest"]) {
+    for (const route of ["rownest", "shownest", "getteriife", "gettermap", "providernest", "fbnest"]) {
       const twin = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", `er-${route}-apply-never`, "jsx-insert").join("\n");
       expect(twin, route).toContain("void sv1;");
       expect(twin, route).not.toContain("sv1!()");
@@ -244,9 +244,34 @@ describe("the er contexts (a function reached by a reference)", () => {
       else expect(twin, route).toContain("void sv1;");
     }
   });
+  it("print the namedfb route (ADR 1153): a named function expression handed to Errored as its fallback that stores itself, under a child that throws at mount", () => {
+    const text = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-namedfb-apply", "jsx-insert");
+    expect(text).toContain("let sv1: (() => void) | undefined;");
+    expect(text.some((line) => line.startsWith('function Broken1(): never { throw new Error("boom"); }'))).toBe(true);
+    const at = text.findIndex((line) => line.startsWith("function Rows1(_props: { a?: unknown }) { return <p><Errored fallback={function fb1() {"));
+    expect(at).toBeGreaterThan(-1);
+    expect(text.slice(at, at + 5).join(" ")).toContain("sv1 = fb1;");
+    expect(text.slice(at, at + 6).join(" ")).toContain("return <p>f</p>; }}><Broken1 /></Errored></p>; }");
+    expect(text).toContain("sv1!();");
+    expect(text.join("\n")).toContain("<Rows1 a={1} />");
+    const twin = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-namedfb-apply-never", "jsx-insert").join("\n");
+    expect(twin).not.toContain("sv1!()");
+    expect(twin).toContain("void sv1;");
+    expect(twin).toContain("sv1 = fb1;");
+  });
+  it("print the fbnest route (ADR 1153): an arrow stored from inside an Errored fallback written in place, under a child that throws at mount", () => {
+    const text = textOf("PRIMITIVE_IN_EFFECT_CALLBACK", "er-fbnest-apply", "jsx-insert");
+    expect(text).toContain("let sv1: (() => void) | undefined;");
+    expect(text.some((line) => line.startsWith('function Broken1(): never { throw new Error("boom"); }'))).toBe(true);
+    const at = text.findIndex((line) => line.startsWith("function Rows1(_props: { a?: unknown }) { return <p><Errored fallback={() => { sv1 = () => {"));
+    expect(at).toBeGreaterThan(-1);
+    expect(text.slice(at, at + 6).join(" ")).toContain("}; return <p>f</p>; }}><Broken1 /></Errored></p>; }");
+    expect(text).toContain("sv1!();");
+    expect(text.join("\n")).toContain("<Rows1 a={1} />");
+  });
   it("take the JSX variants of PRIMITIVE_IN_EFFECT_CALLBACK in the view, prop, slot, children, slotcall, childcall, slothelper, childhelper and nested in-place cells only (a JSX creation is a site of the universe, ADR 0971)", () => {
     const jsx = ["jsx-insert", "jsx-attr", "jsx-spread", "jsx-fragment", "jsx-component"];
-    for (const route of ["view", "prop", "slot", "children", "slotcall", "childcall", "slothelper", "childhelper", "rownest", "shownest", "getteriife", "gettermap", "providernest", "namedrow", "whenfn", "classfield", "matchout"]) {
+    for (const route of ["view", "prop", "slot", "children", "slotcall", "childcall", "slothelper", "childhelper", "rownest", "shownest", "getteriife", "gettermap", "providernest", "namedrow", "namedfb", "fbnest", "whenfn", "classfield", "matchout"]) {
       const variants = recallShapes("PRIMITIVE_IN_EFFECT_CALLBACK", `er-${route}-apply`).map((shape) => shape.variant);
       for (const variant of jsx) expect(variants, `${route} ${variant}`).toContain(variant);
       expect(recallLegalShapes("PRIMITIVE_IN_EFFECT_CALLBACK", `er-${route}-apply-never`).map((shape) => shape.variant), route).toEqual(expect.arrayContaining(jsx));

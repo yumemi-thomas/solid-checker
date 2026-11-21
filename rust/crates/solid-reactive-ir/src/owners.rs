@@ -45,11 +45,14 @@ pub(crate) use owner_emission::{
 };
 use owner_emission::{EmissionInputs, emit_file};
 mod jsx_sites;
+use jsx_sites::{
+    CONTROL_FLOW_PROP_FUNCTION, control_flow_child, control_flow_prop_functions,
+    is_control_flow_child, is_control_flow_prop_function, runs_as_child,
+};
 pub(crate) use jsx_sites::{
     JsxSiteKind, aliased_primitive, control_flow_parent, getter_read_sites, jsx_sites,
     universe_jsx_sites, written_in_getter,
 };
-use jsx_sites::{control_flow_child, is_control_flow_child, runs_as_child};
 mod owner_discovery;
 pub(crate) use owner_discovery::*;
 mod leaf_universe;
