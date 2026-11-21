@@ -42522,5 +42522,24 @@
    "lg-strict-read-untracked-arm-tag-store-dstr-quoted-alias-none"
   ],
   "rediscovered": "focus.mjs --grids lg-recall --codes STRICT_READ_UNTRACKED --recall-full -- --contexts arm-tag (3,748 programs), release builds: main b600297eb 40 unexecuted-violation (needs a look, exit 1); this build none, exit 0 (40 unexecuted and 166 uncertifiable to clean, nothing else)"
+ },
+ {
+  "finding": "The Opus review of ADR 1147, F1's root (on main): a write in a callback a package read as source (or a project function) forwards to createTrackedEffect's compute (`hand(() => setN(1))`, `hand(fn) { createTrackedEffect(() => { fn(); }); }`) was SC2001 a violation; rc.21's write guard exempts every write in the leaf callback, and Chrome is quiet",
+  "found": "review-1147 F1 (s11-hand-direct, Chrome-confirmed); patterns ctxmemo/s11-hand-direct (main 408fc4645: a new false positive)",
+  "fixed": "ADR 1155 (a) (write_roles::forwarded_leaf_scope over callee_roles::forwarded_compute_slot, ADR 0200's proof: a leaf owner's slot takes the leaf scope)",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-barm-fwdleaf-tracked-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-barm-fwdleaf-tracked-store-direct-none",
+   "lg-reactive-write-in-owned-scope-barm-fwdleaf-tracked-refresh-direct-none"
+  ],
+  "rediscovered": "new arm-shape contexts barm-fwdleaf-tracked (legal) and barm-fwdleaf-memo (misuse, its twin through createMemo): main 408fc4645 3 false positives on the legal cells, ADR 1155 3 clean; the misuse twin agrees with Chrome on both builds"
+ },
+ {
+  "finding": "The Opus review of ADR 1147, N1 (on main): a creation or a cleanup written in a context provider's child was a violation of the code around the provider element (SC4001 in a timer or an effect's apply, SC3001 in a tracked effect, SC6002 on a package's apply); rc.21 runs a provider's children in its children() memo, whose owner is that memo, and Chrome reports only at the tag or the control",
+  "found": "review-1147 N1 (p14b-timeout-control, p9-apply-project, p8-tracked-project, p2-render-apply, Chrome-confirmed); patterns ctxmemo/* (main 408fc4645: three new false positives, p9 judged fine by the lane's rule family)",
+  "fixed": "ADR 1155 (b) (callback_return::in_exact_provider_children and exact_provider_child_spans: owner-providing regions, the leaf walk and the effect-phase walk, for ADR 1147's exact provider only)",
+  "outside": "a grid program is judged at its cell's site, and these false rows sit beside the tag's own (correct) row in a program Chrome reports at the tag, so no legal cell has the shape and a misuse cell at the tag agrees either way; the patterns lane judges every violation of a program, and holds the four shapes (ctxmemo/p14b-timeout-control, p9-apply-project, p8-tracked-project, p2-render-apply); fixture reactive-ir/provider-children-memo-owner pins them and the stack-question negatives"
  }
 ]
