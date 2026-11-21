@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1178: a store handed whole to Object.values, Object.entries, Array.from, Object.hasOwn, deep or snapshot (a namespace import too), spread, iterated or put in a template. In a click handler Chrome is silent and the census follows the root through the call: clean. In the body Object.values, Array.from and the array spread warn STRICT_READ_UNTRACKED (the proven SC1001 rows); hasOwn and snapshot are silent. A result read further, a shadowed callee, a pattern loop binding, a call spread, a callback on the result and snapshot or hasOwn on an unsettled store are silent in Chrome and stay uncertifiable."
+}

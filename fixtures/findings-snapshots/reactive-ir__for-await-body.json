@@ -4,9 +4,8 @@
     {
       "rule": "missing-owner",
       "code": "SC4001",
-      "kind": "uncertifiable",
-      "blocker": "owner-varies-by-caller",
-      "severity": "error",
+      "kind": "violation",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/for-await-body/App.tsx",
       "start": 898,
       "end": 907,

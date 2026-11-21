@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1164: a read written directly in the body of a `for await` over `[1]` in an async memo runs past the loop's await, in the memo's flight (UNTRACKED_READ_AFTER_AWAIT at `ForAwaitRead`, `ForAwaitReadGuarded`: violations); the unproven forms stay uncertifiable. A write in the `finally` of `try { await Promise.resolve(); }` runs past the await with no owner (`FinallyWrite`, `FinallyWriteLiteral`: quiet, clean)."
+}

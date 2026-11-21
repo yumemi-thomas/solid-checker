@@ -60,8 +60,8 @@ export function Controls() {
   return <div>{w()}</div>;
 }
 
-// A compute passed by name: clean past a dominating await; uncertifiable in a `finally` whose `try` may throw before it
-// suspends (the named tracked position is no proof there).
+// A compute passed by name: clean past a dominating await, and in a `finally` after `try { await Promise.resolve(); }`
+// (ADR 1164: that try head can't throw before it suspends).
 export function Named() {
   const [w, setW] = createSignal(0);
   const after = async () => {

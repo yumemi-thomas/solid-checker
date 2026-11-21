@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1165: an effect, a cleanup or an `onSettled` returning a cleanup written in the body of a `for await` over `[1]` runs past the loop's await with no owner (NO_OWNER_EFFECT, NO_OWNER_CLEANUP, SETTLED_CLEANUP_UNOWNED: violations); an empty or named iterable, a `getOwner()` guard and a `finally` around the loop stay uncertifiable. Chrome raises SETTLED_CLEANUP_UNOWNED here unattributed (the returned cleanup runs with no application frame), so `SettledInBody`'s violation reads static-only in this multi-component case; the one-site fuzz programs (`mx-settled-cleanup-unowned-*-async-for-await-*`) judge it agree."
+}

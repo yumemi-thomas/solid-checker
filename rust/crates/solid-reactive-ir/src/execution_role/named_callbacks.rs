@@ -1174,10 +1174,10 @@ fn inherits_callback_role(
         // The layers' own awaits are the climb's; the layer's call in the
         // callback's body may follow one of the callback's.
         let at = climb.at;
-        if climb.suspended_on_every_path()
+        if climb.suspended_on_every_path_declared(file, lookup)
             || follows_unconditional_await(file, at)
             || follows_dominating_await(file, at)
-            || follows_try_head_await(file, at, lookup)
+            || follows_declared_try_head_await(file, at, lookup)
         {
             return Some(role_arm!(
                 "named_callbacks.inherits_callback_role.unreported",

@@ -8192,6 +8192,30 @@
    "to": 27,
    "adr": "ADR 1179",
    "fact": "WrapLet and ViaWrap: ADR 0200's forwarding no longer picks a wrapper the binding may not hold (a written let, a call's result); the read is placed nowhere exact, so SC5003 V becomes call-attributed-read U with SC1001 function-run-unplaced (fail closed; Chrome ASYNC_OUTSIDE_LOADING_BOUNDARY)"
+  },
+  {
+   "fixture": "reactive-ir/rc21-whole-store-reads",
+   "key": "SC9012 value-from-primitive-callback",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 1178",
+   "fact": "the value-use census follows a store handed whole to a reviewed reader (Object.values, Object.entries, Array.from, a spread, for...of, a template, deep, snapshot, hasOwn) through what it answers: the SC9012 row that stood at the reference now stands at the use of the answer, still uncertifiable (value-from-primitive-callback where the result is returned from a primitive's callback, value-held-in-binding or value-root-in-helper where it is held or handed on); the matching falls are in counts.json drops"
+  },
+  {
+   "fixture": "reactive-ir/store-element-flow",
+   "key": "SC9012 value-held-in-binding",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1178",
+   "fact": "the value-use census follows a store handed whole to a reviewed reader (Object.values, Object.entries, Array.from, a spread, for...of, a template, deep, snapshot, hasOwn) through what it answers: the SC9012 row that stood at the reference now stands at the use of the answer, still uncertifiable (value-from-primitive-callback where the result is returned from a primitive's callback, value-held-in-binding or value-root-in-helper where it is held or handed on); the matching falls are in counts.json drops"
+  },
+  {
+   "fixture": "reactive-ir/store-element-flow",
+   "key": "SC9012 value-root-in-helper",
+   "from": 8,
+   "to": 9,
+   "adr": "ADR 1178",
+   "fact": "the value-use census follows a store handed whole to a reviewed reader (Object.values, Object.entries, Array.from, a spread, for...of, a template, deep, snapshot, hasOwn) through what it answers: the SC9012 row that stood at the reference now stands at the use of the answer, still uncertifiable (value-from-primitive-callback where the result is returned from a primitive's callback, value-held-in-binding or value-root-in-helper where it is held or handed on); the matching falls are in counts.json drops"
   }
  ]
 }
