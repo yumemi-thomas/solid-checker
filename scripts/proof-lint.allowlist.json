@@ -475,8 +475,8 @@
         "why": "pending-review"
       },
       "name-only-match": {
-        "count": 1,
-        "why": "`eval` is a spelling used only to REFUSE a proof (a direct eval can reach any local binding without an identifier use): the true branch returns false/None/the unchanged slot, so a miss or a shadowing declaration only makes the check more conservative"
+        "count": 2,
+        "why": "`eval` is a spelling used only to REFUSE a proof (a direct eval can reach any local binding without an identifier use): the true branch returns false/None/the unchanged slot, so a miss or a shadowing declaration only makes the check more conservative. ADR 1164's `Promise` spelling in `operand_cannot_throw` is one conjunct beside exact facts: a reference with no declaration (the global, as `native_promise::is_global_promise`), a call resolved to `PromiseConstructor.resolve`, and the Promise intrinsics intact; a miss only refuses the try-head proof"
       },
       "untagged-silent-role": {
         "count": 3,
