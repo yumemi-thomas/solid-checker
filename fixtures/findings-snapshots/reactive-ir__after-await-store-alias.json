@@ -23,6 +23,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/after-await-store-alias/App.tsx",
+      "start": 1413,
+      "end": 1418,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
@@ -133,6 +144,28 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/after-await-store-alias/App.tsx",
+      "start": 2103,
+      "end": 2108,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/after-await-store-alias/App.tsx",
+      "start": 2383,
+      "end": 2388,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
@@ -144,6 +177,28 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/after-await-store-alias/App.tsx",
+      "start": 2422,
+      "end": 2427,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/after-await-store-alias/App.tsx",
+      "start": 2504,
+      "end": 2509,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
@@ -152,6 +207,17 @@
       "path": "fixtures/reactive-ir/after-await-store-alias/App.tsx",
       "start": 2580,
       "end": 2587,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/after-await-store-alias/App.tsx",
+      "start": 2580,
+      "end": 2585,
       "fixes": 0
     },
     {

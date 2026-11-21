@@ -42662,5 +42662,13 @@
    "mx-context-not-found-dny-flush-unmount-x-direct-none"
   ],
   "rediscovered": "focus.mjs --codes CONTEXT_NOT_FOUND,NO_OWNER_CONTEXT --grids mx-census, release builds: 14469fac2 three false-positive (known open); this build none, the three not-fired"
+ },
+ {
+  "finding": "A store link held whole in a `const` (`const held = s1.a; void held.v`): the Get through the alias had no row of any rule though rc.21 warns STRICT_READ_UNTRACKED there (main 14469fac2 and ADR 1172's tip, Chrome-confirmed: runtime-oracle store-link-alias-get is unproven-clean on them). The value-use census ended a store root's own member chain at the chain (`Mode::Root`, the root's own reference), so nothing walked the binding that held the link",
+  "found": "Mac 27, starting ADR 1169 (R3 G15): a scratch probe of a local store link alias's read beside its write",
+  "fixed": "value_use::Census::member: the root's own static chain held whole in a binding is walked on as the root (its alias's Gets need a row, SC9012 value-held-in-binding where none stands). Fixture reactive-ir/store-link-alias-get",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "outside": "no read-grid variant holds a store link in a binding and reads through it (flip-read.mjs store variants read the root or destructure it; misuse.mjs `nested-held` writes through the alias and is judged for STORE_WRITE_OUTSIDE_SETTER only). A variant `{ const held = ${o}.a; void held.v; }` would generate it; generator work deferred by the coordinator (2026-11-21), with the prop/context source crossing"
  }
 ]

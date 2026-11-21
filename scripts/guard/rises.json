@@ -8200,6 +8200,118 @@
    "to": 9,
    "adr": "ADR 1178",
    "fact": "the value-use census follows a store handed whole to a reviewed reader (Object.values, Object.entries, Array.from, a spread, for...of, a template, deep, snapshot, hasOwn) through what it answers: the SC9012 row that stood at the reference now stands at the use of the answer, still uncertifiable (value-from-primitive-callback where the result is returned from a primitive's callback, value-held-in-binding or value-root-in-helper where it is held or handed on); the matching falls are in counts.json drops"
+  },
+  {
+   "fixture": "reactive-ir/after-await-carrier-runs",
+   "key": "SC9012 value-held-in-binding",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1169",
+   "fact": "value_use::Census::member: a store link the root's own static chain hands whole to a binding is walked on as the root, so a Get through the alias has a row (SC9012 value-held-in-binding) where none stood; Chrome warns STRICT_READ_UNTRACKED at such a Get (runtime-oracle store-link-alias-get)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-store-alias",
+   "key": "SC9012 value-held-in-binding",
+   "from": 0,
+   "to": 5,
+   "adr": "ADR 1169",
+   "fact": "value_use::Census::member: a store link the root's own static chain hands whole to a binding is walked on as the root, so a Get through the alias has a row (SC9012 value-held-in-binding) where none stood; Chrome warns STRICT_READ_UNTRACKED at such a Get (runtime-oracle store-link-alias-get)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-store-alias",
+   "key": "SC9012 value-in-carrier",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1169",
+   "fact": "value_use::Census::member: a store link the root's own static chain hands whole to a binding is walked on as the root, so a Get through the alias has a row (SC9012 value-held-in-binding) where none stood; Chrome warns STRICT_READ_UNTRACKED at such a Get (runtime-oracle store-link-alias-get)"
+  },
+  {
+   "fixture": "reactive-ir/after-await-universe",
+   "key": "SC9012 value-held-in-binding",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1169",
+   "fact": "value_use::Census::member: a store link the root's own static chain hands whole to a binding is walked on as the root, so a Get through the alias has a row (SC9012 value-held-in-binding) where none stood; Chrome warns STRICT_READ_UNTRACKED at such a Get (runtime-oracle store-link-alias-get)"
+  },
+  {
+   "fixture": "reactive-ir/exported-const-copy",
+   "key": "SC9012 value-in-carrier",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1169",
+   "fact": "value_use::Census::member: a store link the root's own static chain hands whole to a binding is walked on as the root, so a Get through the alias has a row (SC9012 value-held-in-binding) where none stood; Chrome warns STRICT_READ_UNTRACKED at such a Get (runtime-oracle store-link-alias-get)"
+  },
+  {
+   "fixture": "reactive-ir/forwarded-prop-backing",
+   "key": "SC9012 value-held-in-binding",
+   "from": 4,
+   "to": 6,
+   "adr": "ADR 1169",
+   "fact": "value_use::Census::member: a store link the root's own static chain hands whole to a binding is walked on as the root, so a Get through the alias has a row (SC9012 value-held-in-binding) where none stood; Chrome warns STRICT_READ_UNTRACKED at such a Get (runtime-oracle store-link-alias-get)"
+  },
+  {
+   "fixture": "reactive-ir/past-await-owner-observer",
+   "key": "SC9012 value-from-primitive-callback",
+   "from": 0,
+   "to": 3,
+   "adr": "ADR 1169",
+   "fact": "value_use::Census::member: a store link the root's own static chain hands whole to a binding is walked on as the root, so a Get through the alias has a row (SC9012 value-held-in-binding) where none stood; Chrome warns STRICT_READ_UNTRACKED at such a Get (runtime-oracle store-link-alias-get)"
+  },
+  {
+   "fixture": "reactive-ir/past-await-owner-observer",
+   "key": "SC9012 value-in-carrier",
+   "from": 0,
+   "to": 6,
+   "adr": "ADR 1169",
+   "fact": "value_use::Census::member: a store link the root's own static chain hands whole to a binding is walked on as the root, so a Get through the alias has a row (SC9012 value-held-in-binding) where none stood; Chrome warns STRICT_READ_UNTRACKED at such a Get (runtime-oracle store-link-alias-get)"
+  },
+  {
+   "fixture": "reactive-ir/pending-source-first-run-body-member",
+   "key": "SC9012 value-in-carrier",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1169",
+   "fact": "value_use::Census::member: a store link the root's own static chain hands whole to a binding is walked on as the root, so a Get through the alias has a row (SC9012 value-held-in-binding) where none stood; Chrome warns STRICT_READ_UNTRACKED at such a Get (runtime-oracle store-link-alias-get)"
+  },
+  {
+   "fixture": "reactive-ir/props-callers",
+   "key": "SC9012 value-from-primitive-callback",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1169",
+   "fact": "value_use::Census::member: a store link the root's own static chain hands whole to a binding is walked on as the root, so a Get through the alias has a row (SC9012 value-held-in-binding) where none stood; Chrome warns STRICT_READ_UNTRACKED at such a Get (runtime-oracle store-link-alias-get)"
+  },
+  {
+   "fixture": "reactive-ir/returned-store-nested-read",
+   "key": "SC9012 value-held-in-binding",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1169",
+   "fact": "value_use::Census::member: a store link the root's own static chain hands whole to a binding is walked on as the root, so a Get through the alias has a row (SC9012 value-held-in-binding) where none stood; Chrome warns STRICT_READ_UNTRACKED at such a Get (runtime-oracle store-link-alias-get)"
+  },
+  {
+   "fixture": "reactive-ir/store-copy-element-write",
+   "key": "SC9012 value-held-in-binding",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1169",
+   "fact": "value_use::Census::member: a store link the root's own static chain hands whole to a binding is walked on as the root, so a Get through the alias has a row (SC9012 value-held-in-binding) where none stood; Chrome warns STRICT_READ_UNTRACKED at such a Get (runtime-oracle store-link-alias-get)"
+  },
+  {
+   "fixture": "reactive-ir/stored-throw-wrapper-boundary",
+   "key": "SC9012 value-in-carrier",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1169",
+   "fact": "value_use::Census::member: a store link the root's own static chain hands whole to a binding is walked on as the root, so a Get through the alias has a row (SC9012 value-held-in-binding) where none stood; Chrome warns STRICT_READ_UNTRACKED at such a Get (runtime-oracle store-link-alias-get)"
+  },
+  {
+   "fixture": "reactive-ir/stored-throw-wrapper-boundary",
+   "key": "SC9012 value-to-unresolved-callee",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1169",
+   "fact": "value_use::Census::member: a store link the root's own static chain hands whole to a binding is walked on as the root, so a Get through the alias has a row (SC9012 value-held-in-binding) where none stood; Chrome warns STRICT_READ_UNTRACKED at such a Get (runtime-oracle store-link-alias-get)"
   }
  ]
 }

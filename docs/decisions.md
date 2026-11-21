@@ -4967,6 +4967,11 @@ The component must read its props only through static members, or a pattern of s
 *Measured* (release, against main b06a4e71a; Chrome cached). R4's 1,441 N1 programs plus the 396 legal STORE_WRITE programs of lg-recall: U to V 428 (mx-src 208, mx-pairs 208, mx-combo 12); no legal row moved; no V lost. Fixture `store-write-through-prop`: 4 violations, 4 uncertifiable (a setter read and called, the prop handed on, props used whole, the store also leaving the parent). Chrome covers all eight. Coverage: `store-handed-root` `Nested` goes from uncertifiable to violation (Chrome-confirmed on a scratch case of it).
 *Not covered.* A context, `merge`/`omit` view or spread hand-off; a component in another file; a write in the setter's callback reached through a prop (R4 N1's legal `in-setter` rows stay uncertifiable); an SC1001 violation at an alias's Get (part 1's SC9012 row stands).
 
+<a id="adr-1169"></a>
+## ADR 1169 — Part 1: a Get through a held store link has a row
+**The defect** (main 14469fac2 and ADR 1172's tip; found starting this ADR). `const held = s1.a; void held.v` had no row of any rule at the Get `held.v`. Chrome warns STRICT_READ_UNTRACKED there (`runtime-oracle/store-link-alias-get`, unproven-clean on both). The value-use census answered a store root's own member chain (`Mode::Root`, the root's own reference) where the chain ended, and never walked a binding that holds the chain's link.
+**Decision.** `value_use::Census::member`: the root's own static chain, held whole in an identifier binding, is walked on as the root. Its uses are then an alias's: a Get with no read row stands open as SC9012 `value-held-in-binding` (fail closed). Part 2 proves the exact alias as the store's link.
+
 <a id="adr-1164"></a>
 ## ADR 1164 — A read in a `for await` body that runs, and a `finally` after `await Promise.resolve()`, are past the await
 G1 of the R3 catalog (S half). ADR 1038 already reads a `for await` body as past the loop's suspension, so what stayed uncertifiable was two things. The SC1002 walk marked every read after an implicit suspension as an obligation (`after_implicit_suspension`, `SuspensionUnplaced`). The try-head proof (`follows_try_head_await`, ADR 0612) took only a call of an async function declaration, not the `await Promise.resolve()` every generated `finally` uses.
@@ -5005,6 +5010,10 @@ G4 of the R3 catalog (S half), on ADR 1164. The owner pass places an operation p
 - SC6002's `effect-creation-unaccounted` row at a creation stays beside the new SC4001 violation.
 
 **Evidence.**
+- Fixture `store-link-alias-get`: two alias Gets go from no row to uncertifiable; the member twin stays an SC1001 violation. Chrome covers them.
+- Coverage: SC9012 rises only, in 11 existing fixtures (named in rises.json; no finding removed).
+- Probe (release, 1,998 programs: mx-recall `nested-held`/`sw-let`/`nested-assign`/`nested-push`, lg-recall `store-*`): no outcome worse. The U to clean rows are ADR 1162's, counted against R3's older base.
+- Rediscovery: an `outside` row (no read variant holds a link; generator work deferred).
 - Fixture `owner-after-await-for-await`:
   - `EffectInBody`, `CleanupInBody` and `SettledInBody` move from SC4001 U to V;
   - `HelperInBody` and `CleanupInFinally` (ADR 1164) stay V;
