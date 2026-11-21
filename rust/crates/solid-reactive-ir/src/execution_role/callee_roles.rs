@@ -2357,19 +2357,17 @@ pub(super) fn forwarded_tracked_compute_role(
     if !tracked {
         return None;
     }
-    Some(
-        if attribute_function_within(file, literal, span, lookup) {
-            role_arm!(
-                "callee_roles.forwarded_tracked_compute_role.attribute-function",
-                ExecutionRole::Unknown
-            )
-        } else {
-            role_arm!(
-                "callee_roles.forwarded_tracked_compute_role.tracked-compute",
-                ExecutionRole::TrackedJsx
-            )
-        },
-    )
+    Some(if attribute_function_within(file, literal, span, lookup) {
+        role_arm!(
+            "callee_roles.forwarded_tracked_compute_role.attribute-function",
+            ExecutionRole::Unknown
+        )
+    } else {
+        role_arm!(
+            "callee_roles.forwarded_tracked_compute_role.tracked-compute",
+            ExecutionRole::TrackedJsx
+        )
+    })
 }
 
 /// [`ExecutionRole::DeferredCallback`] for code in a callback that a reviewed

@@ -813,6 +813,8 @@ pub(super) fn leaf_owner_operations_for_file(
             if site.kind == crate::owners::JsxSiteKind::MaybeRenderEffect
                 || site.in_getter
                 || !callback_region.contains(site.span)
+                // ADR 1155 (b): JSX in an exact context provider's children creates under the children memo.
+                || crate::callback_return::in_exact_provider_children(lookup, callback_file, site.span)
             {
                 continue;
             }
@@ -863,6 +865,19 @@ pub(super) fn leaf_owner_operations_for_file(
         }
         for call in &callback_file.ast.calls {
             if call.span == owner_call.span || !callback_region.contains(call.span) {
+                continue;
+            }
+            // ADR 1155 (b): a creation or a cleanup in an exact context provider's children runs under the children memo (a flush, an
+            // observer-guarded call and any other call are walked as before).
+            if let Some(kind) = lookup.primitive_at_call(callback_file, call.span)
+                && !files_as_flush_operation(dialect, kind)
+                && !dialect.leaf_call_throws_observer_guard(kind)
+                && crate::callback_return::in_exact_provider_children(
+                    lookup,
+                    callback_file,
+                    call.span,
+                )
+            {
                 continue;
             }
             // And the call must sit in that callback's own synchronous
@@ -2874,7 +2889,7 @@ fn function_forbidden_operations(
                 || !helper.body.contains(site.span)
                 || !crate::owners::written_directly_in(&helper_file.ast, helper, site.span)
                 // ADR 1155 (b): JSX in an exact context provider's children creates under the children memo.
-                || crate::callback_return::in_exact_provider_children(lookup, helper_file, site.span, helper)
+                || crate::callback_return::in_exact_provider_children(lookup, helper_file, site.span)
                 || helper_file
                     .ast
                     .unconditional_awaits
@@ -2909,7 +2924,7 @@ fn function_forbidden_operations(
         if let Some(kind) = lookup.primitive_at_call(helper_file, inner.span)
             && !files_as_flush_operation(dialect, kind)
             && !dialect.leaf_call_throws_observer_guard(kind)
-            && crate::callback_return::in_exact_provider_children(lookup, helper_file, inner.span, helper)
+            && crate::callback_return::in_exact_provider_children(lookup, helper_file, inner.span)
         {
             continue;
         }
