@@ -35,3 +35,4 @@ A `try` around code no call shows reading is uncertifiable too, blocker
 a prop or of such a value, and a local literal's accessor.
 
 A call in the `try` of a helper that reaches an accessor which may throw into the pass is the same obligation, at the call; a plain signal cannot.
+A `try` written in a local `const` closure the computation calls in place is the computation's own (ADR 1176): proven where the direct read is, when the closure is neither `async` nor a generator, holds no nested function and reads nothing outside a kept block (`fixtures/reactive-ir/caught-read-kept-closure`).
