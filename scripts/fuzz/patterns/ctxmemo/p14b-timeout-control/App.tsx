@@ -1,6 +1,6 @@
 import { children, createContext, onCleanup } from "solid-js";
 const Ctx = createContext<number>();
-export function Host() {
+export function App() {
   setTimeout(() => {
     const made = (
       <Ctx value={1}>

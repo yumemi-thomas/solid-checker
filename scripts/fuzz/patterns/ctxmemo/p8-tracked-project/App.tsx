@@ -1,6 +1,6 @@
 import { createContext, createMemo, createSignal, createTrackedEffect } from "solid-js";
 const Ctx = createContext<number>();
-export function Host() {
+export function App() {
   const [n] = createSignal(0);
   createTrackedEffect(() => {
     n();
