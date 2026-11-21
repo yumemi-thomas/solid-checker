@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1170: `sort`, `reverse`, `fill` and `copyWithin` on a store path whose literal proves a write (seven components): Chrome reports STORE_WRITE_OUTSIDE_SETTER and SC2003 is a violation. A one-element `reverse` or `sort`, an empty `fill` range and a `copyWithin` past the end write nothing (Chrome silent) and stay uncertifiable; string elements, another comparator and a referenced setter stay uncertifiable."
+}

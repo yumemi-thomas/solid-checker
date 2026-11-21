@@ -893,6 +893,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/effect-error-arm-read/variants/flush-in-root/node_modules/**
 !fixtures/reactive-ir/effect-error-arm-read/variants/flush-in-body/node_modules/
 !fixtures/reactive-ir/effect-error-arm-read/variants/flush-in-body/node_modules/**
+!fixtures/reactive-ir/store-array-mutators-literal/node_modules/
+!fixtures/reactive-ir/store-array-mutators-literal/node_modules/**
 !fixtures/reactive-ir/walk-bounds/node_modules/
 !fixtures/reactive-ir/walk-bounds/node_modules/**
 !fixtures/reactive-ir/dynamic-entry-limit/node_modules/
@@ -2280,3 +2282,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/arm-only-store-destructure/node_modules/**
 !fixtures/reactive-ir/owner-call-effect-creation/variants/inline-handler/node_modules/
 !fixtures/reactive-ir/owner-call-effect-creation/variants/inline-handler/node_modules/**
+!fixtures/reactive-ir/named-ref-entry/node_modules/
+!fixtures/reactive-ir/named-ref-entry/node_modules/**

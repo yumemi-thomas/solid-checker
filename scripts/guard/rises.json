@@ -8136,6 +8136,14 @@
    "to": 4,
    "adr": "ADR 1159",
    "fact": "the new case ApplyBranchAwait: a creation after an `await` that some run may skip (`if (wait) await ...`) proves nothing, so it keeps effect-creation-unaccounted; only an await every run reaches first puts the creation on a microtask off the apply (ADR 1159 (2))"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc4001",
+   "key": "SC2002 package-finding-at-entry",
+   "from": 17,
+   "to": 18,
+   "adr": "ADR 1160",
+   "fact": "the SC2002 row at pkg-pointer.tsx stays uncertifiable under another blocker: with `ref={name}` placed at its reference (the named function's entry), its blocker moved from package-may-call-action to package-finding-at-entry (the relabel is in counts.json drops)"
   }
  ]
 }

@@ -4823,14 +4823,21 @@ fn links_proven_wrappable(
         _ => return false,
     };
     let called = ast.calls_with_peeled_callee(member).next().is_some();
-    if called
-        && !file
-            .source_text(*last)
-            .is_some_and(|name| LENGTH_WRITING_ARRAY_MUTATORS.contains(&name))
-    {
-        return false;
+    let holds = resolve_literal_path(file, initial, prefix);
+    if called {
+        let Some(name) = file.source_text(*last) else {
+            return false;
+        };
+        // ADR 1170: an order-changing method is reported where the store's own literal proves it writes.
+        let writes = LENGTH_WRITING_ARRAY_MUTATORS.contains(&name)
+            || matches!(holds, Some(LiteralValue::Array(array)) if ast
+                .calls_with_peeled_callee(member)
+                .any(|call| !call.construct && literal_mutator_writes(file, call, name, array)));
+        if !writes {
+            return false;
+        }
     }
-    holds_object(resolve_literal_path(file, initial, prefix))
+    holds_object(holds)
 }
 
 /// The first half of [`links_proven_wrappable`]'s proof: the store `root`
@@ -4995,7 +5002,10 @@ fn store_literal_untouched(
 /// The value is an object or array literal: a primitive (or a regular
 /// expression, which the facts class with them) is served raw.
 fn holds_object(value: Option<LiteralValue>) -> bool {
-    matches!(value, Some(LiteralValue::Object(_) | LiteralValue::Array))
+    matches!(
+        value,
+        Some(LiteralValue::Object(_) | LiteralValue::Array(_))
+    )
 }
 
 /// ADR 0497: the store reference `reference` is a direct element of an array
@@ -5274,7 +5284,8 @@ fn held_by_member_holder(
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum LiteralValue {
     Object(Span),
-    Array,
+    /// ADR 1170: the array literal's own span.
+    Array(Span),
     Primitive,
 }
 
@@ -5322,7 +5333,7 @@ fn resolve_literal_path(file: &FileFacts, literal: Span, path: &[Span]) -> Optio
             solid_facts::ast::RuntimeValueKind::Array
                 if ast.array_literals.binary_search(&inner).is_ok() =>
             {
-                LiteralValue::Array
+                LiteralValue::Array(inner)
             }
             solid_facts::ast::RuntimeValueKind::Primitive => LiteralValue::Primitive,
             _ => return None,
@@ -5384,10 +5395,18 @@ fn contained_store_use(file: &FileFacts, reference: Span, initial: Span) -> bool
         .calls_with_peeled_callee(top)
         .any(|call| !call.construct);
     if called {
-        return file
-            .source_text(*last)
-            .is_some_and(|name| LENGTH_WRITING_ARRAY_MUTATORS.contains(&name))
-            && resolve_literal_path(file, initial, prefix) == Some(LiteralValue::Array);
+        let Some(LiteralValue::Array(array)) = resolve_literal_path(file, initial, prefix) else {
+            return false;
+        };
+        let Some(name) = file.source_text(*last) else {
+            return false;
+        };
+        // ADR 1170: `sort`, `reverse`, `fill` and `copyWithin` where the literal proves the call writes; a `sort` then holds
+        // number literals, so its comparator receives no proxy.
+        return LENGTH_WRITING_ARRAY_MUTATORS.contains(&name)
+            || ast
+                .calls_with_peeled_callee(top)
+                .any(|call| !call.construct && literal_mutator_writes(file, call, name, array));
     }
     resolve_literal_path(file, initial, &path) == Some(LiteralValue::Primitive)
 }
@@ -5503,6 +5522,159 @@ fn literal_truthiness(file: &FileFacts, value: Span) -> Option<Truthiness> {
         }
         _ => None,
     }
+}
+
+/// ADR 1170: whether `call` of `method` (`sort`, `reverse`, `fill`, `copyWithin`) on the store path holding the array literal
+/// `array` (ADR 0491: nothing replaced or reached it, so its elements are the literal's) writes an element, each write meeting
+/// the proxy's `set` trap. ECMA-262 `Array.prototype` §23.1.3 and V8 (Chrome):
+/// - `reverse()`: swaps when the length is at least 2;
+/// - `sort(cmp?)`: V8 returns a shorter array as is, else writes every element back; a comparator that throws writes nothing,
+///   so only number literal elements, with no comparator or `(a, b) => b - a` / `a - b` of its own two parameters;
+/// - `fill(v, start?, end?)`: writes `[start, end)` clamped to the length; `copyWithin(t, start?, end?)` writes
+///   `min(end - start, length - t)` elements. Each bound a non-negative integer literal.
+///
+/// Every element is a value (no spread, no hole), so the length is the count. Anything else may write nothing: `false`.
+fn literal_mutator_writes(
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    method: &str,
+    array: Span,
+) -> bool {
+    let ast = &file.ast;
+    let Some(literal) = ast.array_literal_at(array) else {
+        return false;
+    };
+    if literal
+        .elements
+        .iter()
+        .any(|element| element.kind != solid_facts::ast::ArrayElementKind::Value)
+        || call.arguments.iter().any(|argument| argument.spread)
+    {
+        return false;
+    }
+    let length = literal.elements.len();
+    let bound = |index: usize| -> Option<Option<usize>> {
+        match call.arguments.get(index) {
+            None => Some(None),
+            Some(argument) => {
+                let text = file.source_text(ast.peel_ts_sugar_span(argument.span))?;
+                (!text.is_empty() && text.bytes().all(|byte| byte.is_ascii_digit()))
+                    .then(|| {
+                        text.parse::<usize>()
+                            .ok()
+                            .map(|value| Some(value.min(length)))
+                    })
+                    .flatten()
+            }
+        }
+    };
+    match method {
+        "reverse" => call.arguments.is_empty() && length >= 2,
+        "sort" => {
+            let number = |span: Span| {
+                file.source_text(span).is_some_and(|text| {
+                    !text.is_empty()
+                        && text
+                            .bytes()
+                            .all(|byte| byte.is_ascii_digit() || byte == b'.')
+                        && text
+                            .bytes()
+                            .next()
+                            .is_some_and(|byte| byte.is_ascii_digit())
+                        && text.parse::<f64>().is_ok()
+                })
+            };
+            length >= 2
+                && literal.elements.iter().all(|element| number(element.span))
+                && match call.arguments.as_slice() {
+                    [] => true,
+                    [comparator] => subtracting_comparator(file, comparator.span),
+                    _ => false,
+                }
+        }
+        "fill" => {
+            if call.arguments.is_empty() || call.arguments.len() > 3 {
+                return false;
+            }
+            let (Some(start), Some(end)) = (bound(1), bound(2)) else {
+                return false;
+            };
+            start.unwrap_or(0) < end.unwrap_or(length)
+        }
+        "copyWithin" => {
+            if call.arguments.is_empty() || call.arguments.len() > 3 {
+                return false;
+            }
+            let (Some(Some(target)), Some(start), Some(end)) = (bound(0), bound(1), bound(2))
+            else {
+                return false;
+            };
+            let from = start.unwrap_or(0);
+            let end = end.unwrap_or(length);
+            end.saturating_sub(from).min(length - target) > 0
+        }
+        _ => false,
+    }
+}
+
+/// ADR 1170: the mutator `call` (callee `callee`) on a path of the store `root` names writes, by ADR 0491's literal: the store
+/// still holds its initializer's closed literal, the path past the root is static and names an array literal there, and
+/// [`literal_mutator_writes`] holds. A store that is itself an array has no such literal (`createStore([0])`): `false`.
+fn literal_mutator_proven(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    call: &solid_facts::ast::CallFact,
+    callee: Span,
+    root: Span,
+) -> bool {
+    let ast = &file.ast;
+    let Some(initial) = store_literal_untouched(file, context, root, false) else {
+        return false;
+    };
+    let Some(path) = static_path(file, callee, ast.peel_ts_sugar_span(root)) else {
+        return false;
+    };
+    let Some((last, prefix)) = path.split_last().filter(|(_, prefix)| !prefix.is_empty()) else {
+        return false;
+    };
+    let (Some(LiteralValue::Array(array)), Some(method)) = (
+        resolve_literal_path(file, initial, prefix),
+        file.source_text(*last),
+    ) else {
+        return false;
+    };
+    literal_mutator_writes(file, call, method, array)
+}
+
+/// ADR 1170: the comparator at `span` is an arrow of exactly two plain parameters whose expression body subtracts one from the
+/// other (`(a, b) => b - a`): on number elements it returns a number and throws nothing.
+fn subtracting_comparator(file: &FileFacts, span: Span) -> bool {
+    let ast = &file.ast;
+    let Some(function) = ast.function_at(ast.peel_ts_sugar_span(span)) else {
+        return false;
+    };
+    let [first, second] = function.parameters.as_slice() else {
+        return false;
+    };
+    if function.r#async
+        || function.generator
+        || function.rest_parameter
+        || [first, second].iter().any(|parameter| {
+            parameter.shape != solid_facts::ast::BindingShape::Identifier
+                || parameter.initializer.is_some()
+        })
+    {
+        return false;
+    }
+    let (Some(a), Some(b), Some(body)) = (
+        file.source_text(first.pattern),
+        file.source_text(second.pattern),
+        file.source_text(function.body),
+    ) else {
+        return false;
+    };
+    let compact = body.split_whitespace().collect::<String>();
+    compact == format!("{b}-{a}") || compact == format!("{a}-{b}")
 }
 
 /// ADR 0718: `sort`, `reverse`, `fill` and `copyWithin` read the length
@@ -5721,7 +5893,9 @@ fn no_store_mutator_call(
             }
             continue;
         };
-        let writes = mutator_always_writes(text(file, member.property));
+        // ADR 1170: the store's own literal proves the call writes.
+        let writes = mutator_always_writes(text(file, member.property))
+            || literal_mutator_proven(file, context, call, callee, root);
         defects.push(StaticDefect {
             kind: StaticDefectKind::DirectMutation {
                 name: name.as_str().to_owned(),
