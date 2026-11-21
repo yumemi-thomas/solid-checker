@@ -828,7 +828,8 @@ thread_local! {
 /// - the run is written in the function that declares the binding, after the declarator, and runs on every completion of that
 ///   function ([`solid_facts::ast::synchronously_unconditional_calls`]): no condition, loop or early exit (a dead `if (false) cb()`)
 ///   stands between the code that creates the callback and the run;
-/// - a read written at the run would report ([`super::read_execution_role`] at the call reports an untracked read).
+/// - a read written at the run would report ([`super::read_execution_role`] at the call reports an untracked read), and outside the
+///   component body's rendering no call stands between the declarator and the run (a creation in an effect's apply throws first).
 ///
 /// Anything else is `None` and the read stays unplaced.
 pub(crate) fn reporting_run_role(
@@ -918,7 +919,20 @@ pub(crate) fn reporting_run_role(
             continue;
         }
         let role = super::read_execution_role(file, run, allowed, entities, symbol_names, lookup);
-        if role.reports_untracked_read() && !super::callee_callback_timing(file, run, role, lookup) {
+        // Outside the component body's rendering a creation throws (an effect's apply: PRIMITIVE_IN_EFFECT_CALLBACK, rc.21), so a
+        // call there between the declarator and the run (`createMemo(f)`, a helper that creates) may stop the function first: the
+        // run is proven only with no call between them.
+        let interrupted = role != ExecutionRole::UntrackedRendering
+            && file.ast.calls.iter().any(|call| {
+                call.span.start >= binding.declaration.end
+                    && call.span.end <= run.start
+                    && crate::owners::containing_body_function(&file.ast, call.span)
+                        .is_some_and(|owner| owner.span == declarer.span)
+            });
+        if role.reports_untracked_read()
+            && !interrupted
+            && !super::callee_callback_timing(file, run, role, lookup)
+        {
             found = Some(role);
             break;
         }

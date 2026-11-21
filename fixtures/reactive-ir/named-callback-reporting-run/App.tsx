@@ -55,6 +55,22 @@ export function StoreNamedExpressionCarriedInApply() {
       const f = function inner() {
         return s.v;
       };
+      [f].forEach((g) => g());
+      createMemo(f);
+    },
+  );
+  return <div />;
+}
+
+// Uncertifiable: in an apply, the creation before the run throws PRIMITIVE_IN_EFFECT_CALLBACK first (rc.21), so the run never comes.
+export function TwinApplyCreationFirst() {
+  const [s] = createStore({ v: 0 });
+  createEffect(
+    () => 1,
+    () => {
+      const f = function inner() {
+        return s.v;
+      };
       createMemo(f);
       [f].forEach((g) => g());
     },
