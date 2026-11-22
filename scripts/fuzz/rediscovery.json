@@ -42722,5 +42722,16 @@
    "mx-optimistic-write-before-load-render-apply-store-direct-none"
   ],
   "rediscovered": "focus.mjs --codes OPTIMISTIC_WRITE_BEFORE_LOAD on 2,000 programs (the 74 with the setter in an apply and a hash sample of the rest), release builds, Chrome cached: main a63e1302e recall-gap; this build agree (6 recall-gap to agree in mx-census, nothing else moved)"
+ },
+ {
+  "finding": "a false clean (certified): SC1001 at a component prop read in an anonymous literal called where it is written (an IIFE, `(() => { (props as typeof props).r1; })()`) inside a named local function the render runs (a ref factory, `ref={dir1()}`): Chrome reports STRICT_READ_UNTRACKED, and the read ended as `placed-elsewhere` with no row at the named function's calls",
+  "found": "Mac 26, `make fuzz-smoke` on ADR 1180 (mx-recall cover); the same on main a63e1302e and 01d5fdc5f",
+  "fixed": "ADR 1184 (`local_access.rs` `handed_anonymous_literal`)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-ref-factory-body-signal-direct-iife-s-prop-value-cast"
+  ],
+  "rediscovered": "`matrix.mjs --recall --ids`: main 01d5fdc5f false-clean (certified); this build recall-gap"
  }
 ]
