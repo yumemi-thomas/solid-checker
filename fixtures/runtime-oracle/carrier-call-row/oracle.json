@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1186: a setter held in an array and run through a loop's binding in a memo's compute: Chrome REACTIVE_WRITE_IN_OWNED_SCOPE at the call `(f as any)(...xs)`; SC9012 uncertifiable there (main had its row only at the carrier `fns`). Generated program `mx-reactive-write-in-owned-scope-memo-shared-signal-loop-callee-module-helper`. Control: a direct setter call in a handler, quiet."
+}

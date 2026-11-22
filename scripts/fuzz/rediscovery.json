@@ -42777,5 +42777,28 @@
    "mx-strict-read-untracked-render-cleanup-rerun-store-satisfies-wrapper-none"
   ],
   "rediscovered": "focus.mjs --grids mx-recall -- --ids (cleanup contexts, layer none): round 1 (55426e2bc, d90b5d4bf on 0751069bf) 34 false-clean; round 2 (308f8fbdb) 0, those programs recall-gap as on main"
+ },
+ {
+  "finding": "a false clean by the judge (program uncertifiable): a setter or action held in an array and called through a `for…of` binding (`for (const f of fns) return (f as any)(...xs)`) had its SC9012 row only at the carrier `fns`; Chrome's frame is at the call, whose handler role cleared it",
+  "found": "Mac 26, `make fuzz-smoke` on ADR 1180 (mx-recall cover); the same on main a63e1302e and 01d5fdc5f",
+  "fixed": "ADR 1186 (`value_use.rs` `escaped_through`, a row at the call past a `value-in-carrier` escape)",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-memo-shared-signal-loop-callee-module-helper",
+   "mx-reactive-write-in-owned-scope-pos-handler-owner-signal-loop-callee-closure"
+  ],
+  "rediscovered": "`matrix.mjs --recall --ids`: main 01d5fdc5f false-clean; this build recall-gap"
+ },
+ {
+  "finding": "a false clean by the judge (program uncertifiable): a setter or action held in an array and called through a `for…of` binding (`for (const f of fns) return (f as any)(...xs)`) had its SC9012 row only at the carrier `fns`; Chrome's frame is at the call, whose handler role cleared it",
+  "found": "Mac 26, `make fuzz-smoke` on ADR 1180 (mx-recall cover); the same on main a63e1302e and 01d5fdc5f",
+  "fixed": "ADR 1186 (`value_use.rs` `escaped_through`, a row at the call past a `value-in-carrier` escape)",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pos-handler-owner-x-loop-callee-none"
+  ],
+  "rediscovered": "`matrix.mjs --recall --ids`: main 01d5fdc5f false-clean; this build recall-gap"
  }
 ]
