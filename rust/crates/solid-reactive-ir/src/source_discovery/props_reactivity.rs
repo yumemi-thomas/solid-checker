@@ -91,6 +91,14 @@ pub(crate) enum PropsReactivity {
 pub(crate) struct SpreadForwards {
     pub(crate) direct: bool,
     pub(crate) forwards: Vec<(Location, BTreeSet<String>)>,
+    /// ADR 1173: the names the elements' own attributes (those passing attributes alone, and those a forward sets after its
+    /// spread) leave unresolved, and those whose value is an unresolved accessor: kept here, where every caller is a visible
+    /// element or a forward, so a name no site leaves open can be proven static through the forwards.
+    pub(crate) unresolved: BTreeSet<String>,
+    pub(crate) accessor_unresolved: BTreeSet<String>,
+    /// ADR 1173: every forwarding element is also one [`spread_of_own_props`] accepts (the props root current through its
+    /// spreads: no receiver writes, deletes or aliases it), so what reaches a name through it is what the parent's callers pass.
+    pub(crate) checked: bool,
 }
 
 /// ADR 0509: per prop name, the exact sources (a primitive's accessor, setter
@@ -101,6 +109,9 @@ pub(crate) struct SpreadForwards {
 /// `reactive` witness is. A component with an escaping or unclassified value
 /// keeps every call of the prop an obligation.
 pub(crate) type PassedSources = BTreeMap<String, PassedSource>;
+
+/// ADR 1173: how many `{...props}` forwards [`PropsReactivityIndex::passed_sources`] follows up.
+const SPREAD_FORWARD_DEPTH: usize = 4;
 
 /// A closed object literal whose own values are functions or primitives.
 fn closed_plain_literal(file: &solid_facts::FileFacts, expression: Span) -> bool {
@@ -159,11 +170,48 @@ impl PropsReactivityIndex {
         if !self.caller_proof {
             return PropUse::Reactive;
         }
-        self.by_declaration
-            .get(declaration)
-            .map_or(PropUse::Unknown, |classification| {
-                classification_use(classification, name)
-            })
+        self.forwarded_use(declaration, name, 0, &|classification| {
+            classification_use(classification, name)
+        })
+    }
+
+    /// ADR 1173: `answer` of the component's own classification, except where its only escapes are `{...props}` forwards
+    /// (ADR 0919), each one `spread_of_own_props` accepts, and its own sites prove nothing reactive: then the name is static when
+    /// no own site leaves it unresolved, no forward sets it itself, and every forwarded-from component's answer is static.
+    fn forwarded_use(
+        &self,
+        declaration: &Location,
+        name: &str,
+        depth: usize,
+        answer: &dyn Fn(&PropsReactivity) -> PropUse,
+    ) -> PropUse {
+        let Some(classification) = self.by_declaration.get(declaration) else {
+            return PropUse::Unknown;
+        };
+        let own = answer(classification);
+        let PropsReactivity::Escaping {
+            spread_forwards: Some(spread),
+            ..
+        } = classification
+        else {
+            return own;
+        };
+        if own == PropUse::Reactive {
+            return own;
+        }
+        if !spread.checked || depth >= SPREAD_FORWARD_DEPTH || spread.unresolved.contains(name) {
+            return PropUse::Unknown;
+        }
+        // Static only: a forwarder's reactive witness reaches here through `resolve_forwarded_props` (ADR 0919), which
+        // already owns that direction.
+        for (parent, set) in &spread.forwards {
+            if set.contains(name)
+                || self.forwarded_use(parent, name, depth + 1, answer) != PropUse::Static
+            {
+                return PropUse::Unknown;
+            }
+        }
+        PropUse::Static
     }
 
     /// The classification of a whole-object use (aliasing, spreading, or
@@ -206,26 +254,43 @@ impl PropsReactivityIndex {
         if !self.caller_proof {
             return PropUse::Unknown;
         }
-        match self.by_declaration.get(declaration) {
-            Some(
-                PropsReactivity::Enumerated {
-                    accessor_values, ..
-                }
-                | PropsReactivity::Escaping {
-                    accessor_values, ..
-                },
-            ) if accessor_values.contains(name) => PropUse::Reactive,
-            Some(PropsReactivity::Enumerated {
-                accessor_unresolved,
-                ..
-            }) if accessor_unresolved.contains(name) => PropUse::Unknown,
-            // Only a complete caller set can prove the value is *not* an
-            // accessor; an escaping component keeps the obligation.
-            Some(PropsReactivity::Enumerated { .. }) => PropUse::Static,
-            None | Some(PropsReactivity::Escaping { .. }) => PropUse::Unknown,
-        }
+        self.forwarded_use(declaration, name, 0, &|classification| {
+            accessor_classification_use(classification, name)
+        })
     }
+}
 
+/// [`PropsReactivityIndex::accessor_value_use`] of one component's own classification.
+fn accessor_classification_use(classification: &PropsReactivity, name: &str) -> PropUse {
+    match classification {
+        PropsReactivity::Enumerated {
+            accessor_values, ..
+        }
+        | PropsReactivity::Escaping {
+            accessor_values, ..
+        } if accessor_values.contains(name) => PropUse::Reactive,
+        PropsReactivity::Enumerated {
+            accessor_unresolved,
+            ..
+        } if accessor_unresolved.contains(name) => PropUse::Unknown,
+        // Only a complete caller set can prove the value is *not* an
+        // accessor; an escaping component keeps the obligation.
+        PropsReactivity::Enumerated { .. } => PropUse::Static,
+        PropsReactivity::Escaping {
+            spread_forwards: Some(spread),
+            ..
+        } if spread.accessor_unresolved.contains(name) => PropUse::Unknown,
+        // ADR 1173: the own sites of a component whose only escapes are forwards leave the name open;
+        // `forwarded_use` decides it through the forwards.
+        PropsReactivity::Escaping {
+            spread_forwards: Some(_),
+            ..
+        } => PropUse::Static,
+        PropsReactivity::Escaping { .. } => PropUse::Unknown,
+    }
+}
+
+impl PropsReactivityIndex {
     /// ADR 0509: the exact sources the call sites pass for `name`, and
     /// whether they are all a call of `props.name(…)` can reach: every caller
     /// enumerated, and none passing anything else.
@@ -237,20 +302,55 @@ impl PropsReactivityIndex {
         if !self.caller_proof {
             return (Vec::new(), false);
         }
+        let mut sources = BTreeSet::new();
+        let complete = self.passed_sources_into(declaration, name, &mut sources, 0);
+        (sources.into_iter().collect(), complete)
+    }
+
+    /// [`Self::passed_sources`] into `sources`, returning completeness. ADR 1173: a component whose only escapes are elements
+    /// handing it an enclosing component's own props whole (ADR 0919's `SpreadForwards`) receives under `name` what that
+    /// component's call sites pass it, when the forwarding element does not set `name` itself: those sources are witnesses
+    /// (monotone, as a visible site's are), and the set is complete when every forwarded-from component's is.
+    fn passed_sources_into(
+        &self,
+        declaration: &Location,
+        name: &str,
+        sources: &mut BTreeSet<SymbolId>,
+        depth: usize,
+    ) -> bool {
         match self.by_declaration.get(declaration) {
             Some(PropsReactivity::Enumerated { passed, .. }) => {
-                passed.get(name).map_or((Vec::new(), true), |passed| {
-                    (passed.sources.iter().cloned().collect(), !passed.other)
+                passed.get(name).is_none_or(|passed| {
+                    sources.extend(passed.sources.iter().cloned());
+                    !passed.other
                 })
             }
-            Some(PropsReactivity::Escaping { passed, .. }) => (
-                passed
-                    .get(name)
-                    .map(|passed| passed.sources.iter().cloned().collect())
-                    .unwrap_or_default(),
-                false,
-            ),
-            None => (Vec::new(), false),
+            Some(PropsReactivity::Escaping {
+                passed,
+                spread_forwards,
+                ..
+            }) => {
+                let own_complete = passed.get(name).is_none_or(|passed| {
+                    sources.extend(passed.sources.iter().cloned());
+                    !passed.other
+                });
+                let Some(spread) = spread_forwards.as_ref().filter(|spread| spread.checked) else {
+                    return false;
+                };
+                if depth >= SPREAD_FORWARD_DEPTH {
+                    return false;
+                }
+                let mut complete = own_complete;
+                for (parent, set) in &spread.forwards {
+                    if set.contains(name) {
+                        complete = false;
+                        continue;
+                    }
+                    complete &= self.passed_sources_into(parent, name, sources, depth + 1);
+                }
+                complete
+            }
+            None => false,
         }
     }
 
@@ -918,6 +1018,8 @@ pub(super) fn classify_one_component(
     let mut accessor_unresolved = BTreeSet::new();
     let mut passed = PassedSources::new();
     let mut spreads = Vec::new();
+    // ADR 1173: some spread element `spread_of_own_props` refuses.
+    let mut unchecked_forward = false;
     // ADR 0919: per prop name, the elements that pass it.
     let mut passing = BTreeMap::<String, usize>::new();
     let elements = component_uses
@@ -940,6 +1042,8 @@ pub(super) fn classify_one_component(
             if let Some(forward) = spread_of_own_props(lookup, entities, inputs, use_file, element)
             {
                 spreads.push(forward);
+            } else {
+                unchecked_forward = true;
             }
             // ADR 0919: one spread of an enclosing component's own props
             // parameter hands its slots on, but for the names the element
@@ -1128,6 +1232,9 @@ pub(super) fn classify_one_component(
                 spread_forwards: (!other_escape).then_some(SpreadForwards {
                     direct: elements > 0,
                     forwards: own_spreads,
+                    unresolved,
+                    accessor_unresolved,
+                    checked: !unchecked_forward,
                 }),
             },
             forwarded,

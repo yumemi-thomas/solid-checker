@@ -955,17 +955,6 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "read-backing-unproven",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
-      "start": 5044,
-      "end": 5053,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",

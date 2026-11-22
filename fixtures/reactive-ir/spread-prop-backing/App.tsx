@@ -59,8 +59,8 @@ function ReassignedOuter(props: { count: number }) {
   return <ReassignedInner {...props} />;
 }
 
-// Uncertifiable: every caller of `StaticOuter` passes a literal, so nothing
-// reactive is witnessed through the spread.
+// Silent (ADR 1173): every caller of `StaticOuter` passes a literal, and the
+// forward hands its props on whole, so the prop is static here.
 function StaticInner(props: { count: number }) {
   const count = props.count;
   return <span>{count}</span>;
