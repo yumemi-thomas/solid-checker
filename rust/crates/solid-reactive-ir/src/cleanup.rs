@@ -447,6 +447,8 @@ pub(super) fn leaf_owner_operations_for_file(
     let leaf_has_observer = Cell::new(false);
     let focus_scan = Cell::new(None);
     let anchors = RefCell::default();
+    let passed_arguments = Cell::new(None);
+    let proven_defaults = RefCell::default();
     let resolution = LeafScopeResolution {
         lookup,
         symbol_names,
@@ -458,6 +460,8 @@ pub(super) fn leaf_owner_operations_for_file(
         leaf_has_observer: &leaf_has_observer,
         focus_scan: &focus_scan,
         anchors: &anchors,
+        passed_arguments: &passed_arguments,
+        proven_defaults: &proven_defaults,
     };
     let mut operations = Vec::new();
     for owner_call in &file.ast.calls {
@@ -1352,8 +1356,11 @@ pub(super) fn leaf_owner_operations_for_file(
             u32::try_from(operation.location.end_byte).unwrap_or(u32::MAX),
         );
         // ADR 0454: written in a parameter list, so it runs only when its
-        // function is called without the argument.
-        if crate::owners::in_parameter_list(&operation_file.ast, at) {
+        // function is called without the argument. ADR 1180: unless a walk proved a call that omits it runs that default.
+        let proven_default = proven_defaults.borrow().iter().any(|(path, initializer)| {
+            path.as_ref() == operation.location.path.as_ref() && initializer.contains(at)
+        });
+        if !proven_default && crate::owners::in_parameter_list(&operation_file.ast, at) {
             operation.uncertain = true;
             operation.possible = false;
         }
@@ -1783,6 +1790,12 @@ struct LeafScopeResolution<'a, 'lookup> {
     /// leaf callback's own text and each call the walk then enters. A proof that removes a row names every one, since the row stands
     /// at the outermost (a helper's call), not where the proof is.
     anchors: &'a RefCell<Vec<(std::sync::Arc<str>, Span)>>,
+    /// ADR 1180: how many arguments the direct call the walk enters a helper by passes (no spread), set by the call just before
+    /// [`function_forbidden_operations`] takes it: a parameter at that index or past it runs its default on this call.
+    passed_arguments: &'a Cell<Option<usize>>,
+    /// ADR 1180: the parameter initializers (file, span) a walk proved to run on a call that omits their argument; an operation
+    /// written in one is no possible-only parameter-list operation.
+    proven_defaults: &'a RefCell<Vec<(std::sync::Arc<str>, Span)>>,
 }
 
 impl LeafScopeResolution<'_, '_> {
@@ -2278,6 +2291,10 @@ fn helper_forbidden_operations_walk(
         _ => Entry::Called { guaranteed },
     };
     note_generator_stepped(kinds, call, helper_file, helper);
+    // ADR 1180: the arguments this direct call passes, when none is spread.
+    resolution.passed_arguments.set(
+        (!call.arguments.iter().any(|argument| argument.spread)).then_some(call.arguments.len()),
+    );
     function_forbidden_operations(
         resolution,
         helper_file,
@@ -2813,6 +2830,8 @@ fn function_forbidden_operations(
         symbol_names,
         ..
     } = resolution;
+    // ADR 1180: taken here, so an entry of any other kind finds none.
+    let passed = resolution.passed_arguments.take();
     if depth == 0 {
         return false;
     }
@@ -2874,7 +2893,93 @@ fn function_forbidden_operations(
         return parameter_calls.peek().is_none();
     }
     let mut complete = true;
+    let entry_guaranteed = match entry {
+        Entry::LeafBody => true,
+        Entry::Called { guaranteed }
+        | Entry::CalledWith { guaranteed, .. }
+        | Entry::ActionStep { guaranteed } => guaranteed,
+    };
     for inner in parameter_calls {
+        // ADR 1180: a call that is the whole default of a parameter this call omits (no spread, fewer arguments than its index)
+        // runs on this call's stack, as a call written in the body does: walked as one, guaranteed with the entry when no earlier
+        // parameter's default holds a call (one that throws would stop the list first). A default nested in a destructuring
+        // pattern, a default the call passes a value for, or one under a condition stays possible.
+        let omitted_default = (!helper.generator)
+            .then(|| {
+                helper
+                    .parameters
+                    .iter()
+                    .enumerate()
+                    .find(|(index, parameter)| {
+                        passed.is_some_and(|passed| *index >= passed)
+                            && parameter.initializer.is_some_and(|initializer| {
+                                helper_file.ast.peel_ts_sugar_span(initializer) == inner.span
+                            })
+                    })
+            })
+            .flatten();
+        if let Some((index, parameter)) = omitted_default {
+            let earlier_calls = helper.parameters[..index].iter().any(|earlier| {
+                earlier.initializer.is_some_and(|initializer| {
+                    helper_file
+                        .ast
+                        .calls
+                        .iter()
+                        .any(|call| initializer.contains(call.span))
+                })
+            });
+            let guaranteed = entry_guaranteed && !earlier_calls;
+            if let Some(initializer) = parameter.initializer {
+                resolution
+                    .proven_defaults
+                    .borrow_mut()
+                    .push((helper_file.path.shared(), initializer));
+            }
+            match crate::call_primitive_name_cached(
+                lookup,
+                helper_file,
+                inner,
+                entities,
+                symbol_names,
+                dialect,
+            ) {
+                None => {
+                    complete &= helper_forbidden_operations(
+                        resolution,
+                        helper_file,
+                        inner,
+                        kinds,
+                        visited,
+                        depth - 1,
+                        exact_this.clone(),
+                        guaranteed,
+                    );
+                }
+                Some(primitive) => {
+                    complete &= slot_callback_operations(
+                        resolution,
+                        helper_file,
+                        inner,
+                        &primitive,
+                        kinds,
+                        visited,
+                        depth,
+                        guaranteed,
+                        false,
+                    );
+                    if let Some(kind) =
+                        forbidden_operation_kind(dialect, helper_file, inner, &primitive)
+                    {
+                        let proven =
+                            primitive_identity_proven(dialect, helper_file, inner, &primitive);
+                        let written = location(helper_file.path.shared(), inner.span);
+                        reached_sync(&written);
+                        record(kinds, kind, guaranteed && proven, !proven, vec![written]);
+                    }
+                }
+            }
+            continue;
+        }
         let mut possible = Vec::new();
         let mut scratch = visited.clone();
         complete &= crate::call_primitive_name_cached(
