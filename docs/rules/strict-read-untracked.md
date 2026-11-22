@@ -228,7 +228,10 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   has no execution role; a read there is reported as
   **uncertifiable**, never dropped. A read past the strict-read window (after
   an unconditional `await`) or in several non-reporting roles (ADR 0323) is
-  proven silent.
+  proven silent. A component prop read in an anonymous literal inside a named
+  local function, whether handed to a project helper (ADR 1103) or called where
+  it is written as an IIFE (ADR 1184), is uncertifiable: no summary carries it
+  to the named function's calls.
 - **A rendered function's body is a component body, however else it is
   called.** `const P2 = Plain; <P2 />` renders `Plain` as `<Plain />` would,
   so a body read in `Plain` is a violation even beside a tracked `{Plain()}`

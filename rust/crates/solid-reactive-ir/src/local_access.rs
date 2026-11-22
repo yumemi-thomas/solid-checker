@@ -10114,6 +10114,8 @@ pub(crate) fn nested_named_function(
 /// ADR 1103: whether the function written directly around `span` is an anonymous function literal (no name, no binding)
 /// handed whole as an argument to a call that is no primitive's: that call enters it, not the named function around it, so
 /// ADR 0936's fallback to the named function's call edges does not place it.
+/// ADR 1184: or called where it is written (`(() => props.m1)()`, a function expression too): no summary carries a component
+/// prop's read in such a literal to the named function's calls either (the census's `ref-factory` and `body` false cleans).
 pub(crate) fn handed_anonymous_literal(
     file: &solid_facts::FileFacts,
     span: solid_facts::core::Span,
@@ -10122,13 +10124,17 @@ pub(crate) fn handed_anonymous_literal(
     containing_ast_function(&file.ast, span).is_some_and(|function| {
         function.name.is_none()
             && function_binding_name(file, function).is_none()
-            && file
+            && (file
                 .ast
                 .arguments_containing(function.span)
                 .any(|(call, index)| {
                     file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
                         && lookup.primitive_at_call(file, call.span).is_none()
                 })
+                || file
+                    .ast
+                    .calls_with_peeled_callee(function.span)
+                    .any(|call| !call.construct))
     })
 }
 
