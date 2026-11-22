@@ -360,6 +360,14 @@
    "removed": 1,
    "adr": "ADR 1152",
    "why": "the fixture writes a name with a unicode escape on purpose (a key such as then or value, an identifier, a computed key) and the program is not proven: every violation of an execution rule is uncertifiable under escaped-name-unresolved (the central decode that would read the names the facts already decode correctly here is not built: docs/open-work.md, ADR 1152)"
+  },
+  {
+   "fixture": "reactive-ir/loading-member-callee",
+   "path": "fixtures/reactive-ir/loading-member-callee/App.tsx",
+   "code": "SC5003",
+   "removed": 2,
+   "adr": "ADR 1179",
+   "why": "WrapLet and ViaWrap: their SC5003 rested on ADR 0200's forwarding naming the first function of a reassigned let / a factory's argument, which the call does not run; no exact proof names the function that runs, so the read is call-attributed-read (fail closed, accepted by the coordinator; Chrome reports ASYNC_OUTSIDE_LOADING_BOUNDARY at both; follow-up in open-work)"
   }
  ]
 }

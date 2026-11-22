@@ -266,8 +266,11 @@ pub(super) fn literal_function<'w>(
     if let Some(function) = file.ast.function_at(value) {
         return Some((file, function));
     }
-    // Shorthand is one declared function, not a callable type or an alias.
-    let declaration = property.shorthand_binding?;
+    // Shorthand is one declared function, not a callable type or an alias. ADR 1179: so is a data slot whose value is an identifier the binder
+    // resolves (`{ hand: handDecl }`): the same declaration, held under the same rules (a function declaration nothing writes).
+    let declaration = property
+        .shorthand_binding
+        .or_else(|| file.ast.reference_declaration(value))?;
     if let Some(function) = file.ast.functions.iter().find(|function| {
         function.kind == ast::FunctionKind::Declaration
             && function

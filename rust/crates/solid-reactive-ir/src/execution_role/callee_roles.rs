@@ -2289,10 +2289,14 @@ pub(super) fn forwarded_compute_slot<'a>(
             && file.ast.peel_ts_sugar_span(argument.span) == literal.span
             && lookup.primitive_at_call(file, call.span).is_none()
     })?;
-    let (wrapper_file, wrapper) = lookup
-        .callee_symbol(file, call.callee)
-        .and_then(|symbol| lookup.function_for_symbol(symbol))
-        .or_else(|| lookup.function_called_at(file.path.as_str(), call.callee))?;
+    // ADR 1179: the function the call runs, exactly (ADR 0278's resolution): a binding written after its initializer (`let w = a; w = b`), a
+    // call's result (`const w = ignore((cb) => …)` names the arrow in the call, not what `ignore` returns), a member not proven to run its
+    // declared method, or a spread before the literal is not the wrapper: no forwarding is proved.
+    let (wrapper_file, wrapper, exact) =
+        crate::execution_role::project_callee_at_parameter(file, call, index, lookup)?;
+    if !exact {
+        return None;
+    }
     if wrapper.r#async || wrapper.generator {
         return None;
     }
