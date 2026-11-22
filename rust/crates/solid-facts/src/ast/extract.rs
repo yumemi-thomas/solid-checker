@@ -183,6 +183,7 @@ pub(super) struct Collector<'s, 'semantic> {
     pub(super) open_blocks: Vec<(Span, usize, usize)>,
     pub(super) straight_line_calls: Vec<Span>,
     pub(super) straight_line_constructs: Vec<Span>,
+    pub(super) straight_line_assignments: Vec<Span>,
     pub(super) completion_sites: Vec<Span>,
     pub(super) returns: Vec<ReturnFact>,
     pub(super) jsx_elements: Vec<JsxElementFact>,
@@ -441,6 +442,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             open_blocks: Vec::new(),
             straight_line_calls: Vec::new(),
             straight_line_constructs: Vec::new(),
+            straight_line_assignments: Vec::new(),
             completion_sites: Vec::new(),
             returns: Vec::new(),
             jsx_elements: Vec::new(),
@@ -541,6 +543,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.unmodeled_require_references.sort_unstable();
         self.straight_line_calls.sort_unstable();
         self.straight_line_constructs.sort_unstable();
+        self.straight_line_assignments.sort_unstable();
         self.completion_sites.sort_unstable();
         self.swallowing_try_blocks.sort_unstable();
         self.completion_sites.dedup();
@@ -799,6 +802,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             unmodeled_require_references: self.unmodeled_require_references,
             straight_line_calls: self.straight_line_calls,
             straight_line_constructs: self.straight_line_constructs,
+            straight_line_assignments: self.straight_line_assignments,
             completion_sites: self.completion_sites,
             returns: self.returns,
             jsx_elements: self.jsx_elements,

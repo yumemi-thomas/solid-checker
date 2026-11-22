@@ -25,6 +25,12 @@ pub(crate) trait CalleeWorld<'a> {
     ) -> Option<(&'a FileFacts, &'a FunctionFact)>;
     /// [`SemanticLookup::callee_symbol`].
     fn callee_symbol(&self, file: &FileFacts, callee: Span) -> Option<&'a str>;
+    /// ADR 1182: [`SemanticLookup::settled_let_function`] at the identifier `mention` of `file`.
+    fn settled_let_function(
+        &self,
+        file: &FileFacts,
+        mention: Span,
+    ) -> Option<(&'a FileFacts, &'a FunctionFact)>;
     /// [`SemanticLookup::function_for_symbol`].
     fn function_for_symbol(&self, symbol: &str) -> Option<(&'a FileFacts, &'a FunctionFact)>;
     /// [`SemanticLookup::function_called_at`].
@@ -70,6 +76,14 @@ impl<'a> CalleeWorld<'a> for SemanticLookup<'a> {
 
     fn callee_symbol(&self, file: &FileFacts, callee: Span) -> Option<&'a str> {
         SemanticLookup::callee_symbol(self, file, callee)
+    }
+
+    fn settled_let_function(
+        &self,
+        file: &FileFacts,
+        mention: Span,
+    ) -> Option<(&'a FileFacts, &'a FunctionFact)> {
+        SemanticLookup::settled_let_function(self, file.path.as_str(), mention)
     }
 
     fn function_for_symbol(&self, symbol: &str) -> Option<(&'a FileFacts, &'a FunctionFact)> {
