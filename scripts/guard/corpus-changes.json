@@ -287,6 +287,42 @@
    "count": 3,
    "adr": "ADR 1169",
    "why": "ADR 1169 part 1 (a Get through a held store link has a row: `value_use::Census::member` walks the root's own member chain, held whole in an identifier binding, as the root, and a Get with no read row stands open as SC9012): in this file the Get or use of the held link or of what a reader answers had no SC9012 row on main (a silent clean the checker could not prove) and now stands open as SC9012 uncertifiable, as the file's other rows of the family already did elsewhere. Corpus-wide the bundle adds 805 SC9012 rows (value-held-in-binding 372, value-in-carrier 182, value-to-unresolved-callee 104, value-root-in-helper 96, value-through-logical 24, value-use-unclassified 15, value-from-primitive-callback 8, value-through-new 4) and drops 26 others; six of them are places with no SC9012 row at the base (this row's). Checked before naming them: none replaces a violation (violations lost 0, added 0; no added row sits on a span where the old build had a violation) and none sits where the old build's proof log names a value_use proof (decision or silent); uncertifiable is internal, nothing a user sees."
+  },
+  {
+   "project": "jandibat-web/apps/web/tsconfig.json",
+   "rule": "SC9012",
+   "kind": "newly-uncertifiable",
+   "build": "std",
+   "count": 1,
+   "adr": "ADR 1182",
+   "why": "ADR 1182 (the one function a wrapper's name holds at a call; the new AST fact `straight_line_assignments`, facts schema 109, and the census that reads it): `apps/web/src/runtime-config.ts`, the `window.__X__ = payload.apiBaseUrl === undefined ? {} : { apiBaseUrl: validateRuntimeApiBaseUrl(payload.apiBaseUrl, import.meta.env.DEV) }` assignment, had no SC9012 row on main and now stands as SC9012 `value-use-unclassified` (fail closed). Checked before naming it (c775 on this project, old = main 176445e77's release, new = the bundle): violations lost 0, added 0; no added row sits where the old build had a violation; none sits where the old build's proof log names a value_use proof (decision or silent); uncertifiable is internal, nothing a user sees. Attributed by controlled builds (the Rust diff of each ADR reverse-applied, the project re-run): without ADR 1182 the place is gone, without ADR 1186, 1187 or 1188 it stands."
+  },
+  {
+   "project": "jandibat-web/apps/web/tsconfig.json",
+   "rule": "SC9012",
+   "kind": "newly-uncertifiable",
+   "build": "dev",
+   "count": 1,
+   "adr": "ADR 1182",
+   "why": "ADR 1182 (the one function a wrapper's name holds at a call; the new AST fact `straight_line_assignments`, facts schema 109, and the census that reads it): `apps/web/src/runtime-config.ts`, the `window.__X__ = payload.apiBaseUrl === undefined ? {} : { apiBaseUrl: validateRuntimeApiBaseUrl(payload.apiBaseUrl, import.meta.env.DEV) }` assignment, had no SC9012 row on main and now stands as SC9012 `value-use-unclassified` (fail closed). Checked before naming it (c775 on this project, old = main 176445e77's release, new = the bundle): violations lost 0, added 0; no added row sits where the old build had a violation; none sits where the old build's proof log names a value_use proof (decision or silent); uncertifiable is internal, nothing a user sees. Attributed by controlled builds (the Rust diff of each ADR reverse-applied, the project re-run): without ADR 1182 the place is gone, without ADR 1186, 1187 or 1188 it stands."
+  },
+  {
+   "project": "jandibat-web/apps/web/tsconfig.json",
+   "rule": "SC5003",
+   "kind": "newly-uncertifiable",
+   "build": "std",
+   "count": 1,
+   "adr": "ADR 1186",
+   "why": "ADR 1186 (a call that runs what a carrier held keeps a row of its own): `apps/web/test/relay-pagination-compat.test.tsx`, the `connections()?.providerConnections?.edges.map(({ node }) => ...)` pending read in a JSX `map` callback, had no SC5003 row on main and now stands as SC5003 `pending-read-unresolved` (3 rows, fail closed). Checked before naming it (c775 on this project, old = main 176445e77's release, new = the bundle): violations lost 0, added 0; no added row sits where the old build had a violation; none sits where the old build's proof log names a value_use proof (decision or silent); uncertifiable is internal, nothing a user sees. Attributed by controlled builds (the Rust diff of each ADR reverse-applied, the project re-run): without ADR 1186 the place is gone, without ADR 1182, 1187 or 1188 it stands."
+  },
+  {
+   "project": "jandibat-web/apps/web/tsconfig.json",
+   "rule": "SC5003",
+   "kind": "newly-uncertifiable",
+   "build": "dev",
+   "count": 1,
+   "adr": "ADR 1186",
+   "why": "ADR 1186 (a call that runs what a carrier held keeps a row of its own): `apps/web/test/relay-pagination-compat.test.tsx`, the `connections()?.providerConnections?.edges.map(({ node }) => ...)` pending read in a JSX `map` callback, had no SC5003 row on main and now stands as SC5003 `pending-read-unresolved` (3 rows, fail closed). Checked before naming it (c775 on this project, old = main 176445e77's release, new = the bundle): violations lost 0, added 0; no added row sits where the old build had a violation; none sits where the old build's proof log names a value_use proof (decision or silent); uncertifiable is internal, nothing a user sees. Attributed by controlled builds (the Rust diff of each ADR reverse-applied, the project re-run): without ADR 1186 the place is gone, without ADR 1182, 1187 or 1188 it stands."
   }
  ]
 }
