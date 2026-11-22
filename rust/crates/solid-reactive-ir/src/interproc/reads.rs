@@ -244,10 +244,9 @@ pub(super) fn direct_reference_contributions(
                 .bindings
                 .iter()
                 .filter(|binding| {
-                    binding
-                        .initializer_identifier
-                        .as_ref()
-                        .is_some_and(|identifier| identifier.span == reference_span)
+                    // ADR 1193: the destructure's root (`destructure_root`).
+                    crate::static_rules::destructure_root(lookup, file, binding)
+                        == Some(reference_span)
                 })
                 .filter_map(|binding| {
                     crate::static_rules::delegated_destructure_slots(lookup, file, binding)

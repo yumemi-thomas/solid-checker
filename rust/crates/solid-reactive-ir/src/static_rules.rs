@@ -965,7 +965,7 @@ fn handed_over_slots(
     file: &solid_facts::FileFacts,
     binding: &solid_facts::ast::BindingFact,
 ) -> Option<Vec<(solid_facts::core::Span, solid_facts::core::Span)>> {
-    if binding.initializer_identifier.is_none()
+    if destructure_root(lookup, file, binding).is_none()
         || written_directly_in_setup(lookup, file, binding.pattern)
     {
         return None;
@@ -976,6 +976,98 @@ fn handed_over_slots(
             .map(|slot| (slot.property, slot.key))
             .collect(),
     )
+}
+
+/// ADR 1193: the root an object destructure reads its keys from, as one identifier reference: the initializer when it is one
+/// (`const { v } = s`); the sole element of the array literal a `for…of` iterates (`for (const { v } of [s])`: the standard array
+/// iteration, intact, hands the pattern that element; no `for await`, one declarator); or the first source of `merge(s, {…}, …)`
+/// whose later sources are closed literals none of which has a key the pattern reads, so each Get falls through to `s`. `None`
+/// for anything else.
+pub(crate) fn destructure_root(
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    binding: &solid_facts::ast::BindingFact,
+) -> Option<solid_facts::core::Span> {
+    if let Some(identifier) = &binding.initializer_identifier {
+        return Some(identifier.span);
+    }
+    if binding.shape != solid_facts::ast::BindingShape::Object {
+        return None;
+    }
+    let ast = &file.ast;
+    let is_reference = |span: solid_facts::core::Span| {
+        ast.identifiers.iter().any(|identifier| {
+            identifier.span == span
+                && identifier.role == solid_facts::ast::IdentifierRole::Reference
+        })
+    };
+    let Some(initializer) = binding.initializer else {
+        // A `for…of` over a one-element array literal.
+        let (looped, left) = ast.loop_repeats.iter().find(|(looped, left)| {
+            left.contains(binding.pattern)
+                && left.start > looped.start
+                && ast.loop_statements.contains(looped)
+        })?;
+        let operand = ast
+            .iterated_operands
+            .iter()
+            .find(|operand| looped.contains(**operand) && operand.start >= left.end)?;
+        let one_declarator = ast
+            .bindings
+            .iter()
+            .filter(|other| left.contains(other.pattern))
+            .count()
+            == 1;
+        let awaited = ast
+            .implicit_suspensions
+            .iter()
+            .any(|suspension| suspension.start == looped.start && suspension.end == operand.end);
+        if !one_declarator || awaited || !lookup.array_iteration_intact() {
+            return None;
+        }
+        let literal = ast
+            .array_literal_elements
+            .iter()
+            .find(|literal| literal.span == ast.peel_ts_sugar_span(*operand))?;
+        let [element] = literal.elements.as_slice() else {
+            return None;
+        };
+        let element = ast.peel_ts_sugar_span(element.span);
+        return (literal.elements[0].kind == solid_facts::ast::ArrayElementKind::Value
+            && is_reference(element))
+        .then_some(element);
+    };
+    // `merge(s, {…}, …)`: every later source a closed literal with none of the pattern's keys.
+    let call = ast.call_at(ast.peel_ts_sugar_span(initializer))?;
+    if call.construct
+        || binding.call_initializer != Some(call.span)
+        || lookup.primitive_at_call(file, call.span) != Some(solid_dialect::Primitive::Merge)
+    {
+        return None;
+    }
+    let keys = destructure_slot_keys(file, binding)?;
+    let (first, later) = call.arguments.split_first()?;
+    let root = ast.peel_ts_sugar_span(first.span);
+    if first.spread || !is_reference(root) {
+        return None;
+    }
+    let later_closed = later.iter().all(|source| {
+        !source.spread
+            && crate::interproc::accessor_provenance::closed_properties(
+                file,
+                ast.peel_ts_sugar_span(source.span),
+            )
+            .is_some_and(|properties| {
+                properties.iter().all(|property| {
+                    !property.computed
+                        && file.source_text(property.key).is_some_and(|key| {
+                            let key = key.trim_matches(['\'', '"']);
+                            keys.iter().all(|slot| slot.name != key)
+                        })
+                })
+            })
+    });
+    later_closed.then_some(root)
 }
 
 /// ADR 1107's form: every property a shorthand name with no default (`{ v, then }`), the key its local's text.
@@ -1232,7 +1324,7 @@ fn open_destructures(
         ast.bindings.iter().any(|binding| {
             binding.pattern == pattern
                 && binding.shape == solid_facts::ast::BindingShape::Object
-                && binding.initializer_identifier.is_some()
+                && destructure_root(ctx.semantic_lookup, file, binding).is_some()
         })
     };
     let mut sites = Vec::new();
@@ -1424,13 +1516,9 @@ fn binding_initializes_reactive_store(
     file: &solid_facts::FileFacts,
     binding: &solid_facts::ast::BindingFact,
 ) -> bool {
-    if binding
-        .initializer_identifier
-        .as_ref()
-        .and_then(|identifier| {
-            ctx.entities
-                .get(&location(file.path.shared(), identifier.span))
-        })
+    // ADR 1193: through `destructure_root` (a `for…of` over `[s]`, `merge(s, {…})`).
+    if destructure_root(ctx.semantic_lookup, file, binding)
+        .and_then(|root| ctx.entities.get(&location(file.path.shared(), root)))
         .is_some_and(|symbol| tables.source_kind(symbol) == Some(&ReactiveSourceKind::Store))
     {
         return true;
