@@ -650,7 +650,7 @@ impl<'a> SemanticLookup<'a> {
         }
     }
 
-    pub(super) fn method_symbol_ref(&self, path: &str, span: Span) -> Option<&'a str> {
+    pub(crate) fn method_symbol_ref(&self, path: &str, span: Span) -> Option<&'a str> {
         self.declaration_symbols
             .get_or_init(|| declaration_symbols(&self.facts.typescript))
             .get(path)?

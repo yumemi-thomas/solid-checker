@@ -883,7 +883,7 @@ pub(crate) fn reporting_run_role(
         return None;
     };
     let declarer = crate::owners::containing_body_function(&file.ast, binding.declaration)?;
-    if declarer.r#async || declarer.generator {
+    if declarer.r#async || declarer.generator || !declarer_role_is_its_own(file, declarer, lookup) {
         return None;
     }
     let symbol = lookup.entities().at(file.path.as_str(), name.span)?;
@@ -959,6 +959,137 @@ pub(crate) fn reporting_run_role(
     }
     CLASSIFYING_RUNS.with(|set| set.borrow_mut().remove(&key));
     found
+}
+
+/// ADR 1189: whether the role of code in `declarer` rests on no function that may not run as a component. ADR 1166's reporting run
+/// gives a read in a named callback the role [`super::read_execution_role`] gives code at the callback's run, which a helper takes from
+/// its calls; a read written at the run is reported at those calls, under their blockers (`component-identity-unproven` where a caller
+/// is handed to code that may call it as a plain function, `[1].map(Row)`), while the reporting run reports at the read itself, where
+/// no such blocker reaches (the census false positives `lg-strict-read-untracked-handed-flush-store-*`). So the declarer qualifies
+/// only when:
+/// - it is an unbound literal that is the whole argument of a dialect primitive's call (an effect's apply), whose role is the slot's;
+/// - or every reference of its name (a method's included) is the name itself, an export statement of it, a JSX element's tag (it
+///   renders as a component, its body's role its own), or a call of it (`name()`, `new K().m()`) written outside every undecided
+///   component region in a function that qualifies in turn (an immediately invoked literal is that call); a function handed on as a
+///   value, or referenced in another file, does not.
+///
+/// The chain is followed four functions deep at most; anything else fails closed and the read stays unplaced.
+fn declarer_role_is_its_own(
+    file: &solid_facts::FileFacts,
+    declarer: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    declarer_role_within(file, declarer, lookup, 4)
+}
+
+fn declarer_role_within(
+    file: &solid_facts::FileFacts,
+    declarer: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+    depth: u8,
+) -> bool {
+    if depth == 0 {
+        return false;
+    }
+    let ast = &file.ast;
+    // A call written at `at` (a direct call of the declarer) whose own function qualifies, outside every undecided component.
+    let caller_qualifies = |at: Span| {
+        !lookup.site_in_undecided_component(file, at)
+            && crate::owners::containing_body_function(ast, at)
+                .is_some_and(|caller| declarer_role_within(file, caller, lookup, depth - 1))
+    };
+    let method = crate::owners::own_method_name(file, declarer).map(|method| method.span);
+    let name = declarer
+        .name
+        .as_ref()
+        .map(|name| name.span)
+        .or(method)
+        .or_else(|| {
+            ast.bindings_initializer_containing(declarer.span)
+                .find(|binding| {
+                    binding.shape == solid_facts::ast::BindingShape::Identifier
+                        && binding.initializer.is_some_and(|initializer| {
+                            ast.peel_ts_sugar_span(initializer) == declarer.span
+                        })
+                })
+                .and_then(|binding| match binding.names.as_slice() {
+                    [name] => Some(name.span),
+                    _ => None,
+                })
+        });
+    let Some(name) = name else {
+        // An unbound literal: a primitive's slot, or called in place where it is written.
+        if let Some(call) = ast
+            .calls
+            .iter()
+            .find(|call| !call.construct && ast.peel_ts_sugar_span(call.callee) == declarer.span)
+        {
+            return caller_qualifies(call.span);
+        }
+        return ast
+            .arguments_containing(declarer.span)
+            .find(|(call, index)| {
+                ast.peel_ts_sugar_span(call.arguments[*index].span) == declarer.span
+            })
+            .is_some_and(|(call, index)| {
+                !call.arguments[index].spread && lookup.primitive_at_call(file, call.span).is_some()
+            });
+    };
+    let symbol = lookup
+        .entities()
+        .at(file.path.as_str(), name)
+        .map(crate::SymbolId::as_str)
+        .or_else(|| method.and_then(|method| lookup.method_symbol_ref(file.path.as_str(), method)));
+    let Some(symbol) = symbol else {
+        return false;
+    };
+    let Some(references) = lookup.symbol_references_if_present(symbol) else {
+        return false;
+    };
+    references.iter().all(|reference| {
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(reference.start_byte),
+            u32::try_from(reference.end_byte),
+        ) else {
+            return false;
+        };
+        let at = Span::new(start, end);
+        if reference.path.as_ref() != file.path.as_str() {
+            return false;
+        }
+        if at == name {
+            return true;
+        }
+        // An export statement of the name (`export { f }`, `export default f`), not the `export function …` around a call.
+        if ast.exports.iter().any(|export| {
+            export.span.contains(at)
+                && !export.span.contains(declarer.span)
+                && ast
+                    .calls
+                    .iter()
+                    .all(|call| !export.span.contains(call.span))
+        }) {
+            return true;
+        }
+        // A JSX element's tag: rendered as a component, whose body's role is its own.
+        if ast
+            .jsx_elements
+            .iter()
+            .any(|element| element.name.span == at || element.closing_name == Some(at))
+        {
+            return true;
+        }
+        // A direct call `name()`, or a member call whose property is the name (`new K().m()`, `o.m()`).
+        let callee = ast
+            .members
+            .iter()
+            .find(|member| member.property == at && !ast.computed_members.contains(&member.span))
+            .map_or(at, |member| member.span);
+        ast.calls
+            .iter()
+            .find(|call| !call.construct && ast.peel_ts_sugar_span(call.callee) == callee)
+            .is_some_and(|call| caller_qualifies(call.span))
+    })
 }
 
 /// ADR 1166: whether the inline arrow a carried `forEach`/`map` call ([`super::write_roles::foreach_carried_call`]) hands the
