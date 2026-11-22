@@ -11,7 +11,7 @@
   "SC1001 component-identity-unproven": 136,
   "SC1001 creation-throws-first": 3,
   "SC1001 escaped-name-unresolved": 19,
-  "SC1001 function-run-unplaced": 1775,
+  "SC1001 function-run-unplaced": 1776,
   "SC1001 function-unentered": 1,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
@@ -29,16 +29,16 @@
   "SC1002 function-run-unplaced": 87,
   "SC1002 function-unentered": 4,
   "SC1002 generator-stepped": 11,
-  "SC1002 handed-read-after-await": 196,
+  "SC1002 handed-read-after-await": 200,
   "SC1002 package-finding-at-entry": 17,
   "SC1002 package-operation-after-await": 3,
   "SC1002 parameter-initializer-unplaced": 8,
-  "SC1002 read-after-await-unaccounted": 792,
+  "SC1002 read-after-await-unaccounted": 796,
   "SC1002 search-depth-limit": 1,
   "SC1002 site-reach-undecided": 1,
   "SC1002 standard-member-impostor": 3,
   "SC1002 tuple-iteration-written": 79,
-  "SC1002 unresolved-invocation": 121,
+  "SC1002 unresolved-invocation": 122,
   "SC1003 build-constant-arm": 1,
   "SC1003 callee-callback-timing": 3,
   "SC1003 destructure-root-unproven": 31,
@@ -6320,6 +6320,18 @@
    "fixtures": {
     "proved": "reactive-ir/settled-cleanup-after-await",
     "open": "reactive-ir/owner-after-await-counted-loop"
+   }
+  },
+  {
+   "fixture": "reactive-ir/after-await-for-await-finally",
+   "key": "SC1002 handed-read-after-await",
+   "from": 6,
+   "to": 5,
+   "adr": "ADR 1191",
+   "proof": "rust/crates/solid-reactive-ir/src/static_rules/after_await.rs::after_implicit_suspension",
+   "fixtures": {
+    "proved": "reactive-ir/after-await-for-await-finally",
+    "open": "reactive-ir/after-await-read-later-pass"
    }
   }
  ],
