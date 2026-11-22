@@ -1,0 +1,27 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "write-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/optimistic-apply-before-load-namespace/App.tsx",
+      "start": 387,
+      "end": 394,
+      "fixes": 0
+    },
+    {
+      "rule": "optimistic-write-before-load",
+      "code": "SC2009",
+      "kind": "uncertifiable",
+      "blocker": "optimistic-reach-unresolved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/optimistic-apply-before-load-namespace/App.tsx",
+      "start": 387,
+      "end": 394,
+      "fixes": 0
+    }
+  ]
+}

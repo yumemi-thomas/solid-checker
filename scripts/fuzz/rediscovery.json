@@ -42628,5 +42628,19 @@
   "grid": "mx-src",
   "code": "STRICT_READ_UNTRACKED",
   "outside": "the read grids (flip-read.mjs store variants) do not cross a store variant with a prop or context source, so no STRICT_READ_UNTRACKED cell writes through a prop store's alias; mx-src and mx-pairs do generate the program (`mx-store-write-outside-setter-body-nested-assign-alias-none-s-prop`, `const useIt = props.s1; useIt.a.v = 7`), but judge it for STORE_WRITE_OUTSIDE_SETTER only, where SC2003 claims the write. Crossing the store read variants with the prop and context sources would generate it; not built in this fix"
+ },
+ {
+  "finding": "ADR 1175 (R4 group N4): an optimistic setter written in an effect apply's first run, before its async source's first answer, was SC2009 uncertifiable (optimistic-reach-unresolved) though rc.21 throws OPTIMISTIC_WRITE_BEFORE_LOAD there: ADR 0636 proved only the creating stack",
+  "found": "the R4 catalog of unproven simple programs (2026-11-22): mx-census apply contexts with the blocker",
+  "fixed": "ADR 1175 (write_roles.rs pending_apply_first_write on ADR 0504/0505's apply proof; Dialect::optimistic_unanswered_arguments)",
+  "grid": "mx-census",
+  "code": "OPTIMISTIC_WRITE_BEFORE_LOAD",
+  "ids": [
+   "mx-optimistic-write-before-load-effect-apply-signal-direct-none",
+   "mx-optimistic-write-before-load-effect-apply-store-direct-none",
+   "mx-optimistic-write-before-load-render-apply-signal-direct-none",
+   "mx-optimistic-write-before-load-render-apply-store-direct-none"
+  ],
+  "rediscovered": "focus.mjs --codes OPTIMISTIC_WRITE_BEFORE_LOAD on 2,000 programs (the 74 with the setter in an apply and a hash sample of the rest), release builds, Chrome cached: main a63e1302e recall-gap; this build agree (6 recall-gap to agree in mx-census, nothing else moved)"
  }
 ]

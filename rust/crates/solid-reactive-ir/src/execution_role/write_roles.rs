@@ -4307,7 +4307,7 @@ fn apply_runs_nothing_before(
         return false;
     }
     !own_calls().any(|other| other.span.end <= position.start)
-        && runs_nothing_before_in_layers(file, span, apply.span, lookup)
+        && runs_nothing_before_in_layers(file, span, apply.span, false, lookup)
 }
 
 /// ADR 0510 (a defect of ADRs 0503-0505): nothing the first run calls before
@@ -4321,19 +4321,11 @@ fn apply_runs_nothing_before(
 /// own. Before this,
 /// `(() => { JSON.parse("{"); a1(); })()` in an apply was SC5001 (and a write
 /// there ADR 0503's), though the run throws a `SyntaxError` first.
+///
+/// ADR 1175: with `unrun_function_arguments`, the body of a function literal written as one of the site's own arguments is not
+/// code the site runs first: evaluating the argument makes a closure, and the site's callee (an optimistic setter, which checks
+/// its source before it calls the updater) throws before calling it.
 pub(crate) fn runs_nothing_before_in_layers(
-    file: &solid_facts::FileFacts,
-    site: Span,
-    apply: Span,
-    lookup: &SemanticLookup<'_>,
-) -> bool {
-    runs_nothing_before_in_layers_with(file, site, apply, false, lookup)
-}
-
-/// [`runs_nothing_before_in_layers`]; with `unrun_function_arguments` (ADR 1175), the body of a function literal written as one
-/// of the site's own arguments is not code the site runs first: evaluating the argument makes a closure, and the site's callee
-/// (an optimistic setter, which checks its source before it calls the updater) throws before calling it.
-fn runs_nothing_before_in_layers_with(
     file: &solid_facts::FileFacts,
     site: Span,
     apply: Span,
@@ -4507,7 +4499,6 @@ pub(crate) fn pending_apply_first_write(
     declaration: &typefacts::Location,
     lookup: &SemanticLookup<'_>,
 ) -> Option<Span> {
-    use solid_dialect::Primitive;
     if declaration.path.as_ref() != file.path.as_str() {
         return None;
     }
@@ -4564,8 +4555,7 @@ pub(crate) fn pending_apply_first_write(
                 BodyAdmits::default(),
                 lookup,
             )
-            && (lookup.primitive_at_call(file, call.span) == Some(Primitive::CreateRenderEffect)
-                || optimistic_apply_runs_in_mount_flush(file, component, call, creation, lookup))
+            && first_apply_in_creating_pass(file, component, call, creation, true, lookup)
     })
 }
 
@@ -4614,13 +4604,7 @@ fn pending_apply_first_run(
                 && crate::owners::containing_ast_function(ast, other.span)
                     .is_some_and(|function| function.span == apply.span)
         })
-        || !runs_nothing_before_in_layers_with(
-            file,
-            site,
-            apply.span,
-            unrun_function_arguments,
-            lookup,
-        )
+        || !runs_nothing_before_in_layers(file, site, apply.span, unrun_function_arguments, lookup)
     {
         return None;
     }
@@ -4639,7 +4623,6 @@ fn apply_source_pending(
     declaration: &typefacts::Location,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    use solid_dialect::Primitive;
     let ast = &file.ast;
     let (Ok(start), Ok(end)) = (
         u32::try_from(declaration.start_byte),
@@ -4668,8 +4651,7 @@ fn apply_source_pending(
                 BodyAdmits::default(),
                 lookup,
             )
-            && (lookup.primitive_at_call(file, call.span) == Some(Primitive::CreateRenderEffect)
-                || user_apply_runs_in_mount_flush(file, component, call, memo, lookup))
+            && first_apply_in_creating_pass(file, component, call, memo, false, lookup)
     } else if crate::indexes::at_module_scope(&source_file.ast, binding.declaration) {
         // ADR 0510: a module-scope memo of a module that only creates.
         module_source_pending(file, component, call, source_file, binding, memo, lookup)
@@ -4725,17 +4707,24 @@ fn user_apply_runs_in_mount_flush(
         && mount_flush_premises(file, component, effect, memo, lookup)
 }
 
-/// ADR 1175: [`user_apply_runs_in_mount_flush`] for an optimistic creation, whose compute may also answer a fresh object
-/// literal of primitive literals (a store's `async () => ({ v: 1 })`): evaluating it runs no code either.
-fn optimistic_apply_runs_in_mount_flush(
+/// ADR 0504/0505 (shared by ADR 1175): the effect's first apply runs in the pass that created `source`: a render effect's at its
+/// creation, a user effect's in the mount's tail flush ([`user_apply_runs_in_mount_flush`]). With `object_compute` (an
+/// optimistic creation), the source's compute may also answer a fresh object literal of primitive literals (a store's
+/// `async () => ({ v: 1 })`): evaluating it runs no code either.
+fn first_apply_in_creating_pass(
     file: &solid_facts::FileFacts,
     component: &solid_facts::ast::FunctionFact,
     effect: &solid_facts::ast::CallFact,
-    creation: &solid_facts::ast::CallFact,
+    source: &solid_facts::ast::CallFact,
+    object_compute: bool,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    (memo_compute_is_literal(file, creation) || compute_is_primitive_object(file, creation))
-        && mount_flush_premises(file, component, effect, creation, lookup)
+    use solid_dialect::Primitive;
+    lookup.primitive_at_call(file, effect.span) == Some(Primitive::CreateRenderEffect)
+        || user_apply_runs_in_mount_flush(file, component, effect, source, lookup)
+        || (object_compute
+            && compute_is_primitive_object(file, source)
+            && mount_flush_premises(file, component, effect, source, lookup))
 }
 
 /// ADR 1175: the creation's compute is an arrow of no parameter whose expression body is a closed object literal of data
