@@ -8352,6 +8352,14 @@
    "to": 27,
    "adr": "ADR 1179",
    "fact": "WrapLet and ViaWrap: ADR 0200's forwarding no longer picks a wrapper the binding may not hold (a written let, a call's result); the read is placed nowhere exact, so SC5003 V becomes call-attributed-read U with SC1001 function-run-unplaced (fail closed; Chrome ASYNC_OUTSIDE_LOADING_BOUNDARY)"
+  },
+  {
+   "fixture": "reactive-ir/foreach-carrier",
+   "key": "SC1001 read-backing-unproven",
+   "from": 0,
+   "to": 4,
+   "adr": "ADR 1166",
+   "fact": "the four carried signal reads of this fixture stay uncertifiable under another blocker: with a carried forEach or map run placing the read at its reporting run (named_callbacks::reporting_run_role), function-run-unplaced becomes read-backing-unproven, the program-wide SC9012 tuple withdrawal that holds every signal read (the relabel is in counts.json drops)"
   }
  ]
 }

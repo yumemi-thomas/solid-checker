@@ -3052,6 +3052,38 @@ pub(super) fn callee_callback_timing_within(
     }
 }
 
+/// ADR 1166 r2: [`callee_callback_timing`] of a strict read (SC1001's row only, as [`super::strict_read_role`]): a named callback
+/// a reporting run provably executes runs the read there, at that run's timing. Every other rule keeps the generic answer, where a
+/// function with several runs has no one timing.
+pub(crate) fn strict_read_callee_timing(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    execution: ExecutionRole,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    callee_callback_timing(file, span, execution, lookup)
+        && !reporting_run_places(file, span, execution, lookup)
+}
+
+/// ADR 1166: whether [`super::named_callbacks::reporting_run_role`] places the read at `span` at `execution`: a run of its named
+/// callback provably executes it there, a run whose own timing [`callee_callback_timing`] already accepted.
+fn reporting_run_places(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    execution: ExecutionRole,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let allowed = super::read_context::allowed_callback_spans(file, lookup);
+    super::named_callbacks::reporting_run_role(
+        file,
+        span,
+        &allowed,
+        lookup.entities(),
+        lookup.symbol_names(),
+        lookup,
+    ) == Some(execution)
+}
+
 /// ADR 0323's at-call role of a callback that runs synchronously at its call
 /// with the listener cleared but the strict-read window untouched
 /// (`createRoot`, `runWithOwner`): the role at `call`, shared by an inline

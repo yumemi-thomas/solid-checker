@@ -42686,5 +42686,27 @@
    "lg-reactive-write-in-owned-scope-barm-fwdwrap-factory-refresh-direct-none"
   ],
   "rediscovered": "new arm-shape contexts barm-fwdwrap-let and barm-fwdwrap-factory (legal): main a63e1302e 6 unexecuted violations (SC2001 at a write that never runs), ADR 1179 6 uncertifiable; the barm-fwdleaf cells (lg-recall 3, mx-recall 6, mx-census 210) unchanged"
+ },
+ {
+  "finding": "ADR 1166 round 1 placed a read by one untracked run of a function with several runs in shared code (callee_callback_timing, read_execution_role): resolve(...) in a function an effect's compute runs tracked and a carried forEach runs untracked lost its uncertifiable row, a false clean where Chrome throws in the compute run",
+  "found": "bundle q's census smoke (Mac 24c, mac24/q-1166-false-clean.md)",
+  "fixed": "ADR 1166 round 2 (strict_read_role, strict_read_callee_timing: the reporting run places SC1001's strict reads only)",
+  "grid": "mx-census",
+  "code": "RESOLVE_IN_REACTIVE_SCOPE",
+  "ids": [
+   "mx-resolve-in-reactive-scope-barm-carried-body-x-direct-none"
+  ],
+  "rediscovered": "focus.mjs --smoke --smoke-leg census --cover all --cover-seed 1 --sample 0: round 1 (e93b74162 joined in bundle q) false-clean; round 2 the row stays (see the commit's smoke)"
+ },
+ {
+  "finding": "ADR 1166 round 1 placed a read by one untracked run of a function with several runs in shared code (callee_callback_timing, read_execution_role): until(...) in a function an effect's compute runs tracked and a carried forEach runs untracked lost its uncertifiable row, a false clean where Chrome throws in the compute run",
+  "found": "bundle q's census smoke (Mac 24c, mac24/q-1166-false-clean.md)",
+  "fixed": "ADR 1166 round 2 (strict_read_role, strict_read_callee_timing: the reporting run places SC1001's strict reads only)",
+  "grid": "mx-census",
+  "code": "UNTIL_IN_REACTIVE_SCOPE",
+  "ids": [
+   "mx-until-in-reactive-scope-barm-carried-body-x-direct-none"
+  ],
+  "rediscovered": "focus.mjs --smoke --smoke-leg census --cover all --cover-seed 1 --sample 0: round 1 (e93b74162 joined in bundle q) false-clean; round 2 the row stays (see the commit's smoke)"
  }
 ]

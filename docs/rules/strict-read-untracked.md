@@ -84,8 +84,12 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   a position, a resolved call or a `const` alias accounted the same way; any other
   (`[cb].forEach((g) => g())`, a global store, a returned object) leaves the read
   uncertifiable (ADR 1119). A whole element of a spread-free array literal the standard
-  `forEach` runs through an only-called parameter is a call there, read as `cb()`
-  written at the `forEach` (ADR 1124).
+  `forEach` or `map` runs through an only-called parameter is a call there, read as `cb()`
+  written at the call (ADR 1124, 1166). A read in the body of a `const`-bound callback
+  is a violation, whatever its other entries, where a direct call or such a carrier
+  runs it in the declaring function after the declarator, on every completion, at a
+  reporting position; outside the body's rendering only with no call before the run,
+  since a creation in an effect's apply throws first (ADR 1166).
 - **Plain assignment targets are writes, not reads.** `store.name = next` is
   diagnosed by `no-store-mutation-outside-setter` without also reporting `store.name` here.
   Only the member that *is* the written target is exempt: read-modify-write

@@ -6914,6 +6914,8 @@ impl LocalAccessContext<'_, '_> {
         let (name, declaration) = accessor;
         let timing_at = placed_at.unwrap_or(call.span);
         let origin = self.accessor_origins.get(symbol);
+        // ADR 1166 r2: a strict read's role may come from a reporting run of its named callback.
+        let execution = self.strict_read(file, call.span, execution);
         let display_name = call.static_callee(&file.source).unwrap_or(name);
         result.reads.push(Arc::new(ReactiveRead {
             withdrawn_slot: false,
@@ -6945,7 +6947,12 @@ impl LocalAccessContext<'_, '_> {
             host_callback_timing: host_callback_timing(file, timing_at, execution, self.lookup),
             project_consumer_non_strict: false,
             callback_invocation_unproven: false,
-            callee_callback_timing: callee_callback_timing(file, timing_at, execution, self.lookup),
+            callee_callback_timing: crate::execution_role::strict_read_callee_timing(
+                file,
+                timing_at,
+                execution,
+                self.lookup,
+            ),
         }));
         if counts_as_strict_read_root(file, call.span, execution, self.lookup) {
             result.strict_read_obligations += 1;
@@ -8159,6 +8166,8 @@ impl LocalAccessContext<'_, '_> {
             return;
         };
         // ADR 0463: as for a call, an alias mention before its declarator.
+        // ADR 1166 r2: the role below came from a reporting run, which places the strict read only.
+        let mut reporting_run = false;
         let mut execution = if self.lookup.local_alias_mention_withheld(file, object_span) {
             ExecutionRole::Unknown
         } else {
@@ -8303,7 +8312,18 @@ impl LocalAccessContext<'_, '_> {
                         )
                     },
                 );
-                execution = ExecutionRole::Unknown;
+                // ADR 1166: unless a run of the named callback around the read provably executes it where it reports: the strict
+                // read's role only (r2); the async row below keeps the read unplaced.
+                execution = crate::execution_role::strict_read_role(
+                    file,
+                    member.span,
+                    ExecutionRole::Unknown,
+                    allowed,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                );
+                reporting_run = execution != ExecutionRole::Unknown;
             }
         }
         // ADR 0294: a Get of a typed store candidate. `Store<T>` is `T`,
@@ -8601,7 +8621,11 @@ impl LocalAccessContext<'_, '_> {
             file.source_text(member.property).unwrap_or_default(),
             symbol,
             (name, declaration),
-            execution,
+            if reporting_run {
+                ExecutionRole::Unknown
+            } else {
+                execution
+            },
             result,
         );
     }
@@ -8612,6 +8636,28 @@ impl LocalAccessContext<'_, '_> {
     /// tuple creation returned as it is is no returned source, ADR 0628), and an array slot 0 (`const [st] = …`) is the store.
     /// The primitive is the symbol's, or the creation's when the symbol carries the creation's declaration (an effect's store
     /// parameter). A tuple primitive's store whose declaration is neither of those shapes is taken as the tuple: undecided.
+    /// ADR 1166 r2: [`crate::execution_role::strict_read_role`] at `span`, for a strict-read row only.
+    fn strict_read(
+        &self,
+        file: &solid_facts::FileFacts,
+        span: solid_facts::core::Span,
+        execution: ExecutionRole,
+    ) -> ExecutionRole {
+        if execution != ExecutionRole::Unknown {
+            return execution;
+        }
+        let allowed = crate::execution_role::allowed_callback_spans(file, self.lookup);
+        crate::execution_role::strict_read_role(
+            file,
+            span,
+            execution,
+            &allowed,
+            self.entities,
+            self.symbol_names,
+            self.lookup,
+        )
+    }
+
     fn store_tuple_held_whole(&self, symbol: &SymbolId, declaration: &Location) -> bool {
         let dialect = self.lookup.dialect;
         let tuple_primitive = |primitive: solid_dialect::Primitive| {
@@ -8685,6 +8731,8 @@ impl LocalAccessContext<'_, '_> {
         (execution, uncertain, prop_head): (ExecutionRole, bool, bool),
         placed_at: Option<solid_facts::core::Span>,
     ) -> ReactiveRead {
+        // ADR 1166 r2: a strict read's role may come from a reporting run of its named callback.
+        let execution = self.strict_read(file, member.span, execution);
         // ADR 0531: the timing of a read a carrier places is the carrier's.
         // ADR 0676: a read in a setter's callback runs when the setter does.
         let timing_at = placed_at
@@ -8738,7 +8786,12 @@ impl LocalAccessContext<'_, '_> {
             host_callback_timing: host_callback_timing(file, timing_at, execution, self.lookup),
             project_consumer_non_strict: false,
             callback_invocation_unproven: false,
-            callee_callback_timing: callee_callback_timing(file, timing_at, execution, self.lookup),
+            callee_callback_timing: crate::execution_role::strict_read_callee_timing(
+                file,
+                timing_at,
+                execution,
+                self.lookup,
+            ),
         }
     }
 
@@ -8972,6 +9025,8 @@ impl LocalAccessContext<'_, '_> {
                     PropUse::Unknown => uncertain = true,
                 }
             }
+            // ADR 1166 r2: a strict read's role may come from a reporting run of its named callback.
+            let execution = self.strict_read(file, spread.span, execution);
             result.reads.push(Arc::new(ReactiveRead {
                 withdrawn_slot: false,
                 pending_open: false,
@@ -9001,7 +9056,7 @@ impl LocalAccessContext<'_, '_> {
                 ),
                 project_consumer_non_strict: false,
                 callback_invocation_unproven: false,
-                callee_callback_timing: callee_callback_timing(
+                callee_callback_timing: crate::execution_role::strict_read_callee_timing(
                     file,
                     spread.span,
                     execution,
@@ -9228,6 +9283,8 @@ impl LocalAccessContext<'_, '_> {
                     .unwrap_or(ExecutionRole::Unknown),
             };
         }
+        // ADR 1166 r2: a strict read's role may come from a reporting run of its named callback.
+        let execution = self.strict_read(file, span, execution);
         result.reads.push(Arc::new(ReactiveRead {
             withdrawn_slot: false,
             pending_open: false,
@@ -9252,7 +9309,12 @@ impl LocalAccessContext<'_, '_> {
             host_callback_timing: host_callback_timing(file, span, execution, self.lookup),
             project_consumer_non_strict: false,
             callback_invocation_unproven: false,
-            callee_callback_timing: callee_callback_timing(file, span, execution, self.lookup),
+            callee_callback_timing: crate::execution_role::strict_read_callee_timing(
+                file,
+                span,
+                execution,
+                self.lookup,
+            ),
         }));
         if counts_as_strict_read_root(file, span, execution, self.lookup) {
             result.strict_read_obligations += 1;
@@ -9410,6 +9472,8 @@ impl LocalAccessContext<'_, '_> {
                 Some((symbol, (name, declaration)))
                     if self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store) =>
                 {
+                    // ADR 1166 r2: a strict read's role may come from a reporting run of its named callback.
+                    let execution = self.strict_read(file, call.span, execution);
                     let call_location = location(file.path.shared(), call.span);
                     result.reads.push(Arc::new(ReactiveRead {
                         withdrawn_slot: false,
@@ -9437,7 +9501,7 @@ impl LocalAccessContext<'_, '_> {
                         ),
                         project_consumer_non_strict: false,
                         callback_invocation_unproven: false,
-                        callee_callback_timing: callee_callback_timing(
+                        callee_callback_timing: crate::execution_role::strict_read_callee_timing(
                             file,
                             call.span,
                             execution,
