@@ -1,0 +1,1 @@
+{ "note": "ADR 1175: an optimistic setter in an effect apply. Chrome throws OPTIMISTIC_WRITE_BEFORE_LOAD in Apply, RenderStore, Namespace and StoreEffect (each its own root, so ADR 0505 does not prove them here: they stay uncertifiable in this case, the reactive-ir fixtures hold the proofs) and is silent in Guarded, Declared and Reads." }

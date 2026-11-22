@@ -1741,6 +1741,15 @@ pub trait Dialect: Sync {
         None
     }
 
+    /// ADR 1175: when `primitive` is an optimistic creation whose setter the runtime refuses before the first answer, how many
+    /// arguments the call may take with no `loadingValue` declared (the compute first, then any value that is no answer, such as a
+    /// store's seed). `None`: not such a creation. With a literal async compute and at most that many arguments, the source is
+    /// uninitialized from its creation until the compute's promise settles, a microtask later at the earliest.
+    fn optimistic_unanswered_arguments(&self, primitive: Primitive) -> Option<usize> {
+        let _ = primitive;
+        None
+    }
+
     /// Whether the property read [`Dialect::argument_is_untouched_target`] names may reach a key the argument does not own: the
     /// runtime first asks the value for a key only a store carries, so on a function the read walks its prototype chain
     /// (`Function.prototype`, `Object.prototype`) and a hook installed there would run project code. The IR asks the
