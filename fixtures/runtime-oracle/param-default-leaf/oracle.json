@@ -1,5 +1,5 @@
 {
-  "note": "ADR 1180: a call that omits the argument runs the parameter's default in a tracked effect's callback. Chrome throws FLUSH_IN_TRACKED_QUEUE_CALLBACK at each default (7 for valued, 9 for drains, 12 for the namespace, 85 for the method, 59 for ordered, whose earlier default returned), and the checker proves SC3001 at the call that omits the argument (17, 24, 31). A thrown error reaches the feedback report with its site and no frames (the oracle's `thrown` rows), so the call is a frame the oracle does not see: the violations are ledgered `attribution`, the default sites `open`. A createMemo and an onCleanup default warn with frames: covered-violation at their calls (112, 119). Passed (valued(1)), spread, undefined-argument and method calls, and the earlier calling default, stay uncertifiable; the shadowed flush is clean. The checker's fixture is reactive-ir/param-default-leaf.",
+  "note": "ADR 1180: a call that omits the argument runs the parameter's default in a tracked effect's callback. Chrome throws FLUSH_IN_TRACKED_QUEUE_CALLBACK at each default (7 for valued, 9 for drains, 12 for the namespace, 85 for the method, 59 for ordered, whose earlier default returned), and the checker proves SC3001 at the call that omits the argument (17, 24, 31). A thrown error reaches the feedback report with its site and no frames (the oracle's `thrown` rows), so the call is a frame the oracle does not see: the violations are ledgered `attribution`, the default sites `open`. A createMemo and an onCleanup default warn with frames: covered-violation at their calls (122, 129). ADR 1188: the global `undefined` argument (101) runs the default as an omitted one, an SC3001 violation at its call, ledgered `attribution` as the omitted calls are; a variable holding `undefined` (111) stays uncertifiable. Passed (valued(1)), spread and method calls, and the earlier calling default, stay uncertifiable; the shadowed flush is clean. The checker's fixture is reactive-ir/param-default-leaf.",
   "open": [
     {
       "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
@@ -38,6 +38,12 @@
       "kind": "attribution",
       "reason": "Chrome throws at the default spaced() runs; the thrown error carries no frames, so this call is not seen",
       "owner": "Mac 26"
+    },
+    {
+      "finding": "leaf-owner-forbidden-call App.tsx:101",
+      "kind": "attribution",
+      "reason": "ADR 1188: Chrome throws at the default valued(undefined) runs; the thrown error carries no frames, so this call is not seen",
+      "owner": "W9"
     }
   ]
 }
