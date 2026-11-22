@@ -153,17 +153,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "leaf-callback-opaque",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/owner-callback-prop/App.tsx",
-      "start": 2666,
-      "end": 2675,
-      "fixes": 0
-    },
-    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",

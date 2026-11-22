@@ -2154,6 +2154,22 @@ fn helper_forbidden_operations_walk(
             resolution, call_file, helper, kinds, visited, depth, None, entry,
         );
     }
+    // ADR 1190: `props.<prop>()` in a component ADR 1171 proves holds a function literal of its one element runs that literal (it is
+    // one of the literal's proven call sites): walked as the callee, as a direct call of a named helper is.
+    if !call.construct
+        && let Some(literal) = prop_literal_called_at(call_file, call.span, lookup)
+    {
+        return function_forbidden_operations(
+            resolution,
+            call_file,
+            literal,
+            kinds,
+            visited,
+            depth,
+            None,
+            Entry::Called { guaranteed },
+        );
+    }
     // This map is the source analyzer's exact, stability-checked transport
     // result, including the shared literal-receiver escape census. Reuse
     // identity, never a signature's possible target or a read-only summary.
@@ -3623,4 +3639,20 @@ mod dom_dispatch_tests {
         assert!(refused_when_optional("OffscreenCanvas.getContext"));
         assert!(!refused_when_optional("Element.scrollIntoView"));
     }
+}
+
+/// ADR 1190: the component prop function literal of `file` whose proven call sites (ADR 1171, [`crate::execution_role::prop_literal_call_sites`])
+/// hold the call at `call`: that call runs the literal and nothing else.
+fn prop_literal_called_at<'f>(
+    file: &'f FileFacts,
+    call: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<&'f solid_facts::ast::FunctionFact> {
+    let callee = file.ast.call_at(call)?.callee;
+    file.ast.member_at(file.ast.peel_ts_sugar_span(callee))?;
+    file.ast.functions.iter().find(|function| {
+        crate::execution_role::component_prop_literal(file, function.span).is_some()
+            && crate::execution_role::prop_literal_call_sites(file, function, lookup)
+                .is_some_and(|calls| calls.contains(&call))
+    })
 }

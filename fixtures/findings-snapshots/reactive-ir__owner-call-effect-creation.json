@@ -76,17 +76,6 @@
       "fixes": 0
     },
     {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/owner-call-effect-creation/App.tsx",
-      "start": 3950,
-      "end": 3960,
-      "fixes": 0
-    },
-    {
       "rule": "primitive-in-effect-callback",
       "code": "SC6002",
       "kind": "violation",

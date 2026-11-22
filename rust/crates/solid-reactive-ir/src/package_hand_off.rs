@@ -437,6 +437,16 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
                 return mark(walk, "accessor-object", file, function.span);
             }
         }
+        // ADR 1190: a component prop's function literal whose runs ADR 1171 proves are the child's calls of `props.<prop>` runs only at those calls, on the child's
+        // stack: a package may run it only where it may run one of those calls. A literal the child never calls keeps the answer below (the dead-site ruling).
+        if let Some(calls) =
+            crate::execution_role::prop_literal_call_sites(file, function, self.lookup)
+            && !calls.is_empty()
+        {
+            return calls
+                .into_iter()
+                .any(|call| self.runs_where_written(file, call, walk));
+        }
         // A function declaration is hoisted, not written at a position: only its references are.
         let mut positions: Vec<(&'a FileFacts, Span)> = Vec::new();
         if function.kind != FunctionKind::Declaration {
