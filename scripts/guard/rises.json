@@ -8384,6 +8384,14 @@
    "to": 15,
    "adr": "ADR 1186",
    "fact": "value_use escaped_through callee arm: a call reached past a value-in-carrier escape, whose role cleared it, keeps an SC9012 value-in-carrier row at the call (call_use_span, the position of Chrome's frame) beside the carrier's own row; Chrome's frame for the write or read is at the call through the carried function (runtime-oracle carrier-call-row)"
+  },
+  {
+   "fixture": "reactive-ir/iife-prop-read",
+   "key": "SC1001 callee-callback-timing",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1187",
+   "fact": "local_access::component_prop_helper climbs from a prop read through each IIFE written directly in its enclosing body to the named local helper, so the helper pass charges the read to the helper's calls with the timing asked at the outermost IIFE call; the RefFactory read (ref={dir()}, a call the helper pass does not place, as without the IIFE) now stands as SC1001 callee-callback-timing where ADR 1184's function-run-unplaced stood (fixture iife-prop-read, README)"
   }
  ]
 }
