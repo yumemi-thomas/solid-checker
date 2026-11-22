@@ -524,7 +524,7 @@ fn settled_callee<'a, W: crate::indexes::CalleeWorld<'a> + ?Sized>(
     factory_result(world, binding_file, call, depth)
 }
 
-/// ADR 1182: the function `call` of `file` returns, when that is decided by the exactly resolved callee's text alone: a synchronous,
+/// ADR 1182: the function `call` of `file` returns, when the exactly resolved callee's text alone settles it: a synchronous,
 /// non-generator function whose body runs nothing but one straight-line `return` (no call, `new`, member read or `throw` of its own
 /// before it, so it returns), of a function literal written directly in it (`ignore(f) { return (fn) => { fn(); }; }`) or of its own
 /// parameter, unwritten (`pass(f) { return f; }`), whose argument here is a function literal. `None` otherwise.

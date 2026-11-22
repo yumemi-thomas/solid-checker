@@ -34,6 +34,10 @@ type Withheld = HashMap<String, (HashSet<Span>, HashSet<Span>)>;
 /// module-level straight-line `name = <function>`, which the mention provably follows ([`SemanticLookup::settled_let_function`]).
 type Settled = HashMap<(String, Span), (String, Span)>;
 
+/// ADR 1182: `((file, receiver binding), member name)` with the declarator standing at the name's last write and that write's
+/// function ([`SemanticLookup::settling_members`]).
+type SettlingMember = (((usize, usize), String), (Declarator, Span));
+
 /// One path's part of [`super::project_memos::UninitializedReferences`]: the withheld mentions, those of them not ordered after the
 /// declarator, and (ADR 1182) the settled `let` mentions as `(mention, declaring path, function)`.
 pub(crate) type UninitializedRow = (String, Vec<Span>, Vec<Span>, Vec<(Span, String, Span)>);
@@ -734,7 +738,7 @@ impl<'a> SemanticLookup<'a> {
     /// straight-line plain `receiver.name = <function literal>`; no function written in the literal or assigned to it reads `this`,
     /// `arguments` or `super` (none can write a member through the receiver); no direct `eval`. With a declarator standing at the end of
     /// the name's last write, and that write's function: after it the member holds that function, and no other code can reach the object.
-    fn settling_members(&self) -> Vec<(((usize, usize), String), (Declarator, Span))> {
+    fn settling_members(&self) -> Vec<SettlingMember> {
         let mut found = Vec::new();
         for (index, file) in crate::base::reads::file_slots(self.facts)
             .iter()
@@ -774,9 +778,7 @@ impl<'a> SemanticLookup<'a> {
                     shape.span == initializer
                         && shape.closed
                         && shape.properties.iter().all(|p| p.getter.is_none())
-                }) || ast
-                    .functions_within(initializer)
-                    .any(|function| exposes_receiver(function))
+                }) || ast.functions_within(initializer).any(&exposes_receiver)
                 {
                     continue;
                 }
