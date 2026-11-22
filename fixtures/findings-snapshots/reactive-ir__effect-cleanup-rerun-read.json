@@ -26,8 +26,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
       "start": 462,
@@ -59,8 +58,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
       "start": 718,

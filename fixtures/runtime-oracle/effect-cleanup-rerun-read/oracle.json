@@ -1,0 +1,1 @@
+{ "note": "ADR 0539/1183: a read in the cleanup an effect apply returns warns STRICT_READ_UNTRACKED on the rerun a click causes; EffectRerun and RenderRerun are SC1001 violations since ADR 1183 (the click is a reachable write of a new value), the other shapes keep their rows." }
