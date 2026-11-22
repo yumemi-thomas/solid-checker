@@ -8360,6 +8360,30 @@
    "to": 4,
    "adr": "ADR 1166",
    "fact": "the four carried signal reads of this fixture stay uncertifiable under another blocker: with a carried forEach or map run placing the read at its reporting run (named_callbacks::reporting_run_role), function-run-unplaced becomes read-backing-unproven, the program-wide SC9012 tuple withdrawal that holds every signal read (the relabel is in counts.json drops)"
+  },
+  {
+   "fixture": "reactive-ir/context-provided-store-tuple",
+   "key": "SC9012 value-in-carrier",
+   "from": 20,
+   "to": 21,
+   "adr": "ADR 1186",
+   "fact": "value_use escaped_through callee arm: a call reached past a value-in-carrier escape, whose role cleared it, keeps an SC9012 value-in-carrier row at the call (call_use_span, the position of Chrome's frame) beside the carrier's own row; Chrome's frame for the write or read is at the call through the carried function (runtime-oracle carrier-call-row)"
+  },
+  {
+   "fixture": "reactive-ir/loading-entries",
+   "key": "SC9012 value-in-carrier",
+   "from": 6,
+   "to": 12,
+   "adr": "ADR 1186",
+   "fact": "value_use escaped_through callee arm: a call reached past a value-in-carrier escape, whose role cleared it, keeps an SC9012 value-in-carrier row at the call (call_use_span, the position of Chrome's frame) beside the carrier's own row; Chrome's frame for the write or read is at the call through the carried function (runtime-oracle carrier-call-row)"
+  },
+  {
+   "fixture": "reactive-ir/value-use-calls-carriers",
+   "key": "SC9012 value-in-carrier",
+   "from": 14,
+   "to": 15,
+   "adr": "ADR 1186",
+   "fact": "value_use escaped_through callee arm: a call reached past a value-in-carrier escape, whose role cleared it, keeps an SC9012 value-in-carrier row at the call (call_use_span, the position of Chrome's frame) beside the carrier's own row; Chrome's frame for the write or read is at the call through the carried function (runtime-oracle carrier-call-row)"
   }
  ]
 }
