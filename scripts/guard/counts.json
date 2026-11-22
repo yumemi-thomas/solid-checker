@@ -5919,7 +5919,7 @@
    "proof": "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs::returned_cleanup_disposal_only",
    "fixtures": {
     "proved": "reactive-ir/effect-cleanup-rerun-read",
-    "open": "reactive-ir/effect-cleanup-rerun-read"
+    "open": "reactive-ir/effect-cleanup-rerun-layers"
    }
   },
   {
@@ -6166,7 +6166,7 @@
    "proof": "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs::returned_cleanup_rerun_reached",
    "fixtures": {
     "proved": "reactive-ir/effect-cleanup-rerun-read",
-    "open": "reactive-ir/effect-cleanup-rerun-read"
+    "open": "reactive-ir/effect-cleanup-rerun-layers"
    }
   },
   {
@@ -6331,7 +6331,7 @@
    "proof": "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs::returned_cleanup_placed_site",
    "fixtures": {
     "proved": "reactive-ir/effect-cleanup-rerun-read",
-    "open": "reactive-ir/effect-cleanup-rerun-read"
+    "open": "reactive-ir/effect-cleanup-rerun-layers"
    }
   },
   {
