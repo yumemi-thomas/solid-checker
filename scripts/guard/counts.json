@@ -33,7 +33,7 @@
   "SC1002 package-finding-at-entry": 17,
   "SC1002 package-operation-after-await": 3,
   "SC1002 parameter-initializer-unplaced": 8,
-  "SC1002 read-after-await-unaccounted": 791,
+  "SC1002 read-after-await-unaccounted": 792,
   "SC1002 search-depth-limit": 1,
   "SC1002 site-reach-undecided": 1,
   "SC1002 standard-member-impostor": 3,
@@ -149,7 +149,7 @@
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 5,
-  "SC4001 owner-varies-by-caller": 180,
+  "SC4001 owner-varies-by-caller": 186,
   "SC4001 package-finding-at-entry": 76,
   "SC4001 unreached-dead-code": 2,
   "SC4002 component-identity-unproven": 2,
@@ -206,7 +206,7 @@
   "SC5008 pending-read-unresolved": 24,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5536,
+  "SC6002 effect-creation-unaccounted": 5537,
   "SC6002 effect-owner-unproven": 54,
   "SC6002 function-run-unplaced": 64,
   "SC6002 generator-step-unplaced": 1,
@@ -6191,6 +6191,18 @@
    "fixtures": {
     "proved": "reactive-ir/effect-cleanup-write-role",
     "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/settled-cleanup-after-await",
+   "key": "SC4001 owner-varies-by-caller",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1185",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/body_roles.rs::in_counted_loop_later_pass",
+   "fixtures": {
+    "proved": "reactive-ir/settled-cleanup-after-await",
+    "open": "reactive-ir/owner-after-await-counted-loop"
    }
   }
  ],

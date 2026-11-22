@@ -1,0 +1,144 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-after-await-counted-loop/App.tsx",
+      "start": 508,
+      "end": 520,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-after-await-counted-loop/App.tsx",
+      "start": 508,
+      "end": 520,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-after-await-counted-loop/App.tsx",
+      "start": 856,
+      "end": 865,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-after-await-counted-loop/App.tsx",
+      "start": 1178,
+      "end": 1187,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-after-await-counted-loop/App.tsx",
+      "start": 1514,
+      "end": 1562,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-after-await-counted-loop/App.tsx",
+      "start": 1532,
+      "end": 1541,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-after-await-counted-loop/App.tsx",
+      "start": 1904,
+      "end": 1913,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-after-await-counted-loop/App.tsx",
+      "start": 2257,
+      "end": 2266,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-after-await-counted-loop/App.tsx",
+      "start": 2598,
+      "end": 2607,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-after-await-counted-loop/App.tsx",
+      "start": 2984,
+      "end": 2993,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-after-await-counted-loop/App.tsx",
+      "start": 3382,
+      "end": 3391,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-after-await-counted-loop/App.tsx",
+      "start": 3733,
+      "end": 3742,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-after-await-counted-loop/App.tsx",
+      "start": 4107,
+      "end": 4116,
+      "fixes": 0
+    }
+  ]
+}
