@@ -4,19 +4,18 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/iife-prop-read/App.tsx",
-      "start": 473,
-      "end": 484,
+      "start": 503,
+      "end": 507,
       "fixes": 0
     },
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/iife-prop-read/App.tsx",
       "start": 710,
@@ -26,12 +25,11 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/iife-prop-read/App.tsx",
-      "start": 958,
-      "end": 969,
+      "start": 988,
+      "end": 992,
       "fixes": 0
     },
     {

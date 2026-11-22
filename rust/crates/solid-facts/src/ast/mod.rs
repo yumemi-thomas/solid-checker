@@ -82,7 +82,8 @@ use thiserror::Error;
 /// spelling, which a scan of the source text cannot see (`document.ev\u0061luate`).
 /// 108 (ADR 1152): the span of each name written with an escape, and of each chain of names that holds one, with the text the program means (`escaped_names`), and each
 /// string or template written with an escape whose whole value is one word, a text a check may read as a name (`escaped_strings`).
-pub const AST_FACTS_SCHEMA: u32 = 108;
+/// 109 (ADR 1182): the assignments written in straight-line flow (`straight_line_assignments`), as `straight_line_calls`.
+pub const AST_FACTS_SCHEMA: u32 = 109;
 
 mod argument_completion;
 pub(crate) mod code_sinks;

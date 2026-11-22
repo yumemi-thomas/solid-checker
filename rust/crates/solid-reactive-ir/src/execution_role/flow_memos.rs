@@ -389,6 +389,22 @@ impl<'w> crate::indexes::CalleeWorld<'w> for ExactCallees<'_, '_, '_, 'w> {
         self.0.ctx.file(id, 0)?.callee_symbol(callee)
     }
 
+    fn settled_let_function(
+        &self,
+        file: &FileFacts,
+        mention: Span,
+    ) -> Option<(&'w FileFacts, &'w solid_facts::ast::FunctionFact)> {
+        let rows = self
+            .0
+            .memo::<crate::indexes::project_memos::UninitializedReferences>(&())?;
+        let (_, _, _, settled) = rows
+            .iter()
+            .find(|(path, _, _, _)| path.as_str() == file.path.as_str())?;
+        let (_, declaring, function) = settled.iter().find(|(at, _, _)| *at == mention)?;
+        let target = self.0.read(self.0.analyzed(declaring)?)?;
+        Some((target, target.ast.function_at(*function)?))
+    }
+
     fn function_for_symbol(
         &self,
         symbol: &str,

@@ -372,6 +372,15 @@ fn callee_in<'a, W: crate::indexes::CalleeWorld<'a> + ?Sized>(
     &'a solid_facts::ast::FunctionFact,
     bool,
 )> {
+    // ADR 1182: a member module code replaces holds its last write's function at a call that follows it; the census withholds it.
+    if let Some((settled_file, settled)) = settled_callee(world, file, call.callee, 4) {
+        let exact = !call
+            .arguments
+            .iter()
+            .take(checked)
+            .any(|argument| argument.spread);
+        return Some((settled_file, settled, exact));
+    }
     // A local method declaration cannot bypass ADR 0299's receiver escape
     // and initialization census when deciding callback timing either.
     if world.call_withheld(file, call.callee) {
@@ -418,6 +427,31 @@ fn declared_in<'a, W: crate::indexes::CalleeWorld<'a> + ?Sized>(
     &'a solid_facts::ast::FunctionFact,
     bool,
 )> {
+    declared_at_depth(world, file, call, checked, 4)
+}
+
+/// [`declared_in`], with `depth` bounding the chain of factory results ADR 1182 follows (`const w = f(g(…))`).
+fn declared_at_depth<'a, W: crate::indexes::CalleeWorld<'a> + ?Sized>(
+    world: &W,
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    checked: usize,
+    depth: u8,
+) -> Option<(
+    &'a solid_facts::FileFacts,
+    &'a solid_facts::ast::FunctionFact,
+    bool,
+)> {
+    // ADR 1182: an identifier callee whose binding holds one function at this call, though it is not the function written as the
+    // binding's value: a written `let` past its last write, or a `const` bound to what a factory returns.
+    if let Some((settled_file, settled)) = settled_callee(world, file, call.callee, depth) {
+        let exact = !call
+            .arguments
+            .iter()
+            .take(checked)
+            .any(|argument| argument.spread);
+        return Some((settled_file, settled, exact));
+    }
     let declared = world
         .callee_symbol(file, call.callee)
         .and_then(|symbol| world.function_for_symbol(symbol));
@@ -446,6 +480,128 @@ fn declared_in<'a, W: crate::indexes::CalleeWorld<'a> + ?Sized>(
             .take(checked)
             .any(|argument| argument.spread);
     Some((callee_file, callee, exact))
+}
+
+/// ADR 1182: the one function the identifier `callee` of `file` holds where it is written, when that is not the function its binding was
+/// initialized with: a written `let` the mention follows past its last write ([`crate::indexes::CalleeWorld::settled_let_function`]), or a
+/// `const` bound to `f(…)` ([`factory_result`]).
+fn settled_callee<'a, W: crate::indexes::CalleeWorld<'a> + ?Sized>(
+    world: &W,
+    file: &solid_facts::FileFacts,
+    callee: Span,
+    depth: u8,
+) -> Option<(
+    &'a solid_facts::FileFacts,
+    &'a solid_facts::ast::FunctionFact,
+)> {
+    let callee = file.ast.peel_ts_sugar_span(callee);
+    // A settled `let` at its mention, or a replaced member at its call (`receiver.name`).
+    if let Some(settled) = world.settled_let_function(file, callee) {
+        return Some(settled);
+    }
+    if file.ast.member_at(callee).is_some()
+        || file.ast.computed_members.binary_search(&callee).is_ok()
+    {
+        return None;
+    }
+    let (binding_file, binding) = world.binding_at_reference(file, callee)?;
+    if !binding.immutable
+        || binding.shape != solid_facts::ast::BindingShape::Identifier
+        || binding.names.len() != 1
+        || binding.initializer_function
+    {
+        return None;
+    }
+    let initializer = binding_file.ast.peel_ts_sugar_span(binding.initializer?);
+    if binding.call_initializer != Some(initializer) {
+        return None;
+    }
+    let call = binding_file
+        .ast
+        .calls
+        .iter()
+        .find(|candidate| candidate.span == initializer && !candidate.construct)?;
+    factory_result(world, binding_file, call, depth)
+}
+
+/// ADR 1182: the function `call` of `file` returns, when the exactly resolved callee's text alone settles it: a synchronous,
+/// non-generator function whose body runs nothing but one straight-line `return` (no call, `new`, member read or `throw` of its own
+/// before it, so it returns), of a function literal written directly in it (`ignore(f) { return (fn) => { fn(); }; }`) or of its own
+/// parameter, unwritten (`pass(f) { return f; }`), whose argument here is a function literal. `None` otherwise.
+fn factory_result<'a, W: crate::indexes::CalleeWorld<'a> + ?Sized>(
+    world: &W,
+    file: &'a solid_facts::FileFacts,
+    call: &'a solid_facts::ast::CallFact,
+    depth: u8,
+) -> Option<(
+    &'a solid_facts::FileFacts,
+    &'a solid_facts::ast::FunctionFact,
+)> {
+    if depth == 0 || call.arguments.iter().any(|argument| argument.spread) {
+        return None;
+    }
+    let (factory_file, factory, exact) =
+        declared_at_depth(world, file, call, call.arguments.len(), depth - 1)?;
+    if !exact || factory.r#async || factory.generator {
+        return None;
+    }
+    let ast = &factory_file.ast;
+    let own = |span: Span| {
+        crate::owners::owning_function(ast, span).is_some_and(|owner| owner.span == factory.span)
+    };
+    let returned = match &factory.expression_return {
+        Some(returned) => returned.argument?,
+        None => {
+            let mut returns = ast.returns.iter().filter(|returned| own(returned.span));
+            let returned = returns.next()?;
+            if returns.next().is_some() || returned.conditional || !returned.straight_line {
+                return None;
+            }
+            returned.argument?
+        }
+    };
+    let returned = ast.peel_ts_sugar_span(returned);
+    let runs_code = ast
+        .calls
+        .iter()
+        .any(|inner| factory.span.contains(inner.span) && own(inner.span))
+        || ast
+            .members
+            .iter()
+            .any(|member| factory.span.contains(member.span) && own(member.span))
+        || ast
+            .throw_statements
+            .iter()
+            .any(|thrown| factory.span.contains(*thrown) && own(*thrown));
+    if runs_code {
+        return None;
+    }
+    if let Some(literal) = ast.function_at(returned) {
+        let written_directly = ast
+            .functions
+            .iter()
+            .filter(|outer| outer.span != literal.span && outer.span.contains(literal.span))
+            .min_by_key(|outer| outer.span.end - outer.span.start)
+            .is_some_and(|outer| outer.span == factory.span);
+        return (written_directly && !literal.generator).then_some((factory_file, literal));
+    }
+    let declaration = ast.reference_declaration(returned)?;
+    if factory.rest_parameter {
+        return None;
+    }
+    let index = factory.parameters.iter().position(|parameter| {
+        parameter.shape == solid_facts::ast::BindingShape::Identifier
+            && parameter.initializer.is_none()
+            && matches!(parameter.names.as_slice(), [name] if name.span == declaration)
+    })?;
+    if crate::indexes::binding_written(factory_file, declaration) {
+        return None;
+    }
+    let argument = file.ast.peel_ts_sugar_span(call.arguments.get(index)?.span);
+    file.ast
+        .function_at(argument)
+        .filter(|literal| !literal.generator)
+        .map(|literal| (file, literal))
 }
 
 /// ADR 0279: whether a member call `receiver.name(…)` runs the declared

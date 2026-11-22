@@ -3,11 +3,12 @@
 **Claim (ADR 1180).** A direct call with no spread argument that passes fewer arguments than a parameter's index runs that
 parameter's default on its own stack. When the default is a whole call (a flush, a creation, `onCleanup`, or a helper that
 performs one), the leaf walk walks it as a call in the body. That makes SC3001 a violation at the call in the tracked
-effect's callback (lines 17, 24, 31, 112, 119), through the value, helper and namespace forms.
+effect's callback (lines 17, 24, 31, 122, 129), through the value, helper and namespace forms. ADR 1188: an argument that is
+the global `undefined` (binder: no declaration) runs the default too: `valued(undefined)` (101) is a violation.
 
 Stays uncertifiable:
 - a passed argument (`valued(1)`, 40): a passed value may be `undefined` at run time;
-- a spread (50) and an `undefined` argument (101);
+- a spread (50), and a variable that holds `undefined` (`valued(none)`, 111): a value, not the literal;
 - a default after an earlier default that calls (63): a throwing call would stop the list first;
 - a method's default reached through an object literal (85, 92): the walk does not resolve the method.
 

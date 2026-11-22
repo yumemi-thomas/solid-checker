@@ -2294,7 +2294,8 @@ pub(super) fn forwarded_compute_slot<'a>(
     // declared method, or a spread before the literal is not the wrapper: no forwarding is proved.
     let (wrapper_file, wrapper, exact) =
         crate::execution_role::project_callee_at_parameter(file, call, index, lookup)?;
-    if !exact {
+    // ADR 1182: a callee mention that may run before its binding is initialized throws there, and the literal never runs.
+    if !exact || lookup.may_precede_initialization(file.path.as_str(), call.callee) {
         return None;
     }
     if wrapper.r#async || wrapper.generator {

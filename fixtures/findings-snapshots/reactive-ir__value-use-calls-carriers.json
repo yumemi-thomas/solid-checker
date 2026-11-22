@@ -305,6 +305,17 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
+      "start": 2296,
+      "end": 2299,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
       "start": 2305,
       "end": 2312,
       "fixes": 0

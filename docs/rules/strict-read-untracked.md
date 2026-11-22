@@ -235,7 +235,9 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   proven silent. A component prop read in an anonymous literal inside a named
   local function, whether handed to a project helper (ADR 1103) or called where
   it is written as an IIFE (ADR 1184), is uncertifiable: no summary carries it
-  to the named function's calls.
+  to the named function's calls. An IIFE written directly in a named local
+  helper's body runs in place, so its prop read is the helper's read at that
+  call and is charged to the helper's calls (ADR 1187).
 - **A rendered function's body is a component body, however else it is
   called.** `const P2 = Plain; <P2 />` renders `Plain` as `<Plain />` would,
   so a body read in `Plain` is a violation even beside a tracked `{Plain()}`

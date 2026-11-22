@@ -1,6 +1,8 @@
 {
-  "note": "ADR 1184: a prop read in an IIFE inside a named local function the render calls (arrow, function expression, the census's ref factory): Chrome reports STRICT_READ_UNTRACKED at the read; SC1001 uncertifiable (it was certified clean). Generated program `mx-strict-read-untracked-ref-factory-body-signal-direct-iife-s-prop-value-cast` (differential fuzzer, generator 2). Controls: the read in the named function and an IIFE in the body (violations), an accessor in the IIFE (violation at the call), untrack and a plain object (quiet).",
+  "note": "ADR 1184: a prop read in an IIFE inside a named local function the render calls (arrow, function expression, the census's ref factory): Chrome reports STRICT_READ_UNTRACKED at the read; SC1001 uncertifiable (it was certified clean); ADR 1187: the arrow and function-expression IIFEs are violations at `go()`, the ref factory stays uncertifiable. Generated program `mx-strict-read-untracked-ref-factory-body-signal-direct-iife-s-prop-value-cast` (differential fuzzer, generator 2). Controls: the read in the named function and an IIFE in the body (violations), an accessor in the IIFE (violation at the call), untrack and a plain object (quiet).",
   "haltMarker": true,
-  "mount": ["Page"],
+  "mount": [
+    "Page"
+  ],
   "steps": []
 }
