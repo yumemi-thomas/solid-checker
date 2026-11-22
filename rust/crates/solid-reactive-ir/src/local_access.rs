@@ -7991,6 +7991,25 @@ impl LocalAccessContext<'_, '_> {
         }
     }
 
+    /// ADR 1181: the store a callback parameter holds ([`array_callback_parameter`]): the element the carrier hands it names a
+    /// store source. Anything else is `None`, and the read keeps its own resolution.
+    fn array_callback_store(
+        &self,
+        file: &solid_facts::FileFacts,
+        receiver: solid_facts::core::Span,
+    ) -> Option<SymbolId> {
+        let declaration = file.ast.reference_declaration(receiver)?;
+        let (_, element) = array_callback_parameter(file, declaration, self.lookup)?;
+        let store = self
+            .entities
+            .get(&location(file.path.shared(), element))
+            .cloned()
+            .or_else(|| {
+                crate::source_discovery::reference_symbol(file, element, self.entities, self.lookup)
+            })?;
+        (self.source_kinds.get(&store) == Some(&ReactiveSourceKind::Store)).then_some(store)
+    }
+
     fn discover_member(
         &self,
         file: &solid_facts::FileFacts,
@@ -8125,8 +8144,14 @@ impl LocalAccessContext<'_, '_> {
             .and_then(|alias| self.entities.at(file.path.as_str(), alias.source).cloned());
         // The alias fact is exact, so it comes before the entity at the
         // member (the property's own symbol, no source).
-        let Some(symbol) = member_alias_symbol
+        // ADR 1181: the parameter of an inline callback the standard `map`/`forEach`/… of a one-element array literal holding a store
+        // runs with that element is the store: its Get is the store's.
+        let carried_store = receiver_is_identifier
+            .then(|| self.array_callback_store(file, receiver))
+            .flatten();
+        let Some(symbol) = carried_store
             .as_ref()
+            .or(member_alias_symbol.as_ref())
             .or(inline_root.as_ref())
             .or(self.entities.get(&object))
             .or(binder_symbol.as_ref())
@@ -12356,4 +12381,81 @@ pub(crate) fn computation_layer_call(
             lookup,
         ))
     .then_some(climb.at)
+}
+
+/// ADR 1181: the carrier call and the element it hands the parameter declared at `declaration`, when that is the first
+/// parameter (a plain identifier, no default, never written) of an inline arrow or function expression, neither `async` nor a
+/// generator, that is the whole first argument of a call of the default library's `Array.prototype` `map`, `forEach`,
+/// `filter`, `some`, `every` or `find` (Type Facts, no impostor or patch veto, ADR 0840) whose receiver is an array literal of
+/// exactly one element, a plain identifier reference, with no spread or hole: the standard method calls the callback with that
+/// element, so the parameter holds it. Returns the call's span and the element's.
+pub(crate) fn array_callback_parameter(
+    file: &solid_facts::FileFacts,
+    declaration: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<(solid_facts::core::Span, solid_facts::core::Span)> {
+    let ast = &file.ast;
+    let callback = ast.functions.iter().find(|function| {
+        function.parameters.first().is_some_and(|parameter| {
+            parameter.shape == solid_facts::ast::BindingShape::Identifier
+                && parameter.initializer.is_none()
+                && parameter
+                    .names
+                    .first()
+                    .is_some_and(|name| name.span == declaration)
+        })
+    })?;
+    if callback.r#async
+        || callback.generator
+        || callback.method_name.is_some()
+        || crate::indexes::binding_written(file, declaration)
+    {
+        return None;
+    }
+    let call = ast.calls.iter().find(|call| {
+        !call.construct
+            && call.arguments.first().is_some_and(|argument| {
+                !argument.spread && ast.peel_ts_sugar_span(argument.span) == callback.span
+            })
+    })?;
+    let member = ast.member_at(ast.peel_ts_sugar_span(call.callee))?;
+    let literal_span = ast.peel_ts_sugar_span(member.object);
+    let literal = ast
+        .array_literal_elements
+        .iter()
+        .find(|literal| literal.span == literal_span)?;
+    let [element] = literal.elements.as_slice() else {
+        return None;
+    };
+    if element.kind != solid_facts::ast::ArrayElementKind::Value {
+        return None;
+    }
+    let element_span = ast.peel_ts_sugar_span(element.span);
+    if !ast.identifiers.iter().any(|identifier| {
+        identifier.span == element_span
+            && identifier.role == solid_facts::ast::IdentifierRole::Reference
+    }) {
+        return None;
+    }
+    let declared = crate::indexes::standard_library_declaration_of(
+        lookup.resolved_callee_call(file, call.callee),
+        typefacts::CallKind::Call,
+    )?;
+    let carrier = matches!(
+        declared.qualified_name.as_ref(),
+        "Array.map"
+            | "ReadonlyArray.map"
+            | "Array.forEach"
+            | "ReadonlyArray.forEach"
+            | "Array.filter"
+            | "ReadonlyArray.filter"
+            | "Array.some"
+            | "ReadonlyArray.some"
+            | "Array.every"
+            | "ReadonlyArray.every"
+            | "Array.find"
+            | "ReadonlyArray.find"
+    );
+    (carrier && !lookup.standard_call_withheld(file, call.callee))
+        .then_some((call.span, element_span))
 }
