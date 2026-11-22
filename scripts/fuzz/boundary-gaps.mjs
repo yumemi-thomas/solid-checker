@@ -68,7 +68,7 @@ export const ARM_GAPS = [
     arms: ["execution_role.read_execution_role.returned-cleanup-rerun"],
   },
   {
-    reason: "ADR 1037: a setter or `refresh` in the cleanup an inline apply returns. The generator's cleanup cells (`effect-cleanup-*`, legal; `effect-cleanup-flush-rerun`, misuse) never run clean: the effect's own creation in the component keeps its SC3001/SC6002 rows (`boundary.mjs verify --only returned-cleanup-write`, 2026-11-17: 15 programs, the arm seen silent in no clean cell). The fixtures `effect-cleanup-write-role` (silent) and `effect-cleanup-write-role-flush` (kept) separate it, with the Chrome oracle case `effect-cleanup-write-role`.",
+    reason: "ADR 1037: a setter or `refresh` in the cleanup an inline apply returns. The generator's cleanup cells (`effect-cleanup-*`, legal; `effect-cleanup-flush-rerun`, misuse) never run clean: the effect's own creation in the component keeps its SC3001/SC6002 rows (`boundary.mjs verify --only returned-cleanup-write`, 2026-11-17: 15 programs, the arm seen silent in no clean cell). The fixtures `effect-cleanup-write-role` (silent) and `effect-cleanup-write-role-flush` (kept) separate it, with the Chrome oracle case `effect-cleanup-write-role`; ADR 1195's layers run in place, `effect-cleanup-rerun-layers` (three silent writes, the shared helper kept; Chrome case of the same name).",
     arms: ["write_roles.returned-cleanup-write"],
   },
   {
