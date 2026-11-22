@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1185: an effect or a cleanup in the consequent of `if (i > 0)` in a counted loop that awaits at its body's statement level on every pass runs on a later pass with no owner (NO_OWNER_EFFECT, NO_OWNER_CLEANUP: violations, directly, in an async helper and through an IIFE); no guard, a `continue`, a conditional await, a written counter, a shadowing guard binding, a single pass and a `getOwner()` probe stay uncertifiable. `flag` is false at run time, so the `continue`, the conditional await's skip and the counter write never happen here."
+}

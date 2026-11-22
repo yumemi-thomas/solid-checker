@@ -313,7 +313,10 @@ owns its synchronous run only (ADR 0612). A `catch` or `finally` counts only pas
 call, or the global `Promise.resolve` with literal arguments, ADR 1164). The body
 of a `for await` over an array literal led by a number, boolean or `null` literal
 runs, every run past the loop's await (ADR 1165); over another iterable it is
-uncertifiable. An operation in a literal that a
+uncertifiable. So is a counted loop's later pass: an operation under `if (i > 0)`
+in `for (let i = 0; i < N; i += 1)`, where only the update writes `i` and the
+body awaits at its own statement level with no `break` or `continue`, runs only
+after a pass that completed past that await (ADR 1185). An operation in a literal that a
 synchronous guard invokes is guarded: `if (getOwner()) (() => { … })()` runs
 only under an owner, so it is not reported; the guard must be Solid's
 `getOwner`, and no suspension may separate it from the operation (ADR 0347): an
