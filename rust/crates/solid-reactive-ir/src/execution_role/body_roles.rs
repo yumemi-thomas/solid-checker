@@ -532,46 +532,96 @@ pub(crate) fn in_counted_loop_later_pass(file: &solid_facts::FileFacts, span: Sp
         return false;
     };
     let ast = &file.ast;
-    if crate::interproc::property_gets::direct_eval_in(file, function.span) {
-        return false;
-    }
     ast.loop_statements.iter().any(|statement| {
         statement.contains(span)
             && containing_ast_function(ast, *statement)
                 .is_some_and(|owner| owner.span == function.span)
-            && counted_loop_head(file, *statement).is_some_and(|head| {
-                let body = Span::new(head.end, statement.end);
-                let declaration = head.counter;
-                let counter_read =
-                    |reference: Span| ast.reference_declaration(reference) == Some(declaration);
-                let declared = ast.bindings.iter().any(|binding| {
-                    binding.runtime_let && binding.names.iter().any(|name| name.span == declaration)
-                });
-                let only_update_writes = counter_read(head.update)
-                    && counter_read(head.test)
-                    && ast.references_to(declaration).iter().all(|reference| {
-                        *reference == head.update || !ast.any_write_target_containing(*reference)
-                    });
-                let block_body = file
-                    .source_text(body)
-                    .is_some_and(|text| text.trim_start().starts_with('{'));
-                let awaits_every_pass = ast.dominating_awaits.iter().any(|(awaited, region)| {
-                    body.contains(*awaited) && region.end == statement.end
-                });
-                let no_jump = !ast.jump_statements.iter().any(|jump| body.contains(*jump));
-                let guarded = ast.if_regions.iter().any(|region| {
-                    body.contains(region.test)
-                        && region.consequent.contains(span)
-                        && greater_than_zero_test(file, region.test).is_some_and(counter_read)
-                });
-                declared
-                    && only_update_writes
-                    && block_body
-                    && awaits_every_pass
-                    && no_jump
-                    && guarded
-            })
+            && later_pass_consequents(file, *statement)
+                .iter()
+                .any(|consequent| consequent.contains(span))
     })
+}
+
+/// ADR 1191: whether `span` is written, at any depth, inside the consequent of a counted loop's later-pass guard
+/// ([`in_counted_loop_later_pass`]'s loop, in an async non-generator function). Nothing written there runs before that function's first
+/// suspension: the first pass skips the consequent, and every later pass follows the first pass's await. A function written there does
+/// not exist before it either.
+pub(crate) fn in_counted_loop_later_pass_region(file: &solid_facts::FileFacts, span: Span) -> bool {
+    let ast = &file.ast;
+    ast.loop_statements.iter().any(|statement| {
+        statement.contains(span)
+            && containing_ast_function(ast, *statement)
+                .is_some_and(|function| function.r#async && !function.generator)
+            && later_pass_consequents(file, *statement)
+                .iter()
+                .any(|consequent| consequent.contains(span))
+    })
+}
+
+/// The consequents of the `if (i > 0)` guards written in the body of a counted loop ([`counted_loop`]) whose body is a block with an
+/// `await` at its own statement level and no `break` or `continue`; empty for any other statement.
+fn later_pass_consequents(file: &solid_facts::FileFacts, statement: Span) -> Vec<Span> {
+    let ast = &file.ast;
+    let Some(head) = counted_loop(file, statement) else {
+        return Vec::new();
+    };
+    let body = Span::new(head.end, statement.end);
+    let block_body = file
+        .source_text(body)
+        .is_some_and(|text| text.trim_start().starts_with('{'));
+    let awaits_every_pass = ast
+        .dominating_awaits
+        .iter()
+        .any(|(awaited, region)| body.contains(*awaited) && region.end == statement.end);
+    let no_jump = !ast.jump_statements.iter().any(|jump| body.contains(*jump));
+    if !(block_body && awaits_every_pass && no_jump) {
+        return Vec::new();
+    }
+    ast.if_regions
+        .iter()
+        .filter(|region| {
+            body.contains(region.test)
+                && greater_than_zero_test(file, region.test)
+                    .is_some_and(|counter| ast.reference_declaration(counter) == Some(head.counter))
+        })
+        .map(|region| region.consequent)
+        .collect()
+}
+
+/// ADR 1191: whether `reference` names the counter of a counted loop ([`counted_loop`]): a number, since it starts at the literal `0`
+/// and its only write adds `1`. A comparison of it (`i < 2`, `i > 0`) coerces nothing and runs no code.
+pub(crate) fn counted_loop_counter(file: &solid_facts::FileFacts, reference: Span) -> bool {
+    let ast = &file.ast;
+    let Some(declaration) = ast.reference_declaration(reference) else {
+        return false;
+    };
+    ast.loop_statements.iter().any(|statement| {
+        statement.contains(declaration)
+            && counted_loop(file, *statement).is_some_and(|head| head.counter == declaration)
+    })
+}
+
+/// The head of a counted loop ([`counted_loop_head`]) whose counter is that `let` binding and is written only by the update: the test's
+/// and the update's references resolve to it, no other reference to it is a write target, and no direct `eval` is in the function the
+/// loop is written in (or the file, at module scope).
+fn counted_loop(file: &solid_facts::FileFacts, statement: Span) -> Option<CountedLoopHead> {
+    let ast = &file.ast;
+    let head = counted_loop_head(file, statement)?;
+    let scope = containing_ast_function(ast, statement)
+        .map_or(Span::new(0, u32::MAX), |function| function.span);
+    if crate::interproc::property_gets::direct_eval_in(file, scope) {
+        return None;
+    }
+    let counter_read = |reference: Span| ast.reference_declaration(reference) == Some(head.counter);
+    let declared = ast.bindings.iter().any(|binding| {
+        binding.runtime_let && binding.names.iter().any(|name| name.span == head.counter)
+    });
+    let only_update_writes = counter_read(head.update)
+        && counter_read(head.test)
+        && ast.references_to(head.counter).iter().all(|reference| {
+            *reference == head.update || !ast.any_write_target_containing(*reference)
+        });
+    (declared && only_update_writes).then_some(head)
 }
 
 /// The spans [`counted_loop_head`] reads: the counter's declaration, its references in the test and the update, and the end of the head

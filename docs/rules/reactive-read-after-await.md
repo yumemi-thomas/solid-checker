@@ -192,8 +192,15 @@ Each of these keeps it from applying:
   body of a `for await` over an array literal whose first element is a
   number, boolean or `null` literal is a violation: the body runs, past the
   suspension ([ADR 1164](../decisions.md#adr-1164)); over any other iterable
-  it stays an obligation.
-  Member reads, callbacks and helpers reached there are obligations too.
+  it stays an obligation. So is a read in a counted loop's later pass
+  (`if (i > 0)` in `for (let i = 0; i < N; i += 1)`, the update the counter's
+  only write, an `await` at the body's statement level, no `break` or
+  `continue`), and a read in function layers run in place (an IIFE, a closure
+  bound to a name and called once, a project helper's callback) whose outermost
+  call is written in either body ([ADR 1191](../decisions.md#adr-1191)). A
+  read inside such a later pass is no dependency of the first run.
+  Member reads, library and primitive callbacks, and helpers reached there
+  otherwise are obligations too.
 
 **The feasible-path premise.** A read is reported where the code is written to
 run it, not where one input makes it dead: a `catch` that only an await
