@@ -1606,6 +1606,15 @@ pub(crate) fn returned_cleanup_rerun_reached(
     if cleanup.r#async || cleanup.generator || super::events::inside_instance_field(file, span) {
         return false;
     }
+    // Round 2 (bundle u's 19 false cleans): a call written in the cleanup runs the code of what it calls, which the summaries
+    // carry to this call; the role here would place a helper's read (`wrapUse()`) where nothing proves its rows. Only a call of
+    // a primitive's accessor (a binding a primitive call creates) is a read this answers; any other call keeps its role.
+    if ast.calls.iter().any(|call| {
+        (call.span == span || ast.peel_ts_sugar_span(call.callee) == span)
+            && !primitive_accessor_call(file, call, lookup)
+    }) {
+        return false;
+    }
     let Some(apply) = function_returning(file, cleanup) else {
         return false;
     };
@@ -1701,6 +1710,33 @@ pub(crate) fn returned_cleanup_rerun_reached(
                 && handler_reached(file, component, write.span)
         })
     })
+}
+
+/// ADR 1183 round 2: whether `call` calls an identifier bound directly by a primitive's call in this file (a slot of
+/// `const [t] = createSignal(…)`, `const m = createMemo(…)`): an accessor read, not a call of project code.
+fn primitive_accessor_call(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    let callee = ast.peel_ts_sugar_span(call.callee);
+    if call.construct || ast.member_at(callee).is_some() {
+        return false;
+    }
+    let Some((binding_file, binding, _)) = lookup.binding_at_reference(file.path.as_str(), callee)
+    else {
+        return false;
+    };
+    binding_file.path == file.path
+        && binding.immutable
+        && binding
+            .call_initializer
+            .map(|at| ast.peel_ts_sugar_span(at))
+            .and_then(|at| ast.call_at(at))
+            .is_some_and(|created| {
+                !created.construct && lookup.primitive_at_call(file, created.span).is_some()
+            })
 }
 
 /// ADR 1183: whether `at` runs on every completion of `function` ([`solid_facts::ast::synchronously_unconditional_calls`]).

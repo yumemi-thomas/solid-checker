@@ -99,3 +99,35 @@ export function TwinDisabled() {
     </button>
   );
 }
+
+// Round 2 (bundle u): the read sits in a named helper the cleanup calls; the call carries the helper's code, which no run proves
+// placed here: uncertifiable, as before (round 1 certified it clean where Chrome warns).
+export function TwinHelperRead() {
+  const [r] = createSignal(3);
+  const [t, setT] = createSignal(1);
+  const wrapUse = () => {
+    r();
+  };
+  createEffect(
+    () => t(),
+    () => () => {
+      wrapUse();
+    },
+  );
+  return <button onClick={() => setT(2)}>x</button>;
+}
+
+export function TwinRenderHelperRead() {
+  const [r] = createSignal(3);
+  const [t, setT] = createSignal(1);
+  const wrapUse = () => {
+    r();
+  };
+  createRenderEffect(
+    () => t(),
+    () => () => {
+      wrapUse();
+    },
+  );
+  return <button onClick={() => setT(2)}>x</button>;
+}

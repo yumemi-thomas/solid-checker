@@ -9,5 +9,5 @@ the component's returned element reaches through intrinsic elements' direct chil
 reachable). SC1001 is a violation (reads only; owner codes keep their rows).
 
 Violations: `EffectRerun`, `RenderEffectRerun`. Uncertifiable: `TwinSameValue` (the write sets the value it holds: no rerun),
-`TwinUnderShow` (a flow component between), `TwinConditionalWrite`, `TwinDisabled`. Chrome:
+`TwinUnderShow` (a flow component between), `TwinConditionalWrite`, `TwinDisabled`, and (round 2, bundle u's false cleans) `TwinHelperRead`, `TwinRenderHelperRead` (the read in a named helper the cleanup calls: round 1 certified it clean). Round 2 places the strict read only (SC1001, as ADR 1166 r2): every other rule keeps the read unplaced. Chrome:
 `runtime-oracle/effect-cleanup-rerun-reached`. Stub: `effect-cleanup-disposal-only`'s.
