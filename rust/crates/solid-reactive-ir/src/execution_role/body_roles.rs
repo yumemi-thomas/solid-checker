@@ -517,6 +517,190 @@ fn for_await_body_suspension(file: &solid_facts::FileFacts, span: Span) -> Optio
     })
 }
 
+/// ADR 1185: whether `span` is in a later pass of a counted loop that awaits on every pass, in `span`'s own continuation function
+/// ([`continuation_function`]). The loop is `for (let i = 0; i < N; i += 1) { … }` (or `i <= N`, `i++`, `++i`), read token by token from
+/// its head ([`counted_loop_head`]), with `N` a decimal literal that lets a second pass run (`< 2`, `<= 1` or more). The counter is that
+/// `let` binding, and its only write is the update's: no other reference to it is a write target and no direct `eval` is in the function.
+/// So `i > 0` holds exactly on the passes after an update, each of which follows a pass whose body completed. The site is in the
+/// consequent of an `if (i > 0)` in the body, the test naming the counter. The body is a block with an `await` at its own statement level
+/// (`AstFacts::dominating_awaits`, the region ending with the loop), and no `break` or `continue` is written in it
+/// (`AstFacts::jump_statements`, which lists exactly those two). The body then completes only past that await, since a throw or a
+/// `return` leaves the loop, so every run of `span` follows a suspension of its own function. The first pass (`i` is `0`) skips the
+/// site, so the claim says nothing of it.
+pub(crate) fn in_counted_loop_later_pass(file: &solid_facts::FileFacts, span: Span) -> bool {
+    let Some(function) = continuation_function(file, span) else {
+        return false;
+    };
+    let ast = &file.ast;
+    if crate::interproc::property_gets::direct_eval_in(file, function.span) {
+        return false;
+    }
+    ast.loop_statements.iter().any(|statement| {
+        statement.contains(span)
+            && containing_ast_function(ast, *statement)
+                .is_some_and(|owner| owner.span == function.span)
+            && counted_loop_head(file, *statement).is_some_and(|head| {
+                let body = Span::new(head.end, statement.end);
+                let declaration = head.counter;
+                let counter_read = |reference: Span| ast.reference_declaration(reference) == Some(declaration);
+                let declared = ast.bindings.iter().any(|binding| {
+                    binding.runtime_let && binding.names.iter().any(|name| name.span == declaration)
+                });
+                let only_update_writes = counter_read(head.update)
+                    && counter_read(head.test)
+                    && ast.references_to(declaration).iter().all(|reference| {
+                        *reference == head.update || !ast.any_write_target_containing(*reference)
+                    });
+                let block_body = file
+                    .source_text(body)
+                    .is_some_and(|text| text.trim_start().starts_with('{'));
+                let awaits_every_pass = ast.dominating_awaits.iter().any(|(awaited, region)| {
+                    body.contains(*awaited) && region.end == statement.end
+                });
+                let no_jump = !ast.jump_statements.iter().any(|jump| body.contains(*jump));
+                let guarded = ast.if_regions.iter().any(|region| {
+                    body.contains(region.test)
+                        && region.consequent.contains(span)
+                        && greater_than_zero_test(file, region.test)
+                            .is_some_and(|counter| counter_read(counter))
+                });
+                declared && only_update_writes && block_body && awaits_every_pass && no_jump && guarded
+            })
+    })
+}
+
+/// The spans [`counted_loop_head`] reads: the counter's declaration, its references in the test and the update, and the end of the head
+/// (just past its `)`).
+struct CountedLoopHead {
+    counter: Span,
+    test: Span,
+    update: Span,
+    end: u32,
+}
+
+/// The head of a `for` statement written exactly as `for (let i = 0; i < N; i += 1)`, with `<=` for `<` and `i++` or `++i` for the
+/// update allowed, and any whitespace (no comment) between the tokens. `N` must let a second pass run (`< N` with `N >= 2`, `<= N` with
+/// `N >= 1`). Any other text answers `None`.
+fn counted_loop_head(file: &solid_facts::FileFacts, statement: Span) -> Option<CountedLoopHead> {
+    let text = file.source_text(statement)?;
+    let mut scan = HeadScan { text, at: 0 };
+    scan.word("for")?;
+    scan.punct("(")?;
+    scan.word("let")?;
+    let counter = scan.identifier()?;
+    scan.punct("=")?;
+    scan.punct("0")?;
+    scan.punct(";")?;
+    let test = scan.identifier()?;
+    let inclusive = if scan.punct("<=").is_some() {
+        true
+    } else {
+        scan.punct("<")?;
+        false
+    };
+    let bound: u64 = scan.digits()?.parse().ok()?;
+    if bound < if inclusive { 1 } else { 2 } {
+        return None;
+    }
+    scan.punct(";")?;
+    let update = if scan.punct("++").is_some() {
+        scan.identifier()?
+    } else {
+        let update = scan.identifier()?;
+        if scan.punct("++").is_none() {
+            scan.punct("+=")?;
+            scan.punct("1")?;
+        }
+        update
+    };
+    scan.punct(")")?;
+    let at = |range: (usize, usize)| -> Option<Span> {
+        Some(Span::new(
+            statement.start + u32::try_from(range.0).ok()?,
+            statement.start + u32::try_from(range.1).ok()?,
+        ))
+    };
+    let name = |range: (usize, usize)| &text[range.0..range.1];
+    (name(counter) == name(test) && name(counter) == name(update)).then_some(())?;
+    Some(CountedLoopHead {
+        counter: at(counter)?,
+        test: at(test)?,
+        update: at(update)?,
+        end: statement.start + u32::try_from(scan.at).ok()?,
+    })
+}
+
+/// The counter reference of an `if` test written exactly as `<identifier> > 0` (whitespace only around the operator), by span.
+fn greater_than_zero_test(file: &solid_facts::FileFacts, test: Span) -> Option<Span> {
+    let text = file.source_text(test)?;
+    let mut scan = HeadScan { text, at: 0 };
+    let counter = scan.identifier()?;
+    scan.punct(">")?;
+    scan.punct("0")?;
+    (scan.at == text.len()).then_some(())?;
+    Some(Span::new(
+        test.start + u32::try_from(counter.0).ok()?,
+        test.start + u32::try_from(counter.1).ok()?,
+    ))
+}
+
+/// A token reader over a loop head's or a test's source text: each step skips ASCII whitespace, then reads one token or answers `None`.
+struct HeadScan<'t> {
+    text: &'t str,
+    at: usize,
+}
+
+impl HeadScan<'_> {
+    fn skip_whitespace(&mut self) {
+        let rest = &self.text[self.at..];
+        self.at += rest.len() - rest.trim_start_matches(|c: char| c.is_ascii_whitespace()).len();
+    }
+
+    fn punct(&mut self, token: &str) -> Option<()> {
+        self.skip_whitespace();
+        self.text[self.at..].starts_with(token).then(|| self.at += token.len())
+    }
+
+    /// A keyword: `token`, not followed by an identifier character.
+    fn word(&mut self, token: &str) -> Option<()> {
+        let start = self.at;
+        self.punct(token)?;
+        if self.text[self.at..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_' || c == '$') {
+            self.at = start;
+            return None;
+        }
+        Some(())
+    }
+
+    /// An ASCII identifier that is no keyword this head may hold, by byte range.
+    fn identifier(&mut self) -> Option<(usize, usize)> {
+        self.skip_whitespace();
+        let rest = &self.text[self.at..];
+        let length = rest
+            .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '$'))
+            .unwrap_or(rest.len());
+        let word = &rest[..length];
+        if word.is_empty() || word.starts_with(|c: char| c.is_ascii_digit()) || matches!(word, "let" | "for" | "of" | "in") {
+            return None;
+        }
+        let start = self.at;
+        self.at += length;
+        Some((start, self.at))
+    }
+
+    fn digits(&mut self) -> Option<&str> {
+        self.skip_whitespace();
+        let rest = &self.text[self.at..];
+        let length = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
+        if length == 0 || rest[length..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_' || c == '.') {
+            return None;
+        }
+        let start = self.at;
+        self.at += length;
+        Some(&self.text[start..self.at])
+    }
+}
+
 /// ADR 1165: whether `span` is in the body of a `for await` ([`for_await_body_suspension`], in `span`'s own continuation function) that
 /// provably runs its body: the iterable is an array literal whose first element is a decimal integer, boolean or `null` literal (the first
 /// `next()` fulfills with that value), while no visible write reaches the array iterator. Every run of `span` follows the loop's

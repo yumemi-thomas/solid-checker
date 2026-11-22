@@ -468,9 +468,25 @@ pub(super) fn emit_file(
         // ADR 1165: an operation (or the `onSettled` call) in the body of a `for await` that provably runs it follows the loop's
         // suspension on every run (ADR 1038), as one past a dominating await does; not where the function probes `getOwner()` (as
         // `call_owner_edge`).
+        // ADR 1185: the same in a counted loop's later pass (`if (i > 0)` in a loop that awaits on every pass), written directly or
+        // at the outermost call of in-place layers (the climb's premises of `climbed_after_await`).
+        let counted_later_pass = |site: Span| {
+            (crate::execution_role::in_counted_loop_later_pass(file, site) && !probes_owner(site))
+                || crate::execution_role::climb_in_place_layers(file, site, lookup).is_some_and(|climb| {
+                    climb.at != site
+                        && !climb.bound()
+                        && climb.in_list.is_none()
+                        && !crate::execution_role::climb_crosses_library_callback(
+                            file, site, climb.at, lookup,
+                        )
+                        && !probes_owner(climb.at)
+                        && crate::execution_role::in_counted_loop_later_pass(file, climb.at)
+                })
+        };
         let for_await_body = |site: Span| {
-            crate::execution_role::in_for_await_body_that_runs(file, site, lookup)
-                && !probes_owner(site)
+            (crate::execution_role::in_for_await_body_that_runs(file, site, lookup)
+                && !probes_owner(site))
+                || counted_later_pass(site)
         };
         let settled_after_await = settled_call.is_some_and(|call| {
             starts.contains(&u64::from(call.callee.start))

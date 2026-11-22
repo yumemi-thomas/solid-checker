@@ -1283,6 +1283,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/after-await-for-await-finally/node_modules/**
 !fixtures/reactive-ir/owner-after-await-for-await/node_modules/
 !fixtures/reactive-ir/owner-after-await-for-await/node_modules/**
+!fixtures/reactive-ir/owner-after-await-counted-loop/node_modules/
+!fixtures/reactive-ir/owner-after-await-counted-loop/node_modules/**
 !fixtures/reactive-ir/value-use-census/node_modules/
 !fixtures/reactive-ir/value-use-census/node_modules/**
 !fixtures/reactive-ir/thrown-value-catch/node_modules/
