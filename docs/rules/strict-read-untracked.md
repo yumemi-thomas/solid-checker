@@ -89,7 +89,11 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   is a violation, whatever its other entries, where a direct call or such a carrier
   runs it in the declaring function after the declarator, on every completion, at a
   reporting position; outside the body's rendering only with no call before the run,
-  since a creation in an effect's apply throws first (ADR 1166).
+  since a creation in an effect's apply throws first (ADR 1166). The declaring function's
+  role must be its own: a primitive's callback, or a function only its name, an export or
+  direct calls reach, each call outside a function that may not run as a component
+  (handed to `map`) and in a function that qualifies in turn; otherwise uncertifiable
+  (ADR 1189).
 - **Plain assignment targets are writes, not reads.** `store.name = next` is
   diagnosed by `no-store-mutation-outside-setter` without also reporting `store.name` here.
   Only the member that *is* the written target is exempt: read-modify-write
