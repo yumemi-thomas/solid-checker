@@ -11,7 +11,7 @@
   "SC1001 component-identity-unproven": 136,
   "SC1001 creation-throws-first": 3,
   "SC1001 escaped-name-unresolved": 19,
-  "SC1001 function-run-unplaced": 1774,
+  "SC1001 function-run-unplaced": 1775,
   "SC1001 function-unentered": 1,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
@@ -129,7 +129,7 @@
   "SC3001 function-run-unplaced": 43,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 7,
-  "SC3001 leaf-operation-unaccounted": 7157,
+  "SC3001 leaf-operation-unaccounted": 7166,
   "SC3001 leaf-owner-unproven": 68,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
@@ -145,7 +145,7 @@
   "SC4001 handler-on-disabled-control": 7,
   "SC4001 handler-spread-unresolved": 84,
   "SC4001 owner-allocation-unproven": 24,
-  "SC4001 owner-callers-unenumerated": 3656,
+  "SC4001 owner-callers-unenumerated": 3664,
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 5,
@@ -206,7 +206,7 @@
   "SC5008 pending-read-unresolved": 24,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5527,
+  "SC6002 effect-creation-unaccounted": 5536,
   "SC6002 effect-owner-unproven": 54,
   "SC6002 function-run-unplaced": 64,
   "SC6002 generator-step-unplaced": 1,
@@ -6143,6 +6143,54 @@
    "fixtures": {
     "proved": "reactive-ir/named-callback-escaped-entry",
     "open": "reactive-ir/named-callback-escaped-entry"
+   }
+  },
+  {
+   "fixture": "reactive-ir/effect-cleanup-disposal-only",
+   "key": "SC1001 function-run-unplaced",
+   "from": 4,
+   "to": 3,
+   "adr": "ADR 1183",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs::returned_cleanup_rerun_reached",
+   "fixtures": {
+    "proved": "reactive-ir/effect-cleanup-disposal-only",
+    "open": "reactive-ir/effect-cleanup-disposal-only"
+   }
+  },
+  {
+   "fixture": "reactive-ir/effect-cleanup-rerun-read",
+   "key": "SC1001 function-run-unplaced",
+   "from": 7,
+   "to": 5,
+   "adr": "ADR 1183",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs::returned_cleanup_rerun_reached",
+   "fixtures": {
+    "proved": "reactive-ir/effect-cleanup-rerun-read",
+    "open": "reactive-ir/effect-cleanup-rerun-read"
+   }
+  },
+  {
+   "fixture": "reactive-ir/effect-cleanup-write-role-flush",
+   "key": "SC1001 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1183",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs::returned_cleanup_rerun_reached",
+   "fixtures": {
+    "proved": "reactive-ir/effect-cleanup-write-role-flush",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/effect-cleanup-write-role",
+   "key": "SC1001 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1183",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs::returned_cleanup_rerun_reached",
+   "fixtures": {
+    "proved": "reactive-ir/effect-cleanup-write-role",
+    "open": "engine/eslint-reactivity-v2"
    }
   }
  ],
