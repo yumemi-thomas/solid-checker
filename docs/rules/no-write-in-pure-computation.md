@@ -308,9 +308,11 @@ call stays a violation. An effect's returned cleanup also runs when the effect's
 owner is disposed (a memo rerun, a `Show` turned off, a `For` row removed), where
 the write is legal, and on a rerun from the drain with no owner, also legal: a
 setter or `refresh` written directly in the cleanup of an inline apply is silent
-unless a `flush()` drains under an owner (ADR 1037). A named apply, a function
-inside the cleanup, and an action call (it throws under a row's disposal) stay
-uncertifiable. Earlier releases throw
+unless a `flush()` drains under an owner (ADR 1037), and so is one in function
+layers run in place there (an IIFE, a closure called once, a project helper's
+callback, ADR 1195). A named apply, a function the cleanup stores or hands to a
+library, a helper that other code calls too, and an action call (it throws under
+a row's disposal) stay uncertifiable. Earlier releases throw
 (ADR 0455, `fixtures/reactive-ir/write-owner-in-cleanup`).
 
 rc.17's `onCleanup` returns its callback, so calling the handle runs the
