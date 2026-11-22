@@ -42722,5 +42722,60 @@
    "mx-optimistic-write-before-load-render-apply-store-direct-none"
   ],
   "rediscovered": "focus.mjs --codes OPTIMISTIC_WRITE_BEFORE_LOAD on 2,000 programs (the 74 with the setter in an apply and a hash sample of the rest), release builds, Chrome cached: main a63e1302e recall-gap; this build agree (6 recall-gap to agree in mx-census, nothing else moved)"
+ },
+ {
+  "finding": "a false clean (certified): SC1001 at a component prop read in an anonymous literal called where it is written (an IIFE, `(() => { (props as typeof props).r1; })()`) inside a named local function the render runs (a ref factory, `ref={dir1()}`): Chrome reports STRICT_READ_UNTRACKED, and the read ended as `placed-elsewhere` with no row at the named function's calls",
+  "found": "Mac 26, `make fuzz-smoke` on ADR 1180 (mx-recall cover); the same on main a63e1302e and 01d5fdc5f",
+  "fixed": "ADR 1184 (`local_access.rs` `handed_anonymous_literal`)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-ref-factory-body-signal-direct-iife-s-prop-value-cast"
+  ],
+  "rediscovered": "`matrix.mjs --recall --ids`: main 01d5fdc5f false-clean (certified); this build recall-gap"
+ },
+ {
+  "finding": "ADR 1183 round 1 placed the reads of a returned cleanup's rerun through read_execution_role, which the call-site summary also asks: a named helper the cleanup calls (wrapUse()) took the apply's role at its call, and its read lost the uncertifiable row, a certified false clean where Chrome warns STRICT_READ_UNTRACKED",
+  "found": "bundle u (Mac 24, mac24/u-1183-false-clean.md): 19 wrapper-none programs of effect-cleanup-rerun and render-cleanup-rerun on main 0751069bf",
+  "fixed": "ADR 1183 round 2 (strict_read_role places the rerun's strict read only; returned_cleanup_rerun_reached refuses any call but a primitive accessor's)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-effect-cleanup-flush-rerun-memo-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-flush-rerun-signal-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-memo-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-signal-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-store-as-cast-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-store-dstr-empty-items-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-store-dstr-empty-sibling-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-store-dstr-empty-sub-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-store-dstr-object-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-store-dstr-quoted-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-store-dstr-then-first-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-store-link-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-store-named-called-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-store-named-same-called-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-store-non-null-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-store-projection-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-store-satisfies-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-flush-rerun-memo-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-flush-rerun-signal-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-memo-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-signal-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-store-as-cast-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-store-dstr-empty-items-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-store-dstr-empty-sibling-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-store-dstr-empty-sub-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-store-dstr-object-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-store-dstr-quoted-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-store-dstr-then-first-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-store-link-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-store-named-called-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-store-named-same-called-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-store-non-null-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-store-projection-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-store-satisfies-wrapper-none"
+  ],
+  "rediscovered": "focus.mjs --grids mx-recall -- --ids (cleanup contexts, layer none): round 1 (55426e2bc, d90b5d4bf on 0751069bf) 34 false-clean; round 2 (308f8fbdb) 0, those programs recall-gap as on main"
  }
 ]

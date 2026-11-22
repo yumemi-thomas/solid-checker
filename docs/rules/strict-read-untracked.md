@@ -232,7 +232,10 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   has no execution role; a read there is reported as
   **uncertifiable**, never dropped. A read past the strict-read window (after
   an unconditional `await`) or in several non-reporting roles (ADR 0323) is
-  proven silent.
+  proven silent. A component prop read in an anonymous literal inside a named
+  local function, whether handed to a project helper (ADR 1103) or called where
+  it is written as an IIFE (ADR 1184), is uncertifiable: no summary carries it
+  to the named function's calls.
 - **A rendered function's body is a component body, however else it is
   called.** `const P2 = Plain; <P2 />` renders `Plain` as `<Plain />` would,
   so a body read in `Plain` is a violation even beside a tracked `{Plain()}`
@@ -372,7 +375,10 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   outside it (ADR 0539). A compute with no call, no reference and a literal
   return never reruns, and a read written in its cleanup's own body is silent:
   only the effect's disposal runs it, as an `onCleanup` callback, unless project
-  code may dispose an owner on a stack of its own (ADR 0695, ADR 1167). A read in an exact bundle's
+  code may dispose an owner on a stack of its own (ADR 0695, ADR 1167).
+  A read in the cleanup is a violation where a click a user can reach writes a
+  new value to the signal the compute reads: the rerun calls the cleanup in the
+  apply's window with the owner alive (ADR 1183). A read in an exact bundle's
   `error` member is silent: rc.17 and rc.21 run it before the effect's window
   opens (ADR 0540), a `createReaction` bundle's too (ADR 0548). It runs in
   the window of the stack that drains the queue, so a read written directly

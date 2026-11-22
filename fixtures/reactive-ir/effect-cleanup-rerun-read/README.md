@@ -5,3 +5,5 @@ ADR 0539: full-7 (2026-11-01) certified clean 3,828 rc.17 SC1001 warnings in the
 ApplyRead's read in the apply itself stays a violation. NeverReruns stays silent (since ADR 1167 also for SC1001, which was uncertifiable): a compute with no call, no reference and a literal return tracks nothing, so only a disposal calls the cleanup. TrackedCleanup is unmoved (a tracked effect calls its cleanup inside its compute, tracking; it keeps an earlier obligation). UntrackedCleanup is silent. ShadowedEffect's project function named like the primitive takes none of this (its findings are the pre-existing escape obligations).
 
 The stub reduces the published rc.17 declarations. The complete source also type-checks against published solid-js rc.17 with strict ES2022 settings. Package bytes are not copied here.
+
+ADR 1183: `EffectRerun` and `RenderRerun` are violations (Chrome rc.21 `runtime-oracle/effect-cleanup-rerun-read`: STRICT_READ_UNTRACKED after the click): the click writes a new value to the signal the compute reads, a write a user can reach, so the rerun runs the cleanup in the window with the owner alive. The other shapes keep their obligations.
