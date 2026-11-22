@@ -1,0 +1,42 @@
+declare namespace JSX {
+  interface IntrinsicElements { div: {}; button: { onClick?: (event: MouseEvent) => void } }
+}
+
+declare module "solid-js" {
+  // `@solidjs/signals@2.0.0-rc.21` `dist/types/signals.d.ts:552`, `:587`, `:605` (UntilOptions reduced to `timeout`), `:642`.
+  export function resolve<T>(fn: () => T): Promise<T>;
+  export type Truthy<T> = Exclude<T, false | 0 | 0n | "" | null | undefined>;
+  export interface UntilOptions { timeout?: number }
+  export function until<T>(fn: () => T, options?: UntilOptions): Promise<Truthy<T>>;
+  export type Store<T> = T;
+  export type StoreSetter<T> = (fn: (draft: T) => T | void) => void;
+  export function createStore<T extends object>(value: T, options?: { shallow?: boolean }): [Store<T>, StoreSetter<T>];
+  // The setter takes an updater, as `@solidjs/signals`' `Setter<T>` does.
+  export function createSignal<T>(value: T): [() => T, (value: T | ((prev: T) => T)) => T];
+  export function createMemo<T>(compute: () => T): () => T;
+  export function createRoot<T>(compute: () => T): T;
+  // Byte-faithful to `@solidjs/signals@2.0.0-rc.0`'s
+  // `createTrackedEffect(compute: () => void | (() => void), options?)`.
+  export function createTrackedEffect(callback: () => void | (() => void)): void;
+  // Byte-faithful to `@solidjs/signals@2.0.0-rc.0`'s
+  // `EffectFunction<Prev, Next extends Prev = Prev> = (v: Next, p?: Prev) => (() => void) | void`
+  // and `onSettled(callback: () => void | (() => void))`. Do not loosen these:
+  // a stub that returns `unknown` manufactures cleanup-return defects no real
+  // project can produce, which is how the removed SC3004/SC9002 pair survived
+  // for a full cycle (fixtures/tsc-oracle/README.md).
+  export function createEffect<T>(
+    compute: () => T,
+    apply: (value: T, previous?: T) => (() => void) | void,
+  ): void;
+  // The same shape as `createEffect`'s (`@solidjs/signals@2.0.0-rc.0`
+  // `createRenderEffect(compute, effect, value?, options?)`).
+  export function createRenderEffect<T>(
+    compute: () => T,
+    apply: (value: T, previous?: T) => (() => void) | void,
+  ): void;
+  export function onSettled(callback: () => void | (() => void)): void;
+  export function onCleanup(callback: () => void): void;
+  export function flush(): void;
+  // `@solidjs/signals@2.0.0-rc.21` core.d.ts:204.
+  export function untrack<T>(fn: () => T, strictReadLabel?: string | false): T;
+}

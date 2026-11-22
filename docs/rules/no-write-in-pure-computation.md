@@ -367,6 +367,8 @@ ADR 1155 (a): a write in a function literal handed, as the whole argument, to a 
 owner's callback slot (`hand(fn) { createTrackedEffect(() => { fn(); }); }`: ADR 0200's exact forwarding, a project function or a package read as source) runs
 only in that leaf callback, which rc.21's write guard exempts as it does the leaf's own literal: it is legal. Forwarded to a memo's compute it keeps its
 violation; any other forwarding keeps the row it had (fixture `forwarded-leaf-write`, patterns `ctxmemo/s11-hand-direct`).
+The wrapper must be the function the call runs exactly (ADR 1179): a `let` written later, a call's result or a replaced member forwards
+nothing, and the write keeps an uncertifiable row (generator contexts `barm-fwdwrap-let`, `barm-fwdwrap-factory`).
 
 ## Why is this bad?
 

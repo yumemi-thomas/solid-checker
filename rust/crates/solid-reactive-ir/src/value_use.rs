@@ -2669,6 +2669,68 @@ impl<'l, 'a> Census<'l, 'a> {
         }
     }
 
+    /// ADR 1181 (G6 step 3): whether `call` is a carrier [`crate::local_access::array_callback_parameter`] accepts and every
+    /// reference of its callback's parameter, but its declaration, is the object of a member Get a row stands on (a read row at
+    /// that exact member), never a call's callee or an assignment's target: the parameter is the root, and its only uses are
+    /// those rows.
+    fn carried_parameter_rowed(&self, file: &FileFacts, call: &solid_facts::ast::CallFact) -> bool {
+        let ast = &file.ast;
+        let Some(callback) = call
+            .arguments
+            .first()
+            .filter(|argument| !argument.spread)
+            .and_then(|argument| ast.function_at(ast.peel_ts_sugar_span(argument.span)))
+        else {
+            return false;
+        };
+        let Some(declaration) = callback
+            .parameters
+            .first()
+            .and_then(|parameter| parameter.names.first())
+            .map(|name| name.span)
+        else {
+            return false;
+        };
+        if !crate::local_access::array_callback_parameter(file, declaration, self.lookup)
+            .is_some_and(|(carrier, _)| carrier == call.span)
+        {
+            return false;
+        }
+        let Some(symbol) = self.lookup.entities().at(file.path.as_str(), declaration) else {
+            return false;
+        };
+        let Some(references) = self.lookup.symbol_references_if_present(symbol.as_str()) else {
+            return false;
+        };
+        let rows = self.rows.get(file.path.as_str());
+        references.iter().all(|reference| {
+            if reference.path.as_ref() != file.path.as_str() {
+                return false;
+            }
+            let (Ok(start), Ok(end)) = (
+                u32::try_from(reference.start_byte),
+                u32::try_from(reference.end_byte),
+            ) else {
+                return false;
+            };
+            let at = Span::new(start, end);
+            if at == declaration {
+                return true;
+            }
+            ast.members.iter().any(|member| {
+                ast.peel_ts_sugar_span(member.object) == at
+                    && !ast.is_no_get_target(member.span)
+                    && ast.calls_with_peeled_callee(member.span).next().is_none()
+                    && rows.is_some_and(|rows| {
+                        rows.iter().any(|(row_start, row_end)| {
+                            *row_start == u64::from(member.span.start)
+                                && *row_end >= u64::from(member.span.end)
+                        })
+                    })
+            })
+        })
+    }
+
     fn member(&mut self, file: &'a FileFacts, at: Span, member: usize, mode: Mode) -> Position {
         let ast = &file.ast;
         let member = &ast.members[member];
@@ -2741,6 +2803,16 @@ impl<'l, 'a> Census<'l, 'a> {
                 // ADR 1109: a root (a store, props) a standard method hands to an inline callback's parameter
                 // (`[store].map((s) => s.v)`, `[store].map(({ v }) => v)`): the handed net follows a value a caller
                 // supplied, not a root, so the callback's reads of it would have no row.
+                // ADR 1181 (G6 step 3): the carrier hands the root to its callback's parameter, whose every use is a Get the
+                // read rows stand on (`array_callback_parameter`): the parameter is the root, and its rows answer for it.
+                if matches!(mode, Mode::RootHolder(_))
+                    && ast
+                        .calls_with_peeled_callee(member.span)
+                        .next()
+                        .is_some_and(|call| self.carried_parameter_rowed(file, call))
+                {
+                    return Position::Followed;
+                }
                 if matches!(mode, Mode::RootHolder(_))
                     && ast.calls_with_peeled_callee(member.span).any(|call| {
                         self.lookup
