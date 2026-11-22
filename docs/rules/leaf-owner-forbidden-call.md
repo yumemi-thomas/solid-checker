@@ -45,7 +45,11 @@ callback a project helper calls in its own body (`run(() => createMemo(…))`,
 through further such helpers, not in a parameter list or after an `await`):
 it runs during the helper call, so an operation written in it is reported
 where it is written (ADR 0492). A helper that defers, stores or hands on its
-callback is not followed. A tagged template's tag (``f`x` ``) is followed as
+callback is not followed. A literal a project function forwards only into a leaf callback
+(`hand(fn) { createTrackedEffect(() => { fn(); }); }`, ADR 0200's proof with no
+`arguments[k]()` and no `onSettled`) runs on that callback's stack: an operation
+written directly in its body, neither it nor the callback `async` or a
+generator, is reported where it is written (ADR 1155 r4). A tagged template's tag (``f`x` ``) is followed as
 a call of `f`, resolved through its declaration (ADR 0538).
 `(function* () { … })().next()` runs its first step in place, as an IIFE; U
 where a `yield` may stop it first (ADR 0929).
@@ -145,7 +149,7 @@ discards runs none of the body, and a generator with no call in its body has not
 
 A parameter initializer a leaf callback's call runs (a default, a destructuring default, an IIFE or closure in one, a
 constructor's) is covered by the withholding rows of the call (`leaf-callback-opaque`, `value-as-parameter-default`), as a
-function the walk cannot follow is; a `new` call's row stands at its `new` token, where V8 places the frame (ADR 0961).
+function the walk cannot follow is; a `new` call's row stands at its `new` token, where V8 places the frame (ADR 0961). A direct call with no spread that omits the argument runs a default that is a whole call on its own stack, and the walk walks it as a body call (ADR 1180): a violation when nothing earlier in the list may throw. A passed argument, which may be `undefined`, keeps the row.
 
 A site no execution reaches is uncertifiable (ADR 0458). Not yet: a site in a
 tracked-effect body whose every creation is inside an owned leaf body, where

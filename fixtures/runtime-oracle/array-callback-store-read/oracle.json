@@ -1,0 +1,1 @@
+{ "note": "ADR 1181: x.v through the parameter of [s].map/forEach/find in the body: STRICT_READ_UNTRACKED, SC1001 violations; in a memo quiet. Two elements, a written parameter and a listed array keep their old answer." }

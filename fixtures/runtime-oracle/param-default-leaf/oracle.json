@@ -1,0 +1,43 @@
+{
+  "note": "ADR 1180: a call that omits the argument runs the parameter's default in a tracked effect's callback. Chrome throws FLUSH_IN_TRACKED_QUEUE_CALLBACK at each default (7 for valued, 9 for drains, 12 for the namespace, 85 for the method, 59 for ordered, whose earlier default returned), and the checker proves SC3001 at the call that omits the argument (17, 24, 31). A thrown error reaches the feedback report with its site and no frames (the oracle's `thrown` rows), so the call is a frame the oracle does not see: the violations are ledgered `attribution`, the default sites `open`. A createMemo and an onCleanup default warn with frames: covered-violation at their calls (112, 119). Passed (valued(1)), spread, undefined-argument and method calls, and the earlier calling default, stay uncertifiable; the shadowed flush is clean. The checker's fixture is reactive-ir/param-default-leaf.",
+  "open": [
+    {
+      "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
+      "site": "App.tsx:7",
+      "reason": "thrown at valued's default; covered by the SC3001 violations at the calls (17) and the uncertifiable spread and undefined calls, frames a thrown error does not carry"
+    },
+    {
+      "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
+      "site": "App.tsx:9",
+      "reason": "thrown in drains, helped's default; covered by the SC3001 violation at the call (24), a frame a thrown error does not carry"
+    },
+    {
+      "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
+      "site": "App.tsx:12",
+      "reason": "thrown at the namespace default; covered by the SC3001 violation at the call (31), a frame a thrown error does not carry"
+    },
+    {
+      "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
+      "site": "App.tsx:59",
+      "reason": "thrown at ordered's second default (first() returned); covered by the SC3001 uncertifiable at the call (63), a frame a thrown error does not carry"
+    },
+    {
+      "finding": "leaf-owner-forbidden-call App.tsx:17",
+      "kind": "attribution",
+      "reason": "Chrome throws at the default valued() runs; the thrown error carries no frames, so this call is not seen",
+      "owner": "Mac 26"
+    },
+    {
+      "finding": "leaf-owner-forbidden-call App.tsx:24",
+      "kind": "attribution",
+      "reason": "Chrome throws at the default helped() runs; the thrown error carries no frames, so this call is not seen",
+      "owner": "Mac 26"
+    },
+    {
+      "finding": "leaf-owner-forbidden-call App.tsx:31",
+      "kind": "attribution",
+      "reason": "Chrome throws at the default spaced() runs; the thrown error carries no frames, so this call is not seen",
+      "owner": "Mac 26"
+    }
+  ]
+}

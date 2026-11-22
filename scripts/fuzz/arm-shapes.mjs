@@ -40,6 +40,10 @@
 //     barm-fwdleaf-memo     misuse  `handMemo` runs it in `createMemo`'s compute: REACTIVE_WRITE_IN_OWNED_SCOPE
 //     barm-fwdleaf-args     misuse  `handArgs`, called in a `createMemo`, runs it in `createTrackedEffect` and again through `arguments[0]()` in the memo
 //                                   (the review of 1155, F1: ADR 0200's proof refuses a wrapper that reads `arguments`)
+//   a wrapper ADR 0200's forwarding cannot name exactly (ADR 1179)   the site is in `w(() => { <site> })`, where the name `w` first holds, or is
+//                           made from, a function that runs its parameter in `createMemo`'s compute, but the function the call runs never calls it
+//     barm-fwdwrap-let      legal   `let w = (fn) => { createMemo(() => { fn(); … }); }; w = (fn) => { void fn; };` (main: SC2001 at the write)
+//     barm-fwdwrap-factory  legal   `const w = drop((fn) => { createMemo(() => { fn(); … }); })`, `drop` returning `(fn) => { void fn; }` (main: SC2001)
 //
 // Recall contexts only, base shapes (misuse.mjs BASE_ONLY_CONTEXTS): the question is the host's run, not the spelling at the site.
 import { awaitStmt, button, contain, ctl, expr, flowEl, fn, iife, domExpr, mounted } from "./model.mjs";
@@ -53,6 +57,7 @@ export const ARM_CONTEXTS = {
   "barm-strpatch-eval": "misuse", "barm-strpatch-newfn": "misuse", "barm-strpatch-none": "legal",
   "barm-ctxstore-memo": "misuse", "barm-ctxstore-handler": "legal", "barm-ctxstore-alias": "misuse",
   "barm-fwdleaf-tracked": "legal", "barm-fwdleaf-memo": "misuse", "barm-fwdleaf-args": "misuse",
+  "barm-fwdwrap-let": "legal", "barm-fwdwrap-factory": "legal",
 };
 export const ARM_CONTEXT_NAMES = Object.keys(ARM_CONTEXTS);
 
@@ -61,7 +66,8 @@ export const ARM_CODES = {
   STRICT_READ_UNTRACKED: ["barm-gen-spread", "barm-gen-handler", "barm-gen-never", "barm-climb-sync", "barm-climb-await", "barm-carried-body", "barm-carried-handler",
     "barm-strpatch-eval", "barm-strpatch-newfn", "barm-strpatch-none"],
   REACTIVE_WRITE_IN_OWNED_SCOPE: ["barm-gen-spread", "barm-gen-handler", "barm-gen-never", "barm-gen-drain", "barm-gen-await",
-    "barm-ctxstore-memo", "barm-ctxstore-handler", "barm-ctxstore-alias", "barm-fwdleaf-tracked", "barm-fwdleaf-memo", "barm-fwdleaf-args"],
+    "barm-ctxstore-memo", "barm-ctxstore-handler", "barm-ctxstore-alias", "barm-fwdleaf-tracked", "barm-fwdleaf-memo", "barm-fwdleaf-args",
+    "barm-fwdwrap-let", "barm-fwdwrap-factory"],
   ACTION_CALLED_IN_OWNED_SCOPE: ["barm-gen-spread", "barm-gen-handler", "barm-gen-never", "barm-gen-drain", "barm-gen-await"],
 };
 
@@ -141,6 +147,20 @@ const fwdLeaf = (stmts, callee, inMemo = false) => ({
   importLines: [`import { ${callee} } from "${FWD_PACKAGE}";`],
 });
 
+/**
+ * ADR 1179: the forwarded-wrapper pair. The name `w` the call runs first holds (`let`, reassigned) or is made from (a factory's argument) a
+ * function that runs its parameter in `createMemo`'s compute; the function the call runs never calls the literal, so the site never runs.
+ */
+const fwdWrap = (kit, stmts, form) => {
+  const w = kit.name("w");
+  const d = kit.name("d");
+  const memoWrapper = "(fn: () => void) => { createMemo(() => { fn(); return 0; }); }";
+  const head = form === "let"
+    ? `let ${w} = ${memoWrapper};\n${w} = (fn: () => void) => { void fn; };\n${w}(() => `
+    : `function ${d}(_inner: (fn: () => void) => void) { return (fn: () => void) => { void fn; }; }\nconst ${w} = ${d}(${memoWrapper});\n${w}(() => `;
+  return { body: [contain("frame", 0, stmts, { head, close: ");", imports: ["createMemo"] })], view: [] };
+};
+
 /** The placement of `stmts` for a `barm-*` context (`{ body, view }`), or undefined for any other. */
 export function armContext(context, stmts, kit) {
   if (!ARM_CONTEXTS[context]) return undefined;
@@ -169,6 +189,8 @@ export function armContext(context, stmts, kit) {
     case "barm-fwdleaf-tracked": return fwdLeaf(stmts, "hand");
     case "barm-fwdleaf-memo": return fwdLeaf(stmts, "handMemo");
     case "barm-fwdleaf-args": return fwdLeaf(stmts, "handArgs", true);
+    case "barm-fwdwrap-let": return fwdWrap(kit, stmts, "let");
+    case "barm-fwdwrap-factory": return fwdWrap(kit, stmts, "factory");
     default: return undefined;
   }
 }

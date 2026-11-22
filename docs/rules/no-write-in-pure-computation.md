@@ -339,6 +339,12 @@ So is a write or `refresh` in a function no call edge reaches but that may
 run (a method, constructor, instance field, getter, `toString`, iterator, `Map`
 slot, or a helper one of those calls; ADR 0721); directly in a tag the body
 runs it is a violation. Module initialization is silent.
+`refresh(props.name)` (or a never-written destructured `name`) whose every caller
+passes one exact refreshable source is that source's write, placed by the call's
+role: a violation in a memo or an effect compute ([ADR 1174](../decisions.md#adr-1174),
+`fixtures/reactive-ir/refresh-prop-target`); a target the caller census does not
+resolve (two sources, a spread caller, a written prop, a `merge`/`omit` view, a
+context member) stays uncertifiable (ADR 0509).
 So is a write in a `createRoot` body, or in a component rendered only there,
 when the root call or the render is written in an effect apply or a leaf
 callback: rc.17 refuses the creation before the body runs (ADR 0475,
@@ -361,6 +367,8 @@ ADR 1155 (a): a write in a function literal handed, as the whole argument, to a 
 owner's callback slot (`hand(fn) { createTrackedEffect(() => { fn(); }); }`: ADR 0200's exact forwarding, a project function or a package read as source) runs
 only in that leaf callback, which rc.21's write guard exempts as it does the leaf's own literal: it is legal. Forwarded to a memo's compute it keeps its
 violation; any other forwarding keeps the row it had (fixture `forwarded-leaf-write`, patterns `ctxmemo/s11-hand-direct`).
+The wrapper must be the function the call runs exactly (ADR 1179): a `let` written later, a call's result or a replaced member forwards
+nothing, and the write keeps an uncertifiable row (generator contexts `barm-fwdwrap-let`, `barm-fwdwrap-factory`).
 
 ## Why is this bad?
 

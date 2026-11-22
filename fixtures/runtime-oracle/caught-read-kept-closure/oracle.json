@@ -1,0 +1,1 @@
+{ "note": "ADR 1176: a caught async-memo read in a local closure a memo or an effect compute calls in place: CAUGHT_REACTIVE_READ, SC5008 violations. A closure that also reads outside its try, or holds a nested function, stays uncertifiable." }

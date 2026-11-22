@@ -1966,6 +1966,7 @@ fn handed_container_write(
         container_root::HandedRoot::Store {
             symbol,
             root: store_root,
+            below,
         } => {
             let mut sink_open = sink.may_not_write;
             if sink.delete {
@@ -1980,6 +1981,8 @@ fn handed_container_write(
             else {
                 return true;
             };
+            // ADR 1169: a root that is an alias of a link is past the store's root whatever the chain.
+            let past_root = past_root || below > 0;
             // ADR 1172: the store's own literal, named by its symbol, proves the links past the handed root.
             let past_root = past_root
                 && !handed_links_wrappable(file, context, &symbol, sink.member, store_root);
@@ -2051,7 +2054,97 @@ fn handed_links_wrappable(
     else {
         return false;
     };
-    links_wrappable_in(file, member, ast.peel_ts_sugar_span(store_root), initial)
+    let store_root = ast.peel_ts_sugar_span(store_root);
+    // ADR 1169: a root that is an exact `const` alias of a link (`const held = s1.a`) starts at that link's literal.
+    if let Some(sub) = link_alias_literal(file, store_root, Span::new(start, end), initial, 4) {
+        let Some(path) = static_path(file, member, store_root) else {
+            return false;
+        };
+        return match path.as_slice() {
+            // A write to the alias's own property: the link is the literal's object, wrapped. A call is no write here.
+            [_] => ast.calls_with_peeled_callee(member).next().is_none(),
+            _ => links_wrappable_in(file, member, store_root, sub),
+        };
+    }
+    links_wrappable_in(file, member, store_root, initial)
+}
+
+/// ADR 1169: for a reference `alias` to an exact `const` alias of a link of a function-local store (`const held = s1.a`), the alias's
+/// initializer chain (`s1.a`) when ADR 0491's proof holds for the store and its literal holds an object literal there
+/// ([`link_alias_literal`]): the alias is that link's proxy, wrapped, so a Get through it (`held.v`) is the store's Get `s1.a.v`.
+/// `local_access` reads it to place such a Get as SC1001's member read.
+pub(crate) fn exact_link_alias_chain(
+    file: &FileFacts,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    entities: &crate::EntitySymbols,
+    source_primitives: &crate::HashMap<crate::SymbolId, crate::SymbolId>,
+    alias: Span,
+) -> Option<Span> {
+    let ast = &file.ast;
+    let declaration = ast.reference_declaration(alias)?;
+    let binding = ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding.names.len() == 1
+            && binding.names[0].span == declaration
+    })?;
+    let chain = ast.peel_ts_sugar_span(binding.initializer?);
+    ast.member_at(chain)?;
+    let root = ast.peel_ts_sugar_span(member_root(file, chain)?);
+    let store_declaration = ast.reference_declaration(root)?;
+    let create_store = |symbol: &crate::SymbolId| {
+        source_primitives
+            .get(symbol)
+            .is_some_and(|primitive| primitive.as_str() == "createStore")
+    };
+    let initial = store_literal_proof(
+        file,
+        lookup,
+        entities,
+        &create_store,
+        store_declaration,
+        false,
+    )?;
+    link_alias_literal(file, alias, store_declaration, initial, 1)?;
+    Some(chain)
+}
+
+/// ADR 1169: the closed object literal an exact `const` alias of a link of the store holds (`const held = s1.a`, or an alias of such an
+/// alias, to `depth`): the alias is an immutable identifier binding of one name whose whole initializer is a static, non-optional member
+/// chain rooted at the store's own binding (`store_declaration`) or at another such alias, and the store's literal `initial` holds an
+/// object literal at that chain's keys. `None` for anything else.
+fn link_alias_literal(
+    file: &FileFacts,
+    alias: Span,
+    store_declaration: Span,
+    initial: Span,
+    depth: usize,
+) -> Option<Span> {
+    let ast = &file.ast;
+    if depth == 0 {
+        return None;
+    }
+    let declaration = ast.reference_declaration(alias)?;
+    let binding = ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding.names.len() == 1
+            && binding.names[0].span == declaration
+    })?;
+    let chain = ast.peel_ts_sugar_span(binding.initializer?);
+    ast.member_at(chain)?;
+    let root = member_root(file, chain)?;
+    let root = ast.peel_ts_sugar_span(root);
+    let path = static_path(file, chain, root)?;
+    let base = if ast.reference_declaration(root) == Some(store_declaration) {
+        initial
+    } else {
+        link_alias_literal(file, root, store_declaration, initial, depth - 1)?
+    };
+    match resolve_literal_path(file, base, &path)? {
+        LiteralValue::Object(object) => Some(object),
+        _ => None,
+    }
 }
 
 /// ADR 0790: the source a write's chain root names, only when the root,
@@ -4921,6 +5014,32 @@ fn store_literal_untouched_at(
     root_declaration: Span,
     module_scope: bool,
 ) -> Option<Span> {
+    let create_store = |symbol: &crate::SymbolId| {
+        context
+            .source_primitives
+            .get(symbol)
+            .is_some_and(|primitive| primitive.as_str() == "createStore")
+    };
+    store_literal_proof(
+        file,
+        context.lookup,
+        context.entities,
+        &create_store,
+        root_declaration,
+        module_scope,
+    )
+}
+
+/// [`store_literal_untouched_at`] on the inputs it reads (ADR 1169: `local_access` asks it too): the lookup, the entity table and
+/// whether a symbol is a store `createStore` made (`create_store`).
+fn store_literal_proof(
+    file: &FileFacts,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    entities: &crate::EntitySymbols,
+    create_store: &dyn Fn(&crate::SymbolId) -> bool,
+    root_declaration: Span,
+    module_scope: bool,
+) -> Option<Span> {
     let ast = &file.ast;
     if crate::interproc::property_gets::direct_eval_in(file, Span::new(0, u32::MAX)) {
         return None;
@@ -4970,16 +5089,15 @@ fn store_literal_untouched_at(
     {
         return None;
     }
-    let primitive = context
-        .entities
+    let created = entities
         .at(file.path.as_str(), slot(0).expect("slot 0").span)
-        .and_then(|symbol| context.source_primitives.get(symbol));
+        .is_some_and(create_store);
     let call = store.call_initializer.and_then(|call| ast.call_at(call))?;
     let [argument] = call.arguments.as_slice() else {
         return None;
     };
     let initial = ast.peel_ts_sugar_span(argument.span);
-    if primitive.is_none_or(|primitive| primitive.as_str() != "createStore")
+    if !created
         || ast.peel_ts_sugar_span(store.initializer.unwrap_or(call.span)) != call.span
         || closed_literal(ast, initial).is_none()
     {
@@ -4997,7 +5115,7 @@ fn store_literal_untouched_at(
             && !ast.identifiers.iter().all(|identifier| {
                 identifier.role != solid_facts::ast::IdentifierRole::Reference
                     || ast.reference_declaration(identifier.span) != Some(setter.span)
-                    || handed_component_prop(file, context, identifier.span).is_some_and(
+                    || handed_component_prop(file, lookup, identifier.span).is_some_and(
                         |(component, prop)| {
                             component_prop_reads(file, component, prop)
                                 .is_some_and(|reads| reads.is_empty())
@@ -5067,7 +5185,8 @@ fn store_literal_untouched_at(
         }
         if !contained_store_use(file, identifier.span, initial)
             && !consumed_by_alias_slots(file, identifier.span, &names, initial)
-            && !handed_to_contained_prop(file, context, identifier.span, initial)
+            && !handed_to_contained_prop(file, lookup, identifier.span, initial)
+            && !link_alias_contained(file, identifier.span, initial, 4)
         {
             return None;
         }
@@ -5438,12 +5557,61 @@ fn static_path(file: &FileFacts, member: Span, root: Span) -> Option<Vec<Span>> 
     Some(path)
 }
 
+/// ADR 1169: the store reference `reference` is the root of a static, non-optional member chain that is the whole initializer of an
+/// immutable identifier binding of one name (`const held = s1.a`), the literal holds an object literal at that chain's keys, and every
+/// reference to the alias is itself a contained use of that object ([`contained_store_use`]) or the initializer of another such
+/// alias, to `depth`: the link's proxy goes nowhere else.
+fn link_alias_contained(file: &FileFacts, reference: Span, initial: Span, depth: usize) -> bool {
+    let ast = &file.ast;
+    if depth == 0 {
+        return false;
+    }
+    let mut top = reference;
+    while let Some(parent) = ast.members.iter().find(|parent| {
+        ast.peel_ts_sugar_span(parent.object) == top
+            && ast.computed_members.binary_search(&parent.span).is_err()
+            && ast.optional_members.binary_search(&parent.span).is_err()
+    }) {
+        top = parent.span;
+    }
+    if top == reference {
+        return false;
+    }
+    let Some(binding) = ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding.names.len() == 1
+            && binding
+                .initializer
+                .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == top)
+    }) else {
+        return false;
+    };
+    let Some(path) = static_path(file, top, reference) else {
+        return false;
+    };
+    let Some(LiteralValue::Object(object)) = resolve_literal_path(file, initial, &path) else {
+        return false;
+    };
+    let name = binding.names[0].span;
+    ast.identifiers
+        .iter()
+        .filter(|identifier| {
+            identifier.role == solid_facts::ast::IdentifierRole::Reference
+                && ast.reference_declaration(identifier.span) == Some(name)
+        })
+        .all(|identifier| {
+            contained_store_use(file, identifier.span, object)
+                || link_alias_contained(file, identifier.span, object, depth - 1)
+        })
+}
+
 /// ADR 1172: the exact component and prop name a store or setter reference is handed to: `reference` is the whole expression of a
 /// plain attribute (`s1={s1}`) of a JSX element whose tag resolves to a function of this file. A member tag, a namespaced attribute and
 /// an intrinsic element hand nothing to a component this can read.
 fn handed_component_prop<'f>(
     file: &'f FileFacts,
-    context: &UpstreamCompatContext<'_>,
+    lookup: &crate::indexes::SemanticLookup<'_>,
     reference: Span,
 ) -> Option<(&'f solid_facts::ast::FunctionFact, &'f str)> {
     let ast = &file.ast;
@@ -5463,9 +5631,7 @@ fn handed_component_prop<'f>(
     if element.member_object.is_some() {
         return None;
     }
-    let (target, function) = context
-        .lookup
-        .function_called_at(file.path.as_str(), element.name.span)?;
+    let (target, function) = lookup.function_called_at(file.path.as_str(), element.name.span)?;
     if target.path != file.path {
         return None;
     }
@@ -5548,11 +5714,11 @@ fn component_prop_reads(
 /// ([`component_prop_reads`]) is itself a contained use of the store ([`contained_store_use`]): the proxy goes nowhere else.
 fn handed_to_contained_prop(
     file: &FileFacts,
-    context: &UpstreamCompatContext<'_>,
+    lookup: &crate::indexes::SemanticLookup<'_>,
     reference: Span,
     initial: Span,
 ) -> bool {
-    handed_component_prop(file, context, reference).is_some_and(|(component, prop)| {
+    handed_component_prop(file, lookup, reference).is_some_and(|(component, prop)| {
         component_prop_reads(file, component, prop).is_some_and(|reads| {
             const_alias_reads(file, reads).is_some_and(|reads| {
                 reads

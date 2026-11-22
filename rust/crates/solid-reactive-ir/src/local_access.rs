@@ -2599,6 +2599,50 @@ impl LocalAccessContext<'_, '_> {
                 self.discover_member(file, &member, &allowed, &mut result, &mut slot_seen);
             }
         }
+        // ADR 1169: a Get through an exact `const` alias of a store link (`const held = s1.a; held.v`), the alias proven to hold that
+        // link's wrapped proxy (ADR 0491's proof, `exact_link_alias_chain`), is the store's Get `s1.a.v` at the alias's member: placed
+        // as any other member read.
+        for member in &file.ast.members {
+            let object = file.ast.peel_ts_sugar_span(member.object);
+            if file
+                .ast
+                .computed_members
+                .binary_search(&member.span)
+                .is_ok()
+                || file
+                    .ast
+                    .optional_members
+                    .binary_search(&member.span)
+                    .is_ok()
+                || !file.ast.identifiers.iter().any(|identifier| {
+                    identifier.span == object
+                        && identifier.role == solid_facts::ast::IdentifierRole::Reference
+                })
+            {
+                continue;
+            }
+            let Some(chain) = crate::upstream_compat::exact_link_alias_chain(
+                file,
+                self.lookup,
+                self.entities,
+                self.source_primitives,
+                object,
+            ) else {
+                continue;
+            };
+            // The store's own identifier is the receiver (a store path's Get is found from its head); the Get's key is the
+            // alias member's own.
+            let Some(head) = crate::upstream_compat::member_root_span(file, chain) else {
+                continue;
+            };
+            let synthetic = solid_facts::ast::MemberFact {
+                span: member.span,
+                object: head,
+                property: member.property,
+            };
+            let mut alias_seen = HashSet::default();
+            self.discover_member(file, &synthetic, &allowed, &mut result, &mut alias_seen);
+        }
         self.discover_spreads(file, &allowed, &mut result);
         self.discover_whole_store_reads(file, &allowed, &mut result);
         self.discover_caught_reads(file, &allowed, &mut result);
@@ -5536,6 +5580,76 @@ impl LocalAccessContext<'_, '_> {
     /// read of a pending source, on its stack, and every other read that might
     /// throw sits in a `try` that keeps it: an uncaught throw leaves the pass,
     /// which then never completes with a value.
+    /// ADR 1176: whether `call` calls a `const`-bound arrow or function expression of this file, neither `async` nor a
+    /// generator, written in the computation's own file, with no nested function, whose every identifier that names an
+    /// accessor that may throw and every call that may reach an async source lies in a block `keeps` accepts (a `try`
+    /// whose handler does not rethrow). Such a call reads nothing outside a kept block, so it is no other throw of the pass.
+    fn call_of_kept_closure(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        keeps: &dyn Fn(solid_facts::core::Span) -> bool,
+    ) -> bool {
+        if call.construct || !call.arguments.is_empty() {
+            return false;
+        }
+        let callee = file.ast.peel_ts_sugar_span(call.callee);
+        let Some(declaration) = file.ast.reference_declaration(callee) else {
+            return false;
+        };
+        let Some(binding) = file.ast.bindings.iter().find(|binding| {
+            binding.immutable
+                && binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding
+                    .names
+                    .first()
+                    .is_some_and(|name| name.span == declaration)
+        }) else {
+            return false;
+        };
+        let Some(closure) = binding.initializer.and_then(|initializer| {
+            file.ast
+                .function_at(file.ast.peel_ts_sugar_span(initializer))
+        }) else {
+            return false;
+        };
+        if closure.r#async
+            || closure.generator
+            || crate::indexes::binding_written(file, declaration)
+            || file
+                .ast
+                .functions
+                .iter()
+                .any(|nested| nested.span != closure.span && closure.span.contains(nested.span))
+        {
+            return false;
+        }
+        file.ast.identifiers.iter().all(|identifier| {
+            !closure.span.contains(identifier.span)
+                || keeps(identifier.span)
+                || file.ast.reference_declaration(identifier.span).is_none()
+                || crate::source_discovery::reference_symbol(
+                    file,
+                    identifier.span,
+                    self.entities,
+                    self.lookup,
+                )
+                .is_some_and(|other| {
+                    !self.accessors.contains_key(&other) || self.caught_read_silent(&other)
+                })
+        }) && file.ast.calls.iter().all(|inner| {
+            !closure.span.contains(inner.span)
+                || keeps(inner.span)
+                || !(crate::execution_role::hook_result_root(file, inner.callee, self.lookup)
+                    .is_some()
+                    || (!self
+                        .lookup
+                        .callee_symbol(file, inner.callee)
+                        .is_some_and(|symbol| self.accessors.contains_key(symbol))
+                        && self.value_reaches_async_source(file, inner.callee).may()))
+        })
+    }
+
     fn caught_read_proven(
         &self,
         file: &solid_facts::FileFacts,
@@ -5582,6 +5696,9 @@ impl LocalAccessContext<'_, '_> {
                     && file.ast.calls.iter().all(|call| {
                         !compute.body.contains(call.span)
                             || keeps(call.span)
+                            // ADR 1176: a call of a local closure whose every read that may throw is kept by a `try` (the
+                            // closure written around the read: `const f = () => { try { a(); } catch {} }; f();`).
+                            || self.call_of_kept_closure(file, call, &keeps)
                             || !(crate::execution_role::hook_result_root(
                                 file,
                                 call.callee,
@@ -6797,6 +6914,8 @@ impl LocalAccessContext<'_, '_> {
         let (name, declaration) = accessor;
         let timing_at = placed_at.unwrap_or(call.span);
         let origin = self.accessor_origins.get(symbol);
+        // ADR 1166 r2: a strict read's role may come from a reporting run of its named callback.
+        let execution = self.strict_read(file, call.span, execution);
         let display_name = call.static_callee(&file.source).unwrap_or(name);
         result.reads.push(Arc::new(ReactiveRead {
             withdrawn_slot: false,
@@ -6828,7 +6947,12 @@ impl LocalAccessContext<'_, '_> {
             host_callback_timing: host_callback_timing(file, timing_at, execution, self.lookup),
             project_consumer_non_strict: false,
             callback_invocation_unproven: false,
-            callee_callback_timing: callee_callback_timing(file, timing_at, execution, self.lookup),
+            callee_callback_timing: crate::execution_role::strict_read_callee_timing(
+                file,
+                timing_at,
+                execution,
+                self.lookup,
+            ),
         }));
         if counts_as_strict_read_root(file, call.span, execution, self.lookup) {
             result.strict_read_obligations += 1;
@@ -7874,6 +7998,25 @@ impl LocalAccessContext<'_, '_> {
         }
     }
 
+    /// ADR 1181: the store a callback parameter holds ([`array_callback_parameter`]): the element the carrier hands it names a
+    /// store source. Anything else is `None`, and the read keeps its own resolution.
+    fn array_callback_store(
+        &self,
+        file: &solid_facts::FileFacts,
+        receiver: solid_facts::core::Span,
+    ) -> Option<SymbolId> {
+        let declaration = file.ast.reference_declaration(receiver)?;
+        let (_, element) = array_callback_parameter(file, declaration, self.lookup)?;
+        let store = self
+            .entities
+            .get(&location(file.path.shared(), element))
+            .cloned()
+            .or_else(|| {
+                crate::source_discovery::reference_symbol(file, element, self.entities, self.lookup)
+            })?;
+        (self.source_kinds.get(&store) == Some(&ReactiveSourceKind::Store)).then_some(store)
+    }
+
     fn discover_member(
         &self,
         file: &solid_facts::FileFacts,
@@ -8008,8 +8151,14 @@ impl LocalAccessContext<'_, '_> {
             .and_then(|alias| self.entities.at(file.path.as_str(), alias.source).cloned());
         // The alias fact is exact, so it comes before the entity at the
         // member (the property's own symbol, no source).
-        let Some(symbol) = member_alias_symbol
+        // ADR 1181: the parameter of an inline callback the standard `map`/`forEach`/… of a one-element array literal holding a store
+        // runs with that element is the store: its Get is the store's.
+        let carried_store = receiver_is_identifier
+            .then(|| self.array_callback_store(file, receiver))
+            .flatten();
+        let Some(symbol) = carried_store
             .as_ref()
+            .or(member_alias_symbol.as_ref())
             .or(inline_root.as_ref())
             .or(self.entities.get(&object))
             .or(binder_symbol.as_ref())
@@ -8017,6 +8166,8 @@ impl LocalAccessContext<'_, '_> {
             return;
         };
         // ADR 0463: as for a call, an alias mention before its declarator.
+        // ADR 1166 r2: the role below came from a reporting run, which places the strict read only.
+        let mut reporting_run = false;
         let mut execution = if self.lookup.local_alias_mention_withheld(file, object_span) {
             ExecutionRole::Unknown
         } else {
@@ -8161,7 +8312,18 @@ impl LocalAccessContext<'_, '_> {
                         )
                     },
                 );
-                execution = ExecutionRole::Unknown;
+                // ADR 1166: unless a run of the named callback around the read provably executes it where it reports: the strict
+                // read's role only (r2); the async row below keeps the read unplaced.
+                execution = crate::execution_role::strict_read_role(
+                    file,
+                    member.span,
+                    ExecutionRole::Unknown,
+                    allowed,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                );
+                reporting_run = execution != ExecutionRole::Unknown;
             }
         }
         // ADR 0294: a Get of a typed store candidate. `Store<T>` is `T`,
@@ -8459,7 +8621,11 @@ impl LocalAccessContext<'_, '_> {
             file.source_text(member.property).unwrap_or_default(),
             symbol,
             (name, declaration),
-            execution,
+            if reporting_run {
+                ExecutionRole::Unknown
+            } else {
+                execution
+            },
             result,
         );
     }
@@ -8470,6 +8636,28 @@ impl LocalAccessContext<'_, '_> {
     /// tuple creation returned as it is is no returned source, ADR 0628), and an array slot 0 (`const [st] = …`) is the store.
     /// The primitive is the symbol's, or the creation's when the symbol carries the creation's declaration (an effect's store
     /// parameter). A tuple primitive's store whose declaration is neither of those shapes is taken as the tuple: undecided.
+    /// ADR 1166 r2: [`crate::execution_role::strict_read_role`] at `span`, for a strict-read row only.
+    fn strict_read(
+        &self,
+        file: &solid_facts::FileFacts,
+        span: solid_facts::core::Span,
+        execution: ExecutionRole,
+    ) -> ExecutionRole {
+        if execution != ExecutionRole::Unknown {
+            return execution;
+        }
+        let allowed = crate::execution_role::allowed_callback_spans(file, self.lookup);
+        crate::execution_role::strict_read_role(
+            file,
+            span,
+            execution,
+            &allowed,
+            self.entities,
+            self.symbol_names,
+            self.lookup,
+        )
+    }
+
     fn store_tuple_held_whole(&self, symbol: &SymbolId, declaration: &Location) -> bool {
         let dialect = self.lookup.dialect;
         let tuple_primitive = |primitive: solid_dialect::Primitive| {
@@ -8543,12 +8731,16 @@ impl LocalAccessContext<'_, '_> {
         (execution, uncertain, prop_head): (ExecutionRole, bool, bool),
         placed_at: Option<solid_facts::core::Span>,
     ) -> ReactiveRead {
+        // ADR 1166 r2: a strict read's role may come from a reporting run of its named callback.
+        let execution = self.strict_read(file, member.span, execution);
         // ADR 0531: the timing of a read a carrier places is the carrier's.
         // ADR 0676: a read in a setter's callback runs when the setter does.
         let timing_at = placed_at
             .or_else(|| self.running_setter_call(file, member.span))
             .unwrap_or(member.span);
-        let accessor = if prop_head {
+        // ADR 1169: a Get through a store link's alias stands for the store's path but is written as `held.v`: name it as written.
+        let through_alias = !member.span.contains(member.object);
+        let accessor = if prop_head || through_alias {
             // Name the Get we proved, including brackets/optional syntax,
             // rather than a suffix's property or an invented dotted key.
             file.source_text(member.span)
@@ -8594,7 +8786,12 @@ impl LocalAccessContext<'_, '_> {
             host_callback_timing: host_callback_timing(file, timing_at, execution, self.lookup),
             project_consumer_non_strict: false,
             callback_invocation_unproven: false,
-            callee_callback_timing: callee_callback_timing(file, timing_at, execution, self.lookup),
+            callee_callback_timing: crate::execution_role::strict_read_callee_timing(
+                file,
+                timing_at,
+                execution,
+                self.lookup,
+            ),
         }
     }
 
@@ -8828,6 +9025,8 @@ impl LocalAccessContext<'_, '_> {
                     PropUse::Unknown => uncertain = true,
                 }
             }
+            // ADR 1166 r2: a strict read's role may come from a reporting run of its named callback.
+            let execution = self.strict_read(file, spread.span, execution);
             result.reads.push(Arc::new(ReactiveRead {
                 withdrawn_slot: false,
                 pending_open: false,
@@ -8857,7 +9056,7 @@ impl LocalAccessContext<'_, '_> {
                 ),
                 project_consumer_non_strict: false,
                 callback_invocation_unproven: false,
-                callee_callback_timing: callee_callback_timing(
+                callee_callback_timing: crate::execution_role::strict_read_callee_timing(
                     file,
                     spread.span,
                     execution,
@@ -9084,6 +9283,8 @@ impl LocalAccessContext<'_, '_> {
                     .unwrap_or(ExecutionRole::Unknown),
             };
         }
+        // ADR 1166 r2: a strict read's role may come from a reporting run of its named callback.
+        let execution = self.strict_read(file, span, execution);
         result.reads.push(Arc::new(ReactiveRead {
             withdrawn_slot: false,
             pending_open: false,
@@ -9108,7 +9309,12 @@ impl LocalAccessContext<'_, '_> {
             host_callback_timing: host_callback_timing(file, span, execution, self.lookup),
             project_consumer_non_strict: false,
             callback_invocation_unproven: false,
-            callee_callback_timing: callee_callback_timing(file, span, execution, self.lookup),
+            callee_callback_timing: crate::execution_role::strict_read_callee_timing(
+                file,
+                span,
+                execution,
+                self.lookup,
+            ),
         }));
         if counts_as_strict_read_root(file, span, execution, self.lookup) {
             result.strict_read_obligations += 1;
@@ -9266,6 +9472,8 @@ impl LocalAccessContext<'_, '_> {
                 Some((symbol, (name, declaration)))
                     if self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store) =>
                 {
+                    // ADR 1166 r2: a strict read's role may come from a reporting run of its named callback.
+                    let execution = self.strict_read(file, call.span, execution);
                     let call_location = location(file.path.shared(), call.span);
                     result.reads.push(Arc::new(ReactiveRead {
                         withdrawn_slot: false,
@@ -9293,7 +9501,7 @@ impl LocalAccessContext<'_, '_> {
                         ),
                         project_consumer_non_strict: false,
                         callback_invocation_unproven: false,
-                        callee_callback_timing: callee_callback_timing(
+                        callee_callback_timing: crate::execution_role::strict_read_callee_timing(
                             file,
                             call.span,
                             execution,
@@ -12237,4 +12445,81 @@ pub(crate) fn computation_layer_call(
             lookup,
         ))
     .then_some(climb.at)
+}
+
+/// ADR 1181: the carrier call and the element it hands the parameter declared at `declaration`, when that is the first
+/// parameter (a plain identifier, no default, never written) of an inline arrow or function expression, neither `async` nor a
+/// generator, that is the whole first argument of a call of the default library's `Array.prototype` `map`, `forEach`,
+/// `filter`, `some`, `every` or `find` (Type Facts, no impostor or patch veto, ADR 0840) whose receiver is an array literal of
+/// exactly one element, a plain identifier reference, with no spread or hole: the standard method calls the callback with that
+/// element, so the parameter holds it. Returns the call's span and the element's.
+pub(crate) fn array_callback_parameter(
+    file: &solid_facts::FileFacts,
+    declaration: solid_facts::core::Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<(solid_facts::core::Span, solid_facts::core::Span)> {
+    let ast = &file.ast;
+    let callback = ast.functions.iter().find(|function| {
+        function.parameters.first().is_some_and(|parameter| {
+            parameter.shape == solid_facts::ast::BindingShape::Identifier
+                && parameter.initializer.is_none()
+                && parameter
+                    .names
+                    .first()
+                    .is_some_and(|name| name.span == declaration)
+        })
+    })?;
+    if callback.r#async
+        || callback.generator
+        || callback.method_name.is_some()
+        || crate::indexes::binding_written(file, declaration)
+    {
+        return None;
+    }
+    let call = ast.calls.iter().find(|call| {
+        !call.construct
+            && call.arguments.first().is_some_and(|argument| {
+                !argument.spread && ast.peel_ts_sugar_span(argument.span) == callback.span
+            })
+    })?;
+    let member = ast.member_at(ast.peel_ts_sugar_span(call.callee))?;
+    let literal_span = ast.peel_ts_sugar_span(member.object);
+    let literal = ast
+        .array_literal_elements
+        .iter()
+        .find(|literal| literal.span == literal_span)?;
+    let [element] = literal.elements.as_slice() else {
+        return None;
+    };
+    if element.kind != solid_facts::ast::ArrayElementKind::Value {
+        return None;
+    }
+    let element_span = ast.peel_ts_sugar_span(element.span);
+    if !ast.identifiers.iter().any(|identifier| {
+        identifier.span == element_span
+            && identifier.role == solid_facts::ast::IdentifierRole::Reference
+    }) {
+        return None;
+    }
+    let declared = crate::indexes::standard_library_declaration_of(
+        lookup.resolved_callee_call(file, call.callee),
+        typefacts::CallKind::Call,
+    )?;
+    let carrier = matches!(
+        declared.qualified_name.as_ref(),
+        "Array.map"
+            | "ReadonlyArray.map"
+            | "Array.forEach"
+            | "ReadonlyArray.forEach"
+            | "Array.filter"
+            | "ReadonlyArray.filter"
+            | "Array.some"
+            | "ReadonlyArray.some"
+            | "Array.every"
+            | "ReadonlyArray.every"
+            | "Array.find"
+            | "ReadonlyArray.find"
+    );
+    (carrier && !lookup.standard_call_withheld(file, call.callee))
+        .then_some((call.span, element_span))
 }

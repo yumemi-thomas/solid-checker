@@ -1,0 +1,80 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "caught-reactive-read",
+      "code": "SC5008",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/caught-read-kept-closure/App.tsx",
+      "start": 453,
+      "end": 457,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-options-opaque",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/caught-read-kept-closure/App.tsx",
+      "start": 526,
+      "end": 530,
+      "fixes": 0
+    },
+    {
+      "rule": "caught-reactive-read",
+      "code": "SC5008",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/caught-read-kept-closure/App.tsx",
+      "start": 744,
+      "end": 748,
+      "fixes": 0
+    },
+    {
+      "rule": "caught-reactive-read",
+      "code": "SC5008",
+      "kind": "uncertifiable",
+      "blocker": "caught-read-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/caught-read-kept-closure/App.tsx",
+      "start": 1120,
+      "end": 1124,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-options-opaque",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/caught-read-kept-closure/App.tsx",
+      "start": 1193,
+      "end": 1197,
+      "fixes": 0
+    },
+    {
+      "rule": "caught-reactive-read",
+      "code": "SC5008",
+      "kind": "uncertifiable",
+      "blocker": "caught-read-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/caught-read-kept-closure/App.tsx",
+      "start": 1433,
+      "end": 1437,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "async-options-opaque",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/caught-read-kept-closure/App.tsx",
+      "start": 1522,
+      "end": 1526,
+      "fixes": 0
+    }
+  ]
+}

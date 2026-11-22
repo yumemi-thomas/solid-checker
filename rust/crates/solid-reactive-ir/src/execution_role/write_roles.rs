@@ -3749,11 +3749,11 @@ fn foreach_carried_accepted() -> bool {
 }
 
 /// ADR 1124 (the Fable review of ADR 1119, "Proposed rule"): the call that runs the function `reference` names, when `reference` is
-/// a whole element of a spread-free array literal that is the direct receiver of the standard `Array.prototype.forEach` (Type Facts,
-/// no impostor veto), whose first argument is an inline arrow, not async and not a generator, with one plain parameter, no default,
+/// a whole element of a spread-free array literal that is the direct receiver of the standard `Array.prototype.forEach` (ADR 1166: or
+/// `map`, which runs every element on the same stack the same way; Type Facts, no impostor veto), whose first argument is an inline arrow, not async and not a generator, with one plain parameter, no default,
 /// that is never written and whose every reference is the callee of a plain call written in the arrow's own body: the arrow then runs
 /// the function on the `forEach` call's stack, synchronously, as `cb()` written there would. Returns the `forEach` call's span (the
-/// place the run is classified at); `None` for anything else (`map`, a non-literal receiver, a spread, a parameter passed on, stored,
+/// place the run is classified at); `None` for anything else (`filter` or another method, a non-literal receiver, a spread, a parameter passed on, stored,
 /// written or called in a nested function, a second parameter that could reach the array).
 pub(crate) fn foreach_carried_call(
     file: &solid_facts::FileFacts,
@@ -3786,7 +3786,7 @@ pub(crate) fn foreach_carried_call(
     )?;
     if !matches!(
         declaration.qualified_name.as_ref(),
-        "Array.forEach" | "ReadonlyArray.forEach"
+        "Array.forEach" | "ReadonlyArray.forEach" | "Array.map" | "ReadonlyArray.map"
     ) || lookup.standard_call_withheld(file, call.callee)
     {
         return None;

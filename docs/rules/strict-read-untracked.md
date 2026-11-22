@@ -84,8 +84,12 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   a position, a resolved call or a `const` alias accounted the same way; any other
   (`[cb].forEach((g) => g())`, a global store, a returned object) leaves the read
   uncertifiable (ADR 1119). A whole element of a spread-free array literal the standard
-  `forEach` runs through an only-called parameter is a call there, read as `cb()`
-  written at the `forEach` (ADR 1124).
+  `forEach` or `map` runs through an only-called parameter is a call there, read as `cb()`
+  written at the call (ADR 1124, 1166). A read in the body of a `const`-bound callback
+  is a violation, whatever its other entries, where a direct call or such a carrier
+  runs it in the declaring function after the declarator, on every completion, at a
+  reporting position; outside the body's rendering only with no call before the run,
+  since a creation in an effect's apply throws first (ADR 1166).
 - **Plain assignment targets are writes, not reads.** `store.name = next` is
   diagnosed by `no-store-mutation-outside-setter` without also reporting `store.name` here.
   Only the member that *is* the written target is exempt: read-modify-write
@@ -323,7 +327,11 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   `count()` is, for an accessor, a memo, an async memo and a store. A mention
   that may run before the alias's declarator throws there and is
   uncertifiable. A `let`, conditional, parameter, imported or exported alias is
-  not followed.
+  not followed. A `const` alias of a store link (`const held = s1.a`) is the
+  link where ADR 0491's literal proof holds for the store: `held.v` is reported
+  as `s1.a.v` is. Any other Get through a held link or a prop's alias has an
+  SC9012 `value-held-in-binding` row ([ADR 1169](../decisions.md#adr-1169),
+  [ADR 1172](../decisions.md#adr-1172) part 1).
 - **A read in JSX a callback writes is tracked where the compiler tracks it (ADR 0470).**
   `createRoot(() => <div>{r()}</div>)`, an attribute, a component prop or
   child in a `createRoot`, `runWithOwner`, `untrack` or handler callback:
@@ -467,7 +475,7 @@ explicit one-time snapshot; it does not make the prop reactive.
 - **Props views.** `omit(props, …)` always builds a view: `omitTraps` in `@solidjs/signals@2.0.0-rc.13` (`dist/dev.js`) returns true from `set` and `deleteProperty`. `merge(...)` returns its one non-falsy source, so it is a view only with no spread argument and an argument that is syntactically never falsy (an object or function literal, or a call that is itself a view). `@solidjs/web`'s `spread` and `ssrElement` only read the object. An element that spreads the props among several sources is a view only when another source is provably never falsy: a non-`ref` attribute, a rendering child, or a member spread (a bare identifier may be `undefined`). A `children` attribute beside a raw child, and a member spread carrying `/*@static*/`, count as no such source, in the native lowering and in `@solidjs/babel-plugin` alike. The view premise needs `Proxy`, since without it `merge` can return its last source.
 - **Getter arity.** The rc.13 accessor is `read.bind(null, node)` over `function read(el)` (`dist/dev.js` `accessor`, `dist/prod/signals.js` `accessor`). `solid-js`'s client wrappers return it unchanged, and its server builds return arrows with no parameter. Probed on the dev and prod client builds: `length` 0 and `typeof` `"function"`. The walk folds `p.length` against a numeric literal (`===`, `!==`, `==`, `!=`, `<`, `<=`, `>`, `>=`), and `typeof p`, or a `p.length` that only feeds a test, is no escape, so a branch that cannot run for the arguments is proven absent. A hoisted function declaration's body runs whenever it is called, so an earlier `return` leaves it possible rather than unreachable. A binding declared in a file with a direct `eval` is refused, and a binding the module exports proves no length.
 - **Not decided.** A read through another helper hop, an array of accessors (`accessArray`), and a read after an `await` (always an obligation).
-- **A helper's call in a `try`** ([ADR 1109](../decisions.md#adr-1109)). A helper's call of its parameter after a statement that may throw, in a `try` whose `catch` completes normally, is not on every completion of the helper: the callback's read is uncertifiable. A store handed through a standard inline callback's parameter (`[store].map((s) => s.v)`) is an SC9012 `value-in-carrier` row, and a callback a carrier provably never runs (a `const` holding `[]` only iterations read, a one-element `sort`) is uncertifiable.
+- **A helper's call in a `try`** ([ADR 1109](../decisions.md#adr-1109)). A helper's call of its parameter after a statement that may throw, in a `try` whose `catch` completes normally, is not on every completion of the helper: the callback's read is uncertifiable. A store handed through a standard inline callback's parameter (`[store].map((s) => s.v)`) is the store there: `s.v` gets the row `store.v` written there gets ([ADR 1181](../decisions.md#adr-1181): an exact default-library `map`, `forEach`, `filter`, `some`, `every` or `find` on a one-element literal, a plain never-written parameter), and the census's SC9012 `value-in-carrier` row is gone where every use of the parameter is such a Get; any other form (a destructured parameter, two elements, a listed array) keeps the SC9012 row, and a callback a carrier provably never runs (a `const` holding `[]` only iterations read, a one-element `sort`) is uncertifiable.
 
 This rule is a member of the `reactivity` group key ([ADR 0428](../decisions.md#adr-0428)): `reactivity` in `rule-options.json` or a disable comment reaches it, and `strict-read-untracked` alone overrides the group.
 

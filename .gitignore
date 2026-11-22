@@ -885,6 +885,10 @@ packages/wasm/owned/
 !fixtures/reactive-ir/undecided-flush-closure/node_modules/**
 !fixtures/reactive-ir/flush-write-path/node_modules/
 !fixtures/reactive-ir/flush-write-path/node_modules/**
+!fixtures/reactive-ir/store-link-alias-write/node_modules/
+!fixtures/reactive-ir/store-link-alias-write/node_modules/**
+!fixtures/reactive-ir/store-link-alias-get/node_modules/
+!fixtures/reactive-ir/store-link-alias-get/node_modules/**
 !fixtures/reactive-ir/prop-alias-link-get/node_modules/
 !fixtures/reactive-ir/prop-alias-link-get/node_modules/**
 !fixtures/reactive-ir/store-write-through-prop/node_modules/
@@ -2294,3 +2298,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/named-ref-entry/node_modules/**
 !fixtures/reactive-ir/component-prop-call-owner/node_modules/
 !fixtures/reactive-ir/component-prop-call-owner/node_modules/**
+!fixtures/reactive-ir/param-default-leaf/node_modules/
+!fixtures/reactive-ir/param-default-leaf/node_modules/**
