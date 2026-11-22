@@ -11,7 +11,7 @@
   "SC1001 component-identity-unproven": 136,
   "SC1001 creation-throws-first": 3,
   "SC1001 escaped-name-unresolved": 19,
-  "SC1001 function-run-unplaced": 1781,
+  "SC1001 function-run-unplaced": 1774,
   "SC1001 function-unentered": 1,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
@@ -19,10 +19,11 @@
   "SC1001 no-hydration-subtree": 2,
   "SC1001 package-finding-at-entry": 141,
   "SC1001 package-value-read": 182,
-  "SC1001 read-backing-unproven": 413,
+  "SC1001 read-backing-unproven": 418,
   "SC1001 store-handed-to-package": 1,
   "SC1001 strict-read-unaccounted": 18,
   "SC1001 summary-read-unplaced": 96,
+  "SC1001 unreached-dead-code": 1,
   "SC1001 write-path-read-unproven": 13,
   "SC1002 field-initializer-unplaced": 3,
   "SC1002 function-run-unplaced": 87,
@@ -92,12 +93,12 @@
   "SC2004 async-slot-unmodelled": 4,
   "SC2004 component-identity-unproven": 1,
   "SC2004 computation-error-unobserved": 26,
-  "SC2004 function-run-unplaced": 21,
+  "SC2004 function-run-unplaced": 22,
   "SC2004 package-finding-at-entry": 1,
   "SC2004 search-depth-limit": 1,
   "SC2005 async-slot-unmodelled": 2,
   "SC2005 computation-error-unobserved": 6,
-  "SC2005 function-run-unplaced": 6,
+  "SC2005 function-run-unplaced": 7,
   "SC2006 flush-in-action-unaccounted": 479,
   "SC2006 function-run-unplaced": 45,
   "SC2006 package-finding-at-entry": 1,
@@ -115,7 +116,7 @@
   "SC2008 handler-dispatch-unproven": 168,
   "SC2008 package-finding-at-entry": 9,
   "SC2008 package-operation-in-effect-apply": 1,
-  "SC2008 parameter-initializer-unplaced": 11,
+  "SC2008 parameter-initializer-unplaced": 16,
   "SC2008 primitive-alias-call": 2,
   "SC2008 refused-creation-unrun": 1,
   "SC2008 search-depth-limit": 3,
@@ -125,11 +126,11 @@
   "SC3001 computation-error-unobserved": 13,
   "SC3001 creation-throws-first": 1,
   "SC3001 field-initializer-unplaced": 5,
-  "SC3001 function-run-unplaced": 42,
+  "SC3001 function-run-unplaced": 43,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 7,
-  "SC3001 leaf-operation-unaccounted": 7122,
-  "SC3001 leaf-owner-unproven": 67,
+  "SC3001 leaf-operation-unaccounted": 7157,
+  "SC3001 leaf-owner-unproven": 68,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
   "SC3002 function-unentered": 2,
@@ -144,7 +145,7 @@
   "SC4001 handler-on-disabled-control": 7,
   "SC4001 handler-spread-unresolved": 84,
   "SC4001 owner-allocation-unproven": 24,
-  "SC4001 owner-callers-unenumerated": 3638,
+  "SC4001 owner-callers-unenumerated": 3656,
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 5,
@@ -205,13 +206,13 @@
   "SC5008 pending-read-unresolved": 24,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5492,
+  "SC6002 effect-creation-unaccounted": 5527,
   "SC6002 effect-owner-unproven": 54,
   "SC6002 function-run-unplaced": 64,
   "SC6002 generator-step-unplaced": 1,
   "SC6002 package-finding-at-entry": 27,
   "SC6002 package-operation-in-effect-apply": 1,
-  "SC6002 parameter-initializer-unplaced": 3,
+  "SC6002 parameter-initializer-unplaced": 4,
   "SC6002 primitive-alias-call": 3,
   "SC6002 search-depth-limit": 2,
   "SC7001 creation-throws-first": 1,
@@ -260,7 +261,7 @@
   "SC9012 handed-read-after-await": 12,
   "SC9012 import-unresolved": 50,
   "SC9012 installed-member": 137,
-  "SC9012 leaf-callback-opaque": 262,
+  "SC9012 leaf-callback-opaque": 266,
   "SC9012 listener-reach": 128,
   "SC9012 package-callee": 28,
   "SC9012 package-finding-at-entry": 232,
@@ -285,7 +286,7 @@
   "SC9012 store-key-undecided": 16,
   "SC9012 tuple-iteration-written": 1503,
   "SC9012 type-only-source": 98,
-  "SC9012 value-as-parameter-default": 9,
+  "SC9012 value-as-parameter-default": 10,
   "SC9012 value-bound-held": 6,
   "SC9012 value-escaped-from-untrack": 8,
   "SC9012 value-exported-unnamed": 6,
@@ -6049,6 +6050,99 @@
    "fixtures": {
     "proved": "reactive-ir/callback-runs-1109",
     "open": "reactive-ir/callback-runs-1109"
+   }
+  },
+  {
+   "fixture": "reactive-ir/accessor-provenance",
+   "key": "SC1001 function-run-unplaced",
+   "from": 17,
+   "to": 16,
+   "adr": "ADR 1166",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/named_callbacks.rs::reporting_run_role",
+   "fixtures": {
+    "proved": "reactive-ir/accessor-provenance",
+    "open": "reactive-ir/accessor-provenance"
+   }
+  },
+  {
+   "fixture": "reactive-ir/destructure-store-slots",
+   "key": "SC1003 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1166",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/named_callbacks.rs::reporting_run_role",
+   "fixtures": {
+    "proved": "reactive-ir/destructure-store-slots",
+    "open": "reactive-ir/named-callback-reporting-run"
+   }
+  },
+  {
+   "fixture": "reactive-ir/effect-compute-also-called",
+   "key": "SC1001 function-run-unplaced",
+   "from": 3,
+   "to": 2,
+   "adr": "ADR 1166",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/named_callbacks.rs::reporting_run_role",
+   "fixtures": {
+    "proved": "reactive-ir/effect-compute-also-called",
+    "open": "reactive-ir/effect-compute-also-called"
+   }
+  },
+  {
+   "fixture": "reactive-ir/foreach-carrier",
+   "key": "SC1001 function-run-unplaced",
+   "from": 17,
+   "to": 13,
+   "adr": "ADR 1166",
+   "kind": "relabel",
+   "relabeledTo": "SC1001 read-backing-unproven"
+  },
+  {
+   "fixture": "reactive-ir/named-callback-escaped-entry",
+   "key": "SC1001 function-run-unplaced",
+   "from": 8,
+   "to": 5,
+   "adr": "ADR 1166",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/named_callbacks.rs::reporting_run_role",
+   "fixtures": {
+    "proved": "reactive-ir/named-callback-escaped-entry",
+    "open": "reactive-ir/named-callback-escaped-entry"
+   }
+  },
+  {
+   "fixture": "reactive-ir/named-fn-expr-calls",
+   "key": "SC1001 function-run-unplaced",
+   "from": 3,
+   "to": 1,
+   "adr": "ADR 1166",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/named_callbacks.rs::reporting_run_role",
+   "fixtures": {
+    "proved": "reactive-ir/named-fn-expr-calls",
+    "open": "reactive-ir/named-fn-expr-calls"
+   }
+  },
+  {
+   "fixture": "reactive-ir/construct-only-class",
+   "key": "SC1001 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1166",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role.rs::strict_read_role",
+   "fixtures": {
+    "proved": "reactive-ir/construct-only-class",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/named-callback-escaped-entry",
+   "key": "SC1001 function-run-unplaced",
+   "from": 8,
+   "to": 2,
+   "adr": "ADR 1166",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role.rs::strict_read_role",
+   "fixtures": {
+    "proved": "reactive-ir/named-callback-escaped-entry",
+    "open": "reactive-ir/named-callback-escaped-entry"
    }
   }
  ],
