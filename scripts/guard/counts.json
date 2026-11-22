@@ -11,7 +11,7 @@
   "SC1001 component-identity-unproven": 136,
   "SC1001 creation-throws-first": 3,
   "SC1001 escaped-name-unresolved": 19,
-  "SC1001 function-run-unplaced": 1776,
+  "SC1001 function-run-unplaced": 1773,
   "SC1001 function-unentered": 1,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
@@ -6297,6 +6297,18 @@
     "open": "reactive-ir/forwarded-wrapper-values"
    },
    "note": "WrapLet and ViaWrap: SC5003 violations again (Chrome ASYNC_OUTSIDE_LOADING_BOUNDARY)."
+  },
+  {
+   "fixture": "reactive-ir/iife-prop-read",
+   "key": "SC1001 function-run-unplaced",
+   "from": 3,
+   "to": 0,
+   "adr": "ADR 1187",
+   "proof": "rust/crates/solid-reactive-ir/src/local_access.rs::component_prop_helper",
+   "fixtures": {
+    "proved": "reactive-ir/iife-prop-read",
+    "open": "engine/eslint-reactivity-v2"
+   }
   }
  ],
  "renames": []
