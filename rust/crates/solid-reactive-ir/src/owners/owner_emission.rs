@@ -472,16 +472,18 @@ pub(super) fn emit_file(
         // at the outermost call of in-place layers (the climb's premises of `climbed_after_await`).
         let counted_later_pass = |site: Span| {
             (crate::execution_role::in_counted_loop_later_pass(file, site) && !probes_owner(site))
-                || crate::execution_role::climb_in_place_layers(file, site, lookup).is_some_and(|climb| {
-                    climb.at != site
-                        && !climb.bound()
-                        && climb.in_list.is_none()
-                        && !crate::execution_role::climb_crosses_library_callback(
-                            file, site, climb.at, lookup,
-                        )
-                        && !probes_owner(climb.at)
-                        && crate::execution_role::in_counted_loop_later_pass(file, climb.at)
-                })
+                || crate::execution_role::climb_in_place_layers(file, site, lookup).is_some_and(
+                    |climb| {
+                        climb.at != site
+                            && !climb.bound()
+                            && climb.in_list.is_none()
+                            && !crate::execution_role::climb_crosses_library_callback(
+                                file, site, climb.at, lookup,
+                            )
+                            && !probes_owner(climb.at)
+                            && crate::execution_role::in_counted_loop_later_pass(file, climb.at)
+                    },
+                )
         };
         let for_await_body = |site: Span| {
             (crate::execution_role::in_for_await_body_that_runs(file, site, lookup)

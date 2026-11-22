@@ -542,7 +542,8 @@ pub(crate) fn in_counted_loop_later_pass(file: &solid_facts::FileFacts, span: Sp
             && counted_loop_head(file, *statement).is_some_and(|head| {
                 let body = Span::new(head.end, statement.end);
                 let declaration = head.counter;
-                let counter_read = |reference: Span| ast.reference_declaration(reference) == Some(declaration);
+                let counter_read =
+                    |reference: Span| ast.reference_declaration(reference) == Some(declaration);
                 let declared = ast.bindings.iter().any(|binding| {
                     binding.runtime_let && binding.names.iter().any(|name| name.span == declaration)
                 });
@@ -561,10 +562,14 @@ pub(crate) fn in_counted_loop_later_pass(file: &solid_facts::FileFacts, span: Sp
                 let guarded = ast.if_regions.iter().any(|region| {
                     body.contains(region.test)
                         && region.consequent.contains(span)
-                        && greater_than_zero_test(file, region.test)
-                            .is_some_and(|counter| counter_read(counter))
+                        && greater_than_zero_test(file, region.test).is_some_and(counter_read)
                 });
-                declared && only_update_writes && block_body && awaits_every_pass && no_jump && guarded
+                declared
+                    && only_update_writes
+                    && block_body
+                    && awaits_every_pass
+                    && no_jump
+                    && guarded
             })
     })
 }
@@ -653,19 +658,26 @@ struct HeadScan<'t> {
 impl HeadScan<'_> {
     fn skip_whitespace(&mut self) {
         let rest = &self.text[self.at..];
-        self.at += rest.len() - rest.trim_start_matches(|c: char| c.is_ascii_whitespace()).len();
+        self.at += rest.len()
+            - rest
+                .trim_start_matches(|c: char| c.is_ascii_whitespace())
+                .len();
     }
 
     fn punct(&mut self, token: &str) -> Option<()> {
         self.skip_whitespace();
-        self.text[self.at..].starts_with(token).then(|| self.at += token.len())
+        self.text[self.at..]
+            .starts_with(token)
+            .then(|| self.at += token.len())
     }
 
     /// A keyword: `token`, not followed by an identifier character.
     fn word(&mut self, token: &str) -> Option<()> {
         let start = self.at;
         self.punct(token)?;
-        if self.text[self.at..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_' || c == '$') {
+        if self.text[self.at..]
+            .starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_' || c == '$')
+        {
             self.at = start;
             return None;
         }
@@ -680,7 +692,10 @@ impl HeadScan<'_> {
             .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '$'))
             .unwrap_or(rest.len());
         let word = &rest[..length];
-        if word.is_empty() || word.starts_with(|c: char| c.is_ascii_digit()) || matches!(word, "let" | "for" | "of" | "in") {
+        if word.is_empty()
+            || word.starts_with(|c: char| c.is_ascii_digit())
+            || matches!(word, "let" | "for" | "of" | "in")
+        {
             return None;
         }
         let start = self.at;
@@ -691,8 +706,13 @@ impl HeadScan<'_> {
     fn digits(&mut self) -> Option<&str> {
         self.skip_whitespace();
         let rest = &self.text[self.at..];
-        let length = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
-        if length == 0 || rest[length..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_' || c == '.') {
+        let length = rest
+            .find(|c: char| !c.is_ascii_digit())
+            .unwrap_or(rest.len());
+        if length == 0
+            || rest[length..]
+                .starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_' || c == '.')
+        {
             return None;
         }
         let start = self.at;
