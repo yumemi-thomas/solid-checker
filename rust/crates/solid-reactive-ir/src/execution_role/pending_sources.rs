@@ -109,17 +109,25 @@ pub(crate) fn inert_creation(
                     && memo_compute_is_literal(file, call)
             }
             Some(Primitive::CreateSignal) => {
-                literal_arguments(1)
-                    && (named
-                        || (binding.shape == BindingShape::Array
-                            && lookup.array_iteration_intact()
-                            && file
-                                .source_text(binding.pattern)
-                                .is_some_and(|pattern| !pattern.contains('='))))
+                literal_arguments(1) && (named || plain_tuple_pattern(file, binding, lookup))
             }
             Some(Primitive::CreateContext) => named && literal_arguments(1),
             _ => false,
         }
+}
+
+/// ADR 0510 (shared by ADR 1175): an array pattern over a primitive's returned tuple (an array literal) runs no project code: the
+/// array iterator is intact (ADR 0349) and no slot has a default.
+pub(crate) fn plain_tuple_pattern(
+    file: &solid_facts::FileFacts,
+    binding: &BindingFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    binding.shape == BindingShape::Array
+        && lookup.array_iteration_intact()
+        && file
+            .source_text(binding.pattern)
+            .is_some_and(|pattern| !pattern.contains('='))
 }
 
 /// ADR 0510: evaluating the module runs nothing but [`inert_creation`]s: at

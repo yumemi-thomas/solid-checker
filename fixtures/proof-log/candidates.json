@@ -106,6 +106,12 @@
       "why": "an optimistic setter call whose REACTIVE_WRITE_IN_OWNED_SCOPE code was ended before only by SC2009's row: SC2001 `write-unaccounted` now stands beside the violation (no false clean); the proof is the optimistic setter's own write guard",
       "at": "fixtures/reactive-ir/optimistic-write-site-code/App.tsx:10:3"
     },
+    "reactive-ir/optimistic-apply-before-load-render|fixtures/reactive-ir/optimistic-apply-before-load-render/App.tsx|411-458|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "ADR 1175: an optimistic setter in a render effect's first apply, whose REACTIVE_WRITE_IN_OWNED_SCOPE code is ended only by SC2009's violation (the setter's guard throws OPTIMISTIC_WRITE_BEFORE_LOAD first); SC2001 `write-unaccounted` stands beside it (no false clean), as at optimistic-write-site-code",
+      "at": "fixtures/reactive-ir/optimistic-apply-before-load-render/App.tsx:10:7",
+      "adr": "ADR 1175"
+    },
     "reactive-ir/own-setter-wrapper-identity|fixtures/reactive-ir/own-setter-wrapper-identity/App.tsx|1267-1329|C3/no-decision": {
       "owner": "proof-log phase B (tag the producing return)",
       "why": "a silent write row whose role no tagged arm answered (no-decision)",
