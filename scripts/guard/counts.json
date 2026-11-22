@@ -5,7 +5,7 @@
   "SC1001 binding-before-initialization": 7,
   "SC1001 build-constant-arm": 3,
   "SC1001 callback-invocation-unproven": 3,
-  "SC1001 callee-callback-timing": 445,
+  "SC1001 callee-callback-timing": 446,
   "SC1001 client-root-unproven": 1,
   "SC1001 compiler-refused-file": 1,
   "SC1001 component-identity-unproven": 136,
