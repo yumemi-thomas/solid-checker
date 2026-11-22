@@ -4480,7 +4480,7 @@ pub(crate) fn pending_apply_first_read_from(
     lookup: &SemanticLookup<'_>,
 ) -> Option<Span> {
     pending_apply_first_run(file, site, false, lookup, |component, call| {
-        apply_source_pending(file, origin, component, call, declaration, lookup)
+        apply_source_pending(file, origin, component, call, declaration, lookup) == Some(true)
     })
 }
 
@@ -4622,21 +4622,14 @@ fn apply_source_pending(
     call: &solid_facts::ast::CallFact,
     declaration: &typefacts::Location,
     lookup: &SemanticLookup<'_>,
-) -> bool {
+) -> Option<bool> {
     let ast = &file.ast;
-    let (Ok(start), Ok(end)) = (
-        u32::try_from(declaration.start_byte),
-        u32::try_from(declaration.end_byte),
-    ) else {
-        return false;
-    };
-    let declared = Span::new(start, end);
-    let Some(source_file) = lookup.file_by_path(declaration.path.as_ref()) else {
-        return false;
-    };
-    let Some((binding, memo)) = async_memo_at(source_file, declared, lookup) else {
-        return false;
-    };
+    let declared = Span::new(
+        u32::try_from(declaration.start_byte).ok()?,
+        u32::try_from(declaration.end_byte).ok()?,
+    );
+    let source_file = lookup.file_by_path(declaration.path.as_ref())?;
+    let (binding, memo) = async_memo_at(source_file, declared, lookup)?;
     let own_body = source_file.path == file.path
         && crate::owners::containing_ast_function(ast, binding.declaration)
             .is_some_and(|function| function.span == component.span);
@@ -4678,7 +4671,7 @@ fn apply_source_pending(
             lookup,
         )
     };
-    ok
+    Some(ok)
 }
 
 /// ADR 0505: a user effect's first apply (`createEffect`) runs in the tail
