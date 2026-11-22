@@ -1790,9 +1790,10 @@ struct LeafScopeResolution<'a, 'lookup> {
     /// leaf callback's own text and each call the walk then enters. A proof that removes a row names every one, since the row stands
     /// at the outermost (a helper's call), not where the proof is.
     anchors: &'a RefCell<Vec<(std::sync::Arc<str>, Span)>>,
-    /// ADR 1180: how many arguments the direct call the walk enters a helper by passes (no spread), set by the call just before
-    /// [`function_forbidden_operations`] takes it: a parameter at that index or past it runs its default on this call.
-    passed_arguments: &'a Cell<Option<usize>>,
+    /// ADR 1180: the arguments the direct call the walk enters a helper by passes (no spread), set by the call just before
+    /// [`function_forbidden_operations`] takes it, each `true` where it is the global `undefined` (ADR 1188): a parameter past
+    /// them, or at an `undefined` one, runs its default on this call.
+    passed_arguments: &'a Cell<Option<Vec<bool>>>,
     /// ADR 1180: the parameter initializers (file, span) a walk proved to run on a call that omits their argument; an operation
     /// written in one is no possible-only parameter-list operation.
     proven_defaults: &'a RefCell<Vec<(std::sync::Arc<str>, Span)>>,
@@ -2292,8 +2293,15 @@ fn helper_forbidden_operations_walk(
     };
     note_generator_stepped(kinds, call, helper_file, helper);
     // ADR 1180: the arguments this direct call passes, when none is spread.
+    // ADR 1188: an argument that is the global `undefined` (not shadowed: the binder resolves it to no declaration) runs its
+    // parameter's default as an omitted one does.
     resolution.passed_arguments.set(
-        (!call.arguments.iter().any(|argument| argument.spread)).then_some(call.arguments.len()),
+        (!call.arguments.iter().any(|argument| argument.spread)).then(|| {
+            call.arguments
+                .iter()
+                .map(|argument| argument.value == solid_facts::ast::ArgumentValueKind::Undefined)
+                .collect()
+        }),
     );
     function_forbidden_operations(
         resolution,
@@ -2900,7 +2908,8 @@ fn function_forbidden_operations(
         | Entry::ActionStep { guaranteed } => guaranteed,
     };
     for inner in parameter_calls {
-        // ADR 1180: a call that is the whole default of a parameter this call omits (no spread, fewer arguments than its index)
+        // ADR 1180: a call that is the whole default of a parameter this call omits (no spread, fewer arguments than its index;
+        // ADR 1188: or the global `undefined` at its index)
         // runs on this call's stack, as a call written in the body does: walked as one, guaranteed with the entry when no earlier
         // parameter's default holds a call (one that throws would stop the list first). A default nested in a destructuring
         // pattern, a default the call passes a value for, or one under a condition stays possible.
@@ -2911,7 +2920,9 @@ fn function_forbidden_operations(
                     .iter()
                     .enumerate()
                     .find(|(index, parameter)| {
-                        passed.is_some_and(|passed| *index >= passed)
+                        passed
+                            .as_ref()
+                            .is_some_and(|passed| *index >= passed.len() || passed[*index])
                             && parameter.initializer.is_some_and(|initializer| {
                                 helper_file.ast.peel_ts_sugar_span(initializer) == inner.span
                             })
