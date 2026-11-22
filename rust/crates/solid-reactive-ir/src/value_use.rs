@@ -1773,7 +1773,20 @@ impl<'l, 'a> Census<'l, 'a> {
                 } else {
                     Site::Call
                 };
-                self.site(file, call_use_span(file, call), site, blocker);
+                let at_call = call_use_span(file, call);
+                let before = self.uses.len();
+                self.site(file, at_call, site, blocker);
+                // ADR 1186: a call that runs what a carrier held (`for (const f of fns) f()`, `Object.values(box)[0](…)`) runs a
+                // function no row selected, so no role proves it legal there: it keeps a row of its own beside the carrier's (kept
+                // apart from the uses, so the carrier's row still stands). It only adds rows: the carrier's row already makes the
+                // program uncertifiable.
+                if blocker == blockers::VALUE_IN_CARRIER
+                    && !self.package_value
+                    && self.uses.len() == before
+                {
+                    self.late_rows
+                        .push((at_call.location(file.path.as_str()), blocker));
+                }
                 self.position(file, call, mode);
                 Position::Followed
             }
