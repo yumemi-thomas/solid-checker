@@ -3580,6 +3580,22 @@ fn returned_call_domain<'a>(
         .and_then(|entity| entity.call_result_domain.as_ref())
 }
 
+/// ADR 1190: the component prop function literal of `file` whose proven call sites (ADR 1171, [`crate::execution_role::prop_literal_call_sites`])
+/// hold the call at `call`: that call runs the literal and nothing else.
+fn prop_literal_called_at<'f>(
+    file: &'f FileFacts,
+    call: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<&'f solid_facts::ast::FunctionFact> {
+    let callee = file.ast.call_at(call)?.callee;
+    file.ast.member_at(file.ast.peel_ts_sugar_span(callee))?;
+    file.ast.functions.iter().find(|function| {
+        crate::execution_role::component_prop_literal(file, function.span).is_some()
+            && crate::execution_role::prop_literal_call_sites(file, function, lookup)
+                .is_some_and(|calls| calls.contains(&call))
+    })
+}
+
 #[cfg(test)]
 mod dom_dispatch_tests {
     use super::{refused_when_optional, synchronously_dispatching_dom_member};
@@ -3639,20 +3655,4 @@ mod dom_dispatch_tests {
         assert!(refused_when_optional("OffscreenCanvas.getContext"));
         assert!(!refused_when_optional("Element.scrollIntoView"));
     }
-}
-
-/// ADR 1190: the component prop function literal of `file` whose proven call sites (ADR 1171, [`crate::execution_role::prop_literal_call_sites`])
-/// hold the call at `call`: that call runs the literal and nothing else.
-fn prop_literal_called_at<'f>(
-    file: &'f FileFacts,
-    call: Span,
-    lookup: &SemanticLookup<'_>,
-) -> Option<&'f solid_facts::ast::FunctionFact> {
-    let callee = file.ast.call_at(call)?.callee;
-    file.ast.member_at(file.ast.peel_ts_sugar_span(callee))?;
-    file.ast.functions.iter().find(|function| {
-        crate::execution_role::component_prop_literal(file, function.span).is_some()
-            && crate::execution_role::prop_literal_call_sites(file, function, lookup)
-                .is_some_and(|calls| calls.contains(&call))
-    })
 }
