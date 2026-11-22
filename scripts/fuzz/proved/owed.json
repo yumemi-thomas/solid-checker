@@ -9,6 +9,11 @@
    "adr": "ADR 1139",
    "owed": 1,
    "why": "bundle j smoke-census: mx-sync-node-received-async-flw-owned-eval-memo-direct-none (a proved-ledger entry; its effect twin moves alike but is no ledger entry), an SC7002 violation Chrome confirms, withheld because the program's `eval` may attach a shadow root and dispatch from an effect's apply (apply_dispatch_into_shadow_possible fails closed on code built from a string). Recovered when a literal eval string is read as the code it is (no shadow root, no dispatch)."
+  },
+  {
+   "adr": "ADR 1177",
+   "owed": 33,
+   "why": "bundle s smoke-census: 33 proved mx-census programs (context-not-found in dny-*, evt-* and pos-handler-owner contexts), each an SC4002 violation Chrome confirms (CONTEXT_NOT_FOUND), withheld by owner-check-throws-first (a context read in a JSX handler whose owner varies by caller or may be null). Recovered when an order proof shows that a run at mount, before the handler can be delivered, is the first (docs/open-work.md, ADR 1177). A 34th program, dny-change-checkbox-retyped, moves alike and is in no ledger."
   }
  ]
 }

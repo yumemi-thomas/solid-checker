@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1166 r2 (census false cleans `barm-carried-body`): `resolve`/`until` in a function an effect's compute runs tracked and a carried `forEach` runs untracked. Chrome throws RESOLVE/UNTIL_IN_REACTIVE_SCOPE in the compute run; the checker keeps SC2004/SC2005 uncertifiable (`function-run-unplaced`) there, where the r1 build was silent. The two throws are plain `Error`s this oracle maps to no code (its verdict is `quiet`); the page's console holds both (`Cannot call resolve inside a reactive scope`, `Cannot call until inside a reactive scope`), and the census judge matches them by message."
+}

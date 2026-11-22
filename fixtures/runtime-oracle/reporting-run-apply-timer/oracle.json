@@ -1,0 +1,1 @@
+{ "note": "ADR 1166 r3: the corpus shape of kui GroupRoute.tsx:80 (a prop read in a const helper an effect apply calls once and a timer re-runs)." }

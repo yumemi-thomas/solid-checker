@@ -1,0 +1,1 @@
+{ "note": "ADR 1174: refresh(props.m1) in a memo or effect compute, every caller passing one exact memo: Chrome throws REACTIVE_WRITE_IN_OWNED_SCOPE, SC2001 violations; quiet in a handler. Two callers, a spread caller and a component that writes its own props.m1 stay uncertifiable." }

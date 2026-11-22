@@ -218,6 +218,9 @@ pub(crate) enum DiscoveryRead {
     /// The props reactivity of one named slot of the object declared at a
     /// location ([`NotedProps::prop_use`]).
     PropUse(Location, String),
+    /// ADR 1174: the prop sources attached to the props object declared at a
+    /// location besides the parameter itself ([`DiscoveryTables::props_attachments`]).
+    PropsAttachments(Location, SymbolId),
     /// Whether the props object declared at a location has a reactivity row
     /// ([`NotedProps::declared`]).
     PropsDeclared(Location),
@@ -480,6 +483,20 @@ fn record_discovery<R>(f: impl FnOnce() -> R) -> (R, Vec<(DiscoveryRead, u64)>) 
     (value, reads)
 }
 
+fn attachments_in(
+    prop_sources: &HashMap<SymbolId, (SymbolId, Location)>,
+    declaration: &Location,
+    parameter: &SymbolId,
+) -> Vec<SymbolId> {
+    let mut attached = prop_sources
+        .iter()
+        .filter(|(symbol, (_, at))| *symbol != parameter && at == declaration)
+        .map(|(symbol, _)| symbol.clone())
+        .collect::<Vec<_>>();
+    attached.sort();
+    attached
+}
+
 fn answer_of(value: &impl Hash) -> u64 {
     let mut hasher = rustc_hash::FxHasher::default();
     value.hash(&mut hasher);
@@ -690,6 +707,44 @@ impl<'a> DiscoveryTables<'a> {
         entry
     }
 
+    /// ADR 1174: [`crate::source_discovery::PropsReactivityIndex::passed_on_every_site`], recorded.
+    pub(crate) fn props_passed_on_every_site(
+        &self,
+        declaration: &Location,
+        name: &str,
+    ) -> Option<(Vec<SymbolId>, bool, Vec<Location>)> {
+        let answer = self
+            .props_reactivity
+            .passed_on_every_site(declaration, name);
+        note(
+            DiscoveryRead::PassedOnEverySite(declaration.clone(), name.to_owned()),
+            answer_of(&answer),
+        );
+        answer
+    }
+
+    /// ADR 1174: the prop sources other than `parameter` attached to the props object declared at `declaration`, sorted,
+    /// recorded as one read; with the file's facts they decide `local_access::props_root_attachments_are_views`.
+    pub(crate) fn props_attachments(
+        &self,
+        declaration: &Location,
+        parameter: &SymbolId,
+    ) -> HashMap<SymbolId, (SymbolId, Location)> {
+        let attached = attachments_in(self.prop_sources, declaration, parameter);
+        note(
+            DiscoveryRead::PropsAttachments(declaration.clone(), parameter.clone()),
+            answer_of(&attached),
+        );
+        attached
+            .into_iter()
+            .filter_map(|symbol| {
+                self.prop_sources
+                    .get(&symbol)
+                    .map(|entry| (symbol, entry.clone()))
+            })
+            .collect()
+    }
+
     pub(crate) fn uncertain_prop_source(&self, symbol: &SymbolId) -> bool {
         let uncertain = self.uncertain_prop_sources.contains(symbol);
         note(
@@ -790,6 +845,9 @@ impl<'a> DiscoveryTables<'a> {
                 DiscoveryRead::Entry(table, symbol) => self.entry_answer(*table, symbol),
                 DiscoveryRead::PropUse(declaration, name) => {
                     use_answer(self.props_reactivity.prop_use(declaration, name))
+                }
+                DiscoveryRead::PropsAttachments(declaration, parameter) => {
+                    answer_of(&attachments_in(self.prop_sources, declaration, parameter))
                 }
                 DiscoveryRead::PropsDeclared(declaration) => {
                     u64::from(self.props_reactivity.for_declaration(declaration).is_some())

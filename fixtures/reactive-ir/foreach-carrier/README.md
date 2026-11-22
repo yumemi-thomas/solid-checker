@@ -13,3 +13,7 @@ three, covered elsewhere. Stub: `named-callback-escaped-entry`'s.
 expression's `const` (`[cb]` with `const cb = function inner() {}`) and its same-named binding (`function cb`) carry entries the census
 counts and the roles classify. Uncertifiable: `NamedMemoCarriedInBody`, `NamedSameCarriedInBody`, `NamedSettledCarriedInBody`,
 `NamedEffectCarriedInApply`. Clean: `NamedMemoCarriedInHandler`. The reviewed head certified the first four clean.
+
+**ADR 1166.** `map` over the literal is a carrier too (`TwinMap` now has the handler cases' standing), and a reporting carried run in
+the function that declares the callback places the read there: violations in `named-callback-reporting-run`. Here every signal read
+stays uncertifiable on the program-wide SC9012 tuple withdrawal (`read-backing-unproven` where the run reports).

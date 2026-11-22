@@ -24,6 +24,12 @@
 
 pub mod rule_options;
 mod shared_reactivity;
+pub(crate) use shared_reactivity::exact_link_alias_chain;
+
+/// ADR 1169: the root identifier of a static member chain (`s1` of `s1.a`), past TypeScript wrappers.
+pub(crate) fn member_root_span(file: &FileFacts, chain: Span) -> Option<Span> {
+    member_root(file, chain).map(|root| file.ast.peel_ts_sugar_span(root))
+}
 pub(crate) use shared_reactivity::serves_write_path;
 mod structure;
 mod syntax;

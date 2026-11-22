@@ -1,0 +1,58 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-varies-by-caller",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-read-owner-varies/App.tsx",
+      "start": 695,
+      "end": 705,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "uncertifiable",
+      "blocker": "owner-check-throws-first",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-read-owner-varies/App.tsx",
+      "start": 695,
+      "end": 705,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-read-owner-varies/App.tsx",
+      "start": 904,
+      "end": 914,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-read-owner-varies/App.tsx",
+      "start": 1215,
+      "end": 1225,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-context-provider",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/context-read-owner-varies/App.tsx",
+      "start": 1215,
+      "end": 1225,
+      "fixes": 0
+    }
+  ]
+}

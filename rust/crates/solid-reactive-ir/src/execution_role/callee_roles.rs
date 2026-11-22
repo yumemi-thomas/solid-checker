@@ -2487,6 +2487,34 @@ pub(crate) fn forwarded_only_into_leaf(
     })
 }
 
+/// ADR 1155 follow-up: the leaf call whose callback runs the call at `span` on its own stack, for SC3001. [`forwarded_only_into_leaf`]'s
+/// proof, and every run of the site is in that callback's synchronous extent: the site is written directly in the literal's body (not in a
+/// nested function or a parameter list), the literal and the leaf callback are neither `async` nor generators (no part runs past a
+/// suspension, off the leaf's stack), and the wrapper's call of its parameter is in the callback's body, not its parameter list. `None`
+/// otherwise; the leaf walk then keeps the site's row as it was.
+pub(crate) fn forwarded_leaf_call<'a>(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'a>,
+) -> Option<(&'a solid_facts::FileFacts, &'a solid_facts::ast::CallFact)> {
+    let literal = containing_ast_function(&file.ast, span)?;
+    if literal.r#async
+        || literal.generator
+        || !crate::owners::owned_by_body(&file.ast, literal, span)
+        || !forwarded_only_into_leaf(file, span, lookup)
+    {
+        return None;
+    }
+    let forwarded = forwarded_compute_slot(file, span, lookup)?;
+    let ast = &forwarded.wrapper_file.ast;
+    let callback = ast
+        .function_at(ast.peel_ts_sugar_span(forwarded.outer.arguments.get(forwarded.slot)?.span))?;
+    (!callback.r#async
+        && !callback.generator
+        && crate::owners::owned_by_body(ast, callback, forwarded.invoke))
+    .then_some((forwarded.wrapper_file, forwarded.outer))
+}
+
 /// ADR 1155 r3: [`ForwardedAsyncSite`] of the read at `span`, when ADR 0200's proof forwards the literal around it.
 pub(crate) fn forwarded_async_site<'a>(
     file: &solid_facts::FileFacts,
@@ -3023,6 +3051,38 @@ pub(super) fn callee_callback_timing_within(
         }
         return true;
     }
+}
+
+/// ADR 1166 r2: [`callee_callback_timing`] of a strict read (SC1001's row only, as [`super::strict_read_role`]): a named callback
+/// a reporting run provably executes runs the read there, at that run's timing. Every other rule keeps the generic answer, where a
+/// function with several runs has no one timing.
+pub(crate) fn strict_read_callee_timing(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    execution: ExecutionRole,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    callee_callback_timing(file, span, execution, lookup)
+        && !reporting_run_places(file, span, execution, lookup)
+}
+
+/// ADR 1166: whether [`super::named_callbacks::reporting_run_role`] places the read at `span` at `execution`: a run of its named
+/// callback provably executes it there, a run whose own timing [`callee_callback_timing`] already accepted.
+fn reporting_run_places(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    execution: ExecutionRole,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let allowed = super::read_context::allowed_callback_spans(file, lookup);
+    super::named_callbacks::reporting_run_role(
+        file,
+        span,
+        &allowed,
+        lookup.entities(),
+        lookup.symbol_names(),
+        lookup,
+    ) == Some(execution)
 }
 
 /// ADR 0323's at-call role of a callback that runs synchronously at its call
