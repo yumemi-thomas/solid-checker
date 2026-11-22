@@ -109,7 +109,7 @@ function Handed(props: { run: (cb: () => unknown) => number }) {
 
 // ADR 1011 (review of the first cut): the callee's boundary decides only where it holds EVERY use of the parameter that can run the closure.
 // Chrome warns at the read of each of these components (a bare call runs in the render). Violations, as on main (the second cut lost them): `BothNs`,
-// `BothId`, `ViaArgumentsId`; `WrapLet`, `ViaWrap` uncertifiable (ADR 1179). `BranchId`, `ReturnedId` uncertifiable on main too (`call-attributed-read`: a call on a flag, or in a
+// `BothId`, `ViaArgumentsId`, `WrapLet`, `ViaWrap` (ADR 1182). `BranchId`, `ReturnedId` uncertifiable on main too (`call-attributed-read`: a call on a flag, or in a
 // closure the callee returns, is not proved to run in the render, as `Maybe`): pinned, not claimed, and the walk must not turn them into a violation.
 function BothNs() {
   return <p>{(() => { H.both(() => { slow(); }); return 1; })()}</p>;
@@ -132,8 +132,8 @@ function ViaArgumentsId() {
 }
 
 // An identifier callee is the function its name runs only where nothing replaces it. `wrapLet` is reassigned to a function that runs the
-// closure bare, `wrapped` is what `ignore` returns (the same): Chrome warns at both reads. ADR 1179: no exact proof names the function the call
-// runs (the first function is not it), so both are uncertifiable, never a claim resting on the wrong function.
+// closure bare, `wrapped` is what `ignore` returns (the same): Chrome warns at both reads. ADR 1182 proves that function: the `let`'s last
+// module-level write, which the render follows, and `ignore`'s sole return; the first function written is neither (ADR 1179).
 let wrapLet = (cb: () => unknown) => {
   createLoadingBoundary(() => cb(), () => 0);
   return 1;

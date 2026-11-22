@@ -809,8 +809,8 @@
     },
     "rust/crates/solid-reactive-ir/src/indexes/initialization.rs": {
       "default-on-missing": {
-        "count": 3,
-        "why": "pending-review"
+        "count": 5,
+        "why": "pending-review (3); ADR 1182 (2): a binding with no mention table entry has no mention to settle, and a path with no withheld or settled row has none; either default yields fewer settled rows, never a claim"
       },
       "finding-filter": {
         "count": 1,

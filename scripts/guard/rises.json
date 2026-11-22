@@ -8178,6 +8178,22 @@
    "fact": "value_use::Census::member: a decided write answers a member reached through an alias only where it is that member's own Set; the Get of a link inside a deeper write (holder.state.nested, thing.useIt.a, held.a) keeps an SC9012 value-held-in-binding row (Chrome warns STRICT_READ_UNTRACKED at such a Get; main had no row)"
   },
   {
+   "fixture": "reactive-ir/loading-member-callee",
+   "key": "SC1001 function-run-unplaced",
+   "from": 19,
+   "to": 21,
+   "adr": "ADR 1179",
+   "fact": "WrapLet and ViaWrap: ADR 0200's forwarding no longer picks a wrapper the binding may not hold (a written let, a call's result); the read is placed nowhere exact, so SC5003 V becomes call-attributed-read U with SC1001 function-run-unplaced (fail closed; Chrome ASYNC_OUTSIDE_LOADING_BOUNDARY)"
+  },
+  {
+   "fixture": "reactive-ir/loading-member-callee",
+   "key": "SC5003 call-attributed-read",
+   "from": 25,
+   "to": 27,
+   "adr": "ADR 1179",
+   "fact": "WrapLet and ViaWrap: ADR 0200's forwarding no longer picks a wrapper the binding may not hold (a written let, a call's result); the read is placed nowhere exact, so SC5003 V becomes call-attributed-read U with SC1001 function-run-unplaced (fail closed; Chrome ASYNC_OUTSIDE_LOADING_BOUNDARY)"
+  },
+  {
    "fixture": "reactive-ir/rc21-whole-store-reads",
    "key": "SC9012 value-from-primitive-callback",
    "from": 0,
@@ -8336,22 +8352,6 @@
    "to": 1,
    "adr": "ADR 1169",
    "fact": "relabels, not new rows: container_root::handed_root now resolves a write through a const alias of a store link to the store (HandedRoot::Store below > 0), so a write ADR 0491's proof does not reach is SC2003 store-write-unproven / store-operation-may-not-write where it was unproven-container-root"
-  },
-  {
-   "fixture": "reactive-ir/loading-member-callee",
-   "key": "SC1001 function-run-unplaced",
-   "from": 19,
-   "to": 21,
-   "adr": "ADR 1179",
-   "fact": "WrapLet and ViaWrap: ADR 0200's forwarding no longer picks a wrapper the binding may not hold (a written let, a call's result); the read is placed nowhere exact, so SC5003 V becomes call-attributed-read U with SC1001 function-run-unplaced (fail closed; Chrome ASYNC_OUTSIDE_LOADING_BOUNDARY)"
-  },
-  {
-   "fixture": "reactive-ir/loading-member-callee",
-   "key": "SC5003 call-attributed-read",
-   "from": 25,
-   "to": 27,
-   "adr": "ADR 1179",
-   "fact": "WrapLet and ViaWrap: ADR 0200's forwarding no longer picks a wrapper the binding may not hold (a written let, a call's result); the read is placed nowhere exact, so SC5003 V becomes call-attributed-read U with SC1001 function-run-unplaced (fail closed; Chrome ASYNC_OUTSIDE_LOADING_BOUNDARY)"
   },
   {
    "fixture": "reactive-ir/foreach-carrier",

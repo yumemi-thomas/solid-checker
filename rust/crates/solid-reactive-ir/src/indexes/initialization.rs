@@ -30,9 +30,22 @@ type RunningBeforeDeclarator = HashMap<(String, Span), Arc<HashSet<Span>>>;
 /// ([`SemanticLookup::mention_may_precede_initialization_within`]).
 type Withheld = HashMap<String, (HashSet<Span>, HashSet<Span>)>;
 
+/// ADR 1182: by `(mentioning path, mention)`, the function a written `let` holds at that mention: the last of its writes, each a
+/// module-level straight-line `name = <function>`, which the mention provably follows ([`SemanticLookup::settled_let_function`]).
+type Settled = HashMap<(String, Span), (String, Span)>;
+
+/// ADR 1182: `((file, receiver binding), member name)` with the declarator standing at the name's last write and that write's
+/// function ([`SemanticLookup::settling_members`]).
+type SettlingMember = (((usize, usize), String), (Declarator, Span));
+
+/// One path's part of [`super::project_memos::UninitializedReferences`]: the withheld mentions, those of them not ordered after the
+/// declarator, and (ADR 1182) the settled `let` mentions as `(mention, declaring path, function)`.
+pub(crate) type UninitializedRow = (String, Vec<Span>, Vec<Span>, Vec<(Span, String, Span)>);
+
 #[derive(Default)]
 pub(super) struct State {
     rejected: crate::base::reads::Recorded<Withheld>,
+    settled: crate::base::reads::Recorded<Settled>,
     census: crate::base::reads::Recorded<ModuleCensus>,
     file_refs: Mutex<HashMap<String, Arc<FileFunctionRefs>>>,
     running: Mutex<RunningBeforeDeclarator>,
@@ -78,6 +91,9 @@ struct Scratch {
     /// binding follows its declarator. The call graph keeps ADR 0339's order
     /// for a function-valued binding, which credits neither.
     full_order: bool,
+    /// ADR 1182: a declarator standing in for a binding's own, at the end of its last write: the proof then asks whether a mention
+    /// follows that write. The initializer's own function is no exception there (it may run before the write).
+    stand_in: HashMap<(usize, usize), Declarator>,
 }
 
 /// The declarations and arrows whose mentions one ordering proof is proving
@@ -271,7 +287,7 @@ impl<'a> SemanticLookup<'a> {
         self.initialization.rejected.get_or_init(|| {
             self.whole_program_answer::<super::project_memos::UninitializedReferences>()
                 .into_iter()
-                .map(|(path, spans, unordered)| {
+                .map(|(path, spans, unordered, _)| {
                     (
                         path,
                         (spans.into_iter().collect(), unordered.into_iter().collect()),
@@ -286,7 +302,31 @@ impl<'a> SemanticLookup<'a> {
     /// recursive `initialized_before` / `declaration_runs_after` proof runs
     /// inside this one top-level answer (its working tables are scratch of the
     /// call); the memo is keyed per program, a per-mention memo is study S7.
-    pub(super) fn compute_uninitialized_references(&self) -> Vec<(String, Vec<Span>, Vec<Span>)> {
+    /// ADR 1182: the function the written `let` named at `mention` of `path` holds there, when every write of it is a module-level
+    /// straight-line `name = <function>` and the mention provably runs after the last ([`Scratch::stand_in`]).
+    pub(crate) fn settled_let_function(
+        &self,
+        path: &str,
+        mention: Span,
+    ) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)> {
+        let settled = self.initialization.settled.get_or_init(|| {
+            self.whole_program_answer::<super::project_memos::UninitializedReferences>()
+                .into_iter()
+                .flat_map(|(path, _, _, settled)| {
+                    settled
+                        .into_iter()
+                        .map(move |(mention, declaring, function)| {
+                            ((path.clone(), mention), (declaring, function))
+                        })
+                })
+                .collect()
+        });
+        let (declaring, function) = settled.get(&(path.to_owned(), mention))?;
+        let file = self.file_by_path(declaring)?;
+        Some((file, file.ast.function_at(*function)?))
+    }
+
+    pub(super) fn compute_uninitialized_references(&self) -> Vec<UninitializedRow> {
         {
             let mut scratch = Scratch::default();
             // Every mention of each decided binding, by binding, with whether
@@ -347,6 +387,8 @@ impl<'a> SemanticLookup<'a> {
                 }
             }
             let mut rejected = HashMap::<String, (HashSet<Span>, HashSet<Span>)>::default();
+            // ADR 1182: the written `let`s whose every write is a module-level straight-line `name = <function>`, with their last write.
+            let settling = self.settling_lets();
             // A decided binding none of whose names carries the compiler's
             // reference list has mentions the table above cannot see (ADR
             // 0464 review): its same-file mentions, from the binder, are
@@ -412,14 +454,108 @@ impl<'a> SemanticLookup<'a> {
                     entry.1.insert(span);
                 }
             }
-            let mut answer = rejected
+            // ADR 1182: each mention of a settling `let` (no write of it), proved after its last write by the same proof.
+            let mut settled = HashMap::<String, Vec<(Span, String, Span)>>::default();
+            for (key, (declarator, function)) in &settling {
+                scratch.stand_in.insert(*key, *declarator);
+                let declaring_path = crate::base::reads::file_slots(self.facts)[key.0]
+                    .path
+                    .to_string();
+                for (caller, mention) in scratch.mentions.get(key).cloned().unwrap_or_default() {
+                    let caller_file = &crate::base::reads::file_slots(self.facts)[caller];
+                    if caller_file.ast.any_write_target_containing(mention) {
+                        continue;
+                    }
+                    scratch.full_order = false;
+                    let ordered = self.initialized_before(
+                        &mut scratch,
+                        caller,
+                        mention,
+                        key.0,
+                        key.1,
+                        &mut Proving::default(),
+                    ) || {
+                        scratch.full_order = true;
+                        self.initialized_before(
+                            &mut scratch,
+                            caller,
+                            mention,
+                            key.0,
+                            key.1,
+                            &mut Proving::default(),
+                        )
+                    };
+                    if ordered {
+                        settled
+                            .entry(caller_file.path.to_string())
+                            .or_default()
+                            .push((mention, declaring_path.clone(), *function));
+                    }
+                }
+                scratch.stand_in.remove(key);
+            }
+            // ADR 1182: each call of a settling member through its receiver, proved after the member's last write the same way.
+            for ((key, name), (declarator, function)) in self.settling_members() {
+                let file = &crate::base::reads::file_slots(self.facts)[key.0];
+                let receiver = &file.ast.bindings[key.1].names[0];
+                scratch.stand_in.insert(key, declarator);
+                for &mention in file.ast.references_to(receiver.span) {
+                    let Some(member) = file.ast.members.iter().find(|member| {
+                        file.ast.peel_ts_sugar_span(member.object) == mention
+                            && file.source_text(member.property) == Some(name.as_str())
+                    }) else {
+                        continue;
+                    };
+                    if file
+                        .ast
+                        .calls_with_peeled_callee(member.span)
+                        .next()
+                        .is_none()
+                    {
+                        continue;
+                    }
+                    scratch.full_order = false;
+                    let ordered = self.initialized_before(
+                        &mut scratch,
+                        key.0,
+                        mention,
+                        key.0,
+                        key.1,
+                        &mut Proving::default(),
+                    ) || {
+                        scratch.full_order = true;
+                        self.initialized_before(
+                            &mut scratch,
+                            key.0,
+                            mention,
+                            key.0,
+                            key.1,
+                            &mut Proving::default(),
+                        )
+                    };
+                    if ordered {
+                        settled.entry(file.path.to_string()).or_default().push((
+                            member.span,
+                            file.path.to_string(),
+                            function,
+                        ));
+                    }
+                }
+                scratch.stand_in.remove(&key);
+            }
+            let mut paths = rejected.keys().cloned().collect::<HashSet<_>>();
+            paths.extend(settled.keys().cloned());
+            let mut answer = paths
                 .into_iter()
-                .map(|(path, (spans, unordered))| {
+                .map(|path| {
+                    let (spans, unordered) = rejected.remove(&path).unwrap_or_default();
                     let mut spans = spans.into_iter().collect::<Vec<_>>();
                     spans.sort_unstable();
                     let mut unordered = unordered.into_iter().collect::<Vec<_>>();
                     unordered.sort_unstable();
-                    (path, spans, unordered)
+                    let mut rows = settled.remove(&path).unwrap_or_default();
+                    rows.sort_unstable();
+                    (path, spans, unordered, rows)
                 })
                 .collect::<Vec<_>>();
             answer.sort_unstable();
@@ -513,6 +649,228 @@ impl<'a> SemanticLookup<'a> {
 
     fn files_by_path_index(&self, path: &str) -> Option<usize> {
         self.first_file_index(path)
+    }
+
+    /// ADR 1182: by `(file, binding)`, the module-level `let`s bound to a function and written, every write a module-level straight-line
+    /// plain `name = <function literal>` (no compound or logical assignment, no destructuring, no write in a function or on a branch), with
+    /// a declarator standing at the end of the last write and that write's function. Module code runs in order, so after the last write
+    /// the binding holds its function, and nothing else can write it (an import cannot assign a module's binding).
+    fn settling_lets(&self) -> Vec<((usize, usize), (Declarator, Span))> {
+        let mut found = Vec::new();
+        for (index, file) in crate::base::reads::file_slots(self.facts)
+            .iter()
+            .enumerate()
+        {
+            let ast = &file.ast;
+            if ast.assignments.is_empty()
+                || crate::interproc::property_gets::direct_eval_in(file, Span::new(0, u32::MAX))
+            {
+                continue;
+            }
+            for (position, binding) in ast.bindings.iter().enumerate() {
+                let [name] = binding.names.as_slice() else {
+                    continue;
+                };
+                if !binding.runtime_let
+                    || binding.shape != BindingShape::Identifier
+                    || binding.in_switch_case
+                    || !binding.initializer_function
+                    || executing_function(ast, binding.declaration).is_some()
+                {
+                    continue;
+                }
+                let mut last: Option<(&solid_facts::ast::AssignmentFact, Span)> = None;
+                let mut settles = true;
+                let mut written = false;
+                for &reference in ast.references_to(name.span) {
+                    if !ast.any_write_target_containing(reference) {
+                        continue;
+                    }
+                    written = true;
+                    let write = ast
+                        .assignments
+                        .iter()
+                        .find(|assignment| ast.peel_ts_sugar_span(assignment.target) == reference);
+                    let function = write.and_then(|write| {
+                        let straight = ast.straight_line_assignments.iter().any(|expression| {
+                            expression.start == write.target.start
+                                && expression.end >= write.value_span.end
+                        });
+                        (straight
+                            && !write.reads_target
+                            && write.logical.is_none()
+                            && executing_function(ast, reference).is_none())
+                        .then(|| ast.function_at(ast.peel_ts_sugar_span(write.value_span)))
+                        .flatten()
+                        .filter(|function| !function.generator)
+                    });
+                    match (write, function) {
+                        (Some(write), Some(function)) => {
+                            if last.is_none_or(|(previous, _)| {
+                                previous.target.start < write.target.start
+                            }) {
+                                last = Some((write, function.span));
+                            }
+                        }
+                        _ => settles = false,
+                    }
+                }
+                if let (true, true, Some((write, function))) = (settles, written, last) {
+                    found.push((
+                        (index, position),
+                        (
+                            Declarator {
+                                initialized: write.value_span.end,
+                                start: write.target.start,
+                                container: None,
+                            },
+                            function,
+                        ),
+                    ));
+                }
+            }
+        }
+        found
+    }
+
+    /// ADR 1182: by `((file, receiver binding), member name)`, the members of a module-level `const` bound to a closed object literal that
+    /// module code replaces: every reference of the receiver is in its own file and is the object of a member call or of a module-level
+    /// straight-line plain `receiver.name = <function literal>`; no function written in the literal or assigned to it reads `this`,
+    /// `arguments` or `super` (none can write a member through the receiver); no direct `eval`. With a declarator standing at the end of
+    /// the name's last write, and that write's function: after it the member holds that function, and no other code can reach the object.
+    fn settling_members(&self) -> Vec<SettlingMember> {
+        let mut found = Vec::new();
+        for (index, file) in crate::base::reads::file_slots(self.facts)
+            .iter()
+            .enumerate()
+        {
+            let ast = &file.ast;
+            if ast.assignments.is_empty()
+                || crate::interproc::property_gets::direct_eval_in(file, Span::new(0, u32::MAX))
+            {
+                continue;
+            }
+            let exposes_receiver = |function: &solid_facts::ast::FunctionFact| {
+                function.kind != FunctionKind::Arrow
+                    && file.source_text(function.span).is_none_or(|text| {
+                        text.contains("this")
+                            || text.contains("arguments")
+                            || text.contains("super")
+                    })
+            };
+            for (position, binding) in ast.bindings.iter().enumerate() {
+                let [name] = binding.names.as_slice() else {
+                    continue;
+                };
+                if !binding.immutable
+                    || binding.shape != BindingShape::Identifier
+                    || binding.in_switch_case
+                    || executing_function(ast, binding.declaration).is_some()
+                {
+                    continue;
+                }
+                let Some(initializer) =
+                    binding.initializer.map(|span| ast.peel_ts_sugar_span(span))
+                else {
+                    continue;
+                };
+                if !ast.object_get_shapes.iter().any(|shape| {
+                    shape.span == initializer
+                        && shape.closed
+                        && shape.properties.iter().all(|p| p.getter.is_none())
+                }) || ast.functions_within(initializer).any(&exposes_receiver)
+                {
+                    continue;
+                }
+                // Every reference in this file: the receiver is not exported or handed anywhere.
+                let all_here =
+                    self.entities
+                        .at(file.path.as_str(), name.span)
+                        .is_some_and(|symbol| {
+                            self.symbol_references_if_present(symbol.as_str())
+                                .is_some_and(|references| {
+                                    references.iter().all(|reference| {
+                                        reference.path.as_ref() == file.path.as_str()
+                                    })
+                                })
+                        });
+                if !all_here
+                    || ast
+                        .exports
+                        .iter()
+                        .any(|export| export.span.contains(name.span))
+                {
+                    continue;
+                }
+                let mut last = HashMap::<String, (Span, u32, Span)>::default();
+                let mut closed = true;
+                for &reference in ast.references_to(name.span) {
+                    let member = ast.members.iter().find(|member| {
+                        ast.peel_ts_sugar_span(member.object) == reference
+                            && !ast.computed_members.contains(&member.span)
+                            && !ast.optional_members.contains(&member.span)
+                    });
+                    let Some(member) = member else {
+                        closed = false;
+                        break;
+                    };
+                    let called = ast
+                        .calls_with_peeled_callee(member.span)
+                        .any(|call| !call.construct);
+                    if called {
+                        continue;
+                    }
+                    let write = ast.assignments.iter().find(|assignment| {
+                        ast.peel_ts_sugar_span(assignment.target) == member.span
+                    });
+                    let function = write.and_then(|write| {
+                        let straight = ast.straight_line_assignments.iter().any(|expression| {
+                            expression.start == write.target.start
+                                && expression.end >= write.value_span.end
+                        });
+                        (straight
+                            && !write.reads_target
+                            && write.logical.is_none()
+                            && executing_function(ast, reference).is_none())
+                        .then(|| ast.function_at(ast.peel_ts_sugar_span(write.value_span)))
+                        .flatten()
+                        .filter(|function| !function.generator && !exposes_receiver(function))
+                    });
+                    let (Some(write), Some(function), Some(property)) =
+                        (write, function, file.source_text(member.property))
+                    else {
+                        closed = false;
+                        break;
+                    };
+                    let entry = last.entry(property.to_owned()).or_insert((
+                        write.target,
+                        write.value_span.end,
+                        function.span,
+                    ));
+                    if entry.0.start < write.target.start {
+                        *entry = (write.target, write.value_span.end, function.span);
+                    }
+                }
+                if !closed {
+                    continue;
+                }
+                for (property, (target, end, function)) in last {
+                    found.push((
+                        ((index, position), property),
+                        (
+                            Declarator {
+                                initialized: end,
+                                start: target.start,
+                                container: None,
+                            },
+                            function,
+                        ),
+                    ));
+                }
+            }
+        }
+        found.sort_by(|a, b| (a.0.0, &a.0.1).cmp(&(b.0.0, &b.0.1)));
+        found
     }
 
     fn declarator(file: &FileFacts, binding: &BindingFact) -> Option<Declarator> {
@@ -666,20 +1024,22 @@ impl<'a> SemanticLookup<'a> {
                     Self::module_level_position(&caller_file.ast, span, scratch.full_order),
                 );
         }
-        if initializer.contains(span) {
+        let stand_in = scratch.stand_in.get(&(declaring, binding)).copied();
+        if stand_in.is_none() && initializer.contains(span) {
             // Inside the function expression itself: it runs only once it
             // exists, which is after the declarator. Inside a call's
             // arguments (`const x = wrap(() => x())`) the callee may run it
             // before `x` is initialized.
             return binding_fact.initializer_function;
         }
-        let Some(declarator) = scratch
-            .declarators
-            .entry((declaring, binding))
-            .or_insert_with(|| Self::declarator(declaring_file, binding_fact))
-            .as_ref()
-            .copied()
-        else {
+        let Some(declarator) = stand_in.or_else(|| {
+            scratch
+                .declarators
+                .entry((declaring, binding))
+                .or_insert_with(|| Self::declarator(declaring_file, binding_fact))
+                .as_ref()
+                .copied()
+        }) else {
             return false;
         };
         let ast = &declaring_file.ast;

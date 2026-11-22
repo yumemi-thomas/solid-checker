@@ -1,5 +1,5 @@
 {
-  "status": "uncertifiable",
+  "status": "violation",
   "findings": [
     {
       "rule": "leaf-owner-forbidden-call",
@@ -224,8 +224,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "callee-callback-timing",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/effect-phase-windows/App.tsx",
       "start": 2515,

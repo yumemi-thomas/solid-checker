@@ -248,6 +248,11 @@ pub struct AstFacts {
     /// apart so that table's existing consumers keep their meaning.
     #[serde(default)]
     pub straight_line_constructs: Vec<Span>,
+    /// The assignment expressions written in their innermost enclosing function's straight-line flow (module level included), under the
+    /// conditions of [`Self::straight_line_calls`] (facts schema 109, ADR 1182): such an assignment runs on every execution of that function
+    /// that reaches its position.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub straight_line_assignments: Vec<Span>,
     /// The call, `new` and member expressions written in their innermost
     /// enclosing function's straight-line flow, outside any logical
     /// assignment and after no optional-chain link, that no earlier `return`,
@@ -2787,6 +2792,7 @@ impl AstFacts {
             unmodeled_require_references: Vec::new(),
             straight_line_calls: Vec::new(),
             straight_line_constructs: Vec::new(),
+            straight_line_assignments: Vec::new(),
             completion_sites: Vec::new(),
             returns: Vec::new(),
             jsx_elements: Vec::new(),

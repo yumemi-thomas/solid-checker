@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1182: shapes whose value at the call is not proved stay uncertifiable though Chrome reports them (PENDING_ASYNC_FORBIDDEN_SCOPE at InFunctionApp, OnBranchApp, MemberInFunctionApp, MemberExportedApp; PENDING_ASYNC_UNTRACKED_READ at ByNameApp, NotedApp, EitherApp); LateApp, whose call follows the let's last write, is an SC5001 violation (PENDING_ASYNC_FORBIDDEN_SCOPE). early()'s read throws at module evaluation, caught: no event."
+}
