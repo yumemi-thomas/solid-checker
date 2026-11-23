@@ -448,19 +448,7 @@ pub(crate) fn read_execution_role(
     lookup: &SemanticLookup<'_>,
 ) -> ExecutionRole {
     crate::role_log::decide("read", file.path.as_str(), span, || {
-        let role =
-            read_execution_role_unlogged(file, span, allowed, entities, symbol_names, lookup);
-        // ADR 1167: a read in the cleanup an effect's inline apply returns, where the compute provably tracks nothing, runs only at the
-        // effect's disposal, as an `onCleanup` callback's (ADR 0695); reads only, every other site keeps its unplaced role.
-        if role == ExecutionRole::Unknown
-            && write_roles::returned_cleanup_disposal_only(file, span, lookup)
-        {
-            return role_arm!(
-                "execution_role.read_execution_role.returned-cleanup-disposal",
-                ExecutionRole::DeferredCallback
-            );
-        }
-        role
+        read_execution_role_unlogged(file, span, allowed, entities, symbol_names, lookup)
     })
 }
 
@@ -491,6 +479,15 @@ pub(crate) fn strict_read_role(
         None if write_roles::returned_cleanup_rerun_reached(file, span, lookup) => role_arm!(
             "execution_role.read_execution_role.returned-cleanup-rerun",
             ExecutionRole::EffectApply
+        ),
+        // ADR 1167 (moved here by ADR 1196, as ADR 1166 r2 and 1183 r2 did): a read in the cleanup an effect's inline apply returns,
+        // where the compute provably tracks nothing, runs only at the effect's disposal, outside any strict-read window. The strict read
+        // only: the read role is also what the action rule's dispatch asks at a member or `Object.values` callee, and a `For` row's
+        // disposal runs the cleanup under the row's owner, where an action throws ACTION_CALLED_IN_OWNED_SCOPE (the false clean
+        // `mx-action-called-in-owned-scope-effect-cleanup-for-x-values-callee-none`).
+        None if write_roles::returned_cleanup_disposal_only(file, span, lookup) => role_arm!(
+            "execution_role.read_execution_role.returned-cleanup-disposal",
+            ExecutionRole::DeferredCallback
         ),
         None => role,
     }
