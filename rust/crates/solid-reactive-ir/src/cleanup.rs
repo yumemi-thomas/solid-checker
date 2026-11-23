@@ -3587,10 +3587,10 @@ fn prop_literal_called_at<'f>(
     call: Span,
     lookup: &SemanticLookup<'_>,
 ) -> Option<&'f solid_facts::ast::FunctionFact> {
-    let callee = file.ast.call_at(call)?.callee;
-    file.ast.member_at(file.ast.peel_ts_sugar_span(callee))?;
+    file.ast.call_at(call)?;
     file.ast.functions.iter().find(|function| {
-        crate::execution_role::component_prop_literal(file, function.span).is_some()
+        (crate::execution_role::component_prop_literal(file, function.span).is_some()
+            || crate::owners::function_binding_name(file, function).is_some())
             && crate::execution_role::prop_literal_call_sites(file, function, lookup)
                 .is_some_and(|calls| calls.contains(&call))
     })

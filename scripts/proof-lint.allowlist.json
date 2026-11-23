@@ -565,6 +565,10 @@
       "name-only-match": {
         "count": 1,
         "why": "`eval` is a spelling used only to REFUSE a proof (a direct eval can reach any local binding without an identifier use): the true branch returns false/None/the unchanged slot, so a miss or a shadowing declaration only makes the check more conservative"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "ADR 1190 (`prop_literal_call_sites`): `None => return None` is a named function expression written at the attribute, a form the proof does not take; `None` is the unproven answer, and every caller keeps its answer from before ADR 1171 for it"
       }
     },
     "rust/crates/solid-reactive-ir/src/execution_role/flow_helpers.rs": {

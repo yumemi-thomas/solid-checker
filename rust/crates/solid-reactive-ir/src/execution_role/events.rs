@@ -250,10 +250,49 @@ pub(crate) fn prop_literal_call_sites(
     literal: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
 ) -> Option<Vec<Span>> {
-    if literal.name.is_some() || literal.generator || lookup.program_has_eval() {
+    if literal.generator || lookup.program_has_eval() {
         return None;
     }
-    let (element, prop) = component_prop_literal(file, literal.span)?;
+    // ADR 1190 (slice 3): a function bound to a name whose one reference is the attribute's whole value (`<Kid run={run1} />`) is
+    // that value as a literal written there is: the binding is not exported, not written, and named nowhere else.
+    let value = match function_binding_name(file, literal) {
+        None if literal.name.is_none() => literal.span,
+        None => return None,
+        Some(binding) => {
+            if literal.kind == solid_facts::ast::FunctionKind::Expression && literal.name.is_some()
+            {
+                return None;
+            }
+            if crate::indexes::binding_exported(file, binding.span)
+                || crate::indexes::binding_written(file, binding.span)
+            {
+                return None;
+            }
+            let symbol = lookup.entities().at(file.path.as_str(), binding.span)?;
+            let references = lookup.symbol_references_if_present(symbol.as_str())?;
+            let mut uses = references.iter().filter(|reference| {
+                !(reference.path.as_ref() == file.path.as_str()
+                    && u32::try_from(reference.start_byte)
+                        .is_ok_and(|start| start == binding.span.start))
+            });
+            let only = uses.next()?;
+            if uses.next().is_some() || only.path.as_ref() != file.path.as_str() {
+                return None;
+            }
+            let (Ok(start), Ok(end)) =
+                (u32::try_from(only.start_byte), u32::try_from(only.end_byte))
+            else {
+                return None;
+            };
+            Span::new(start, end)
+        }
+    };
+    let (element, prop) = component_prop_literal(file, value)?;
+    // ADR 1190: a named function handed as a component's `ref` is wrapped by the compiler (`typeof r === "function" ? r(el) : …`), so
+    // the prop holds the compiler's function, not the name's: not this form (`named-ref-entry`'s `ComponentRef` keeps its rows).
+    if value != literal.span && prop == "ref" {
+        return None;
+    }
     if !element.spreads.is_empty()
         || element
             .attributes
@@ -294,27 +333,89 @@ pub(crate) fn prop_literal_call_sites(
     }) {
         return None;
     }
-    let names_props = props_kept(file, component, prop, lookup)?;
     let peel = |span: Span| file.ast.peel_ts_sugar_span(span);
     let mut calls = Vec::new();
-    for member in file.ast.members.iter().filter(|member| {
-        component.span.contains(member.span)
-            && names_props(member.object)
-            && file.source_text(member.property) == Some(prop)
-    }) {
+    if let Some(names_props) = props_kept(file, component, prop, lookup) {
+        for member in file.ast.members.iter().filter(|member| {
+            component.span.contains(member.span)
+                && names_props(member.object)
+                && file.source_text(member.property) == Some(prop)
+        }) {
+            let call = file
+                .ast
+                .calls
+                .iter()
+                .find(|call| !call.construct && peel(call.callee) == member.span)?;
+            // A call in a class written in the component (a field initializer, a method) runs where an instance is made or the method
+            // is called, which no owner edge from the place it is written shows.
+            if class_within(file, component.span, call.span) {
+                return None;
+            }
+            calls.push(call.span);
+        }
+        return Some(calls);
+    }
+    // ADR 1190 (slice 3): the component destructures the prop in its first parameter (`({ run }) => …`): a plain slot of that key, no
+    // default, no nested pattern, its name never written, and every reference of the name the callee of a call (not `new`).
+    let local = destructured_prop_name(file, component, prop)?;
+    if crate::indexes::binding_written(file, local.span)
+        || file.ast.identifiers.iter().any(|identifier| {
+            component.span.contains(identifier.span)
+                && matches!(
+                    file.source_text(identifier.span),
+                    Some("arguments" | "eval")
+                )
+        })
+    {
+        return None;
+    }
+    for (reference, _) in file
+        .ast
+        .reference_declarations
+        .iter()
+        .filter(|(reference, declaration)| *declaration == local.span && *reference != local.span)
+    {
         let call = file
             .ast
             .calls
             .iter()
-            .find(|call| !call.construct && peel(call.callee) == member.span)?;
-        // A call in a class written in the component (a field initializer, a method) runs where an instance is made or the method
-        // is called, which no owner edge from the place it is written shows.
+            .find(|call| !call.construct && peel(call.callee) == *reference)?;
         if class_within(file, component.span, call.span) {
             return None;
         }
         calls.push(call.span);
     }
     Some(calls)
+}
+
+/// ADR 1190 (slice 3): the name a synchronous component's first parameter, an object pattern, binds the key `prop` to: one plain
+/// slot of that static key with no default and no nested pattern.
+fn destructured_prop_name<'f>(
+    file: &'f solid_facts::FileFacts,
+    component: &'f solid_facts::ast::FunctionFact,
+    prop: &str,
+) -> Option<&'f solid_facts::ast::NamedSpan> {
+    if component.r#async || component.generator {
+        return None;
+    }
+    let parameter = file
+        .ast
+        .function_at(component.span)
+        .and_then(|function| function.parameters.first())
+        .or_else(|| component.parameters.first())?;
+    if parameter.shape != solid_facts::ast::BindingShape::Object || parameter.initializer.is_some()
+    {
+        return None;
+    }
+    let mut slots = parameter
+        .object_properties
+        .iter()
+        .filter(|property| property.computed || property.key.as_deref() == Some(prop));
+    let slot = slots.next()?;
+    if slots.next().is_some() || slot.computed || slot.has_default || slot.nested {
+        return None;
+    }
+    slot.local.as_ref()
 }
 
 /// The checks [`component_invokes_prop_in_body`] and [`prop_literal_call_sites`] share: `component` is synchronous, its first
