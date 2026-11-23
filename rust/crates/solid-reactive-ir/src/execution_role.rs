@@ -485,10 +485,15 @@ pub(crate) fn strict_read_role(
         // only: the read role is also what the action rule's dispatch asks at a member or `Object.values` callee, and a `For` row's
         // disposal runs the cleanup under the row's owner, where an action throws ACTION_CALLED_IN_OWNED_SCOPE (the false clean
         // `mx-action-called-in-owned-scope-effect-cleanup-for-x-values-callee-none`).
-        None if write_roles::returned_cleanup_disposal_only(file, span, lookup) => role_arm!(
-            "execution_role.read_execution_role.returned-cleanup-disposal",
-            ExecutionRole::DeferredCallback
-        ),
+        // Logged as the read's own decision (the proof log's C3 check: a silent row's role is a tagged arm's).
+        None if write_roles::returned_cleanup_disposal_only(file, span, lookup) => {
+            crate::role_log::decide("read", file.path.as_str(), span, || {
+                role_arm!(
+                    "execution_role.read_execution_role.returned-cleanup-disposal",
+                    ExecutionRole::DeferredCallback
+                )
+            })
+        }
         None => role,
     }
 }
