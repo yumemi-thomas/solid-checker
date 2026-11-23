@@ -1865,6 +1865,42 @@ fn named_prop_function(
     expression: solid_facts::core::Span,
 ) -> bool {
     let reference = file.ast.peel_ts_sugar_span(expression);
+    // ADR 1190 (slice 4): `props.<prop>` forwarded whole (`<Kid run={props.run} />`) from a component a proven prop literal reaches
+    // as that prop: the literal's proof follows every use of `props.<prop>` there, this one included.
+    if let Some(member) = file.ast.member_at(reference) {
+        let Some(component) = file
+            .ast
+            .functions
+            .iter()
+            .filter(|function| function.body.contains(reference))
+            .min_by_key(|function| function.span.end - function.span.start)
+        else {
+            return false;
+        };
+        let names_parameter = component
+            .parameters
+            .first()
+            .and_then(|parameter| parameter.names.first())
+            .is_some_and(|name| {
+                file.ast
+                    .reference_declaration(file.ast.peel_ts_sugar_span(member.object))
+                    == Some(name.span)
+            });
+        let Some(key) = file.source_text(member.property) else {
+            return false;
+        };
+        return names_parameter
+            && file.ast.functions.iter().any(|literal| {
+                crate::execution_role::literal_prop_element(file, literal, lookup).is_some_and(
+                    |(element, prop)| {
+                        prop == key
+                            && crate::execution_role::rendered_component(file, element, lookup)
+                                .is_some_and(|(_, rendered)| rendered.span == component.span)
+                    },
+                ) && crate::execution_role::prop_literal_call_sites(file, literal, lookup)
+                    .is_some_and(|calls| !calls.is_empty())
+            });
+    }
     let Some(declaration) = file.ast.reference_declaration(reference) else {
         return false;
     };

@@ -141,7 +141,7 @@ pub(super) fn prop_literal_invoked_during_render(
 /// `Kids = Later` reassignment), and a member tag (`Menu.Item`) reaches
 /// exactly the declared member, as [`InvocationFlow::component_props_uses`]
 /// requires.
-pub(super) fn rendered_component<'f>(
+pub(crate) fn rendered_component<'f>(
     file: &solid_facts::FileFacts,
     element: &solid_facts::ast::JsxElementFact,
     lookup: &SemanticLookup<'f>,
@@ -245,11 +245,13 @@ pub(super) fn component_invokes_prop_in_body(
 /// ([`props_kept`]) and every member `props.<prop>` is the callee of a call (not `new`). Then `props.<prop>` holds the literal and
 /// nothing else, and each of those calls runs it where the call is written (none is in a class written in the component). `None` where any of that is not proven; an empty list
 /// where the component never calls it.
-pub(crate) fn prop_literal_call_sites(
-    file: &solid_facts::FileFacts,
+/// ADR 1171 / ADR 1190: the component element and prop `literal` is the whole value of: written there, or (slice 3) a function named
+/// nowhere but that attribute; not a component's `ref` for a named function.
+pub(crate) fn literal_prop_element<'f>(
+    file: &'f solid_facts::FileFacts,
     literal: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
-) -> Option<Vec<Span>> {
+) -> Option<(&'f solid_facts::ast::JsxElementFact, &'f str)> {
     if literal.generator || lookup.program_has_eval() {
         return None;
     }
@@ -293,16 +295,48 @@ pub(crate) fn prop_literal_call_sites(
     if value != literal.span && prop == "ref" {
         return None;
     }
-    if !element.spreads.is_empty()
-        || element
-            .attributes
-            .iter()
-            .filter(|attribute| {
-                attribute.namespace.is_none() && file.source_text(attribute.name) == Some(prop)
-            })
-            .count()
-            != 1
-    {
+    Some((element, prop))
+}
+
+pub(crate) fn prop_literal_call_sites(
+    file: &solid_facts::FileFacts,
+    literal: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Vec<Span>> {
+    let (element, prop) = literal_prop_element(file, literal, lookup)?;
+    element_prop_calls(file, element, prop, lookup, None, PROP_FORWARD_DEPTH)
+}
+
+/// ADR 1190 (slice 4): how many components a callback prop may be forwarded through (`run={props.run}`, `{...props}`).
+const PROP_FORWARD_DEPTH: usize = 4;
+
+/// ADR 1171 / ADR 1190: the calls that run the value element `element` passes as its prop `prop`, when they are all its runs.
+/// `spread` is the one spread the value arrives through (slice 4: `<Kid {...props} />`), else the value is the element's one
+/// attribute of that name. The element's tag renders a project component of the same file that nothing else names; in it the prop
+/// is called (`props.<prop>()` on a kept `props`, or a destructured name's call), or forwarded whole to one more such element
+/// (`run={props.run}`, or a `props` spread onto it alone), followed `depth` deep.
+fn element_prop_calls(
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+    prop: &str,
+    lookup: &SemanticLookup<'_>,
+    spread: Option<Span>,
+    depth: usize,
+) -> Option<Vec<Span>> {
+    let named_attributes = element
+        .attributes
+        .iter()
+        .filter(|attribute| {
+            attribute.namespace.is_none() && file.source_text(attribute.name) == Some(prop)
+        })
+        .count();
+    let arrives = match spread {
+        None => element.spreads.is_empty() && named_attributes == 1,
+        Some(spread) => {
+            element.spreads.len() == 1 && element.spreads[0].span == spread && named_attributes == 0
+        }
+    };
+    if !arrives {
         return None;
     }
     let (component_file, component) = rendered_component(file, element, lookup)?;
@@ -341,19 +375,37 @@ pub(crate) fn prop_literal_call_sites(
                 && names_props(member.object)
                 && file.source_text(member.property) == Some(prop)
         }) {
-            let call = file
+            if let Some(call) = file
                 .ast
                 .calls
                 .iter()
-                .find(|call| !call.construct && peel(call.callee) == member.span)?;
-            // A call in a class written in the component (a field initializer, a method) runs where an instance is made or the method
-            // is called, which no owner edge from the place it is written shows.
-            if class_within(file, component.span, call.span) {
+                .find(|call| !call.construct && peel(call.callee) == member.span)
+            {
+                // A call in a class written in the component (a field initializer, a method) runs where an instance is made or the
+                // method is called, which no owner edge from the place it is written shows.
+                if class_within(file, component.span, call.span) {
+                    return None;
+                }
+                calls.push(call.span);
+                continue;
+            }
+            // ADR 1190 (slice 4): `props.<prop>` forwarded whole as a component element's attribute (`<Kid run={props.run} />`).
+            let depth = depth.checked_sub(1)?;
+            let (next, next_prop) = component_prop_literal(file, member.span)?;
+            // A component's `ref` holds the compiler's wrapper, not the value written (as for the named form).
+            if next_prop == "ref" || class_within(file, component.span, member.span) {
                 return None;
             }
-            calls.push(call.span);
+            calls.extend(element_prop_calls(
+                file, next, next_prop, lookup, None, depth,
+            )?);
         }
         return Some(calls);
+    }
+    // ADR 1190 (slice 4): `props` spread whole onto one component element and used nowhere else (`<Kid {...props} />`).
+    if let Some((next, spread)) = props_spread_only(file, component, lookup) {
+        let depth = depth.checked_sub(1)?;
+        return element_prop_calls(file, next, prop, lookup, Some(spread), depth);
     }
     // ADR 1190 (slice 3): the component destructures the prop in its first parameter (`({ run }) => …`): a plain slot of that key, no
     // default, no nested pattern, its name never written, and every reference of the name the callee of a call (not `new`).
@@ -386,6 +438,54 @@ pub(crate) fn prop_literal_call_sites(
         calls.push(call.span);
     }
     Some(calls)
+}
+
+/// ADR 1190 (slice 4): the one component element a synchronous component spreads its plain, unwritten `props` parameter onto, as the
+/// element's only spread, when every reference of `props` is that spread (no member read, no other use, no `arguments` or `eval`).
+fn props_spread_only<'f>(
+    file: &'f solid_facts::FileFacts,
+    component: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<(&'f solid_facts::ast::JsxElementFact, Span)> {
+    if component.r#async || component.generator {
+        return None;
+    }
+    let parameter = component.parameters.first()?;
+    if parameter.shape != solid_facts::ast::BindingShape::Identifier
+        || parameter.initializer.is_some()
+    {
+        return None;
+    }
+    let name = parameter.names.first()?;
+    if crate::indexes::binding_written(file, name.span)
+        || file.ast.identifiers.iter().any(|identifier| {
+            component.span.contains(identifier.span)
+                && matches!(
+                    file.source_text(identifier.span),
+                    Some("arguments" | "eval")
+                )
+        })
+    {
+        return None;
+    }
+    let mut references = file
+        .ast
+        .reference_declarations
+        .iter()
+        .filter(|(reference, declaration)| *declaration == name.span && *reference != name.span)
+        .map(|(reference, _)| *reference);
+    let only = references.next()?;
+    if references.next().is_some() {
+        return None;
+    }
+    let _ = lookup;
+    file.ast.jsx_elements.iter().find_map(|element| {
+        (component.span.contains(element.span)
+            && element.spreads.len() == 1
+            && file.ast.peel_ts_sugar_span(element.spreads[0].argument) == only
+            && !intrinsic_element(file, element))
+        .then(|| (element, element.spreads[0].span))
+    })
 }
 
 /// ADR 1190 (slice 3): the name a synchronous component's first parameter, an object pattern, binds the key `prop` to: one plain
