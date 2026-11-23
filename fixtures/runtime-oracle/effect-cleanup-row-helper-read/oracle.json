@@ -1,0 +1,1 @@
+{ "note": "ADR 1198: a click removes a Show or For row; its disposal runs the cleanup an effect apply returned, which calls a helper that reads a signal: no STRICT_READ_UNTRACKED (silent). The tracked compute reruns the cleanup in the window (uncertifiable); the action through Object.values throws ACTION_CALLED_IN_OWNED_SCOPE (uncertifiable)." }
