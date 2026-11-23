@@ -2937,8 +2937,7 @@ pub(crate) fn callee_callback_timing(
     execution: ExecutionRole,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    let r = callee_callback_timing_within(file, span, execution, lookup, &mut HashSet::default());
-    r
+    callee_callback_timing_within(file, span, execution, lookup, &mut HashSet::default())
 }
 
 /// [`callee_callback_timing`], carrying the invocation sites ADR 0152's arm
