@@ -56,7 +56,7 @@ export const STORE_DESTRUCTURES = {
   "store-dstr-assign": { reads: true, text: (o) => `let v = 0; ({ v } = ${o}); void v;` },
   "store-dstr-array": { reads: true, text: (o) => `const [{ v }] = [${o}]; void v;` },
   "store-dstr-for-of": { reads: true, text: (o) => `for (const { v } of [${o}]) void v;` },
-  "store-dstr-merge": { reads: true, imports: ["merge"], text: (o) => `const { v } = merge(${o}, { w: 1 }); void v;` },
+  "store-dstr-merge": { reads: true, imports: ["merge"], text: (o) => `const { v: dmv } = merge(${o}, { w: 1 }); void dmv;` },
   // ADR 1106: the plain object destructure. In a named helper the body calls (the `closure` layer) it was a clean nothing explained.
   "store-dstr-object": { reads: true, text: (o) => `{ const { v } = ${o}; void v; }` },
   // ADR 1109: the store handed through a standard inline callback's parameter, destructured or read by member.
