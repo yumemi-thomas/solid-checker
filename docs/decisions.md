@@ -5272,5 +5272,11 @@ Both answers looked only at a site written in the cleanup's own body. A closure,
   - `ShowWrapper` and `ForMember` are silent (uncertifiable on main 6e4191ede).
   - `TrackedCompute` stays uncertifiable (a rerun runs the cleanup in the window).
   - `ForActionValues` keeps ADR 1196's dispatch row at the call.
-- Chrome (`runtime-oracle/effect-cleanup-row-helper-read`, `effect-cleanup-for-action-dispatch`): PROBE.
-- Probe: PROBE.
+- Chrome (`runtime-oracle/effect-cleanup-row-helper-read`, `effect-cleanup-for-action-dispatch`, `effect-cleanup-disposal-only`): covered, nothing static-only.
+- Probe (release, VM, Chrome judge), main 6e4191ede against this, every cleanup-context program of every code (85,440):
+  - mx-recall, 45,675: no outcome changes (no misuse program clean). At code level, 1,204 STORE_WRITE_OUTSIDE_SETTER programs of `effect-cleanup-for`/`-show` lose SC1001's strict read on the write path in a layer, which runs at the row's disposal. Their SC2003 row stands, and no violation is added or lost.
+  - lg-recall, 39,765: 1,578 uncertifiable to clean, Chrome silent, nothing needs a look. At code level, 1,796 programs change: removals, plus 20 relabelling an SC9012 row (U to U); no violation is added.
+  - Against main before ADR 1196 (60a7cf1db), 158 of the 208 legal programs ADR 1196 cost are clean again. The other 50 keep rows on purpose:
+    - 38 SC9012 withholding rows of the call's dispatch (`handed-member-read`, `store-key-undecided`, `value-through-logical`, `value-to-unresolved-callee`), ADR 1196's row, which covers every code;
+    - 8 SC1001 reads carried by `[f].forEach(…)`, a library callback;
+    - 4 SC1003 `destructure-root-unproven` rows.
