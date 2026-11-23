@@ -11,7 +11,7 @@
   "SC1001 component-identity-unproven": 136,
   "SC1001 creation-throws-first": 3,
   "SC1001 escaped-name-unresolved": 19,
-  "SC1001 function-run-unplaced": 1780,
+  "SC1001 function-run-unplaced": 1778,
   "SC1001 function-unentered": 1,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
@@ -129,7 +129,7 @@
   "SC3001 function-run-unplaced": 44,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 7,
-  "SC3001 leaf-operation-unaccounted": 7183,
+  "SC3001 leaf-operation-unaccounted": 7191,
   "SC3001 leaf-owner-unproven": 69,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
@@ -145,7 +145,7 @@
   "SC4001 handler-on-disabled-control": 7,
   "SC4001 handler-spread-unresolved": 84,
   "SC4001 owner-allocation-unproven": 24,
-  "SC4001 owner-callers-unenumerated": 3679,
+  "SC4001 owner-callers-unenumerated": 3687,
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 5,
@@ -206,7 +206,7 @@
   "SC5008 pending-read-unresolved": 24,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5557,
+  "SC6002 effect-creation-unaccounted": 5565,
   "SC6002 effect-owner-unproven": 54,
   "SC6002 function-run-unplaced": 64,
   "SC6002 generator-step-unplaced": 1,
@@ -256,7 +256,7 @@
   "SC9012 function-call-target-unresolved": 8,
   "SC9012 function-prototype-callee-unresolved": 2,
   "SC9012 function-run-unplaced": 1,
-  "SC9012 handed-member-dispatch": 463,
+  "SC9012 handed-member-dispatch": 464,
   "SC9012 handed-member-read": 79,
   "SC9012 handed-read-after-await": 12,
   "SC9012 import-unresolved": 50,
@@ -265,7 +265,7 @@
   "SC9012 listener-reach": 128,
   "SC9012 package-callee": 28,
   "SC9012 package-finding-at-entry": 232,
-  "SC9012 parameter-call-argument-unproven": 93,
+  "SC9012 parameter-call-argument-unproven": 94,
   "SC9012 parameter-default-unresolved": 5,
   "SC9012 parameter-member-path-unresolved": 21,
   "SC9012 parameter-member-target-unresolved": 163,
@@ -6615,6 +6615,54 @@
    "adr": "ADR 1190",
    "kind": "relabel",
    "relabeledTo": "SC1001 read-backing-unproven"
+  },
+  {
+   "fixture": "reactive-ir/effect-cleanup-disposal-only",
+   "key": "SC1001 function-run-unplaced",
+   "from": 3,
+   "to": 2,
+   "adr": "ADR 1200",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs::sole_named_apply_reference",
+   "fixtures": {
+    "proved": "reactive-ir/effect-cleanup-disposal-only",
+    "open": "reactive-ir/effect-cleanup-disposal-only"
+   }
+  },
+  {
+   "fixture": "reactive-ir/effect-cleanup-rerun-read",
+   "key": "SC1001 function-run-unplaced",
+   "from": 4,
+   "to": 3,
+   "adr": "ADR 1200",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs::sole_named_apply_reference",
+   "fixtures": {
+    "proved": "reactive-ir/effect-cleanup-rerun-read",
+    "open": "reactive-ir/effect-cleanup-rerun-read"
+   }
+  },
+  {
+   "fixture": "reactive-ir/effect-cleanup-write-role",
+   "key": "SC2001 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1200",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs::sole_named_apply_reference",
+   "fixtures": {
+    "proved": "reactive-ir/effect-cleanup-write-role",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/forwarded-callback-nested-window",
+   "key": "SC1001 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1200",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs::sole_named_apply_reference",
+   "fixtures": {
+    "proved": "reactive-ir/forwarded-callback-nested-window",
+    "open": "engine/eslint-reactivity-v2"
+   }
   }
  ],
  "renames": []
