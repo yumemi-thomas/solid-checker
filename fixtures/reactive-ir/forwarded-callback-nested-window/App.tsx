@@ -34,7 +34,7 @@ export function ForwardedInNamedRef() {
   return <p ref={ref}>x</p>;
 }
 
-// Uncertifiable: the cleanup a named apply returns, run on the rerun.
+// Violation since ADR 1200: the cleanup a named apply (one reference) returns, run on the reached rerun.
 export function ForwardedInNamedCleanup() {
   const [count] = createSignal(3);
   const [tick, setTick] = createSignal(1);

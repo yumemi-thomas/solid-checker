@@ -62,7 +62,7 @@ export function CleanupAction() {
   return <button onClick={() => setT(2)}>go</button>;
 }
 
-// A named apply may be called elsewhere and run its cleanup on that stack.
+// Clean since ADR 1200: a named apply whose one reference is the apply argument is the inline apply.
 export function NamedApply() {
   const [w, setW] = createSignal(0);
   const [t, setT] = createSignal(1);

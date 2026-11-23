@@ -74,7 +74,7 @@ export function TwinComputeTracks() {
   return <button onClick={() => setT(2)}>x</button>;
 }
 
-// Uncertifiable: a named apply may be called elsewhere.
+// Silent since ADR 1200: a named apply whose one reference is the apply argument is the inline apply.
 export function TwinNamedApply() {
   const [s] = createStore({ v: 0 });
   const apply = () => () => {

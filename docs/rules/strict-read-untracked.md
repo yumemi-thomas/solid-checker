@@ -384,7 +384,8 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   code may dispose an owner on a stack of its own (ADR 0695, ADR 1167).
   A read in the cleanup is a violation where a click a user can reach writes a
   new value to the signal the compute reads: the rerun calls the cleanup in the
-  apply's window with the owner alive (ADR 1183), and so is a read in function
+  apply's window with the owner alive (ADR 1183; an apply named by a `const` whose one reference is the apply argument is the
+  inline apply, ADR 1200), and so is a read in function
   layers run in place in the cleanup (an IIFE, a closure called once, a project
   helper's callback; no library callback, no await on the way; ADR 1195). A read in an exact bundle's
   `error` member is silent: rc.17 and rc.21 run it before the effect's window

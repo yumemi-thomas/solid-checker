@@ -1671,6 +1671,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/owner-call-getter-placed/node_modules/**
 !fixtures/reactive-ir/effect-cleanup-write-role/node_modules/
 !fixtures/reactive-ir/effect-cleanup-write-role/node_modules/**
+!fixtures/reactive-ir/effect-cleanup-named-apply/node_modules/
+!fixtures/reactive-ir/effect-cleanup-named-apply/node_modules/**
 !fixtures/reactive-ir/effect-cleanup-for-action-dispatch/node_modules/
 !fixtures/reactive-ir/effect-cleanup-for-action-dispatch/node_modules/**
 !fixtures/reactive-ir/effect-cleanup-row-helper-read/node_modules/

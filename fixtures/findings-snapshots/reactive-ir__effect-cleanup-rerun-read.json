@@ -100,12 +100,11 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
-      "start": 1328,
-      "end": 1335,
+      "start": 1431,
+      "end": 1438,
       "fixes": 0
     },
     {
@@ -115,8 +114,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
-      "start": 1344,
-      "end": 1356,
+      "start": 1447,
+      "end": 1459,
       "fixes": 0
     },
     {
@@ -126,8 +125,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
-      "start": 1344,
-      "end": 1356,
+      "start": 1447,
+      "end": 1459,
       "fixes": 0
     },
     {
@@ -137,8 +136,8 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
-      "start": 1433,
-      "end": 1440,
+      "start": 1536,
+      "end": 1543,
       "fixes": 0
     },
     {
@@ -148,8 +147,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
-      "start": 1455,
-      "end": 1473,
+      "start": 1558,
+      "end": 1576,
       "fixes": 0
     },
     {
@@ -159,8 +158,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
-      "start": 1455,
-      "end": 1473,
+      "start": 1558,
+      "end": 1576,
       "fixes": 0
     },
     {
@@ -170,8 +169,8 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
-      "start": 1571,
-      "end": 1578,
+      "start": 1674,
+      "end": 1681,
       "fixes": 0
     },
     {
@@ -181,8 +180,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
-      "start": 1617,
-      "end": 1629,
+      "start": 1720,
+      "end": 1732,
       "fixes": 0
     },
     {
@@ -192,8 +191,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
-      "start": 1617,
-      "end": 1629,
+      "start": 1720,
+      "end": 1732,
       "fixes": 0
     },
     {
@@ -203,8 +202,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
-      "start": 1836,
-      "end": 1848,
+      "start": 1939,
+      "end": 1951,
       "fixes": 0
     },
     {
@@ -214,8 +213,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
-      "start": 1836,
-      "end": 1848,
+      "start": 1939,
+      "end": 1951,
       "fixes": 0
     },
     {
@@ -224,8 +223,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
-      "start": 1881,
-      "end": 1888,
+      "start": 1984,
+      "end": 1991,
       "fixes": 0
     },
     {
@@ -235,8 +234,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
-      "start": 2108,
-      "end": 2120,
+      "start": 2211,
+      "end": 2223,
       "fixes": 0
     },
     {
@@ -246,8 +245,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
-      "start": 2108,
-      "end": 2120,
+      "start": 2211,
+      "end": 2223,
       "fixes": 0
     },
     {
@@ -257,8 +256,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
-      "start": 2182,
-      "end": 2200,
+      "start": 2285,
+      "end": 2303,
       "fixes": 0
     },
     {
@@ -268,8 +267,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
-      "start": 2182,
-      "end": 2200,
+      "start": 2285,
+      "end": 2303,
       "fixes": 0
     },
     {
@@ -279,8 +278,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
-      "start": 2442,
-      "end": 2461,
+      "start": 2545,
+      "end": 2564,
       "fixes": 0
     },
     {
@@ -290,8 +289,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
-      "start": 2442,
-      "end": 2461,
+      "start": 2545,
+      "end": 2564,
       "fixes": 0
     },
     {
@@ -301,8 +300,8 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
-      "start": 2480,
-      "end": 2487,
+      "start": 2583,
+      "end": 2590,
       "fixes": 0
     },
     {
@@ -312,8 +311,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
-      "start": 2677,
-      "end": 2689,
+      "start": 2780,
+      "end": 2792,
       "fixes": 0
     },
     {
@@ -323,8 +322,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
-      "start": 2677,
-      "end": 2689,
+      "start": 2780,
+      "end": 2792,
       "fixes": 0
     },
     {
@@ -334,8 +333,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
-      "start": 3141,
-      "end": 3147,
+      "start": 3244,
+      "end": 3250,
       "fixes": 0
     },
     {
@@ -345,8 +344,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/effect-cleanup-rerun-read/App.tsx",
-      "start": 3173,
-      "end": 3180,
+      "start": 3276,
+      "end": 3283,
       "fixes": 0
     },
     {

@@ -6,8 +6,8 @@ cleanup and no other code can name it. A disposal runs it outside any strict-rea
 a stack of its own (ADR 0695, `project_may_dispose`, the premise `onCleanup` rests on): SC1001 is clean. Only the read role takes the
 answer; a `For` row's disposal runs the cleanup owned, which owner codes read differently.
 
-Clean: `ShowRemoved`, `ForRowRemoved`, `RenderEffectCleanup` (a signal read). Uncertifiable: `TwinComputeTracks` (a rerun may call it
-in the apply's window), `TwinNamedApply`, `TwinNestedRead`, `TwinAsyncCleanup`; and `effect-cleanup-disposal-reachable`, where a
+Clean: `ShowRemoved`, `ForRowRemoved`, `RenderEffectCleanup` (a signal read), and since ADR 1200 `TwinNamedApply` (its `const` apply has one reference: the inline apply). Uncertifiable: `TwinComputeTracks` (a rerun may call it
+in the apply's window), `TwinNestedRead`, `TwinAsyncCleanup`; and `effect-cleanup-disposal-reachable`, where a
 `createRoot` that takes `dispose` makes every disposal reachable from project code (ADR 0695's premise stands down). Chrome rc.21
 (`runtime-oracle/effect-cleanup-disposal-only`): quiet at the three clean reads, STRICT_READ_UNTRACKED at `TwinComputeTracks` after the click. Stub: `foreach-carrier`'s, plus `createStore`, `Show`, `For` and `createRoot`'s `dispose`.
 
