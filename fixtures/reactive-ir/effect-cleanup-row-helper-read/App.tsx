@@ -14,7 +14,7 @@ export function ShowWrapper() {
   return (
     <div>
       <Show when={t()}>
-        {() => {
+        {(_u) => {
           createEffect(
             () => 1,
             () => () => {

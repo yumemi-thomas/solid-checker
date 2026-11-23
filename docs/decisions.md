@@ -5254,3 +5254,21 @@ Both answers looked only at a site written in the cleanup's own body. A closure,
   - lg-recall: 300 programs gain rows; 8 relabel U to U at the same site.
   - Nothing goes clean and no violation is added or lost: the fail-closed cost of the move.
 - Rediscovery: the id, its build fails focus on main and passes here.
+<a id="adr-1198"></a>
+## ADR 1198 — A helper call in a disposal-only returned cleanup places its strict reads at the disposal (ADR 1196's named cost)
+**The cost** (ADR 1196's code-level probe; coordinator count on main 6e4191ede: 208 legal programs).
+- `effect-cleanup-for`/`-show` with STRICT_READ_UNTRACKED (202) and REACTIVE_WRITE_IN_OWNED_SCOPE (6) lost their clean.
+- A helper (`wrapUse()`) or a hook's member accessor (`thing.useIt()`) called from a `For`/`Show` row's returned cleanup, where the compute tracks nothing, is placed by the call-site summary (`result_reads::call_result_reads`) through the shared read role. ADR 1196 took ADR 1167's disposal-only answer out of that role.
+- The summary's strict reads at the call became SC1001 `function-run-unplaced`.
+
+**Decision.** In `call_result_reads`, a call whose role is unplaced and that `returned_cleanup_disposal_only` places takes `DeferredCallback`, logged as the read's decision for the proof gate. The call is written in the body of the cleanup an inline apply returns, with no rerun (a compute that tracks nothing) and no project code able to dispose an owner on its own stack. Its strict reads run at the disposal, outside any strict-read window, as a read written in the cleanup does. These rows are SC1001's only. The call's dispatch rows are built before them and keep their role, so the action rule's row at an unselectable callee in a `For` row's owned disposal stays (ADR 1196).
+
+**Not restored: the 6 REACTIVE_WRITE_IN_OWNED_SCOPE programs.** Their added rows are SC9012 dispatch rows at an unselectable callee (`value-through-logical`, `value-to-unresolved-callee`): the row ADR 1196 restored, which covers every code. A setter's write there is legal on every run of the cleanup, but an action at the same callee throws under the row's owner. Dropping the row needs a proof that every candidate of the callee is a setter, not built.
+
+**Evidence.**
+- Fixture `effect-cleanup-row-helper-read`:
+  - `ShowWrapper` and `ForMember` are silent (uncertifiable on main 6e4191ede).
+  - `TrackedCompute` stays uncertifiable (a rerun runs the cleanup in the window).
+  - `ForActionValues` keeps ADR 1196's dispatch row at the call.
+- Chrome (`runtime-oracle/effect-cleanup-row-helper-read`, `effect-cleanup-for-action-dispatch`): PROBE.
+- Probe: PROBE.
