@@ -22,7 +22,7 @@
   "SC1001 read-backing-unproven": 418,
   "SC1001 store-handed-to-package": 1,
   "SC1001 strict-read-unaccounted": 18,
-  "SC1001 summary-read-unplaced": 96,
+  "SC1001 summary-read-unplaced": 97,
   "SC1001 unreached-dead-code": 1,
   "SC1001 write-path-read-unproven": 13,
   "SC1002 field-initializer-unplaced": 3,
@@ -33,7 +33,7 @@
   "SC1002 package-finding-at-entry": 17,
   "SC1002 package-operation-after-await": 3,
   "SC1002 parameter-initializer-unplaced": 8,
-  "SC1002 read-after-await-unaccounted": 796,
+  "SC1002 read-after-await-unaccounted": 739,
   "SC1002 search-depth-limit": 1,
   "SC1002 site-reach-undecided": 1,
   "SC1002 standard-member-impostor": 3,
@@ -6332,6 +6332,162 @@
    "fixtures": {
     "proved": "reactive-ir/after-await-for-await-finally",
     "open": "reactive-ir/after-await-read-later-pass"
+   }
+  },
+  {
+   "fixture": "reactive-ir/async-call-prefix",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 11,
+   "to": 2,
+   "adr": "ADR 1197",
+   "proof": "rust/crates/solid-reactive-ir/src/after_await_accounting/closed_callers.rs::closed",
+   "fixtures": {
+    "proved": "reactive-ir/async-call-prefix",
+    "open": "reactive-ir/async-call-prefix"
+   }
+  },
+  {
+   "fixture": "reactive-ir/callee-callback-timing",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 3,
+   "to": 2,
+   "adr": "ADR 1197",
+   "proof": "rust/crates/solid-reactive-ir/src/after_await_accounting/closed_callers.rs::closed",
+   "fixtures": {
+    "proved": "reactive-ir/callee-callback-timing",
+    "open": "reactive-ir/callee-callback-timing"
+   }
+  },
+  {
+   "fixture": "reactive-ir/fp-exec-await-argument-write",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1197",
+   "proof": "rust/crates/solid-reactive-ir/src/after_await_accounting/closed_callers.rs::closed",
+   "fixtures": {
+    "proved": "reactive-ir/fp-exec-await-argument-write",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/helper-prop-read",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 3,
+   "to": 0,
+   "adr": "ADR 1197",
+   "proof": "rust/crates/solid-reactive-ir/src/after_await_accounting/closed_callers.rs::closed",
+   "fixtures": {
+    "proved": "reactive-ir/helper-prop-read",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/invocation-flow",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1197",
+   "proof": "rust/crates/solid-reactive-ir/src/after_await_accounting/closed_callers.rs::closed",
+   "fixtures": {
+    "proved": "reactive-ir/invocation-flow",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/obligation-exclusion-boundary",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 11,
+   "to": 0,
+   "adr": "ADR 1197",
+   "proof": "rust/crates/solid-reactive-ir/src/after_await_accounting/closed_callers.rs::closed",
+   "fixtures": {
+    "proved": "reactive-ir/obligation-exclusion-boundary",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/owner-after-await-layers",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 9,
+   "to": 0,
+   "adr": "ADR 1197",
+   "proof": "rust/crates/solid-reactive-ir/src/after_await_accounting/closed_callers.rs::closed",
+   "fixtures": {
+    "proved": "reactive-ir/owner-after-await-layers",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/read-after-await-reach",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 55,
+   "to": 54,
+   "adr": "ADR 1197",
+   "proof": "rust/crates/solid-reactive-ir/src/after_await_accounting/closed_callers.rs::closed",
+   "fixtures": {
+    "proved": "reactive-ir/read-after-await-reach",
+    "open": "reactive-ir/read-after-await-reach"
+   }
+  },
+  {
+   "fixture": "reactive-ir/ref-await-in-place-layers",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 5,
+   "to": 4,
+   "adr": "ADR 1197",
+   "proof": "rust/crates/solid-reactive-ir/src/after_await_accounting/closed_callers.rs::closed",
+   "fixtures": {
+    "proved": "reactive-ir/ref-await-in-place-layers",
+    "open": "reactive-ir/ref-await-in-place-layers"
+   }
+  },
+  {
+   "fixture": "reactive-ir/settled-cleanup-after-await",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 3,
+   "to": 2,
+   "adr": "ADR 1197",
+   "proof": "rust/crates/solid-reactive-ir/src/after_await_accounting/closed_callers.rs::closed",
+   "fixtures": {
+    "proved": "reactive-ir/settled-cleanup-after-await",
+    "open": "reactive-ir/settled-cleanup-after-await"
+   }
+  },
+  {
+   "fixture": "reactive-ir/write-legality-proofs",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 22,
+   "to": 2,
+   "adr": "ADR 1197",
+   "proof": "rust/crates/solid-reactive-ir/src/after_await_accounting/closed_callers.rs::closed",
+   "fixtures": {
+    "proved": "reactive-ir/write-legality-proofs",
+    "open": "reactive-ir/write-legality-proofs"
+   }
+  },
+  {
+   "fixture": "uncertifiable-repro/sc2001",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 3,
+   "to": 1,
+   "adr": "ADR 1197",
+   "proof": "rust/crates/solid-reactive-ir/src/after_await_accounting/closed_callers.rs::closed",
+   "fixtures": {
+    "proved": "uncertifiable-repro/sc2001",
+    "open": "uncertifiable-repro/sc2001"
+   }
+  },
+  {
+   "fixture": "uncertifiable-repro/sc9012",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 11,
+   "to": 10,
+   "adr": "ADR 1197",
+   "proof": "rust/crates/solid-reactive-ir/src/after_await_accounting/closed_callers.rs::closed",
+   "fixtures": {
+    "proved": "uncertifiable-repro/sc9012",
+    "open": "uncertifiable-repro/sc9012"
    }
   }
  ],
