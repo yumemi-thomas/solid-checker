@@ -1345,6 +1345,8 @@ fn open_destructures(
                     .filter(|binding| {
                         left.contains(binding.pattern)
                             && binding.shape != solid_facts::ast::BindingShape::Identifier
+                            // ADR 1193: a pattern over `[s]` whose root `destructure_root` names is the exact arm's.
+                            && !exact_root(binding.pattern)
                     })
                     .map(|binding| binding.pattern),
             );
