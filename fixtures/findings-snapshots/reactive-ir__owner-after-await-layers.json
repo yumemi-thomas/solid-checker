@@ -2,17 +2,6 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "read-after-await-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/owner-after-await-layers/App.tsx",
-      "start": 496,
-      "end": 548,
-      "fixes": 0
-    },
-    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -42,17 +31,6 @@
       "path": "fixtures/reactive-ir/owner-after-await-layers/App.tsx",
       "start": 510,
       "end": 522,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "read-after-await-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/owner-after-await-layers/App.tsx",
-      "start": 757,
-      "end": 760,
       "fixes": 0
     },
     {
@@ -106,17 +84,6 @@
       "path": "fixtures/reactive-ir/owner-after-await-layers/App.tsx",
       "start": 1039,
       "end": 1051,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "read-after-await-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/owner-after-await-layers/App.tsx",
-      "start": 1083,
-      "end": 1088,
       "fixes": 0
     },
     {
@@ -153,17 +120,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "read-after-await-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/owner-after-await-layers/App.tsx",
-      "start": 1575,
-      "end": 1627,
-      "fixes": 0
-    },
-    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -194,17 +150,6 @@
       "path": "fixtures/reactive-ir/owner-after-await-layers/App.tsx",
       "start": 1589,
       "end": 1601,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "read-after-await-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/owner-after-await-layers/App.tsx",
-      "start": 1945,
-      "end": 1950,
       "fixes": 0
     },
     {
@@ -241,17 +186,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "read-after-await-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/owner-after-await-layers/App.tsx",
-      "start": 2288,
-      "end": 2291,
-      "fixes": 0
-    },
-    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -285,28 +219,6 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "read-after-await-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/owner-after-await-layers/App.tsx",
-      "start": 2583,
-      "end": 2594,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "read-after-await-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/owner-after-await-layers/App.tsx",
-      "start": 2583,
-      "end": 2602,
-      "fixes": 0
-    },
-    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -337,17 +249,6 @@
       "path": "fixtures/reactive-ir/owner-after-await-layers/App.tsx",
       "start": 2617,
       "end": 2629,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-read-after-await",
-      "code": "SC1002",
-      "kind": "uncertifiable",
-      "blocker": "read-after-await-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/owner-after-await-layers/App.tsx",
-      "start": 2956,
-      "end": 3002,
       "fixes": 0
     },
     {

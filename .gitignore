@@ -1281,6 +1281,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/for-await-body/node_modules/**
 !fixtures/reactive-ir/after-await-for-await-finally/node_modules/
 !fixtures/reactive-ir/after-await-for-await-finally/node_modules/**
+!fixtures/reactive-ir/after-await-closed-callers/node_modules/
+!fixtures/reactive-ir/after-await-closed-callers/node_modules/**
 !fixtures/reactive-ir/after-await-read-later-pass/node_modules/
 !fixtures/reactive-ir/after-await-read-later-pass/node_modules/**
 !fixtures/reactive-ir/owner-after-await-for-await/node_modules/

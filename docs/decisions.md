@@ -5255,3 +5255,30 @@ Both answers looked only at a site written in the cleanup's own body. A closure,
   - lg-recall: 300 programs gain rows; 8 relabel U to U at the same site.
   - Nothing goes clean and no violation is added or lost: the fail-closed cost of the move.
 - Rediscovery: the id, its build fails focus on main and passes here.
+<a id="adr-1197"></a>
+## ADR 1197 — Closed callers: a read after an await in an async function no computation runs (the owner's addendum to ADR 0973's ruling 5)
+**The ruling** (owner, 2026-11-23, an addendum to ADR 0973's ruling 5, asked in ADR 1191's step-0 report). A read past an await in an async function counts as "no async computation runs it" when every call is enumerated and none escapes. The conditions:
+- the function is in the same file and not exported;
+- every reference is a direct call, never stored, returned, passed as an argument, spread or put in an object;
+- each caller resolves exactly to a handler or the component body, and a helper caller qualifies only if the same holds for it (bounded depth);
+- no memo or effect compute or tracked async callback is anywhere in the chain;
+- anything unresolved (a dynamic call, `eval`, `arguments`, an unknown callee) keeps the row.
+
+**Decision** (`after_await_accounting/closed_callers.rs`, the typed ending `closed-callers`, after the six of ADRs 0973, 0976, 1004 and 1097). A site ADR 0973's accounting lists ends when the async non-generator function it is written in satisfies `closed`:
+- The function is named (a declaration or a `const`'s literal), same-file, unexported (`binding_exported`) and never rebound (`function_value_is_current`). No unseen code enters it, it is no method and no component, and there is no `eval` in the file.
+- ADR 0565's census of its references (`function_reference_hand_offs`) holds only `HandOff::Call`, with no foreign reference or call. It also lists every reference the binder resolved to the name, type positions aside.
+- Each call is no `new` and not in a parameter list, and is the own code of its function (`runs_with_its_function`: no JSX expression, tracked region or field between). That function is an intrinsic element's `on…` handler literal (a lowercase tag with no spread), a proven component's body (`ComponentStatus::Proven`), or a helper for which the same holds (four links).
+- It asks no index of computations, so it is not the census reason ADR 0973 refused.
+
+**Evidence.**
+- Fixture `after-await-closed-callers`:
+  - Clean (uncertifiable on main, `read-after-await-unaccounted`): `BodyCall`, `HandlerCall`, `HelperChain`.
+  - Uncertifiable, the ruling's twins: `ExportedCall` (exported), `PassedAsCallback` (`queueMicrotask(later)`), `CalledFromMemo`, `HelperFromMemo`.
+- The component body's SC1001 `summary-read-unplaced` row at the call stays: another claim.
+- Chrome (`runtime-oracle/after-await-closed-callers`): quiet, every clean silent at run time.
+- Probe (release, VM, Chrome judge), main 25f525504 against this, every UNTRACKED_READ_AFTER_AWAIT program of both recall grids:
+  - mx-recall, 36,503 (misuse): no outcome changes and no program changes at code level. No misuse program becomes clean, and no violation is lost.
+  - lg-recall, 12,974 (legal): 513 move from uncertifiable to clean, Chrome silent, nothing needs a look. At code level, 3,927 programs lose 4,007 SC1002 `read-after-await-unaccounted` rows and nothing is added (the rest keep other rows: an SC1001 summary read at the call, a handed member, an unplaced function run).
+- Boundary: the accounting's endings are no `SiteSilence` (ADR 0973) and the boundary inventory lists none of them, so there is no pair or gap to add; the separation is the probe's (no misuse move against 513 legal cleans) and the fixture's twins.
+
+**Accepted as ruled.** The component body is a terminal as the ruling names it: a proven component that unseen code also ran as a computation's compute would break the premise. Not observed, and recorded in `docs/open-work.md`.
