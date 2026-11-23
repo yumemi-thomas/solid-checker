@@ -1679,6 +1679,7 @@ impl<'l, 'a> Census<'l, 'a> {
                 // pattern (`for (const { v } of [s])`), is the root's destructure (`static_rules::destructure_root`): the pattern's
                 // keys are SC1003's and SC1001's rows, as `const { v } = s`'s.
                 if matches!(mode, Mode::RootHolder(_))
+                    && !self.props_root
                     && self.steps <= 2
                     && file.ast.bindings.iter().any(|binding| {
                         binding.immutable

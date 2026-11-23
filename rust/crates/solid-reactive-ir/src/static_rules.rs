@@ -561,6 +561,14 @@ fn component_props_destructure_into(
             if empty_pattern(binding) {
                 continue;
             }
+            // ADR 1193: a root `destructure_root` adds (a `for…of`'s `[s]`, `merge(s, {…})`) keeps the silence the unproven net gave
+            // it where setup provably takes no snapshot (`may_snapshot_at_setup`): a clean stays clean.
+            if binding.initializer_identifier.is_none()
+                && !props
+                && read_role_fresh(ctx.semantic_lookup, file, binding.pattern)
+            {
+                continue;
+            }
             let role = semantic_execution_role(
                 file,
                 binding.pattern,
@@ -969,6 +977,8 @@ fn handed_over_slots(
 ) -> Option<Vec<(solid_facts::core::Span, solid_facts::core::Span)>> {
     if destructure_root(lookup, file, binding).is_none()
         || written_directly_in_setup(lookup, file, binding.pattern)
+        // ADR 1193: a root `destructure_root` adds keeps the unproven net's silence where the read's own role proves a fresh read.
+        || (binding.initializer_identifier.is_none() && read_role_fresh(lookup, file, binding.pattern))
     {
         return None;
     }
@@ -1043,7 +1053,9 @@ pub(crate) fn destructure_root(
     let call = ast.call_at(ast.peel_ts_sugar_span(initializer))?;
     if call.construct
         || binding.call_initializer != Some(call.span)
-        || lookup.primitive_at_call(file, call.span) != Some(solid_dialect::Primitive::Merge)
+        || !lookup
+            .primitive_at_call(file, call.span)
+            .is_some_and(|primitive| lookup.dialect.merges_props_reactivity(primitive))
     {
         return None;
     }
@@ -1062,10 +1074,8 @@ pub(crate) fn destructure_root(
             .is_some_and(|properties| {
                 properties.iter().all(|property| {
                     !property.computed
-                        && file.source_text(property.key).is_some_and(|key| {
-                            let key = key.trim_matches(['\'', '"']);
-                            keys.iter().all(|slot| slot.name != key)
-                        })
+                        && crate::kernel::property_key(file, property.key)
+                            .is_some_and(|key| keys.iter().all(|slot| slot.name != key))
                 })
             })
     });
@@ -1322,11 +1332,21 @@ fn open_destructures(
                     })
         })
     };
+    // ADR 1193: a root `destructure_root` adds counts only where it is a store, which SC1003's store paths then claim; a props
+    // root there (`for (const { a } of [props])`) keeps this net's row.
     let exact_root = |pattern: Span| {
         ast.bindings.iter().any(|binding| {
             binding.pattern == pattern
                 && binding.shape == solid_facts::ast::BindingShape::Object
-                && destructure_root(ctx.semantic_lookup, file, binding).is_some()
+                && destructure_root(ctx.semantic_lookup, file, binding).is_some_and(|root| {
+                    binding.initializer_identifier.is_some()
+                        || ctx
+                            .entities
+                            .get(&location(file.path.shared(), root))
+                            .is_some_and(|symbol| {
+                                tables.source_kind(symbol) == Some(&ReactiveSourceKind::Store)
+                            })
+                })
         })
     };
     let mut sites = Vec::new();
@@ -1431,6 +1451,30 @@ fn may_snapshot_at_setup(
             ctx.entities,
             ctx.symbol_names,
             ctx.semantic_lookup,
+        ),
+        crate::ExecutionRole::TrackedJsx
+            | crate::ExecutionRole::EventCallback
+            | crate::ExecutionRole::DeferredCallback
+            | crate::ExecutionRole::UntrackedUnwindowed
+    )
+}
+
+/// ADR 1193: [`may_snapshot_at_setup`]'s fresh roles, asked of the lookup: the read's own role at `pattern` reads current values when
+/// it runs (tracked JSX, an event callback, a deferred callback, an untracked unwindowed callback), so no snapshot claim stands there.
+fn read_role_fresh(
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    pattern: Span,
+) -> bool {
+    let allowed = allowed_callback_spans(file, lookup);
+    matches!(
+        read_execution_role(
+            file,
+            pattern,
+            &allowed,
+            lookup.entities(),
+            lookup.symbol_names(),
+            lookup
         ),
         crate::ExecutionRole::TrackedJsx
             | crate::ExecutionRole::EventCallback
