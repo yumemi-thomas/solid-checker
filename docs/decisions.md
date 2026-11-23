@@ -5163,3 +5163,29 @@ G4 of the R3 catalog (M half), on ADR 1165. `createMemo(async () => { for (let i
 - Boundary: no role arm and no silent-capable path; it adds violations only.
 
 **Not built.** In-place layers in an async function the component body or a handler calls (most of the 4,811), another counter or guard shape, a `while` loop, and SC6002's `effect-creation-unaccounted` row at the creation, which stays beside the violation.
+<a id="adr-1191"></a>
+## ADR 1191 — A read in a counted loop's later pass, or in layers run in place in a placed body, is past the await
+G1 of the R3 catalog (misuse half), on ADRs 1164 and 1185. In an async memo's or effect's compute, `for (let i = 0; i < 2; i += 1) { if (i > 0) { r1(); } await p; }` and `for await (const _ of [1]) { (() => r1())(); }` kept SC1002 uncertifiable. Chrome warns UNTRACKED_READ_AFTER_AWAIT at both reads.
+**Decision.**
+- *Placement* (`after_await.rs` `after_implicit_suspension`): beside ADR 1164's `for await` bodies that run, a row stays unmarked when its site is placed:
+  - written directly in a counted loop's later pass (`body_roles::in_counted_loop_later_pass`, ADR 1185's predicate), or
+  - in function layers run in place (`climb_in_place_layers`) whose outermost call is placed so.
+  - The climb premises are those of ADR 1185's owner climb: no bound, no parameter-list layer, no layer that also runs its callback elsewhere, nothing withheld or unmodelled, and no library or package callback crossed (`climb_crosses_library_callback`), so no primitive's slot (`untrack`) and no `forEach` either.
+- *No dependency* (`pre_await.rs`): the window before the first suspension skips what is written inside a later pass's consequent (`in_counted_loop_later_pass_region`). The first pass skips it, every later pass follows the first pass's await, and a function written there does not exist earlier. A counter reference is a primitive (`counted_loop_counter`: a `let` set to `0` whose only write adds `1`), so `i < 2` and `i > 0` coerce nothing. Before this, both made the read `MayBeTracked`.
+- The 1185 predicate is split (`counted_loop`, `later_pass_consequents`) and is unchanged for owners.
+
+**Evidence.**
+- Fixture `after-await-read-later-pass`: violations at `LaterPassRead`, `LaterPassIife`, `ForAwaitClosure` (a closure called once) and `ForAwaitHelper` (a project helper's callback, an effect compute). Uncertifiable as before: no guard (the first pass reads before any await), a `continue`, a shadowing guard binding, `forEach`, a stored closure. `untrack`'s callback has no SC1002 row, on main too. ADR 0973's accounting rows at the layer calls stand beside the violations.
+- `after-await-for-await-finally` `ForAwaitClosure` (an IIFE in the body): uncertifiable to violation.
+- Chrome (`runtime-oracle/after-await-read-later-pass`, `after-await-for-await-finally`): covered, nothing static-only.
+- Probe (release, VM, Chrome judge), main 176445e77 against this, every UNTRACKED_READ_AFTER_AWAIT program of both recall grids:
+  - mx-recall, 36,503 programs: 2,196 recall-gap to agree (memo and effect × the counted loop, about 1,240, every layer and source, and `for await`'s layers, about 950); nothing needs a look; not-fired (1,370) and typed-away unchanged.
+  - At code level, exactly 2,196 programs change, each one SC1002 row from uncertifiable to violation.
+  - lg-recall, 12,974 programs: none changes.
+- Boundary: no role arm; it adds violations only.
+
+**Not built.**
+- The legal half of G1: a read after an await in an async function only a handler, a `ref` or the component body calls. This is ADR 0973 ruling 5: there is no "no flight" reason. The ruling question was sent with the step-0 report.
+- A `finally`'s layered reads.
+- Member reads in a later pass.
+- Other loop shapes.

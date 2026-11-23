@@ -92,7 +92,7 @@ export function ForAwaitTracked() {
   createEffect(() => m(), () => {});
   return <p />;
 }
-// A closure the body runs in place: not this proof's (the read is not written directly in the computation).
+// Violation since ADR 1191: an IIFE the body runs in place reads on the same continuation.
 export function ForAwaitClosure() {
   const [s] = createSignal(0);
   const m = createMemo(async () => {
