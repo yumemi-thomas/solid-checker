@@ -1143,6 +1143,9 @@ pub(super) fn classify_one_component(
                         .ast
                         .function_at(use_file.ast.peel_ts_sugar_span(expression))
                         .is_some()
+                        // ADR 1190 (slice 3): a function's name whose runs ADR 1171's proof places at the child's calls
+                        // (`run={run1}`, named nowhere else): the same value as the literal written there.
+                        || named_prop_function(lookup, use_file, expression)
                 }) =>
                 {
                     entry.function = true;
@@ -1852,4 +1855,23 @@ fn classify_passed_expression(
         }
     }
     result
+}
+
+/// ADR 1190 (slice 3): whether `expression` names a function of `file` whose runs ADR 1171's proof places at a child's calls of the
+/// prop ([`crate::execution_role::prop_literal_call_sites`], which also proves the name has no other reference).
+fn named_prop_function(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    expression: solid_facts::core::Span,
+) -> bool {
+    let reference = file.ast.peel_ts_sugar_span(expression);
+    let Some(declaration) = file.ast.reference_declaration(reference) else {
+        return false;
+    };
+    file.ast.functions.iter().any(|function| {
+        crate::owners::function_binding_name(file, function)
+            .is_some_and(|name| name.span == declaration)
+            && crate::execution_role::prop_literal_call_sites(file, function, lookup)
+                .is_some_and(|calls| !calls.is_empty())
+    })
 }

@@ -1,0 +1,16 @@
+{
+  "note": "ADR 1190: a component prop's function literal run at the child's calls of `props.run`: in the body (quiet), in onSettled (PRIMITIVE_IN_FORBIDDEN_SCOPE at the creation, SC3001 violation at the call), in a tracked effect (FLUSH_IN_TRACKED_QUEUE_CALLBACK at the flush, SC3001 violation at the call), never called and under a spread (rows kept). The checker's fixture is reactive-ir/callback-prop-leaf.",
+  "open": [
+    {
+      "code": "FLUSH_IN_TRACKED_QUEUE_CALLBACK",
+      "site": "App.tsx:49",
+      "reason": "thrown at the literal's flush; covered by the SC3001 violation at the child's call (41), a frame a thrown error does not carry (ADR 1180's case)"
+    },
+    {
+      "finding": "leaf-owner-forbidden-call App.tsx:41",
+      "kind": "attribution",
+      "reason": "Chrome throws FLUSH_IN_TRACKED_QUEUE_CALLBACK at the literal's flush (49); the thrown error carries no frames, so this call is not seen",
+      "owner": "Mac 26"
+    }
+  ]
+}

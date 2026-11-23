@@ -8392,6 +8392,14 @@
    "to": 1,
    "adr": "ADR 1187",
    "fact": "local_access::component_prop_helper climbs from a prop read through each IIFE written directly in its enclosing body to the named local helper, so the helper pass charges the read to the helper's calls with the timing asked at the outermost IIFE call; the RefFactory read (ref={dir()}, a call the helper pass does not place, as without the IIFE) now stands as SC1001 callee-callback-timing where ADR 1184's function-run-unplaced stood (fixture iife-prop-read, README)"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC3001 leaf-owner-unproven",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1190",
+   "fact": "cleanup.rs Entry::Called from prop_literal_called_at: a component prop's function literal is walked at the child's proven calls, so the call's SC9012 leaf-callback-opaque row becomes an SC3001 leaf-owner-unproven row where the walked literal reaches a creation whose owner the leaf walk cannot prove (the same site stays uncertifiable; the literal's own SC3001 leaf-operation-unaccounted row leaves)"
   }
  ]
 }
