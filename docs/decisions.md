@@ -5189,3 +5189,34 @@ G1 of the R3 catalog (misuse half), on ADRs 1164 and 1185. In an async memo's or
 - A `finally`'s layered reads.
 - Member reads in a later pass.
 - Other loop shapes.
+<a id="adr-1195"></a>
+## ADR 1195 — A read or a write in layers run in place inside a returned effect cleanup is placed where the cleanup runs
+G3 leftovers (R3 catalog; research R6), on ADRs 1037 and 1183. Scan of main 60a7cf1db: every cleanup context of both recall grids, 85,440 programs. The dominant blocker was `function-run-unplaced` in the `*-cleanup-rerun*` contexts:
+- STRICT_READ_UNTRACKED (misuse): 2,956 programs plus 1,551 named;
+- REACTIVE_WRITE_IN_OWNED_SCOPE (legal): 2,632 programs plus 1,556 named.
+
+Both answers looked only at a site written in the cleanup's own body. A closure, an IIFE or a helper's callback inside the cleanup left the site unplaced.
+
+**Decision** (`write_roles.rs` `returned_cleanup_placed_site`).
+- The site placed is either the site itself or the outermost call of the function layers run in place around it, on ADR 0493's climb premises: no bound, no parameter-list layer, no layer that also runs its callback elsewhere, nothing withheld or unmodelled, no library or package callback crossed (`forEach`, a primitive's slot), and no await on the way.
+- `returned_cleanup_write_role` (ADR 1037: a setter or `refresh` in the cleanup is legal on its every run) and `returned_cleanup_rerun_reached` (ADR 1183: a reached click reruns the effect with its owner alive, so the read runs in the apply's window) take their cleanup from that call.
+- The read itself must still be a primitive accessor's call, so no helper call at the site is placed (1183 r2).
+
+**Evidence.**
+- Fixture `effect-cleanup-rerun-layers`:
+  - SC1001 violations: `ReadInClosure`, `ReadInIife`, `ReadInHelperCallback`.
+  - SC2001 clean: `WriteInClosure`, `WriteInIife`, `WriteInHelperCallback`.
+  - Uncertifiable as before: a `forEach` callback, a stored closure, a read past an await in an async IIFE.
+  - `WriteInSharedHelper` keeps main's rows: a helper the body also calls is no in-place layer.
+- Chrome (`runtime-oracle/effect-cleanup-rerun-layers`): covered, nothing static-only.
+- Probe (release, VM, Chrome judge), main 60a7cf1db against this, every cleanup-context program of every code:
+  - mx-recall, 45,675 programs: 592 recall-gap to agree. At code level, 1,166 programs gain violations, every one replacing an uncertifiable row at the same site: 1,046 SC1001 and 120 with two SC1003 rows. No violation is lost.
+  - lg-recall, 39,765 programs: 4,935 uncertifiable to clean (Chrome silent). At code level, 5,090 SC2001 rows go and no violation is added; 50 programs relabel an SC9012 row (U to U).
+  - Nothing needs a look on either build but one mx false clean that main has too (`mx-action-called-in-owned-scope-effect-cleanup-for-x-values-callee-none`). That is pre-existing, unchanged, and not this change's.
+- Boundary: the write arm `write_roles.returned-cleanup-write` keeps its stated gap. Legal cells now run clean through it, but no misuse cell writes in a rerun cleanup. The premise `kind-returned-cleanup-write-guard` names the new fixture.
+
+**Not built.**
+- A named apply (`effect-cleanup-rerun-named`).
+- The disposal-only contexts (`effect-cleanup-dispose`, `-show`, `-for`, `wh-root-cleanup`, about 6.5k lg rows), which need an "only disposal reruns it" proof.
+- The owner codes' `effect-owner-unproven` and `owner-callers-unenumerated`.
+- A loop or a handed function inside the cleanup.

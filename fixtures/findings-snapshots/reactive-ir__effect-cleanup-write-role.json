@@ -238,8 +238,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/effect-cleanup-write-role/App.tsx",
-      "start": 2270,
-      "end": 2282,
+      "start": 2274,
+      "end": 2286,
       "fixes": 0
     },
     {
@@ -249,8 +249,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/effect-cleanup-write-role/App.tsx",
-      "start": 2270,
-      "end": 2282,
+      "start": 2274,
+      "end": 2286,
       "fixes": 0
     },
     {
@@ -260,19 +260,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/effect-cleanup-write-role/App.tsx",
-      "start": 2270,
-      "end": 2282,
-      "fixes": 0
-    },
-    {
-      "rule": "no-write-in-pure-computation",
-      "code": "SC2001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/effect-cleanup-write-role/App.tsx",
-      "start": 2343,
-      "end": 2350,
+      "start": 2274,
+      "end": 2286,
       "fixes": 0
     }
   ]
