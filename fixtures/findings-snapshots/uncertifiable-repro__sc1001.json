@@ -498,7 +498,7 @@
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
-      "blocker": "callee-callback-timing",
+      "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/uncertifiable-repro/sc1001/src/prop-in-effect-apply-read.tsx",
       "start": 609,
