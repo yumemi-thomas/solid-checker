@@ -1,0 +1,1 @@
+{ "note": "ADR 1197: async functions called only from a component body, a handler or a helper the handler calls read a signal past their await: rc.21 raises nothing (SC1002 silent). Exported, handed as a callback, called from a memo or from a helper a memo calls: uncertifiable." }

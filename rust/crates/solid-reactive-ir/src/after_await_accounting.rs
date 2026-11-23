@@ -44,6 +44,9 @@
 //!   the stack of such a callback's continuations is the runner's. The facts asked are the flush accounting's for the same class
 //!   ([`crate::flush_accounting::runs_when_the_call_runs`]). A helper the tests call, a callback handed by name or through a wrapper, a suite body a runner runs inside
 //!   the registration call and a function written inside the callback are not covered.
+//! - **closed callers** (ADR 1197, the owner's addendum to decision 5, [`closed_callers`]): every call of the async function the site is written in is enumerated
+//!   and none escapes (same file, unexported, direct calls only), each from an intrinsic element's `on…` handler, a proven component's body or a helper that is so in
+//!   turn: no async computation runs the function. It asks no index of computations, so it is not the census reason below.
 //!
 //! **No callee reason.** A call of a project function whose closure reads nothing the universe lists is no ending. The first build of this pass had one, and the
 //! review of #233 found it unsound: the closure is a list of reads and calls, and a read reaches a continuation through values no call shows (a store read through
@@ -66,6 +69,7 @@
 //! of the family overlaps the site without standing at one of its spans), `test` (the function is a literal a reviewed runner schedules), `never` (`SiteReach`), `host`
 //! (the callee that takes the function as an argument), `reason` (the typed reason that ended the site) and `filed` (whether the site got its row).
 
+mod closed_callers;
 mod flight_census;
 mod handlers;
 mod library_call;
@@ -111,17 +115,22 @@ enum AfterAwaitSafe {
     /// holding a function literal, or an action's generator, whose body is nothing but exact setter calls that run nothing ([`setter_callee`]). The only callee
     /// reason: it asks no question of what a body reads, only whether the body is, by its facts, setter calls and nothing else.
     SetterOnlyCallee,
+    /// ADR 1197 (the owner's addendum to ADR 0973's ruling 5): the site is written in an async function every call of which is enumerated
+    /// and runs from an `on…` handler, a component body or a helper that is so in turn ([`closed_callers::closed`]): no async computation
+    /// runs the function, so no flight is on its continuation's async stack.
+    ClosedCallers,
 }
 
 impl AfterAwaitSafe {
     /// In the order they are asked, the cheapest first.
-    const ALL: [Self; 6] = [
+    const ALL: [Self; 7] = [
         Self::NeverRuns,
         Self::RunnerScheduled,
         Self::LibraryRunsNothing,
         Self::OwnerCaptured,
         Self::PlainReceiver,
         Self::SetterOnlyCallee,
+        Self::ClosedCallers,
     ];
 
     /// The id the proof log writes, and `SOLID_CHECKER_IR_ABLATE_SILENCE` names (`<module>.<function>.<end>`).
@@ -133,6 +142,7 @@ impl AfterAwaitSafe {
             Self::PlainReceiver => "after_await_accounting.account.plain-receiver",
             Self::RunnerScheduled => "after_await_accounting.account.runner-scheduled",
             Self::SetterOnlyCallee => "after_await_accounting.account.setter-only-callee",
+            Self::ClosedCallers => "after_await_accounting.account.closed-callers",
         }
     }
 
@@ -156,6 +166,19 @@ impl AfterAwaitSafe {
                             object_prototype_touched,
                         )
                     })
+            }
+            Self::ClosedCallers => {
+                let ast = &site.file.ast;
+                crate::owners::owning_function(ast, site.at).is_some_and(|function| {
+                    function.r#async
+                        && !function.generator
+                        && function.body.contains(site.at)
+                        && site.alternates.iter().all(|alternate| {
+                            crate::owners::owning_function(ast, *alternate)
+                                .is_some_and(|owner| owner.span == function.span)
+                        })
+                        && closed_callers::closed(site.file, function, ctx.semantic_lookup)
+                })
             }
             Self::NeverRuns => matches!(
                 reach.site(site.file, site.at),
@@ -1062,12 +1085,15 @@ mod tests {
                 "after_await_accounting.account.library-runs-nothing",
                 "after_await_accounting.account.owner-captured",
                 "after_await_accounting.account.plain-receiver",
-                "after_await_accounting.account.setter-only-callee"
+                "after_await_accounting.account.setter-only-callee",
+                "after_await_accounting.account.closed-callers"
             ]
         );
         // ADR 0973: a closure that reads nothing the universe lists (the review of #233: a store read through an alias, a stored generator stepped by a spread, a trap or a
         // getter installed by reference) and the absence of a recognized computation (the oracle cases `after-await-universe-census-*`) are no endings. ADR 1097 (reopened
         // narrowly): the one callee reason asks no question of what a body reads, only whether it is exact setter calls and nothing else (`setter_callee`).
+        // ADR 1197 (the owner's addendum to ruling 5): `closed-callers` asks no index of computations either, only that every reference of the function is a direct call
+        // whose caller is a handler, a component body or a closed helper (`closed_callers`).
         assert_eq!(
             AfterAwaitSafe::ALL
                 .iter()
