@@ -5235,3 +5235,22 @@ Both answers looked only at a site written in the cleanup's own body. A closure,
 **Decision.** `named_callbacks::declarer_role_within` judges each reference in its own file: an import or export statement, a JSX tag, or a call (`f()`, `o.m()`) whose `caller_qualifies` there (outside every undecided component region, in a function that qualifies in turn; module code qualifies). An unbound literal handed to any call qualifies when that call does; `read_execution_role` still decides the role (a helper that does not run its argument in place gives none). A function handed on as a value (`[1].map(Row)`) still refuses, and a call inside an undecided component region still refuses: the 1189 false positives stay out.
 **Evidence** (release, Chrome judging every program). The 3,943 programs (bundle q's list): agree 2,440, recall-gap 1,503 (ADR 1189: 735 / 3,208), so 1,705 come back; no false positive, no false clean. The 2,824 `handed-flush` legal programs: uncertifiable 2,552, clean 272, no false positive (ADR 1189's 102 stay out). Fixture `reporting-run-called-helper` gains `HelperCallback` (a violation, Chrome STRICT_READ_UNTRACKED), `MappedRowHelperCallback` (uncertifiable, Chrome silent) and `Entry.tsx` (an importer's tag of `BodyDeclared`, whose violation stands); coverage moves nothing else.
 **Not built.** The 1,503 still recall-gap: a declarer reached through a function handed on as a value, a reference the reference list does not have, or a chain past four functions.
+<a id="adr-1196"></a>
+## ADR 1196 — ADR 1167's disposal-only answer is the strict read's alone (a false clean of ACTION_CALLED_IN_OWNED_SCOPE)
+**The defect** (fuzz, found in ADR 1195's probe on main 60a7cf1db and 25f525504; not in `open-defects.json`): `mx-action-called-in-owned-scope-effect-cleanup-for-x-values-callee-none` judged false-clean.
+- A `For` row's effect returns a cleanup that calls an action through `Object.values(box)[0]()`.
+- A click empties the list, the row's disposal runs the cleanup under the row's owner, and rc.21 throws ACTION_CALLED_IN_OWNED_SCOPE at the call.
+- The checker kept only the SC9012 row at `box` (the carrier), not the dispatch's withholding row at the call, where Chrome's frame is.
+- Cause: ADR 1167 answered `returned-cleanup-disposal` (DeferredCallback, silent) in `read_execution_role` for a site in such a cleanup. Its doc said "reads only", but the read role is also what the dispatch of an unselectable callee asks, and that silence dropped the call's row. The same leak family as ADR 1166 r2 and ADR 1183 r2.
+
+**Fix (fail closed).** The arm moves to `strict_read_role`, which only SC1001's strict read asks. A `For` row's disposal runs the cleanup owned, which the strict read does not care about and the action rule does.
+
+**Evidence.**
+- Fixture `effect-cleanup-for-action-dispatch`: `ValuesCallee` gains the SC9012 row at the call. `MemberCallee` (already a row at the call), `DirectCall` (SC2002) and `ReadAtDisposal` (silent, ADR 1167's strict read) are unchanged. `effect-cleanup-disposal-only` is unchanged.
+- Chrome (`runtime-oracle/effect-cleanup-for-action-dispatch`, `effect-cleanup-disposal-only`): covered, nothing static-only.
+- Probe (release, VM, Chrome judge), main 25f525504 against this, ACTION_CALLED_IN_OWNED_SCOPE in every cleanup context: mx-recall 1,436 programs, the false clean becomes a recall gap and nothing else moves. lg-recall 3,380 programs: none moves.
+- Code level, every cleanup-context program of both grids (85,440), checker only:
+  - mx-recall: 82 programs gain uncertifiable rows (80 SC1001 `function-run-unplaced`, at reads ADR 1167's read-role answer had silenced for consumers other than the strict read; 2 SC9012).
+  - lg-recall: 300 programs gain rows; 8 relabel U to U at the same site.
+  - Nothing goes clean and no violation is added or lost: the fail-closed cost of the move.
+- Rediscovery: the id, its build fails focus on main and passes here.
