@@ -149,7 +149,7 @@ discards runs none of the body, and a generator with no call in its body has not
 
 A parameter initializer a leaf callback's call runs (a default, a destructuring default, an IIFE or closure in one, a
 constructor's) is covered by the withholding rows of the call (`leaf-callback-opaque`, `value-as-parameter-default`), as a
-function the walk cannot follow is; a `new` call's row stands at its `new` token, where V8 places the frame (ADR 0961). A direct call with no spread that omits the argument runs a default that is a whole call on its own stack, and the walk walks it as a body call (ADR 1180): a violation when nothing earlier in the list may throw. The global `undefined` as the argument runs the default as an omitted one does (ADR 1188); any other passed argument, which may be `undefined` at run time, keeps the row.
+function the walk cannot follow is; a `new` call's row stands at its `new` token, where V8 places the frame (ADR 0961). A component prop's function literal whose runs ADR 1171 proves (the child's calls of `props.<prop>`) is walked at those calls, and an unread package may run it only where it may run them (ADR 1190). A direct call with no spread that omits the argument runs a default that is a whole call on its own stack, and the walk walks it as a body call (ADR 1180): a violation when nothing earlier in the list may throw. The global `undefined` as the argument runs the default as an omitted one does (ADR 1188); any other passed argument, which may be `undefined` at run time, keeps the row.
 
 A site no execution reaches is uncertifiable (ADR 0458). Not yet: a site in a
 tracked-effect body whose every creation is inside an owned leaf body, where

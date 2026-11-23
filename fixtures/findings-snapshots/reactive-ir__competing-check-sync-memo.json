@@ -1402,11 +1402,11 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
       "kind": "uncertifiable",
-      "blocker": "leaf-callback-opaque",
-      "severity": "warning",
+      "blocker": "leaf-owner-unproven",
+      "severity": "error",
       "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
       "start": 7021,
       "end": 7030,
@@ -1432,17 +1432,6 @@
       "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
       "start": 7129,
       "end": 7233,
-      "fixes": 0
-    },
-    {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/competing-check-sync-memo/App.tsx",
-      "start": 7175,
-      "end": 7185,
       "fixes": 0
     },
     {
