@@ -5283,3 +5283,29 @@ Both answers looked only at a site written in the cleanup's own body. A closure,
 - Boundary: the accounting's endings are no `SiteSilence` (ADR 0973) and the boundary inventory lists none of them, so there is no pair or gap to add; the separation is the probe's (no misuse move against 513 legal cleans) and the fixture's twins.
 
 **Accepted as ruled.** The component body is a terminal as the ruling names it: a proven component that unseen code also ran as a computation's compute would break the premise. Not observed, and recorded in `docs/open-work.md`.
+<a id="adr-1198"></a>
+## ADR 1198 — A helper call in a disposal-only returned cleanup places its strict reads at the disposal (ADR 1196's named cost)
+**The cost** (ADR 1196's code-level probe; coordinator count on main 6e4191ede: 208 legal programs).
+- `effect-cleanup-for`/`-show` with STRICT_READ_UNTRACKED (202) and REACTIVE_WRITE_IN_OWNED_SCOPE (6) lost their clean.
+- A helper (`wrapUse()`) or a hook's member accessor (`thing.useIt()`) called from a `For`/`Show` row's returned cleanup, where the compute tracks nothing, is placed by the call-site summary (`result_reads::call_result_reads`) through the shared read role. ADR 1196 took ADR 1167's disposal-only answer out of that role.
+- The summary's strict reads at the call became SC1001 `function-run-unplaced`.
+
+**Decision.** In `call_result_reads`, a call whose role is unplaced and that `returned_cleanup_disposal_only` places takes `DeferredCallback`, logged as the read's decision for the proof gate. The call is written in the body of the cleanup an inline apply returns, with no rerun (a compute that tracks nothing) and no project code able to dispose an owner on its own stack. Its strict reads run at the disposal, outside any strict-read window, as a read written in the cleanup does. These rows are SC1001's only. The call's dispatch rows are built before them and keep their role, so the action rule's row at an unselectable callee in a `For` row's owned disposal stays (ADR 1196).
+
+*The read in the helper.* A read written in function layers run in place in such a cleanup (a wrapper bound to a name and called once there) is placed the same way. `strict_read_role` asks `returned_cleanup_disposal_only` at the layers' outermost call too, with ADR 1195's climb premises (`returned_cleanup_placed_site`: no library callback crossed). So a read carried through `[f].forEach(…)` keeps its row: `f` is also handed to a primitive there.
+
+**Not restored: the 6 REACTIVE_WRITE_IN_OWNED_SCOPE programs.** Their added rows are SC9012 dispatch rows at an unselectable callee (`value-through-logical`, `value-to-unresolved-callee`): the row ADR 1196 restored, which covers every code. A setter's write there is legal on every run of the cleanup, but an action at the same callee throws under the row's owner. Dropping the row needs a proof that every candidate of the callee is a setter, not built.
+
+**Evidence.**
+- Fixture `effect-cleanup-row-helper-read`:
+  - `ShowWrapper` and `ForMember` are silent (uncertifiable on main 6e4191ede).
+  - `TrackedCompute` stays uncertifiable (a rerun runs the cleanup in the window).
+  - `ForActionValues` keeps ADR 1196's dispatch row at the call.
+- Chrome (`runtime-oracle/effect-cleanup-row-helper-read`, `effect-cleanup-for-action-dispatch`, `effect-cleanup-disposal-only`): covered, nothing static-only.
+- Probe (release, VM, Chrome judge), main 6e4191ede against this, every cleanup-context program of every code (85,440):
+  - mx-recall, 45,675: no outcome changes (no misuse program clean). At code level, 1,204 STORE_WRITE_OUTSIDE_SETTER programs of `effect-cleanup-for`/`-show` lose SC1001's strict read on the write path in a layer, which runs at the row's disposal. Their SC2003 row stands, and no violation is added or lost.
+  - lg-recall, 39,765: 1,578 uncertifiable to clean, Chrome silent, nothing needs a look. At code level, 1,796 programs change: removals, plus 20 relabelling an SC9012 row (U to U); no violation is added.
+  - Against main before ADR 1196 (60a7cf1db), 158 of the 208 legal programs ADR 1196 cost are clean again. The other 50 keep rows on purpose:
+    - 38 SC9012 withholding rows of the call's dispatch (`handed-member-read`, `store-key-undecided`, `value-through-logical`, `value-to-unresolved-callee`), ADR 1196's row, which covers every code;
+    - 8 SC1001 reads carried by `[f].forEach(…)`, a library callback;
+    - 4 SC1003 `destructure-root-unproven` rows.

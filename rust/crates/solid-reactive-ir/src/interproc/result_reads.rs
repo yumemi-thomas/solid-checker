@@ -390,7 +390,21 @@ fn call_result_reads(
         })
         .flatten();
     let mut placed_at = None;
-    if let Some((role, Some(carrier))) = handed
+    // ADR 1198: a call written in the cleanup an inline apply returns, where the compute tracks nothing (ADR 1167), runs at the
+    // effect's disposal only, outside any strict-read window: the strict reads it carries are placed there, as a read written in the
+    // cleanup is (`strict_read_role`). These rows are SC1001's alone; the dispatch rows of the call above keep their role, so a
+    // `For` row's owned disposal still keeps the action rule's row (ADR 1196).
+    let disposal_only = execution == ExecutionRole::Unknown
+        && !continuation
+        && crate::execution_role::returned_cleanup_disposal_only(file, call.callee, lookup);
+    if disposal_only {
+        execution = crate::role_log::decide("read", file.path.as_str(), call.span, || {
+            crate::role_log::role_arm!(
+                "result_reads.call_result_reads.returned-cleanup-disposal",
+                ExecutionRole::DeferredCallback
+            )
+        });
+    } else if let Some((role, Some(carrier))) = handed
         && role.reports_untracked_read()
     {
         execution = role;
