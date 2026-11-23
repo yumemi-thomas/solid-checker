@@ -1304,7 +1304,7 @@ pub(crate) fn inside_rerun_effect_cleanup(
 /// site's run. On the climb's premises only: no bound, no parameter-list layer, no layer that also runs its callback elsewhere,
 /// nothing withheld or unmodelled, no library or package callback crossed (`forEach`, a primitive's slot) and no await on the way (an
 /// async layer's code past its own await runs later). `None` where a layer is crossed and a premise fails.
-fn returned_cleanup_placed_site(
+pub(super) fn returned_cleanup_placed_site(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,

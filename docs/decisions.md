@@ -5263,6 +5263,8 @@ Both answers looked only at a site written in the cleanup's own body. A closure,
 
 **Decision.** In `call_result_reads`, a call whose role is unplaced and that `returned_cleanup_disposal_only` places takes `DeferredCallback`, logged as the read's decision for the proof gate. The call is written in the body of the cleanup an inline apply returns, with no rerun (a compute that tracks nothing) and no project code able to dispose an owner on its own stack. Its strict reads run at the disposal, outside any strict-read window, as a read written in the cleanup does. These rows are SC1001's only. The call's dispatch rows are built before them and keep their role, so the action rule's row at an unselectable callee in a `For` row's owned disposal stays (ADR 1196).
 
+*The read in the helper.* A read written in function layers run in place in such a cleanup (a wrapper bound to a name and called once there) is placed the same way. `strict_read_role` asks `returned_cleanup_disposal_only` at the layers' outermost call too, with ADR 1195's climb premises (`returned_cleanup_placed_site`: no library callback crossed). So a read carried through `[f].forEach(…)` keeps its row: `f` is also handed to a primitive there.
+
 **Not restored: the 6 REACTIVE_WRITE_IN_OWNED_SCOPE programs.** Their added rows are SC9012 dispatch rows at an unselectable callee (`value-through-logical`, `value-to-unresolved-callee`): the row ADR 1196 restored, which covers every code. A setter's write there is legal on every run of the cleanup, but an action at the same callee throws under the row's owner. Dropping the row needs a proof that every candidate of the callee is a setter, not built.
 
 **Evidence.**

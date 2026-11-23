@@ -1,4 +1,4 @@
-import { For, Show, action, createEffect, createSignal } from "solid-js";
+import { For, Show, action, createEffect, createSignal, createStore } from "solid-js";
 
 // ADR 1198: a helper the cleanup an inline apply returns calls, inside a `Show` or `For` row, where the compute tracks nothing
 // (ADR 1167): it runs at the row's disposal only, outside any strict-read window, so its read is silent, as a read written in the
@@ -14,7 +14,7 @@ export function ShowWrapper() {
   return (
     <div>
       <Show when={t()}>
-        {(_u) => {
+        {(_u: unknown) => {
           createEffect(
             () => 1,
             () => () => {
@@ -43,6 +43,57 @@ export function ForMember() {
             () => 1,
             () => () => {
               thing.useIt();
+            },
+          );
+          return <li>x</li>;
+        }}
+      </For>
+      <button onClick={() => setT(0)}>go</button>
+    </div>
+  );
+}
+
+// Silent: a store read in a wrapper called once from a `For` row's cleanup (an in-place layer).
+export function ForStoreWrapper() {
+  const [store] = createStore({ v: 0 });
+  const [t, setT] = createSignal(1);
+  const wrapUse = () => {
+    Object.values(store);
+  };
+  return (
+    <div>
+      <For each={t() ? [1] : []}>
+        {() => {
+          createEffect(
+            () => 1,
+            () => () => {
+              wrapUse();
+            },
+          );
+          return <li>x</li>;
+        }}
+      </For>
+      <button onClick={() => setT(0)}>go</button>
+    </div>
+  );
+}
+
+// Uncertifiable: the wrapper is also called from the component body, so it is no layer of the cleanup alone.
+export function WrapperAlsoInBody() {
+  const [store] = createStore({ v: 0 });
+  const [t, setT] = createSignal(1);
+  const wrapUse = () => {
+    Object.values(store);
+  };
+  wrapUse();
+  return (
+    <div>
+      <For each={t() ? [1] : []}>
+        {() => {
+          createEffect(
+            () => 1,
+            () => () => {
+              wrapUse();
             },
           );
           return <li>x</li>;

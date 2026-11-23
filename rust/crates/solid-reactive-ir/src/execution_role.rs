@@ -486,7 +486,13 @@ pub(crate) fn strict_read_role(
         // disposal runs the cleanup under the row's owner, where an action throws ACTION_CALLED_IN_OWNED_SCOPE (the false clean
         // `mx-action-called-in-owned-scope-effect-cleanup-for-x-values-callee-none`).
         // Logged as the read's own decision (the proof log's C3 check: a silent row's role is a tagged arm's).
-        None if write_roles::returned_cleanup_disposal_only(file, span, lookup) => {
+        // ADR 1198: or in function layers run in place there (a wrapper bound to a name and called once in the cleanup), placed at
+        // the layers' outermost call (`returned_cleanup_placed_site`, ADR 1195's climb premises).
+        None if write_roles::returned_cleanup_disposal_only(file, span, lookup)
+            || write_roles::returned_cleanup_placed_site(file, span, lookup).is_some_and(
+                |at| at != span && write_roles::returned_cleanup_disposal_only(file, at, lookup),
+            ) =>
+        {
             crate::role_log::decide("read", file.path.as_str(), span, || {
                 role_arm!(
                     "execution_role.read_execution_role.returned-cleanup-disposal",
