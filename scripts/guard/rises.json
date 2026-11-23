@@ -8400,6 +8400,54 @@
    "to": 1,
    "adr": "ADR 1190",
    "fact": "cleanup.rs Entry::Called from prop_literal_called_at: a component prop's function literal is walked at the child's proven calls, so the call's SC9012 leaf-callback-opaque row becomes an SC3001 leaf-owner-unproven row where the walked literal reaches a creation whose owner the leaf walk cannot prove (the same site stays uncertifiable; the literal's own SC3001 leaf-operation-unaccounted row leaves)"
+  },
+  {
+   "fixture": "reactive-ir/reporting-run-called-helper",
+   "key": "SC1001 function-run-unplaced",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 1194",
+   "fact": "new fixture components HelperCallback and MappedRowHelperCallback (and Entry.tsx): their own flush, onSettled and creation rows, the same kinds the fixture's other components have; no row moved elsewhere"
+  },
+  {
+   "fixture": "reactive-ir/reporting-run-called-helper",
+   "key": "SC2006 flush-in-action-unaccounted",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 1194",
+   "fact": "new fixture components HelperCallback and MappedRowHelperCallback (and Entry.tsx): their own flush, onSettled and creation rows, the same kinds the fixture's other components have; no row moved elsewhere"
+  },
+  {
+   "fixture": "reactive-ir/reporting-run-called-helper",
+   "key": "SC2008 flush-in-effect-unaccounted",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 1194",
+   "fact": "new fixture components HelperCallback and MappedRowHelperCallback (and Entry.tsx): their own flush, onSettled and creation rows, the same kinds the fixture's other components have; no row moved elsewhere"
+  },
+  {
+   "fixture": "reactive-ir/reporting-run-called-helper",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 3,
+   "to": 6,
+   "adr": "ADR 1194",
+   "fact": "new fixture components HelperCallback and MappedRowHelperCallback (and Entry.tsx): their own flush, onSettled and creation rows, the same kinds the fixture's other components have; no row moved elsewhere"
+  },
+  {
+   "fixture": "reactive-ir/reporting-run-called-helper",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 1194",
+   "fact": "new fixture components HelperCallback and MappedRowHelperCallback (and Entry.tsx): their own flush, onSettled and creation rows, the same kinds the fixture's other components have; no row moved elsewhere"
+  },
+  {
+   "fixture": "reactive-ir/reporting-run-called-helper",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 2,
+   "to": 4,
+   "adr": "ADR 1194",
+   "fact": "new fixture components HelperCallback and MappedRowHelperCallback (and Entry.tsx): their own flush, onSettled and creation rows, the same kinds the fixture's other components have; no row moved elsewhere"
   }
  ]
 }

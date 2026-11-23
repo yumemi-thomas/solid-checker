@@ -1,3 +1,3 @@
 {
-  "note": "ADR 1189: a read in a named callback whose run is in a helper reached from a function handed to map (MappedRow) or in that function itself (RowDeclared) is tracked there: Chrome silent, uncertifiable. A helper the body calls directly, a declared helper, an invoked arrow and the body itself run it untracked: STRICT_READ_UNTRACKED, SC1001 violations."
+  "note": "ADR 1189: a read in a named callback whose run is in a helper reached from a function handed to map (MappedRow) or in that function itself (RowDeclared) is tracked there: Chrome silent, uncertifiable. A helper the body calls directly, a declared helper, an invoked arrow and the body itself run it untracked: STRICT_READ_UNTRACKED, SC1001 violations. ADR 1194: a helper's callback run in place in the body (HelperCallback) warns, a violation; inside the handed Row (MappedRowHelperCallback) it is silent, uncertifiable."
 }

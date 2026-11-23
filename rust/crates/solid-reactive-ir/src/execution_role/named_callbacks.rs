@@ -992,12 +992,6 @@ fn declarer_role_within(
         return false;
     }
     let ast = &file.ast;
-    // A call written at `at` (a direct call of the declarer) whose own function qualifies, outside every undecided component.
-    let caller_qualifies = |at: Span| {
-        !lookup.site_in_undecided_component(file, at)
-            && crate::owners::containing_body_function(ast, at)
-                .is_some_and(|caller| declarer_role_within(file, caller, lookup, depth - 1))
-    };
     let method = crate::owners::own_method_name(file, declarer).map(|method| method.span);
     let name = declarer
         .name
@@ -1018,13 +1012,15 @@ fn declarer_role_within(
                 })
         });
     let Some(name) = name else {
-        // An unbound literal: a primitive's slot, or called in place where it is written.
+        // An unbound literal: called in place where it is written, a primitive's slot, or an argument of another call (ADR 1194: a
+        // helper's callback, whose role `read_execution_role` takes from that call when the helper runs it in place) whose call
+        // qualifies in turn.
         if let Some(call) = ast
             .calls
             .iter()
             .find(|call| !call.construct && ast.peel_ts_sugar_span(call.callee) == declarer.span)
         {
-            return caller_qualifies(call.span);
+            return caller_qualifies(file, call.span, lookup, depth);
         }
         return ast
             .arguments_containing(declarer.span)
@@ -1032,7 +1028,9 @@ fn declarer_role_within(
                 ast.peel_ts_sugar_span(call.arguments[*index].span) == declarer.span
             })
             .is_some_and(|(call, index)| {
-                !call.arguments[index].spread && lookup.primitive_at_call(file, call.span).is_some()
+                !call.arguments[index].spread
+                    && (lookup.primitive_at_call(file, call.span).is_some()
+                        || caller_qualifies(file, call.span, lookup, depth))
             });
     };
     let symbol = lookup
@@ -1054,25 +1052,38 @@ fn declarer_role_within(
             return false;
         };
         let at = Span::new(start, end);
-        if reference.path.as_ref() != file.path.as_str() {
-            return false;
-        }
-        if at == name {
+        let same_file = reference.path.as_ref() == file.path.as_str();
+        if same_file && at == name {
             return true;
         }
-        // An export statement of the name (`export { f }`, `export default f`), not the `export function …` around a call.
-        if ast.exports.iter().any(|export| {
-            export.span.contains(at)
-                && !export.span.contains(declarer.span)
-                && ast
-                    .calls
-                    .iter()
-                    .all(|call| !export.span.contains(call.span))
-        }) {
+        // ADR 1194: a reference in another file is judged there, as one here (an importer's tag, import or call).
+        let Some(reference_file) = (if same_file {
+            Some(file)
+        } else {
+            lookup.file_by_path(reference.path.as_ref())
+        }) else {
+            return false;
+        };
+        let reference_ast = &reference_file.ast;
+        // An import or export statement of the name (`export { f }`, `export default f`, `import { f }`), not the `export
+        // function …` around a call.
+        if reference_ast
+            .imports
+            .iter()
+            .any(|import| import.span.contains(at))
+            || reference_ast.exports.iter().any(|export| {
+                export.span.contains(at)
+                    && !(same_file && export.span.contains(declarer.span))
+                    && reference_ast
+                        .calls
+                        .iter()
+                        .all(|call| !export.span.contains(call.span))
+            })
+        {
             return true;
         }
         // A JSX element's tag: rendered as a component, whose body's role is its own.
-        if ast
+        if reference_ast
             .jsx_elements
             .iter()
             .any(|element| element.name.span == at || element.closing_name == Some(at))
@@ -1080,16 +1091,33 @@ fn declarer_role_within(
             return true;
         }
         // A direct call `name()`, or a member call whose property is the name (`new K().m()`, `o.m()`).
-        let callee = ast
+        let callee = reference_ast
             .members
             .iter()
-            .find(|member| member.property == at && !ast.computed_members.contains(&member.span))
+            .find(|member| {
+                member.property == at && !reference_ast.computed_members.contains(&member.span)
+            })
             .map_or(at, |member| member.span);
-        ast.calls
+        reference_ast
+            .calls
             .iter()
-            .find(|call| !call.construct && ast.peel_ts_sugar_span(call.callee) == callee)
-            .is_some_and(|call| caller_qualifies(call.span))
+            .find(|call| !call.construct && reference_ast.peel_ts_sugar_span(call.callee) == callee)
+            .is_some_and(|call| caller_qualifies(reference_file, call.span, lookup, depth))
     })
+}
+
+/// ADR 1189, 1194: a call written at `at` of `file` (of the declarer, or one an argument literal is handed to) qualifies when it is
+/// outside every undecided component region and the function it is written in qualifies in turn; module code qualifies (it runs
+/// where the module is evaluated, a role of its own).
+fn caller_qualifies(
+    file: &solid_facts::FileFacts,
+    at: Span,
+    lookup: &SemanticLookup<'_>,
+    depth: u8,
+) -> bool {
+    !lookup.site_in_undecided_component(file, at)
+        && crate::owners::containing_body_function(&file.ast, at)
+            .is_none_or(|caller| declarer_role_within(file, caller, lookup, depth - 1))
 }
 
 /// ADR 1166: whether the inline arrow a carried `forEach`/`map` call ([`super::write_roles::foreach_carried_call`]) hands the
