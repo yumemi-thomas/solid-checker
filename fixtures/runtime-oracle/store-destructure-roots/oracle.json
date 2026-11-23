@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1193: STRICT_READ_UNTRACKED at ForOfBody and MergeBody (SC1003 violations), at ForOfTwo and MergeOpen (uncertifiable); silent at the memo forms and MergeShadowed."
+}

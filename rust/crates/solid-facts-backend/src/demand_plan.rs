@@ -317,6 +317,26 @@ fn collect_symbol_spans(
             add_symbol(initializer.span, true);
         }
     }
+    // ADR 1193: an identifier element of an array literal a `for…of` iterates is a destructure's root
+    // (`for (const { v } of [s])`, `static_rules::destructure_root`), whose symbol the rules ask.
+    for literal in file
+        .ast
+        .array_literal_elements
+        .iter()
+        .filter(|literal| file.ast.iterated_operands.contains(&literal.span))
+    {
+        for element in &literal.elements {
+            let span = file.ast.peel_ts_sugar_span(element.span);
+            if element.kind == solid_facts::ast::ArrayElementKind::Value
+                && file.ast.identifiers.iter().any(|identifier| {
+                    identifier.span == span
+                        && identifier.role == solid_facts::ast::IdentifierRole::Reference
+                })
+            {
+                add_symbol(span, true);
+            }
+        }
+    }
     for function in &file.ast.functions {
         if let Some(name) = &function.name {
             add_symbol(name.span, true);

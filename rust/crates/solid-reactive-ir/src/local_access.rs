@@ -2607,12 +2607,14 @@ impl LocalAccessContext<'_, '_> {
         // ADR 1107: a store's destructure SC1003 hands over (`delegated_destructure_slots`) reads each slot as a member: the
         // member read `store.a` at the slot, placed as any other (summaries, carriers, windows).
         for binding in &file.ast.bindings {
-            let Some(identifier) = binding.initializer_identifier.as_ref() else {
+            // ADR 1193: the destructure's root (`destructure_root`): the initializer, a `for…of`'s `[s]`, `merge(s, {…})`'s `s`.
+            let Some(root) = crate::static_rules::destructure_root(self.lookup, file, binding)
+            else {
                 continue;
             };
             let is_store = self
                 .entities
-                .get(&location(file.path.shared(), identifier.span))
+                .get(&location(file.path.shared(), root))
                 .is_some_and(|symbol| {
                     self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store)
                 });
@@ -2627,7 +2629,7 @@ impl LocalAccessContext<'_, '_> {
             for (slot, key) in slots {
                 let member = solid_facts::ast::MemberFact {
                     span: slot,
-                    object: identifier.span,
+                    object: root,
                     property: key,
                 };
                 // Round 2 (P1): every slot shares the store identifier as its receiver, which `seen` keys on; each slot is

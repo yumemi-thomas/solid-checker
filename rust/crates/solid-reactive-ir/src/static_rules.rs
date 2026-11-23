@@ -561,6 +561,14 @@ fn component_props_destructure_into(
             if empty_pattern(binding) {
                 continue;
             }
+            // ADR 1193: a root `destructure_root` adds (a `for…of`'s `[s]`, `merge(s, {…})`) keeps the silence the unproven net gave
+            // it where setup provably takes no snapshot (`may_snapshot_at_setup`): a clean stays clean.
+            if binding.initializer_identifier.is_none()
+                && !props
+                && read_role_fresh(ctx.semantic_lookup, file, binding.pattern)
+            {
+                continue;
+            }
             let role = semantic_execution_role(
                 file,
                 binding.pattern,
@@ -725,8 +733,10 @@ fn component_props_destructure_into(
                 }
             }
             let location = location(file.path.shared(), binding.pattern);
+            // ADR 1193: a `for…of` pattern has no initializer; its root names the source.
             let source = binding
                 .initializer
+                .or_else(|| destructure_root(ctx.semantic_lookup, file, binding))
                 .and_then(|span| file.source_text(span))
                 .unwrap_or("reactive object")
                 .to_owned();
@@ -965,8 +975,10 @@ fn handed_over_slots(
     file: &solid_facts::FileFacts,
     binding: &solid_facts::ast::BindingFact,
 ) -> Option<Vec<(solid_facts::core::Span, solid_facts::core::Span)>> {
-    if binding.initializer_identifier.is_none()
+    if destructure_root(lookup, file, binding).is_none()
         || written_directly_in_setup(lookup, file, binding.pattern)
+        // ADR 1193: a root `destructure_root` adds keeps the unproven net's silence where the read's own role proves a fresh read.
+        || (binding.initializer_identifier.is_none() && read_role_fresh(lookup, file, binding.pattern))
     {
         return None;
     }
@@ -976,6 +988,98 @@ fn handed_over_slots(
             .map(|slot| (slot.property, slot.key))
             .collect(),
     )
+}
+
+/// ADR 1193: the root an object destructure reads its keys from, as one identifier reference: the initializer when it is one
+/// (`const { v } = s`); the sole element of the array literal a `for…of` iterates (`for (const { v } of [s])`: the standard array
+/// iteration, intact, hands the pattern that element; no `for await`, one declarator); or the first source of `merge(s, {…}, …)`
+/// whose later sources are closed literals none of which has a key the pattern reads, so each Get falls through to `s`. `None`
+/// for anything else.
+pub(crate) fn destructure_root(
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    binding: &solid_facts::ast::BindingFact,
+) -> Option<solid_facts::core::Span> {
+    if let Some(identifier) = &binding.initializer_identifier {
+        return Some(identifier.span);
+    }
+    if binding.shape != solid_facts::ast::BindingShape::Object {
+        return None;
+    }
+    let ast = &file.ast;
+    let is_reference = |span: solid_facts::core::Span| {
+        ast.identifiers.iter().any(|identifier| {
+            identifier.span == span
+                && identifier.role == solid_facts::ast::IdentifierRole::Reference
+        })
+    };
+    let Some(initializer) = binding.initializer else {
+        // A `for…of` over a one-element array literal.
+        let (looped, left) = ast.loop_repeats.iter().find(|(looped, left)| {
+            left.contains(binding.pattern)
+                && left.start > looped.start
+                && ast.loop_statements.contains(looped)
+        })?;
+        let operand = ast
+            .iterated_operands
+            .iter()
+            .find(|operand| looped.contains(**operand) && operand.start >= left.end)?;
+        let one_declarator = ast
+            .bindings
+            .iter()
+            .filter(|other| left.contains(other.pattern))
+            .count()
+            == 1;
+        let awaited = ast
+            .implicit_suspensions
+            .iter()
+            .any(|suspension| suspension.start == looped.start && suspension.end == operand.end);
+        if !one_declarator || awaited || !lookup.array_iteration_intact() {
+            return None;
+        }
+        let literal = ast
+            .array_literal_elements
+            .iter()
+            .find(|literal| literal.span == ast.peel_ts_sugar_span(*operand))?;
+        let [element] = literal.elements.as_slice() else {
+            return None;
+        };
+        let element = ast.peel_ts_sugar_span(element.span);
+        return (literal.elements[0].kind == solid_facts::ast::ArrayElementKind::Value
+            && is_reference(element))
+        .then_some(element);
+    };
+    // `merge(s, {…}, …)`: every later source a closed literal with none of the pattern's keys.
+    let call = ast.call_at(ast.peel_ts_sugar_span(initializer))?;
+    if call.construct
+        || binding.call_initializer != Some(call.span)
+        || !lookup
+            .primitive_at_call(file, call.span)
+            .is_some_and(|primitive| lookup.dialect.merges_props_reactivity(primitive))
+    {
+        return None;
+    }
+    let keys = destructure_slot_keys(file, binding)?;
+    let (first, later) = call.arguments.split_first()?;
+    let root = ast.peel_ts_sugar_span(first.span);
+    if first.spread || !is_reference(root) {
+        return None;
+    }
+    let later_closed = later.iter().all(|source| {
+        !source.spread
+            && crate::interproc::accessor_provenance::closed_properties(
+                file,
+                ast.peel_ts_sugar_span(source.span),
+            )
+            .is_some_and(|properties| {
+                properties.iter().all(|property| {
+                    !property.computed
+                        && crate::kernel::property_key(file, property.key)
+                            .is_some_and(|key| keys.iter().all(|slot| slot.name != key))
+                })
+            })
+    });
+    later_closed.then_some(root)
 }
 
 /// ADR 1107's form: every property a shorthand name with no default (`{ v, then }`), the key its local's text.
@@ -1228,11 +1332,21 @@ fn open_destructures(
                     })
         })
     };
+    // ADR 1193: a root `destructure_root` adds counts only where it is a store, which SC1003's store paths then claim; a props
+    // root there (`for (const { a } of [props])`) keeps this net's row.
     let exact_root = |pattern: Span| {
         ast.bindings.iter().any(|binding| {
             binding.pattern == pattern
                 && binding.shape == solid_facts::ast::BindingShape::Object
-                && binding.initializer_identifier.is_some()
+                && destructure_root(ctx.semantic_lookup, file, binding).is_some_and(|root| {
+                    binding.initializer_identifier.is_some()
+                        || ctx
+                            .entities
+                            .get(&location(file.path.shared(), root))
+                            .is_some_and(|symbol| {
+                                tables.source_kind(symbol) == Some(&ReactiveSourceKind::Store)
+                            })
+                })
         })
     };
     let mut sites = Vec::new();
@@ -1253,6 +1367,8 @@ fn open_destructures(
                     .filter(|binding| {
                         left.contains(binding.pattern)
                             && binding.shape != solid_facts::ast::BindingShape::Identifier
+                            // ADR 1193: a pattern over `[s]` whose root `destructure_root` names is the exact arm's.
+                            && !exact_root(binding.pattern)
                     })
                     .map(|binding| binding.pattern),
             );
@@ -1343,6 +1459,30 @@ fn may_snapshot_at_setup(
     )
 }
 
+/// ADR 1193: [`may_snapshot_at_setup`]'s fresh roles, asked of the lookup: the read's own role at `pattern` reads current values when
+/// it runs (tracked JSX, an event callback, a deferred callback, an untracked unwindowed callback), so no snapshot claim stands there.
+fn read_role_fresh(
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    pattern: Span,
+) -> bool {
+    let allowed = allowed_callback_spans(file, lookup);
+    matches!(
+        read_execution_role(
+            file,
+            pattern,
+            &allowed,
+            lookup.entities(),
+            lookup.symbol_names(),
+            lookup
+        ),
+        crate::ExecutionRole::TrackedJsx
+            | crate::ExecutionRole::EventCallback
+            | crate::ExecutionRole::DeferredCallback
+            | crate::ExecutionRole::UntrackedUnwindowed
+    )
+}
+
 /// `const { a } = useThing()`: a call of no primitive whose result may be a
 /// store. A project function whose every return is a closed object literal
 /// hands a plain object; the standard library hands no store.
@@ -1424,13 +1564,9 @@ fn binding_initializes_reactive_store(
     file: &solid_facts::FileFacts,
     binding: &solid_facts::ast::BindingFact,
 ) -> bool {
-    if binding
-        .initializer_identifier
-        .as_ref()
-        .and_then(|identifier| {
-            ctx.entities
-                .get(&location(file.path.shared(), identifier.span))
-        })
+    // ADR 1193: through `destructure_root` (a `for…of` over `[s]`, `merge(s, {…})`).
+    if destructure_root(ctx.semantic_lookup, file, binding)
+        .and_then(|root| ctx.entities.get(&location(file.path.shared(), root)))
         .is_some_and(|symbol| tables.source_kind(symbol) == Some(&ReactiveSourceKind::Store))
     {
         return true;
