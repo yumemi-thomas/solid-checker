@@ -161,6 +161,115 @@
       "start": 2746,
       "end": 2805,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reporting-run-called-helper/App.tsx",
+      "start": 3247,
+      "end": 3251,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-action",
+      "code": "SC2006",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-action-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/reporting-run-called-helper/App.tsx",
+      "start": 3439,
+      "end": 3599,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-effect-callback",
+      "code": "SC2008",
+      "kind": "uncertifiable",
+      "blocker": "flush-in-effect-unaccounted",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reporting-run-called-helper/App.tsx",
+      "start": 3439,
+      "end": 3599,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/reporting-run-called-helper/App.tsx",
+      "start": 3439,
+      "end": 3599,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/reporting-run-called-helper/App.tsx",
+      "start": 3511,
+      "end": 3515,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/reporting-run-called-helper/App.tsx",
+      "start": 3653,
+      "end": 3712,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-callers-unenumerated",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/reporting-run-called-helper/App.tsx",
+      "start": 3653,
+      "end": 3712,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/reporting-run-called-helper/App.tsx",
+      "start": 3653,
+      "end": 3712,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/reporting-run-called-helper/Entry.tsx",
+      "start": 203,
+      "end": 219,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/reporting-run-called-helper/Entry.tsx",
+      "start": 203,
+      "end": 219,
+      "fixes": 0
     }
   ]
 }

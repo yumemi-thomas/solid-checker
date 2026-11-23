@@ -103,3 +103,43 @@ export function RowDeclared() {
     </p>
   );
 }
+
+// ADR 1194: a helper's callback (`h1` runs it in place): its role is the helper call's, in the body here (SC1001 a violation; Chrome
+// warns). The same inside `Row`, which `map` calls as a plain function in a JSX expression, stays uncertifiable (Chrome silent).
+function h1(cb: () => void) {
+  cb();
+}
+export function HelperCallback() {
+  const [s1] = createStore({ v: 0 });
+  h1(() => {
+    const f = () => {
+      void s1.v;
+    };
+    onSettled(f);
+    [f].forEach((g) => g());
+  });
+  return <i />;
+}
+export function MappedRowHelperCallback() {
+  const [s1] = createStore({ v: 0 });
+  const Row = () => {
+    flush(() => {
+      h1(() => {
+        const f = () => {
+          void s1.v;
+        };
+        onSettled(f);
+        [f].forEach((g) => g());
+      });
+    });
+    return <span />;
+  };
+  return (
+    <p>
+      {(() => {
+        [1].map(Row);
+        return 1;
+      })()}
+    </p>
+  );
+}
