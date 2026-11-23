@@ -323,6 +323,24 @@
    "count": 1,
    "adr": "ADR 1186",
    "why": "ADR 1186 (a call that runs what a carrier held keeps a row of its own): `apps/web/test/relay-pagination-compat.test.tsx`, the `connections()?.providerConnections?.edges.map(({ node }) => ...)` pending read in a JSX `map` callback, had no SC5003 row on main and now stands as SC5003 `pending-read-unresolved` (3 rows, fail closed). Checked before naming it (c775 on this project, old = main 176445e77's release, new = the bundle): violations lost 0, added 0; no added row sits where the old build had a violation; none sits where the old build's proof log names a value_use proof (decision or silent); uncertifiable is internal, nothing a user sees. Attributed by controlled builds (the Rust diff of each ADR reverse-applied, the project re-run): without ADR 1186 the place is gone, without ADR 1182, 1187 or 1188 it stands."
+  },
+  {
+   "project": "jar-hell-web/web/tsconfig.json",
+   "rule": "SC2001",
+   "kind": "newly-uncertifiable",
+   "build": "std",
+   "count": 1,
+   "adr": "ADR 1190",
+   "why": "ADR 1190 slice 2 (reads and writes in a callback prop's literal take the child's calls' roles): `web/src/components/VersionsSidebar.tsx` line 136, the `onToggle={(group: string) => setOpenedGroup(prev => group === prev ? undefined : group)}` callback prop's setter write inside a `For` row, had no SC2001 row on main and now stands as SC2001 `function-run-unplaced` (fail closed): the write's role is now the role of the child `VersionGroup`'s calls of `props.onToggle`, and a call the role engine does not place by itself (`call_plainly_placed` stops at a call in a named local function, which is placed by that function's own entries) leaves it unplaced. Checked before naming it (c775 on the seven projects whose rows moved, old = main 6e4191ede's release, new = the bundle): violations lost 0, added 0; no added row sits where the old build had a violation; none sits where the old build's proof log names a value_use proof (decision or silent); all nine added rows (this one and eight SC2002 `package-may-call-action` rows in places that already had rows) sit under a silent proof of the role engine's own arms (callee_roles.control-flow-nested, control_flow.deferred-callback, write_roles.walk-direct-1, execution_role_where.compiler-region); uncertifiable is internal, nothing a user sees. Only ADR 1190 slice 2 is in the bundle, so no controlled build was needed."
+  },
+  {
+   "project": "jar-hell-web/web/tsconfig.json",
+   "rule": "SC2001",
+   "kind": "newly-uncertifiable",
+   "build": "dev",
+   "count": 1,
+   "adr": "ADR 1190",
+   "why": "ADR 1190 slice 2 (reads and writes in a callback prop's literal take the child's calls' roles): `web/src/components/VersionsSidebar.tsx` line 136, the `onToggle={(group: string) => setOpenedGroup(prev => group === prev ? undefined : group)}` callback prop's setter write inside a `For` row, had no SC2001 row on main and now stands as SC2001 `function-run-unplaced` (fail closed): the write's role is now the role of the child `VersionGroup`'s calls of `props.onToggle`, and a call the role engine does not place by itself (`call_plainly_placed` stops at a call in a named local function, which is placed by that function's own entries) leaves it unplaced. Checked before naming it (c775 on the seven projects whose rows moved, old = main 6e4191ede's release, new = the bundle): violations lost 0, added 0; no added row sits where the old build had a violation; none sits where the old build's proof log names a value_use proof (decision or silent); all nine added rows (this one and eight SC2002 `package-may-call-action` rows in places that already had rows) sit under a silent proof of the role engine's own arms (callee_roles.control-flow-nested, control_flow.deferred-callback, write_roles.walk-direct-1, execution_role_where.compiler-region); uncertifiable is internal, nothing a user sees. Only ADR 1190 slice 2 is in the bundle, so no controlled build was needed."
   }
  ]
 }
