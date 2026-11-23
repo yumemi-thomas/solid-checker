@@ -170,9 +170,14 @@
     ]
   },
   "rust/crates/solid-reactive-ir/src/indexes/initialization.rs": {
-    "file_slots": 6,
-    "file_by_path": 3,
-    "hashmap-iteration": 2
+    "file_slots": 11,
+    "file_by_path": 4,
+    "hashmap-iteration": 5,
+    "pending-review": [
+      "file_slots rose 6 -> 11 (--allow-rise): ADR 1182, the settling lets and members, computed inside the whole-program UninitializedReferences memo (its read is the whole program)",
+      "file_by_path rose 3 -> 4 (--allow-rise): ADR 1182, settled_let_function opens the declaring file its recorded UninitializedReferences row names",
+      "hashmap-iteration rose 2 -> 5 (--allow-rise): ADR 1182, the settled rows, the paths and a receiver's last writes; each answer is sorted before it leaves the memo"
+    ]
   },
   "rust/crates/solid-reactive-ir/src/indexes/intrinsics.rs": {
     "file_slots": 1
@@ -261,6 +266,12 @@
   },
   "rust/crates/solid-reactive-ir/src/name_matcher.rs": {
     "hashmap-iteration": 1
+  },
+  "rust/crates/solid-reactive-ir/src/object_members/memo.rs": {
+    "hashmap-iteration": 1,
+    "pending-review": [
+      "hashmap-iteration rose 0 -> 1 (--allow-rise): ADR 1182, a name match only: `file.ast.bindings` is a Vec (a HashMap of that name is declared elsewhere in the file)"
+    ]
   },
   "rust/crates/solid-reactive-ir/src/object_members.rs": {
     "file_slots": 3,

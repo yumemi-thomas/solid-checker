@@ -35,6 +35,33 @@ fn straight_line_calls_exclude_every_conditional_construct() {
     assert_eq!(lines, [4, 5, 13], "{lines:?}");
 }
 
+/// Facts schema 109 (ADR 1182): a straight-line assignment is one its function (or the module) runs on every execution that reaches it,
+/// under the conditions of `straight_line_calls`.
+#[test]
+fn straight_line_assignments_exclude_every_conditional_construct() {
+    let source = concat!(
+        "declare const c: boolean;\n",
+        "let w = () => 1;\n",
+        "w = () => 2;\n",
+        "if (c) w = () => 3;\n",
+        "c && (w = () => 4);\n",
+        "for (const x of [1]) w = () => x;\n",
+        "try { w = () => 5; } catch {}\n",
+        "function f() { w = () => 6; }\n",
+        "{ w = () => 7; }\n",
+        "export { f };\n",
+    );
+    let facts = super::extract("assign.ts", source).unwrap();
+    let line_of = |span: crate::core::Span| source[..span.start as usize].matches('\n').count() + 1;
+    let lines = facts
+        .straight_line_assignments
+        .iter()
+        .map(|span| line_of(*span))
+        .collect::<Vec<_>>();
+    // Line 8 is straight-line in `f`'s own flow, as `straight_line_calls` records it; a consumer attributes each span to its function.
+    assert_eq!(lines, [3, 8, 9], "{lines:?}");
+}
+
 /// Facts schema 65: an await dominates the rest of its innermost block when
 /// nothing between that block's start and the await can skip it. A `try`
 /// block and a branch's block are blocks; `catch`, `finally`, the code after

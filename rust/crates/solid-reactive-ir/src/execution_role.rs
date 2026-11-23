@@ -486,6 +486,12 @@ pub(crate) fn strict_read_role(
             "execution_role.read_execution_role.reporting-run",
             reporting
         ),
+        // ADR 1183 (round 2: the strict read only, as ADR 1166 r2's run): a read in a returned cleanup that a reached write reruns
+        // while the owner is alive runs in the apply's window, one untracked run, a witness for this claim alone.
+        None if write_roles::returned_cleanup_rerun_reached(file, span, lookup) => role_arm!(
+            "execution_role.read_execution_role.returned-cleanup-rerun",
+            ExecutionRole::EffectApply
+        ),
         None => role,
     }
 }

@@ -1949,25 +1949,57 @@ impl LocalAccessContext<'_, '_> {
         )
     }
 
+    /// The named local helper a prop read at `site` is written in, and the position in its body that runs the read: the read
+    /// itself, or (ADR 1187) the call of the outermost IIFE around it. An anonymous, unbound literal that is neither async nor a
+    /// generator and is called where it is written directly in the enclosing body runs in place on that body's stack, so its read
+    /// is the helper's read at that call, charged to the helper's calls as one written in its body is.
     fn component_prop_helper<'file>(
         &self,
         file: &'file solid_facts::FileFacts,
         site: solid_facts::core::Span,
-    ) -> Option<&'file solid_facts::ast::FunctionFact> {
-        let helper = file
-            .ast
-            .functions
-            .iter()
-            .filter(|function| function.span.contains(site))
-            .min_by_key(|function| function.span.end - function.span.start)?;
-        (helper.body.contains(site)
+    ) -> Option<(
+        &'file solid_facts::ast::FunctionFact,
+        solid_facts::core::Span,
+    )> {
+        let innermost = |at: solid_facts::core::Span| {
+            file.ast
+                .functions
+                .iter()
+                .filter(|function| function.span.contains(at) && function.span != at)
+                .min_by_key(|function| function.span.end - function.span.start)
+        };
+        let mut helper = innermost(site)?;
+        let mut anchor = site;
+        while helper.body.contains(anchor)
+            && helper.name.is_none()
+            && function_binding_name(file, helper).is_none()
+            && !helper.r#async
+            && !helper.generator
+        {
+            let Some(call) = file
+                .ast
+                .calls_with_peeled_callee(helper.span)
+                .find(|call| !call.construct)
+            else {
+                break;
+            };
+            let Some(outer) = innermost(call.span) else {
+                break;
+            };
+            if !crate::owners::written_directly_in(&file.ast, outer, call.span) {
+                break;
+            }
+            anchor = call.span;
+            helper = outer;
+        }
+        (helper.body.contains(anchor)
             && function_binding_name(file, helper).is_some()
             && !self.lookup.function_may_be_component(file, helper)
             && file.ast.functions.iter().any(|component| {
                 component.body.contains(helper.span)
                     && self.lookup.function_is_component(file, component)
             }))
-        .then_some(helper)
+        .then_some((helper, anchor))
     }
 
     /// An exact callback slot's execution role, independent of any other use
@@ -2127,7 +2159,7 @@ impl LocalAccessContext<'_, '_> {
         &self,
         file: &solid_facts::FileFacts,
         helper: &solid_facts::ast::FunctionFact,
-        site: solid_facts::core::Span,
+        (site, run_at): (solid_facts::core::Span, solid_facts::core::Span),
         allowed: &[solid_facts::core::Span],
         read: ReactiveRead,
         definition_admitted: bool,
@@ -2165,7 +2197,8 @@ impl LocalAccessContext<'_, '_> {
                             target_file.path == file.path && target.span == helper.span
                         })
             });
-        let body_runs = crate::interproc::body_site_runs_during_call(file, helper, site);
+        // ADR 1187: a read in an IIFE runs where the IIFE's call in the body runs.
+        let body_runs = crate::interproc::body_site_runs_during_call(file, helper, run_at);
         // The lexical census includes undemanded references. Missing call
         // facts open the proof rather than hiding an observed call or escape.
         let mut unproven_use = dynamic_lexical_observation;
@@ -8212,6 +8245,10 @@ impl LocalAccessContext<'_, '_> {
             .get(symbol)
             .filter(|_| self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store))
             .and_then(|_| self.component_prop_helper(file, member.span));
+        let (helper, helper_anchor) = (
+            helper.map(|(helper, _)| helper),
+            helper.map_or(member.span, |(_, anchor)| anchor),
+        );
         let gate_refuses = inside_non_component_function(file, member.span, self.lookup)
                 && named_callback_execution_role(file, member.span, self.lookup).is_none()
                 // This literal is the exact dialect-owned children callback,
@@ -8625,7 +8662,7 @@ impl LocalAccessContext<'_, '_> {
             self.project_helper_prop_read(
                 file,
                 helper,
-                member.span,
+                (member.span, helper_anchor),
                 allowed,
                 read,
                 !gate_refuses,
@@ -10298,6 +10335,8 @@ pub(crate) fn nested_named_function(
 /// ADR 1103: whether the function written directly around `span` is an anonymous function literal (no name, no binding)
 /// handed whole as an argument to a call that is no primitive's: that call enters it, not the named function around it, so
 /// ADR 0936's fallback to the named function's call edges does not place it.
+/// ADR 1184: or called where it is written (`(() => props.m1)()`, a function expression too): no summary carries a component
+/// prop's read in such a literal to the named function's calls either (the census's `ref-factory` and `body` false cleans).
 pub(crate) fn handed_anonymous_literal(
     file: &solid_facts::FileFacts,
     span: solid_facts::core::Span,
@@ -10306,13 +10345,17 @@ pub(crate) fn handed_anonymous_literal(
     containing_ast_function(&file.ast, span).is_some_and(|function| {
         function.name.is_none()
             && function_binding_name(file, function).is_none()
-            && file
+            && (file
                 .ast
                 .arguments_containing(function.span)
                 .any(|(call, index)| {
                     file.ast.peel_ts_sugar_span(call.arguments[index].span) == function.span
                         && lookup.primitive_at_call(file, call.span).is_none()
                 })
+                || file
+                    .ast
+                    .calls_with_peeled_callee(function.span)
+                    .any(|call| !call.construct))
     })
 }
 

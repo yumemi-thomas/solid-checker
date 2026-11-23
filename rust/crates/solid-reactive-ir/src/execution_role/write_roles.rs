@@ -1582,6 +1582,296 @@ fn effect_provably_reruns(
     })
 }
 
+/// ADR 1183: whether the read at `span`, written in the body of the cleanup an effect's inline apply returns (ADR 0539's
+/// [`WindowedCleanup::MayRerun`]), provably runs on a rerun while the effect's owner is alive, in the apply's strict-read window.
+/// Every premise:
+/// - the cleanup is the literal an inline apply at slot 1 of an effect or render effect returns (rerun in the read window,
+///   `returned_cleanup_reruns_in_read_window`), neither `async` nor a generator, and the read is in its own body;
+/// - the effect call runs on every completion of the component that writes it (the component's own body), and its compute, an
+///   inline literal, calls on every completion the accessor of a `const [t, setT] = createSignal(<primitive literal>)` of that
+///   component, with no options;
+/// - `setT(<primitive literal>)` of a different value runs on every completion of an inline `on…` handler of an intrinsic
+///   element with no spread and no `disabled` or `inert`, reached from the component's returned element through intrinsic
+///   elements' direct children only (ADR 1132: a handler a user can reach is reachable): while the element is mounted the
+///   component owns the effect, so the write reruns it with its owner alive, and the rerun calls the cleanup first.
+pub(crate) fn returned_cleanup_rerun_reached(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    let Some(cleanup) = crate::owners::containing_body_function(ast, span) else {
+        return false;
+    };
+    if cleanup.r#async || cleanup.generator || super::events::inside_instance_field(file, span) {
+        return false;
+    }
+    // Round 2 (bundle u's 19 false cleans): a call written in the cleanup runs the code of what it calls, which the summaries
+    // carry to this call; the role here would place a helper's read (`wrapUse()`) where nothing proves its rows. Only a call of
+    // a primitive's accessor (a binding a primitive call creates) is a read this answers; any other call keeps its role.
+    if ast.calls.iter().any(|call| {
+        (call.span == span || ast.peel_ts_sugar_span(call.callee) == span)
+            && !primitive_accessor_call(file, call, lookup)
+    }) {
+        return false;
+    }
+    let Some(apply) = function_returning(file, cleanup) else {
+        return false;
+    };
+    let Some((call, _)) = ast.arguments_containing(apply.span).find(|(call, index)| {
+        *index == 1
+            && !call.arguments[1].spread
+            && ast.peel_ts_sugar_span(call.arguments[1].span) == apply.span
+            && lookup
+                .primitive_at_call(file, call.span)
+                .is_some_and(|primitive| {
+                    lookup
+                        .dialect
+                        .returned_cleanup_reruns_in_read_window(primitive, 1)
+                })
+    }) else {
+        return false;
+    };
+    let Some(component) = crate::owners::containing_body_function(ast, call.span) else {
+        return false;
+    };
+    if lookup.function_component_status(file, component) == ComponentStatus::No
+        || !unconditional_in(file, component, call.span)
+    {
+        return false;
+    }
+    let Some(compute) = call
+        .arguments
+        .first()
+        .filter(|compute| !compute.spread)
+        .and_then(|compute| crate::cleanup::callback_argument_literal(file, compute.span))
+    else {
+        return false;
+    };
+    if compute.r#async || compute.generator {
+        return false;
+    }
+    ast.calls.iter().any(|read| {
+        if read.construct
+            || !read.arguments.is_empty()
+            || !crate::owners::containing_body_function(ast, read.span)
+                .is_some_and(|owner| owner.span == compute.span)
+            || !unconditional_in(file, compute, read.span)
+        {
+            return false;
+        }
+        let callee = ast.peel_ts_sugar_span(read.callee);
+        let Some(declaration) = ast.reference_declaration(callee) else {
+            return false;
+        };
+        let Some((binding_file, binding, _)) = lookup.binding_at_reference(file.path.as_str(), callee) else {
+            return false;
+        };
+        if binding_file.path != file.path
+            || !binding.immutable
+            || binding.shape != solid_facts::ast::BindingShape::Array
+            || !binding
+                .array_slots
+                .first()
+                .and_then(Option::as_ref)
+                .is_some_and(|accessor| accessor.span == declaration)
+            || !crate::owners::containing_body_function(ast, binding.declaration)
+                .is_some_and(|owner| owner.span == component.span)
+        {
+            return false;
+        }
+        let Some(initializer) = binding
+            .call_initializer
+            .map(|at| ast.peel_ts_sugar_span(at))
+            .and_then(|at| ast.call_at(at))
+        else {
+            return false;
+        };
+        if initializer.construct
+            || !lookup
+                .primitive_at_call(file, initializer.span)
+                .is_some_and(|primitive| lookup.dialect.signal_creation_options(primitive).is_some())
+        {
+            return false;
+        }
+        let [initial] = initializer.arguments.as_slice() else {
+            return false;
+        };
+        let Some(initial) = argument_literal(file, initial) else {
+            return false;
+        };
+        let Some(Some(setter)) = binding.array_slots.get(1) else {
+            return false;
+        };
+        ast.calls.iter().any(|write| {
+            !write.construct
+                && ast.reference_declaration(ast.peel_ts_sugar_span(write.callee)) == Some(setter.span)
+                && matches!(write.arguments.as_slice(), [value] if argument_literal(file, value).is_some_and(|value| value != initial))
+                && handler_reached(file, component, write.span)
+        })
+    })
+}
+
+/// ADR 1183 round 2: whether `call` calls an identifier bound directly by a primitive's call in this file (a slot of
+/// `const [t] = createSignal(…)`, `const m = createMemo(…)`): an accessor read, not a call of project code.
+fn primitive_accessor_call(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    let callee = ast.peel_ts_sugar_span(call.callee);
+    if call.construct || ast.member_at(callee).is_some() {
+        return false;
+    }
+    let Some((binding_file, binding, _)) = lookup.binding_at_reference(file.path.as_str(), callee)
+    else {
+        return false;
+    };
+    binding_file.path == file.path
+        && binding.immutable
+        && binding
+            .call_initializer
+            .map(|at| ast.peel_ts_sugar_span(at))
+            .and_then(|at| ast.call_at(at))
+            .is_some_and(|created| {
+                !created.construct && lookup.primitive_at_call(file, created.span).is_some()
+            })
+}
+
+/// ADR 1183: whether `at` runs on every completion of `function` ([`solid_facts::ast::synchronously_unconditional_calls`]).
+fn unconditional_in(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    at: Span,
+) -> bool {
+    solid_facts::ast::synchronously_unconditional_calls(
+        std::path::Path::new(file.path.as_str()),
+        &file.source,
+        function.span,
+        &[],
+    )
+    .is_some_and(|calls| calls.contains(&at))
+}
+
+/// ADR 1183: a primitive literal argument's value, canonical (a number by its value, a string by its text with no escape or
+/// quote, `true`/`false`); `None` for anything else.
+fn argument_literal(
+    file: &solid_facts::FileFacts,
+    argument: &solid_facts::ast::ArgumentFact,
+) -> Option<String> {
+    if argument.spread
+        || argument.runtime_value_kind != solid_facts::ast::RuntimeValueKind::Primitive
+    {
+        return None;
+    }
+    let text = file
+        .source_text(file.ast.peel_ts_sugar_span(argument.span))?
+        .trim();
+    if matches!(text, "true" | "false") {
+        return Some(format!("b:{text}"));
+    }
+    for quote in ['"', '\''] {
+        if text.len() >= 2 && text.starts_with(quote) && text.ends_with(quote) {
+            let inner = &text[1..text.len() - 1];
+            return (!inner.contains([quote, '\\', '\n'])).then(|| format!("s:{inner}"));
+        }
+    }
+    let digits = text
+        .bytes()
+        .all(|byte| byte.is_ascii_digit() || byte == b'.')
+        && text
+            .bytes()
+            .next()
+            .is_some_and(|byte| byte.is_ascii_digit());
+    digits
+        .then(|| text.parse::<f64>().ok())
+        .flatten()
+        .filter(|value| value.is_finite())
+        .map(|value| format!("n:{value:?}"))
+}
+
+/// ADR 1183: whether `write` runs on every completion of an inline `on…` handler written as an attribute of an intrinsic element
+/// the component's returned element reaches through intrinsic elements' direct children, none with a spread, `disabled` or
+/// `inert`.
+fn handler_reached(
+    file: &solid_facts::FileFacts,
+    component: &solid_facts::ast::FunctionFact,
+    write: Span,
+) -> bool {
+    let ast = &file.ast;
+    let Some(handler) = crate::owners::containing_body_function(ast, write) else {
+        return false;
+    };
+    if handler.r#async || handler.generator || !unconditional_in(file, handler, write) {
+        return false;
+    }
+    let intrinsic = |element: &solid_facts::ast::JsxElementFact| {
+        element.member_object.is_none()
+            && file.source_text(element.name.span).is_some_and(|name| {
+                name.chars()
+                    .next()
+                    .is_some_and(|first| first.is_ascii_lowercase())
+            })
+            && element.spreads.is_empty()
+            && element.attributes.iter().all(|attribute| {
+                !matches!(file.source_text(attribute.name), Some("disabled" | "inert"))
+            })
+    };
+    let Some(element) = ast.jsx_elements.iter().find(|element| {
+        element.attributes.iter().any(|attribute| {
+            attribute.namespace.is_none()
+                && file.source_text(attribute.name).is_some_and(|name| {
+                    name.len() > 2
+                        && name.starts_with("on")
+                        && name.as_bytes()[2].is_ascii_uppercase()
+                })
+                && attribute
+                    .expression
+                    .is_some_and(|value| ast.peel_ts_sugar_span(value) == handler.span)
+        })
+    }) else {
+        return false;
+    };
+    if !intrinsic(element) {
+        return false;
+    }
+    // Climb the direct-child chain to the component's returned element.
+    let mut current = element;
+    for _ in 0..32 {
+        if let Some(parent) = ast
+            .jsx_elements
+            .iter()
+            .find(|parent| parent.span != current.span && parent.children.contains(&current.span))
+        {
+            if !intrinsic(parent) {
+                return false;
+            }
+            current = parent;
+            continue;
+        }
+        let returned = component
+            .expression_return
+            .iter()
+            .chain(ast.returns.iter().filter(|returned| {
+                crate::owners::containing_body_function(ast, returned.span)
+                    .is_some_and(|owner| owner.span == component.span)
+            }))
+            .all(|returned| {
+                returned
+                    .argument
+                    .is_some_and(|argument| ast.peel_ts_sugar_span(argument) == current.span)
+            });
+        return returned
+            && (component.expression_return.is_some()
+                || ast.returns.iter().any(|returned| {
+                    crate::owners::containing_body_function(ast, returned.span)
+                        .is_some_and(|owner| owner.span == component.span)
+                }));
+    }
+    false
+}
+
 /// ADR 0455: the innermost function around `span` that is bound to a name and
 /// written in a callback that keeps its call's owner and runs it during the call
 /// (`untrack`, [`solid_dialect::Dialect::callback_preserves_owner_write_context`]).

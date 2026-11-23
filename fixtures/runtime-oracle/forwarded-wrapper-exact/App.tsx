@@ -69,6 +69,16 @@ export function MemberDataApp() {
   return <i />;
 }
 
+// ADR 1182: a data slot naming a module-level `const` arrow declared before the literal (ADR 0299's census reads it as the arrow).
+const apiArrow = { go2: handConst };
+export function DataArrowApp() {
+  const a1 = createMemo(async () => 1);
+  apiArrow.go2(() => {
+    a1();
+  });
+  return <i />;
+}
+
 // The false-positive twins: the name's first function forwards into the leaf, the function the call runs does not. The read runs bare in
 // the component's render (Chrome: ASYNC_OUTSIDE_LOADING_BOUNDARY, not the leaf's code): no SC5001 violation.
 let handSwap = (fn: () => void) => {
@@ -200,8 +210,7 @@ export function MemberDropApp() {
 }
 
 // Data slots the census does not follow (uncertifiable): one naming a `let` an assignment rewrites (its function is not the declaration's),
-// one naming a `const` arrow (the census reads a slot's name as a function declaration only, as for shorthand), and one an assignment
-// replaces.
+// and one an assignment replaces (the census refuses the receiver it writes through).
 const apiSwap = { go: handDrop };
 export function DataSwapApp() {
   const a1 = createMemo(async () => 1);
@@ -211,14 +220,6 @@ export function DataSwapApp() {
   return <i />;
 }
 
-const apiArrow = { go2: handConst };
-export function DataArrowApp() {
-  const a1 = createMemo(async () => 1);
-  apiArrow.go2(() => {
-    a1();
-  });
-  return <i />;
-}
 
 const apiReplaced = { go3: handDecl };
 apiReplaced.go3 = (fn: () => void) => {

@@ -94,11 +94,21 @@ export function MemberDefaultRuns() {
   return <p>x</p>;
 }
 
-// An argument that is `undefined` runs the default too: never clean.
+// An argument that is the global `undefined` runs the default too (ADR 1188: a violation, as an omitted one).
 export function UndefinedArgument() {
   createTrackedEffect(() => {
     n();
     valued(undefined);
+  });
+  return <p>x</p>;
+}
+
+// ADR 1188: a variable that holds `undefined` is a value, not the literal: it stays uncertifiable.
+export function UndefinedThroughVariable() {
+  const none = undefined;
+  createTrackedEffect(() => {
+    n();
+    valued(none);
   });
   return <p>x</p>;
 }

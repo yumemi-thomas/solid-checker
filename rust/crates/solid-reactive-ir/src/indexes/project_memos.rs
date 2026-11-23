@@ -249,7 +249,7 @@ whole_program! {
     /// (the proof's own recursion lives inside the one answer), so the empty
     /// answer is never served: it would be reported and the store emptied.
     UninitializedReferences, 36, uninitialized_references, "initialization_rejected",
-    Vec<(String, Vec<Span>, Vec<Span>)>,
+    Vec<super::initialization::UninitializedRow>,
     cycle: Vec::new(),
     direct: |lookup| lookup.compute_uninitialized_references(),
     |ctx| Ok(ctx.project(|lookup| lookup.compute_uninitialized_references()))

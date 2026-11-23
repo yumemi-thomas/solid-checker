@@ -217,14 +217,35 @@
       "fixes": 0
     },
     {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
+      "start": 2044,
+      "end": 2048,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "call-attributed-read",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
+      "start": 2044,
+      "end": 2048,
+      "fixes": 0
+    },
+    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 2062,
-      "end": 2081,
+      "start": 2362,
+      "end": 2381,
       "fixes": 0
     },
     {
@@ -234,8 +255,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 2062,
-      "end": 2081,
+      "start": 2362,
+      "end": 2381,
       "fixes": 0
     },
     {
@@ -245,30 +266,18 @@
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 2094,
-      "end": 2096,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "callee-callback-timing",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 2244,
-      "end": 2248,
+      "start": 2394,
+      "end": 2396,
       "fixes": 0
     },
     {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
-      "kind": "uncertifiable",
-      "blocker": "callee-callback-timing",
+      "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 2244,
-      "end": 2248,
+      "start": 2544,
+      "end": 2548,
       "fixes": 0
     },
     {
@@ -278,8 +287,8 @@
       "blocker": "call-attributed-read",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 2244,
-      "end": 2248,
+      "start": 2544,
+      "end": 2548,
       "fixes": 0
     },
     {
@@ -289,8 +298,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 2322,
-      "end": 2341,
+      "start": 2622,
+      "end": 2641,
       "fixes": 0
     },
     {
@@ -300,8 +309,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 2322,
-      "end": 2341,
+      "start": 2622,
+      "end": 2641,
       "fixes": 0
     },
     {
@@ -311,30 +320,18 @@
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 2354,
-      "end": 2356,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "callee-callback-timing",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 2463,
-      "end": 2467,
+      "start": 2654,
+      "end": 2656,
       "fixes": 0
     },
     {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
-      "kind": "uncertifiable",
-      "blocker": "callee-callback-timing",
+      "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 2463,
-      "end": 2467,
+      "start": 2763,
+      "end": 2767,
       "fixes": 0
     },
     {
@@ -344,8 +341,8 @@
       "blocker": "call-attributed-read",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 2463,
-      "end": 2467,
+      "start": 2763,
+      "end": 2767,
       "fixes": 0
     },
     {
@@ -355,8 +352,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 2771,
-      "end": 2790,
+      "start": 3071,
+      "end": 3090,
       "fixes": 0
     },
     {
@@ -366,8 +363,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 2771,
-      "end": 2790,
+      "start": 3071,
+      "end": 3090,
       "fixes": 0
     },
     {
@@ -377,30 +374,18 @@
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 2803,
-      "end": 2805,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "callee-callback-timing",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 2909,
-      "end": 2913,
+      "start": 3103,
+      "end": 3105,
       "fixes": 0
     },
     {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
-      "kind": "uncertifiable",
-      "blocker": "callee-callback-timing",
-      "severity": "error",
+      "kind": "violation",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 2909,
-      "end": 2913,
+      "start": 3209,
+      "end": 3213,
       "fixes": 0
     },
     {
@@ -410,8 +395,8 @@
       "blocker": "call-attributed-read",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 2909,
-      "end": 2913,
+      "start": 3209,
+      "end": 3213,
       "fixes": 0
     },
     {
@@ -421,8 +406,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 2984,
-      "end": 3003,
+      "start": 3284,
+      "end": 3303,
       "fixes": 0
     },
     {
@@ -432,8 +417,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 2984,
-      "end": 3003,
+      "start": 3284,
+      "end": 3303,
       "fixes": 0
     },
     {
@@ -443,8 +428,8 @@
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 3016,
-      "end": 3018,
+      "start": 3316,
+      "end": 3318,
       "fixes": 0
     },
     {
@@ -454,30 +439,18 @@
       "blocker": "handed-member-dispatch",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 3102,
-      "end": 3108,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "callee-callback-timing",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 3121,
-      "end": 3125,
+      "start": 3402,
+      "end": 3408,
       "fixes": 0
     },
     {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
-      "kind": "uncertifiable",
-      "blocker": "callee-callback-timing",
-      "severity": "error",
+      "kind": "violation",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 3121,
-      "end": 3125,
+      "start": 3421,
+      "end": 3425,
       "fixes": 0
     },
     {
@@ -487,8 +460,8 @@
       "blocker": "call-attributed-read",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 3121,
-      "end": 3125,
+      "start": 3421,
+      "end": 3425,
       "fixes": 0
     },
     {
@@ -498,8 +471,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 3313,
-      "end": 3332,
+      "start": 3613,
+      "end": 3632,
       "fixes": 0
     },
     {
@@ -509,8 +482,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 3313,
-      "end": 3332,
+      "start": 3613,
+      "end": 3632,
       "fixes": 0
     },
     {
@@ -520,8 +493,8 @@
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 3347,
-      "end": 3349,
+      "start": 3647,
+      "end": 3649,
       "fixes": 0
     },
     {
@@ -531,30 +504,18 @@
       "blocker": "withheld-object-member",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 3489,
-      "end": 3497,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "callee-callback-timing",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 3510,
-      "end": 3514,
+      "start": 3789,
+      "end": 3797,
       "fixes": 0
     },
     {
       "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
-      "kind": "uncertifiable",
-      "blocker": "callee-callback-timing",
+      "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 3510,
-      "end": 3514,
+      "start": 3810,
+      "end": 3814,
       "fixes": 0
     },
     {
@@ -564,8 +525,8 @@
       "blocker": "call-attributed-read",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 3510,
-      "end": 3514,
+      "start": 3810,
+      "end": 3814,
       "fixes": 0
     },
     {
@@ -575,8 +536,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 3771,
-      "end": 3790,
+      "start": 4071,
+      "end": 4090,
       "fixes": 0
     },
     {
@@ -586,8 +547,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 3771,
-      "end": 3790,
+      "start": 4071,
+      "end": 4090,
       "fixes": 0
     },
     {
@@ -597,8 +558,8 @@
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 3803,
-      "end": 3805,
+      "start": 4103,
+      "end": 4105,
       "fixes": 0
     },
     {
@@ -608,8 +569,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 3956,
-      "end": 3960,
+      "start": 4256,
+      "end": 4260,
       "fixes": 0
     },
     {
@@ -619,8 +580,8 @@
       "blocker": "callee-callback-timing",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 3956,
-      "end": 3960,
+      "start": 4256,
+      "end": 4260,
       "fixes": 0
     },
     {
@@ -630,8 +591,8 @@
       "blocker": "call-attributed-read",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 3956,
-      "end": 3960,
+      "start": 4256,
+      "end": 4260,
       "fixes": 0
     },
     {
@@ -641,8 +602,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 4032,
-      "end": 4051,
+      "start": 4332,
+      "end": 4351,
       "fixes": 0
     },
     {
@@ -652,8 +613,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 4032,
-      "end": 4051,
+      "start": 4332,
+      "end": 4351,
       "fixes": 0
     },
     {
@@ -663,8 +624,8 @@
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 4064,
-      "end": 4066,
+      "start": 4364,
+      "end": 4366,
       "fixes": 0
     },
     {
@@ -674,8 +635,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 4177,
-      "end": 4181,
+      "start": 4477,
+      "end": 4481,
       "fixes": 0
     },
     {
@@ -685,8 +646,8 @@
       "blocker": "callee-callback-timing",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 4177,
-      "end": 4181,
+      "start": 4477,
+      "end": 4481,
       "fixes": 0
     },
     {
@@ -696,8 +657,8 @@
       "blocker": "call-attributed-read",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 4177,
-      "end": 4181,
+      "start": 4477,
+      "end": 4481,
       "fixes": 0
     },
     {
@@ -707,8 +668,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 4252,
-      "end": 4271,
+      "start": 4552,
+      "end": 4571,
       "fixes": 0
     },
     {
@@ -718,8 +679,8 @@
       "blocker": "function-run-unplaced",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 4252,
-      "end": 4271,
+      "start": 4552,
+      "end": 4571,
       "fixes": 0
     },
     {
@@ -729,8 +690,8 @@
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 4286,
-      "end": 4288,
+      "start": 4586,
+      "end": 4588,
       "fixes": 0
     },
     {
@@ -740,8 +701,8 @@
       "blocker": "withheld-object-member",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 4432,
-      "end": 4441,
+      "start": 4732,
+      "end": 4741,
       "fixes": 0
     },
     {
@@ -751,8 +712,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 4454,
-      "end": 4458,
+      "start": 4754,
+      "end": 4758,
       "fixes": 0
     },
     {
@@ -762,8 +723,8 @@
       "blocker": "callee-callback-timing",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 4454,
-      "end": 4458,
+      "start": 4754,
+      "end": 4758,
       "fixes": 0
     },
     {
@@ -773,8 +734,8 @@
       "blocker": "call-attributed-read",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 4454,
-      "end": 4458,
+      "start": 4754,
+      "end": 4758,
       "fixes": 0
     },
     {
@@ -784,8 +745,8 @@
       "blocker": "withheld-object-member",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 4882,
-      "end": 4892,
+      "start": 5121,
+      "end": 5131,
       "fixes": 0
     },
     {
@@ -795,8 +756,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 4905,
-      "end": 4909,
+      "start": 5144,
+      "end": 5148,
       "fixes": 0
     },
     {
@@ -806,8 +767,8 @@
       "blocker": "callee-callback-timing",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 4905,
-      "end": 4909,
+      "start": 5144,
+      "end": 5148,
       "fixes": 0
     },
     {
@@ -817,8 +778,8 @@
       "blocker": "call-attributed-read",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 4905,
-      "end": 4909,
+      "start": 5144,
+      "end": 5148,
       "fixes": 0
     },
     {
@@ -828,8 +789,8 @@
       "blocker": "withheld-object-member",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 5048,
-      "end": 5060,
+      "start": 5347,
+      "end": 5362,
       "fixes": 0
     },
     {
@@ -839,8 +800,8 @@
       "blocker": "callee-callback-timing",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 5073,
-      "end": 5077,
+      "start": 5375,
+      "end": 5379,
       "fixes": 0
     },
     {
@@ -850,8 +811,8 @@
       "blocker": "callee-callback-timing",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 5073,
-      "end": 5077,
+      "start": 5375,
+      "end": 5379,
       "fixes": 0
     },
     {
@@ -861,52 +822,8 @@
       "blocker": "call-attributed-read",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 5073,
-      "end": 5077,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "withheld-object-member",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 5275,
-      "end": 5290,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "callee-callback-timing",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 5303,
-      "end": 5307,
-      "fixes": 0
-    },
-    {
-      "rule": "pending-async-unsuspendable-read",
-      "code": "SC5001",
-      "kind": "uncertifiable",
-      "blocker": "callee-callback-timing",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 5303,
-      "end": 5307,
-      "fixes": 0
-    },
-    {
-      "rule": "async-outside-loading-boundary",
-      "code": "SC5003",
-      "kind": "uncertifiable",
-      "blocker": "call-attributed-read",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/forwarded-wrapper-exact/App.tsx",
-      "start": 5303,
-      "end": 5307,
+      "start": 5375,
+      "end": 5379,
       "fixes": 0
     }
   ]

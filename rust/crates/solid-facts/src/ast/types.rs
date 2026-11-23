@@ -248,6 +248,11 @@ pub struct AstFacts {
     /// apart so that table's existing consumers keep their meaning.
     #[serde(default)]
     pub straight_line_constructs: Vec<Span>,
+    /// The assignment expressions written in their innermost enclosing function's straight-line flow (module level included), under the
+    /// conditions of [`Self::straight_line_calls`] (facts schema 109, ADR 1182): such an assignment runs on every execution of that function
+    /// that reaches its position.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub straight_line_assignments: Vec<Span>,
     /// The call, `new` and member expressions written in their innermost
     /// enclosing function's straight-line flow, outside any logical
     /// assignment and after no optional-chain link, that no earlier `return`,
@@ -405,7 +410,10 @@ pub struct AstFacts {
     pub if_regions: Vec<IfRegionFact>,
     /// Every `break` and `continue` statement, by span, sorted.
     ///
-    /// **No consumer reads this today.** It was added for the `creates`
+    /// Read by ADR 1185's counted-loop proof (`body_roles::in_counted_loop_later_pass`), whose premise is only that no `break` or
+    /// `continue` is written in a loop body: a syntactic absence, which this list states whole.
+    ///
+    /// It was first added for the `creates`
     /// implementation census, which refused any declaration node containing a
     /// jump: the Type Facts producer *withheld* every call row inside the
     /// region a jump makes non-universal, and for a claim of the absence of
@@ -416,8 +424,7 @@ pub struct AstFacts {
     /// approximation that could see the jump but never which rows it touched
     /// (Type Facts ADR 0026 amendment).
     ///
-    /// Retained rather than removed because it is a faithful syntactic fact and
-    /// its extraction is two pushes; it is a removal candidate. Any new consumer must state its own premise:
+    /// Retained because it is a faithful syntactic fact. Any new consumer must state its own premise:
     /// a jump in a span says nothing about what any other fact domain withheld.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub jump_statements: Vec<Span>,
@@ -2787,6 +2794,7 @@ impl AstFacts {
             unmodeled_require_references: Vec::new(),
             straight_line_calls: Vec::new(),
             straight_line_constructs: Vec::new(),
+            straight_line_assignments: Vec::new(),
             completion_sites: Vec::new(),
             returns: Vec::new(),
             jsx_elements: Vec::new(),

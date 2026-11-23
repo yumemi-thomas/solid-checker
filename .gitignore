@@ -1281,8 +1281,12 @@ packages/wasm/owned/
 !fixtures/reactive-ir/for-await-body/node_modules/**
 !fixtures/reactive-ir/after-await-for-await-finally/node_modules/
 !fixtures/reactive-ir/after-await-for-await-finally/node_modules/**
+!fixtures/reactive-ir/after-await-read-later-pass/node_modules/
+!fixtures/reactive-ir/after-await-read-later-pass/node_modules/**
 !fixtures/reactive-ir/owner-after-await-for-await/node_modules/
 !fixtures/reactive-ir/owner-after-await-for-await/node_modules/**
+!fixtures/reactive-ir/owner-after-await-counted-loop/node_modules/
+!fixtures/reactive-ir/owner-after-await-counted-loop/node_modules/**
 !fixtures/reactive-ir/value-use-census/node_modules/
 !fixtures/reactive-ir/value-use-census/node_modules/**
 !fixtures/reactive-ir/thrown-value-catch/node_modules/
@@ -2300,3 +2304,7 @@ packages/wasm/owned/
 !fixtures/reactive-ir/component-prop-call-owner/node_modules/**
 !fixtures/reactive-ir/param-default-leaf/node_modules/
 !fixtures/reactive-ir/param-default-leaf/node_modules/**
+!fixtures/reactive-ir/iife-prop-read/node_modules/
+!fixtures/reactive-ir/iife-prop-read/node_modules/**
+!fixtures/reactive-ir/carrier-call-row/node_modules/
+!fixtures/reactive-ir/carrier-call-row/node_modules/**

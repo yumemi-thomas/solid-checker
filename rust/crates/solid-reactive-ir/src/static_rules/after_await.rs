@@ -2461,10 +2461,34 @@ impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
         // ADR 1164: a read written directly in the body of a `for await` that provably runs it is placed: every run of the body follows
         // the loop's await of its first `next()` (ADR 1038), and the body runs at least once.
         let running_bodies = self.for_await_bodies_that_run(file, function);
-        if running_bodies.is_empty() {
-            mark_uncertain(draft, mark, &reason);
-            return;
-        }
+        // ADR 1191: so is a read written directly in a counted loop's later pass (ADR 1185's `if (i > 0)` in a loop that awaits on
+        // every pass), and a read in function layers run in place whose outermost call is written so (ADR 0493's climb, on its
+        // premises: no bound, no parameter-list layer, no layer that also runs its callback elsewhere, no withheld or unmodelled
+        // step, and no library or package callback crossed, so no primitive's callback slot either).
+        let placed_directly = |at: Span| {
+            written_directly_in(&file.ast, function, at)
+                && (running_bodies.iter().any(|body| body.contains(at))
+                    || (!function.generator
+                        && crate::execution_role::in_counted_loop_later_pass(file, at)))
+        };
+        let lookup = self.ctx.semantic_lookup;
+        let placed = |site: Span| {
+            placed_directly(site)
+                || crate::execution_role::climb_in_place_layers(file, site, lookup).is_some_and(
+                    |climb| {
+                        climb.at != site
+                            && !climb.bound()
+                            && climb.in_list.is_none()
+                            && !climb.among_others
+                            && !climb.withheld
+                            && !climb.unmodelled
+                            && !crate::execution_role::climb_crosses_library_callback(
+                                file, site, climb.at, lookup,
+                            )
+                            && placed_directly(climb.at)
+                    },
+                )
+        };
         let path = file.path.as_str();
         let mut index = mark;
         while index < draft.static_defects.len() {
@@ -2473,11 +2497,7 @@ impl<'s, 'f, 'a> Reach<'s, 'f, 'a> {
                 .ok()
                 .zip(u32::try_from(location.end_byte).ok())
                 .map(|(start, end)| Span::new(start, end));
-            let in_body = &*location.path == path
-                && site.is_some_and(|site| {
-                    running_bodies.iter().any(|body| body.contains(site))
-                        && written_directly_in(&file.ast, function, site)
-                });
+            let in_body = &*location.path == path && site.is_some_and(placed);
             if !in_body {
                 mark_uncertain_one(draft, index, &reason);
             }

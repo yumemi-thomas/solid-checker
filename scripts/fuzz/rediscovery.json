@@ -42630,6 +42630,22 @@
   "outside": "the read grids (flip-read.mjs store variants) do not cross a store variant with a prop or context source, so no STRICT_READ_UNTRACKED cell writes through a prop store's alias; mx-src and mx-pairs do generate the program (`mx-store-write-outside-setter-body-nested-assign-alias-none-s-prop`, `const useIt = props.s1; useIt.a.v = 7`), but judge it for STORE_WRITE_OUTSIDE_SETTER only, where SC2003 claims the write. Crossing the store read variants with the prop and context sources would generate it; not built in this fix"
  },
  {
+  "finding": "ADR 0200 forwarding resolved its wrapper through function_for_symbol / function_called_at, which name the first value of a reassigned `let` or the literal handed to a factory whose result is called: a write in a literal forwarded by such a name into createMemo`s compute was an SC2001 violation where the function the call runs never calls the literal (Chrome silent)",
+  "found": "ADR 1155 r3 (Mac 27): loading-member-callee WrapLet and ViaWrap, violations by coincidence; the fixture forwarded-wrapper-exact`s DropApp, FactoryDropApp and MemberDropApp are false positives on main a63e1302e (Chrome silent)",
+  "fixed": "ADR 1179: callee_roles::forwarded_compute_slot resolves the wrapper with project_callee_at_parameter and requires it exact (a written let, a call`s result, a replaced member or a spread forwards nothing); object_members::memo::literal_function follows a data slot naming a function declaration (`{ hand: handDecl }`)",
+  "grid": "lg-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "lg-reactive-write-in-owned-scope-barm-fwdwrap-let-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-barm-fwdwrap-let-store-direct-none",
+   "lg-reactive-write-in-owned-scope-barm-fwdwrap-let-refresh-direct-none",
+   "lg-reactive-write-in-owned-scope-barm-fwdwrap-factory-signal-direct-none",
+   "lg-reactive-write-in-owned-scope-barm-fwdwrap-factory-store-direct-none",
+   "lg-reactive-write-in-owned-scope-barm-fwdwrap-factory-refresh-direct-none"
+  ],
+  "rediscovered": "new arm-shape contexts barm-fwdwrap-let and barm-fwdwrap-factory (legal): main a63e1302e 6 unexecuted violations (SC2001 at a write that never runs), ADR 1179 6 uncertifiable; the barm-fwdleaf cells (lg-recall 3, mx-recall 6, mx-census 210) unchanged"
+ },
+ {
   "finding": "ADR 1178 (R3 catalog G6): a store handed whole to Object.values, Object.entries, Array.from, Object.hasOwn, deep or snapshot, spread, iterated by a for…of or put in a template stood as SC9012 value-in-carrier at the reference, so a legal program whose read is tracked (a memo, a compute, untrack, a deferred callback) was uncertifiable where Chrome is silent",
   "found": "research R5 on the R3 catalog of unproven simple programs (2026-11-21): the per-callee read rows (ADRs 0620, 0621, 0635) existed, the census table did not",
   "fixed": "ADR 1178 (value_use.rs whole_store_argument, whole_store_form; Dialect::whole_store_argument, creates_settled_store_from_value)",
@@ -42672,22 +42688,6 @@
   "outside": "no read-grid variant holds a store link in a binding and reads through it (flip-read.mjs store variants read the root or destructure it; misuse.mjs `nested-held` writes through the alias and is judged for STORE_WRITE_OUTSIDE_SETTER only). A variant `{ const held = ${o}.a; void held.v; }` would generate it; generator work deferred by the coordinator (2026-11-21), with the prop/context source crossing"
  },
  {
-  "finding": "ADR 0200 forwarding resolved its wrapper through function_for_symbol / function_called_at, which name the first value of a reassigned `let` or the literal handed to a factory whose result is called: a write in a literal forwarded by such a name into createMemo`s compute was an SC2001 violation where the function the call runs never calls the literal (Chrome silent)",
-  "found": "ADR 1155 r3 (Mac 27): loading-member-callee WrapLet and ViaWrap, violations by coincidence; the fixture forwarded-wrapper-exact`s DropApp, FactoryDropApp and MemberDropApp are false positives on main a63e1302e (Chrome silent)",
-  "fixed": "ADR 1179: callee_roles::forwarded_compute_slot resolves the wrapper with project_callee_at_parameter and requires it exact (a written let, a call`s result, a replaced member or a spread forwards nothing); object_members::memo::literal_function follows a data slot naming a function declaration (`{ hand: handDecl }`)",
-  "grid": "lg-recall",
-  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
-  "ids": [
-   "lg-reactive-write-in-owned-scope-barm-fwdwrap-let-signal-direct-none",
-   "lg-reactive-write-in-owned-scope-barm-fwdwrap-let-store-direct-none",
-   "lg-reactive-write-in-owned-scope-barm-fwdwrap-let-refresh-direct-none",
-   "lg-reactive-write-in-owned-scope-barm-fwdwrap-factory-signal-direct-none",
-   "lg-reactive-write-in-owned-scope-barm-fwdwrap-factory-store-direct-none",
-   "lg-reactive-write-in-owned-scope-barm-fwdwrap-factory-refresh-direct-none"
-  ],
-  "rediscovered": "new arm-shape contexts barm-fwdwrap-let and barm-fwdwrap-factory (legal): main a63e1302e 6 unexecuted violations (SC2001 at a write that never runs), ADR 1179 6 uncertifiable; the barm-fwdleaf cells (lg-recall 3, mx-recall 6, mx-census 210) unchanged"
- },
- {
   "finding": "ADR 1166 round 1 placed a read by one untracked run of a function with several runs in shared code (callee_callback_timing, read_execution_role): resolve(...) in a function an effect's compute runs tracked and a carried forEach runs untracked lost its uncertifiable row, a false clean where Chrome throws in the compute run",
   "found": "bundle q's census smoke (Mac 24c, mac24/q-1166-false-clean.md)",
   "fixed": "ADR 1166 round 2 (strict_read_role, strict_read_callee_timing: the reporting run places SC1001's strict reads only)",
@@ -42722,6 +42722,84 @@
    "mx-optimistic-write-before-load-render-apply-store-direct-none"
   ],
   "rediscovered": "focus.mjs --codes OPTIMISTIC_WRITE_BEFORE_LOAD on 2,000 programs (the 74 with the setter in an apply and a hash sample of the rest), release builds, Chrome cached: main a63e1302e recall-gap; this build agree (6 recall-gap to agree in mx-census, nothing else moved)"
+ },
+ {
+  "finding": "a false clean (certified): SC1001 at a component prop read in an anonymous literal called where it is written (an IIFE, `(() => { (props as typeof props).r1; })()`) inside a named local function the render runs (a ref factory, `ref={dir1()}`): Chrome reports STRICT_READ_UNTRACKED, and the read ended as `placed-elsewhere` with no row at the named function's calls",
+  "found": "Mac 26, `make fuzz-smoke` on ADR 1180 (mx-recall cover); the same on main a63e1302e and 01d5fdc5f",
+  "fixed": "ADR 1184 (`local_access.rs` `handed_anonymous_literal`)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-ref-factory-body-signal-direct-iife-s-prop-value-cast"
+  ],
+  "rediscovered": "`matrix.mjs --recall --ids`: main 01d5fdc5f false-clean (certified); this build recall-gap"
+ },
+ {
+  "finding": "ADR 1183 round 1 placed the reads of a returned cleanup's rerun through read_execution_role, which the call-site summary also asks: a named helper the cleanup calls (wrapUse()) took the apply's role at its call, and its read lost the uncertifiable row, a certified false clean where Chrome warns STRICT_READ_UNTRACKED",
+  "found": "bundle u (Mac 24, mac24/u-1183-false-clean.md): 19 wrapper-none programs of effect-cleanup-rerun and render-cleanup-rerun on main 0751069bf",
+  "fixed": "ADR 1183 round 2 (strict_read_role places the rerun's strict read only; returned_cleanup_rerun_reached refuses any call but a primitive accessor's)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-effect-cleanup-flush-rerun-memo-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-flush-rerun-signal-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-memo-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-signal-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-store-as-cast-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-store-dstr-empty-items-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-store-dstr-empty-sibling-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-store-dstr-empty-sub-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-store-dstr-object-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-store-dstr-quoted-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-store-dstr-then-first-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-store-link-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-store-named-called-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-store-named-same-called-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-store-non-null-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-store-projection-wrapper-none",
+   "mx-strict-read-untracked-effect-cleanup-rerun-store-satisfies-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-flush-rerun-memo-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-flush-rerun-signal-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-memo-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-signal-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-store-as-cast-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-store-dstr-empty-items-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-store-dstr-empty-sibling-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-store-dstr-empty-sub-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-store-dstr-object-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-store-dstr-quoted-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-store-dstr-then-first-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-store-link-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-store-named-called-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-store-named-same-called-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-store-non-null-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-store-projection-wrapper-none",
+   "mx-strict-read-untracked-render-cleanup-rerun-store-satisfies-wrapper-none"
+  ],
+  "rediscovered": "focus.mjs --grids mx-recall -- --ids (cleanup contexts, layer none): round 1 (55426e2bc, d90b5d4bf on 0751069bf) 34 false-clean; round 2 (308f8fbdb) 0, those programs recall-gap as on main"
+ },
+ {
+  "finding": "a false clean by the judge (program uncertifiable): a setter or action held in an array and called through a `for…of` binding (`for (const f of fns) return (f as any)(...xs)`) had its SC9012 row only at the carrier `fns`; Chrome's frame is at the call, whose handler role cleared it",
+  "found": "Mac 26, `make fuzz-smoke` on ADR 1180 (mx-recall cover); the same on main a63e1302e and 01d5fdc5f",
+  "fixed": "ADR 1186 (`value_use.rs` `escaped_through`, a row at the call past a `value-in-carrier` escape)",
+  "grid": "mx-recall",
+  "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-reactive-write-in-owned-scope-memo-shared-signal-loop-callee-module-helper",
+   "mx-reactive-write-in-owned-scope-pos-handler-owner-signal-loop-callee-closure"
+  ],
+  "rediscovered": "`matrix.mjs --recall --ids`: main 01d5fdc5f false-clean; this build recall-gap"
+ },
+ {
+  "finding": "a false clean by the judge (program uncertifiable): a setter or action held in an array and called through a `for…of` binding (`for (const f of fns) return (f as any)(...xs)`) had its SC9012 row only at the carrier `fns`; Chrome's frame is at the call, whose handler role cleared it",
+  "found": "Mac 26, `make fuzz-smoke` on ADR 1180 (mx-recall cover); the same on main a63e1302e and 01d5fdc5f",
+  "fixed": "ADR 1186 (`value_use.rs` `escaped_through`, a row at the call past a `value-in-carrier` escape)",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-pos-handler-owner-x-loop-callee-none"
+  ],
+  "rediscovered": "`matrix.mjs --recall --ids`: main 01d5fdc5f false-clean; this build recall-gap"
  },
  {
   "finding": "ADR 1166`s reporting run gave a read in a named callback the role of code at its run in a helper (`wrapUse`) whose role came from its call in a function handed to `[1].map(Row)` inside a JSX expression; the read was an SC1001 violation reported at the read, outside the undecided component the backend downgrades (Chrome silent: the read is tracked there)",

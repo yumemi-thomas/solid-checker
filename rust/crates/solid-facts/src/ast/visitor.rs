@@ -1840,6 +1840,16 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_assignment_expression(&mut self, expression: &AssignmentExpression<'a>) {
+        if self.optional_chain_depth == 0
+            && self.conditional_flow_depth
+                == self
+                    .function_flow_depths
+                    .last()
+                    .copied()
+                    .unwrap_or_default()
+        {
+            self.straight_line_assignments.push(span(expression.span));
+        }
         if !matches!(
             expression.operator,
             AssignmentOperator::Assign
