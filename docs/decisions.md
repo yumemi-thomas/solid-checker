@@ -5141,3 +5141,82 @@ A prop's alias (`const held = props.s1; held.a`) stays SC9012: its direct twin `
 **Decision.** `component_prop_helper` climbs from the read through each IIFE around it to the named helper. A layer is an anonymous, unbound literal, neither async nor a generator, called where it is written (not `new`), with that call written directly in the enclosing function's body. The helper pass then answers as for a read written at the outermost IIFE call: `body_site_runs_during_call` is asked of that call, and each of the helper's calls carries the read with its own role. The read's site and ends stay its own.
 **Evidence.** Fixture `iife-prop-read`: `Arrow` and `Expression` are SC1001 violations at `go()`; `RefFactory` stays uncertifiable, as main leaves the same read written without the IIFE (`ref={dir()}` is no call the helper pass places); the controls are unchanged. Fuzz, release, every STRICT_READ_UNTRACKED `-iife-s-prop-value` cell (960 programs on four grids; mx-pairs and lg-pairs hold none), against main 01d5fdc5f and against ADR 1184: 8 of 1184's 24 legal programs are clean again (`jsx-helper`, `async`, `handler-async`). The other 16 (`proto-*`, `async-loop`, `async-finally`, `handler-async-loop`, `handler-async-finally`) stay uncertifiable: each one's twin with the read written in the helper itself (`-direct-none-s-prop-value-cast`, 20 programs run) is uncertifiable too, so their cleans came only from the false premise. The census ref-factory programs stay recall-gap. 0 V lost, 0 legal V gained.
 **Not built.** A violation for the ref factory: `ref={dir()}`'s call is not placed by the helper pass, with or without an IIFE.
+<a id="adr-1189"></a>
+## ADR 1189 — A reporting run counts only where the declaring function's role is its own
+**The defect** (bundle t, main 0751069bf and ff7f6cf0c; found by the ADR 1182 probe). 26 legal `lg-strict-read-untracked-handed-flush-store-*` cells were SC1001 violations where Chrome is silent: `Row` runs `flush(() => wrapUse())` and is called by `[1].map(Row)` inside a JSX expression (tracked); `wrapUse` declares `const f = () => { void s1.v; }` and runs it (`[f].forEach((g) => g())`). Bisect: 960bfa1f9 and 01d5fdc5f uncertifiable, 0751069bf violation; inside bundle t, the merge of ADR 1166 (`ddc55b05e`; 742ca3d75, with 1181, uncertifiable); 1166's own tip alone reproduces it. ADR 1166's reporting run gave the read the role `read_execution_role` gives code at the run (`UntrackedRendering`, which `wrapUse` takes from its call in `Row`). A read written at the run is reported at that call, inside `Row`, which the backend downgrades (`component-identity-unproven`: `Row` is handed to code that may call it as a plain function); the reporting run reports at the read itself, where no downgrade reaches.
+**Decision.** `named_callbacks::reporting_run_role` requires `declarer_role_is_its_own`: the declaring function is an unbound literal that is the whole argument of a dialect primitive's call, or every reference of its name is the name, an export statement of it, or a direct call written outside every undecided component region (`site_in_undecided_component`) in a function that qualifies in turn (an immediately invoked literal: its call); four functions deep at most. Anything else keeps the read unplaced.
+**Evidence.** The whole family (`focus.mjs --codes STRICT_READ_UNTRACKED --grids lg-recall -- --contexts handed-flush`, 2,824 legal programs, Chrome judge, release): main ff7f6cf0c 102 false positives (the 26 among them), this build 0; the 102 move to uncertifiable and nothing else moves (rediscovery.json). Fixture `reporting-run-called-helper` (Chrome `runtime-oracle/reporting-run-called-helper`): `MappedRow` (the reduced census program) and `RowDeclared` uncertifiable, Chrome silent; `BodyCalledHelper`, `DeclaredHelper`, `InvokedHelper`, `BodyDeclared` violations, Chrome STRICT_READ_UNTRACKED. A first cut that refused every called helper lost those three and two Chrome-confirmed violations in `construct-only-class` (`ClosureInMethod`, a method entered by `new K().m()`) and `destructure-store-slots` (`HandedAndCalled`, rendered by a JSX tag); the predicate follows calls, member calls and JSX tags, and coverage moves nothing. `named-callback-reporting-run` keeps its 8 violations.
+<a id="adr-1185"></a>
+## ADR 1185 — An owner call in a counted loop's later pass is past the await
+G4 of the R3 catalog (M half), on ADR 1165. `createMemo(async () => { for (let i = 0; i < 2; i += 1) { if (i > 0) { createEffect(…); } await Promise.resolve(); } })` kept SC4001 `owner-varies-by-caller`: the owner pass saw the loop's owned first pass and its later ones. Chrome reports NO_OWNER_EFFECT on the second pass.
+**Decision** (`body_roles.rs` `in_counted_loop_later_pass`, asked where `owner_emission.rs` asks ADR 1165's `for await` body).
+- The site is in the consequent of `if (i > 0)` in the body of a `for` whose head reads token by token as `for (let i = 0; i < N; i += 1)`. `<=` and `i++` or `++i` are accepted, and `N` is a decimal literal that lets a second pass run.
+- The test's `i` resolves to the head's `let` binding, and the update's reference is its only write; there is no direct `eval` in the function.
+- The body is a block with an `await` at its own statement level (`dominating_awaits`, its region ending with the loop) and no `break` or `continue` (`jump_statements`).
+- So `i > 0` holds only on passes after one whose body completed past that await (a throw or `return` leaves the loop). Every run of the site is a continuation of its own async non-generator function, with no owner.
+- The operation may be written directly or at the outermost call of in-place layers (ADR 0493's climb premises), and the function must not probe `getOwner()`.
+
+**Evidence.**
+- Fixture `owner-after-await-counted-loop`: violations at `EffectLaterPass`, `CleanupLaterPass` (`<=`, `i++`), `HelperLaterPass` (an async helper the component calls, `++i`) and `IifeLaterPass`. Uncertifiable as before: no guard, a `continue`, a conditional await, a counter the body writes, a guard on a shadowing binding, a single pass (dead site) and a `getOwner()` probe.
+- Chrome (`runtime-oracle/owner-after-await-counted-loop`): covered, nothing static-only.
+- Probe (release, VM, Chrome judge), main 176445e77 against this, on every `*-async-loop` program of the five owner codes (the whole family): mx-recall 12,636 programs, 5,727 recall-gap to agree, 4,811 still recall-gap, 2,098 agree unchanged, nothing needs a look. At code level, 5,793 programs change: +5,727 SC4001 violations, all at the site, and no violation lost. 66 programs relabel U to U (`component-identity-unproven` for the dynamic mounts, `owner-allocation-unproven` for `onSettled` forms). lg-recall: 30 programs, unchanged (no legal violation).
+- Boundary: no role arm and no silent-capable path; it adds violations only.
+
+**Not built.** In-place layers in an async function the component body or a handler calls (most of the 4,811), another counter or guard shape, a `while` loop, and SC6002's `effect-creation-unaccounted` row at the creation, which stays beside the violation.
+<a id="adr-1191"></a>
+## ADR 1191 — A read in a counted loop's later pass, or in layers run in place in a placed body, is past the await
+G1 of the R3 catalog (misuse half), on ADRs 1164 and 1185. In an async memo's or effect's compute, `for (let i = 0; i < 2; i += 1) { if (i > 0) { r1(); } await p; }` and `for await (const _ of [1]) { (() => r1())(); }` kept SC1002 uncertifiable. Chrome warns UNTRACKED_READ_AFTER_AWAIT at both reads.
+**Decision.**
+- *Placement* (`after_await.rs` `after_implicit_suspension`): beside ADR 1164's `for await` bodies that run, a row stays unmarked when its site is placed:
+  - written directly in a counted loop's later pass (`body_roles::in_counted_loop_later_pass`, ADR 1185's predicate), or
+  - in function layers run in place (`climb_in_place_layers`) whose outermost call is placed so.
+  - The climb premises are those of ADR 1185's owner climb: no bound, no parameter-list layer, no layer that also runs its callback elsewhere, nothing withheld or unmodelled, and no library or package callback crossed (`climb_crosses_library_callback`), so no primitive's slot (`untrack`) and no `forEach` either.
+- *No dependency* (`pre_await.rs`): the window before the first suspension skips what is written inside a later pass's consequent (`in_counted_loop_later_pass_region`). The first pass skips it, every later pass follows the first pass's await, and a function written there does not exist earlier. A counter reference is a primitive (`counted_loop_counter`: a `let` set to `0` whose only write adds `1`), so `i < 2` and `i > 0` coerce nothing. Before this, both made the read `MayBeTracked`.
+- The 1185 predicate is split (`counted_loop`, `later_pass_consequents`) and is unchanged for owners.
+
+**Evidence.**
+- Fixture `after-await-read-later-pass`: violations at `LaterPassRead`, `LaterPassIife`, `ForAwaitClosure` (a closure called once) and `ForAwaitHelper` (a project helper's callback, an effect compute). Uncertifiable as before: no guard (the first pass reads before any await), a `continue`, a shadowing guard binding, `forEach`, a stored closure. `untrack`'s callback has no SC1002 row, on main too. ADR 0973's accounting rows at the layer calls stand beside the violations.
+- `after-await-for-await-finally` `ForAwaitClosure` (an IIFE in the body): uncertifiable to violation.
+- Chrome (`runtime-oracle/after-await-read-later-pass`, `after-await-for-await-finally`): covered, nothing static-only.
+- Probe (release, VM, Chrome judge), main 176445e77 against this, every UNTRACKED_READ_AFTER_AWAIT program of both recall grids:
+  - mx-recall, 36,503 programs: 2,196 recall-gap to agree (memo and effect × the counted loop, about 1,240, every layer and source, and `for await`'s layers, about 950); nothing needs a look; not-fired (1,370) and typed-away unchanged.
+  - At code level, exactly 2,196 programs change, each one SC1002 row from uncertifiable to violation.
+  - lg-recall, 12,974 programs: none changes.
+- Boundary: no role arm; it adds violations only.
+
+**Not built.**
+- The legal half of G1: a read after an await in an async function only a handler, a `ref` or the component body calls. This is ADR 0973 ruling 5: there is no "no flight" reason. The ruling question was sent with the step-0 report.
+- A `finally`'s layered reads.
+- Member reads in a later pass.
+- Other loop shapes.
+<a id="adr-1195"></a>
+## ADR 1195 — A read or a write in layers run in place inside a returned effect cleanup is placed where the cleanup runs
+G3 leftovers (R3 catalog; research R6), on ADRs 1037 and 1183. Scan of main 60a7cf1db: every cleanup context of both recall grids, 85,440 programs. The dominant blocker was `function-run-unplaced` in the `*-cleanup-rerun*` contexts:
+- STRICT_READ_UNTRACKED (misuse): 2,956 programs plus 1,551 named;
+- REACTIVE_WRITE_IN_OWNED_SCOPE (legal): 2,632 programs plus 1,556 named.
+
+Both answers looked only at a site written in the cleanup's own body. A closure, an IIFE or a helper's callback inside the cleanup left the site unplaced.
+
+**Decision** (`write_roles.rs` `returned_cleanup_placed_site`).
+- The site placed is either the site itself or the outermost call of the function layers run in place around it, on ADR 0493's climb premises: no bound, no parameter-list layer, no layer that also runs its callback elsewhere, nothing withheld or unmodelled, no library or package callback crossed (`forEach`, a primitive's slot), and no await on the way.
+- `returned_cleanup_write_role` (ADR 1037: a setter or `refresh` in the cleanup is legal on its every run) and `returned_cleanup_rerun_reached` (ADR 1183: a reached click reruns the effect with its owner alive, so the read runs in the apply's window) take their cleanup from that call.
+- The read itself must still be a primitive accessor's call, so no helper call at the site is placed (1183 r2).
+
+**Evidence.**
+- Fixture `effect-cleanup-rerun-layers`:
+  - SC1001 violations: `ReadInClosure`, `ReadInIife`, `ReadInHelperCallback`.
+  - SC2001 clean: `WriteInClosure`, `WriteInIife`, `WriteInHelperCallback`.
+  - Uncertifiable as before: a `forEach` callback, a stored closure, a read past an await in an async IIFE.
+  - `WriteInSharedHelper` keeps main's rows: a helper the body also calls is no in-place layer.
+- Chrome (`runtime-oracle/effect-cleanup-rerun-layers`): covered, nothing static-only.
+- Probe (release, VM, Chrome judge), main 60a7cf1db against this, every cleanup-context program of every code:
+  - mx-recall, 45,675 programs: 592 recall-gap to agree. At code level, 1,166 programs gain violations, every one replacing an uncertifiable row at the same site: 1,046 SC1001 and 120 with two SC1003 rows. No violation is lost.
+  - lg-recall, 39,765 programs: 4,935 uncertifiable to clean (Chrome silent). At code level, 5,090 SC2001 rows go and no violation is added; 50 programs relabel an SC9012 row (U to U).
+  - Nothing needs a look on either build but one mx false clean that main has too (`mx-action-called-in-owned-scope-effect-cleanup-for-x-values-callee-none`). That is pre-existing, unchanged, and not this change's.
+- Boundary: the write arm `write_roles.returned-cleanup-write` keeps its stated gap. Legal cells now run clean through it, but no misuse cell writes in a rerun cleanup. The premise `kind-returned-cleanup-write-guard` names the new fixture.
+
+**Not built.**
+- A named apply (`effect-cleanup-rerun-named`).
+- The disposal-only contexts (`effect-cleanup-dispose`, `-show`, `-for`, `wh-root-cleanup`, about 6.5k lg rows), which need an "only disposal reruns it" proof.
+- The owner codes' `effect-owner-unproven` and `owner-callers-unenumerated`.
+- A loop or a handed function inside the cleanup.

@@ -73,7 +73,7 @@ export function NamedApply() {
   return <button onClick={() => setT(2)}>go</button>;
 }
 
-// A write in a closure inside the cleanup: only code written directly in the cleanup is placed.
+// A write in a closure called once inside the cleanup: run in place there, so clean since ADR 1195.
 export function NestedInCleanup() {
   const [w, setW] = createSignal(0);
   const [t, setT] = createSignal(1);

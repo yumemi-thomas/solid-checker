@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1191: a read in a counted loop's later pass, or in a layer run in place (an IIFE, a closure called once, a project helper's callback) in that pass or in a `for await` body that runs, is past the compute's own await in an async memo's or effect's flight (UNTRACKED_READ_AFTER_AWAIT: violations); no guard, a `continue`, a shadowing guard, `forEach`, `untrack` and a stored closure stay uncertifiable. `flag` is false at run time."
+}

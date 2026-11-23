@@ -1,0 +1,1 @@
+{ "note": "ADR 1195: a click reruns the effect, whose returned cleanup runs a closure, an IIFE or a helper callback in place: the read there warns STRICT_READ_UNTRACKED (SC1001 violations); the write there is legal (clean). A forEach callback, a stored closure, a read past an await in an async IIFE and a helper the body also calls stay uncertifiable." }

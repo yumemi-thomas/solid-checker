@@ -89,7 +89,11 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   is a violation, whatever its other entries, where a direct call or such a carrier
   runs it in the declaring function after the declarator, on every completion, at a
   reporting position; outside the body's rendering only with no call before the run,
-  since a creation in an effect's apply throws first (ADR 1166).
+  since a creation in an effect's apply throws first (ADR 1166). The declaring function's
+  role must be its own: a primitive's callback, or a function only its name, an export or
+  direct calls reach, each call outside a function that may not run as a component
+  (handed to `map`) and in a function that qualifies in turn; otherwise uncertifiable
+  (ADR 1189).
 - **Plain assignment targets are writes, not reads.** `store.name = next` is
   diagnosed by `no-store-mutation-outside-setter` without also reporting `store.name` here.
   Only the member that *is* the written target is exempt: read-modify-write
@@ -380,7 +384,9 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   code may dispose an owner on a stack of its own (ADR 0695, ADR 1167).
   A read in the cleanup is a violation where a click a user can reach writes a
   new value to the signal the compute reads: the rerun calls the cleanup in the
-  apply's window with the owner alive (ADR 1183). A read in an exact bundle's
+  apply's window with the owner alive (ADR 1183), and so is a read in function
+  layers run in place in the cleanup (an IIFE, a closure called once, a project
+  helper's callback; no library callback, no await on the way; ADR 1195). A read in an exact bundle's
   `error` member is silent: rc.17 and rc.21 run it before the effect's window
   opens (ADR 0540), a `createReaction` bundle's too (ADR 0548). It runs in
   the window of the stack that drains the queue, so a read written directly

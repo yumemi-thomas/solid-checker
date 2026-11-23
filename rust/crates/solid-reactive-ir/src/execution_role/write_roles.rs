@@ -1298,6 +1298,33 @@ pub(crate) fn inside_rerun_effect_cleanup(
     })
 }
 
+/// ADR 1195: where the returned-cleanup answers ([`returned_cleanup_write_role`], [`returned_cleanup_rerun_reached`]) place `span`:
+/// the site itself when no function layer is around it in its function, else the outermost call of the function layers run in place
+/// around it (ADR 0493's climb: an IIFE, a closure bound to a name and called once, a project helper's callback), whose run is the
+/// site's run. On the climb's premises only: no bound, no parameter-list layer, no layer that also runs its callback elsewhere,
+/// nothing withheld or unmodelled, no library or package callback crossed (`forEach`, a primitive's slot) and no await on the way (an
+/// async layer's code past its own await runs later). `None` where a layer is crossed and a premise fails.
+fn returned_cleanup_placed_site(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    let Some(climb) = climb_in_place_layers(file, span, lookup) else {
+        return Some(span);
+    };
+    if climb.at == span {
+        return Some(span);
+    }
+    (!climb.bound()
+        && climb.in_list.is_none()
+        && !climb.among_others
+        && !climb.withheld
+        && !climb.unmodelled
+        && climb.suspended.is_none()
+        && !climb_crosses_library_callback(file, span, climb.at, lookup))
+    .then_some(climb.at)
+}
+
 /// ADR 1037: the role of a setter or `refresh` written directly in the cleanup an inline effect apply returns, where the walk left it
 /// unplaced, with the effect call (the premise's span). The cleanup runs only from the effect: on a rerun, from the queue's drain with no owner set (ADR 0613: unless a `flush()` of
 /// the program drains it under an owner, `flush_drains_under_owner`), or at a disposal, where the release's write guard stands down
@@ -1305,7 +1332,8 @@ pub(crate) fn inside_rerun_effect_cleanup(
 /// every one of those runs, so it takes [`ExecutionRole::UntrackedCallback`], the role that reports no disallowed write. Only for a
 /// `ReactiveWrite` row: an action call or `onFlush` there throws under a `For` row's disposal (no disposal exemption), so the shared
 /// write role is not changed. The apply must be the inline literal at the primitive's own apply slot (a named apply may also be called
-/// elsewhere, `apply()()`, and run the cleanup on that stack), and the site written directly in the cleanup's body.
+/// elsewhere, `apply()()`, and run the cleanup on that stack), and the site written directly in the cleanup's body or, since ADR 1195, in
+/// function layers run in place there ([`returned_cleanup_placed_site`]).
 pub(crate) fn returned_cleanup_write_role(
     file: &solid_facts::FileFacts,
     span: Span,
@@ -1316,8 +1344,9 @@ pub(crate) fn returned_cleanup_write_role(
     {
         return None;
     }
-    let cleanup = crate::owners::owning_function(&file.ast, span).filter(|function| {
-        function.body.contains(span) && !function.generator && !function.r#async
+    let at = returned_cleanup_placed_site(file, span, lookup)?;
+    let cleanup = crate::owners::owning_function(&file.ast, at).filter(|function| {
+        function.body.contains(at) && !function.generator && !function.r#async
     })?;
     let apply = function_returning(file, cleanup)?;
     if apply.generator {
@@ -1600,10 +1629,17 @@ pub(crate) fn returned_cleanup_rerun_reached(
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     let ast = &file.ast;
-    let Some(cleanup) = crate::owners::containing_body_function(ast, span) else {
+    let Some(at) = returned_cleanup_placed_site(file, span, lookup) else {
         return false;
     };
-    if cleanup.r#async || cleanup.generator || super::events::inside_instance_field(file, span) {
+    let Some(cleanup) = crate::owners::containing_body_function(ast, at) else {
+        return false;
+    };
+    if cleanup.r#async
+        || cleanup.generator
+        || super::events::inside_instance_field(file, span)
+        || super::events::inside_instance_field(file, at)
+    {
         return false;
     }
     // Round 2 (bundle u's 19 false cleans): a call written in the cleanup runs the code of what it calls, which the summaries

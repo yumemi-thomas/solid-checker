@@ -410,7 +410,10 @@ pub struct AstFacts {
     pub if_regions: Vec<IfRegionFact>,
     /// Every `break` and `continue` statement, by span, sorted.
     ///
-    /// **No consumer reads this today.** It was added for the `creates`
+    /// Read by ADR 1185's counted-loop proof (`body_roles::in_counted_loop_later_pass`), whose premise is only that no `break` or
+    /// `continue` is written in a loop body: a syntactic absence, which this list states whole.
+    ///
+    /// It was first added for the `creates`
     /// implementation census, which refused any declaration node containing a
     /// jump: the Type Facts producer *withheld* every call row inside the
     /// region a jump makes non-universal, and for a claim of the absence of
@@ -421,8 +424,7 @@ pub struct AstFacts {
     /// approximation that could see the jump but never which rows it touched
     /// (Type Facts ADR 0026 amendment).
     ///
-    /// Retained rather than removed because it is a faithful syntactic fact and
-    /// its extraction is two pushes; it is a removal candidate. Any new consumer must state its own premise:
+    /// Retained because it is a faithful syntactic fact. Any new consumer must state its own premise:
     /// a jump in a span says nothing about what any other fact domain withheld.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub jump_statements: Vec<Span>,

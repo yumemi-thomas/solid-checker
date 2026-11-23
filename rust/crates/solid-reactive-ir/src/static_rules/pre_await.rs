@@ -318,7 +318,11 @@ impl<'f, 'a> PreAwait<'f, 'a> {
         }
         let ctx = self.ctx;
         let excluded = self.deferred_functions(file, region);
-        let skipped = |span: Span| excluded.iter().any(|callback| callback.contains(span));
+        // ADR 1191: a counted loop's later pass runs only after its function's first suspension.
+        let skipped = |span: Span| {
+            excluded.iter().any(|callback| callback.contains(span))
+                || crate::execution_role::in_counted_loop_later_pass_region(file, span)
+        };
         // Written in the computation's own flow, not in a callback or a
         // helper: a conditional read there is a run that tracked nothing,
         // which is the feasible path the finding stands on (ADR 0195 exempts
@@ -912,6 +916,8 @@ impl<'f, 'a> PreAwait<'f, 'a> {
                 || self.number_signal_call(file, call);
         }
         file.source_text(value) == Some("null")
+            // ADR 1191: a counted loop's counter is a number.
+            || crate::execution_role::counted_loop_counter(file, value)
             || (file.source_text(value) == Some("undefined")
                 && file.ast.reference_declaration(value).is_none())
             || self
