@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1199: a flush in a function whose every run is a plain call (or a component prop's literal run at the child's calls) placed at those calls: helpers and a prop literal called only from timer callbacks or after an await (quiet, clean), and twins whose calls include an effect's apply, an event handler, a member call or a component body (rows kept). The checker's fixture is reactive-ir/flush-in-call-entries."
+}
