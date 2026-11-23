@@ -725,8 +725,10 @@ fn component_props_destructure_into(
                 }
             }
             let location = location(file.path.shared(), binding.pattern);
+            // ADR 1193: a `for…of` pattern has no initializer; its root names the source.
             let source = binding
                 .initializer
+                .or_else(|| destructure_root(ctx.semantic_lookup, file, binding))
                 .and_then(|span| file.source_text(span))
                 .unwrap_or("reactive object")
                 .to_owned();
