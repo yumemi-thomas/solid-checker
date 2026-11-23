@@ -93,6 +93,9 @@ enum FlushSafe {
     TestRunner,
     /// No execution of the program runs the site (`SiteReach`).
     NeverRuns,
+    /// ADR 1199: the site runs whenever its function runs, and every run of that function is an entry on which a class above rules every code
+    /// out ([`entries_placed`]).
+    EntriesPlaced,
 }
 
 impl FlushSafe {
@@ -107,11 +110,12 @@ impl FlushSafe {
             Self::ModuleInitialization => "flush_accounting.account.module-initialization",
             Self::TestRunner => "flush_accounting.account.test-runner-callback",
             Self::NeverRuns => "flush_accounting.account.never-runs",
+            Self::EntriesPlaced => "flush_accounting.account.entries-placed",
         }
     }
 
     #[cfg(test)]
-    const ALL: [Self; 8] = [
+    const ALL: [Self; 9] = [
         Self::NoSteppedAction,
         Self::NoDeferringPrimitive,
         Self::NoLeafScope,
@@ -120,6 +124,7 @@ impl FlushSafe {
         Self::ModuleInitialization,
         Self::TestRunner,
         Self::NeverRuns,
+        Self::EntriesPlaced,
     ];
 
     /// Whether the reason rules `code` out.
@@ -132,7 +137,8 @@ impl FlushSafe {
             | Self::AwaitContinuation
             | Self::ModuleInitialization
             | Self::TestRunner
-            | Self::NeverRuns => true,
+            | Self::NeverRuns
+            | Self::EntriesPlaced => true,
         }
     }
 }
@@ -244,7 +250,6 @@ fn reasons<'a>(
     hand_off: &crate::package_hand_off::UnreadPackageHandOff<'_, 'a>,
     fake_timers: &FakeTimers<'_, 'a>,
 ) -> Vec<FlushSafe> {
-    use crate::indexes::DispatchCaller;
     let lookup = ctx.semantic_lookup;
     let (steps, defers, leaf) = census;
     let mut reasons = Vec::new();
@@ -272,8 +277,39 @@ fn reasons<'a>(
         None => climbed_caller(lookup, file, site.span)
             .map_or((site.span, None), |(at, caller)| (at, Some(caller))),
     };
+    let class = position_class(lookup, file, at, caller, fake_timers);
+    reasons.extend(class);
+    // ADR 1199: a site the census places nowhere, written where it runs whenever its function runs, in a function whose every run is a
+    // call the program writes (a component prop's literal at the child's calls of the prop, ADR 1171/1190; a function every reference of
+    // which is a plain call): it runs on those calls' stacks, so a class every one of them has rules what it rules out. Only a call of the primitive: a
+    // reference handed on runs wherever its taker runs it.
+    if class.is_none()
+        && caller.is_none()
+        && site.called
+        && entries_placed(lookup, file, site.span, fake_timers, ENTRY_DEPTH)
+    {
+        reasons.push(FlushSafe::EntriesPlaced);
+    }
+    if matches!(
+        crate::execution_role::SiteReach::new(lookup).site(file, site.span),
+        crate::execution_role::Reach::Unreached(_)
+    ) {
+        reasons.push(FlushSafe::NeverRuns);
+    }
+    reasons
+}
+
+/// The reason the census class of the code at `at` gives (the class named by `caller`), on the conditions each class's own facts need there.
+fn position_class(
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    file: &FileFacts,
+    at: Span,
+    caller: Option<crate::indexes::DispatchCaller>,
+    fake_timers: &FakeTimers<'_, '_>,
+) -> Option<FlushSafe> {
+    use crate::indexes::DispatchCaller;
     let in_body = !crate::owners::in_parameter_list(&file.ast, at);
-    let class = match caller {
+    match caller {
         // A program that installs fake timers runs the scheduler's callbacks on the stack of whatever advances the clock (F1 of the review of #213): no reason, so the
         // site keeps its row. A test runner's callback is run by the runner whatever the clock is, so the next arm does not ask.
         Some(DispatchCaller::FreshStack) => (callback_runs_it(lookup, file, at)
@@ -299,15 +335,89 @@ fn reasons<'a>(
             | DispatchCaller::EffectApply,
         )
         | None => None,
+    }
+}
+
+/// How many functions of entries [`entries_placed`] climbs through.
+const ENTRY_DEPTH: usize = 4;
+
+/// ADR 1199: whether the code at `span` runs only on stacks a position class rules every code out on. The function whose body holds it (not a
+/// parameter list, not async, not a generator, not reentered by its own name, with no class field, JSX or tracked region between) runs it whenever
+/// it is called, and its every run is one of its entries: a component prop literal's calls in the child ([`crate::execution_role::prop_literal_call_sites`],
+/// a non-empty list), the plain calls of a function every reference of which is one ([`crate::execution_role::plain_call_entries`]), or the one call an
+/// in-place layer runs at ([`crate::execution_role::LayerRun::InPlace`]: an IIFE, a callback a standard call or a helper runs in its body). Each entry is then
+/// asked as the site was: its own census class ([`position_class`] of its call, or of the call at the end of its in-place layers), else, within `depth`,
+/// its own function's entries. An entry no execution reaches runs nothing. Any entry with no answer is no proof.
+fn entries_placed<'a>(
+    lookup: &crate::indexes::SemanticLookup<'a>,
+    file: &'a FileFacts,
+    span: Span,
+    fake_timers: &FakeTimers<'_, '_>,
+    depth: usize,
+) -> bool {
+    if depth == 0 || crate::owners::in_parameter_list(&file.ast, span) {
+        return false;
+    }
+    let Some(function) = crate::owners::containing_ast_function(&file.ast, span) else {
+        return false;
     };
-    reasons.extend(class);
+    if function.r#async
+        || function.generator
+        || !function.body.contains(span)
+        || reentered_by_name(file, function)
+        || !crate::execution_role::runs_with_its_function(file, span, function.span)
+    {
+        return false;
+    }
+    let entries: Vec<(&'a FileFacts, Span)> =
+        match crate::execution_role::prop_literal_call_sites(file, function, lookup) {
+            Some(calls) if !calls.is_empty() => {
+                calls.into_iter().map(|call| (file, call)).collect()
+            }
+            Some(_) => return false,
+            None => match crate::execution_role::plain_call_entries(file, function, lookup) {
+                Some(calls) => calls,
+                // An in-place layer (an IIFE, a callback a standard call or a helper runs in its body: ADR 0469) runs only at that call.
+                None => match crate::execution_role::layer_run(file, function, lookup) {
+                    crate::execution_role::LayerRun::InPlace(call) => vec![(file, call)],
+                    crate::execution_role::LayerRun::InPlaceAmongOthers(_)
+                    | crate::execution_role::LayerRun::FreshStack
+                    | crate::execution_role::LayerRun::Elsewhere
+                    | crate::execution_role::LayerRun::Withheld(_) => return false,
+                },
+            },
+        };
+    entries
+        .into_iter()
+        .all(|(holder, call)| entry_placed(lookup, holder, call, fake_timers, depth))
+}
+
+/// One entry of [`entries_placed`]: the call at `call` in `file`.
+fn entry_placed<'a>(
+    lookup: &crate::indexes::SemanticLookup<'a>,
+    file: &'a FileFacts,
+    call: Span,
+    fake_timers: &FakeTimers<'_, '_>,
+    depth: usize,
+) -> bool {
     if matches!(
-        crate::execution_role::SiteReach::new(lookup).site(file, site.span),
+        crate::execution_role::SiteReach::new(lookup).site(file, call),
         crate::execution_role::Reach::Unreached(_)
     ) {
-        reasons.push(FlushSafe::NeverRuns);
+        return true;
     }
-    reasons
+    let Some(fact) = file.ast.calls.iter().find(|fact| fact.span == call) else {
+        return false;
+    };
+    let (at, caller) = match lookup.flush_caller_of_layer_call(file, fact) {
+        Some(caller) => (call, Some(caller)),
+        None => climbed_caller(lookup, file, call)
+            .map_or((call, None), |(at, caller)| (at, Some(caller))),
+    };
+    if position_class(lookup, file, at, caller, fake_timers).is_some() {
+        return true;
+    }
+    caller.is_none() && entries_placed(lookup, file, call, fake_timers, depth - 1)
 }
 
 /// ADR 1090: the call at the end of the exact in-place layers around `span` and its census class: the climb crossed at least one layer, no layer holds the site in a
@@ -597,16 +707,21 @@ mod tests {
     #[test]
     fn every_reason_is_named_by_the_function_that_records_it() {
         let source = include_str!("flush_accounting.rs");
-        let body = source
-            .split("fn reasons(")
-            .nth(1)
-            .and_then(|rest| rest.split("\n}\n").next())
-            .expect("the function `reasons`");
+        // `reasons` records each, the census classes through `position_class` (ADR 1199: asked of the site and of its entries).
+        let body = |name: &str| {
+            source
+                .split(&format!("\nfn {name}"))
+                .nth(1)
+                .and_then(|rest| rest.split("\n}\n").next())
+                .unwrap_or_else(|| panic!("the function `{name}`"))
+                .to_owned()
+        };
+        let body = body("reasons") + &body("position_class");
         for reason in FlushSafe::ALL {
             // A reason nobody records is a dead end: `reasons` names each once.
             assert!(
                 body.contains(&format!("FlushSafe::{reason:?}")),
-                "{reason:?} is named by no arm of `reasons`"
+                "{reason:?} is named by no arm of `reasons` or `position_class`"
             );
         }
     }

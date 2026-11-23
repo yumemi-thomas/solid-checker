@@ -3721,6 +3721,34 @@ pub(crate) fn role_entries_complete(
     entry_census(file, function, lookup, &[], true)
 }
 
+/// ADR 1199: every run of `function`, when each is a plain call written in the program: [`entry_census_complete`] holds (no alias, no
+/// carried entry), the named-callback index records no position of it (a function handed to a primitive or a host runs there, not at
+/// a call), and each call site is a call expression whose callee is the reference (not `new`, not a rendered tag). The calls, by file;
+/// `None` where any of that fails or nothing calls it.
+pub(crate) fn plain_call_entries<'a>(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'a>,
+) -> Option<Vec<(&'a solid_facts::FileFacts, Span)>> {
+    let roles = lookup.named_callback_roles(file);
+    if !roles.positions(function.span).is_empty()
+        || !roles.tracking_positions(function.span).is_empty()
+        || !entry_census_complete(file, function, lookup)
+    {
+        return None;
+    }
+    let sites = lookup.function_call_sites(file.path.as_str(), function.span);
+    let mut calls = Vec::with_capacity(sites.len());
+    for (caller, callee) in sites {
+        let call =
+            caller.ast.calls.iter().find(|call| {
+                !call.construct && caller.ast.peel_ts_sugar_span(call.callee) == callee
+            })?;
+        calls.push((caller, call.span));
+    }
+    (!calls.is_empty()).then_some(calls)
+}
+
 /// ADR 1127: the bindings a function is entered through, as the entry census counts them; every walk over a function's
 /// references by name reads this one list (ADR 1124 round 2: two lists diverged). A named function expression is entered
 /// through the binding holding it as well as through its own name (`const cb = function inner() {}`: `cb` and `inner`);
