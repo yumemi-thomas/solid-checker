@@ -477,6 +477,18 @@ impl<'a> Question<'_, '_, 'a> {
                 self.lookup,
             ) && (super::owner_emission::runs_in_delivered_handler(file, span, self.lookup)
                 || !entry_open())
+                // ADR 1190: a component prop's literal ADR 1171 proves entered by the child's calls runs where those calls run, not where
+                // it is written: the role must place each call off every apply too (`er-prop-apply-*`: a JSX creation in a literal the
+                // child calls in an effect's apply).
+                && prop_literal_calls_off_apply(
+                    file,
+                    span,
+                    allowed,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                    PROP_LITERAL_CALL_DEPTH,
+                )
             {
                 effect_answer = Some(Ok((
                     SiteSilence::EffectCreationRunsOffApply,
@@ -611,4 +623,47 @@ fn answer_at_reads<'a>(
         leaf: leaf.then(|| fold(leaf_outcomes)),
         effect: effect.then(|| fold(effect_outcomes)),
     }
+}
+
+/// ADR 1190: how many prop literals, each called inside another, [`prop_literal_calls_off_apply`] follows out.
+const PROP_LITERAL_CALL_DEPTH: usize = 4;
+
+/// ADR 1190: whether every component prop literal around `span` whose runs ADR 1171 proves (the child's calls) is run only off every
+/// effect's apply: the role engine places each of its calls off every apply, and so on out through the literals around each call.
+/// A literal the child never calls answers nothing here (the other questions decide it).
+fn prop_literal_calls_off_apply(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    allowed: &[Span],
+    entities: &crate::EntitySymbols,
+    symbol_names: &crate::HashMap<crate::SymbolId, crate::SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+) -> bool {
+    file.ast.functions_owning(span).all(|function| {
+        match crate::execution_role::prop_literal_call_sites(file, function, lookup) {
+            Some(calls) if !calls.is_empty() => {
+                depth > 0
+                    && calls.into_iter().all(|call| {
+                        crate::static_api::runs_off_every_apply(
+                            file,
+                            call,
+                            allowed,
+                            entities,
+                            symbol_names,
+                            lookup,
+                        ) && prop_literal_calls_off_apply(
+                            file,
+                            call,
+                            allowed,
+                            entities,
+                            symbol_names,
+                            lookup,
+                            depth - 1,
+                        )
+                    })
+            }
+            _ => true,
+        }
+    })
 }

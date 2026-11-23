@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1190 (slice 3): the named (`run={run1}`) and destructured (`({ run }) => run()`) callback-prop forms: a creation run in onSettled (PRIMITIVE_IN_FORBIDDEN_SCOPE, SC3001 violation at the child's call), in the child's body (quiet, clean), a name also called elsewhere and a defaulted slot (rows kept). The checker's fixture is reactive-ir/callback-prop-forms."
+}

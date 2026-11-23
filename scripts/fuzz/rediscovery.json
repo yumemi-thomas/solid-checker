@@ -42912,5 +42912,17 @@
    "lg-strict-read-untracked-handed-flush-store-settled-named-carried-wrapper-none"
   ],
   "rediscovered": "focus.mjs --codes STRICT_READ_UNTRACKED --grids lg-recall -- --contexts handed-flush (2,824 programs, Chrome judge): main ff7f6cf0c 102 false positives, ADR 1189 0 (the 102 uncertifiable, nothing else moves); bisect: 01d5fdc5f uncertifiable, the merge of ADR 1166 into bundle t (ddc55b05e) false positive, 1166`s tip alone too"
+ },
+ {
+  "finding": "a false clean (certified) in ADR 1190 slice 1's first cut, before merge: a component prop literal whose only content is a JSX creation, called in the child's effect apply (`createEffect(() => 1, () => { props.run(); })`), ended SC6002 as `effect-creation-runs-off-apply` on the literal's lexical role once the B3 gate stopped declining; Chrome throws PRIMITIVE_IN_EFFECT_CALLBACK",
+  "found": "Mac 24c, bundle y's cover scan and oracle judge (mac24/u-1190-false-clean.md)",
+  "fixed": "ADR 1190 (`leaf_universe.rs` `prop_literal_calls_off_apply`: the role silence asks each of the literal's proven calls)",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-er-prop-apply-jsx-fragment-direct-none",
+   "mx-primitive-in-effect-callback-er-prop-apply-jsx-component-direct-none"
+  ],
+  "rediscovered": "the integrator's judge: slice 1 (229ede1c6) false-clean; this build uncertifiable at the creation (SC6002)"
  }
 ]

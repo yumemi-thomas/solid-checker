@@ -1,0 +1,90 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callback-prop-forms/App.tsx",
+      "start": 308,
+      "end": 317,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callback-prop-forms/App.tsx",
+      "start": 994,
+      "end": 997,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "closed-parameter-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callback-prop-forms/App.tsx",
+      "start": 1603,
+      "end": 1612,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callback-prop-forms/App.tsx",
+      "start": 1692,
+      "end": 1702,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callback-prop-forms/App.tsx",
+      "start": 1735,
+      "end": 1739,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "leaf-callback-opaque",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/callback-prop-forms/App.tsx",
+      "start": 1950,
+      "end": 1953,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callback-prop-forms/App.tsx",
+      "start": 2080,
+      "end": 2090,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callback-prop-forms/App.tsx",
+      "start": 2080,
+      "end": 2090,
+      "fixes": 0
+    }
+  ]
+}
