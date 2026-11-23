@@ -1,4 +1,4 @@
-import { createMemo, createTrackedEffect, flush, onSettled } from "solid-js";
+import { createEffect, createMemo, createTrackedEffect, flush, onSettled } from "solid-js";
 
 // ADR 1190: a component prop's function literal whose runs ADR 1171 proves are the child's calls of `props.run` is walked
 // at those calls by the leaf walk, and no unread package runs it elsewhere.
@@ -80,6 +80,49 @@ export function Spread() {
       {...rest}
       run={() => {
         createMemo(() => 1);
+      }}
+    />
+  );
+}
+
+// The false cleans of slice 1's first cut (census `er-prop-apply-jsx-fragment`, `-jsx-component`): the literal's JSX creation
+// runs in the child's effect apply (PRIMITIVE_IN_EFFECT_CALLBACK). The role engine places the literal where it is written, so
+// the role silence must ask each call's place too. Uncertifiable, never clean.
+function ApplyKid(props: { run: () => void }) {
+  createEffect(
+    () => 1,
+    () => {
+      props.run();
+    },
+  );
+  return <p>x</p>;
+}
+export function ApplyFragment() {
+  return (
+    <ApplyKid
+      run={() => {
+        <>{String(Math.random())}</>;
+      }}
+    />
+  );
+}
+function Leaf() {
+  return <i />;
+}
+function ApplyComponentKid(props: { run: () => void }) {
+  createEffect(
+    () => 1,
+    () => {
+      props.run();
+    },
+  );
+  return <p>x</p>;
+}
+export function ApplyComponent() {
+  return (
+    <ApplyComponentKid
+      run={() => {
+        <Leaf />;
       }}
     />
   );

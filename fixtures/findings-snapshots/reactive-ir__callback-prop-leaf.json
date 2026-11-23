@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/callback-prop-leaf/App.tsx",
-      "start": 807,
-      "end": 816,
+      "start": 821,
+      "end": 830,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/callback-prop-leaf/App.tsx",
-      "start": 1175,
-      "end": 1184,
+      "start": 1189,
+      "end": 1198,
       "fixes": 0
     },
     {
@@ -28,8 +28,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/callback-prop-leaf/App.tsx",
-      "start": 1297,
-      "end": 1304,
+      "start": 1311,
+      "end": 1318,
       "fixes": 0
     },
     {
@@ -39,8 +39,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/callback-prop-leaf/App.tsx",
-      "start": 1544,
-      "end": 1554,
+      "start": 1558,
+      "end": 1568,
       "fixes": 0
     },
     {
@@ -50,8 +50,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/callback-prop-leaf/App.tsx",
-      "start": 1544,
-      "end": 1554,
+      "start": 1558,
+      "end": 1568,
       "fixes": 0
     },
     {
@@ -61,8 +61,8 @@
       "blocker": "leaf-callback-opaque",
       "severity": "warning",
       "path": "fixtures/reactive-ir/callback-prop-leaf/App.tsx",
-      "start": 1749,
-      "end": 1758,
+      "start": 1763,
+      "end": 1772,
       "fixes": 0
     },
     {
@@ -72,8 +72,8 @@
       "blocker": "closed-parameter-member-dispatch",
       "severity": "warning",
       "path": "fixtures/reactive-ir/callback-prop-leaf/App.tsx",
-      "start": 1749,
-      "end": 1758,
+      "start": 1763,
+      "end": 1772,
       "fixes": 0
     },
     {
@@ -83,8 +83,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/callback-prop-leaf/App.tsx",
-      "start": 1904,
-      "end": 1914,
+      "start": 1918,
+      "end": 1928,
       "fixes": 0
     },
     {
@@ -94,8 +94,30 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/callback-prop-leaf/App.tsx",
-      "start": 1904,
-      "end": 1914,
+      "start": 1918,
+      "end": 1928,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callback-prop-leaf/App.tsx",
+      "start": 2527,
+      "end": 2548,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/callback-prop-leaf/App.tsx",
+      "start": 2859,
+      "end": 2867,
       "fixes": 0
     }
   ]
