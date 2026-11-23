@@ -2949,6 +2949,13 @@ pub(super) fn callee_callback_timing_within(
             span = run;
             continue;
         }
+        // ADR 1190 (slice 2): a component prop literal ADR 1171 proves run by the child's calls runs on each call's stack: its
+        // timing is theirs, unproven where any call's is.
+        if let Some(calls) = super::prop_literal_run_calls(file, span, lookup) {
+            return calls.into_iter().any(|call| {
+                callee_callback_timing_within(file, call, execution, lookup, following)
+            });
+        }
         // The call the literal is written in: an argument in which the literal
         // is the outermost function (directly, or inside an array or object
         // literal), the innermost such call.

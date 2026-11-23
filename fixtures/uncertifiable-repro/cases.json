@@ -11474,14 +11474,14 @@
     "src/prop-in-effect-apply-read.tsx"
    ],
    "causes": [
-    "SC1001/callback-to-unproven-consumer/component-prop>package-callback:solid-js"
+    "SC1001/direct-read-callers-unenumerable/props-escape:exported-unrendered"
    ],
    "expect": [
     {
      "rule": "SC1001",
-     "family": "callback-to-unproven-consumer",
+     "family": "direct-read-callers-unenumerable",
      "context": "",
-     "cause": "SC1001/callback-to-unproven-consumer/component-prop>package-callback:solid-js"
+     "cause": "SC1001/direct-read-callers-unenumerable/props-escape:exported-unrendered"
     }
    ],
    "source": {

@@ -2306,3 +2306,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/callback-prop-leaf/node_modules/**
 !fixtures/reactive-ir/callback-prop-forms/node_modules/
 !fixtures/reactive-ir/callback-prop-forms/node_modules/**
+!fixtures/reactive-ir/callback-prop-roles/node_modules/
+!fixtures/reactive-ir/callback-prop-roles/node_modules/**

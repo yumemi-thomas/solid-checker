@@ -2364,6 +2364,39 @@ pub(super) fn semantic_write_execution_role_within(
     if let Some(role) = withheld_caller_role(file, span, lookup) {
         return role;
     }
+    // ADR 1190 (slice 2): a write written directly in a component prop literal ADR 1171 proves run by the child's calls runs on each
+    // call's stack: a call that rejects the write proves it rejected; otherwise the calls' one role, unplaced where they differ.
+    if let Some(calls) = super::prop_literal_run_calls(file, span, lookup) {
+        let key = (file.path.to_string(), span);
+        if !visit_insert(visiting, key.clone()) {
+            return role_arm!("write_roles.prop-literal-cycle", ExecutionRole::Unknown);
+        }
+        let roles = calls
+            .into_iter()
+            .map(|call| {
+                semantic_write_execution_role_within(
+                    file,
+                    call,
+                    allowed,
+                    entities,
+                    symbol_names,
+                    lookup,
+                    root_body,
+                    visiting,
+                )
+            })
+            .collect::<Vec<_>>();
+        visiting.remove(&key);
+        let role = roles
+            .iter()
+            .copied()
+            .find(|role| role.reports_disallowed_write())
+            .unwrap_or_else(|| match roles.split_first() {
+                Some((first, rest)) if rest.iter().all(|role| role == first) => *first,
+                _ => ExecutionRole::Unknown,
+            });
+        return role_arm!("write_roles.prop-literal-calls", role);
+    }
     let mut decided = false;
     let role = write_role_walk(
         file,
@@ -3467,7 +3500,33 @@ pub(super) fn caller_loop(
     // ADR 1147 (arm 3): an action of a provided `[store, { actions }]` literal is entered by its readers' calls, which no call edge shows: the path fold
     // walks them beside the graph's sites, and the literal's reference is the entry they account for.
     let action_entries =
-        crate::callback_return::store_tuple_action_entries(lookup, file, function.span);
+        crate::callback_return::store_tuple_action_entries(lookup, file, function.span)
+            // ADR 1190 (slice 2): a component prop literal ADR 1171 proves run by the child's calls is entered by those calls, which
+            // no call edge shows either: the path fold walks their callees as it does an action's readers'.
+            .or_else(|| {
+                crate::execution_role::prop_literal_call_sites(file, function, lookup)
+                    .filter(|calls| !calls.is_empty())
+                    .map(|calls| {
+                        let callees = calls
+                            .iter()
+                            .filter_map(|call| file.ast.call_at(*call).map(|call| call.callee))
+                            .collect();
+                        // The named form's one reference (the attribute's value) is the entry those calls account for.
+                        let held = crate::owners::function_binding_name(file, function)
+                            .map(|name| {
+                                file.ast
+                                    .reference_declarations
+                                    .iter()
+                                    .filter(|(reference, declaration)| {
+                                        *declaration == name.span && *reference != name.span
+                                    })
+                                    .map(|(reference, _)| *reference)
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        (held, callees)
+                    })
+            });
     let folded = match &action_entries {
         Some((_, calls)) => path_fold(
             file,

@@ -1145,6 +1145,13 @@ pub(crate) fn unplaced_run_but(
     if matches!(SiteReach::new(lookup).site(file, span), Reach::Unreached(_)) {
         return false;
     }
+    // ADR 1190 (slice 2): a site in a component prop literal ADR 1171 proves run by the child's calls runs at those calls: it is
+    // placed exactly where each of them is.
+    if let Some(calls) = super::prop_literal_run_calls(file, span, lookup) {
+        return calls
+            .into_iter()
+            .any(|call| unplaced_run_but(file, call, lookup, placed));
+    }
     let ast = &file.ast;
     // ADR 1022: a construct-only class's member runs at its one `new` or receiver call.
     (ast.classes
