@@ -6,6 +6,8 @@ Violations (`missing-context-provider`): `BodyCall` (`props.run()` in the body),
 
 Silent: `ProvidedParent` (a provider above the child) and `OwnedCleanup` (`onCleanup` in a prop the child calls in its body is owned). `Kid` is rendered by three parents with three arrows; each arrow is answered on its own.
 
-Obligations (`missing-owner` uncertifiable; SC9012 where the dispatch net fires): `NeverCalled` (a prop only tested runs nothing), `Forwarded`, `Copied` (a copy called from a timer), `SettledCall` (a call inside the child's `onSettled` callback, under that callback's owner), `OtherFile` (a child in `remote.ts`).
+Obligations (`missing-owner` uncertifiable; SC9012 where the dispatch net fires): `NeverCalled` (a prop only tested runs nothing), `Copied` (a copy called from a timer), `SettledCall` (a call inside the child's `onSettled` callback, under that callback's owner), `OtherFile` (a child in `remote.ts`).
 
 Premises: the closed program is the `private` manifest. Runtime: rc.17 throws ContextNotFoundError at each SC4002 line (fuzzer cells `mx-recall` CONTEXT_NOT_FOUND `cbp-body`, `cbp-body-destructured`, `cbp-jsx`, `cbp-jsx-destructured`).
+
+ADR 1190 (slice 4): `Forwarded` (the prop forwarded whole to `KidForwardTarget`, which calls it in its body) is an SC4002 violation, as `BodyCall` is.

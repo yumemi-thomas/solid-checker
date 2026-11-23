@@ -129,7 +129,7 @@
   "SC3001 function-run-unplaced": 43,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 7,
-  "SC3001 leaf-operation-unaccounted": 7158,
+  "SC3001 leaf-operation-unaccounted": 7160,
   "SC3001 leaf-owner-unproven": 69,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
@@ -138,10 +138,10 @@
   "SC4001 component-identity-unproven": 15,
   "SC4001 computation-error-unobserved": 31,
   "SC4001 creation-throws-first": 17,
-  "SC4001 function-run-unplaced": 310,
+  "SC4001 function-run-unplaced": 309,
   "SC4001 function-unentered": 3,
   "SC4001 handler-key-overridden": 4,
-  "SC4001 handler-member-unresolved": 39,
+  "SC4001 handler-member-unresolved": 40,
   "SC4001 handler-on-disabled-control": 7,
   "SC4001 handler-spread-unresolved": 84,
   "SC4001 owner-allocation-unproven": 24,
@@ -206,7 +206,7 @@
   "SC5008 pending-read-unresolved": 24,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5538,
+  "SC6002 effect-creation-unaccounted": 5540,
   "SC6002 effect-owner-unproven": 54,
   "SC6002 function-run-unplaced": 64,
   "SC6002 generator-step-unplaced": 1,
@@ -261,7 +261,7 @@
   "SC9012 handed-read-after-await": 12,
   "SC9012 import-unresolved": 50,
   "SC9012 installed-member": 137,
-  "SC9012 leaf-callback-opaque": 265,
+  "SC9012 leaf-callback-opaque": 266,
   "SC9012 listener-reach": 128,
   "SC9012 package-callee": 28,
   "SC9012 package-finding-at-entry": 232,
@@ -6450,6 +6450,30 @@
    "adr": "ADR 1190",
    "kind": "relabel",
    "relabeledTo": "SC1001 read-backing-unproven"
+  },
+  {
+   "fixture": "reactive-ir/owner-callback-prop",
+   "key": "SC4001 function-run-unplaced",
+   "from": 4,
+   "to": 3,
+   "adr": "ADR 1190",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/events.rs::element_prop_calls",
+   "fixtures": {
+    "proved": "reactive-ir/owner-callback-prop",
+    "open": "reactive-ir/owner-callback-prop"
+   }
+  },
+  {
+   "fixture": "reactive-ir/owner-callback-prop",
+   "key": "SC9012 closed-parameter-member-dispatch",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1190",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/events.rs::element_prop_calls",
+   "fixtures": {
+    "proved": "reactive-ir/owner-callback-prop",
+    "open": "reactive-ir/callback-prop-forms"
+   }
   }
  ],
  "renames": []

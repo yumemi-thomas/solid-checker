@@ -57,7 +57,7 @@ function KidNever(props: { run?: () => void }) {
   return <p>{props.run ? "set" : "unset"}</p>;
 }
 
-// Negative (obligation): a prop forwarded to another component is not followed.
+// Positive (SC4002, ADR 1190 slice 4): a prop forwarded whole to one more component is followed to its call there.
 export function Forwarded() {
   return <Forwarder run={() => useContext(Ctx)} />;
 }
