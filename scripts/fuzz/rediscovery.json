@@ -42912,5 +42912,16 @@
    "lg-strict-read-untracked-handed-flush-store-settled-named-carried-wrapper-none"
   ],
   "rediscovered": "focus.mjs --codes STRICT_READ_UNTRACKED --grids lg-recall -- --contexts handed-flush (2,824 programs, Chrome judge): main ff7f6cf0c 102 false positives, ADR 1189 0 (the 102 uncertifiable, nothing else moves); bisect: 01d5fdc5f uncertifiable, the merge of ADR 1166 into bundle t (ddc55b05e) false positive, 1166`s tip alone too"
+ },
+ {
+  "finding": "ADR 1167 answered the read role (read_execution_role) of a site in a returned cleanup whose compute tracks nothing as disposal-only, silent; the dispatch of an unselectable callee (`Object.values(box)[0]()`) asks the read role too, so the call lost its withholding SC9012 row, while a `For` row's disposal runs the cleanup owned and the action throws ACTION_CALLED_IN_OWNED_SCOPE: a false clean",
+  "found": "ADR 1195's whole cleanup-family probe (W9, 2026-11-23): 1 false clean on main 60a7cf1db, unchanged by ADR 1195",
+  "fixed": "ADR 1196 (ADR 1167's returned-cleanup-disposal answer moves from read_execution_role to strict_read_role: the dispatch of an unselectable callee asked the read role, and the silence dropped the call's withholding row)",
+  "grid": "mx-recall",
+  "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+  "ids": [
+   "mx-action-called-in-owned-scope-effect-cleanup-for-x-values-callee-none"
+  ],
+  "rediscovered": "focus.mjs --codes ACTION_CALLED_IN_OWNED_SCOPE --grids mx-recall over every cleanup context (1,436 programs, Chrome judge): main 60a7cf1db and 25f525504 1 false clean (this id), ADR 1196 0 (a recall gap; nothing else moves)"
  }
 ]
