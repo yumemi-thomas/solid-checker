@@ -25,6 +25,26 @@ export function NamedRerunRead() {
   return <button onClick={() => setT(2)}>go</button>;
 }
 
+// Violation: the read forwarded through two in-place helpers in the named apply's cleanup, on the reached rerun (as
+// forwarded-callback-nested-window's ForwardedInNamedCleanup).
+export function NamedForwardedRead() {
+  const [r] = createSignal(3);
+  const [t, setT] = createSignal(1);
+  const apply = () => () => {
+    const hc0 = (g: () => void) => {
+      g();
+    };
+    const hc1 = (g: () => void) => {
+      hc0(g);
+    };
+    hc1(() => {
+      r();
+    });
+  };
+  createEffect(() => t(), apply);
+  return <button onClick={() => setT(2)}>go</button>;
+}
+
 // Silent: the compute tracks nothing, so only the disposal runs the cleanup (ADR 1167).
 export function NamedDisposalRead() {
   const [r] = createSignal(3);

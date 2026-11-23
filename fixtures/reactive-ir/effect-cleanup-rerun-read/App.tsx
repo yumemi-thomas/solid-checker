@@ -45,7 +45,7 @@ export function RerunThroughLayer() {
   return <button onClick={() => setTick(2)}>go</button>;
 }
 
-// An apply passed by name: the same cleanup, the same obligation.
+// Applies passed by name: the `const` one with its one reference is the inline apply since ADR 1200 (a violation); the declared and the handed ones keep the obligation.
 export function NamedApply() {
   const [count] = createSignal(3);
   const [tick, setTick] = createSignal(1);

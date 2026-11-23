@@ -5255,3 +5255,20 @@ Both answers looked only at a site written in the cleanup's own body. A closure,
   - lg-recall: 300 programs gain rows; 8 relabel U to U at the same site.
   - Nothing goes clean and no violation is added or lost: the fail-closed cost of the move.
 - Rediscovery: the id, its build fails focus on main and passes here.
+<a id="adr-1200"></a>
+## ADR 1200 — A named apply with one reference is the inline apply for the returned-cleanup proofs
+**The gap** (G3 leftovers, ADR 1195's step 0: `effect-cleanup-rerun-named`). `const apply = () => () => {…}; createEffect(compute, apply)`. The returned-cleanup proofs took only the literal at the effect's apply slot: ADR 1037's write role, ADR 1183's reached rerun, ADR 1167's disposal-only answer through `windowed_returned_cleanup`, and ADR 0539's rerun arm (`returned_effect_cleanup`). A named apply may be called elsewhere (`apply()()`) and run its cleanup on that stack, so the cleanup's read or write stayed `function-run-unplaced`.
+
+**Decision** (`write_roles.rs` `apply_slot_arguments`, `sole_named_apply_reference`). The four proofs find the apply's argument positions through one helper. That is the literal's own position, or, for a named apply, the position of the name's one reference. The name must be an unexported, never-written `const` of exactly this literal (one identifier, no shadowing write). Its only reference (type positions aside) must be a non-spread argument, and the file must hold no direct `eval`. No other code can then call the apply, so its cleanup runs only from the effect, as an inline apply's does. Every other premise of each proof is unchanged.
+
+**Evidence.**
+- Fixture `effect-cleanup-named-apply`:
+  - `NamedWrite` is clean, `NamedRerunRead` an SC1001 violation, and `NamedDisposalRead` silent (all uncertifiable on main).
+  - Uncertifiable as before: `NamedCalledElsewhere` (`apply()()`) and `NamedTwice` (two effects). `NamedExported`'s cleanup holds no read or write.
+- Chrome (`runtime-oracle/effect-cleanup-named-apply`, `effect-cleanup-write-role`, `effect-cleanup-rerun-reached`): covered, nothing static-only.
+- Probe (release, VM, Chrome judge), main 631b12291 against this, every cleanup-context program of every code (85,440):
+  - mx-recall, 45,675: 491 recall-gap to agree, nothing needs a look. At code level, 934 programs change: 766 SC1001 and 108 SC1003 rows go from uncertifiable to violation, and 60 relabel U to U (a dynamic mount's `component-identity-unproven`). No violation is lost.
+  - lg-recall, 39,765: 1,225 uncertifiable to clean, Chrome silent. At code level, 1,264 SC2001 rows go and 12 programs relabel an SC9012 row (U to U); no violation is added.
+- Boundary: the arms are unchanged; the write arm keeps its stated gap (ADR 1195).
+
+**Not built.** A named apply with any other reference (a second effect, a call, an export, a property). An apply that is a function declaration, or a `const` chain.
