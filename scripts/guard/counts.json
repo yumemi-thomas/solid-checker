@@ -11,7 +11,7 @@
   "SC1001 component-identity-unproven": 136,
   "SC1001 creation-throws-first": 3,
   "SC1001 escaped-name-unresolved": 19,
-  "SC1001 function-run-unplaced": 1779,
+  "SC1001 function-run-unplaced": 1780,
   "SC1001 function-unentered": 1,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
@@ -19,7 +19,7 @@
   "SC1001 no-hydration-subtree": 2,
   "SC1001 package-finding-at-entry": 141,
   "SC1001 package-value-read": 182,
-  "SC1001 read-backing-unproven": 418,
+  "SC1001 read-backing-unproven": 419,
   "SC1001 store-handed-to-package": 1,
   "SC1001 strict-read-unaccounted": 18,
   "SC1001 summary-read-unplaced": 96,
@@ -161,7 +161,7 @@
   "SC4002 package-finding-at-entry": 27,
   "SC4002 provider-not-proven-above": 202,
   "SC4002 unreached-dead-code": 10,
-  "SC5001 async-component-prop": 2,
+  "SC5001 async-component-prop": 1,
   "SC5001 async-options-opaque": 18,
   "SC5001 async-provenance-unproven": 14,
   "SC5001 async-read-caught": 2,
@@ -174,7 +174,7 @@
   "SC5001 creation-pass-unproven": 18,
   "SC5001 declared-loading-value": 4,
   "SC5001 host-callback-timing": 1,
-  "SC5001 invocation-context-unproven": 174,
+  "SC5001 invocation-context-unproven": 175,
   "SC5001 mount-form-window": 1,
   "SC5001 mount-unresolved": 2,
   "SC5001 package-finding-at-entry": 44,
@@ -6579,6 +6579,42 @@
     "proved": "uncertifiable-repro/sc2001",
     "open": "uncertifiable-repro/sc2001"
    }
+  },
+  {
+   "fixture": "reactive-ir/forwarded-event-prop",
+   "key": "SC1001 callee-callback-timing",
+   "from": 14,
+   "to": 12,
+   "adr": "ADR 1190",
+   "kind": "relabel",
+   "relabeledTo": "SC1001 function-run-unplaced"
+  },
+  {
+   "fixture": "reactive-ir/fp-owner-loading-cover",
+   "key": "SC1001 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1190",
+   "kind": "relabel",
+   "relabeledTo": "SC5001 invocation-context-unproven"
+  },
+  {
+   "fixture": "reactive-ir/fp-owner-loading-cover",
+   "key": "SC5001 async-component-prop",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1190",
+   "kind": "relabel",
+   "relabeledTo": "SC5001 invocation-context-unproven"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc1001",
+   "key": "SC1001 callee-callback-timing",
+   "from": 26,
+   "to": 25,
+   "adr": "ADR 1190",
+   "kind": "relabel",
+   "relabeledTo": "SC1001 read-backing-unproven"
   }
  ],
  "renames": []

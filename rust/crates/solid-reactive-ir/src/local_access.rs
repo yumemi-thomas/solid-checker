@@ -11986,6 +11986,25 @@ fn handed_role(
     role_at: impl Fn(solid_facts::core::Span) -> ExecutionRole,
     reports: impl Fn(ExecutionRole) -> bool,
 ) -> Option<(ExecutionRole, Option<solid_facts::core::Span>)> {
+    // ADR 1190 (slice 2): a component prop literal ADR 1171 proves run by the child's calls (inline, named or destructured) is
+    // handed to those calls, each a carrier that runs it on its own stack, read as an inline hand-off's position is below.
+    if let Some(calls) = crate::execution_role::prop_literal_run_calls(file, span, lookup) {
+        let mut silent = None;
+        for at in calls {
+            let role = role_at(at);
+            if role == ExecutionRole::Unknown
+                || (reports(role)
+                    && require_run
+                    && !crate::carrier_runs::carrier_provably_runs(file, at, lookup))
+            {
+                return Some((ExecutionRole::Unknown, None));
+            } else if reports(role) {
+                return Some((role, Some(at)));
+            }
+            silent = silent.or(Some(role));
+        }
+        return silent.map(|role| (role, None));
+    }
     let function = containing_ast_function(&file.ast, span)?;
     if lookup.function_may_be_component(file, function) {
         return None;
