@@ -105,6 +105,12 @@
     "file_by_path": 4,
     "hashmap-iteration": 2
   },
+  "rust/crates/solid-reactive-ir/src/execution_role/named_callbacks.rs": {
+    "file_by_path": 1,
+    "pending-review": [
+      "file_by_path rose 0 -> 1 (--allow-rise): ADR 1194, the module a reference of the declaring function is written in, to judge it there (its tag, import or call); file_by_path notes the slot"
+    ]
+  },
   "rust/crates/solid-reactive-ir/src/execution_role/read_context.rs": {
     "file_by_path": 4
   },

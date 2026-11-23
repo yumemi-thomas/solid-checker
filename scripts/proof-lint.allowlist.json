@@ -595,8 +595,8 @@
     },
     "rust/crates/solid-reactive-ir/src/execution_role/named_callbacks.rs": {
       "default-on-missing": {
-        "count": 1,
-        "why": "pending-review"
+        "count": 2,
+        "why": "pending-review (1); ADR 1194 (1): caller_qualifies takes a call with no enclosing function as module code, which runs where the module is evaluated (a role of its own: no component's identity can be undecided there); the role itself is still read_execution_role's, so this widens no claim past the read's own placement"
       }
     },
     "rust/crates/solid-reactive-ir/src/execution_role/pending_sources.rs": {

@@ -5189,3 +5189,10 @@ G1 of the R3 catalog (misuse half), on ADRs 1164 and 1185. In an async memo's or
 - A `finally`'s layered reads.
 - Member reads in a later pass.
 - Other loop shapes.
+
+<a id="adr-1194"></a>
+## ADR 1194 — A declaring function's role is its own through an importer's tag or call and through a helper's callback
+**The cost** (bundle x): of the 3,943 mx-recall programs ADR 1166 moved to agree, ADR 1189 sent 3,208 back to recall-gap. Its `declarer_role_is_its_own` refused every reference in another file (the harness renders `C1` by its tag from an entry module, so even a read in the component body was refused) and every literal handed to a call that is no dialect primitive (`h1(() => { const f = …; [f].forEach((g) => g()); })`).
+**Decision.** `named_callbacks::declarer_role_within` judges each reference in its own file: an import or export statement, a JSX tag, or a call (`f()`, `o.m()`) whose `caller_qualifies` there (outside every undecided component region, in a function that qualifies in turn; module code qualifies). An unbound literal handed to any call qualifies when that call does; `read_execution_role` still decides the role (a helper that does not run its argument in place gives none). A function handed on as a value (`[1].map(Row)`) still refuses, and a call inside an undecided component region still refuses: the 1189 false positives stay out.
+**Evidence** (release, Chrome judging every program). The 3,943 programs (bundle q's list): agree 2,440, recall-gap 1,503 (ADR 1189: 735 / 3,208), so 1,705 come back; no false positive, no false clean. The 2,824 `handed-flush` legal programs: uncertifiable 2,552, clean 272, no false positive (ADR 1189's 102 stay out). Fixture `reporting-run-called-helper` gains `HelperCallback` (a violation, Chrome STRICT_READ_UNTRACKED), `MappedRowHelperCallback` (uncertifiable, Chrome silent) and `Entry.tsx` (an importer's tag of `BodyDeclared`, whose violation stands); coverage moves nothing else.
+**Not built.** The 1,503 still recall-gap: a declarer reached through a function handed on as a value, a reference the reference list does not have, or a chain past four functions.
