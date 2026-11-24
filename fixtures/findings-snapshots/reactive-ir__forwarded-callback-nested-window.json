@@ -72,19 +72,18 @@
       "blocker": "parameter-call-argument-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-callback-nested-window/App.tsx",
-      "start": 1294,
-      "end": 1295,
+      "start": 1329,
+      "end": 1330,
       "fixes": 0
     },
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "function-run-unplaced",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-callback-nested-window/App.tsx",
-      "start": 1323,
-      "end": 1330,
+      "start": 1358,
+      "end": 1365,
       "fixes": 0
     },
     {
@@ -94,8 +93,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-callback-nested-window/App.tsx",
-      "start": 1347,
-      "end": 1359,
+      "start": 1382,
+      "end": 1394,
       "fixes": 0
     },
     {
@@ -105,8 +104,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-callback-nested-window/App.tsx",
-      "start": 1347,
-      "end": 1359,
+      "start": 1382,
+      "end": 1394,
       "fixes": 0
     },
     {
@@ -116,8 +115,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-callback-nested-window/App.tsx",
-      "start": 1583,
-      "end": 1660,
+      "start": 1618,
+      "end": 1695,
       "fixes": 0
     },
     {
@@ -127,8 +126,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-callback-nested-window/App.tsx",
-      "start": 1583,
-      "end": 1660,
+      "start": 1618,
+      "end": 1695,
       "fixes": 0
     },
     {
@@ -138,8 +137,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-callback-nested-window/App.tsx",
-      "start": 1799,
-      "end": 1935,
+      "start": 1834,
+      "end": 1970,
       "fixes": 0
     },
     {
@@ -149,8 +148,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-callback-nested-window/App.tsx",
-      "start": 1799,
-      "end": 1935,
+      "start": 1834,
+      "end": 1970,
       "fixes": 0
     },
     {
@@ -160,8 +159,8 @@
       "blocker": "parameter-call-argument-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-callback-nested-window/App.tsx",
-      "start": 2154,
-      "end": 2155,
+      "start": 2189,
+      "end": 2190,
       "fixes": 0
     },
     {
@@ -170,8 +169,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/forwarded-callback-nested-window/App.tsx",
-      "start": 2179,
-      "end": 2186,
+      "start": 2214,
+      "end": 2221,
       "fixes": 0
     },
     {

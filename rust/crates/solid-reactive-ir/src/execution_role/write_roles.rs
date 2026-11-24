@@ -1206,11 +1206,8 @@ fn returned_effect_cleanup(
     let Some(outer) = function_returning(file, function) else {
         return false;
     };
-    file.ast
-        .arguments_containing(outer.span)
-        .filter(|(call, index)| {
-            file.ast.peel_ts_sugar_span(call.arguments[*index].span) == outer.span
-        })
+    apply_slot_arguments(file, outer)
+        .into_iter()
         .any(|(call, index)| {
             lookup
                 .primitive_at_call(file, call.span)
@@ -1226,6 +1223,75 @@ fn returned_effect_cleanup(
 
 /// The function whose body returns `function` itself (an expression body or a
 /// `return` of that function, not of a nested one), if any.
+/// The argument positions that hold `apply`, a function returning an effect's cleanup: the positions of the literal itself, or (ADR
+/// 1200) of the one reference to a named apply (`const apply = () => () => …; createEffect(compute, apply)`) when that name is an
+/// unexported `const` of exactly this literal that nothing writes, its only reference (type positions aside) is that non-spread
+/// argument, and the file holds no direct `eval`. No other code can then call the apply, so its cleanup runs only from the effect, as
+/// an inline apply's does.
+fn apply_slot_arguments<'f>(
+    file: &'f solid_facts::FileFacts,
+    apply: &solid_facts::ast::FunctionFact,
+) -> Vec<(&'f solid_facts::ast::CallFact, usize)> {
+    let ast = &file.ast;
+    let at = |span: Span| {
+        ast.arguments_containing(span)
+            .filter(|(call, index)| ast.peel_ts_sugar_span(call.arguments[*index].span) == span)
+            .collect::<Vec<_>>()
+    };
+    let inline = at(apply.span);
+    if !inline.is_empty() {
+        return inline;
+    }
+    sole_named_apply_reference(file, apply).map_or_else(Vec::new, |reference| {
+        at(reference)
+            .into_iter()
+            .filter(|(call, index)| !call.arguments[*index].spread)
+            .collect()
+    })
+}
+
+/// ADR 1200: the one reference of a named apply, on [`apply_slot_arguments`]'s premises.
+fn sole_named_apply_reference(
+    file: &solid_facts::FileFacts,
+    apply: &solid_facts::ast::FunctionFact,
+) -> Option<Span> {
+    let ast = &file.ast;
+    if apply.generator || apply.name.is_some() {
+        return None;
+    }
+    let name = crate::owners::function_binding_name(file, apply)?;
+    let binding = ast
+        .bindings
+        .iter()
+        .find(|binding| binding.names.iter().any(|named| named.span == name.span))?;
+    if !binding.immutable
+        || binding.names.len() != 1
+        || binding.shape != solid_facts::ast::BindingShape::Identifier
+        || binding
+            .initializer
+            .map(|initializer| ast.peel_ts_sugar_span(initializer))
+            != Some(apply.span)
+        || crate::indexes::binding_exported(file, name.span)
+        || crate::interproc::property_gets::direct_eval_in(file, Span::new(0, u32::MAX))
+    {
+        return None;
+    }
+    let references = ast
+        .references_to(name.span)
+        .iter()
+        .copied()
+        .filter(|reference| {
+            !ast.type_queries
+                .iter()
+                .any(|query| query.contains(*reference))
+        })
+        .collect::<Vec<_>>();
+    match references.as_slice() {
+        [reference] if !ast.any_write_target_containing(*reference) => Some(*reference),
+        _ => None,
+    }
+}
+
 fn function_returning<'a>(
     file: &'a solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
@@ -1304,7 +1370,7 @@ pub(crate) fn inside_rerun_effect_cleanup(
 /// site's run. On the climb's premises only: no bound, no parameter-list layer, no layer that also runs its callback elsewhere,
 /// nothing withheld or unmodelled, no library or package callback crossed (`forEach`, a primitive's slot) and no await on the way (an
 /// async layer's code past its own await runs later). `None` where a layer is crossed and a premise fails.
-fn returned_cleanup_placed_site(
+pub(super) fn returned_cleanup_placed_site(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,
@@ -1352,12 +1418,10 @@ pub(crate) fn returned_cleanup_write_role(
     if apply.generator {
         return None;
     }
-    let (effect, _) = file
-        .ast
-        .arguments_containing(apply.span)
+    let (effect, _) = apply_slot_arguments(file, apply)
+        .into_iter()
         .find(|(call, index)| {
             !call.arguments[*index].spread
-                && file.ast.peel_ts_sugar_span(call.arguments[*index].span) == apply.span
                 && lookup
                     .primitive_at_call(file, call.span)
                     .is_some_and(|primitive| {
@@ -1385,13 +1449,7 @@ pub(super) fn windowed_returned_cleanup(
 ) -> Option<WindowedCleanup> {
     let outer = function_returning(file, function)?;
     let mut answer = None;
-    for (call, index) in file
-        .ast
-        .arguments_containing(outer.span)
-        .filter(|(call, index)| {
-            file.ast.peel_ts_sugar_span(call.arguments[*index].span) == outer.span
-        })
-    {
+    for (call, index) in apply_slot_arguments(file, outer) {
         let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
             continue;
         };
@@ -1654,18 +1712,20 @@ pub(crate) fn returned_cleanup_rerun_reached(
     let Some(apply) = function_returning(file, cleanup) else {
         return false;
     };
-    let Some((call, _)) = ast.arguments_containing(apply.span).find(|(call, index)| {
-        *index == 1
-            && !call.arguments[1].spread
-            && ast.peel_ts_sugar_span(call.arguments[1].span) == apply.span
-            && lookup
-                .primitive_at_call(file, call.span)
-                .is_some_and(|primitive| {
-                    lookup
-                        .dialect
-                        .returned_cleanup_reruns_in_read_window(primitive, 1)
-                })
-    }) else {
+    let Some((call, _)) = apply_slot_arguments(file, apply)
+        .into_iter()
+        .find(|(call, index)| {
+            *index == 1
+                && !call.arguments[1].spread
+                && lookup
+                    .primitive_at_call(file, call.span)
+                    .is_some_and(|primitive| {
+                        lookup
+                            .dialect
+                            .returned_cleanup_reruns_in_read_window(primitive, 1)
+                    })
+        })
+    else {
         return false;
     };
     let Some(component) = crate::owners::containing_body_function(ast, call.span) else {
@@ -3778,6 +3838,34 @@ pub(crate) fn role_entries_complete(
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     entry_census(file, function, lookup, &[], true)
+}
+
+/// ADR 1199: every run of `function`, when each is a plain call written in the program: [`entry_census_complete`] holds (no alias, no
+/// carried entry), the named-callback index records no position of it (a function handed to a primitive or a host runs there, not at
+/// a call), and each call site is a call expression whose callee is the reference (not `new`, not a rendered tag). The calls, by file;
+/// `None` where any of that fails or nothing calls it.
+pub(crate) fn plain_call_entries<'a>(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'a>,
+) -> Option<Vec<(&'a solid_facts::FileFacts, Span)>> {
+    let roles = lookup.named_callback_roles(file);
+    if !roles.positions(function.span).is_empty()
+        || !roles.tracking_positions(function.span).is_empty()
+        || !entry_census_complete(file, function, lookup)
+    {
+        return None;
+    }
+    let sites = lookup.function_call_sites(file.path.as_str(), function.span);
+    let mut calls = Vec::with_capacity(sites.len());
+    for (caller, callee) in sites {
+        let call =
+            caller.ast.calls.iter().find(|call| {
+                !call.construct && caller.ast.peel_ts_sugar_span(call.callee) == callee
+            })?;
+        calls.push((caller, call.span));
+    }
+    (!calls.is_empty()).then_some(calls)
 }
 
 /// ADR 1127: the bindings a function is entered through, as the entry census counts them; every walk over a function's

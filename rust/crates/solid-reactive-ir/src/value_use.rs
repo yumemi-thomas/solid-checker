@@ -1675,6 +1675,21 @@ impl<'l, 'a> Census<'l, 'a> {
             Holder::Awaited => Position::Open(blockers::VALUE_THROUGH_AWAIT),
             Holder::Yielded => Position::Open(blockers::VALUE_THROUGH_GENERATOR),
             Holder::Iterated => {
+                // ADR 1193: a one-element literal holding the root, iterated by a `for…of` whose one declarator is a `const` object
+                // pattern (`for (const { v } of [s])`), is the root's destructure (`static_rules::destructure_root`): the pattern's
+                // keys are SC1003's and SC1001's rows, as `const { v } = s`'s.
+                if matches!(mode, Mode::RootHolder(_))
+                    && !self.props_root
+                    && self.steps <= 2
+                    && file.ast.bindings.iter().any(|binding| {
+                        binding.immutable
+                            && binding.initializer.is_none()
+                            && crate::static_rules::destructure_root(self.lookup, file, binding)
+                                .is_some_and(|root| at.contains(root))
+                    })
+                {
+                    return Position::Followed;
+                }
                 // ADR 1104: a carrier a `for…of` iterates hands what it holds to the loop's binding: its uses are walked as past an
                 // escape, each with a row.
                 if matches!(mode, Mode::Holder(_) | Mode::RootHolder(_)) {

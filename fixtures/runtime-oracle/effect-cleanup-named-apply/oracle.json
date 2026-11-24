@@ -1,0 +1,1 @@
+{ "note": "ADR 1200: a named apply whose one reference is the effect apply argument: the cleanup write is legal (clean), the cleanup read on a click-driven rerun warns STRICT_READ_UNTRACKED (violation), the read with a compute that tracks nothing is silent; called elsewhere, exported or handed twice: uncertifiable." }
