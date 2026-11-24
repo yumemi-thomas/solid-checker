@@ -1,0 +1,1 @@
+{ "note": "ADR 1205: a flush in a function a closed object literal holds under a key, run only by that literal's member calls (after an await, in a counted loop's later pass): quiet where the checker is silent; the first pass, a call before the await, a member read without a call, a handed object, a let holder and a captured call keep their rows." }

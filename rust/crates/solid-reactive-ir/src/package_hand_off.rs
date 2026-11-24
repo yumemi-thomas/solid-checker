@@ -2434,6 +2434,10 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             return Some((file, function));
         }
         if let Some(member) = file.ast.member_at(value) {
+            // ADR 1205: the member census's exact target (a closed literal receiver's slot, ADR 0299/1182): the one function the read takes.
+            if let Some(target) = self.lookup.object_member_function(file, value) {
+                return Some(target);
+            }
             let property = self
                 .lookup
                 .ast_file_index(file.path.as_str())?

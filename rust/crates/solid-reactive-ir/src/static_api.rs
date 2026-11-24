@@ -3090,6 +3090,15 @@ fn unplaced_step<'s, 'f: 's>(
     {
         return false;
     }
+    // ADR 1205: a site in a function only a closed literal's member calls run runs at those calls: they are the sites above it.
+    if let Some(calls) = crate::execution_role::member_call_run_calls(file, site, lookup) {
+        for call in calls {
+            if visited.insert((file.path.to_string(), call)) {
+                pending.push((file, call));
+            }
+        }
+        return false;
+    }
     // ADR 0673: `unplaced_run` refuses a site `SiteReach` calls never entered,
     // and a method only a coercion runs (`${o}`) is one: no call edge reaches
     // `toString`. The hand-off census asks nothing of reach.
@@ -3506,6 +3515,18 @@ fn runs_unplaced_once(
                 .map(move |call| (caller, call))
         })
         .collect::<Vec<_>>();
+    // ADR 1205: the member calls of a closed literal that are every run of the function are its calls too.
+    if let Some(entries) = crate::execution_role::member_call_entries(file, function, lookup) {
+        for (caller, at) in entries {
+            if let Some(call) = caller.ast.calls.iter().find(|call| call.span == at)
+                && !calls.iter().any(|(known_file, known)| {
+                    known_file.path.as_str() == caller.path.as_str() && known.span == call.span
+                })
+            {
+                calls.push((caller, call));
+            }
+        }
+    }
     // ADR 1105: a call of the binding in this file the call graph withholds (one that may run before the declarator, ADR 0339:
     // a call in a constructor or a method may) is still a run when it follows it, as the exhaustive walks read it (ADR 0673).
     for call in &file.ast.calls {

@@ -6867,6 +6867,120 @@
     "proved": "reactive-ir/write-detached-owner-helper",
     "open": "engine/eslint-reactivity-v2"
    }
+  },
+  {
+   "fixture": "reactive-ir/competing-check-first",
+   "key": "SC6002 function-run-unplaced",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 1205",
+   "kind": "relabel",
+   "relabeledTo": "SC6002 effect-creation-unaccounted"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC6002 function-run-unplaced",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 1205",
+   "kind": "relabel",
+   "relabeledTo": "SC6002 effect-creation-unaccounted"
+  },
+  {
+   "fixture": "reactive-ir/flush-later-continuation",
+   "key": "SC1002 read-after-await-unaccounted",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 1197",
+   "proof": "rust/crates/solid-reactive-ir/src/after_await_accounting/closed_callers.rs::closed",
+   "fixtures": {
+    "proved": "reactive-ir/flush-later-continuation",
+    "open": "reactive-ir/flush-later-continuation"
+   }
+  },
+  {
+   "fixture": "reactive-ir/forwarded-leaf-operation",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 6,
+   "to": 1,
+   "adr": "ADR 1205",
+   "proof": "rust/crates/solid-reactive-ir/src/package_hand_off.rs::callback_target",
+   "fixtures": {
+    "proved": "reactive-ir/forwarded-leaf-operation",
+    "open": "reactive-ir/forwarded-leaf-operation"
+   }
+  },
+  {
+   "fixture": "reactive-ir/forwarded-leaf-operation",
+   "key": "SC2006 flush-in-action-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1205",
+   "proof": "rust/crates/solid-reactive-ir/src/package_hand_off.rs::callback_target",
+   "fixtures": {
+    "proved": "reactive-ir/forwarded-leaf-operation",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/overridden-spread-handler",
+   "key": "SC4001 handler-spread-unresolved",
+   "from": 3,
+   "to": 0,
+   "adr": "ADR 1205",
+   "proof": "rust/crates/solid-reactive-ir/src/object_members/memo.rs::literal_function",
+   "fixtures": {
+    "proved": "reactive-ir/overridden-spread-handler",
+    "open": "reactive-ir/eslint-compat"
+   }
+  },
+  {
+   "fixture": "reactive-ir/rc13-flush-in-effect-callback",
+   "key": "SC2006 flush-in-action-unaccounted",
+   "from": 6,
+   "to": 5,
+   "adr": "ADR 1205",
+   "proof": "rust/crates/solid-reactive-ir/src/package_hand_off.rs::callback_target",
+   "fixtures": {
+    "proved": "reactive-ir/rc13-flush-in-effect-callback",
+    "open": "reactive-ir/rc13-flush-in-effect-callback"
+   }
+  },
+  {
+   "fixture": "reactive-ir/rc13-flush-in-effect-callback",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 6,
+   "to": 5,
+   "adr": "ADR 1205",
+   "proof": "rust/crates/solid-reactive-ir/src/package_hand_off.rs::callback_target",
+   "fixtures": {
+    "proved": "reactive-ir/rc13-flush-in-effect-callback",
+    "open": "reactive-ir/rc13-flush-in-effect-callback"
+   }
+  },
+  {
+   "fixture": "reactive-ir/stored-throw-held-callbacks",
+   "key": "SC9012 withheld-object-member",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1205",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs::member_call_entries",
+   "fixtures": {
+    "proved": "reactive-ir/stored-throw-held-callbacks",
+    "open": "reactive-ir/action-step-window"
+   }
+  },
+  {
+   "fixture": "reactive-ir/typed-accessor-roots",
+   "key": "SC1001 function-run-unplaced",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1205",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs::member_call_entries",
+   "fixtures": {
+    "proved": "reactive-ir/typed-accessor-roots",
+    "open": "engine/eslint-reactivity-v2"
+   }
   }
  ],
  "renames": []

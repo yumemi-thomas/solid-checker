@@ -607,17 +607,6 @@
       "fixes": 0
     },
     {
-      "rule": "flush-in-action",
-      "code": "SC2006",
-      "kind": "uncertifiable",
-      "blocker": "flush-in-action-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 10600,
-      "end": 10607,
-      "fixes": 0
-    },
-    {
       "rule": "flush-in-effect-callback",
       "code": "SC2008",
       "kind": "uncertifiable",
@@ -626,17 +615,6 @@
       "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
       "start": 10600,
       "end": 10605,
-      "fixes": 0
-    },
-    {
-      "rule": "leaf-owner-forbidden-call",
-      "code": "SC3001",
-      "kind": "uncertifiable",
-      "blocker": "leaf-operation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/rc13-flush-in-effect-callback/App.ts",
-      "start": 10600,
-      "end": 10607,
       "fixes": 0
     },
     {

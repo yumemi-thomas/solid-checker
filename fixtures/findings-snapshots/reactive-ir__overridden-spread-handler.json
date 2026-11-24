@@ -49,17 +49,6 @@
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
-      "blocker": "handler-spread-unresolved",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
-      "start": 736,
-      "end": 754,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
       "blocker": "handler-key-overridden",
       "severity": "error",
       "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
@@ -118,28 +107,6 @@
       "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
       "start": 1337,
       "end": 1355,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "blocker": "handler-spread-unresolved",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
-      "start": 1388,
-      "end": 1408,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "uncertifiable",
-      "blocker": "handler-spread-unresolved",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/overridden-spread-handler/App.tsx",
-      "start": 1444,
-      "end": 1449,
       "fixes": 0
     },
     {

@@ -3868,6 +3868,112 @@ pub(crate) fn plain_call_entries<'a>(
     (!calls.is_empty()).then_some(calls)
 }
 
+/// ADR 1205: every run of `function`, when each is a member call of a closed object literal that holds it under a key: the
+/// function is the value of a data property written directly in the literal, or a `const` every reference of which (type
+/// positions aside) is such a value. Each literal is the whole initializer of an immutable, unexported `const` whose every
+/// reference is the object of a call's member callee that the member census resolves exactly
+/// ([`SemanticLookup::object_member_function`], ADR 0299/1182): no read that gives the member or the object out, no write, no
+/// spread, no argument. The file holds no direct `eval`, no code the analysis cannot see enters the function, and the
+/// named-callback index records no position of it. The calls whose target is `function`, all in its own file; `None` where
+/// any of that fails or nothing calls it.
+pub(crate) fn member_call_entries<'f>(
+    file: &'f solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Vec<(&'f solid_facts::FileFacts, Span)>> {
+    let ast = &file.ast;
+    if function.method_name.is_some()
+        || ast
+            .module_hazards
+            .iter()
+            .any(|hazard| hazard.kind == solid_facts::ast::ModuleHazardKind::Eval)
+        || crate::interproc::property_gets::direct_eval_in(file, Span::new(0, u32::MAX))
+        || entered_by_unseen_code(file, function, lookup)
+    {
+        return None;
+    }
+    let roles = lookup.named_callback_roles(file);
+    if !roles.positions(function.span).is_empty()
+        || !roles.tracking_positions(function.span).is_empty()
+    {
+        return None;
+    }
+    let typed = |at: Span| ast.type_queries.iter().any(|query| query.contains(at));
+    // The literals that hold the function as a direct data property's value.
+    let holder = |value: Span| -> Option<Span> {
+        let value = ast.peel_ts_sugar_span(value);
+        let property = ast.object_properties.iter().find(|property| {
+            property.data && !property.computed && ast.peel_ts_sugar_span(property.value) == value
+        })?;
+        ast.object_get_shapes
+            .iter()
+            .filter(|shape| shape.span.contains(property.span))
+            .min_by_key(|shape| shape.span.end - shape.span.start)
+            .filter(|shape| {
+                shape.closed
+                    && shape.properties.iter().all(|key| key.getter.is_none())
+                    && !ast.object_properties.iter().any(|nested| {
+                        nested.span != property.span
+                            && nested.span.contains(property.span)
+                            && shape.span.contains(nested.span)
+                    })
+            })
+            .map(|shape| shape.span)
+    };
+    let mut literals = Vec::new();
+    if let Some(literal) = holder(function.span) {
+        literals.push(literal);
+    } else {
+        let bindings = entry_bindings(file, function)?;
+        for binding in bindings {
+            if crate::indexes::binding_exported(file, binding.span) {
+                return None;
+            }
+            for reference in ast.references_to(binding.span) {
+                if typed(*reference) {
+                    continue;
+                }
+                literals.push(holder(*reference)?);
+            }
+        }
+    }
+    if literals.is_empty() {
+        return None;
+    }
+    let mut calls = Vec::new();
+    for literal in literals {
+        let object = ast.bindings.iter().find(|binding| {
+            binding
+                .initializer
+                .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == literal)
+        })?;
+        let [name] = object.names.as_slice() else {
+            return None;
+        };
+        if !object.immutable
+            || object.shape != solid_facts::ast::BindingShape::Identifier
+            || crate::indexes::binding_exported(file, name.span)
+        {
+            return None;
+        }
+        for reference in ast.references_to(name.span) {
+            if typed(*reference) {
+                continue;
+            }
+            let member = ast.members_with_peeled_object(*reference).next()?;
+            let call = ast.calls_with_peeled_callee(member.span).next()?;
+            if call.construct {
+                return None;
+            }
+            let (target_file, target) = lookup.object_member_function(file, member.span)?;
+            if target_file.path == file.path && target.span == function.span {
+                calls.push((file, call.span));
+            }
+        }
+    }
+    (!calls.is_empty()).then_some(calls)
+}
+
 /// ADR 1127: the bindings a function is entered through, as the entry census counts them; every walk over a function's
 /// references by name reads this one list (ADR 1124 round 2: two lists diverged). A named function expression is entered
 /// through the binding holding it as well as through its own name (`const cb = function inner() {}`: `cb` and `inner`);

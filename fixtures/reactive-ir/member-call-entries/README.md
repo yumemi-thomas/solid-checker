@@ -1,0 +1,9 @@
+# member-call-entries
+
+**Claim (ADR 1205).** A function a closed object literal holds under a key (the value of a data property written directly in it, or a `const` arrow every reference of which is such a value, declared before the literal in the same function's code: ADR 1182's data-slot route widened from module level) whose literal is the whole initializer of an unexported `const` used only as the object of member calls the member census resolves exactly runs only at those calls (`write_roles::member_call_entries`). ADR 1199's flush census asks each such call as an entry (`FlushSafe::EntriesPlaced`), and the effect-phase walk (`unplaced_run_but`, `runs_unplaced_once`, the exhaustive step) climbs through them as through plain calls. The program steps an action, runs an effect's apply and opens a leaf scope, so no program-wide reason ends any site.
+
+Clean: `MemberLoop` (the call in a counted loop's later pass of an async memo, ADR 1201), `LiteralSlot` (the literal itself as the slot's value, called after an await), `OptionalCall` (`ho.m?.()` after an await).
+
+Uncertifiable (fail closed): `CapturedCall` (the call in a timer's callback: the member census refuses a captured receiver, ADR 0299), `FirstPass` (the loop's first pass), `MemberRead` (`const g = ho.m; g()`), `ObjectHanded` (`[ho].forEach(…)`), `LetHolder` (a `let` written again), `BeforeAwait` (the call on the compute's stack).
+
+Not covered: a method of the literal (`{ m() { … } }`), a member assigned after creation (`ho.m = …`, fuzz `handoff-assign*`), a slot's function handed whole to a scheduler (`setTimeout(cb1.cb)`, fuzz callback form `bundle`). SC1002 keeps `unresolved-invocation` at a data-slot member call (the after-await walk does not follow the member census's target). Stub: `flush-later-continuation`'s. Chrome: `runtime-oracle/member-call-entries`.
