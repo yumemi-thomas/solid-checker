@@ -93,6 +93,11 @@ enum FlushSafe {
     TestRunner,
     /// No execution of the program runs the site (`SiteReach`).
     NeverRuns,
+    /// ADR 1201: code no `await` dominates that still runs only past one of its own async function's suspensions: a counted loop's later pass
+    /// (`in_counted_loop_later_pass`, ADR 1185: the `if (i > 0)` consequent of a loop that awaits on every pass) or the `catch` or `finally` of a
+    /// `try` whose block starts with an await of an operand that cannot throw synchronously (`follows_try_head_await`, ADRs 0477 and 1164). Like
+    /// [`Self::AwaitContinuation`], it resumes from the microtask queue on an empty stack; only for code in a function's body.
+    LaterContinuation,
     /// ADR 1199: the site runs whenever its function runs, and every run of that function is an entry on which a class above rules every code
     /// out ([`entries_placed`]).
     EntriesPlaced,
@@ -111,11 +116,12 @@ impl FlushSafe {
             Self::TestRunner => "flush_accounting.account.test-runner-callback",
             Self::NeverRuns => "flush_accounting.account.never-runs",
             Self::EntriesPlaced => "flush_accounting.account.entries-placed",
+            Self::LaterContinuation => "flush_accounting.account.later-continuation",
         }
     }
 
     #[cfg(test)]
-    const ALL: [Self; 9] = [
+    const ALL: [Self; 10] = [
         Self::NoSteppedAction,
         Self::NoDeferringPrimitive,
         Self::NoLeafScope,
@@ -125,6 +131,7 @@ impl FlushSafe {
         Self::TestRunner,
         Self::NeverRuns,
         Self::EntriesPlaced,
+        Self::LaterContinuation,
     ];
 
     /// Whether the reason rules `code` out.
@@ -138,7 +145,8 @@ impl FlushSafe {
             | Self::ModuleInitialization
             | Self::TestRunner
             | Self::NeverRuns
-            | Self::EntriesPlaced => true,
+            | Self::EntriesPlaced
+            | Self::LaterContinuation => true,
         }
     }
 }
@@ -325,16 +333,18 @@ fn position_class(
         Some(DispatchCaller::TestRunner) => {
             callback_runs_it(lookup, file, at).then_some(FlushSafe::TestRunner)
         }
-        // No reason, so the site gets its uncertifiable row: `DetachedOwner` keeps the stack's action depth, `TestHelper` may be called from a step
-        // inside a test, an event handler's delivery may be dispatched from a step, `EffectApply` is the apply itself, and no census class (`None`)
-        // is a site the census could not place (owner ruling 5a).
-        Some(
-            DispatchCaller::DetachedOwner
-            | DispatchCaller::TestHelper
-            | DispatchCaller::EventHandler
-            | DispatchCaller::EffectApply,
-        )
-        | None => None,
+        // No reason, so the site gets its uncertifiable row: `DetachedOwner` keeps the stack's action depth and `EffectApply` is the apply itself;
+        // `TestHelper` (may be called from a step inside a test) and `EventHandler` (a delivery may be dispatched from a step) get one only past a
+        // suspension, below (owner ruling 5a).
+        Some(DispatchCaller::DetachedOwner | DispatchCaller::EffectApply) => None,
+        // ADR 1201: code no await dominates that still runs only past a suspension of its own function: a counted loop's later pass, or
+        // the `catch` or `finally` behind a `try` head's await that cannot throw first. The census asks a dominating await before the classes
+        // of a function every call of which is an event delivery or in a test (`flush_caller`: `EventHandler`, `TestHelper`), and after the
+        // callback classes; so does this.
+        Some(DispatchCaller::TestHelper | DispatchCaller::EventHandler) | None => (in_body
+            && (crate::execution_role::in_counted_loop_later_pass(file, at)
+                || crate::execution_role::follows_try_head_await(file, at, lookup)))
+        .then_some(FlushSafe::LaterContinuation),
     }
 }
 
