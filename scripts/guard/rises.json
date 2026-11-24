@@ -8400,6 +8400,86 @@
    "to": 1,
    "adr": "ADR 1190",
    "fact": "cleanup.rs Entry::Called from prop_literal_called_at: a component prop's function literal is walked at the child's proven calls, so the call's SC9012 leaf-callback-opaque row becomes an SC3001 leaf-owner-unproven row where the walked literal reaches a creation whose owner the leaf walk cannot prove (the same site stays uncertifiable; the literal's own SC3001 leaf-operation-unaccounted row leaves)"
+  },
+  {
+   "fixture": "reactive-ir/reporting-run-called-helper",
+   "key": "SC1001 function-run-unplaced",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 1194",
+   "fact": "new fixture components HelperCallback and MappedRowHelperCallback (and Entry.tsx): their own flush, onSettled and creation rows, the same kinds the fixture's other components have; no row moved elsewhere"
+  },
+  {
+   "fixture": "reactive-ir/reporting-run-called-helper",
+   "key": "SC2006 flush-in-action-unaccounted",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 1194",
+   "fact": "new fixture components HelperCallback and MappedRowHelperCallback (and Entry.tsx): their own flush, onSettled and creation rows, the same kinds the fixture's other components have; no row moved elsewhere"
+  },
+  {
+   "fixture": "reactive-ir/reporting-run-called-helper",
+   "key": "SC2008 flush-in-effect-unaccounted",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 1194",
+   "fact": "new fixture components HelperCallback and MappedRowHelperCallback (and Entry.tsx): their own flush, onSettled and creation rows, the same kinds the fixture's other components have; no row moved elsewhere"
+  },
+  {
+   "fixture": "reactive-ir/reporting-run-called-helper",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 3,
+   "to": 6,
+   "adr": "ADR 1194",
+   "fact": "new fixture components HelperCallback and MappedRowHelperCallback (and Entry.tsx): their own flush, onSettled and creation rows, the same kinds the fixture's other components have; no row moved elsewhere"
+  },
+  {
+   "fixture": "reactive-ir/reporting-run-called-helper",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 1194",
+   "fact": "new fixture components HelperCallback and MappedRowHelperCallback (and Entry.tsx): their own flush, onSettled and creation rows, the same kinds the fixture's other components have; no row moved elsewhere"
+  },
+  {
+   "fixture": "reactive-ir/reporting-run-called-helper",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 2,
+   "to": 4,
+   "adr": "ADR 1194",
+   "fact": "new fixture components HelperCallback and MappedRowHelperCallback (and Entry.tsx): their own flush, onSettled and creation rows, the same kinds the fixture's other components have; no row moved elsewhere"
+  },
+  {
+   "fixture": "reactive-ir/fp-owner-loading-cover",
+   "key": "SC5001 invocation-context-unproven",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1190",
+   "fact": "slice 2 (execution_role::prop_literal_run_calls): a site in a callback prop's literal takes the role of the child's calls (read role execution_role.prop-literal-calls, write role write_roles.prop-literal-calls) and callee_callback_timing and unplaced_run_but ask each call: where the literal reads, the row of its lexical role leaves or changes kind (fp-owner-loading-cover: SC1001 function-run-unplaced leaves and SC5001 async-component-prop becomes invocation-context-unproven; repro prop-in-effect-apply-read: callee-callback-timing becomes read-backing-unproven under the exact cause direct-read-callers-unenumerable); a named wrapper the literal calls (wrapUse in handed-net c3-wrapper.tsx and handed-net-guards g4b.tsx) keeps its read's SC1001 function-run-unplaced row, a new uncertifiable row, because call_plainly_placed stops at a call in a named local function"
+  },
+  {
+   "fixture": "reactive-ir/handed-net",
+   "key": "SC1001 function-run-unplaced",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 1190",
+   "fact": "slice 2 (execution_role::prop_literal_run_calls): a site in a callback prop's literal takes the role of the child's calls (read role execution_role.prop-literal-calls, write role write_roles.prop-literal-calls) and callee_callback_timing and unplaced_run_but ask each call: where the literal reads, the row of its lexical role leaves or changes kind (fp-owner-loading-cover: SC1001 function-run-unplaced leaves and SC5001 async-component-prop becomes invocation-context-unproven; repro prop-in-effect-apply-read: callee-callback-timing becomes read-backing-unproven under the exact cause direct-read-callers-unenumerable); a named wrapper the literal calls (wrapUse in handed-net c3-wrapper.tsx and handed-net-guards g4b.tsx) keeps its read's SC1001 function-run-unplaced row, a new uncertifiable row, because call_plainly_placed stops at a call in a named local function"
+  },
+  {
+   "fixture": "reactive-ir/handed-net-guards",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1190",
+   "fact": "slice 2 (execution_role::prop_literal_run_calls): a site in a callback prop's literal takes the role of the child's calls (read role execution_role.prop-literal-calls, write role write_roles.prop-literal-calls) and callee_callback_timing and unplaced_run_but ask each call: where the literal reads, the row of its lexical role leaves or changes kind (fp-owner-loading-cover: SC1001 function-run-unplaced leaves and SC5001 async-component-prop becomes invocation-context-unproven; repro prop-in-effect-apply-read: callee-callback-timing becomes read-backing-unproven under the exact cause direct-read-callers-unenumerable); a named wrapper the literal calls (wrapUse in handed-net c3-wrapper.tsx and handed-net-guards g4b.tsx) keeps its read's SC1001 function-run-unplaced row, a new uncertifiable row, because call_plainly_placed stops at a call in a named local function"
+  },
+  {
+   "fixture": "uncertifiable-repro/sc1001",
+   "key": "SC1001 read-backing-unproven",
+   "from": 11,
+   "to": 12,
+   "adr": "ADR 1190",
+   "fact": "slice 2 (execution_role::prop_literal_run_calls): a site in a callback prop's literal takes the role of the child's calls (read role execution_role.prop-literal-calls, write role write_roles.prop-literal-calls) and callee_callback_timing and unplaced_run_but ask each call: where the literal reads, the row of its lexical role leaves or changes kind (fp-owner-loading-cover: SC1001 function-run-unplaced leaves and SC5001 async-component-prop becomes invocation-context-unproven; repro prop-in-effect-apply-read: callee-callback-timing becomes read-backing-unproven under the exact cause direct-read-callers-unenumerable); a named wrapper the literal calls (wrapUse in handed-net c3-wrapper.tsx and handed-net-guards g4b.tsx) keeps its read's SC1001 function-run-unplaced row, a new uncertifiable row, because call_plainly_placed stops at a call in a named local function"
   }
  ]
 }

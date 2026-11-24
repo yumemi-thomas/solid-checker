@@ -1,0 +1,5 @@
+# effect-cleanup-for-action-dispatch
+
+**Claim (ADR 1196).** ADR 1167's disposal-only answer (a read in the cleanup an inline apply returns, where the compute tracks nothing, runs only at the effect's disposal) is the strict read's alone (`strict_read_role`). The action rule's dispatch asks the read role at a callee it cannot select, and a `For` row's disposal runs the cleanup under the row's owner, where an action throws ACTION_CALLED_IN_OWNED_SCOPE. On main, the call through `Object.values` (`ValuesCallee`) kept only the SC9012 row at `box` (the carrier), not the dispatch's row at the call, where Chrome's frame is: the fuzz false clean `mx-action-called-in-owned-scope-effect-cleanup-for-x-values-callee-none`. Now the call has its SC9012 row. `MemberCallee` already kept its withholding row at the call (unchanged). `DirectCall` keeps its SC2002 obligation; `ReadAtDisposal` stays silent.
+
+Chrome: `fixtures/runtime-oracle/effect-cleanup-for-action-dispatch`. Stubs: `effect-cleanup-write-role`'s. `tsc --noEmit` clean.

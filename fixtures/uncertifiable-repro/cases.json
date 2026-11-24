@@ -27,7 +27,7 @@
    "held": {
     "adr": "0803",
     "restoredBy": "Callbacks and listeners the census cannot read (ADR 0803 step 2)",
-    "why": "certified clean before step 2, uncertifiable until the parameter and listener proofs: ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above ADR 0976 adds one more row: SC1002 `read-after-await-unaccounted` at `err.message` (after-await.tsx:22), a member of a `catch` parameter after an `await` that no fact proves plain (the full S4 rule). ADR 1097 (narrow only) and ADR 1113 each add that row at `err instanceof Error` (after-await.tsx:22), an operator after an `await` that may run code (`Symbol.hasInstance`); joined in bundle u they give one row. ADR 1125 adds rows: an imported package the program does not analyse (not installed here) may replace the listener API, so every event proof of the program is withheld.",
+    "why": "certified clean before step 2, uncertifiable until the parameter and listener proofs: ADR 0803 step 2: `attachPropListeners(window, props)` in @solid-primitives/event-listener's dist/components.js, and in sc4001 `makeEventListener(window, ...)` at src/pkg-event-listener-target.tsx:12, hand window on with a listener the census cannot read, so every tuple slot of this project is withdrawn (tuple-iteration-written); the parameter and listener proofs restore the expectation above ADR 0976 adds one more row: SC1002 `read-after-await-unaccounted` at `err.message` (after-await.tsx:22), a member of a `catch` parameter after an `await` that no fact proves plain (the full S4 rule). ADR 1097 (narrow only) and ADR 1113 each add that row at `err instanceof Error` (after-await.tsx:22), an operator after an `await` that may run code (`Symbol.hasInstance`); joined in bundle u they give one row. ADR 1125 adds rows: an imported package the program does not analyse (not installed here) may replace the listener API, so every event proof of the program is withheld. ADR 1197 removes both SC1002 rows again: `submit` is called only from the form's `onSubmit` handler, so no async computation runs it (closed callers, the owner's addendum to ADR 0973's ruling 5).",
     "expect": [
      {
       "kind": "uncertifiable",
@@ -38,16 +38,6 @@
       "kind": "uncertifiable",
       "rule": "SC1002",
       "context": "package-finding-at-entry"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC1002",
-      "context": "read-after-await-unaccounted"
-     },
-     {
-      "kind": "uncertifiable",
-      "rule": "SC1002",
-      "context": "read-after-await-unaccounted"
      },
      {
       "kind": "uncertifiable",
@@ -11474,14 +11464,14 @@
     "src/prop-in-effect-apply-read.tsx"
    ],
    "causes": [
-    "SC1001/callback-to-unproven-consumer/component-prop>package-callback:solid-js"
+    "SC1001/direct-read-callers-unenumerable/props-escape:exported-unrendered"
    ],
    "expect": [
     {
      "rule": "SC1001",
-     "family": "callback-to-unproven-consumer",
+     "family": "direct-read-callers-unenumerable",
      "context": "",
-     "cause": "SC1001/callback-to-unproven-consumer/component-prop>package-callback:solid-js"
+     "cause": "SC1001/direct-read-callers-unenumerable/props-escape:exported-unrendered"
     }
    ],
    "source": {

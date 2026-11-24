@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1190 (slice 2): reads and writes in a callback prop's literal take the role of the child's calls: a read called in an effect apply and a named function's read called in the body (STRICT_READ_UNTRACKED, SC1001 violation), a destructured prop's write called in the body (REACTIVE_WRITE_IN_OWNED_SCOPE, SC2001 violation), the same write from a handler and a read in an IIFE called in tracked JSX (quiet, clean). The checker's fixture is reactive-ir/callback-prop-roles."
+}

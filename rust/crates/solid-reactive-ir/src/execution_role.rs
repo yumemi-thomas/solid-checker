@@ -448,19 +448,7 @@ pub(crate) fn read_execution_role(
     lookup: &SemanticLookup<'_>,
 ) -> ExecutionRole {
     crate::role_log::decide("read", file.path.as_str(), span, || {
-        let role =
-            read_execution_role_unlogged(file, span, allowed, entities, symbol_names, lookup);
-        // ADR 1167: a read in the cleanup an effect's inline apply returns, where the compute provably tracks nothing, runs only at the
-        // effect's disposal, as an `onCleanup` callback's (ADR 0695); reads only, every other site keeps its unplaced role.
-        if role == ExecutionRole::Unknown
-            && write_roles::returned_cleanup_disposal_only(file, span, lookup)
-        {
-            return role_arm!(
-                "execution_role.read_execution_role.returned-cleanup-disposal",
-                ExecutionRole::DeferredCallback
-            );
-        }
-        role
+        read_execution_role_unlogged(file, span, allowed, entities, symbol_names, lookup)
     })
 }
 
@@ -492,6 +480,20 @@ pub(crate) fn strict_read_role(
             "execution_role.read_execution_role.returned-cleanup-rerun",
             ExecutionRole::EffectApply
         ),
+        // ADR 1167 (moved here by ADR 1196, as ADR 1166 r2 and 1183 r2 did): a read in the cleanup an effect's inline apply returns,
+        // where the compute provably tracks nothing, runs only at the effect's disposal, outside any strict-read window. The strict read
+        // only: the read role is also what the action rule's dispatch asks at a member or `Object.values` callee, and a `For` row's
+        // disposal runs the cleanup under the row's owner, where an action throws ACTION_CALLED_IN_OWNED_SCOPE (the false clean
+        // `mx-action-called-in-owned-scope-effect-cleanup-for-x-values-callee-none`).
+        // Logged as the read's own decision (the proof log's C3 check: a silent row's role is a tagged arm's).
+        None if write_roles::returned_cleanup_disposal_only(file, span, lookup) => {
+            crate::role_log::decide("read", file.path.as_str(), span, || {
+                role_arm!(
+                    "execution_role.read_execution_role.returned-cleanup-disposal",
+                    ExecutionRole::DeferredCallback
+                )
+            })
+        }
         None => role,
     }
 }
@@ -504,6 +506,20 @@ fn read_execution_role_unlogged(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
 ) -> ExecutionRole {
+    // ADR 1190 (slice 2): a site written directly in a component prop literal whose runs ADR 1171 proves (the child's calls) runs
+    // where those calls run: the role is theirs, one role when they all agree, unplaced otherwise.
+    if let Some(calls) = prop_literal_run_calls(file, span, lookup) {
+        let mut roles = calls.into_iter().map(|call| {
+            read_execution_role_unlogged(file, call, allowed, entities, symbol_names, lookup)
+        });
+        let first = roles.next().unwrap_or(ExecutionRole::Unknown);
+        let role = if roles.all(|role| role == first) {
+            first
+        } else {
+            ExecutionRole::Unknown
+        };
+        return role_arm!("execution_role.prop-literal-calls", role);
+    }
     let role = semantic_execution_role(file, span, allowed, entities, symbol_names, lookup);
     // Deleted code and code past an await keep their answers.
     if matches!(
@@ -852,4 +868,86 @@ pub(crate) fn dynamic_component_entry(
         exclusive &= mounted || whole || alias_whole;
     }
     dynamic.then_some(exclusive)
+}
+
+/// ADR 1190 (slice 2): the child's calls that run the component prop literal (ADR 1171's proof, the named and destructured forms
+/// too) that `span` is written directly in, during its synchronous run: not in a function nested in it, not past an `await` of
+/// it, not in its parameter list. `None` where `span` is no such site, or the literal's calls are unproven or none.
+pub(crate) fn prop_literal_run_calls(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Vec<Span>> {
+    let literal = file.ast.innermost_function_body_containing(span)?;
+    if !crate::owners::written_directly_in(&file.ast, literal, span) {
+        return None;
+    }
+    match crate::execution_role::prop_literal_call_sites(file, literal, lookup) {
+        Some(calls) if !calls.is_empty() => {
+            if literal.r#async
+                || literal.generator
+                || !calls
+                    .iter()
+                    .all(|call| call_plainly_placed(file, *call, lookup))
+            {
+                return None;
+            }
+            crate::interproc::body_site_runs_during_call(file, literal, span).then_some(calls)
+        }
+        // Not such a literal: a site in layers that run in place (an IIFE, an inline carrier's callback) written in one runs where
+        // the outermost layer's call does, asked there, on a clean climb only (every run in place, no parameter list, no await).
+        _ => {
+            let climb = climb_in_place_layers(file, span, lookup)?;
+            let clean = climb.at != span
+                && climb.in_list.is_none()
+                && climb.suspended.is_none()
+                && !climb.among_others
+                && !climb.withheld
+                && !climb.unmodelled;
+            clean
+                .then(|| prop_literal_run_calls(file, climb.at, lookup))
+                .flatten()
+        }
+    }
+}
+
+/// ADR 1190 (slice 2): whether the child's call at `call` is placed by the role engine alone: written directly in the child component's
+/// body, or directly in an anonymous literal that is a primitive's callback argument or an intrinsic element's attribute value written
+/// directly in that body. A call in a named local function (`const handler = () => props.run()`) is placed by that function's own
+/// entries and hand-offs (an alias, a `keep(handler)`, a shadowing name), which the role at the call does not check: not this proof.
+fn call_plainly_placed(
+    file: &solid_facts::FileFacts,
+    call: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some(owner) = file.ast.innermost_function_body_containing(call) else {
+        return false;
+    };
+    if !crate::owners::written_directly_in(&file.ast, owner, call) {
+        return false;
+    }
+    if lookup.function_may_be_component(file, owner) {
+        return true;
+    }
+    if owner.name.is_some() || crate::owners::function_binding_name(file, owner).is_some() {
+        return false;
+    }
+    let handed = file
+        .ast
+        .arguments_containing(owner.span)
+        .any(|(outer, index)| {
+            !outer.arguments[index].spread
+                && file.ast.peel_ts_sugar_span(outer.arguments[index].span) == owner.span
+                && lookup.primitive_at_call(file, outer.span).is_some()
+        })
+        || events::intrinsic_attribute_value(file, owner.span);
+    // The function whose body holds the literal directly (no other function between them) is the child component.
+    handed
+        && file
+            .ast
+            .functions
+            .iter()
+            .filter(|function| function.span != owner.span && function.body.contains(owner.span))
+            .min_by_key(|function| function.span.end - function.span.start)
+            .is_some_and(|component| lookup.function_may_be_component(file, component))
 }

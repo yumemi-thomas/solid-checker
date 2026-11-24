@@ -1281,6 +1281,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/for-await-body/node_modules/**
 !fixtures/reactive-ir/after-await-for-await-finally/node_modules/
 !fixtures/reactive-ir/after-await-for-await-finally/node_modules/**
+!fixtures/reactive-ir/after-await-closed-callers/node_modules/
+!fixtures/reactive-ir/after-await-closed-callers/node_modules/**
 !fixtures/reactive-ir/after-await-read-later-pass/node_modules/
 !fixtures/reactive-ir/after-await-read-later-pass/node_modules/**
 !fixtures/reactive-ir/owner-after-await-for-await/node_modules/
@@ -1667,6 +1669,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/owner-call-getter-placed/node_modules/**
 !fixtures/reactive-ir/effect-cleanup-write-role/node_modules/
 !fixtures/reactive-ir/effect-cleanup-write-role/node_modules/**
+!fixtures/reactive-ir/effect-cleanup-for-action-dispatch/node_modules/
+!fixtures/reactive-ir/effect-cleanup-for-action-dispatch/node_modules/**
 !fixtures/reactive-ir/effect-cleanup-write-role-flush/node_modules/
 !fixtures/reactive-ir/effect-cleanup-write-role-flush/node_modules/**
 !fixtures/reactive-ir/portal-children-owner/node_modules/
@@ -2312,3 +2316,7 @@ packages/wasm/owned/
 !fixtures/reactive-ir/callback-prop-leaf/node_modules/**
 !fixtures/reactive-ir/callback-prop-forms/node_modules/
 !fixtures/reactive-ir/callback-prop-forms/node_modules/**
+!fixtures/reactive-ir/callback-prop-roles/node_modules/
+!fixtures/reactive-ir/callback-prop-roles/node_modules/**
+!fixtures/reactive-ir/callback-prop-forwarded/node_modules/
+!fixtures/reactive-ir/callback-prop-forwarded/node_modules/**
