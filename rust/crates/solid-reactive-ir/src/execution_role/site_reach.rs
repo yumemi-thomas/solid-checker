@@ -1948,9 +1948,13 @@ pub(crate) fn unreached_report_sites(
 /// of them visibly may not. By the facts of the file alone, before the site (or the layer's call) in that function's own code
 /// (not in a function nested in it):
 /// - a `throw` statement;
-/// - a Get `o.k` of a `const` bound to an object literal whose `k` is a getter whose own code holds a `throw`;
-/// - a call of a `const` function literal or a function declaration of the file whose own code holds a `throw`.
-/// A throw a `try` around it catches, where that `try`'s block does not also hold the site, completes the `try` normally.
+/// - a Get `o.k` of a `const` bound to an object literal whose `k` is a getter that may throw;
+/// - a call of a `const` function literal or a function declaration of the file that may throw;
+///
+/// where a function may throw when its own code holds one of these, uncaught in it, through local calls [`THROW_DEPTH`] deep.
+/// A row at a call of a local function (a call-attributed read) stands for what that function runs, so a function that may
+/// throw there is enough. A throw a `try` around it catches, where that `try`'s block does not also hold the site, completes
+/// the `try` normally.
 /// ADR 0279's premise stays: any other call completes normally unless its signature says it may not, so a throw this does not
 /// see (a helper's helper, a package) is outside the model.
 fn earlier_evaluation_may_throw(
@@ -1959,86 +1963,21 @@ fn earlier_evaluation_may_throw(
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     let ast = &file.ast;
-    let own = |function: &solid_facts::ast::FunctionFact, span: Span| {
-        crate::owners::containing_ast_function(ast, span)
-            .is_some_and(|owner| owner.span == function.span)
-    };
-    let throws_in = |function: &solid_facts::ast::FunctionFact| {
-        ast.throw_statements
-            .iter()
-            .any(|thrown| own(function, *thrown) && !caught_before(file, *thrown, function.span))
-    };
-    let local_function = |callee: Span| -> Option<&solid_facts::ast::FunctionFact> {
-        let declaration = ast.reference_declaration(ast.peel_ts_sugar_span(callee))?;
-        ast.functions
-            .iter()
-            .find(|function| {
-                function.kind == solid_facts::ast::FunctionKind::Declaration
-                    && function
-                        .name
-                        .as_ref()
-                        .is_some_and(|name| name.span == declaration)
-            })
-            .or_else(|| {
-                let binding = ast.bindings.iter().find(|binding| {
-                    binding.immutable
-                        && binding.shape == solid_facts::ast::BindingShape::Identifier
-                        && binding.names.iter().any(|name| name.span == declaration)
-                })?;
-                ast.function_at(ast.peel_ts_sugar_span(binding.initializer?))
-            })
-    };
-    let throwing_getter = |member: &solid_facts::ast::MemberFact| {
-        if ast.computed_members.contains(&member.span) {
-            return false;
-        }
-        let Some(key) = file.source_text(member.property) else {
-            return false;
-        };
-        let Some(declaration) = ast.reference_declaration(ast.peel_ts_sugar_span(member.object))
-        else {
-            return false;
-        };
-        let Some(literal) = ast
-            .bindings
-            .iter()
-            .find(|binding| {
-                binding.immutable
-                    && binding.shape == solid_facts::ast::BindingShape::Identifier
-                    && binding.names.iter().any(|name| name.span == declaration)
-            })
-            .and_then(|binding| binding.initializer)
-            .map(|value| ast.peel_ts_sugar_span(value))
-        else {
-            return false;
-        };
-        ast.object_get_shapes
-            .iter()
-            .filter(|shape| shape.span == literal)
-            .flat_map(|shape| &shape.properties)
-            .filter(|property| property.key.as_str() == key)
-            .filter_map(|property| property.getter)
-            .filter_map(|getter| ast.function_at(getter))
-            .any(throws_in)
-    };
     let mut at = site;
     for _ in 0..8 {
         let Some(function) = crate::owners::containing_ast_function(ast, at) else {
             return false;
         };
         let before = |span: Span| {
-            span.end <= at.start && own(function, span) && !caught_before(file, span, at)
+            span.end <= at.start && own_code(file, function, span) && !caught_before(file, span, at)
         };
-        if ast.throw_statements.iter().any(|thrown| before(*thrown))
+        if may_throw_in(file, function, &before, THROW_DEPTH)
+            // A row at a call of a local function stands for what runs in it (a call-attributed read): any throw there may come
+            // before the read.
             || ast
-                .members
-                .iter()
-                .any(|member| before(member.span) && throwing_getter(member))
-            || ast.calls.iter().any(|call| {
-                !call.construct
-                    && before(call.span)
-                    && local_function(call.callee).is_some_and(throws_in)
-            })
+                .call_at(at)
+                .and_then(|call| local_function_of(file, call.callee))
+                .is_some_and(|callee| function_may_throw(file, callee, THROW_DEPTH))
         {
             return true;
         }
@@ -2048,6 +1987,122 @@ fn earlier_evaluation_may_throw(
         }
     }
     false
+}
+
+/// ADR 1204: how many local calls deep [`function_may_throw`] follows a callee's own calls.
+const THROW_DEPTH: usize = 4;
+
+fn own_code(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    span: Span,
+) -> bool {
+    crate::owners::containing_ast_function(&file.ast, span)
+        .is_some_and(|owner| owner.span == function.span)
+}
+
+/// ADR 1204: whether an evaluation of `function`'s own code that `admitted` keeps visibly may throw: a `throw` statement, a
+/// Get of a throwing getter of a `const` literal, or a call of a local function that may throw ([`function_may_throw`]).
+fn may_throw_in(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    admitted: &dyn Fn(Span) -> bool,
+    depth: usize,
+) -> bool {
+    let ast = &file.ast;
+    ast.throw_statements.iter().any(|thrown| admitted(*thrown))
+        || ast
+            .members
+            .iter()
+            .any(|member| admitted(member.span) && throwing_getter(file, member, depth))
+        || ast.calls.iter().any(|call| {
+            !call.construct
+                && admitted(call.span)
+                && call.span != function.span
+                && local_function_of(file, call.callee).is_some_and(|callee| {
+                    callee.span != function.span && function_may_throw(file, callee, depth)
+                })
+        })
+}
+
+/// ADR 1204: whether `function`'s own code visibly may throw out of it (a throw no `try` in it catches), following local calls
+/// `depth` deep; past that depth, a call is taken to complete normally (ADR 0279's premise).
+fn function_may_throw(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    depth: usize,
+) -> bool {
+    let Some(depth) = depth.checked_sub(1) else {
+        return false;
+    };
+    let admitted =
+        |span: Span| own_code(file, function, span) && !caught_before(file, span, function.span);
+    may_throw_in(file, function, &admitted, depth)
+}
+
+/// ADR 1204: the function a callee names: a function declaration of the file, or a `const` bound to a function literal.
+fn local_function_of(
+    file: &solid_facts::FileFacts,
+    callee: Span,
+) -> Option<&solid_facts::ast::FunctionFact> {
+    let ast = &file.ast;
+    let declaration = ast.reference_declaration(ast.peel_ts_sugar_span(callee))?;
+    ast.functions
+        .iter()
+        .find(|function| {
+            function.kind == solid_facts::ast::FunctionKind::Declaration
+                && function
+                    .name
+                    .as_ref()
+                    .is_some_and(|name| name.span == declaration)
+        })
+        .or_else(|| {
+            let binding = ast.bindings.iter().find(|binding| {
+                binding.immutable
+                    && binding.shape == solid_facts::ast::BindingShape::Identifier
+                    && binding.names.iter().any(|name| name.span == declaration)
+            })?;
+            ast.function_at(ast.peel_ts_sugar_span(binding.initializer?))
+        })
+}
+
+/// ADR 1204: whether `member` is a Get of a key a `const` object literal defines as a getter that may throw.
+fn throwing_getter(
+    file: &solid_facts::FileFacts,
+    member: &solid_facts::ast::MemberFact,
+    depth: usize,
+) -> bool {
+    let ast = &file.ast;
+    if ast.computed_members.contains(&member.span) {
+        return false;
+    }
+    let Some(key) = file.source_text(member.property) else {
+        return false;
+    };
+    let Some(declaration) = ast.reference_declaration(ast.peel_ts_sugar_span(member.object)) else {
+        return false;
+    };
+    let Some(literal) = ast
+        .bindings
+        .iter()
+        .find(|binding| {
+            binding.immutable
+                && binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.names.iter().any(|name| name.span == declaration)
+        })
+        .and_then(|binding| binding.initializer)
+        .map(|value| ast.peel_ts_sugar_span(value))
+    else {
+        return false;
+    };
+    ast.object_get_shapes
+        .iter()
+        .filter(|shape| shape.span == literal)
+        .flat_map(|shape| &shape.properties)
+        .filter(|property| property.key.as_str() == key)
+        .filter_map(|property| property.getter)
+        .filter_map(|getter| ast.function_at(getter))
+        .any(|getter| function_may_throw(file, getter, depth + 1))
 }
 
 /// ADR 1204: whether a `try` with a `catch` holds `thrown` in its block and does not hold `site` there: the throw lands in the
