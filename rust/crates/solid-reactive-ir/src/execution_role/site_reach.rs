@@ -1892,16 +1892,32 @@ pub(crate) fn unreached_report_sites(
                     member_may_be_replaced: false,
                     returned_value_run: false,
                     returned_value_creation: false,
+                    earlier_may_throw: false,
                     undecided,
+                })
+            };
+            // ADR 1204: a site the reach queries leave reached may still follow an evaluation that throws.
+            let throw_first = || {
+                let file = lookup.file_by_path(location.path.as_ref())?;
+                let span = Span::new(
+                    u32::try_from(location.start_byte).ok()?,
+                    u32::try_from(location.end_byte).ok()?,
+                );
+                if !earlier_evaluation_may_throw(file, span, lookup) {
+                    return None;
+                }
+                Some(crate::UnreachedSite {
+                    earlier_may_throw: true,
+                    ..answer(false, false, false, false, false)?
                 })
             };
             match site? {
                 SyntaxReach::DeadCode => answer(true, false, false, false, false),
                 SyntaxReach::AbsentProp => answer(false, true, false, false, false),
-                SyntaxReach::Unowned => None,
+                SyntaxReach::Unowned => throw_first(),
                 SyntaxReach::Owned(file, function) => {
                     match answers.get(&function_key(file, function))?.site() {
-                        SiteAnswer::MayRun => None,
+                        SiteAnswer::MayRun => throw_first(),
                         SiteAnswer::NeverEntered { refused_creation } => {
                             answer(false, false, refused_creation, false, false)
                         }
@@ -1925,6 +1941,122 @@ pub(crate) fn unreached_report_sites(
             }
         })
         .collect()
+}
+
+/// ADR 1204: the site runs only if every evaluation before it, in the function written around it and in each in-place layer
+/// whose call runs that function (an IIFE, a closure's one direct call: [`in_place_layer_call`]), completes normally, and one
+/// of them visibly may not. By the facts of the file alone, before the site (or the layer's call) in that function's own code
+/// (not in a function nested in it):
+/// - a `throw` statement;
+/// - a Get `o.k` of a `const` bound to an object literal whose `k` is a getter whose own code holds a `throw`;
+/// - a call of a `const` function literal or a function declaration of the file whose own code holds a `throw`.
+/// A throw a `try` around it catches, where that `try`'s block does not also hold the site, completes the `try` normally.
+/// ADR 0279's premise stays: any other call completes normally unless its signature says it may not, so a throw this does not
+/// see (a helper's helper, a package) is outside the model.
+fn earlier_evaluation_may_throw(
+    file: &solid_facts::FileFacts,
+    site: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    let own = |function: &solid_facts::ast::FunctionFact, span: Span| {
+        crate::owners::containing_ast_function(ast, span)
+            .is_some_and(|owner| owner.span == function.span)
+    };
+    let throws_in = |function: &solid_facts::ast::FunctionFact| {
+        ast.throw_statements
+            .iter()
+            .any(|thrown| own(function, *thrown) && !caught_before(file, *thrown, function.span))
+    };
+    let local_function = |callee: Span| -> Option<&solid_facts::ast::FunctionFact> {
+        let declaration = ast.reference_declaration(ast.peel_ts_sugar_span(callee))?;
+        ast.functions
+            .iter()
+            .find(|function| {
+                function.kind == solid_facts::ast::FunctionKind::Declaration
+                    && function
+                        .name
+                        .as_ref()
+                        .is_some_and(|name| name.span == declaration)
+            })
+            .or_else(|| {
+                let binding = ast.bindings.iter().find(|binding| {
+                    binding.immutable
+                        && binding.shape == solid_facts::ast::BindingShape::Identifier
+                        && binding.names.iter().any(|name| name.span == declaration)
+                })?;
+                ast.function_at(ast.peel_ts_sugar_span(binding.initializer?))
+            })
+    };
+    let throwing_getter = |member: &solid_facts::ast::MemberFact| {
+        if ast.computed_members.contains(&member.span) {
+            return false;
+        }
+        let Some(key) = file.source_text(member.property) else {
+            return false;
+        };
+        let Some(declaration) = ast.reference_declaration(ast.peel_ts_sugar_span(member.object))
+        else {
+            return false;
+        };
+        let Some(literal) = ast
+            .bindings
+            .iter()
+            .find(|binding| {
+                binding.immutable
+                    && binding.shape == solid_facts::ast::BindingShape::Identifier
+                    && binding.names.iter().any(|name| name.span == declaration)
+            })
+            .and_then(|binding| binding.initializer)
+            .map(|value| ast.peel_ts_sugar_span(value))
+        else {
+            return false;
+        };
+        ast.object_get_shapes
+            .iter()
+            .filter(|shape| shape.span == literal)
+            .flat_map(|shape| &shape.properties)
+            .filter(|property| property.key.as_str() == key)
+            .filter_map(|property| property.getter)
+            .filter_map(|getter| ast.function_at(getter))
+            .any(throws_in)
+    };
+    let mut at = site;
+    for _ in 0..8 {
+        let Some(function) = crate::owners::containing_ast_function(ast, at) else {
+            return false;
+        };
+        let before = |span: Span| {
+            span.end <= at.start && own(function, span) && !caught_before(file, span, at)
+        };
+        if ast.throw_statements.iter().any(|thrown| before(*thrown))
+            || ast
+                .members
+                .iter()
+                .any(|member| before(member.span) && throwing_getter(member))
+            || ast.calls.iter().any(|call| {
+                !call.construct
+                    && before(call.span)
+                    && local_function(call.callee).is_some_and(throws_in)
+            })
+        {
+            return true;
+        }
+        match in_place_layer_call(file, function, lookup) {
+            Some(call) => at = call,
+            None => return false,
+        }
+    }
+    false
+}
+
+/// ADR 1204: whether a `try` with a `catch` holds `thrown` in its block and does not hold `site` there: the throw lands in the
+/// handler, which completes the `try`, and the code after it runs.
+fn caught_before(file: &solid_facts::FileFacts, thrown: Span, site: Span) -> bool {
+    file.ast
+        .try_catches
+        .iter()
+        .any(|caught| caught.block.contains(thrown) && !caught.block.contains(site))
 }
 
 fn function_key(
