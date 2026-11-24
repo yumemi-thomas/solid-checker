@@ -5306,3 +5306,18 @@ Both answers looked only at a site written in the cleanup's own body. A closure,
 - The 96 false positives (rediscovery entry): `reaction-store-{byname,effect,render-effect}-*carried` and `byname-mapped`. A creation between the declarator and the run (`createMemo(f)`, `createEffect(f, …)`) throws PRIMITIVE_IN_EFFECT_CALLBACK in the reaction's run before the closure runs. With the body's lexical role at the run, ADR 1166's reporting run skipped its interruption test. With the reaction's role, it applies.
 
 **Accepted cost** (coordinator ruling, 2026-11-24). 40 mx programs Chrome reports STRICT_READ_UNTRACKED at, `reaction-store-settled-{carried,named-carried,called,named-called}-*` (48 rows), move from violation to `function-run-unplaced`. `onSettled(f)` stands between the declarator and the run, and the same interruption test now refuses the run. Owed (ADR 1203): an exact premise that `onSettled`'s call returns without throwing (rc.21: it enqueues the callback, or creates a tracked effect under an owner that admits children).
+<a id="adr-1203"></a>
+## ADR 1203 — `onSettled` returns without throwing: it does not interrupt a later run (ADR 1202's settled cost)
+**The gap** (ADR 1202's accepted cost). ADR 1166's reporting run refuses a run outside rendering when any call stands between the declarator and the run, because a creation there may throw first (PRIMITIVE_IN_EFFECT_CALLBACK). Once ADR 1202 gave a run in a `createReaction` effect the effect's role, `onSettled(f)` before `[f].forEach((g) => g())` or `f()` left 40 Chrome-confirmed reads (`reaction-store-settled-*`) unplaced.
+
+**Decision** (`Dialect::call_returns_without_throwing`; `named_callbacks.rs` `returns_without_throwing`). Read in rc.21 `@solidjs/signals`:
+- `onSettled` runs its callback on no path before it returns. Under an owner that admits children it creates a lazy `trackedEffect`; `setupComputedNode`'s throws need a children-forbidden context (the branch excludes it) or no context, and its first run is enqueued. Otherwise it queues the callback.
+- The only remaining throws are in hooks a configuration installs, which the runtime-configuration premise vetoes (ADR 0266).
+- So the dialect answers it for `onSettled`, only where rc.21's three packages were read. The interruption test skips an exact call of such a primitive with no spread and every argument a plain identifier or a function literal, whose evaluation throws nothing.
+
+**Evidence.**
+- Fixture `reaction-settled-run`:
+  - Violations: `SettledCarried`, `SettledCalled`, `SettledLiteral` (uncertifiable before).
+  - Uncertifiable: `MemoBefore` (a creation throws first), `SettledMember` (a getter argument), `ShadowedSettled` (a local `onSettled`).
+- Chrome (`runtime-oracle/reaction-settled-run`): PROBE.
+- Probe: PROBE.

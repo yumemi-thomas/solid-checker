@@ -1352,3 +1352,20 @@ fn rc17_callback_exports_are_modelled_only_on_a_whole_triple() {
     }
     assert_eq!(audited.primitive("setLinkClaim"), None);
 }
+
+/// ADR 1203: `onSettled` returns without throwing exactly where rc.21's three packages were read (its bytes were read there only),
+/// and no other primitive is claimed.
+#[test]
+fn only_rc21_on_settled_returns_without_throwing() {
+    use crate::Dialect;
+    let (audited, _) = analyzed(&same("2.0.0-rc.21"));
+    assert!(audited.call_returns_without_throwing(Primitive::OnSettled));
+    for primitive in [Primitive::CreateMemo, Primitive::OnCleanup, Primitive::CreateTrackedEffect, Primitive::Flush] {
+        assert!(!audited.call_returns_without_throwing(primitive), "{primitive:?}");
+    }
+    for release in ["2.0.0-rc.9", "2.0.0-rc.13", "2.0.0-rc.17"] {
+        let (vocabulary, _) = analyzed(&same(release));
+        assert!(!vocabulary.call_returns_without_throwing(Primitive::OnSettled), "{release}");
+    }
+    assert!(!Solid2::CONSERVATIVE.call_returns_without_throwing(Primitive::OnSettled));
+}
