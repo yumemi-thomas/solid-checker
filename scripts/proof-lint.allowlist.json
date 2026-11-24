@@ -673,6 +673,10 @@
       "untagged-silent-role": {
         "count": 3,
         "why": "pending-review"
+      },
+      "text-premise": {
+        "count": 1,
+        "why": "ADR 1207 (`settled_local_members`): source text only vetoes; a `switch` in the receiver's function refuses its settled members (the dominance arms do not model a case's fall-through), and text never grants one"
       }
     },
     "rust/crates/solid-reactive-ir/src/findings.rs": {

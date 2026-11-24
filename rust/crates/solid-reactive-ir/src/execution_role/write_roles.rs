@@ -4015,11 +4015,16 @@ fn settled_local_members(
             && shape.closed
             && shape.properties.iter().all(|key| key.getter.is_none())
     })?;
+    // A function that may read its receiver (not an arrow, and its text names `this`, `arguments` or `super`); a text that cannot be read
+    // counts as naming them (fail closed: the receiver is refused).
     let exposes_receiver = |function: &solid_facts::ast::FunctionFact| {
-        function.kind != solid_facts::ast::FunctionKind::Arrow
-            && file.source_text(function.span).is_none_or(|text| {
-                text.contains("this") || text.contains("arguments") || text.contains("super")
-            })
+        if function.kind == solid_facts::ast::FunctionKind::Arrow {
+            return false;
+        }
+        let Some(text) = file.source_text(function.span) else {
+            return true;
+        };
+        text.contains("this") || text.contains("arguments") || text.contains("super")
     };
     if ast.functions_within(initializer).any(exposes_receiver) {
         return None;
@@ -4040,24 +4045,26 @@ fn settled_local_members(
     {
         return None;
     }
-    // The home function's code: no `switch` and no labeled jump, which ADR 1207's arms do not model (source text only vetoes).
-    if file
-        .source_text(home)
-        .is_none_or(|text| text.contains("switch"))
-        || ast.jump_statements.iter().any(|jump| {
-            home.contains(*jump)
-                && file.source_text(*jump).is_none_or(|text| {
-                    let rest = text
-                        .trim_start_matches("break")
-                        .trim_start_matches("continue");
-                    rest.len() != text.len()
-                        && rest
-                            .trim_start()
-                            .starts_with(|c: char| c.is_alphabetic() || c == '_' || c == '$')
-                })
-        })
-    {
+    // The home function's code: no `switch` and no labeled jump, which ADR 1207's arms do not model (source text only vetoes; a text that
+    // cannot be read refuses the receiver).
+    if file.source_text(home)?.contains("switch") {
         return None;
+    }
+    for jump in &ast.jump_statements {
+        if !home.contains(*jump) {
+            continue;
+        }
+        let text = file.source_text(*jump)?;
+        let rest = text
+            .trim_start_matches("break")
+            .trim_start_matches("continue");
+        if rest.len() != text.len()
+            && rest
+                .trim_start()
+                .starts_with(|c: char| c.is_alphabetic() || c == '_' || c == '$')
+        {
+            return None;
+        }
     }
     // The conditional arms of the file: an `if`'s branches, a conditional's arms, a logical expression's right operand, a loop, a
     // `try` block and its `catch`.
