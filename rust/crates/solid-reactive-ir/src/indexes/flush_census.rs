@@ -295,7 +295,8 @@ impl<'a> SemanticLookup<'a> {
     }
 
     /// ADR 0639: the `flush()` at `call` runs where no delivery reaches it: a
-    /// timer, past an await, module scope, a test runner's callback or helper.
+    /// timer, past an await (ADR 1201: also one no await dominates, past its own
+    /// function's suspension), module scope, a test runner's callback or helper.
     pub(crate) fn flush_runs_off_any_delivery(
         &self,
         file: &'a solid_facts::FileFacts,
@@ -311,6 +312,12 @@ impl<'a> SemanticLookup<'a> {
                         | DispatchCaller::TestRunner
                 )
             ) || crate::execution_role::dispatch_in_test_only_function(file, at.span, self)
+                // ADR 1201: past a suspension of its own async function no await dominates (a counted loop's later pass, the `catch`
+                // or `finally` behind a `try` head's await that cannot throw first): it resumes on an empty stack, whoever runs the
+                // function (a primitive's compute or apply handed it by name included).
+                || (!crate::owners::in_parameter_list(&file.ast, at.span)
+                    && (crate::execution_role::in_counted_loop_later_pass(file, at.span)
+                        || crate::execution_role::follows_try_head_await(file, at.span, self)))
         };
         // ADR 0640: or on the stack of a call that does: `createRoot(() => flush())`
         // in a test's callback, a callback a local helper runs in place.

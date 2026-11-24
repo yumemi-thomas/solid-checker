@@ -365,6 +365,15 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// ADR 1203: whether a call of `primitive` returns without throwing, whatever
+    /// the owner and the callback it is given: it runs no argument on the
+    /// call's stack and every check it makes before returning passes. `false`
+    /// wherever the bytes were not read.
+    fn call_returns_without_throwing(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        false
+    }
+
     /// Whether a leaf owner's forbidden call of this primitive throws the
     /// observer guard's code (`resolve`, `until`), not the leaf owner's.
     fn leaf_call_throws_observer_guard(&self, primitive: Primitive) -> bool {
