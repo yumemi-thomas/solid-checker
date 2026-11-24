@@ -1,0 +1,1 @@
+{ "note": "ADR 1203: a closure a createReaction effect hands to onSettled (or after onSettled of a literal) and then runs reads a signal: STRICT_READ_UNTRACKED after the click, SC1001 violations. The negatives of reactive-ir/reaction-settled-run throw in the effect by construction and are not mounted here." }

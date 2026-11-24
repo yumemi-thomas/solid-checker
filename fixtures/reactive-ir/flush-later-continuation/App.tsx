@@ -83,6 +83,50 @@ export function HandlerLoop() {
   return <button onClick={() => run()}>go</button>;
 }
 
+// Clean: the memo's compute handed by name, its flush in the later pass (slice 2: the effect-phase walk's unplaced row asks the same proof).
+export function NamedLoop() {
+  const cb1 = async () => {
+    for (let i = 0; i < 2; i += 1) {
+      if (i > 0) {
+        flush();
+      }
+      await Promise.resolve();
+    }
+    return 1;
+  };
+  const m5 = createMemo(cb1);
+  createEffect(() => m5(), () => {});
+  return <div />;
+}
+
+// Clean: an effect's compute handed by name, its flush in the `finally` behind the `try` head's await.
+export function NamedFinally() {
+  const cb2 = async () => {
+    try {
+      await Promise.resolve();
+    } finally {
+      flush();
+    }
+    return 1;
+  };
+  createEffect(cb2, () => {});
+  return <div />;
+}
+
+// Uncertifiable (fail closed): a compute handed by name that flushes on its first pass.
+export function NamedFirstPass() {
+  const cb3 = async () => {
+    for (let i = 0; i < 2; i += 1) {
+      flush();
+      await Promise.resolve();
+    }
+    return 1;
+  };
+  const m6 = createMemo(cb3);
+  createEffect(() => m6(), () => {});
+  return <div />;
+}
+
 // Uncertifiable (fail closed): the same handler's function flushing on its first pass, on the delivery's stack.
 export function HandlerFirstPass() {
   const run = async () => {

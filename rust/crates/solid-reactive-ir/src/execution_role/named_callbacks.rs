@@ -948,6 +948,7 @@ pub(crate) fn reporting_run_role(
                     && call.span.end <= run.start
                     && crate::owners::containing_body_function(&file.ast, call.span)
                         .is_some_and(|owner| owner.span == declarer.span)
+                    && !returns_without_throwing(file, call, lookup)
             });
         if role.reports_untracked_read()
             && !interrupted
@@ -959,6 +960,34 @@ pub(crate) fn reporting_run_role(
     }
     CLASSIFYING_RUNS.with(|set| set.borrow_mut().remove(&key));
     found
+}
+
+/// ADR 1203: `call` is an exact call of a primitive the dialect says returns without throwing
+/// ([`solid_dialect::Dialect::call_returns_without_throwing`]: `onSettled` on rc.21), with no spread and every argument a plain
+/// identifier or a function literal, so evaluating them throws nothing either. Such a call cannot stop the function before a later
+/// run: ADR 1166's interruption test skips it.
+fn returns_without_throwing(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    !call.construct
+        && lookup
+            .primitive_at_call(file, call.span)
+            .is_some_and(|primitive| lookup.dialect.call_returns_without_throwing(primitive))
+        && call.arguments.iter().all(|argument| {
+            let at = file.ast.peel_ts_sugar_span(argument.span);
+            !argument.spread
+                && (file
+                    .ast
+                    .functions
+                    .iter()
+                    .any(|function| function.span == at)
+                    || file.ast.identifiers.iter().any(|identifier| {
+                        identifier.span == at
+                            && identifier.role == solid_facts::ast::IdentifierRole::Reference
+                    }))
+        })
 }
 
 /// ADR 1189: whether the role of code in `declarer` rests on no function that may not run as a component. ADR 1166's reporting run
