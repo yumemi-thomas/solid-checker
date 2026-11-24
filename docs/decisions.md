@@ -5394,3 +5394,30 @@ Both answers looked only at a site written in the cleanup's own body. A closure,
 - Coverage (each move checked against the base build): `stored-throw-held-callbacks` loses its SC9012 `withheld-object-member`; `typed-accessor-roots` the definition-site SC1001 row of `holder.read` (both member calls keep their violations); `overridden-spread-handler` three `handler-spread-unresolved` rows (`{ onClick: later }` resolves to the empty local arrow); `forwarded-leaf-operation` and `rc13-flush-in-effect-callback` SC6002, SC2006 and SC3001 rows (the member values `api.hand`, `sharedBox.apply` now resolve exactly, so the program censuses hold); `competing-check-*` relabel U to U. `forwarded-leaf-operation`'s `AsyncLiteralApp` also loses its SC6002 row: with the hand-off taint gone the site reached a latent drop in `leaf_universe::Question::answer` (a site that may follow a suspension returned the effect group undecided, dropping ADR 1159's after-await silence already given), now `effect_answer.or(…)`, as the leaf group keeps its answer. `flush-later-continuation`'s SC1002 row is main's ADR 1197 (the merge), not this.
 
 **Not built** (`docs/open-work.md`): assigned members (`handoff-assign*`); a slot's function handed whole to a scheduler (`setTimeout(cb1.cb)`); a member call in a closure; a literal's method. SC1002 keeps `unresolved-invocation` at such a member call.
+<a id="adr-1207"></a>
+## ADR 1207 — A member assigned once in its receiver's function, and a literal read only through its own keys
+**The gap** (ADR 1205's follow-ups). `const ho = {}; ho.m = () => { flush(); }; ho.m?.();` had no entry list: the member census refuses a receiver that is written, and 1182's settling members are module-level only. `const cb1 = { cb: () => { flush(); } }; setTimeout(cb1.cb, 0);` kept its flush rows: wherever the program may write `Object.prototype` (an unread package, a file naming it), the package hand-off walk confined no literal, so a key some receiver reads (`this.cb` in a package) placed the function under it (`placed-under-read-key`).
+
+**Decision.**
+- `write_roles::settled_local_members`: a receiver is an immutable, unexported `const` bound to a closed literal with no getter, declared in a function, with every reference in that function's own code (none in a closure or another file) the object of a non-computed member. Each such member is either the target of a plain `=` of a function literal (an arrow, or one naming no receiver) or a call's callee.
+- A key is settled when it has one write and the write dominates every call of it:
+  - the write comes first in the source;
+  - every conditional arm around the write holds the call (an `if`'s branch, a conditional's arm, a logical right operand, a loop, a `try` block or `catch`);
+  - no `finally` lies between them, and the write is in no call's argument;
+  - the function has no `switch` and no labeled jump (vetoed by its source text).
+- The calls are the written function's entries (`member_call_entries`, ADR 1205). The hand-off walk's `callback_target` takes the written function as the call's exact target.
+- `package_hand_off::own_key_confined`: where the prototype may be written, a literal is still confined when it is plain with no spread, each property is a data property holding a function that names no receiver, and it is the whole initializer of an immutable, unexported `const`.
+  - Every reference must be a member under a key the literal owns. Nothing writes or deletes it, and it is read (which gives out the function) or called as a method of an inert callee.
+  - No prototype accessor runs against such a literal, and no function reads it as a receiver.
+
+**Evidence.**
+- Fixture `assigned-member-entries` (the program steps an action, so only entries end a flush): `AssignedLoop` and `AssignedAfterAwait` clean. `TwoWrites`, `ConditionalWrite`, `CapturedCall`, `WrittenThroughParameter` and `BeforeAwait` uncertifiable.
+- Fixture `bundle-handed-member` (no action, deferring primitive or leaf scope): `HandedToTimer` and `HandedAndCalled` clean. `ObjectHanded` and `ForeignKeyRead` uncertifiable.
+- Chrome (`runtime-oracle/assigned-member-entries`, `bundle-handed-member`): quiet.
+- Probe (release, Chrome judge, 774f64ec5 (875c8a07c with ADR 1205) against this; every code's `handoff-member`, `handoff-assign*` and `bundle` programs and every program of the three flush codes):
+  - lg-recall, 68,052 programs: 345 uncertifiable to clean (`handoff-assign` and the timer `cb-bundle` flush programs), nothing else. Code level: 1,314 programs (`handoff-assign` 1,164, `cb-bundle` 150), 0 violations. Only U rows go or relabel: 1,162 SC3001, 375 SC2006 and 350 SC2008 flush rows end.
+  - mx-recall, 78,224 programs: no program changes outcome. Code level: 2,751 programs, 0 violations added or lost. U rows go or relabel; the 385 SC1001 `function-run-unplaced` rows that go are a wrapper read's definition-site rows, and each program keeps its site row.
+  - mx-census, 4,073 programs: unchanged.
+- Coverage: besides the two new fixtures, only `later-assigned-function`'s `MemberLater` moves (`const o = { f: () => {} }; o.f = () => flush(); o.f();` in an effect's apply). Its SC3001 row goes: the program opens no leaf scope, and the census now holds because the hand-off walk resolves `o.f()`. SC2006 and SC2008 relabel U to U.
+
+**Not built** (`docs/open-work.md`): a member written through a parameter, a factory's result or `this`; a call in a closure; a literal's method.
