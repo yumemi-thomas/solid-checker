@@ -62,6 +62,107 @@ fn straight_line_assignments_exclude_every_conditional_construct() {
     assert_eq!(lines, [3, 8, 9], "{lines:?}");
 }
 
+/// Facts schema 110 (ADR 1193): a plain assignment's object target and an object pattern that is a direct element of a declarator's
+/// array pattern are destructure sites in a declarator's shape; a compound assignment, an element with a default, an object pattern
+/// nested in an object pattern and a declarator's own pattern are not.
+#[test]
+fn destructure_sites_are_assignment_targets_and_array_elements() {
+    let source = concat!(
+        "declare const s: { v: number; w: number }; declare const o: { x: number };\n",
+        "let v = 0, w = 0;\n",
+        "({ v, \"w\": w } = s);\n",
+        "({ v: o.x, w = 1, ...o } = s);\n",
+        "const [a, { v: x }, { w: y } = s] = [0, s, s];\n",
+        "const { v: z } = s;\n",
+        "const { a: { v: q } } = { a: s };\n",
+        "let n = 0; n += 1;\n",
+    );
+    let facts = super::extract("sites.ts", source).unwrap();
+    let text = |span: crate::core::Span| &source[span.start as usize..span.end as usize];
+    let sites = facts
+        .destructure_sites
+        .iter()
+        .map(|site| (text(site.binding.pattern), site.source))
+        .collect::<Vec<_>>();
+    let outer = facts
+        .bindings
+        .iter()
+        .find(|binding| text(binding.pattern).starts_with("[a"))
+        .unwrap()
+        .pattern;
+    assert_eq!(
+        sites,
+        [
+            ("{ v, \"w\": w }", super::DestructureSource::Assignment),
+            (
+                "{ v: o.x, w = 1, ...o }",
+                super::DestructureSource::Assignment
+            ),
+            (
+                "{ v: x }",
+                super::DestructureSource::ArrayElement { outer, index: 1 }
+            ),
+        ],
+        "{sites:?}"
+    );
+    let first = &facts.destructure_sites[0].binding;
+    assert_eq!(first.shape, super::BindingShape::Object);
+    assert_eq!(first.initializer.map(text), Some("s"));
+    assert_eq!(first.initializer_identifier, None);
+    assert_eq!(
+        first
+            .names
+            .iter()
+            .map(|name| text(name.span))
+            .collect::<Vec<_>>(),
+        ["v", "w"]
+    );
+    let keys = first
+        .object_properties
+        .iter()
+        .map(|property| property.key.as_deref())
+        .collect::<Vec<_>>();
+    assert_eq!(keys, [Some("v"), Some("w")]);
+    assert!(
+        first.object_properties[0]
+            .local
+            .as_ref()
+            .is_some_and(|local| local.span == first.object_properties[0].span)
+    );
+    assert_eq!(
+        first
+            .object_slots
+            .iter()
+            .map(|slot| slot.property.as_str())
+            .collect::<Vec<_>>(),
+        ["v", "w"]
+    );
+    let second = &facts.destructure_sites[1].binding;
+    assert!(second.pattern_rest);
+    assert_eq!(second.object_properties[0].local, None);
+    assert!(second.object_properties[1].has_default);
+    assert!(second.object_slots.is_empty());
+    assert_eq!(
+        second
+            .names
+            .iter()
+            .map(|name| text(name.span))
+            .collect::<Vec<_>>(),
+        ["w", "o"]
+    );
+    let third = &facts.destructure_sites[2].binding;
+    assert_eq!(third.initializer, None);
+    assert!(third.immutable);
+    assert_eq!(
+        third
+            .names
+            .iter()
+            .map(|name| text(name.span))
+            .collect::<Vec<_>>(),
+        ["x"]
+    );
+}
+
 /// Facts schema 65: an await dominates the rest of its innermost block when
 /// nothing between that block's start and the await can skip it. A `try`
 /// block and a branch's block are blocks; `catch`, `finally`, the code after
