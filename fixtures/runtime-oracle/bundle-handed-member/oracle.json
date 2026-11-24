@@ -1,0 +1,1 @@
+{ "note": "ADR 1207: a flush in a function a literal holds under a key it owns, handed whole to a timer (and called): quiet; the object handed on and a foreign key read keep their rows." }

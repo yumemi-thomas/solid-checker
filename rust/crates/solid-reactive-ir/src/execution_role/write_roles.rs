@@ -3898,6 +3898,10 @@ pub(crate) fn member_call_entries<'f>(
     {
         return None;
     }
+    // ADR 1207: a function a settled local member's one write assigns runs at that member's calls.
+    if let Some(entries) = assigned_member_entries(file, function, lookup) {
+        return Some(entries);
+    }
     let typed = |at: Span| ast.type_queries.iter().any(|query| query.contains(at));
     // The literals that hold the function as a direct data property's value.
     let holder = |value: Span| -> Option<Span> {
@@ -3972,6 +3976,215 @@ pub(crate) fn member_call_entries<'f>(
         }
     }
     (!calls.is_empty()).then_some(calls)
+}
+
+/// ADR 1207: a member a function's own code assigns and then calls, settled. The receiver is an immutable, unexported `const` bound
+/// to a closed object literal with no getter, declared in a function (ADR 1182's `settling_members` answers module level); every
+/// reference of it, type positions aside, is in that function's own code (none in a closure, none in another file) and is the object
+/// of a non-computed member that is either the target of a plain `=` of a function literal (an arrow, or a function that names no
+/// `this`, `arguments` or `super`) or the callee of a call. A key is settled when it has exactly one such write and the write
+/// dominates every call of it: written before it, every conditional arm around the write (an `if`'s branch, a conditional's arm, a
+/// logical expression's right operand, a loop, a `try` block or `catch`) holds the call too, no `finally` is written between them,
+/// the write is in no call's argument, and the function has no `switch` and no labeled jump. A run that reaches the call then
+/// passed the write first, so each call runs the written function. The file holds no direct `eval`. By key: the written function and the calls.
+fn settled_local_members(
+    file: &solid_facts::FileFacts,
+    receiver: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<crate::HashMap<String, (Span, Vec<Span>)>> {
+    let ast = &file.ast;
+    if ast
+        .module_hazards
+        .iter()
+        .any(|hazard| hazard.kind == solid_facts::ast::ModuleHazardKind::Eval)
+        || crate::interproc::property_gets::direct_eval_in(file, Span::new(0, u32::MAX))
+    {
+        return None;
+    }
+    let binding = ast.identifier_binding(receiver)?;
+    if !binding.immutable
+        || binding.shape != solid_facts::ast::BindingShape::Identifier
+        || binding.in_switch_case
+        || crate::indexes::binding_exported(file, receiver)
+    {
+        return None;
+    }
+    let initializer = ast.peel_ts_sugar_span(binding.initializer?);
+    ast.object_get_shapes.iter().find(|shape| {
+        shape.span == initializer
+            && shape.closed
+            && shape.properties.iter().all(|key| key.getter.is_none())
+    })?;
+    let exposes_receiver = |function: &solid_facts::ast::FunctionFact| {
+        function.kind != solid_facts::ast::FunctionKind::Arrow
+            && file.source_text(function.span).is_none_or(|text| {
+                text.contains("this") || text.contains("arguments") || text.contains("super")
+            })
+    };
+    if ast.functions_within(initializer).any(exposes_receiver) {
+        return None;
+    }
+    let owner = |at: Span| {
+        ast.functions
+            .iter()
+            .filter(|function| function.span.contains(at))
+            .min_by_key(|function| function.span.end - function.span.start)
+            .map(|function| function.span)
+    };
+    let home = owner(binding.declaration)?;
+    let symbol = lookup.entities().at(file.path.as_str(), receiver)?;
+    if !lookup
+        .symbol_references_if_present(symbol.as_str())?
+        .iter()
+        .all(|reference| reference.path.as_ref() == file.path.as_str())
+    {
+        return None;
+    }
+    // The home function's code: no `switch` and no labeled jump, which ADR 1207's arms do not model (source text only vetoes).
+    if file
+        .source_text(home)
+        .is_none_or(|text| text.contains("switch"))
+        || ast.jump_statements.iter().any(|jump| {
+            home.contains(*jump)
+                && file.source_text(*jump).is_none_or(|text| {
+                    let rest = text
+                        .trim_start_matches("break")
+                        .trim_start_matches("continue");
+                    rest.len() != text.len()
+                        && rest
+                            .trim_start()
+                            .starts_with(|c: char| c.is_alphabetic() || c == '_' || c == '$')
+                })
+        })
+    {
+        return None;
+    }
+    // The conditional arms of the file: an `if`'s branches, a conditional's arms, a logical expression's right operand, a loop, a
+    // `try` block and its `catch`.
+    let mut arms: Vec<Span> = Vec::new();
+    for region in &ast.if_regions {
+        arms.push(region.consequent);
+        arms.extend(region.alternate);
+    }
+    for conditional in &ast.conditional_expressions {
+        arms.push(conditional.consequent);
+        arms.push(conditional.alternate);
+    }
+    arms.extend(ast.logical_expressions.iter().map(|logical| logical.right));
+    arms.extend(ast.loop_statements.iter().copied());
+    for clause in &ast.try_catches {
+        arms.push(clause.block);
+        arms.push(clause.handler);
+    }
+    // The write runs before every run of the code at `call`: written before it, every arm around the write holds the call too, no
+    // `finally` between them, and no call's argument holds the write.
+    let dominates = |write: Span, call: Span| {
+        write.end <= call.start
+            && arms
+                .iter()
+                .all(|arm| !arm.contains(write) || arm.contains(call))
+            && file
+                .source_text(Span::new(write.end, call.start))
+                .is_some_and(|between| !between.contains("finally"))
+            && !ast
+                .arguments_containing(write)
+                .any(|(call, _)| home.contains(call.span))
+    };
+    let mut writes: crate::HashMap<String, Vec<(Span, Span)>> = crate::HashMap::default();
+    let mut calls: crate::HashMap<String, Vec<Span>> = crate::HashMap::default();
+    for &reference in ast.references_to(receiver) {
+        if ast
+            .type_queries
+            .iter()
+            .any(|query| query.contains(reference))
+        {
+            continue;
+        }
+        if owner(reference) != Some(home) {
+            return None;
+        }
+        let member = ast.members.iter().find(|member| {
+            ast.peel_ts_sugar_span(member.object) == reference
+                && !ast.computed_members.contains(&member.span)
+        })?;
+        let key = file.source_text(member.property)?.to_owned();
+        if key == "__proto__" {
+            return None;
+        }
+        if let Some(assignment) = ast
+            .assignments
+            .iter()
+            .find(|assignment| ast.peel_ts_sugar_span(assignment.target) == member.span)
+        {
+            let function = ast.function_at(ast.peel_ts_sugar_span(assignment.value_span))?;
+            if assignment.reads_target
+                || assignment.logical.is_some()
+                || exposes_receiver(function)
+                || function.generator
+            {
+                return None;
+            }
+            writes
+                .entry(key)
+                .or_default()
+                .push((assignment.target, function.span));
+            continue;
+        }
+        let call = ast.calls_with_peeled_callee(member.span).next()?;
+        if call.construct {
+            return None;
+        }
+        calls.entry(key).or_default().push(call.span);
+    }
+    let mut settled = crate::HashMap::default();
+    for (key, called) in calls {
+        let Some([(target, function)]) = writes.get(&key).map(Vec::as_slice) else {
+            continue;
+        };
+        if called.iter().all(|call| dominates(*target, *call)) {
+            settled.insert(key, (*function, called));
+        }
+    }
+    Some(settled)
+}
+
+/// ADR 1207: the function a call of a settled local member ([`settled_local_members`]) runs, for its callee `callee`.
+pub(crate) fn settled_local_member_target<'f>(
+    file: &'f solid_facts::FileFacts,
+    callee: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<&'f solid_facts::ast::FunctionFact> {
+    let ast = &file.ast;
+    let member = ast.member_at(ast.peel_ts_sugar_span(callee))?;
+    let receiver = ast.reference_declaration(ast.peel_ts_sugar_span(member.object))?;
+    let key = file.source_text(member.property)?;
+    let settled = settled_local_members(file, receiver, lookup)?;
+    let (function, calls) = settled.get(key)?;
+    let call = ast.calls_with_peeled_callee(member.span).next()?;
+    if !calls.contains(&call.span) {
+        return None;
+    }
+    ast.function_at(*function)
+}
+
+/// ADR 1207: every run of `function` when it is the value of a settled local member's one write: that member's calls.
+fn assigned_member_entries<'f>(
+    file: &'f solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Vec<(&'f solid_facts::FileFacts, Span)>> {
+    let ast = &file.ast;
+    let assignment = ast
+        .assignments
+        .iter()
+        .find(|assignment| ast.peel_ts_sugar_span(assignment.value_span) == function.span)?;
+    let member = ast.member_at(ast.peel_ts_sugar_span(assignment.target))?;
+    let receiver = ast.reference_declaration(ast.peel_ts_sugar_span(member.object))?;
+    let key = file.source_text(member.property)?;
+    let settled = settled_local_members(file, receiver, lookup)?;
+    let (written, calls) = settled.get(key)?;
+    (*written == function.span && !calls.is_empty())
+        .then(|| calls.iter().map(|call| (file, *call)).collect())
 }
 
 /// ADR 1127: the bindings a function is entered through, as the entry census counts them; every walk over a function's

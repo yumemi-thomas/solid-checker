@@ -1,0 +1,1 @@
+{ "note": "ADR 1207: a flush in a function a local const receiver member is assigned once, the write dominating every call of the member (a counted loop's later pass, after an await): quiet where the checker is silent; two writes, a conditional write, a captured call, a write through a parameter and a call before the await keep their rows." }

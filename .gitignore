@@ -1579,6 +1579,10 @@ packages/wasm/owned/
 !fixtures/reactive-ir/flush-later-continuation/node_modules/**
 !fixtures/reactive-ir/member-call-entries/node_modules/
 !fixtures/reactive-ir/member-call-entries/node_modules/**
+!fixtures/reactive-ir/assigned-member-entries/node_modules/
+!fixtures/reactive-ir/assigned-member-entries/node_modules/**
+!fixtures/reactive-ir/bundle-handed-member/node_modules/
+!fixtures/reactive-ir/bundle-handed-member/node_modules/**
 !fixtures/reactive-ir/flush-universe-inline-suite/node_modules/
 !fixtures/reactive-ir/flush-universe-inline-suite/node_modules/**
 !fixtures/reactive-ir/flush-universe-package-hand-off/node_modules/

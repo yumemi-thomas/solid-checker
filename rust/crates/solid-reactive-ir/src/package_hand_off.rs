@@ -1363,8 +1363,10 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
 
     /// [`Self::holder_confined`] of an object literal: where it is written decides (the binding that names it, the parameter that receives it, the literal that holds it).
     fn literal_confined(&self, file: &'a FileFacts, literal: Span) -> bool {
+        // ADR 1207: an accessor `Object.prototype` may hold runs only where a key the object does not own is read, so a literal read only through its own keys
+        // stays confined though the prototype may be written.
         if self.object_prototype_written() {
-            return false;
+            return self.own_key_confined(file, literal);
         }
         let key = (file.path.shared(), literal);
         if let Some(known) = self.confined.borrow().get(&key) {
@@ -1373,6 +1375,78 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
         let answer = self.literal_context_confined(file, literal, &mut HashSet::new());
         self.confined.borrow_mut().insert(key, answer);
         answer
+    }
+
+    /// ADR 1207: whether the object literal at `literal` is used only through keys it owns, so no accessor of a prototype runs against it and no function reads
+    /// it as a receiver: a plain literal ([`Self::literal_plain`]) with no spread, each property written directly in it a data property under a key the program
+    /// names whose value is a function literal that names no `this` or `super`; the whole initializer of an immutable, unexported `const` with no reference in
+    /// another file; every reference of that name, type positions aside, the object of a member under one of those keys that nothing writes or deletes, and that
+    /// is either read (it gives out the function, never the object) or called as a method of a callee [`Self::method_call_may_read_receiver`] clears. A file
+    /// with a direct `eval` answers no.
+    fn own_key_confined(&self, file: &'a FileFacts, literal: Span) -> bool {
+        let ast = &file.ast;
+        if !self.literal_plain(file, literal)
+            || crate::interproc::property_gets::direct_eval_in(file, Span::new(0, u32::MAX))
+            || ast
+                .spreads
+                .iter()
+                .any(|spread| literal.contains(spread.span))
+        {
+            return false;
+        }
+        let mut own: HashSet<String> = HashSet::new();
+        for property in direct_properties(ast, literal) {
+            let Some(key) = self.property_key(file, property) else {
+                return false;
+            };
+            let inert = property.data
+                && ast
+                    .function_at(ast.peel_ts_sugar_span(property.value))
+                    .is_some_and(|function| !self.function_names_receiver(file, function));
+            if !inert {
+                return false;
+            }
+            own.insert(key);
+        }
+        let Some(binding) = ast.bindings.iter().find(|binding| {
+            binding
+                .initializer
+                .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == literal)
+        }) else {
+            return false;
+        };
+        let [name] = binding.names.as_slice() else {
+            return false;
+        };
+        if !binding.immutable
+            || binding.shape != solid_facts::ast::BindingShape::Identifier
+            || crate::indexes::binding_exported(file, name.span)
+            || !self.foreign_references(file, name.span).is_empty()
+        {
+            return false;
+        }
+        ast.references_to(name.span).iter().all(|reference| {
+            if ast
+                .type_queries
+                .iter()
+                .any(|query| query.contains(*reference))
+            {
+                return true;
+            }
+            let Some(member) = ast.members_with_peeled_object(*reference).next() else {
+                return false;
+            };
+            let owned = member_spelled_key(file, member).is_some_and(|key| own.contains(&key));
+            let written = ast
+                .write_targets
+                .iter()
+                .chain(&ast.deleted_targets)
+                .any(|target| ast.peel_ts_sugar_span(*target) == member.span);
+            owned
+                && !written
+                && (!self.called_as_method(file, member.span)
+                    || !self.method_call_may_read_receiver(file, member.span))
+        })
     }
 
     fn literal_context_confined(
@@ -1543,6 +1617,15 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             // A call binds `this` to the object: a callee that may name it reads members through it.
             if self.called_as_method(file, member.span) {
                 return !self.method_call_may_read_receiver(file, member.span);
+            }
+            // ADR 1207: a read the member census resolves to the one function the literal holds under the key (a member handed whole, `setTimeout(o.cb)`, ADR
+            // 0516: its receiver is closed, the function inert) gives out that function, never the object nor a literal nested in it.
+            if self
+                .lookup
+                .object_member_function(file, member.span)
+                .is_some()
+            {
+                return true;
             }
             // A read gives out the member's value: an object the program holds under that key (a nested literal) goes on under whatever keeps it, and its uses are asked in
             // turn (the review of #232, B1). Any other key gives a value that is no object a literal built inside this one.
@@ -2437,6 +2520,12 @@ impl<'l, 'a> UnreadPackageHandOff<'l, 'a> {
             // ADR 1205: the member census's exact target (a closed literal receiver's slot, ADR 0299/1182): the one function the read takes.
             if let Some(target) = self.lookup.object_member_function(file, value) {
                 return Some(target);
+            }
+            // ADR 1207: a member its function's own code assigns once and then calls.
+            if let Some(function) =
+                crate::execution_role::settled_local_member_target(file, value, self.lookup)
+            {
+                return Some((file, function));
             }
             let property = self
                 .lookup
