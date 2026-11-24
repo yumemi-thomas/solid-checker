@@ -8480,6 +8480,14 @@
    "to": 12,
    "adr": "ADR 1190",
    "fact": "slice 2 (execution_role::prop_literal_run_calls): a site in a callback prop's literal takes the role of the child's calls (read role execution_role.prop-literal-calls, write role write_roles.prop-literal-calls) and callee_callback_timing and unplaced_run_but ask each call: where the literal reads, the row of its lexical role leaves or changes kind (fp-owner-loading-cover: SC1001 function-run-unplaced leaves and SC5001 async-component-prop becomes invocation-context-unproven; repro prop-in-effect-apply-read: callee-callback-timing becomes read-backing-unproven under the exact cause direct-read-callers-unenumerable); a named wrapper the literal calls (wrapUse in handed-net c3-wrapper.tsx and handed-net-guards g4b.tsx) keeps its read's SC1001 function-run-unplaced row, a new uncertifiable row, because call_plainly_placed stops at a call in a named local function"
+  },
+  {
+   "fixture": "reactive-ir/flush-later-continuation",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 4,
+   "to": 5,
+   "adr": "ADR 1201",
+   "fact": "reactive-ir/flush-later-continuation SC3001 leaf-operation-unaccounted 4 -> 5: ADR 1201 slice 2's new function NamedFirstPass (a flush in a counted loop's first pass, in a compute handed by name) keeps its row, as the ADR states; NamedLoop and NamedFinally beside it are clean"
   }
  ]
 }
