@@ -1949,26 +1949,33 @@ pub(crate) fn unreached_report_sites(
         .collect()
 }
 
-/// ADR 1204: the site runs only if every evaluation before it, in the function written around it and in each in-place layer
-/// whose call runs that function (an IIFE, a closure's one direct call: [`in_place_layer_call`]), completes normally, and one
-/// of them visibly may not. By the facts of the file alone, before the site (or the layer's call) in that function's own code
-/// (not in a function nested in it):
-/// - a `throw` statement;
-/// - a Get `o.k` of a `const` bound to an object literal whose `k` is a getter that may throw;
-/// - a call of a `const` function literal or a function declaration of the file that may throw;
+/// ADR 1204: the site runs only if every evaluation before it completes, and one of them must throw: in the function written
+/// around the site, or before the call of each in-place layer that runs that function (an IIFE, a closure's one direct call:
+/// [`in_place_layer_call`]), an evaluation of its own code (not of a function nested in it) that runs on every completion
+/// reaching it (`completion_sites`: straight-line flow, no earlier exit may skip it) and that must throw: a Get of a key a
+/// `const` object literal defines as a getter that must throw, or a call of a function declaration or `const` function literal
+/// of the file that must throw. A function must throw when its own straight-line code holds such an evaluation or a
+/// `throw new …`/`throw f(…)` whose operand is a completion site, uncaught in it, through local calls [`THROW_DEPTH`] deep. A
+/// row at a call of a local function (a call-attributed read) stands for what that function runs, so a callee that must throw
+/// is enough there. A throw that a `try` catches, where the `try`'s block does not also hold the site, completes the `try`.
 ///
-/// where a function may throw when its own code holds one of these, uncaught in it, through local calls [`THROW_DEPTH`] deep.
-/// A row at a call of a local function (a call-attributed read) stands for what that function runs, so a function that may
-/// throw there is enough. A throw a `try` around it catches, where that `try`'s block does not also hold the site, completes
-/// the `try` normally.
-/// ADR 0279's premise stays: any other call completes normally unless its signature says it may not, so a throw this does not
-/// see (a helper's helper, a package) is outside the model.
+/// A throw on a branch is not this: the site reads as reached, as a site in a branch does (ADR 0458). ADR 0279's premise stays:
+/// any other call completes normally unless its signature says it may not, so a throw this does not see (a helper's helper, a
+/// package) is outside the model.
 fn earlier_evaluation_may_throw(
     file: &solid_facts::FileFacts,
     site: Span,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     let ast = &file.ast;
+    // A row at a call of a local function stands for what runs in it (a call-attributed read).
+    if ast
+        .call_at(site)
+        .and_then(|call| local_function_of(file, call.callee))
+        .is_some_and(|callee| function_must_throw(file, callee, THROW_DEPTH))
+    {
+        return true;
+    }
     let mut at = site;
     for _ in 0..8 {
         let Some(function) = crate::owners::containing_ast_function(ast, at) else {
@@ -1977,14 +1984,7 @@ fn earlier_evaluation_may_throw(
         let before = |span: Span| {
             span.end <= at.start && own_code(file, function, span) && !caught_before(file, span, at)
         };
-        if may_throw_in(file, function, &before, THROW_DEPTH)
-            // A row at a call of a local function stands for what runs in it (a call-attributed read): any throw there may come
-            // before the read.
-            || ast
-                .call_at(at)
-                .and_then(|call| local_function_of(file, call.callee))
-                .is_some_and(|callee| function_may_throw(file, callee, THROW_DEPTH))
-        {
+        if must_throw_in(file, function, &before, THROW_DEPTH) {
             return true;
         }
         match in_place_layer_call(file, function, lookup) {
@@ -1995,7 +1995,7 @@ fn earlier_evaluation_may_throw(
     false
 }
 
-/// ADR 1204: how many local calls deep [`function_may_throw`] follows a callee's own calls.
+/// ADR 1204: how many local calls deep [`function_must_throw`] follows a callee's own calls.
 const THROW_DEPTH: usize = 4;
 
 fn own_code(
@@ -2007,33 +2007,36 @@ fn own_code(
         .is_some_and(|owner| owner.span == function.span)
 }
 
-/// ADR 1204: whether an evaluation of `function`'s own code that `admitted` keeps visibly may throw: a `throw` statement, a
-/// Get of a throwing getter of a `const` literal, or a call of a local function that may throw ([`function_may_throw`]).
-fn may_throw_in(
+/// ADR 1204: whether an evaluation of `function`'s straight-line code that `admitted` keeps must throw: a Get of a throwing
+/// getter of a `const` literal, a call of a local function that must throw ([`function_must_throw`]), or a `throw` whose
+/// operand (a `new` or a call) is a completion site.
+fn must_throw_in(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
     admitted: &dyn Fn(Span) -> bool,
     depth: usize,
 ) -> bool {
     let ast = &file.ast;
-    ast.throw_statements.iter().any(|thrown| admitted(*thrown))
+    let straight = |span: Span| ast.completion_sites.binary_search(&span).is_ok() && admitted(span);
+    ast.throws
+        .iter()
+        .any(|thrown| admitted(thrown.span) && straight(ast.peel_ts_sugar_span(thrown.argument)))
         || ast
             .members
             .iter()
-            .any(|member| admitted(member.span) && throwing_getter(file, member, depth))
+            .any(|member| straight(member.span) && throwing_getter(file, member, depth))
         || ast.calls.iter().any(|call| {
             !call.construct
-                && admitted(call.span)
-                && call.span != function.span
+                && straight(call.span)
                 && local_function_of(file, call.callee).is_some_and(|callee| {
-                    callee.span != function.span && function_may_throw(file, callee, depth)
+                    callee.span != function.span && function_must_throw(file, callee, depth)
                 })
         })
 }
 
-/// ADR 1204: whether `function`'s own code visibly may throw out of it (a throw no `try` in it catches), following local calls
-/// `depth` deep; past that depth, a call is taken to complete normally (ADR 0279's premise).
-fn function_may_throw(
+/// ADR 1204: whether every completion of `function` throws out of it: [`must_throw_in`] its own code, uncaught in it, following
+/// local calls `depth` deep; past that depth, a call is taken to complete normally (ADR 0279's premise).
+fn function_must_throw(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
     depth: usize,
@@ -2043,7 +2046,7 @@ fn function_may_throw(
     };
     let admitted =
         |span: Span| own_code(file, function, span) && !caught_before(file, span, function.span);
-    may_throw_in(file, function, &admitted, depth)
+    must_throw_in(file, function, &admitted, depth)
 }
 
 /// ADR 1204: the function a callee names: a function declaration of the file, or a `const` bound to a function literal.
@@ -2072,7 +2075,7 @@ fn local_function_of(
         })
 }
 
-/// ADR 1204: whether `member` is a Get of a key a `const` object literal defines as a getter that may throw.
+/// ADR 1204: whether `member` is a Get of a key a `const` object literal defines as a getter that must throw.
 fn throwing_getter(
     file: &solid_facts::FileFacts,
     member: &solid_facts::ast::MemberFact,
@@ -2108,7 +2111,7 @@ fn throwing_getter(
         .filter(|property| property.key.as_str() == key)
         .filter_map(|property| property.getter)
         .filter_map(|getter| ast.function_at(getter))
-        .any(|getter| function_may_throw(file, getter, depth + 1))
+        .any(|getter| function_must_throw(file, getter, depth + 1))
 }
 
 /// ADR 1204: whether a `try` with a `catch` holds `thrown` in its block and does not hold `site` there: the throw lands in the

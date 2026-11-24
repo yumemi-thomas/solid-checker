@@ -1,7 +1,5 @@
 import { createReaction, createSignal, onSettled } from "solid-js";
 
-const flag = Math.random() > 2;
-
 // ADR 1204: an evaluation before the read visibly may throw, so the read is not proven to run: uncertifiable
 // (`earlier-evaluation-may-throw`). Chrome is silent at each read; CaughtGetter and DataMember warn.
 export function HandedThrows() {
@@ -27,13 +25,6 @@ export function DirectThrows() {
     },
   };
   void box.cb;
-  s();
-  return <div />;
-}
-
-export function ConditionalThrow() {
-  const [s] = createSignal(1);
-  if (!flag) throw new Error("not yet");
   s();
   return <div />;
 }
