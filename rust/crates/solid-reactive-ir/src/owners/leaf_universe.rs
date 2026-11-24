@@ -433,9 +433,10 @@ impl<'a> Question<'_, '_, 'a> {
             Ok(())
         };
         if let Err(reason) = plain {
+            // ADR 1205: an effect group the after-await silence already answered keeps that answer, as the leaf group keeps the census's.
             return (
                 leaf_answer.or(open_leaf.then_some(Err(reason))),
-                open_effect.then_some(Err(reason)),
+                effect_answer.or(open_effect.then_some(Err(reason))),
             );
         }
         // Whether a layer around the site is entered by a route the graph has no edge for, asked once and without the component-render premise

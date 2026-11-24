@@ -206,7 +206,7 @@
   "SC5008 pending-read-unresolved": 24,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5581,
+  "SC6002 effect-creation-unaccounted": 5580,
   "SC6002 effect-owner-unproven": 54,
   "SC6002 function-run-unplaced": 60,
   "SC6002 generator-step-unplaced": 1,
@@ -6890,7 +6890,7 @@
    "fixture": "reactive-ir/forwarded-leaf-operation",
    "key": "SC6002 effect-creation-unaccounted",
    "from": 6,
-   "to": 2,
+   "to": 1,
    "adr": "ADR 1205",
    "proof": "rust/crates/solid-reactive-ir/src/package_hand_off.rs::callback_target",
    "fixtures": {
