@@ -5390,3 +5390,8 @@ Both answers looked only at a site written in the cleanup's own body. A closure,
   - Code level: 208 SC1001 rows from `function-run-unplaced` to violation (44 beside a violation already on the same line), nothing else.
   - lg-recall, 32,860 programs: unchanged.
 - ADR 1202's accepted cost is closed (its `docs/open-work.md` row is removed).
+
+<a id="adr-1210"></a>
+## ADR 1210 — Two infrastructure items: the boundary registry kept current, and no tracked link but a fixture's own
+**The registry** (`scripts/fuzz/boundary-witnesses.json`) had stayed at batch 8's snapshot while ADRs added and replaced arms; it is regenerated on the current main (`boundary.mjs verify --ablate --update`), every change read, and the arm gaps it no longer needs or now needs are stated in `boundary-gaps.mjs` (the commit lists them).
+**The link guard** (`scripts/guard/symlinks.mjs`): ADR 1165's worktree committed `node_modules` links to another worktree's absolute paths, which work on one machine only. A tracked link (git's mode 120000, read from the index) must be relative, sit in a fixture project, resolve inside that same project and point at a tracked path; there is no allowlist. It runs in `make verify` (lint-misc), CI's guards job and verify-delta's universal set. The 14 fixture workspace links pass.
