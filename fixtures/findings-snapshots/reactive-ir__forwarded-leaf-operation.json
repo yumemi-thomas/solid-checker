@@ -67,17 +67,6 @@
       "fixes": 0
     },
     {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/forwarded-leaf-operation/App.tsx",
-      "start": 643,
-      "end": 655,
-      "fixes": 0
-    },
-    {
       "rule": "sync-computation-received-async",
       "code": "SC7002",
       "kind": "uncertifiable",
@@ -92,17 +81,6 @@
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/forwarded-leaf-operation/App.tsx",
-      "start": 770,
-      "end": 780,
-      "fixes": 0
-    },
-    {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-leaf-operation/App.tsx",
       "start": 770,
@@ -128,17 +106,6 @@
       "path": "fixtures/reactive-ir/forwarded-leaf-operation/App.tsx",
       "start": 866,
       "end": 875,
-      "fixes": 0
-    },
-    {
-      "rule": "flush-in-action",
-      "code": "SC2006",
-      "kind": "uncertifiable",
-      "blocker": "flush-in-action-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/forwarded-leaf-operation/App.tsx",
-      "start": 960,
-      "end": 967,
       "fixes": 0
     },
     {
@@ -283,31 +250,9 @@
       "fixes": 0
     },
     {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/forwarded-leaf-operation/App.tsx",
-      "start": 3024,
-      "end": 3034,
-      "fixes": 0
-    },
-    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/forwarded-leaf-operation/App.tsx",
-      "start": 3210,
-      "end": 3220,
-      "fixes": 0
-    },
-    {
-      "rule": "primitive-in-effect-callback",
-      "code": "SC6002",
-      "kind": "uncertifiable",
-      "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/forwarded-leaf-operation/App.tsx",
       "start": 3210,
