@@ -978,7 +978,11 @@ fn returns_without_throwing(
         && call.arguments.iter().all(|argument| {
             let at = file.ast.peel_ts_sugar_span(argument.span);
             !argument.spread
-                && (file.ast.functions.iter().any(|function| function.span == at)
+                && (file
+                    .ast
+                    .functions
+                    .iter()
+                    .any(|function| function.span == at)
                     || file.ast.identifiers.iter().any(|identifier| {
                         identifier.span == at
                             && identifier.role == solid_facts::ast::IdentifierRole::Reference

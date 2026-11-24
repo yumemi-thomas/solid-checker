@@ -5319,5 +5319,9 @@ Both answers looked only at a site written in the cleanup's own body. A closure,
 - Fixture `reaction-settled-run`:
   - Violations: `SettledCarried`, `SettledCalled`, `SettledLiteral` (uncertifiable before).
   - Uncertifiable: `MemoBefore` (a creation throws first), `SettledMember` (a getter argument), `ShadowedSettled` (a local `onSettled`).
-- Chrome (`runtime-oracle/reaction-settled-run`): PROBE.
-- Probe: PROBE.
+- Chrome (`runtime-oracle/reaction-settled-run`): covered-violation, nothing static-only.
+- Probe (release, Chrome judge, ADR 1202's STRICT_READ_UNTRACKED selection, 1e5f2839c (main f3f66ca0d with ADR 1202) against this):
+  - mx-recall, 87,426 programs: 152 recall-gap to agree, nothing else moves. They are ADR 1202's 40 `reaction-store-settled-*` programs and the same settled shapes in `effect-apply`, `render-apply` and `render-apply-guarded-rerun` applies, where `onSettled` has no owner and queues its callback.
+  - Code level: 208 SC1001 rows from `function-run-unplaced` to violation (44 beside a violation already on the same line), nothing else.
+  - lg-recall, 32,860 programs: unchanged.
+- ADR 1202's accepted cost is closed (its `docs/open-work.md` row is removed).
