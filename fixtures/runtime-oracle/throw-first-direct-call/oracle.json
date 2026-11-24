@@ -1,0 +1,1 @@
+{ "note": "ADR 1204: a body whose earlier evaluation throws (a getter) never reaches the read after it. Chrome is silent at the reads in HandedThrows, DirectThrows and VoidThrows; HandedReturns warns STRICT_READ_UNTRACKED at its read." }
