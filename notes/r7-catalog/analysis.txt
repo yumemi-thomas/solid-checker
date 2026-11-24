@@ -1,0 +1,40 @@
+totals {
+ "0751069bf": {
+  "misuse agree": 24739,
+  "misuse recall-gap": 8288,
+  "legal clean": 12743,
+  "legal uncertifiable": 10935,
+  "misuse typed-away": 601,
+  "misuse not-fired": 15108,
+  "legal typed-away": 5,
+  "legal unexecuted": 4
+ },
+ "7bc723e35": {
+  "misuse agree": 25304,
+  "misuse recall-gap": 7723,
+  "legal clean": 14138,
+  "legal uncertifiable": 9540,
+  "misuse typed-away": 601,
+  "misuse not-fired": 15108,
+  "legal typed-away": 5,
+  "legal unexecuted": 4
+ }
+}
+moves {"legal uncertifiable -> clean":1415,"misuse recall-gap -> agree":801,"misuse agree -> recall-gap":236,"legal clean -> uncertifiable":20}
+false or unjudged results on 7bc723e35 0 []
+families by at-site rows (side, code, main at-site blocker):
+1358	790	misuse STORE_WRITE_OUTSIDE_SETTER store-write-unproven	30 contexts: handler 71, untrack 70, render-compute 69, jsx 67	also at the site: value-held-in-binding 568
+1244	1130	legal STRICT_READ_UNTRACKED function-run-unplaced	125 contexts: flush-read-each 107, flush-read-each-iife 100, wh-helper-late 87, effect-cleanup-dispose 68	also at the site: effect-creation-unaccounted 18, leaf-operation-unaccounted 12
+836	804	misuse REACTIVE_WRITE_IN_OWNED_SCOPE function-run-unplaced	51 contexts: render-apply 133, body 59, root 52, untrack 52	also at the site: read-backing-unproven 28, value-held-in-binding 4
+799	299	legal STRICT_READ_UNTRACKED value-in-carrier	52 contexts: async-loop 10, async-for-await 10, handler-async-loop 10, jsx-helper 8	also at the site: value-to-unresolved-callee 89, destructure-root-unproven 37
+709	428	legal STRICT_READ_UNTRACKED effect-creation-unaccounted	16 contexts: timer-from-handler 32, micro-from-handler 32, pos-handler-untrack 32, effect-error-arm 32	also at the site: function-run-unplaced 243, leaf-operation-unaccounted 20
+656	316	misuse OPTIMISTIC_WRITE_BEFORE_LOAD optimistic-reach-unresolved	156 contexts: root 6, body 2, flush-read-body 2, root-named-twice 2	also at the site: write-unaccounted 308, read-after-await-unaccounted 24
+633	616	legal REACTIVE_WRITE_IN_OWNED_SCOPE function-run-unplaced	103 contexts: effect-async-loop 37, async-loop 30, wh-root-cleanup 30, ref-factory 30	also at the site: read-after-await-unaccounted 17
+603	382	legal PRIMITIVE_IN_EFFECT_CALLBACK effect-creation-unaccounted	63 contexts: effect-error-arm 26, reaction-error-arm 26, root 9, cbp-never 9	also at the site: leaf-operation-unaccounted 105, function-run-unplaced 70
+540	478	misuse STRICT_READ_UNTRACKED function-run-unplaced	55 contexts: ref-row 81, helper-handed-call 48, effect-cleanup-rerun 28, render-cleanup-rerun 28	also at the site: effect-creation-unaccounted 16, read-after-await-unaccounted 3
+505	300	legal PRIMITIVE_IN_FORBIDDEN_SCOPE effect-creation-unaccounted	58 contexts: root 9, cbp-never 9, cbp-never-named 9, cbp-never-forwarded 9	also at the site: leaf-operation-unaccounted 131, function-run-unplaced 45
+480	144	misuse STRICT_READ_UNTRACKED value-in-carrier	32 contexts: body 10, root 10, effect-apply 8, ref-factory-body 6	also at the site: value-to-unresolved-callee 64, destructure-root-unproven 60
+369	256	legal UNTIL_IN_REACTIVE_SCOPE effect-creation-unaccounted	62 contexts: handler 16, memo-async-for-await 16, memo-async-finally 16, memo-async-loop 15	also at the site: function-run-unplaced 84, leaf-operation-unaccounted 23
+368	255	legal RESOLVE_IN_REACTIVE_SCOPE effect-creation-unaccounted	62 contexts: memo-async-for-await 16, memo-async-finally 16, handler 15, memo-async-loop 15	also at the site: function-run-unplaced 84, leaf-operation-unaccounted 23
+335	192	legal PRIMITIVE_IN_FORBIDDEN_SCOPE function-run-unplaced	53 contexts: apply-ref-value-untrack 9, apply-member-value-untrack 9, effect-error-arm-flush-rerun 9, tw-owner-null-call-both-settled 6	also at the site: leaf-operation-unaccounted 86, owner-callers-unenumerated 6
+295	227	misuse PRIMITIVE_IN_EFFECT_CALLBACK effect-owner-unproven	31 contexts: effect-cleanup-rerun 39, render-cleanup-rerun 39, effect-cleanup-rerun-named 36, render-apply-guarded-rerun 36	also at the site: owner-callers-unenumerated 45, owner-later-run-unowned 12
