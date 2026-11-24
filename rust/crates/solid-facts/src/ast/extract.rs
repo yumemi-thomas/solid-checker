@@ -1092,15 +1092,14 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
                         }
                         _ => None,
                     };
+                    // The key by the parser's value (`"v"` is `v`), as `object_properties` records it.
                     if let Some(local) = &local
                         && !has_default
                         && !property.computed
-                        && let Some(key) = self.source.get(
-                            property.name.span().start as usize..property.name.span().end as usize,
-                        )
+                        && let Some(key) = property.name.static_name()
                     {
                         object_slots.push(ObjectBindingFact {
-                            property: key.trim_matches(['\'', '"']).into(),
+                            property: key.as_ref().into(),
                             plain_identifier_key: matches!(&property.name,
                                 PropertyKey::StaticIdentifier(key)
                                     if self.source.get(key.span.start as usize..key.span.end as usize)

@@ -738,7 +738,7 @@ fn component_props_destructure_into(
                     crate::source_discovery::PropUse::Unknown => uncertain = true,
                 }
             }
-            let location = location(file.path.shared(), binding.pattern);
+            let location = location(file.path.shared(), destructure_row_at(file, binding));
             // ADR 1193: a `for…of` pattern has no initializer; its root names the source.
             let source = binding
                 .initializer
@@ -919,7 +919,8 @@ pub(crate) fn destructure_slots(
 ) -> Vec<crate::DestructureSlot> {
     let mut out = Vec::new();
     for file in lookup.files() {
-        for binding in &file.ast.bindings {
+        // ADR 1193 part 2: a destructure site's slots too (`object_destructures`).
+        for binding in object_destructures(file) {
             let Some(slots) = handed_over_slots(lookup, file, binding) else {
                 continue;
             };
@@ -932,7 +933,7 @@ pub(crate) fn destructure_slots(
             for (slot, _) in slots {
                 out.push(crate::DestructureSlot {
                     slot: location(file.path.shared(), slot),
-                    pattern: location(file.path.shared(), binding.pattern),
+                    pattern: location(file.path.shared(), destructure_row_at(file, binding)),
                     source: source.clone(),
                     label: label.clone(),
                 });
@@ -985,6 +986,16 @@ fn handed_over_slots(
         || written_directly_in_setup(lookup, file, binding.pattern)
         // ADR 1193: a root `destructure_root` adds keeps the unproven net's silence where the read's own role proves a fresh read.
         || (binding.initializer_identifier.is_none() && read_role_fresh(lookup, file, binding.pattern))
+        // ADR 1193 part 2: an assignment's shorthand slot (`({ v } = s)`) is the name it writes, which the member-read discovery
+        // skips as a write target: handed over, its Get would have no row. SC1003 keeps the pattern's row instead.
+        || (destructure_site(file, binding)
+            .is_some_and(|site| site.source == solid_facts::ast::DestructureSource::Assignment)
+            && binding.object_properties.iter().any(|property| {
+                property
+                    .local
+                    .as_ref()
+                    .is_some_and(|local| local.span == property.span)
+            }))
     {
         return None;
     }
@@ -1020,44 +1031,46 @@ pub(crate) fn destructure_root(
         })
     };
     // ADR 1193 part 2 (facts schema 110): a pattern no declarator describes.
-    match destructure_site(file, binding).map(|site| site.source) {
-        // `({ v } = s)`: the assignment's value, as a declarator's initializer; `merge(s, {…})` below.
-        Some(solid_facts::ast::DestructureSource::Assignment) => {
-            if let Some(value) = binding
-                .initializer
-                .map(|value| ast.peel_ts_sugar_span(value))
-                && is_reference(value)
-            {
-                return Some(value);
+    // A declarator is none: it takes the arms below.
+    if let Some(source) = destructure_site(file, binding).map(|site| site.source) {
+        match source {
+            // `({ v } = s)`: the assignment's value, as a declarator's initializer; `merge(s, {…})` below.
+            solid_facts::ast::DestructureSource::Assignment => {
+                if let Some(value) = binding
+                    .initializer
+                    .map(|value| ast.peel_ts_sugar_span(value))
+                    && is_reference(value)
+                {
+                    return Some(value);
+                }
+            }
+            // `const [{ v }] = [s]`: the element at the pattern's index of the array literal the declarator iterates, every element
+            // up to it a plain value (no spread, no hole), the standard array iteration intact.
+            solid_facts::ast::DestructureSource::ArrayElement { outer, index } => {
+                let declarator = ast.bindings.iter().find(|declarator| {
+                    declarator.pattern == outer
+                        && declarator.shape == solid_facts::ast::BindingShape::Array
+                })?;
+                if !lookup.array_iteration_intact() {
+                    return None;
+                }
+                let initializer = ast.peel_ts_sugar_span(declarator.initializer?);
+                let literal = ast
+                    .array_literal_elements
+                    .iter()
+                    .find(|literal| literal.span == initializer)?;
+                let index = usize::try_from(index).ok()?;
+                let elements = literal.elements.get(..=index)?;
+                if elements
+                    .iter()
+                    .any(|element| element.kind != solid_facts::ast::ArrayElementKind::Value)
+                {
+                    return None;
+                }
+                let element = ast.peel_ts_sugar_span(elements[index].span);
+                return is_reference(element).then_some(element);
             }
         }
-        // `const [{ v }] = [s]`: the element at the pattern's index of the array literal the declarator iterates, every element
-        // up to it a plain value (no spread, no hole), the standard array iteration intact.
-        Some(solid_facts::ast::DestructureSource::ArrayElement { outer, index }) => {
-            let declarator = ast.bindings.iter().find(|declarator| {
-                declarator.pattern == outer
-                    && declarator.shape == solid_facts::ast::BindingShape::Array
-            })?;
-            if !lookup.array_iteration_intact() {
-                return None;
-            }
-            let initializer = ast.peel_ts_sugar_span(declarator.initializer?);
-            let literal = ast
-                .array_literal_elements
-                .iter()
-                .find(|literal| literal.span == initializer)?;
-            let index = usize::try_from(index).ok()?;
-            let elements = literal.elements.get(..=index)?;
-            if elements
-                .iter()
-                .any(|element| element.kind != solid_facts::ast::ArrayElementKind::Value)
-            {
-                return None;
-            }
-            let element = ast.peel_ts_sugar_span(elements[index].span);
-            return is_reference(element).then_some(element);
-        }
-        None => {}
     }
     let Some(initializer) = binding.initializer else {
         if destructure_site(file, binding).is_some() {
@@ -1142,6 +1155,19 @@ pub(crate) fn object_destructures(
         .iter()
         .filter(|binding| binding.shape == solid_facts::ast::BindingShape::Object)
         .chain(file.ast.destructure_sites.iter().map(|site| &site.binding))
+}
+
+/// ADR 1193 part 2: where SC1003's row for a destructure stands: its pattern, or for an array pattern's element the declarator's
+/// pattern, where a declarator's row stands (Chrome places the element's Get at its bound name, a position the declarator's start
+/// stands for; the element's own `{` is none).
+fn destructure_row_at(
+    file: &solid_facts::FileFacts,
+    binding: &solid_facts::ast::BindingFact,
+) -> Span {
+    match destructure_site(file, binding).map(|site| site.source) {
+        Some(solid_facts::ast::DestructureSource::ArrayElement { outer, .. }) => outer,
+        _ => binding.pattern,
+    }
 }
 
 /// ADR 1193: the destructure site (facts schema 110) `binding` is, when it is one rather than a declarator.
