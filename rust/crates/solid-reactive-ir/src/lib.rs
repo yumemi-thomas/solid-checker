@@ -1989,6 +1989,10 @@ pub struct UnreachedSite {
     /// it decided whether any execution reaches the site.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub undecided: bool,
+    /// ADR 1204: the site may run, but after an evaluation that visibly may throw (a `throw`, a throwing getter's Get, a call
+    /// of a local function that throws), in its function or an in-place layer that runs it: that it runs is not proven.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub earlier_may_throw: bool,
 }
 
 /// The [`UnreachedSite`] at exactly the byte range `start..end` of `path`,
