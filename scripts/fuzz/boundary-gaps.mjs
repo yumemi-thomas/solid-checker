@@ -64,6 +64,10 @@ export const TABLE_GAP_GROUPS = [
 // <arm-gaps>
 export const ARM_GAPS = [
   {
+    reason: "ADR 1202 (ADR 1176's N8): the arm returns the role at the call of an in-place layer inside a callback that reports untracked reads, and only when that role reports an untracked read (`reports_untracked_read`, checked before it answers): computed, so the inventory counts it, but never a silent role; a wrong answer is a false positive, which the grids' judge and Chrome find (fixture `reaction-closure-read`).",
+    arms: ["callee_roles.untracked-argument-climb"],
+  },
+  {
     reason: "ADR 1183 (G3 M1): a read in the cleanup an inline apply returns, placed in the apply's window when a reached write (a reachable handler's setter call of a new value, ADR 1132) reruns the effect with its owner alive. It answers the apply's role, which reports a read; the census reads the same role at a setter call there (`setW(7)` in the cleanup, legal on every run per ADR 1037), which clears four lg-recall RWOS `cond-alias` rows. No registered pair has a cleanup cell; the separating cells are the generator's `effect-cleanup-rerun` (misuse, now violations) against `effect-cleanup-show`/`-for` (legal, ADR 1167), held as fixtures `effect-cleanup-rerun-reached` (with its uncertifiable twins) and `effect-cleanup-disposal-only`, Chrome rc.21 on both; a registry pair and a snapshot rerun are not run here.",
     arms: ["execution_role.read_execution_role.returned-cleanup-rerun"],
   },

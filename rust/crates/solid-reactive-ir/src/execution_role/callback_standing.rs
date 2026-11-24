@@ -280,15 +280,30 @@ pub(super) fn named_helper_runs_during_body(
         // The call must itself be written where the rendering role holds: a
         // call in a tracked JSX attribute or child, a memo or a deferred
         // callback runs in that scope, not in the body's strict-read window.
+        // ADR 1202: or, for a body helper, in N8's shape: the call is run by in-place layers whose outermost call is written in
+        // a primitive's callback that reports untracked reads (ADR 1176 N8 gave the call that callback's role). The helper then
+        // runs in that callback's run, where a strict read reports as in the body: the summary and the role agree. The call's
+        // timing is still proven below.
+        let role = super::read_execution_role(
+            caller,
+            *callee,
+            &allowed_callback_spans(caller, lookup),
+            lookup.entities(),
+            lookup.symbol_names(),
+            lookup,
+        );
         omits_argument
-            && super::read_execution_role(
-                caller,
-                *callee,
-                &allowed_callback_spans(caller, lookup),
-                lookup.entities(),
-                lookup.symbol_names(),
-                lookup,
-            ) == expected
+            && (role == expected
+                || (expected == ExecutionRole::UntrackedRendering
+                    && role.reports_untracked_read()
+                    && super::callee_roles::untracked_argument_layer_call(
+                        caller,
+                        *callee,
+                        lookup.entities(),
+                        lookup.symbol_names(),
+                        lookup,
+                    )
+                    .is_some()))
             && !callee_callback_timing_within(caller, *callee, execution, lookup, following)
     });
     following.remove(&key);
