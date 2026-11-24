@@ -1575,6 +1575,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/flush-in-place-layers/node_modules/**
 !fixtures/reactive-ir/flush-in-call-entries/node_modules/
 !fixtures/reactive-ir/flush-in-call-entries/node_modules/**
+!fixtures/reactive-ir/flush-later-continuation/node_modules/
+!fixtures/reactive-ir/flush-later-continuation/node_modules/**
 !fixtures/reactive-ir/flush-universe-inline-suite/node_modules/
 !fixtures/reactive-ir/flush-universe-inline-suite/node_modules/**
 !fixtures/reactive-ir/flush-universe-package-hand-off/node_modules/
