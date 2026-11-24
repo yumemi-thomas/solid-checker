@@ -1264,9 +1264,9 @@
    "kind": "halted-claim",
    "item": "flw-flow-for-async",
    "idRegex": "flw-flow-for-async",
-   "adr": "ADR 1012",
+   "adr": "ADR 1205",
    "work": "scripts/fuzz/classify.mjs halted claims",
-   "why": "SETTLED_CLEANUP_UNOWNED in a flow row after an async step: the run halts before the site (REACTIVITY_HALTED, offSite missing-owner@halted(halt-before-site)), the program is not-fired. 58 at the lean audit 63725c6bf, 59 since ADR 1205 (`x-wrapper-handoff-member`: the member call is an exact edge now, so the missing-owner claim at the wrapper's `onSettled` stands, and the run halts before it as for the others); the full audit holds 99 because the full recall grid generates 40 more of the same family (the mounts `m-for`, `m-show`, `m-child` variants the lean grid omits): 59 of the 99 are the lean audit's own ids, 40 were absent from it. The 2 ledgered R-halted rows are not counted here.",
+   "why": "SETTLED_CLEANUP_UNOWNED in a flow row after an async step (ADR 1012's family; ADR 1205 raised the count): the run halts before the site (REACTIVITY_HALTED, offSite missing-owner@halted(halt-before-site)), the program is not-fired. 58 at the lean audit 63725c6bf, 59 since ADR 1205 (`x-wrapper-handoff-member`: the member call is an exact edge now, so the missing-owner claim at the wrapper's `onSettled` stands, and the run halts before it as for the others); the full audit holds 99 because the full recall grid generates 40 more of the same family (the mounts `m-for`, `m-show`, `m-child` variants the lean grid omits): 59 of the 99 are the lean audit's own ids, 40 were absent from it. The 2 ledgered R-halted rows are not counted here.",
    "ids": {
     "lean": [
      "mx-settled-cleanup-unowned-flw-flow-for-async-x-alias-const-none",
