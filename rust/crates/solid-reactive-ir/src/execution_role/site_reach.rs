@@ -1855,12 +1855,17 @@ pub(crate) fn unreached_report_sites(
         ) else {
             return None;
         };
-        Some(SyntaxReach::of(file, Span::new(start, end), lookup))
+        let span = Span::new(start, end);
+        // ADR 1204: asked of every site; read only where the reach queries leave it reached.
+        Some((
+            SyntaxReach::of(file, span, lookup),
+            earlier_evaluation_may_throw(file, span, lookup),
+        ))
     });
     let mut owners = sites
         .iter()
         .flatten()
-        .filter_map(|site| match site {
+        .filter_map(|(site, _)| match site {
             SyntaxReach::Owned(file, function) => Some((*file, *function)),
             _ => None,
         })
@@ -1896,22 +1901,23 @@ pub(crate) fn unreached_report_sites(
                     undecided,
                 })
             };
+            let (site, throws_first) = site?;
             // ADR 1204: a site the reach queries leave reached may still follow an evaluation that throws.
             let throw_first = || {
-                let file = lookup.file_by_path(location.path.as_ref())?;
-                let span = Span::new(
-                    u32::try_from(location.start_byte).ok()?,
-                    u32::try_from(location.end_byte).ok()?,
-                );
-                if !earlier_evaluation_may_throw(file, span, lookup) {
-                    return None;
-                }
-                Some(crate::UnreachedSite {
+                throws_first.then(|| crate::UnreachedSite {
                     earlier_may_throw: true,
-                    ..answer(false, false, false, false, false)?
+                    location: (*location).clone(),
+                    dead_code: false,
+                    absent_prop: false,
+                    refused_creation: false,
+                    lazy_unread: false,
+                    member_may_be_replaced: false,
+                    returned_value_run: false,
+                    returned_value_creation: false,
+                    undecided: false,
                 })
             };
-            match site? {
+            match site {
                 SyntaxReach::DeadCode => answer(true, false, false, false, false),
                 SyntaxReach::AbsentProp => answer(false, true, false, false, false),
                 SyntaxReach::Unowned => throw_first(),
