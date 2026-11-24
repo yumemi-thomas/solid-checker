@@ -1152,6 +1152,12 @@ pub(crate) fn unplaced_run_but(
             .into_iter()
             .any(|call| unplaced_run_but(file, call, lookup, placed));
     }
+    // ADR 1205: a site in a function only a closed literal's member calls run is placed exactly where each of them is.
+    if let Some(calls) = super::member_call_run_calls(file, span, lookup) {
+        return calls
+            .into_iter()
+            .any(|call| unplaced_run_but(file, call, lookup, placed));
+    }
     let ast = &file.ast;
     // ADR 1022: a construct-only class's member runs at its one `new` or receiver call.
     (ast.classes

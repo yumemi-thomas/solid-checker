@@ -876,6 +876,26 @@ pub(crate) fn dynamic_component_entry(
     dynamic.then_some(exclusive)
 }
 
+/// ADR 1205: the member calls a site runs at, when it is written directly in the body of a function every run of which is a member
+/// call of a closed literal holding it ([`member_call_entries`]), that function neither `async` nor a generator, and the site runs
+/// whenever its function runs ([`crate::interproc::body_site_runs_during_call`]): it runs on each of those calls' stacks.
+pub(crate) fn member_call_run_calls(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Vec<Span>> {
+    let function = file.ast.innermost_function_body_containing(span)?;
+    if function.r#async
+        || function.generator
+        || !crate::owners::written_directly_in(&file.ast, function, span)
+        || !crate::interproc::body_site_runs_during_call(file, function, span)
+    {
+        return None;
+    }
+    let calls = member_call_entries(file, function, lookup)?;
+    Some(calls.into_iter().map(|(_, call)| call).collect())
+}
+
 /// ADR 1190 (slice 2): the child's calls that run the component prop literal (ADR 1171's proof, the named and destructured forms
 /// too) that `span` is written directly in, during its synchronous run: not in a function nested in it, not past an `await` of
 /// it, not in its parameter list. `None` where `span` is no such site, or the literal's calls are unproven or none.

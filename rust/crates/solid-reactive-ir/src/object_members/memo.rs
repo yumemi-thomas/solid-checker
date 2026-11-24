@@ -292,14 +292,16 @@ pub(super) fn literal_function<'w>(
             .ast
             .function_at(file.ast.peel_ts_sugar_span(initializer))
     {
-        let module_level = |span: Span| super::enclosing_function(file, span).is_none();
+        // ADR 1205: or both written directly in the same function's code (no function between either and that one): the declarator runs before
+        // the literal in every activation that creates the literal (a literal reached before it throws on the binding's dead zone first).
+        let same_scope = super::enclosing_function(file, binding.declaration)
+            == super::enclosing_function(file, literal);
         return (function.kind == ast::FunctionKind::Arrow
             && !function.generator
             && crate::indexes::function_value_is_current_in(file, function)
             && initializer.end <= literal.start
-            && module_level(binding.declaration)
-            && module_level(literal))
-        .then_some((file, function));
+            && same_scope)
+            .then_some((file, function));
     }
     let symbol = symbol_at(cx, owner, declaration)?;
     let (id, rank, function) = cx.function_for_symbol(symbol.as_str())?;

@@ -385,7 +385,9 @@ fn entries_placed<'a>(
                 calls.into_iter().map(|call| (file, call)).collect()
             }
             Some(_) => return false,
-            None => match crate::execution_role::plain_call_entries(file, function, lookup) {
+            None => match crate::execution_role::plain_call_entries(file, function, lookup)
+                .or_else(|| crate::execution_role::member_call_entries(file, function, lookup))
+            {
                 Some(calls) => calls,
                 // An in-place layer (an IIFE, a callback a standard call or a helper runs in its body: ADR 0469) runs only at that call.
                 None => match crate::execution_role::layer_run(file, function, lookup) {
