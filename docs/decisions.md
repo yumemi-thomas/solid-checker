@@ -5255,3 +5255,26 @@ Both answers looked only at a site written in the cleanup's own body. A closure,
   - lg-recall: 300 programs gain rows; 8 relabel U to U at the same site.
   - Nothing goes clean and no violation is added or lost: the fail-closed cost of the move.
 - Rediscovery: the id, its build fails focus on main and passes here.
+<a id="adr-1202"></a>
+## ADR 1202 — A read in an in-place layer of a reporting callback takes the layer call's role, and the named-helper timing agrees (ADR 1176's N8)
+**The gap** (R4 group N8, first built in ADR 1176 and reverted there). A read in a layer that runs in place inside a callback that reports untracked reads (`createReaction(() => { const f = () => r(); f(); })`) stayed uncertifiable. The read role of a layer's body did not follow the layer's call into the callback. ADR 1176's arm placed it (70 U to V) but turned 4 violations (`reaction-store-named-called-*-helper`) into `callee-callback-timing` obligations. There:
+- the read, in a named function expression the layers do not cross (`const f = function inner() { … }`), keeps the body's lexical role (`inside-component`);
+- its call `f()` took the reaction's role through the new arm;
+- `named_helper_runs_during_body` required every call to carry the body role, so the summary and the role disagreed.
+
+**Decision** (`callee_roles.rs` `untracked_argument_layer_call`, the arm `callee_roles.untracked-argument-climb`; `callback_standing.rs` `named_helper_runs_during_body`).
+- The arm: where `climb_in_place_layers` crosses at least one layer, the layers' outermost call is written directly in a primitive's callback that reports untracked reads. The arm also needs no bound, no suspension, no parameter-list layer, a callback that is not window-less, and no exact bundle's `error` member. A read there takes the role at that call when it reports.
+- The agreement: a body helper's call may carry, instead of the body's role, a reporting role given in that same shape (`untracked_argument_layer_call` holds at the call). The helper then runs in that callback's run, where a strict read reports as in the body. The call's own timing is still proven by the walk.
+
+**Evidence.**
+- Fixture `reaction-closure-read`:
+  - Violations: `ClosureInReaction`, `IifeInReaction` (uncertifiable on main), and `NamedHelperInReaction` (main's violation, kept).
+  - Clean: `ClosureInTracking`.
+- Coverage: only `write-detached-owner-helper` moves. Its SC6002 row at `createRoot` in `inOwnRoot` is now clean: the helper's call is in `runWithOwner(null, …)` in the body, which runs in place, so the creation runs during rendering, not in an effect's apply.
+- Chrome (`runtime-oracle/reaction-closure-read`): covered-violation, nothing static-only.
+- Probe (release, Chrome judge, STRICT_READ_UNTRACKED over every reporting-callback context, main 631b12291 against this):
+  - mx-recall, 87,426 programs: 339 recall-gap to agree; 96 false positives to not-fired; 40 agree to recall-gap (the cost below). Code level: 144 SC1001 violations to `function-run-unplaced`, no other code's violation lost.
+  - lg-recall, 32,860 programs: unchanged.
+- The 96 false positives (rediscovery entry): `reaction-store-{byname,effect,render-effect}-*carried` and `byname-mapped`. A creation between the declarator and the run (`createMemo(f)`, `createEffect(f, …)`) throws PRIMITIVE_IN_EFFECT_CALLBACK in the reaction's run before the closure runs. With the body's lexical role at the run, ADR 1166's reporting run skipped its interruption test. With the reaction's role, it applies.
+
+**Accepted cost** (coordinator ruling, 2026-11-24). 40 mx programs Chrome reports STRICT_READ_UNTRACKED at, `reaction-store-settled-{carried,named-carried,called,named-called}-*` (48 rows), move from violation to `function-run-unplaced`. `onSettled(f)` stands between the declarator and the run, and the same interruption test now refuses the run. Owed (ADR 1203): an exact premise that `onSettled`'s call returns without throwing (rc.21: it enqueues the callback, or creates a tracked effect under an owner that admits children).
