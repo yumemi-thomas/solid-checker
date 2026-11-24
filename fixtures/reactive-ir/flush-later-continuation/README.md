@@ -4,4 +4,6 @@
 
 Clean: `MemoLoop`, `EffectFinally`, `HelperLoop` (the helper's one call is the site asked, ADR 1199), `HandlerLoop` (a closure's call in the later pass of an event handler's async function: the census class of the call is the delivery's, which a dominating await already overrides, and so does this).
 
+Slice 2: `NamedLoop` and `NamedFinally` are clean too: a compute handed by name is a function no call edge places, and the effect-phase walk's SC2008 row for it (ADR 0709) asks whether the flush runs off every delivery (`flush_runs_off_any_delivery`), which now takes the same two shapes. `NamedFirstPass` keeps its row.
+
 Uncertifiable (fail closed): `HandlerFirstPass` (the first pass flushes on the delivery's stack), `FirstPass` (no `i > 0` guard: the first pass flushes before any await), `Breaks` (a `break` in the body), `RiskyFinally` (the `try` head's operand may throw before it suspends).
