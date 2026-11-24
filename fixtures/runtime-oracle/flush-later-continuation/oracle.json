@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1201: a flush in a counted loop's later pass or in the finally behind a try head's await that cannot throw, in an async memo or effect compute (quiet, clean), and twins with no guard, a break, or a throwing try head (rows kept). The checker's fixture is reactive-ir/flush-later-continuation."
+}
