@@ -778,15 +778,21 @@ fn some_entry_from(
     first_pass: bool,
 ) -> Option<(Span, Option<Span>)> {
     *budget = budget.checked_sub(1)?;
-    // ADR 1224: whether every position so far runs on every completion of its layer's run, so that a run of the layers
-    // around it is a run of the site; an effect's apply step needs it, since only the apply's first run comes before
-    // the answer (`if (v > 1) write()` runs only on a later one).
-    let first_pass = first_pass && straight_line(file, at);
     let layer = containing_ast_function(&file.ast, at);
     if layer.map(|function| function.span) == target.map(|function| function.span) {
         return Some((at, None));
     }
     let layer = layer?;
+    // ADR 1224: whether every position so far runs on every completion of its layer's run, so that a run of the layers
+    // around it is a run of the site; an effect's apply step needs it, since only the apply's first run comes before
+    // the answer (`if (v > 1) write()` runs only on a later one). A JSX element around the call is around its function
+    // too (a literal written in an attribute), not around the call within it.
+    let first_pass = first_pass
+        && file.ast.straight_line_calls.contains(&at)
+        && file
+            .ast
+            .jsx_containing(at)
+            .all(|element| element.span.contains(layer.span));
     if seen.contains(&layer.span)
         || layer.r#async
         || layer.generator
