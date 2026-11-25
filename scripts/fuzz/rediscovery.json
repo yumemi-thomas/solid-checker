@@ -43041,5 +43041,25 @@
    "mx-strict-read-untracked-reaction-store-render-effect-named-carried-wrapper-module-helper"
   ],
   "rediscovered": "focus.mjs --codes STRICT_READ_UNTRACKED --grids mx-recall (87,426 programs, Chrome judge): main 631b12291 96 false positives (these ids); ADR 1202 none (not-fired)"
+ },
+ {
+  "finding": "a createEffect in a function a slot only calls inside an effect apply, reached through a member call of a closed literal (ADR 1205 round 1) or a plain call (main), was an SC4001 NO_OWNER_EFFECT violation, while Chrome throws PRIMITIVE_IN_EFFECT_CALLBACK first: ADR 1052 part 7 looked only at the slot body",
+  "found": "bundle ai judge (the integrator, 2026-11-25): 5 handoff-member false positives on ADR 1205 1b2d2fa66; W9 re-probe: the 5 handoff-function twins on main 7bc723e35",
+  "fixed": "ADR 1205 round 2 (competing_checks::runs_only_in_applies: a function whose every plain or member entry is written in an apply callback, or in such a function, four deep, is creation-throws-first)",
+  "grid": "mx-recall",
+  "code": "PRIMITIVE_IN_EFFECT_CALLBACK",
+  "ids": [
+   "mx-primitive-in-effect-callback-flw-apply-slot-module-effect-direct-handoff-member",
+   "mx-primitive-in-effect-callback-flw-apply-slot-module-effect-direct-handoff-function",
+   "mx-primitive-in-effect-callback-flw-apply-slot-module-effect-namespace-handoff-member",
+   "mx-primitive-in-effect-callback-flw-apply-slot-module-effect-namespace-handoff-function",
+   "mx-primitive-in-effect-callback-flw-apply-slot-module-effect-alias-handoff-member",
+   "mx-primitive-in-effect-callback-flw-apply-slot-module-effect-alias-handoff-function",
+   "mx-primitive-in-effect-callback-flw-apply-slot-module-effect-destructured-handoff-member",
+   "mx-primitive-in-effect-callback-flw-apply-slot-module-effect-destructured-handoff-function",
+   "mx-primitive-in-effect-callback-flw-apply-slot-module-effect-wrapper-handoff-member",
+   "mx-primitive-in-effect-callback-flw-apply-slot-module-effect-wrapper-handoff-function"
+  ],
+  "rediscovered": "focus.mjs over every code handoff-member and handoff-function program of mx-recall (21,450, Chrome judge) with codediff: 1b2d2fa66 has an SC4001 violation on the 10 programs (main 7bc723e35 on the 5 handoff-function ones), and this build has creation-throws-first on all 10 and nothing else moves"
  }
 ]
