@@ -864,8 +864,8 @@ fn some_entry_from(
 /// with no argument. Every other use of the collection is the receiver of a standard `forEach` whose callback is a
 /// literal of at most one parameter, or of `WeakMap.get`, so the collection holds exactly that entry afterwards. A site
 /// is a straight-line `forEach(literal)` whose callback calls its parameter straight-line, or a straight-line call of
-/// `get(k)` with the stored key (the same `const` binding), in the function that declares the collection, after the
-/// store (climbed to that function through straight-line `untrack` or synchronous-primitive calls).
+/// `get(k)` with the stored key (the same `const` binding). Both the store and the site run in the function that declares
+/// the collection, the site after the store, each climbed to it through straight-line `untrack` calls.
 fn stored_run_sites(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
@@ -953,31 +953,26 @@ fn stored_run_sites(
         if !fresh {
             continue;
         }
-        // The store's position in `home`, through straight-line synchronous layers.
-        let mut at = store.span;
-        let mut reached = false;
-        for _ in 0..4 {
-            let Some(layer) = containing_ast_function(ast, at) else {
-                break;
-            };
-            if layer.span == home.span {
-                reached = true;
-                break;
+        // A position's run in `home`, through straight-line `untrack` layers.
+        let in_home = |site: Span| {
+            let mut at = site;
+            for _ in 0..4 {
+                let layer = containing_ast_function(ast, at)?;
+                if layer.span == home.span {
+                    return Some(at);
+                }
+                if layer.r#async || layer.generator {
+                    return None;
+                }
+                at = untrack_carrier(file, layer, lookup)
+                    .map(|call| call.span)
+                    .filter(|step| straight_line(file, *step))?;
             }
-            if layer.r#async || layer.generator {
-                break;
-            }
-            let Some(step) = untrack_carrier(file, layer, lookup)
-                .map(|call| call.span)
-                .filter(|step| straight_line(file, *step))
-            else {
-                break;
-            };
-            at = step;
-        }
-        if !reached || collection.end > at.start {
+            None
+        };
+        let Some(at) = in_home(store.span).filter(|at| collection.end <= at.start) else {
             continue;
-        }
+        };
         let stored_key = (constructor == "WeakMapConstructor.construct")
             .then(|| store.arguments.first())
             .flatten()
@@ -1016,9 +1011,7 @@ fn stored_run_sites(
                     let runs = !callback.r#async
                         && !callback.generator
                         && straight_line(file, call.span)
-                        && containing_ast_function(ast, call.span).map(|layer| layer.span)
-                            == Some(home.span)
-                        && at.end <= call.span.start
+                        && in_home(call.span).is_some_and(|run| at.end <= run.start)
                         && callback
                             .parameters
                             .first()
@@ -1064,9 +1057,7 @@ fn stored_run_sites(
                         && same_key
                         && fixed_key
                         && straight_line(file, outer.span)
-                        && containing_ast_function(ast, outer.span).map(|layer| layer.span)
-                            == Some(home.span)
-                        && at.end <= outer.span.start
+                        && in_home(outer.span).is_some_and(|run| at.end <= run.start)
                     {
                         found.push(outer.span);
                     }
