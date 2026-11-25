@@ -5390,3 +5390,25 @@ Both answers looked only at a site written in the cleanup's own body. A closure,
   - Code level: 208 SC1001 rows from `function-run-unplaced` to violation (44 beside a violation already on the same line), nothing else.
   - lg-recall, 32,860 programs: unchanged.
 - ADR 1202's accepted cost is closed (its `docs/open-work.md` row is removed).
+<a id="adr-1211"></a>
+## ADR 1211 — A handed store's reads are followed through props views, whole-props forwards and a context
+**The gap** (R7 family #1). Step 0 on main 7bc723e35: misuse STORE_WRITE_OUTSIDE_SETTER, `store-write-unproven` at the site, 900 simple programs in mx-src (520), mx-pairs (314), mx-recall (50) and mx-combo (16). Every prop and context source except the plain one was in it: `merge({ extra: 1 }, props).s1.a.v = 7`, `omit(props, "extra")`, `<C1 {...props} />` from a middle component, an `omit` rest spread onto an element beside a merge view, and `useContext(ValCtx).s1` or its destructure under `<ValCtx value={{ s1, setS1 }}>`. ADR 0919's handed route already reached the store on all of them. The one failing step was ADR 1172's `handed_links_wrappable`: the links past the store must still be its literal, so the setter has to be called by no code and the store read only as the root of a contained use. `component_prop_reads` gave up on any use of the props object other than a static member, and a provider's value literal is no component prop.
+**Decision.**
+- `component_prop_reads` reads the props object through `props_object_reads`, a superset of the reads of a key. Each reference must be a static, non-optional, unwritten member (read when its key is the prop), or, four levels deep (`PROPS_VIEW_DEPTH`), one of:
+  - the whole argument of a `merge` call, or the first argument of an `omit` call with string-literal keys, that is the whole initializer of an unwritten `const` (`props_view_at`: that view's reads); a JSX spread of an `omit` view that drops the key reads none;
+  - the argument of a JSX spread onto an element whose tag is a function of this file (that component's reads).
+  Any other use is `None`, as before.
+- In the provider form where the context itself is the provider (`Dialect::context_provider_member` is none), `store_literal_proof` also takes a store or setter reference that is a data slot of the closed literal that is the one `value` of a spread-free provider element (`handed_context_key`). The context must be a `const` of this file made by `createContext`, never exported or written. Its reads (`context_key_reads`) are those of every `useContext` result, an identifier (`props_object_reads`) or a static object pattern. Every other reference of the context must be its declaration, a provider tag or a type query. A setter with no reads, and a store whose every read is a contained use (`handed_to_contained_context`), keep the proof as ADR 1172's props do.
+**Evidence.**
+- Fixture `store-write-through-prop-view`:
+  - Violations, all six Chrome STORE_WRITE_OUTSIDE_SETTER (`runtime-oracle/store-write-through-prop-view`: covered, nothing static-only): `MergeChild`, `OmitChild`, `ForwardChild`, `ViewSpreadChild`, `ContextChild`, `ContextDestructuredChild`. On main they are uncertifiable.
+  - Uncertifiable: the setter called through the view, after a forward or through the context; the view or the context value handed to a function; an exported context.
+  - Coverage moves nothing else.
+- Probe (release, VM, Chrome judge), main 7bc723e35 against this build:
+  - mx-src, every STORE_WRITE_OUTSIDE_SETTER and STRICT_READ_UNTRACKED program (28,284): 2,340 recall-gap to agree, nothing else.
+  - mx-recall and lg-recall, the programs of those two codes whose text makes a store and uses `merge`, `omit`, `useContext` or a JSX spread (8,309 and 3,300 of 389,250 and 121,138): mx 26 recall-gap to agree, the `view-spread` source; at code level, 26 SC2003 rows from `store-write-unproven` to violation and nothing else. lg: unchanged.
+  - lg-src (8,568) and lg-pairs (6,912): unchanged.
+  - mx-pairs, every STORE_WRITE_OUTSIDE_SETTER program (70,632): 3,744 recall-gap to agree, nothing else.
+  - mx-src at code level: 2,340 SC2003 rows from `store-write-unproven` to violation, nothing else.
+  - Of step 0's 900, 860 now agree (mx-src 520, mx-pairs 314, mx-recall 26). The other 40 are named below.
+**Not built** (`docs/open-work.md`): a view written inline (`merge(…).s1.a.v`) or destructured; a context read in another file or with a `.Provider` member; the `nested-held`, `sw-delete` and `sw-decl` variants and mx-combo's extras (40 of the 900).
