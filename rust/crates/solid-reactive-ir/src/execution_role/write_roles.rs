@@ -5325,7 +5325,14 @@ pub(crate) fn flush_mount_hold_free(
         && static_tree_admitting(file, creating, lookup, &|candidate| {
             candidate.span == element.span
         })
-        && body_runs_nothing_else(file, creating, source, None, BodyAdmits::default(), lookup)
+        && body_runs_nothing_else(
+            file,
+            creating,
+            source,
+            Some(source),
+            BodyAdmits::default(),
+            lookup,
+        )
 }
 
 /// ADR 1224: the effect call whose apply is `function` (the dialect's apply slot, `apply_callback_argument`) when its
