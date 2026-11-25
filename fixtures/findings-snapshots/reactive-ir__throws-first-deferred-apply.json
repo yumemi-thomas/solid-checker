@@ -8,8 +8,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/throws-first-deferred-apply/App.tsx",
-      "start": 640,
-      "end": 652,
+      "start": 587,
+      "end": 599,
       "fixes": 0
     },
     {
@@ -19,8 +19,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/throws-first-deferred-apply/App.tsx",
-      "start": 640,
-      "end": 652,
+      "start": 587,
+      "end": 599,
       "fixes": 0
     },
     {
@@ -30,8 +30,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/throws-first-deferred-apply/App.tsx",
-      "start": 640,
-      "end": 652,
+      "start": 587,
+      "end": 599,
       "fixes": 0
     },
     {
@@ -41,8 +41,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/throws-first-deferred-apply/App.tsx",
-      "start": 715,
-      "end": 725,
+      "start": 662,
+      "end": 672,
       "fixes": 0
     },
     {
@@ -52,8 +52,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/throws-first-deferred-apply/App.tsx",
-      "start": 715,
-      "end": 725,
+      "start": 662,
+      "end": 672,
       "fixes": 0
     },
     {
@@ -62,8 +62,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/throws-first-deferred-apply/App.tsx",
-      "start": 715,
-      "end": 725,
+      "start": 662,
+      "end": 672,
       "fixes": 0
     },
     {
@@ -73,8 +73,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/throws-first-deferred-apply/App.tsx",
-      "start": 884,
-      "end": 894,
+      "start": 831,
+      "end": 841,
       "fixes": 0
     },
     {
@@ -84,8 +84,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/throws-first-deferred-apply/App.tsx",
-      "start": 884,
-      "end": 894,
+      "start": 831,
+      "end": 841,
       "fixes": 0
     },
     {
@@ -95,8 +95,8 @@
       "blocker": "flush-in-action-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/throws-first-deferred-apply/App.tsx",
-      "start": 913,
-      "end": 920,
+      "start": 860,
+      "end": 867,
       "fixes": 0
     },
     {
@@ -106,8 +106,8 @@
       "blocker": "flush-in-effect-unaccounted",
       "severity": "warning",
       "path": "fixtures/reactive-ir/throws-first-deferred-apply/App.tsx",
-      "start": 913,
-      "end": 920,
+      "start": 860,
+      "end": 867,
       "fixes": 0
     },
     {
@@ -117,8 +117,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/throws-first-deferred-apply/App.tsx",
-      "start": 913,
-      "end": 920,
+      "start": 860,
+      "end": 867,
       "fixes": 0
     },
     {
@@ -128,8 +128,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/throws-first-deferred-apply/App.tsx",
-      "start": 1162,
-      "end": 1174,
+      "start": 1109,
+      "end": 1121,
       "fixes": 0
     },
     {
@@ -139,8 +139,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/throws-first-deferred-apply/App.tsx",
-      "start": 1162,
-      "end": 1174,
+      "start": 1109,
+      "end": 1121,
       "fixes": 0
     },
     {
@@ -150,8 +150,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/throws-first-deferred-apply/App.tsx",
-      "start": 1162,
-      "end": 1174,
+      "start": 1109,
+      "end": 1121,
       "fixes": 0
     },
     {
@@ -161,8 +161,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/throws-first-deferred-apply/App.tsx",
-      "start": 1237,
-      "end": 1247,
+      "start": 1184,
+      "end": 1194,
       "fixes": 0
     },
     {
@@ -172,8 +172,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/throws-first-deferred-apply/App.tsx",
-      "start": 1237,
-      "end": 1247,
+      "start": 1184,
+      "end": 1194,
       "fixes": 0
     },
     {
@@ -183,8 +183,8 @@
       "blocker": "creation-throws-first",
       "severity": "error",
       "path": "fixtures/reactive-ir/throws-first-deferred-apply/App.tsx",
-      "start": 1237,
-      "end": 1247,
+      "start": 1184,
+      "end": 1194,
       "fixes": 0
     }
   ]
