@@ -12,4 +12,14 @@ Get, except where the read's own role proves a fresh read, which keeps the earli
 | `ForOfMemo`, `MergeMemo` (a memo's compute) | not claimed | silent |
 | `ForOfTwo` (two elements), `MergeShadowed` (a later literal has the key), `MergeOpen` (a later source no literal) | uncertifiable, as before | `ForOfTwo`, `MergeOpen`: STRICT_READ_UNTRACKED; `MergeShadowed`: silent |
 
+**Part 2 (facts schema 110).** A plain assignment's object target (`({ v } = s)`, `({ v } = merge(s, {…}))`) and an object pattern that is
+an element of a declarator's array pattern over a literal (`const [{ v }] = [s]`, `const [, { v }] = [0, s]`: every literal element up to
+it a plain value, array iteration intact) are `destructure_sites`, which the same readers take as declarators.
+
+| component | outcome | Chrome |
+|---|---|---|
+| `AssignBody`, `AssignMergeBody`, `AssignMember` (`{ v: o.x }`), `ArrayBody`, `ArraySecond` | SC1003 a violation (main: uncertifiable) | STRICT_READ_UNTRACKED |
+| `AssignMemo`, `ArrayMemo` | not claimed (main: uncertifiable census rows) | silent |
+| `ArrayHole` (a hole before the element), `ArraySpread` (a spread literal), `AssignProps` (a props root) | uncertifiable, as before | `ArrayHole`, `ArraySpread`: STRICT_READ_UNTRACKED; `AssignProps`: silent |
+
 Chrome: `fixtures/runtime-oracle/store-destructure-roots`. Stubs: `absent-guard-prop`'s `solid-js.d.ts`.
