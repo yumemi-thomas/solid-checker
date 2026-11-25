@@ -765,7 +765,7 @@ pub(crate) fn some_entry_on_stack_of(
 ) -> Option<(Span, Option<Span>)> {
     let mut budget = SOME_ENTRY_BUDGET;
     let mut seen = Vec::new();
-    some_entry_from(file, site, target, lookup, &mut budget, &mut seen)
+    some_entry_from(file, site, target, lookup, &mut budget, &mut seen, true)
 }
 
 fn some_entry_from(
@@ -775,8 +775,13 @@ fn some_entry_from(
     lookup: &SemanticLookup<'_>,
     budget: &mut usize,
     seen: &mut Vec<Span>,
+    first_pass: bool,
 ) -> Option<(Span, Option<Span>)> {
     *budget = budget.checked_sub(1)?;
+    // ADR 1224: whether every position so far runs on every completion of its layer's run, so that a run of the layers
+    // around it is a run of the site; an effect's apply step needs it, since only the apply's first run comes before
+    // the answer (`if (v > 1) write()` runs only on a later one).
+    let first_pass = first_pass && straight_line(file, at);
     let layer = containing_ast_function(&file.ast, at);
     if layer.map(|function| function.span) == target.map(|function| function.span) {
         return Some((at, None));
@@ -859,10 +864,11 @@ fn some_entry_from(
     // (`flush_mount_hold_free`). One such step per walk.
     let apply_step = super::first_run_effect_of_apply(file, layer, lookup);
     next.into_iter()
-        .find_map(|step| some_entry_from(file, step, target, lookup, budget, seen))
+        .find_map(|step| some_entry_from(file, step, target, lookup, budget, seen, first_pass))
         .or_else(|| {
-            let effect = apply_step?;
-            let (entry, earlier) = some_entry_from(file, effect, target, lookup, budget, seen)?;
+            let effect = apply_step.filter(|_| first_pass)?;
+            let (entry, earlier) =
+                some_entry_from(file, effect, target, lookup, budget, seen, first_pass)?;
             earlier.is_none().then_some((entry, Some(effect)))
         })
 }

@@ -1,7 +1,7 @@
 import { createEffect, createOptimistic, createRenderEffect, onSettled } from "solid-js";
 
-// ADR 1224: each export is the matching reactive-ir fixture `optimistic-effect-first-run(-render, -reads, -wrapped, -settled, -named)`, its
-// child renamed. Chrome throws OPTIMISTIC_WRITE_BEFORE_LOAD in `Effect`, `Render`, `Settled` and `Named`; the other two stay uncertifiable.
+// ADR 1224: each export is the matching reactive-ir fixture `optimistic-effect-first-run(-render, -reads, -wrapped, -settled, -named, -guarded)`, its
+// child renamed. Chrome throws OPTIMISTIC_WRITE_BEFORE_LOAD in `Effect`, `Render`, `Settled` and `Named`; `Reads`, `Wrapped` and `Guarded` stay uncertifiable.
 
 function KidEffect(props: { run: () => void }) {
   createEffect(
@@ -118,6 +118,25 @@ export function Named() {
   return (
     <div>
       <KidNamed run={run} />
+    </div>
+  );
+}
+
+function KidGuarded(props: { run: () => void }) {
+  createEffect(
+    () => 1,
+    (v) => {
+      if (v > 1) props.run();
+    },
+  );
+  return <p />;
+}
+
+export function Guarded() {
+  const [, setO] = createOptimistic(async () => 1);
+  return (
+    <div>
+      <KidGuarded run={() => setO(8)} />
     </div>
   );
 }
