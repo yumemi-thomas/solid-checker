@@ -857,8 +857,9 @@ fn some_entry_from(
 }
 
 /// ADR 1216 slice 2: the elements that render the component `function` of this file eagerly: a JSX element whose tag
-/// resolves to it (no member tag), every enclosing JSX element of which is intrinsic and holds it among its children, not
-/// in an attribute. A component's children and attributes run only when that component reads them; an intrinsic element's
+/// resolves to it (no member tag), every enclosing JSX element of which is intrinsic and holds it, or the element between,
+/// as a direct child: not in an attribute and not in an expression child (`{c() ? <K /> : null}` is evaluated reactively,
+/// possibly long after the creating pass). A component's children and attributes run only when that component reads them; an intrinsic element's
 /// children are built with it.
 fn eager_render_sites(
     file: &solid_facts::FileFacts,
@@ -881,7 +882,17 @@ fn eager_render_sites(
                     .filter(|outer| outer.span != element.span)
                     .all(|outer| {
                         super::intrinsic_element(file, outer)
-                            && outer.children.iter().any(|child| child.contains(element.span))
+                            && outer
+                                .children
+                                .iter()
+                                .any(|child| child.contains(element.span))
+                            && (outer.children.contains(&element.span)
+                                || ast.jsx_containing(element.span).any(|between| {
+                                    between.span != element.span
+                                        && outer.span.contains(between.span)
+                                        && between.span != outer.span
+                                        && outer.children.contains(&between.span)
+                                }))
                     })
         })
         .map(|element| element.span)
