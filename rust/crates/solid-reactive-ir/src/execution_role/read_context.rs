@@ -913,11 +913,8 @@ fn stored_run_sites(
         let Some(method) = standard(store) else {
             continue;
         };
-        let constructor = match (method.as_str(), index) {
-            ("Map.set", 1) => "MapConstructor.construct",
-            ("WeakMap.set", 1) => "WeakMapConstructor.construct",
-            ("Set.add", 0) => "SetConstructor.construct",
-            _ => continue,
+        let Some(constructor) = stored_collection_constructor(method.as_str(), index) else {
+            continue;
         };
         if store.construct
             || store.arguments.iter().any(|argument| argument.spread)
@@ -1073,6 +1070,18 @@ fn stored_run_sites(
         }
     }
     sites
+}
+
+/// ADR 1216 slice 3: the standard constructor of the collection a store call writes its argument `index` into: the
+/// value of `Map.set` and `WeakMap.set`, the member of `Set.add`. `None` for any other method or slot: that call stores
+/// nothing [`stored_run_sites`] follows, so it gives no step (the site keeps its uncertifiable answer).
+fn stored_collection_constructor(method: &str, index: usize) -> Option<&'static str> {
+    match (method, index) {
+        ("Map.set", 1) => Some("MapConstructor.construct"),
+        ("WeakMap.set", 1) => Some("WeakMapConstructor.construct"),
+        ("Set.add", 0) => Some("SetConstructor.construct"),
+        _ => None,
+    }
 }
 
 /// ADR 1216 slice 2: the elements that render the component `function` of this file eagerly: a JSX element whose tag
