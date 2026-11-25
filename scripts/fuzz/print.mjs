@@ -242,7 +242,11 @@ function render(program, instrument) {
   const siteCall = (node, text) => {
     if (!instrument || !siteIndex.has(node) || prefixed.has(node)) return `${mark(node)}${text}`;
     const hit = counterFor(node);
-    return `${mark(node)}(__h(${hit}), ${text})`;
+    // ADR 1217: a site whose text is a statement's (flip-read.mjs `[o].map((s) => s.v);`) printed where only an expression stands (a class
+    // field's initializer, `printsBare`) keeps its `;` after the counter's close: `(__h(N), [o].map(...));`, never `(__h(N), ...;)`. The
+    // counter's removal (hits.mjs) gives back the program's own text.
+    const statementEnd = text.endsWith(";") ? ";" : "";
+    return `${mark(node)}(__h(${hit}), ${statementEnd ? text.slice(0, -1) : text})${statementEnd}`;
   };
   const ind = (depth) => INDENT.repeat(depth);
   // The line table: every lineable node's text is wrapped in span markers, read back (and stripped) below.

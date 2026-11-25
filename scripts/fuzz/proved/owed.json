@@ -3,7 +3,7 @@
   {
    "adr": "ADR 1125",
    "owed": 19,
-   "why": "#296 smoke and smoke-census: 40 true proofs withheld beside the false ones, each named in changes.json; ADR 1133 recovered 21 (Reflect.apply 20: Reflect is a hazard only for writing members and key readers; the then on an object literal 1: a contained hook is no delivery hazard). Still owed: an uninstalled package (unread-module) 12, JSON.stringify with a replacer (key-reader) 5, a literal javascript: URL 2 (docs/open-work.md, ADR 1125 owed and N4). The shadow-delivery owner bit (5 smoke-census programs, not in the proved ledger) was recovered by ADR 1139."
+   "why": "#296 smoke and smoke-census: 40 true proofs withheld beside the false ones, each named in changes.json; ADR 1133 recovered 21 (Reflect.apply 20: Reflect is a hazard only for writing members and key readers; the then on an object literal 1: a contained hook is no delivery hazard). Still owed: an uninstalled package (unread-module) 12, JSON.stringify with a replacer (key-reader) 5, a literal javascript: URL 2 (docs/open-work.md, ADR 1125 owed and N4). The shadow-delivery owner bit (5 smoke-census programs, not in the proved ledger) was recovered by ADR 1139. Audit 45516815348 (ADR 1217): 254 more proved programs of batch 20z lost to the event-delivery hazards, named by ADR 1125 group rows of changes.json (accepted fail-closed cost, win-back owed). This count stays 19 because an owed count may not rise (scripts/guard/proved.mjs); the owed total is 19 + 254, docs/open-work.md names it, and ADR 1218 measures whether an exact win-back exists."
   },
   {
    "adr": "ADR 1139",
@@ -14,6 +14,11 @@
    "adr": "ADR 1177",
    "owed": 33,
    "why": "bundle s smoke-census: 33 proved mx-census programs (context-not-found in dny-*, evt-* and pos-handler-owner contexts), each an SC4002 violation Chrome confirms (CONTEXT_NOT_FOUND), withheld by owner-check-throws-first (a context read in a JSX handler whose owner varies by caller or may be null). Recovered when an order proof shows that a run at mount, before the handler can be delivered, is the first (docs/open-work.md, ADR 1177). A 34th program, dny-change-checkbox-retyped, moves alike and is in no ledger. Not built (ADR 1192 released, 2026-11-23): in each program the owned run is a DOM side effect of code in `Later`'s body (a `.click()` or `dispatchEvent`, but mostly a removal, move, disable, popover change or disposal that fires blur, beforetoggle, change or load synchronously) on an element found by `document.querySelector('[data-act=\"b1\"]')`. The checker has no element identity: a handler's owner is a seed (OWNED and UNOWNED wherever a synchronous dispatch exists), and no edge says which call delivers which handler's event. A proof would resolve selector strings to JSX elements (name matching, which invariant 3 forbids; uniqueness in the live DOM is not provable from the source) and model each delivery mechanism and the focus or popover state before it."
+  },
+  {
+   "adr": "ADR 1186",
+   "owed": 329,
+   "why": "Audit 45516815348 (ADR 1217): 329 proved lg-recall programs on the `nested` binding (STRICT_READ_UNTRACKED 160, REACTIVE_WRITE_IN_OWNED_SCOPE 124, ACTION_CALLED_IN_OWNED_SCOPE 33, LOADING_ON_ACCESSOR 6, UNTRACKED_READ_AFTER_AWAIT 6), clean on batch w’s base and uncertifiable since 3935fa715: ADR 1186’s value-in-carrier SC9012 at the nested read. Named by ADR 1186 group rows of changes.json. Recovered by ADR 1218 (win back the legal cleans the nested binding lost). The 24 use-each-apart programs of the same batch are accepted, not owed."
   }
  ]
 }

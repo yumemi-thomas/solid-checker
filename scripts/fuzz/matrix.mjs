@@ -29,7 +29,7 @@ import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { browserExecutionCache, withRuntimeCache, cacheStats } from "./cache.mjs";
-import { callStarts, frameStarts, statementAt } from "./call-starts.mjs";
+import { callStarts, dispatchPlaces, frameStarts, statementAt } from "./call-starts.mjs";
 import { registrationPositions } from "./registration.mjs";
 import { partlySilentRules, besideCode, codeOfUncaught, codeRules, codesForRule, coversCodeAt, declinesCode, appStack, withheldAtStack, withStarts, ignoredRules, isPlacelessCode, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
 import { loggedEvents, offSiteVerdicts, runtimeEvents } from "./classify.mjs";
@@ -83,6 +83,9 @@ import { checkTypedAway, typeRejectedRows, typedAwayVerdict, typedOnPurpose } fr
 import { TYPE_ERROR_REFUSAL_SHARE, harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal, typecheck } from "./typecheck.mjs";
 
 export const OUTCOMES = ["typed-away", "harness", "unexecuted", "pending-uncaught", "not-fired", "agree", "wrong-rule", "recall-gap", "false-clean", "misplaced", "unplaced", "unjudged-claim", "halted-claim", "stacked-claim", "false-positive", "tsc-overlap"];
+// ADR 1217: the codes about a pending read, where an SC5003 uncertifiable (`async-outside-loading-boundary`: the pending read unresolved)
+// at the read is the checker's fail-closed answer (`judge`).
+const PENDING_READ_CODES = ["CAUGHT_REACTIVE_READ"];
 const CONFIRMED = ["agree", "wrong-rule", "recall-gap", "false-clean", "false-positive"];
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -372,15 +375,28 @@ function judgeSite({ code, site, typecheck: typed, checker, runtime, others = []
   const unrelated = covering.length ? { unrelated: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`) } : {};
   const claimingElsewhere = relevant.find((finding) => claims(finding)) ?? (placedCode ? moduleFindings.find((finding) => claims(finding)) : undefined);
   if (claimingElsewhere) return { outcome: "recall-gap", detail: { ...detail, ...unrelated, declinedBy: mechanism(claimingElsewhere), remote: `${claimingElsewhere.rule}/${claimingElsewhere.kind}@${where(claimingElsewhere)}` } };
+  // The statement that holds the read: Chrome's top frame on the site's lines (a `wrapper` site's read is on its aux line, the site's line
+  // is the call). A code with a place and no such frame has none; a placeless code has the site's line.
+  const top = stacks.find((stack) => Number.isInteger(stack[0]?.column) && region.includes(stack[0].line))?.[0];
+  const statement = top ? statementAt(text, top.line, top.column) : null;
+  const atRead = (finding) => finding.file === "App.tsx" && (statement ? statement.contains(finding.line, finding.column) : isPlacelessCode(code) && finding.line === site.line);
+  // ADR 1217: the checker's fail-closed answer where the read runs. An uncertifiable SC9012 (any code: a withholding) or SC5003 (a code about
+  // a pending read) inside the callee of a call in the statement that holds the read (the call dispatches through what it could not resolve),
+  // or at a carrier call where the read runs (a call in the body of the function the site calls by name; call-starts.mjs `dispatchPlaces`),
+  // is this program's uncertifiable: a recall gap, not a false clean. Nothing else: a silent program, a row on another statement, or one at
+  // a call's argument (what the call was handed, R20, R22) stays a false clean.
+  const failClosedRule = (finding) => finding.kind === "uncertifiable" && finding.file === "App.tsx"
+    && (finding.rule === "reactive-dispatch-unresolved" || (finding.rule === "async-outside-loading-boundary" && PENDING_READ_CODES.includes(code)));
+  const candidates = relevant.filter(failClosedRule);
+  const placeOf = candidates.length && source.length > 1 ? dispatchPlaces(text, (line, column) => atRead({ file: "App.tsx", line, column })) : () => null;
+  const failClosed = candidates.find((finding) => placeOf(finding.line, finding.column));
+  if (failClosed) return { outcome: "recall-gap", detail: { ...detail, ...unrelated, declinedBy: "fail-closed", failClosed: `${failClosed.rule}/${failClosed.id}@${failClosed.line}:${failClosed.column} (${placeOf(failClosed.line, failClosed.column)})` } };
   // Certified: the file has no uncertifiable finding at all, so the checker claims it proved the whole file. A false clean there is a
   // fail-closed break (invariant 2); in a file with an uncertifiable finding elsewhere it is a recall gap that only lost its place.
   const certified = !checker.findings.some((finding) => !ignoredRules.includes(finding.rule) && finding.kind === "uncertifiable");
   const near = relevant.find(nearOnly);
-  // The named uncertifiables starting in the statement that holds the read: Chrome's top frame on the site's lines (a `wrapper` site's read is
-  // on its aux line, the site's line is the call). A code with a place and no such frame has none; a placeless code has the site's line.
+  // The named uncertifiables starting in the statement that holds the read (`top`, `statement` above).
   // `atRead` when one starts exactly at the position Chrome reported. What open-rows.mjs checks for a row the owner's stop rule covers (ADR 0815).
-  const top = stacks.find((stack) => Number.isInteger(stack[0]?.column) && region.includes(stack[0].line))?.[0];
-  const statement = top ? statementAt(text, top.line, top.column) : null;
   const namedU = relevant.filter((finding) => finding.kind === "uncertifiable" && finding.blocker && finding.file === "App.tsx"
     && (statement ? statement.contains(finding.line, finding.column) : isPlacelessCode(code) && finding.line === site.line)).map((finding) => ({ rule: finding.rule, id: finding.id, line: finding.line, column: finding.column, blocker: finding.blocker, ...(stacks.some((stack) => withheldAtStack(finding, stack.slice(0, 1), mount, code)) ? { atRead: true } : {}) }));
   return { outcome: "false-clean", detail: { ...detail, ...unrelated, certified, ...(near ? { withheldNear: `${near.rule}@${near.line}:${near.column}` } : {}), ...(namedU.length ? { namedU } : {}) } };
@@ -804,7 +820,7 @@ export function buildMatrix(rows, { options, header, typedAway }) {
       code: cell.code, context: cell.context, programs: cell.rows.length, ...counts, confirmed,
       agreeRemote: cell.rows.filter((row) => row.outcome === "agree" && row.detail?.remote).length,
       falseCleanCertified: cell.rows.filter((row) => row.outcome === "false-clean" && row.detail?.certified).length,
-      recallGapBy: Object.fromEntries(["claiming", "withholding", "declining"].map((by) => [by, cell.rows.filter((row) => row.outcome === "recall-gap" && row.detail?.declinedBy === by).length])),
+      recallGapBy: Object.fromEntries(["claiming", "withholding", "declining", "fail-closed"].map((by) => [by, cell.rows.filter((row) => row.outcome === "recall-gap" && row.detail?.declinedBy === by).length])),
       secondaryCertified: cell.rows.filter((row) => Object.values(row.detail?.secondary ?? {}).includes("false-clean-certified")).length,
       byBinding: by("binding"), byLayer: by("layer"),
       chrome: chromeSummary(cell.rows),
@@ -828,7 +844,7 @@ export function buildMatrix(rows, { options, header, typedAway }) {
     generator: GENERATOR_VERSION, entry: ENTRY_VERSION, profile: "misuse", seed: options.seed, perCell: options.grid ? null : options.perCell, ...(options.grid ? { sampling: "grid" } : {}), ...(options.pairs ? { pairs: pairsOption(options.pairs) } : {}), ...(options.recall ? { recallLean: recallLeanOf(options) } : {}), checker: header, total,
     confirmed: CONFIRMED.reduce((sum, name) => sum + total[name], 0),
     falseCleanCertified: rows.filter((row) => row.outcome === "false-clean" && row.detail?.certified).length,
-    recallGapBy: Object.fromEntries(["claiming", "withholding", "declining"].map((by) => [by, rows.filter((row) => row.outcome === "recall-gap" && row.detail?.declinedBy === by).length])),
+    recallGapBy: Object.fromEntries(["claiming", "withholding", "declining", "fail-closed"].map((by) => [by, rows.filter((row) => row.outcome === "recall-gap" && row.detail?.declinedBy === by).length])),
     // The violations away from the site, by verdict (`judge`, classify.mjs `offSiteVerdicts`): `unconnected` ones are the next lead.
     offSite: Object.fromEntries(["false-positive", "unconnected", "unexecuted", "unjudged"].map((verdict) => [verdict, rows.flatMap((row) => row.detail?.offSite ?? []).filter((label) => label.split(":")[1].startsWith(verdict)).length])),
     // Per (rule, verdict, reason), what `gate` holds down (ADR 0641): a rise in violations nothing judged is a blind spot growing.
