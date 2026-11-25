@@ -18,6 +18,9 @@ outside JSX, whatever its other uses (a handler, a map), and a primitive that ru
 its call (`flush(fn)`, a memo's or an effect's compute with no `lazy` option). Also (ADR 1216 slice 2) a
 callback prop the child calls straight-line in its body (ADR 1171, 1190), and a same-file component whose
 element is a direct child of intrinsic elements only (not in an expression child or a component's children).
+Also (ADR 1216 slice 3) `new Map([[k, v]]).forEach(f)` and `new Set([x]).forEach(f)`, and a function stored once in a
+fresh local `Map`, `Set` or `WeakMap` (`m.set(k, f)`, `s.add(f)`) that a later straight-line `forEach((g) => g())` or
+`get(key)!()` calls.
 
 Proven too (ADR 1175): the setter call is in the first run of an effect's apply that comes
 before the answer. The apply half is ADR 0504's (the call on every completion of the apply's
