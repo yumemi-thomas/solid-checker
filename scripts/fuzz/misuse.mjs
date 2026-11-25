@@ -20,7 +20,7 @@ import {
 import { codePolicy, policyOf } from "./codes.mjs";
 import { RECALL_MOUNTS, WRAP_MOUNTS } from "./mounts.mjs";
 import { FLIP_READ_CONTEXTS, FLIP_READ_CONTEXT_ONLY, FLIP_READ_LEGAL, FLIP_READ_VARIANTS, STATIC_SOURCES, STORE_DESTRUCTURES, SYNC_COMPUTES, SYNC_COMPUTE_LINES, flipReadContext, openSignal } from "./flip-read.mjs";
-import { FLIP_WRITE_CONTEXTS, FLIP_WRITE_LEGAL, flipWriteContext } from "./flip-write.mjs";
+import { BRANCH_FALSE_LEGAL, FLIP_WRITE_CONTEXTS, FLIP_WRITE_LEGAL, flipWriteContext } from "./flip-write.mjs";
 import { FLIP_GEN_CONTEXTS, flipGenContext } from "./flip-gen.mjs";
 import { TABLE_CONTEXT_NAMES, tableContext, tablePlacement } from "./table-shapes.mjs";
 import { WRAP_CONTEXT_NAMES, wrapContext, wrapPlacement } from "./boundary-shapes.mjs";
@@ -925,6 +925,8 @@ for (const contexts of [FLIP_READ_CONTEXTS, FLIP_WRITE_CONTEXTS, FLIP_GEN_CONTEX
   for (const [code, added] of Object.entries(contexts)) SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...added];
 }
 for (const legal of [FLIP_READ_LEGAL, FLIP_WRITE_LEGAL]) for (const [code, added] of Object.entries(legal)) SPEC[code].recallLegal = [...(SPEC[code].recallLegal ?? []), ...added];
+// ADR 1219: every code's site behind a test that is false at run time is legal (it never runs).
+for (const [code, spec] of Object.entries(SPEC)) if (!spec.typedAway) spec.recallLegal = [...(spec.recallLegal ?? []), ...Object.keys(BRANCH_FALSE_LEGAL)];
 for (const [code, only] of Object.entries(FLIP_READ_CONTEXT_ONLY)) SPEC[code].contextOnly = { ...SPEC[code].contextOnly, ...only };
 for (const [code, variants] of Object.entries(FLIP_READ_VARIANTS)) {
   const spec = SPEC[code];
