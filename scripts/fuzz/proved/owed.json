@@ -14,6 +14,11 @@
    "adr": "ADR 1177",
    "owed": 33,
    "why": "bundle s smoke-census: 33 proved mx-census programs (context-not-found in dny-*, evt-* and pos-handler-owner contexts), each an SC4002 violation Chrome confirms (CONTEXT_NOT_FOUND), withheld by owner-check-throws-first (a context read in a JSX handler whose owner varies by caller or may be null). Recovered when an order proof shows that a run at mount, before the handler can be delivered, is the first (docs/open-work.md, ADR 1177). A 34th program, dny-change-checkbox-retyped, moves alike and is in no ledger. Not built (ADR 1192 released, 2026-11-23): in each program the owned run is a DOM side effect of code in `Later`'s body (a `.click()` or `dispatchEvent`, but mostly a removal, move, disable, popover change or disposal that fires blur, beforetoggle, change or load synchronously) on an element found by `document.querySelector('[data-act=\"b1\"]')`. The checker has no element identity: a handler's owner is a seed (OWNED and UNOWNED wherever a synchronous dispatch exists), and no edge says which call delivers which handler's event. A proof would resolve selector strings to JSX elements (name matching, which invariant 3 forbids; uniqueness in the live DOM is not provable from the source) and model each delivery mechanism and the focus or popover state before it."
+  },
+  {
+   "adr": "ADR 1216",
+   "owed": 200,
+   "why": "Part 2 (accepted to fix 1,426 legal FPs): 200 true SC2009 violations in constructs that provably enter their body (mx-recall 192, mx-census 8; scripts/fuzz/costs/adr-1216-part2.json), owed until a fact says the construct is entered."
   }
  ]
 }

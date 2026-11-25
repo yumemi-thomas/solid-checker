@@ -274,6 +274,30 @@
    "witness": "mx-context-not-found-dny-flush-load-x-direct-none (and dny-flush-popover, dny-flush-unmount; fixtures/reactive-ir/context-read-owner-varies, Varies): Chrome rc.21 throws NO_OWNER_CONTEXT where main 960bfa1f9 reported missing-context-provider (SC4002, CONTEXT_NOT_FOUND) at a useContext in a JSX handler (onLoad, onBeforeToggle, onBlur) that a later flush reaches unowned (the census false positives of open-defects)",
    "collateral": 33,
    "why": "ADR 1177 (bundle s, full census leg of the smoke): a context read written in a JSX handler whose owner varies by caller or may be null makes no provider claim (`owner-check-throws-first`: an unowned delivery may come first and throw NO_OWNER_CONTEXT). These 33 programs (context-not-found: dny-* 30, evt-* 2, pos-handler-owner 1) are the true proofs it withholds beside the three false positives: Chrome reports CONTEXT_NOT_FOUND at them because the owned run came first (a dispatch or an insertion at mount, e.g. dny-click-any, dny-load-show, dny-dispose-body), so the provider claim was right. One more program, mx-context-not-found-dny-change-checkbox-retyped-x-direct-none, moves alike and is in no ledger. Recovered when an order proof shows that a run at mount, before the handler can be delivered, is the first (docs/open-work.md, ADR 1177)."
+  },
+  {
+   "grid": "mx-recall",
+   "code": "OPTIMISTIC_WRITE_BEFORE_LOAD",
+   "from": "agree",
+   "to": "recall-gap",
+   "count": 192,
+   "adr": "ADR 1216",
+   "kind": "fix",
+   "witness": "lg-optimistic-write-before-load-flw-branch-false-signal-direct-none (and the 1,425 other flw-branch-false programs: main 7e56b592b reports SC2009 at a site Chrome never runs; rediscovery.json)",
+   "collateral": 192,
+   "why": "ADR 1216 part 2 (accepted to fix FP, win-back owed: construct provably entered): SC2009 now requires the write and every call carrying it to run whenever their function runs, which fixes 1,426 legal false positives; 192 true violations in a one-pass for, while (true), do-while, literal switch case, label, finally, stepped generator or tagged-template hand-off lose their proof. Ids: scripts/fuzz/costs/adr-1216-part2.json"
+  },
+  {
+   "grid": "mx-census",
+   "code": "OPTIMISTIC_WRITE_BEFORE_LOAD",
+   "from": "agree",
+   "to": "recall-gap",
+   "count": 8,
+   "adr": "ADR 1216",
+   "kind": "fix",
+   "witness": "lg-optimistic-write-before-load-flw-branch-false-signal-direct-none (and the 1,425 other flw-branch-false programs: main 7e56b592b reports SC2009 at a site Chrome never runs; rediscovery.json)",
+   "collateral": 8,
+   "why": "ADR 1216 part 2 (accepted to fix FP, win-back owed: construct provably entered): the same requirement; 8 true violations (flw-guard-early, show, async-entry, signal and store) lose their proof. Ids: scripts/fuzz/costs/adr-1216-part2.json"
   }
  ]
 }
