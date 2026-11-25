@@ -1,0 +1,1 @@
+{"note": "ADR 1220: a sync-mode async memo created in a closure a deferred effect apply calls, the apply rerun by flush() in a handler's root: Chrome reports SYNC_NODE_RECEIVED_ASYNC and SC7002 is a violation. The same closure in an apply with no options keeps creation-throws-first (uncertifiable)."}

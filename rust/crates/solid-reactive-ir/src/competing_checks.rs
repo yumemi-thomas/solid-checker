@@ -708,7 +708,9 @@ const APPLY_ENTRY_DEPTH: usize = 4;
 /// [`slot_called_only_in_applies`]), or, within `depth`, every run of it is one of its exact entries
 /// ([`crate::execution_role::plain_call_entries`], [`crate::execution_role::member_call_entries`]), each written directly (no
 /// nested function, no parameter list) in a function that is such an apply's callback or for which the same holds. Neither
-/// function may be `async` or a generator: a call past a suspension is off the apply's stack. `false` for anything else.
+/// function may be `async` or a generator: a call past a suspension is off the apply's stack. `false` for anything else. ADR
+/// 1220: for an apply's first run (`rerunning_applies` false), an entry in an apply written with an options argument after it
+/// does not count ([`apply_written_last`]).
 fn runs_only_in_applies(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
@@ -738,10 +740,27 @@ fn runs_only_in_applies(
                     && !caller.generator
                     && caller.body.contains(*call)
                     && crate::owners::written_directly_in(&file.ast, caller, *call)
-                    && (apply_callback(file, caller, rerunning_applies, lookup)
+                    && ((apply_callback(file, caller, rerunning_applies, lookup)
+                        && (rerunning_applies || apply_written_last(file, caller)))
                         || runs_only_in_applies(file, caller, rerunning_applies, lookup, depth))
             })
     })
+}
+
+/// ADR 1220: `function` is the last argument its call is written with, so no options argument follows it. Asked of an apply
+/// whose first run is the claim (`rerunning_applies` false, SC7002's question): options may defer that run (`{ defer: true }`),
+/// and then every run is a rerun the scheduler starts from wherever `flush` runs it, where Chrome reaches the result probe
+/// with no effect-callback guard first (`mx-sync-node-received-async-effect-apply-defer-flush-rerun-memo-direct-closure`).
+fn apply_written_last(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> bool {
+    let ast = &file.ast;
+    ast.arguments_containing(function.span)
+        .any(|(holder, index)| {
+            ast.peel_ts_sugar_span(holder.arguments[index].span) == function.span
+                && index + 1 == holder.arguments.len()
+        })
 }
 
 /// Whether `function` is written as the whole argument of a dialect primitive whose callback at that position the effect phase runs
