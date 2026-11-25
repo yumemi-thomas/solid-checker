@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1211: a store handed with its setter by prop, the child reaching the prop through a `merge` view, an `omit` view, a whole-props spread forward, or a merge view beside an `omit` rest spread onto an element that drops both keys, and written past the store's root: Chrome reports STORE_WRITE_OUTSIDE_SETTER and SC2003 is a violation. A child that calls the setter through the view or after a forward, or hands the view on whole, stays uncertifiable."
+}
