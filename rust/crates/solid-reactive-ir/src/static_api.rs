@@ -1652,6 +1652,10 @@ impl StaticApiContext<'_> {
         if target.spread {
             return None;
         }
+        // ADR 1214 (slice C): a context member read through a `useContext` result names the provided source.
+        if let Some(provided) = self.context_refresh_source(file, target) {
+            return Some(provided);
+        }
         let (declaration, name) = self.props_target_slot(file, target)?;
         let (sources, plain, forwards) = self
             .tables
@@ -1672,6 +1676,194 @@ impl StaticApiContext<'_> {
             kind,
             accessor_declaration.clone(),
             self.tables.source_owned_write(source).unwrap_or_default(),
+        ))
+    }
+
+    /// ADR 1214 (slice C): the source a `refresh` target names through a context: `ctx.name` on a `const ctx = useContext(Ctx)`, or `name` bound by a
+    /// static slot of a `const { name } = useContext(Ctx)` pattern (no default, no nested pattern, no rest), where (ADR 1123's premises, all in this file):
+    /// - `Ctx` is an unwritten, unexported `const` initialized by the dialect's `createContext` with no argument: no default, so a read under no provider
+    ///   throws and the `refresh` never runs;
+    /// - every reference of `Ctx` is the tag of the one provider element (no spread, one `value`) or the one argument of a `useContext` call whose result
+    ///   is an unwritten `const` identifier each reference of which is a static, non-optional member Get, or a `const` object pattern of static plain
+    ///   slots: no reader can write a slot of the provided object;
+    /// - the provider's value is a closed object literal of data properties whose `name` slot is a reference to an unwritten `const` that is one source.
+    /// The source's kind, accessor declaration and owned-write option, as ADR 1174's caller census gives them.
+    fn context_refresh_source(
+        &self,
+        file: &FileFacts,
+        target: &solid_facts::ast::ArgumentFact,
+    ) -> Option<(
+        SymbolId,
+        ReactiveSourceKind,
+        Location,
+        crate::OwnedWriteOption,
+    )> {
+        let ast = &file.ast;
+        if self.lookup.program_has_eval() {
+            return None;
+        }
+        let at = ast.peel_ts_sugar_span(target.value_span.unwrap_or(target.span));
+        let exact = |call: &solid_facts::ast::CallFact| {
+            !call.construct
+                && call.arguments.len() == 1
+                && !call.arguments[0].spread
+                && self.lookup.primitive_at_call(file, call.span) == Some(Primitive::UseContext)
+                && self
+                    .lookup
+                    .resolved_callee_call(file, call.callee)
+                    .is_some_and(|resolved| resolved.validity != typefacts::ResolvedCallValidity::Recovery)
+        };
+        let const_binding = |declaration: Span| {
+            ast.bindings.iter().find(|binding| {
+                binding.immutable && binding.names.iter().any(|name| name.span == declaration)
+            })
+        };
+        // The read and the key.
+        let (read, key) = if let Some(member) = ast.member_at(at) {
+            if ast.computed_members.binary_search(&member.span).is_ok()
+                || ast.optional_members.binary_search(&member.span).is_ok()
+            {
+                return None;
+            }
+            let object = ast.peel_ts_sugar_span(member.object);
+            let declaration = ast.reference_declaration(object)?;
+            let binding = const_binding(declaration)?;
+            if binding.shape != solid_facts::ast::BindingShape::Identifier {
+                return None;
+            }
+            let read = ast.call_at(ast.peel_ts_sugar_span(binding.initializer?))?;
+            (read, file.source_text(member.property)?.to_owned())
+        } else {
+            let declaration = ast.reference_declaration(at)?;
+            let binding = const_binding(declaration)?;
+            if binding.shape != solid_facts::ast::BindingShape::Object || binding.pattern_rest {
+                return None;
+            }
+            let slot = binding.object_properties.iter().find(|slot| {
+                slot.local.as_ref().is_some_and(|local| local.span == declaration)
+            })?;
+            if slot.computed || slot.has_default || slot.nested {
+                return None;
+            }
+            let read = ast.call_at(ast.peel_ts_sugar_span(binding.initializer?))?;
+            (read, slot.key.as_ref()?.to_string())
+        };
+        if !exact(read) {
+            return None;
+        }
+        // The context.
+        let context = ast.reference_declaration(ast.peel_ts_sugar_span(read.arguments[0].span))?;
+        let binding = const_binding(context)?;
+        let created = ast.call_at(ast.peel_ts_sugar_span(binding.initializer?))?;
+        if binding.shape != solid_facts::ast::BindingShape::Identifier
+            || binding.names.len() != 1
+            || created.construct
+            || !created.arguments.is_empty()
+            || self.lookup.primitive_at_call(file, created.span) != Some(Primitive::CreateContext)
+            || crate::indexes::binding_written(file, context)
+            || ast.exports.iter().any(|export| {
+                export
+                    .specifiers
+                    .iter()
+                    .chain(&export.declarations)
+                    .chain(&export.declaration_surface_only)
+                    .any(|specifier| specifier.local.span == context)
+                    || export.span.contains(context)
+            })
+        {
+            return None;
+        }
+        // Every reference: the one provider's tag, or a `useContext` read whose result is read only.
+        let read_only = |call: &solid_facts::ast::CallFact| {
+            let Some(holder) = ast.bindings.iter().find(|holder| {
+                holder.immutable
+                    && holder
+                        .initializer
+                        .is_some_and(|value| ast.peel_ts_sugar_span(value) == call.span)
+            }) else {
+                return false;
+            };
+            match holder.shape {
+                solid_facts::ast::BindingShape::Object => {
+                    !holder.pattern_rest
+                        && holder.object_properties.iter().all(|slot| {
+                            !slot.computed && !slot.nested && slot.key.is_some() && slot.local.is_some()
+                        })
+                }
+                solid_facts::ast::BindingShape::Identifier => holder.names.iter().all(|name| {
+                    !crate::indexes::binding_written(file, name.span)
+                        && ast.references_to(name.span).iter().all(|reference| {
+                            *reference == name.span
+                                || ast.members.iter().any(|member| {
+                                    ast.peel_ts_sugar_span(member.object) == *reference
+                                        && ast.computed_members.binary_search(&member.span).is_err()
+                                        && !ast.any_write_target_containing(member.span)
+                                })
+                                || ast.type_queries.iter().any(|query| query.contains(*reference))
+                        })
+                }),
+                _ => false,
+            }
+        };
+        let mut provider = None;
+        for &reference in ast.references_to(context) {
+            if reference == context || ast.type_queries.iter().any(|query| query.contains(reference)) {
+                continue;
+            }
+            if let Some(element) = ast.jsx_elements.iter().find(|element| {
+                element.member_object.is_none()
+                    && (element.name.span == reference || element.closing_name == Some(reference))
+            }) {
+                if provider.is_some_and(|seen: &solid_facts::ast::JsxElementFact| seen.span != element.span) {
+                    return None;
+                }
+                provider = Some(element);
+                continue;
+            }
+            let read_here = ast.calls.iter().find(|call| {
+                call.arguments.len() == 1 && ast.peel_ts_sugar_span(call.arguments[0].span) == reference
+            })?;
+            if !exact(read_here) || !read_only(read_here) {
+                return None;
+            }
+        }
+        let provider = provider?;
+        if !provider.spreads.is_empty() {
+            return None;
+        }
+        let mut values = provider.attributes.iter().filter(|attribute| {
+            attribute.namespace.is_none() && file.source_text(attribute.local_name) == Some("value")
+        });
+        let value = values.next()?;
+        if values.next().is_some() || value.runtime_type_escape {
+            return None;
+        }
+        let literal = ast.peel_ts_sugar_span(value.expression?);
+        let properties = crate::interproc::accessor_provenance::closed_properties(file, literal)?;
+        let property = properties.iter().find(|property| {
+            property.data
+                && !property.method
+                && file.source_text(property.key).map(|text| text.trim_matches(['\'', '"'])) == Some(key.as_str())
+        })?;
+        let held = ast.peel_ts_sugar_span(property.value);
+        let declaration = ast.reference_declaration(held)?;
+        let source_binding = const_binding(declaration)?;
+        if source_binding.shape != solid_facts::ast::BindingShape::Identifier
+            || crate::indexes::binding_written(file, declaration)
+        {
+            return None;
+        }
+        let source = self.entities.at(file.path.as_str(), declaration)?;
+        let kind = *self.tables.source_kind(&source)?;
+        if kind == ReactiveSourceKind::Store && self.tables.value_form_store(&source) {
+            return None;
+        }
+        let (_, accessor_declaration) = self.tables.accessor(&source)?;
+        Some((
+            source.clone(),
+            kind,
+            accessor_declaration.clone(),
+            self.tables.source_owned_write(&source).unwrap_or_default(),
         ))
     }
 
