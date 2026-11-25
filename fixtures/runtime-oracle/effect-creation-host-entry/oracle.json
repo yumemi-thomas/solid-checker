@@ -1,0 +1,33 @@
+{
+  "note": "ADR 1213: a creation reached only from a host entry (an inline handler literal, a scheduler's fresh-stack callback) through in-place layers: HandlerNamed, HandlerUntrack, HandlerTimer, HandlerMicro silent (effect-creation-runs-off-apply); HandlerExported silent at runtime too (its uncertifiable row is the cost of an unseen importer). Chrome: no PRIMITIVE_IN_EFFECT_CALLBACK anywhere.",
+  "steps": [
+    {
+      "action": "click",
+      "selector": "[data-act=\"b1\"]"
+    },
+    {
+      "action": "click",
+      "selector": "[data-act=\"b2\"]"
+    },
+    {
+      "action": "click",
+      "selector": "[data-act=\"b3\"]"
+    },
+    {
+      "action": "click",
+      "selector": "[data-act=\"b4\"]"
+    },
+    {
+      "action": "click",
+      "selector": "[data-act=\"b5\"]"
+    },
+    {
+      "action": "wait-for-selector",
+      "selector": "body[data-timer]"
+    },
+    {
+      "action": "wait-for-selector",
+      "selector": "body[data-micro]"
+    }
+  ]
+}

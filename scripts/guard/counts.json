@@ -130,7 +130,7 @@
   "SC3001 function-run-unplaced": 44,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 7,
-  "SC3001 leaf-operation-unaccounted": 7227,
+  "SC3001 leaf-operation-unaccounted": 7229,
   "SC3001 leaf-owner-unproven": 69,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
@@ -6867,6 +6867,18 @@
    "fixtures": {
     "proved": "reactive-ir/write-detached-owner-helper",
     "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/owner-call-effect-creation-inline-handler",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 1213",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::runs_on_host_entry",
+   "fixtures": {
+    "proved": "reactive-ir/owner-call-effect-creation-inline-handler",
+    "open": "reactive-ir/owner-call-effect-creation-inline-handler"
    }
   }
  ],
