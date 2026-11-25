@@ -1656,8 +1656,12 @@ fn direct_mutations(
                             == file.ast.peel_ts_sugar_span(root)
                     }))
         {
-            // ADR 0509: the caller may have passed a store for the prop.
-            let sink = SinkWrite::writes(written);
+            // ADR 0509: the caller may have passed a store for the prop. ADR 1225: a logical assignment writes only when its test
+            // passes, so it may not write here as in the paths above (`props.s1.v &&= 5` over `createStore({ v: 0 })` writes nothing).
+            let sink = SinkWrite {
+                may_not_write: head == Some(false) || logical.is_some(),
+                ..SinkWrite::writes(written)
+            };
             push_unproven_container_write(file, context, written, root, sink, defects, ends);
             decide(defects, false);
             continue;
