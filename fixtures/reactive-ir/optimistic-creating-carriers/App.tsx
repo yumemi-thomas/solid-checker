@@ -54,7 +54,7 @@ export function StoredInWeakMap() {
     setValue(6);
   };
   table.set(key, run);
-  table.get(key)?.();
+  table.get(key)!();
   return <p>{value()}</p>;
 }
 
@@ -111,5 +111,17 @@ export function OtherKey() {
   };
   table.set(key, run);
   table.get(other)?.();
+  return <p>{value()}</p>;
+}
+
+export function OptionalCall() {
+  const [value, setValue] = createOptimistic(async () => 1);
+  const key = {};
+  const table = new WeakMap<object, () => void>();
+  const run = () => {
+    setValue(12);
+  };
+  table.set(key, run);
+  table.get(key)?.();
   return <p>{value()}</p>;
 }
