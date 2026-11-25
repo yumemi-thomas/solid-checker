@@ -824,6 +824,14 @@ fn some_entry_from(
             })
             .map(|(call, _)| call.span),
     );
+    // ADR 1216 slice 2: a callback prop's function runs at the child's calls of the prop (ADR 1171, 1190: inline, named,
+    // destructured, forwarded and spread forms).
+    if let Some(calls) = prop_literal_call_sites(file, layer, lookup) {
+        next.extend(calls.into_iter().filter(|call| straight_line(file, *call)));
+    }
+    // ADR 1216 slice 2: a component runs where the file renders it: an element of its tag written in the children of
+    // intrinsic elements only, so it is built when the tree around it is.
+    next.extend(eager_render_sites(file, layer, lookup));
     // The direct calls of the name the layer is bound to.
     if let Some(name) = crate::owners::function_binding_name(file, layer)
         && lookup.function_value_is_current(file, layer)
@@ -846,6 +854,38 @@ fn some_entry_from(
     }
     next.into_iter()
         .find_map(|step| some_entry_from(file, step, target, lookup, budget, seen))
+}
+
+/// ADR 1216 slice 2: the elements that render the component `function` of this file eagerly: a JSX element whose tag
+/// resolves to it (no member tag), every enclosing JSX element of which is intrinsic and holds it among its children, not
+/// in an attribute. A component's children and attributes run only when that component reads them; an intrinsic element's
+/// children are built with it.
+fn eager_render_sites(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<Span> {
+    let ast = &file.ast;
+    ast.jsx_elements
+        .iter()
+        .filter(|element| {
+            element.member_object.is_none()
+                && !super::intrinsic_element(file, element)
+                && lookup
+                    .function_called_at(file.path.as_str(), element.name.span)
+                    .is_some_and(|(target, called)| {
+                        target.path == file.path && called.span == function.span
+                    })
+                && ast
+                    .jsx_containing(element.span)
+                    .filter(|outer| outer.span != element.span)
+                    .all(|outer| {
+                        super::intrinsic_element(file, outer)
+                            && outer.children.iter().any(|child| child.contains(element.span))
+                    })
+        })
+        .map(|element| element.span)
+        .collect()
 }
 
 /// ADR 1216: the dialect runs the callback at `index` of `call` before the call returns, on its first run at least
