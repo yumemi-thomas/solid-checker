@@ -1,0 +1,1 @@
+{"note": "ADR 1216 part 2: SC2009 at a write that runs whenever its function does (straight-line, in intrinsic JSX) is a violation Chrome confirms; under a branch that does not run, after an early return or in a component's children, uncertifiable (main reported them, static-only)."}

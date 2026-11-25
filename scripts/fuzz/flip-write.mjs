@@ -149,6 +149,17 @@ const guardedAsync = (form) => (stmts) => ({ body: [expr(iife(fn([ctl(form, stmt
 const GUARDED = { "flw-guard-for-await": guardedAsync("guard-for-await"), "flw-guard-loop": guardedAsync("guard-loop"), "flw-guard-await": guardedAsync("guard-await"), "flw-guard-yield": (stmts) => ({ body: [ctl("guard-yield", stmts)], view: [] }) };
 const GUARDED_LEGAL = { "flw-guard-early": guardedAsync("guard-early"), "flw-guard-probe-loop": guardedAsync("guard-probe-loop") };
 /**
+ * ADR 1216 part 2 (OPTIMISTIC_WRITE_BEFORE_LOAD): the site behind a test that is false at run time, in the component body, directly or in a
+ * helper whose one call is behind it. The site never runs (Chrome silent); the build before proved the write on the creating pass anyway.
+ */
+const BRANCH_FALSE_LEGAL = {
+  "flw-branch-false": (stmts) => ({ body: [ctl("dead-random", stmts)], view: [] }),
+  "flw-branch-false-helper": (stmts, kit) => {
+    const g = kit.name("g");
+    return { body: [decl(g, fn(stmts)), ctl("dead-random", [expr(call(ref(g)))])], view: [] };
+  },
+};
+/**
  * F2 (scout's owner-context map): the site's function is called in the component body, so an owned edge reaches it, and it is also handed
  * somewhere a later click runs it with no owner. Chrome (rc.21): the site's NO_OWNER_* code on the click. The build before read the owned
  * edge as every entry. `flw-owned-twice` and `flw-owned-removed` are legal: every run is on the body's stack.
@@ -316,6 +327,7 @@ const FLOW_VALUES = {
 const OWNER_CODES = ["NO_OWNER_CLEANUP", "NO_OWNER_EFFECT", "NO_OWNER_BOUNDARY", "NO_OWNER_CONTEXT", "SETTLED_CLEANUP_UNOWNED"];
 /** Legal recall contexts per runtime code, appended to that code's recallLegal. */
 export const FLIP_WRITE_LEGAL = Object.fromEntries(OWNER_CODES.map((code) => [code, [...Object.keys(GUARDED_LEGAL), ...Object.keys(ESCAPES_LEGAL)]]));
+FLIP_WRITE_LEGAL.OPTIMISTIC_WRITE_BEFORE_LOAD = Object.keys(BRANCH_FALSE_LEGAL);
 
 export const FLIP_WRITE_CONTEXTS = {
   ACTION_CALLED_IN_OWNED_SCOPE: Object.keys(UNREACHED_WRITES),
@@ -336,5 +348,5 @@ for (const code of OWNER_CODES) FLIP_WRITE_CONTEXTS[code] = [...(FLIP_WRITE_CONT
 export function flipWriteContext(context, stmts, kit) {
   const fire = DISPATCH_FIRES[context];
   if (fire) return { body: fire(stmts, kit), view: [] };
-  return (APPLY_AND_TIMER[context] ?? FLOW_VALUES[context] ?? GUARDED[context] ?? GUARDED_LEGAL[context] ?? ESCAPES[context] ?? ESCAPES_LEGAL[context] ?? UNPLACED_STEPS[context] ?? UNPLACED_APPLIES[context] ?? OPEN_CONTEXTS[context] ?? MIXED_OWNERS[context] ?? UNREACHED_WRITES[context])?.(stmts, kit);
+  return (APPLY_AND_TIMER[context] ?? FLOW_VALUES[context] ?? GUARDED[context] ?? GUARDED_LEGAL[context] ?? BRANCH_FALSE_LEGAL[context] ?? ESCAPES[context] ?? ESCAPES_LEGAL[context] ?? UNPLACED_STEPS[context] ?? UNPLACED_APPLIES[context] ?? OPEN_CONTEXTS[context] ?? MIXED_OWNERS[context] ?? UNREACHED_WRITES[context])?.(stmts, kit);
 }

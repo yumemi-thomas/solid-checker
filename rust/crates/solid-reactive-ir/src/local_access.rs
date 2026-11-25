@@ -5410,17 +5410,13 @@ impl LocalAccessContext<'_, '_> {
                     .function_at(file.ast.peel_ts_sugar_span(compute.span))
             })
             .is_some_and(|compute| compute.r#async);
-        // ADR 1216: one run suffices, so any entry that runs the call on the creating pass.
+        // ADR 1216: one run suffices, so any entry that runs the call on the creating pass. Part 2: the call and every
+        // step to it run whenever their function runs, or nothing proves the write runs at all.
+        if !crate::execution_role::runs_whenever_its_function_runs(file, call.span) {
+            return false;
+        }
         let Some(entry) =
-            crate::execution_role::entry_on_stack_of(file, call.span, creating, self.lookup)
-                .or_else(|| {
-                    crate::execution_role::some_entry_on_stack_of(
-                        file,
-                        call.span,
-                        creating,
-                        self.lookup,
-                    )
-                })
+            crate::execution_role::some_entry_on_stack_of(file, call.span, creating, self.lookup)
         else {
             return false;
         };

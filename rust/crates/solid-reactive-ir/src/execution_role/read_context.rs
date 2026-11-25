@@ -754,8 +754,7 @@ const SOME_ENTRY_BUDGET: usize = 64;
 /// - any direct call of the name an unrebound named function is bound to (`const f = () => …`, `function f() {}`):
 ///   other uses of the name do not matter here, since one run is the claim.
 ///
-/// Each such call is a straight-line call of its function (`straight_line_calls`: run on every execution that reaches
-/// it) written outside JSX, and no layer it crosses is async or a generator or may follow a suspension. Not for a silence: a function also
+/// Every step, these and the old ones, runs whenever its function runs ([`runs_whenever_its_function_runs`]), and no layer it crosses is async or a generator or may follow a suspension. Not for a silence: a function also
 /// entered elsewhere runs there too.
 pub(crate) fn some_entry_on_stack_of(
     file: &solid_facts::FileFacts,
@@ -810,6 +809,7 @@ fn some_entry_from(
         .map(|(call, _)| call.span)
         .or_else(|| untrack_carrier(file, layer, lookup).map(|call| call.span))
         .or_else(|| in_place_step(file, layer, lookup))
+        && runs_whenever_its_function_runs(file, step)
     {
         next.push(step);
     }
@@ -820,7 +820,7 @@ fn some_entry_from(
             .filter(|(call, index)| {
                 file.ast.peel_ts_sugar_span(call.arguments[*index].span) == layer.span
                     && runs_during_call(file, call, *index, lookup)
-                    && straight_line(file, call.span)
+                    && runs_whenever_its_function_runs(file, call.span)
             })
             .map(|(call, _)| call.span),
     );
@@ -837,7 +837,7 @@ fn some_entry_from(
             let called = file.ast.calls.iter().find(|call| {
                 !call.construct
                     && file.ast.peel_ts_sugar_span(call.callee) == identifier.span
-                    && straight_line(file, call.span)
+                    && runs_whenever_its_function_runs(file, call.span)
             });
             if let Some(call) = called {
                 next.push(call.span);
@@ -872,11 +872,16 @@ fn runs_during_call(
     during && !lazy_written
 }
 
-/// ADR 1216: `call` is a call its function (or the module) runs on every execution that reaches it, written outside
-/// every JSX element: a JSX expression is evaluated when (and as often as) the compiled code reads it, and a component's
-/// children only when that component reads them, so `straight_line_calls`, which sees no function there, says nothing.
-fn straight_line(file: &solid_facts::FileFacts, call: Span) -> bool {
-    file.ast.straight_line_calls.contains(&call) && file.ast.jsx_containing(call).next().is_none()
+/// ADR 1216 (part 2): `call` runs whenever its function (or the module) runs and reaches its own end: a completion site
+/// (`completion_sites`: straight-line flow that no earlier `return`, `break`, `continue` or `throw` of that function may
+/// skip), written in no JSX element but an intrinsic one. A component's children and attributes run only when that
+/// component reads them; an intrinsic element's run as the tree is built.
+pub(crate) fn runs_whenever_its_function_runs(file: &solid_facts::FileFacts, call: Span) -> bool {
+    file.ast.completion_sites.contains(&call)
+        && file
+            .ast
+            .jsx_containing(call)
+            .all(|element| super::intrinsic_element(file, element))
 }
 
 pub(crate) fn runs_on_stack_of(
