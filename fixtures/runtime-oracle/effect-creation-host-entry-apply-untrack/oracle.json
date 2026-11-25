@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1213 (fixture effect-creation-host-entry/variants/apply, ApplyUntrack): PRIMITIVE_IN_EFFECT_CALLBACK: untrack runs its callback on the apply's stack."
+}

@@ -1,0 +1,56 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-creation-host-entry/variants/apply/App.tsx",
+      "start": 951,
+      "end": 961,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-creation-host-entry/variants/apply/App.tsx",
+      "start": 1105,
+      "end": 1115,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-creation-host-entry/variants/apply/App.tsx",
+      "start": 1274,
+      "end": 1284,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-creation-host-entry/variants/apply/App.tsx",
+      "start": 1446,
+      "end": 1456,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/effect-creation-host-entry/variants/apply/App.tsx",
+      "start": 1446,
+      "end": 1456,
+      "fixes": 0
+    }
+  ]
+}
