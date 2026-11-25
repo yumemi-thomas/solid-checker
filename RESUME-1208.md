@@ -24,3 +24,16 @@ Next:
 - Run verify-delta in the VM clone `w10/c`: info/exclude the symlinks, COUNT_BASE, CARGO_INCREMENTAL=0,
   `make tsc-oracle-provision`. The local fuzz unit tests fail here only because the worktree has no node_modules.
 - Note: `--runtime-diff 0` judges on the fast path only, so pass `--runtime-diff all` (or N) for Chrome.
+
+## Rerun of the context store cells against ADR 1211 (2026-11-26, W10)
+
+1208's generator (c244c183d) on its 5,236 context cells (sources `context`, `context-destructured`: mx-recall 3,084, lg-recall 2,152),
+main-release 7bc723e35 (1211's base) against a release build of 1211 (5e84277da), real Chrome on every program (`--runtime-diff all`:
+2,988 + 2,148 compared per run, 0 behaviour, 0 attribution, 0 inconclusive). Tools and rows: `~/EDF/tmp.noindex/w10/r1208`.
+- 1211 moves 372 mx-recall programs recall-gap -> agree (store writes through a context), nothing else: no lg-recall move, no new false
+  positive, no new false clean.
+- Unchanged on both builds, 68 mx-recall false cleans in the context cells:
+  - class 2 (16, certified): STRICT_READ_UNTRACKED `store-dstr-merge` through `context` / `context-destructured` (8 each).
+  - class 3 (52, an unrelated SC9012 near the site): `store-dstr-for-of` 16 and `store-dstr-assign` 8 (strict reads), and
+    STORE_WRITE_OUTSIDE_SETTER `net-sort-call`, `net-sort-reflect`, `net-sort-bind`, `net-push-reflect`, `net-push-apply-held` 28.
+- Class 1 (the 6 noop-and/noop-nullish false positives) is a `prop` cell, not in this rerun.
