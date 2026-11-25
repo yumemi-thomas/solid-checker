@@ -1,0 +1,26 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "write-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/optimistic-effect-first-run/App.tsx",
+      "start": 527,
+      "end": 534,
+      "fixes": 0
+    },
+    {
+      "rule": "optimistic-write-before-load",
+      "code": "SC2009",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/optimistic-effect-first-run/App.tsx",
+      "start": 527,
+      "end": 534,
+      "fixes": 0
+    }
+  ]
+}
