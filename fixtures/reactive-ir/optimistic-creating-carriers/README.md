@@ -9,7 +9,7 @@ straight-line `forEach` whose callback calls its parameter, or a straight-line c
 
 | component | SC2009 |
 |---|---|
-| `SeededMap`, `SeededSet`, `StoredInMap`, `AddedToSetUnderUntrack`, `StoredInWeakMap` | violation (slice 2: uncertifiable) |
+| `SeededMap`, `SeededSet`, `StoredInMap`, `AddedToSetUnderUntrack` (store and run each in an `untrack`), `StoredInWeakMap` | violation (slice 2: uncertifiable) |
 | `EmptySet`, `StoredThenDeleted`, `StoredNeverRun`, `RunBeforeStore`, `OtherKey` | uncertifiable |
 | `OptionalCall` (`get(key)?.()`: no fact says a call in an optional chain runs; Chrome throws) | uncertifiable (gap) |
 

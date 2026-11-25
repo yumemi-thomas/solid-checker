@@ -42,7 +42,9 @@ export function AddedToSetUnderUntrack() {
     };
     table.add(run);
   });
-  table.forEach((g) => g());
+  untrack(() => {
+    table.forEach((g) => g());
+  });
   return <p>{value()}</p>;
 }
 
