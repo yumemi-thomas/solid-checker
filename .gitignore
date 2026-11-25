@@ -957,6 +957,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/rc21-optimistic-before-load/node_modules/**
 !fixtures/reactive-ir/optimistic-creating-entries/node_modules/
 !fixtures/reactive-ir/optimistic-creating-entries/node_modules/**
+!fixtures/reactive-ir/optimistic-creating-renders/node_modules/
+!fixtures/reactive-ir/optimistic-creating-renders/node_modules/**
 !fixtures/reactive-ir/rc21-optimistic-setter-forms/node_modules/
 !fixtures/reactive-ir/rc21-optimistic-setter-forms/node_modules/**
 !fixtures/reactive-ir/rc21-optimistic-handed-prop/node_modules/

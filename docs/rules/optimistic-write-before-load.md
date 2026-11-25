@@ -15,7 +15,9 @@ in closures, helpers' callbacks, `untrack` or `createRoot` on that stack, in a h
 creates the source too, at module scope (ADR 0636). One run that throws is the claim, so one entry
 on that stack is enough (ADR 1216): a direct, straight-line call of an unrebound named helper written
 outside JSX, whatever its other uses (a handler, a map), and a primitive that runs its callback during
-its call (`flush(fn)`, a memo's or an effect's compute with no `lazy` option).
+its call (`flush(fn)`, a memo's or an effect's compute with no `lazy` option). Also (ADR 1216 slice 2) a
+callback prop the child calls straight-line in its body (ADR 1171, 1190), and a same-file component whose
+element is a direct child of intrinsic elements only (not in an expression child or a component's children).
 
 Proven too (ADR 1175): the setter call is in the first run of an effect's apply that comes
 before the answer. The apply half is ADR 0504's (the call on every completion of the apply's
