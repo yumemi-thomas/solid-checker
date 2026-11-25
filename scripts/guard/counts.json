@@ -20,7 +20,7 @@
   "SC1001 no-hydration-subtree": 2,
   "SC1001 package-finding-at-entry": 141,
   "SC1001 package-value-read": 182,
-  "SC1001 read-backing-unproven": 421,
+  "SC1001 read-backing-unproven": 420,
   "SC1001 store-handed-to-package": 1,
   "SC1001 strict-read-unaccounted": 18,
   "SC1001 summary-read-unplaced": 97,
@@ -71,7 +71,7 @@
   "SC2001 setter-handed-to-package": 9,
   "SC2001 site-reach-undecided": 3,
   "SC2001 unreached-dead-code": 5,
-  "SC2001 write-unaccounted": 34,
+  "SC2001 write-unaccounted": 44,
   "SC2002 action-handed-to-package": 1,
   "SC2002 function-run-unplaced": 30,
   "SC2002 function-unentered": 2,
@@ -122,7 +122,7 @@
   "SC2008 refused-creation-unrun": 1,
   "SC2008 search-depth-limit": 3,
   "SC2008 unreached-dead-code": 4,
-  "SC2009 optimistic-reach-unresolved": 30,
+  "SC2009 optimistic-reach-unresolved": 36,
   "SC2009 optimistic-write-unaccounted": 2,
   "SC3001 computation-error-unobserved": 13,
   "SC3001 creation-throws-first": 1,
@@ -130,7 +130,7 @@
   "SC3001 function-run-unplaced": 44,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 7,
-  "SC3001 leaf-operation-unaccounted": 7276,
+  "SC3001 leaf-operation-unaccounted": 7298,
   "SC3001 leaf-owner-unproven": 69,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
@@ -139,14 +139,14 @@
   "SC4001 component-identity-unproven": 15,
   "SC4001 computation-error-unobserved": 31,
   "SC4001 creation-throws-first": 17,
-  "SC4001 function-run-unplaced": 313,
+  "SC4001 function-run-unplaced": 312,
   "SC4001 function-unentered": 3,
   "SC4001 handler-key-overridden": 4,
   "SC4001 handler-member-unresolved": 40,
   "SC4001 handler-on-disabled-control": 7,
   "SC4001 handler-spread-unresolved": 84,
   "SC4001 owner-allocation-unproven": 26,
-  "SC4001 owner-callers-unenumerated": 3720,
+  "SC4001 owner-callers-unenumerated": 3731,
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 5,
@@ -170,7 +170,7 @@
   "SC5001 binding-before-initialization": 1,
   "SC5001 call-attributed-read": 3,
   "SC5001 callee-callback-timing": 18,
-  "SC5001 carrier-run-unproven": 4,
+  "SC5001 carrier-run-unproven": 3,
   "SC5001 component-identity-unproven": 1,
   "SC5001 creation-pass-unproven": 18,
   "SC5001 declared-loading-value": 4,
@@ -189,7 +189,7 @@
   "SC5003 carrier-run-unproven": 2,
   "SC5003 component-identity-unproven": 1,
   "SC5003 mount-form-window": 2,
-  "SC5003 mount-unresolved": 400,
+  "SC5003 mount-unresolved": 411,
   "SC5003 package-finding-at-entry": 113,
   "SC5003 pending-read-unresolved": 827,
   "SC5003 root-mount-pass-unproven": 54,
@@ -207,7 +207,7 @@
   "SC5008 pending-read-unresolved": 24,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5613,
+  "SC6002 effect-creation-unaccounted": 5624,
   "SC6002 effect-owner-unproven": 54,
   "SC6002 function-run-unplaced": 64,
   "SC6002 generator-step-unplaced": 1,
@@ -249,7 +249,7 @@
   "SC9012 dependency-source-getter": 54,
   "SC9012 dependency-source-program-call-error": 1,
   "SC9012 dependency-value-unfollowed": 23,
-  "SC9012 derived-read-under-untrack": 6,
+  "SC9012 derived-read-under-untrack": 7,
   "SC9012 dialect-specifier-mapped": 10,
   "SC9012 escaped-name-unresolved": 54,
   "SC9012 exported-parameter-member-dispatch": 83,
@@ -6867,6 +6867,42 @@
    "fixtures": {
     "proved": "reactive-ir/write-detached-owner-helper",
     "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/async-carrier-provably-runs",
+   "key": "SC5001 carrier-run-unproven",
+   "from": 3,
+   "to": 2,
+   "adr": "ADR 1216",
+   "proof": "rust/crates/solid-reactive-ir/src/carrier_runs.rs::seeded_collection",
+   "fixtures": {
+    "proved": "reactive-ir/async-carrier-provably-runs",
+    "open": "reactive-ir/async-carrier-provably-runs"
+   }
+  },
+  {
+   "fixture": "reactive-ir/async-carrier-provably-runs",
+   "key": "SC1001 read-backing-unproven",
+   "from": 4,
+   "to": 3,
+   "adr": "ADR 1216",
+   "proof": "rust/crates/solid-reactive-ir/src/carrier_runs.rs::seeded_collection",
+   "fixtures": {
+    "proved": "reactive-ir/async-carrier-provably-runs",
+    "open": "reactive-ir/async-carrier-provably-runs"
+   }
+  },
+  {
+   "fixture": "reactive-ir/owner-carrier-provably-runs",
+   "key": "SC4001 function-run-unplaced",
+   "from": 6,
+   "to": 5,
+   "adr": "ADR 1216",
+   "proof": "rust/crates/solid-reactive-ir/src/carrier_runs.rs::seeded_collection",
+   "fixtures": {
+    "proved": "reactive-ir/owner-carrier-provably-runs",
+    "open": "reactive-ir/owner-carrier-provably-runs"
    }
   }
  ],
