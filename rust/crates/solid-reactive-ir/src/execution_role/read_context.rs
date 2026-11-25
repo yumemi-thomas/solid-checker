@@ -832,6 +832,8 @@ fn some_entry_from(
     // ADR 1216 slice 2: a component runs where the file renders it: an element of its tag written in the children of
     // intrinsic elements only, so it is built when the tree around it is.
     next.extend(eager_render_sites(file, layer, lookup));
+    // ADR 1216 slice 3: a function stored in a fresh local collection runs where the collection hands it back and calls it.
+    next.extend(stored_run_sites(file, layer, lookup));
     // The direct calls of the name the layer is bound to.
     if let Some(name) = crate::owners::function_binding_name(file, layer)
         && lookup.function_value_is_current(file, layer)
@@ -854,6 +856,228 @@ fn some_entry_from(
     }
     next.into_iter()
         .find_map(|step| some_entry_from(file, step, target, lookup, budget, seen))
+}
+
+/// ADR 1216 slice 3: the positions where `function`, stored once in a fresh local collection, is handed back and called
+/// on some execution. `function` is bound to an unrebound name stored by one straight-line call of the standard
+/// `Map.set(k, f)`, `WeakMap.set(k, f)` or `Set.add(f)` on a `const` local initialized there by the standard constructor
+/// with no argument. Every other use of the collection is the receiver of a standard `forEach` whose callback is a
+/// literal of at most one parameter, or of `WeakMap.get`, so the collection holds exactly that entry afterwards. A site
+/// is a straight-line `forEach(literal)` whose callback calls its parameter straight-line, or a straight-line call of
+/// `get(k)` with the stored key (the same `const` binding), in the function that declares the collection, after the
+/// store (climbed to that function through straight-line `untrack` or synchronous-primitive calls).
+fn stored_run_sites(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<Span> {
+    let ast = &file.ast;
+    let Some(name) = crate::owners::function_binding_name(file, function) else {
+        return Vec::new();
+    };
+    if !lookup.function_value_is_current(file, function) {
+        return Vec::new();
+    }
+    let standard = |call: &solid_facts::ast::CallFact| {
+        let kind = if call.construct {
+            typefacts::CallKind::Construct
+        } else {
+            typefacts::CallKind::Call
+        };
+        crate::indexes::standard_library_declaration_of(
+            lookup.resolved_callee_call(file, call.callee),
+            kind,
+        )
+        .map(|declaration| declaration.qualified_name.to_string())
+    };
+    let references = |declaration: Span| {
+        ast.identifiers.iter().filter(move |identifier| {
+            identifier.role == solid_facts::ast::IdentifierRole::Reference
+                && ast.reference_declaration(identifier.span) == Some(declaration)
+        })
+    };
+    let receiver_of = |call: &solid_facts::ast::CallFact| {
+        ast.member_at(ast.peel_ts_sugar_span(call.callee))
+            .map(|member| ast.peel_ts_sugar_span(member.object))
+    };
+    let mut sites = Vec::new();
+    for reference in references(name.span) {
+        let Some((store, index)) =
+            ast.arguments_containing(reference.span)
+                .find(|(call, index)| {
+                    ast.peel_ts_sugar_span(call.arguments[*index].span) == reference.span
+                })
+        else {
+            continue;
+        };
+        let Some(method) = standard(store) else {
+            continue;
+        };
+        let constructor = match (method.as_str(), index) {
+            ("Map.set", 1) => "MapConstructor.construct",
+            ("WeakMap.set", 1) => "WeakMapConstructor.construct",
+            ("Set.add", 0) => "SetConstructor.construct",
+            _ => continue,
+        };
+        if store.construct
+            || store.arguments.iter().any(|argument| argument.spread)
+            || !straight_line(file, store.span)
+        {
+            continue;
+        }
+        let Some(collection) =
+            receiver_of(store).and_then(|object| ast.reference_declaration(object))
+        else {
+            continue;
+        };
+        let Some(home) = containing_ast_function(ast, collection) else {
+            continue;
+        };
+        let fresh = ast.bindings.iter().any(|binding| {
+            binding.immutable
+                && binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.names.iter().any(|name| name.span == collection)
+                && binding
+                    .call_initializer
+                    .and_then(|initializer| ast.call_at(initializer))
+                    .is_some_and(|created| {
+                        created.construct
+                            && created.arguments.is_empty()
+                            && standard(created).as_deref() == Some(constructor)
+                    })
+        });
+        if !fresh {
+            continue;
+        }
+        // The store's position in `home`, through straight-line synchronous layers.
+        let mut at = store.span;
+        let mut reached = false;
+        for _ in 0..4 {
+            let Some(layer) = containing_ast_function(ast, at) else {
+                break;
+            };
+            if layer.span == home.span {
+                reached = true;
+                break;
+            }
+            if layer.r#async || layer.generator {
+                break;
+            }
+            let Some(step) = untrack_carrier(file, layer, lookup)
+                .map(|call| call.span)
+                .filter(|step| straight_line(file, *step))
+            else {
+                break;
+            };
+            at = step;
+        }
+        if !reached || collection.end > at.start {
+            continue;
+        }
+        let stored_key = (constructor == "WeakMapConstructor.construct")
+            .then(|| store.arguments.first())
+            .flatten()
+            .and_then(|key| ast.reference_declaration(ast.peel_ts_sugar_span(key.span)));
+        let mut uses_kept = true;
+        let mut found = Vec::new();
+        for use_site in references(collection) {
+            let Some(call) = ast
+                .calls
+                .iter()
+                .find(|call| !call.construct && receiver_of(call) == Some(use_site.span))
+            else {
+                uses_kept = false;
+                break;
+            };
+            if call.span == store.span {
+                continue;
+            }
+            match standard(call).as_deref() {
+                Some("Map.forEach" | "Set.forEach") => {
+                    let Some(callback) = call
+                        .arguments
+                        .first()
+                        .filter(|argument| !argument.spread)
+                        .and_then(|argument| {
+                            ast.function_at(ast.peel_ts_sugar_span(argument.span))
+                        })
+                    else {
+                        uses_kept = false;
+                        break;
+                    };
+                    if callback.parameters.len() > 1 || callback.rest_parameter {
+                        uses_kept = false;
+                        break;
+                    }
+                    let runs = !callback.r#async
+                        && !callback.generator
+                        && straight_line(file, call.span)
+                        && containing_ast_function(ast, call.span).map(|layer| layer.span)
+                            == Some(home.span)
+                        && at.end <= call.span.start
+                        && callback
+                            .parameters
+                            .first()
+                            .filter(|parameter| {
+                                parameter.shape == solid_facts::ast::BindingShape::Identifier
+                            })
+                            .and_then(|parameter| parameter.names.first())
+                            .is_some_and(|parameter| {
+                                ast.calls.iter().any(|inner| {
+                                    !inner.construct
+                                        && ast.reference_declaration(
+                                            ast.peel_ts_sugar_span(inner.callee),
+                                        ) == Some(parameter.span)
+                                        && straight_line(file, inner.span)
+                                        && containing_ast_function(ast, inner.span)
+                                            .map(|layer| layer.span)
+                                            == Some(callback.span)
+                                })
+                            });
+                    if runs {
+                        found.push(call.span);
+                    }
+                }
+                Some("WeakMap.get") => {
+                    let same_key = stored_key.is_some()
+                        && call
+                            .arguments
+                            .first()
+                            .filter(|argument| !argument.spread)
+                            .and_then(|key| {
+                                ast.reference_declaration(ast.peel_ts_sugar_span(key.span))
+                            })
+                            == stored_key;
+                    let fixed_key = stored_key.is_some_and(|key| {
+                        ast.bindings.iter().any(|binding| {
+                            binding.immutable && binding.names.iter().any(|name| name.span == key)
+                        })
+                    });
+                    let caller = ast.calls.iter().find(|outer| {
+                        !outer.construct && ast.peel_ts_sugar_span(outer.callee) == call.span
+                    });
+                    if let Some(outer) = caller
+                        && same_key
+                        && fixed_key
+                        && straight_line(file, outer.span)
+                        && containing_ast_function(ast, outer.span).map(|layer| layer.span)
+                            == Some(home.span)
+                        && at.end <= outer.span.start
+                    {
+                        found.push(outer.span);
+                    }
+                }
+                _ => {
+                    uses_kept = false;
+                    break;
+                }
+            }
+        }
+        if uses_kept {
+            sites.extend(found);
+        }
+    }
+    sites
 }
 
 /// ADR 1216 slice 2: the elements that render the component `function` of this file eagerly: a JSX element whose tag

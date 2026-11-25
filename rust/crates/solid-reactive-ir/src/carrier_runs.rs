@@ -24,7 +24,11 @@
 //! - `Array.from` (and the typed-array `from`s) only with such an array literal
 //!   as its source.
 //!
-//! Every other carrier (`Set`/`Map`/`NodeList` `forEach`, a variable or
+//! - (ADR 1216 slice 3) `Set`/`Map` `forEach` on `new Set(…)`/`new Map(…)`
+//!   written there from such an array literal (for a `Map`, of array
+//!   literals).
+//!
+//! Every other carrier (`Set`/`Map`/`NodeList` `forEach` elsewhere, a variable or
 //! property receiver, `String.replace`, `JSON.parse`'s reviver) may run it
 //! zero times: the finding stays an obligation. The carrier is the
 //! compiler-selected standard-library declaration, never a spelling; a local
@@ -112,6 +116,14 @@ pub(crate) fn carrier_provably_runs(
         | "ReadonlyArray.findLastIndex" => {
             receiver().is_some_and(|receiver| literal_elements(file, receiver) >= 1)
         }
+        // ADR 1216 slice 3: a collection built there from an array literal of at least one entry holds an entry when
+        // `forEach` starts, and `forEach` visits it.
+        "Set.forEach" => receiver().is_some_and(|receiver| {
+            seeded_collection(file, receiver, lookup, "SetConstructor.construct")
+        }),
+        "Map.forEach" => receiver().is_some_and(|receiver| {
+            seeded_collection(file, receiver, lookup, "MapConstructor.construct")
+        }),
         "Array.reduce"
         | "ReadonlyArray.reduce"
         | "Array.reduceRight"
@@ -498,6 +510,48 @@ fn fresh_collection(
         return false;
     };
     construct.arguments.is_empty()
+        && crate::indexes::standard_library_declaration_of(
+            lookup.resolved_callee_call(file, construct.callee),
+            typefacts::CallKind::Construct,
+        )
+        .is_some_and(|declaration| declaration.qualified_name.as_ref() == constructor)
+}
+
+/// ADR 1216 slice 3: whether `span` (through parentheses and type assertions) is a `new` expression of the
+/// standard-library `constructor` (`SetConstructor.construct`, `MapConstructor.construct`) whose one argument is an
+/// array literal with at least one element and no spread or hole; for a `Map`, each element is an array literal itself
+/// (an entry object: `AddEntriesFromIterable` throws on a primitive before any entry is added).
+fn seeded_collection(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    constructor: &str,
+) -> bool {
+    let ast = &file.ast;
+    let span = ast.peel_ts_sugar_span(span);
+    let Some(construct) = ast
+        .calls
+        .iter()
+        .find(|call| call.span == span && call.construct)
+    else {
+        return false;
+    };
+    let [source] = construct.arguments.as_slice() else {
+        return false;
+    };
+    if source.spread || literal_elements(file, source.span) == 0 {
+        return false;
+    }
+    let entries = constructor != "MapConstructor.construct"
+        || ast
+            .array_literal_at(ast.peel_ts_sugar_span(source.span))
+            .is_some_and(|array| {
+                array.elements.iter().all(|element| {
+                    ast.array_literal_at(ast.peel_ts_sugar_span(element.span))
+                        .is_some()
+                })
+            });
+    entries
         && crate::indexes::standard_library_declaration_of(
             lookup.resolved_callee_call(file, construct.callee),
             typefacts::CallKind::Construct,
