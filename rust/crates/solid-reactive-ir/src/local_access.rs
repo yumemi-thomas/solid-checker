@@ -5412,8 +5412,9 @@ impl LocalAccessContext<'_, '_> {
             })
             .is_some_and(|compute| compute.r#async);
         // ADR 1216: one run suffices, so any entry that runs the call on the creating pass.
-        let Some(entry) =
+        let Some((entry, effect)) =
             crate::execution_role::entry_on_stack_of(file, call.span, creating, self.lookup)
+                .map(|entry| (entry, None))
                 .or_else(|| {
                     crate::execution_role::some_entry_on_stack_of(
                         file,
@@ -5425,6 +5426,27 @@ impl LocalAccessContext<'_, '_> {
         else {
             return false;
         };
+        // ADR 1224: a walk through an effect's apply holds only where its mount flush holds nothing.
+        if let Some(effect) = effect {
+            let held_free = creating
+                .zip(
+                    binding
+                        .call_initializer
+                        .and_then(|initializer| file.ast.call_at(initializer)),
+                )
+                .is_some_and(|(creating, source)| {
+                    crate::execution_role::flush_mount_hold_free(
+                        file,
+                        effect,
+                        creating,
+                        source,
+                        self.lookup,
+                    )
+                });
+            if !held_free {
+                return false;
+            }
+        }
         binding.immutable
             && literal_async
             && declared.end <= entry.start

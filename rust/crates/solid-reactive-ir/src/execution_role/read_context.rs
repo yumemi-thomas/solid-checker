@@ -762,7 +762,7 @@ pub(crate) fn some_entry_on_stack_of(
     site: Span,
     target: Option<&solid_facts::ast::FunctionFact>,
     lookup: &SemanticLookup<'_>,
-) -> Option<Span> {
+) -> Option<(Span, Option<Span>)> {
     let mut budget = SOME_ENTRY_BUDGET;
     let mut seen = Vec::new();
     some_entry_from(file, site, target, lookup, &mut budget, &mut seen)
@@ -775,11 +775,11 @@ fn some_entry_from(
     lookup: &SemanticLookup<'_>,
     budget: &mut usize,
     seen: &mut Vec<Span>,
-) -> Option<Span> {
+) -> Option<(Span, Option<Span>)> {
     *budget = budget.checked_sub(1)?;
     let layer = containing_ast_function(&file.ast, at);
     if layer.map(|function| function.span) == target.map(|function| function.span) {
-        return Some(at);
+        return Some((at, None));
     }
     let layer = layer?;
     if seen.contains(&layer.span)
@@ -854,8 +854,17 @@ fn some_entry_from(
             }
         }
     }
+    // ADR 1224: an effect's apply runs on the creating pass (a render effect, at its call) or in the flush that ends it (a
+    // user effect); the walk goes on from the effect call and names it, for the mount's premises
+    // (`flush_mount_hold_free`). One such step per walk.
+    let apply_step = super::first_run_effect_of_apply(file, layer, lookup);
     next.into_iter()
         .find_map(|step| some_entry_from(file, step, target, lookup, budget, seen))
+        .or_else(|| {
+            let effect = apply_step?;
+            let (entry, earlier) = some_entry_from(file, effect, target, lookup, budget, seen)?;
+            earlier.is_none().then_some((entry, Some(effect)))
+        })
 }
 
 /// ADR 1216 slice 3: the positions where `function`, stored once in a fresh local collection, is handed back and called
@@ -1089,7 +1098,7 @@ fn stored_collection_constructor(method: &str, index: usize) -> Option<&'static 
 /// as a direct child: not in an attribute and not in an expression child (`{c() ? <K /> : null}` is evaluated reactively,
 /// possibly long after the creating pass). A component's children and attributes run only when that component reads them; an intrinsic element's
 /// children are built with it.
-fn eager_render_sites(
+pub(super) fn eager_render_sites(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,

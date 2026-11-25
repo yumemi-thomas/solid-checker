@@ -5245,6 +5245,117 @@ fn compute_is_primitive_object(
             })
 }
 
+/// ADR 1224: the first run of the effect created at `effect` comes in a flush that holds nothing and runs before any
+/// answer of the source `source` the component `creating` creates. rc.21 runs a `createEffect` apply only in the next
+/// flush (`@solidjs/signals@2.0.0-rc.21` `dist/dev.js:2629-2633`, `dist/dev-shared.js:2664-2672`, `:2437-2438`), and
+/// `render` flushes synchronously once its tree is built (`@solidjs/web` `dist/web.dev.js:540-551`), before an async
+/// compute can answer. A run is skipped there only behind a boundary's fallback or an open hold (`dist/dev.js:2727-2731`),
+/// and a hold opens only where a render effect observes a pending read (`dist/dev-shared.js:2677-2682`). A
+/// `createRenderEffect` apply runs at its call; the same premises keep it out of a lane. Proven where:
+/// - `creating` is mounted by a module-scope `render` with no parent between, and that render runs first
+///   ([`render_runs_first`]), and creates `source` on every completion;
+/// - the effect is in `creating` (ADR 0505's own premises with `source` as the memo), or in one child component that
+///   `creating` renders eagerly at one element (ADR 1216 slice 2's eager render) with no child, spread or boolean
+///   property and each attribute a string or a function literal;
+/// - every tree on the way is static ([`static_intrinsic_tree`]; in `creating`, that element is admitted too), so no
+///   render effect reads anything, and every body runs nothing else ([`body_runs_nothing_else`]).
+pub(crate) fn flush_mount_hold_free(
+    file: &solid_facts::FileFacts,
+    effect: Span,
+    creating: &solid_facts::ast::FunctionFact,
+    source: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    let Some(effect_call) = ast.calls.iter().find(|call| call.span == effect) else {
+        return false;
+    };
+    let Some(home) = crate::owners::containing_ast_function(ast, effect) else {
+        return false;
+    };
+    let mounted = crate::owners::module_render_sites(lookup, file, creating)
+        .into_iter()
+        .any(|site| site.parents.is_empty() && render_runs_first(lookup, site.entry, site.render));
+    if !mounted
+        || !plain_component(creating)
+        || !crate::interproc::site_on_every_completion(lookup, file, creating.span, source.span)
+    {
+        return false;
+    }
+    if home.span == creating.span {
+        return static_intrinsic_tree(file, creating, lookup)
+            && body_runs_nothing_else(
+                file,
+                creating,
+                effect_call,
+                Some(source),
+                BodyAdmits::default(),
+                lookup,
+            );
+    }
+    let renders = super::eager_render_sites(file, home, lookup);
+    let [rendered] = renders.as_slice() else {
+        return false;
+    };
+    let Some(element) = ast
+        .jsx_elements
+        .iter()
+        .find(|element| element.span == *rendered)
+    else {
+        return false;
+    };
+    let handed = element.children.is_empty()
+        && element.spreads.is_empty()
+        && element.boolean_properties.is_empty()
+        && element.attributes.iter().all(|attribute| {
+            attribute.namespace.is_none()
+                && match attribute.expression {
+                    Some(expression) => ast
+                        .function_at(ast.peel_ts_sugar_span(expression))
+                        .is_some(),
+                    None => attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::String,
+                }
+        });
+    handed
+        && crate::owners::containing_ast_function(ast, element.span)
+            .is_some_and(|parent| parent.span == creating.span)
+        && plain_component(home)
+        && static_intrinsic_tree(file, home, lookup)
+        && body_runs_nothing_else(file, home, effect_call, None, BodyAdmits::default(), lookup)
+        && static_tree_admitting(file, creating, lookup, &|candidate| {
+            candidate.span == element.span
+        })
+        && body_runs_nothing_else(file, creating, source, None, BodyAdmits::default(), lookup)
+}
+
+/// ADR 1224: the effect call whose apply is `function` (the dialect's apply slot, `apply_callback_argument`) when its
+/// first run comes on the creating pass or in the flush that ends it: no options argument, a compute that settles on its
+/// first pass ([`compute_settles_synchronously`]: it calls, reads and throws nothing), and the call in its function's
+/// straight-line flow. Whether that flush holds nothing is [`flush_mount_hold_free`]'s, at the mount.
+pub(crate) fn first_run_effect_of_apply(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    let ast = &file.ast;
+    let (call, index) = ast
+        .arguments_containing(function.span)
+        .find(|(call, index)| {
+            ast.peel_ts_sugar_span(call.arguments[*index].span) == function.span
+        })?;
+    let primitive = lookup.primitive_at_call(file, call.span)?;
+    let [compute, apply] = call.arguments.as_slice() else {
+        return None;
+    };
+    (lookup.dialect.apply_callback_argument(primitive) == Some(index)
+        && !compute.spread
+        && !apply.spread
+        && compute_settles_synchronously(file, compute.span)
+        && ast.straight_line_calls.contains(&call.span)
+        && ast.jsx_containing(call.span).next().is_none())
+    .then_some(call.span)
+}
+
 /// ADR 0505's premises past the compute: the component's own (a static tree, a body that runs nothing else) and a module-scope
 /// `render` that mounts it first.
 fn mount_flush_premises(
@@ -5335,6 +5446,17 @@ fn static_intrinsic_tree(
     component: &solid_facts::ast::FunctionFact,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
+    static_tree_admitting(file, component, lookup, &|_| false)
+}
+
+/// [`static_intrinsic_tree`], where an element `admit` accepts may stand in place of a static intrinsic one (still written in
+/// the component's own body, and reached as the others are: a direct child, never inside an expression child).
+fn static_tree_admitting(
+    file: &solid_facts::FileFacts,
+    component: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+    admit: &dyn Fn(&solid_facts::ast::JsxElementFact) -> bool,
+) -> bool {
     let ast = &file.ast;
     let own = |span: Span| {
         crate::owners::containing_ast_function(ast, span)
@@ -5370,12 +5492,13 @@ fn static_intrinsic_tree(
                 && attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::String
         });
         own(element.span)
-            && intrinsic
-            && element.member_object.is_none()
-            && static_attributes
-            && element.spreads.is_empty()
-            && element.boolean_properties.is_empty()
-            && children
+            && (admit(element)
+                || (intrinsic
+                    && element.member_object.is_none()
+                    && static_attributes
+                    && element.spreads.is_empty()
+                    && element.boolean_properties.is_empty()
+                    && children))
     };
     let is_element = |span: Span| {
         let span = ast.peel_ts_sugar_span(span);
