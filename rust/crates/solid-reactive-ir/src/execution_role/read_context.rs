@@ -742,6 +742,146 @@ pub(crate) fn entry_on_stack_of(
     None
 }
 
+/// How many layers [`some_entry_on_stack_of`] climbs through, over every route it tries.
+const SOME_ENTRY_BUDGET: usize = 64;
+
+/// ADR 1216: a position in `target` (`None`: at module scope) whose evaluation runs `site` on one stack on at least one
+/// execution, for a claim that one run suffices (a write that throws on its first run). Beside [`entry_on_stack_of`]'s
+/// steps, a layer is climbed through:
+/// - the callback of a dialect primitive that runs it during the call (`Execution::Inline`, or a tracked callback whose
+///   first run is `TrackedCallbackTiming::DuringCall`, with no `lazy` options argument written): `flush(fn)`, a memo's or
+///   an effect's compute;
+/// - any direct call of the name an unrebound named function is bound to (`const f = () => …`, `function f() {}`):
+///   other uses of the name do not matter here, since one run is the claim.
+///
+/// Each such call is a straight-line call of its function (`straight_line_calls`: run on every execution that reaches
+/// it) written outside JSX, and no layer it crosses is async or a generator or may follow a suspension. Not for a silence: a function also
+/// entered elsewhere runs there too.
+pub(crate) fn some_entry_on_stack_of(
+    file: &solid_facts::FileFacts,
+    site: Span,
+    target: Option<&solid_facts::ast::FunctionFact>,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    let mut budget = SOME_ENTRY_BUDGET;
+    let mut seen = Vec::new();
+    some_entry_from(file, site, target, lookup, &mut budget, &mut seen)
+}
+
+fn some_entry_from(
+    file: &solid_facts::FileFacts,
+    at: Span,
+    target: Option<&solid_facts::ast::FunctionFact>,
+    lookup: &SemanticLookup<'_>,
+    budget: &mut usize,
+    seen: &mut Vec<Span>,
+) -> Option<Span> {
+    let Some(left) = budget.checked_sub(1) else {
+        return None;
+    };
+    *budget = left;
+    let layer = containing_ast_function(&file.ast, at);
+    if layer.map(|function| function.span) == target.map(|function| function.span) {
+        return Some(at);
+    }
+    let layer = layer?;
+    if seen.contains(&layer.span)
+        || layer.r#async
+        || layer.generator
+        || super::may_follow_suspension(file, at)
+    {
+        return None;
+    }
+    seen.push(layer.span);
+    let mut next = Vec::new();
+    // The steps of `entry_on_stack_of`.
+    if let Some(step) = file
+        .ast
+        .arguments_containing(layer.span)
+        .find(|(call, index)| {
+            file.ast.peel_ts_sugar_span(call.arguments[*index].span) == layer.span
+                && lookup
+                    .primitive_at_call(file, call.span)
+                    .is_some_and(|primitive| {
+                        lookup.dialect.synchronous_callback_slot(
+                            primitive,
+                            *index,
+                            call.arguments.len(),
+                        )
+                    })
+        })
+        .map(|(call, _)| call.span)
+        .or_else(|| untrack_carrier(file, layer, lookup).map(|call| call.span))
+        .or_else(|| in_place_step(file, layer, lookup))
+    {
+        next.push(step);
+    }
+    // A primitive that runs the layer during its own call.
+    next.extend(
+        file.ast
+            .arguments_containing(layer.span)
+            .filter(|(call, index)| {
+                file.ast.peel_ts_sugar_span(call.arguments[*index].span) == layer.span
+                    && runs_during_call(file, call, *index, lookup)
+                    && straight_line(file, call.span)
+            })
+            .map(|(call, _)| call.span),
+    );
+    // The direct calls of the name the layer is bound to.
+    if let Some(name) = crate::owners::function_binding_name(file, layer)
+        && lookup.function_value_is_current(file, layer)
+    {
+        for identifier in &file.ast.identifiers {
+            if identifier.role != solid_facts::ast::IdentifierRole::Reference
+                || file.ast.reference_declaration(identifier.span) != Some(name.span)
+            {
+                continue;
+            }
+            let called = file.ast.calls.iter().find(|call| {
+                !call.construct
+                    && file.ast.peel_ts_sugar_span(call.callee) == identifier.span
+                    && straight_line(file, call.span)
+            });
+            if let Some(call) = called {
+                next.push(call.span);
+            }
+        }
+    }
+    next.into_iter()
+        .find_map(|step| some_entry_from(file, step, target, lookup, budget, seen))
+}
+
+/// ADR 1216: the dialect runs the callback at `index` of `call` before the call returns, on its first run at least
+/// (`Execution::Inline`, or `TrackedCallbackTiming::DuringCall`), and no argument stands where a `lazy` option may defer it.
+fn runs_during_call(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
+        return false;
+    };
+    let count = call.arguments.len();
+    let dialect = lookup.dialect;
+    let during = dialect.callback_execution_at(primitive, index, count)
+        == Some(solid_dialect::Execution::Inline)
+        || dialect.tracked_callback_timing(primitive, index, count)
+            == Some(solid_dialect::TrackedCallbackTiming::DuringCall);
+    // A schedule with no `lazy` option has nothing to defer; one with it defers only where that argument is written.
+    let lazy_written = dialect
+        .lazy_option_argument(primitive)
+        .is_some_and(|options| options < count);
+    during && !lazy_written
+}
+
+/// ADR 1216: `call` is a call its function (or the module) runs on every execution that reaches it, written outside
+/// every JSX element: a JSX expression is evaluated when (and as often as) the compiled code reads it, and a component's
+/// children only when that component reads them, so `straight_line_calls`, which sees no function there, says nothing.
+fn straight_line(file: &solid_facts::FileFacts, call: Span) -> bool {
+    file.ast.straight_line_calls.contains(&call) && file.ast.jsx_containing(call).next().is_none()
+}
+
 pub(crate) fn runs_on_stack_of(
     file: &solid_facts::FileFacts,
     site: Span,
