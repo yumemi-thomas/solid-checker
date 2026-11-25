@@ -1070,6 +1070,8 @@ pub(crate) fn destructure_root(
                 let element = ast.peel_ts_sugar_span(elements[index].span);
                 return is_reference(element).then_some(element);
             }
+            // ADR 1218: no rule reads it (`object_destructures` leaves it out).
+            solid_facts::ast::DestructureSource::ObjectProperty { .. } => return None,
         }
     }
     let Some(initializer) = binding.initializer else {
@@ -1154,7 +1156,20 @@ pub(crate) fn object_destructures(
         .bindings
         .iter()
         .filter(|binding| binding.shape == solid_facts::ast::BindingShape::Object)
-        .chain(file.ast.destructure_sites.iter().map(|site| &site.binding))
+        .chain(
+            file.ast
+                .destructure_sites
+                .iter()
+                // ADR 1218: a pattern nested in a declarator's object pattern is the value-use census's only (`value_use`); the
+                // rules read it through the declarator, as before facts schema 111.
+                .filter(|site| {
+                    !matches!(
+                        site.source,
+                        solid_facts::ast::DestructureSource::ObjectProperty { .. }
+                    )
+                })
+                .map(|site| &site.binding),
+        )
 }
 
 /// ADR 1193 part 2: where SC1003's row for a destructure stands: its pattern, or for an array pattern's element the declarator's

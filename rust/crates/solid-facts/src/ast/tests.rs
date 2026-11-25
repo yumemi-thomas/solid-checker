@@ -63,8 +63,9 @@ fn straight_line_assignments_exclude_every_conditional_construct() {
 }
 
 /// Facts schema 110 (ADR 1193): a plain assignment's object target and an object pattern that is a direct element of a declarator's
-/// array pattern are destructure sites in a declarator's shape; a compound assignment, an element with a default, an object pattern
-/// nested in an object pattern and a declarator's own pattern are not.
+/// array pattern are destructure sites in a declarator's shape; a compound assignment, an element with a default and a declarator's
+/// own pattern are not. Schema 111 (ADR 1218): an object pattern that is the value of a direct property of a declarator's object
+/// pattern is one too, but not with a default or a computed key, and not one nested deeper.
 #[test]
 fn destructure_sites_are_assignment_targets_and_array_elements() {
     let source = concat!(
@@ -75,6 +76,7 @@ fn destructure_sites_are_assignment_targets_and_array_elements() {
         "const [a, { v: x }, { w: y } = s] = [0, s, s];\n",
         "const { v: z } = s;\n",
         "const { a: { v: q } } = { a: s };\n",
+        "const { b: { v: r } = s, [\"c\"]: { v: t }, d: { e: { v: u } } } = { b: s, c: s, d: { e: s } };\n",
         "let n = 0; n += 1;\n",
     );
     let facts = super::extract("sites.ts", source).unwrap();
@@ -90,6 +92,24 @@ fn destructure_sites_are_assignment_targets_and_array_elements() {
         .find(|binding| text(binding.pattern).starts_with("[a"))
         .unwrap()
         .pattern;
+    let object = |start: &str| {
+        facts
+            .bindings
+            .iter()
+            .find(|binding| text(binding.pattern).starts_with(start))
+            .unwrap()
+            .pattern
+    };
+    let property = |outer: crate::core::Span, key: &str| {
+        let binding = facts.bindings.iter().find(|binding| binding.pattern == outer).unwrap();
+        binding
+            .object_properties
+            .iter()
+            .find(|property| property.key.as_deref() == Some(key))
+            .unwrap()
+            .span
+    };
+    let (nested, deeper) = (object("{ a:"), object("{ b:"));
     assert_eq!(
         sites,
         [
@@ -101,6 +121,20 @@ fn destructure_sites_are_assignment_targets_and_array_elements() {
             (
                 "{ v: x }",
                 super::DestructureSource::ArrayElement { outer, index: 1 }
+            ),
+            (
+                "{ v: q }",
+                super::DestructureSource::ObjectProperty {
+                    outer: nested,
+                    property: property(nested, "a")
+                }
+            ),
+            (
+                "{ e: { v: u } }",
+                super::DestructureSource::ObjectProperty {
+                    outer: deeper,
+                    property: property(deeper, "d")
+                }
             ),
         ],
         "{sites:?}"

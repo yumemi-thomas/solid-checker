@@ -1,0 +1,3 @@
+# value-use-nested-destructure
+
+ADR 1218 (facts schema 111): a pattern nested in a `const` declarator's object pattern (`const { a: { useIt } } = { a: { useIt: count } }`) takes the value at its key of the declarator's closed literal, as a one-level destructure does: the value-use census follows `useIt` as the accessor, with no `value-in-carrier` row. Negative: `NestedMemo`, `NestedStoreMemo` (no row; the calls and Gets are tracked). Positive: `NestedBody` (the untracked call in the body keeps an SC9012 row). Controls that stay carriers (`value-in-carrier` rows, as before): `SpreadLiteral`, `RepeatedKey` (a computed key in the literal that may repeat `a`), `RestPattern`, `LetDeclarator`, `TwoLevels` (only one level of nesting is a destructure site).

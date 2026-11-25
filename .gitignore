@@ -1427,6 +1427,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/write-parameter-call/node_modules/**
 !fixtures/reactive-ir/value-use-calls-carriers/node_modules/
 !fixtures/reactive-ir/value-use-calls-carriers/node_modules/**
+!fixtures/reactive-ir/value-use-nested-destructure/node_modules/
+!fixtures/reactive-ir/value-use-nested-destructure/node_modules/**
 !fixtures/reactive-ir/forwarded-const-callback/node_modules/
 !fixtures/reactive-ir/forwarded-const-callback/node_modules/**
 !fixtures/reactive-ir/handed-root-patch/node_modules/
