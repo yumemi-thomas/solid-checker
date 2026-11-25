@@ -5774,7 +5774,13 @@ fn props_object_reads(
                 .functions
                 .iter()
                 .find(|candidate| candidate.span == function.span)?;
-            reads.extend(component_prop_reads(file, lookup, component, prop, depth - 1)?);
+            reads.extend(component_prop_reads(
+                file,
+                lookup,
+                component,
+                prop,
+                depth - 1,
+            )?);
             continue;
         }
         let (view, view_omits) = props_view_at(file, lookup, reference, prop)?;
@@ -5859,15 +5865,17 @@ fn handed_context_key(
             return None;
         }
         let literal = ast.peel_ts_sugar_span(value.expression?);
-        let properties =
-            crate::interproc::accessor_provenance::closed_properties(file, literal)?;
-        let property = properties.iter().find(|property| {
-            ast.peel_ts_sugar_span(property.value) == reference
-        })?;
+        let properties = crate::interproc::accessor_provenance::closed_properties(file, literal)?;
+        let property = properties
+            .iter()
+            .find(|property| ast.peel_ts_sugar_span(property.value) == reference)?;
         if !property.data || property.method {
             return None;
         }
-        let key = file.source_text(property.key)?.trim_matches(['\'', '"']).to_owned();
+        let key = file
+            .source_text(property.key)?
+            .trim_matches(['\'', '"'])
+            .to_owned();
         Some((element, key))
     })?;
     if !element.spreads.is_empty() || element.member_object.is_some() {
@@ -5897,7 +5905,10 @@ fn context_declared_here(
         .call_initializer
         .and_then(|call| ast.call_at(call))
         .is_some_and(|call| {
-            binding.initializer.map(|initializer| ast.peel_ts_sugar_span(initializer)) == Some(call.span)
+            binding
+                .initializer
+                .map(|initializer| ast.peel_ts_sugar_span(initializer))
+                == Some(call.span)
                 && lookup.primitive_at_call(file, call.span)
                     == Some(solid_dialect::Primitive::CreateContext)
         });
@@ -5937,7 +5948,10 @@ fn context_key_reads(
     for reference in references_of(declaration) {
         if ast.jsx_elements.iter().any(|element| {
             element.name.span == reference || element.closing_name == Some(reference)
-        }) || ast.type_queries.iter().any(|query| query.contains(reference))
+        }) || ast
+            .type_queries
+            .iter()
+            .any(|query| query.contains(reference))
         {
             continue;
         }
