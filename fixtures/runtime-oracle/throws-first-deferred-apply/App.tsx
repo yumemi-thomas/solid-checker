@@ -1,9 +1,8 @@
 import { createEffect, createMemo, createRoot, createSignal, flush } from "solid-js";
 
-// ADR 1220: ADR 1205 took a creation in a function an effect's apply calls as creation-throws-first (the effect-callback
-// guard throws PRIMITIVE_IN_EFFECT_CALLBACK before SC7002's result probe). For SC7002 that is the apply's first run, and an
-// apply written with options may have none (`defer: true`): its runs are reruns a `flush()` may start anywhere, and there
-// Chrome reaches the probe (SYNC_NODE_RECEIVED_ASYNC).
+// ADR 1220 (ADR 1205 round 3): ADR 1205 took a creation in a function an effect's apply calls as creation-throws-first for
+// SC7002 too. An apply a `flush()` runs (during render, or from a handler when it has no first run: deferred, a reaction)
+// meets no effect-callback guard first, and Chrome reaches the probe (SYNC_NODE_RECEIVED_ASYNC). SC7002 keeps main's answer.
 
 // Violation: the deferred apply's closure.
 export function DeferredApplyClosure() {
@@ -30,6 +29,21 @@ export function DeferredApplyClosure() {
       go
     </button>
   );
+}
+
+// Violation: a `flush()` in the body runs the apply's first run itself, before the scheduler's guarded run.
+export function FlushBodyClosure() {
+  createEffect(
+    () => 1,
+    () => {
+      const f1 = () => {
+        createMemo(async () => 1, { sync: true });
+      };
+      f1();
+    },
+  );
+  flush();
+  return <div />;
 }
 
 // Uncertifiable, creation-throws-first: the apply's first run creates in its closure, and the guard throws first.
