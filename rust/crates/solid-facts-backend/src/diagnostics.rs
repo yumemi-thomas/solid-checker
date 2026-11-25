@@ -570,7 +570,10 @@ impl DiagnosticSession {
                     || finding.id == "SC7002")
             {
                 finding.kind = "uncertifiable".into();
-                let blocker = if site.returned_value_run {
+                let blocker = if site.earlier_may_throw {
+                    // ADR 1204: reached only if an earlier evaluation that visibly may throw completes.
+                    "earlier-evaluation-may-throw"
+                } else if site.returned_value_run {
                     // Fourth cut: every rule's site in a callback a creation there never runs; SC7002 at the creation itself.
                     "creation-throws-first"
                 } else if site.undecided {
@@ -588,7 +591,9 @@ impl DiagnosticSession {
                 };
                 finding.analysis_context =
                     solid_reactive_ir::blocked_context(blocker, &finding.analysis_context);
-                finding.message.push_str(if site.returned_value_creation {
+                finding.message.push_str(if site.earlier_may_throw {
+                    "; this code runs only after an evaluation that may throw first (a `throw`, a getter or a local function whose code throws), so that it runs is not proven"
+                } else if site.returned_value_creation {
                     "; this code runs only in a callback of a computation created inside a function an effect's or a memo's compute returned, and where that function is called on an effect apply's stack the creation throws PRIMITIVE_IN_EFFECT_CALLBACK first, so the callback never runs: this is not proven"
                 } else if site.returned_value_run {
                     "; this code runs only where a function an effect's or a memo's compute returned is called, which may be on an effect apply's stack with no owner set, where creating a computation throws PRIMITIVE_IN_EFFECT_CALLBACK before its result is probed, so this is not proven"

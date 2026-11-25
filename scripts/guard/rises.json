@@ -8480,6 +8480,70 @@
    "to": 12,
    "adr": "ADR 1190",
    "fact": "slice 2 (execution_role::prop_literal_run_calls): a site in a callback prop's literal takes the role of the child's calls (read role execution_role.prop-literal-calls, write role write_roles.prop-literal-calls) and callee_callback_timing and unplaced_run_but ask each call: where the literal reads, the row of its lexical role leaves or changes kind (fp-owner-loading-cover: SC1001 function-run-unplaced leaves and SC5001 async-component-prop becomes invocation-context-unproven; repro prop-in-effect-apply-read: callee-callback-timing becomes read-backing-unproven under the exact cause direct-read-callers-unenumerable); a named wrapper the literal calls (wrapUse in handed-net c3-wrapper.tsx and handed-net-guards g4b.tsx) keeps its read's SC1001 function-run-unplaced row, a new uncertifiable row, because call_plainly_placed stops at a call in a named local function"
+  },
+  {
+   "fixture": "reactive-ir/flush-later-continuation",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 4,
+   "to": 5,
+   "adr": "ADR 1201",
+   "fact": "reactive-ir/flush-later-continuation SC3001 leaf-operation-unaccounted 4 -> 5: ADR 1201 slice 2's new function NamedFirstPass (a flush in a counted loop's first pass, in a compute handed by name) keeps its row, as the ADR states; NamedLoop and NamedFinally beside it are clean"
+  },
+  {
+   "fixture": "reactive-ir/rc21-after-await-handed",
+   "key": "SC1003 props-callers-unenumerated",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1193",
+   "fact": "ADR 1193 part 2 (facts schema 110, destructure_sites): the fixture store-destructure-roots gains the ten part-2 components (AssignBody, AssignMergeBody, AssignMember, ArrayBody, ArraySecond violations, AssignMemo and ArrayMemo clean, ArrayHole, ArraySpread and AssignProps uncertifiable by design), so its uncertifiable rows rise by their new sites (SC1003 destructure-root-unproven 3 -> 6, SC3001 leaf-operation-unaccounted 3 -> 8, SC4001 owner-callers-unenumerated 2 -> 5, SC6002 effect-creation-unaccounted 3 -> 8, SC9012 value-held-in-binding 0 -> 1, SC9012 value-in-carrier 3 -> 9); reactive-ir/rc21-after-await-handed SC1003 props-callers-unenumerated 0 -> 1: the assignment in an effect apply stays SC1003 uncertifiable, a blocker relabelled (its const-destructure in onClick loses 2 SC9012 rows, recorded with a drops row)"
+  },
+  {
+   "fixture": "reactive-ir/store-destructure-roots",
+   "key": "SC1003 destructure-root-unproven",
+   "from": 3,
+   "to": 6,
+   "adr": "ADR 1193",
+   "fact": "ADR 1193 part 2 (facts schema 110, destructure_sites): the fixture store-destructure-roots gains the ten part-2 components (AssignBody, AssignMergeBody, AssignMember, ArrayBody, ArraySecond violations, AssignMemo and ArrayMemo clean, ArrayHole, ArraySpread and AssignProps uncertifiable by design), so its uncertifiable rows rise by their new sites (SC1003 destructure-root-unproven 3 -> 6, SC3001 leaf-operation-unaccounted 3 -> 8, SC4001 owner-callers-unenumerated 2 -> 5, SC6002 effect-creation-unaccounted 3 -> 8, SC9012 value-held-in-binding 0 -> 1, SC9012 value-in-carrier 3 -> 9); reactive-ir/rc21-after-await-handed SC1003 props-callers-unenumerated 0 -> 1: the assignment in an effect apply stays SC1003 uncertifiable, a blocker relabelled (its const-destructure in onClick loses 2 SC9012 rows, recorded with a drops row)"
+  },
+  {
+   "fixture": "reactive-ir/store-destructure-roots",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 3,
+   "to": 8,
+   "adr": "ADR 1193",
+   "fact": "ADR 1193 part 2 (facts schema 110, destructure_sites): the fixture store-destructure-roots gains the ten part-2 components (AssignBody, AssignMergeBody, AssignMember, ArrayBody, ArraySecond violations, AssignMemo and ArrayMemo clean, ArrayHole, ArraySpread and AssignProps uncertifiable by design), so its uncertifiable rows rise by their new sites (SC1003 destructure-root-unproven 3 -> 6, SC3001 leaf-operation-unaccounted 3 -> 8, SC4001 owner-callers-unenumerated 2 -> 5, SC6002 effect-creation-unaccounted 3 -> 8, SC9012 value-held-in-binding 0 -> 1, SC9012 value-in-carrier 3 -> 9); reactive-ir/rc21-after-await-handed SC1003 props-callers-unenumerated 0 -> 1: the assignment in an effect apply stays SC1003 uncertifiable, a blocker relabelled (its const-destructure in onClick loses 2 SC9012 rows, recorded with a drops row)"
+  },
+  {
+   "fixture": "reactive-ir/store-destructure-roots",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 2,
+   "to": 5,
+   "adr": "ADR 1193",
+   "fact": "ADR 1193 part 2 (facts schema 110, destructure_sites): the fixture store-destructure-roots gains the ten part-2 components (AssignBody, AssignMergeBody, AssignMember, ArrayBody, ArraySecond violations, AssignMemo and ArrayMemo clean, ArrayHole, ArraySpread and AssignProps uncertifiable by design), so its uncertifiable rows rise by their new sites (SC1003 destructure-root-unproven 3 -> 6, SC3001 leaf-operation-unaccounted 3 -> 8, SC4001 owner-callers-unenumerated 2 -> 5, SC6002 effect-creation-unaccounted 3 -> 8, SC9012 value-held-in-binding 0 -> 1, SC9012 value-in-carrier 3 -> 9); reactive-ir/rc21-after-await-handed SC1003 props-callers-unenumerated 0 -> 1: the assignment in an effect apply stays SC1003 uncertifiable, a blocker relabelled (its const-destructure in onClick loses 2 SC9012 rows, recorded with a drops row)"
+  },
+  {
+   "fixture": "reactive-ir/store-destructure-roots",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 3,
+   "to": 8,
+   "adr": "ADR 1193",
+   "fact": "ADR 1193 part 2 (facts schema 110, destructure_sites): the fixture store-destructure-roots gains the ten part-2 components (AssignBody, AssignMergeBody, AssignMember, ArrayBody, ArraySecond violations, AssignMemo and ArrayMemo clean, ArrayHole, ArraySpread and AssignProps uncertifiable by design), so its uncertifiable rows rise by their new sites (SC1003 destructure-root-unproven 3 -> 6, SC3001 leaf-operation-unaccounted 3 -> 8, SC4001 owner-callers-unenumerated 2 -> 5, SC6002 effect-creation-unaccounted 3 -> 8, SC9012 value-held-in-binding 0 -> 1, SC9012 value-in-carrier 3 -> 9); reactive-ir/rc21-after-await-handed SC1003 props-callers-unenumerated 0 -> 1: the assignment in an effect apply stays SC1003 uncertifiable, a blocker relabelled (its const-destructure in onClick loses 2 SC9012 rows, recorded with a drops row)"
+  },
+  {
+   "fixture": "reactive-ir/store-destructure-roots",
+   "key": "SC9012 value-held-in-binding",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1193",
+   "fact": "ADR 1193 part 2 (facts schema 110, destructure_sites): the fixture store-destructure-roots gains the ten part-2 components (AssignBody, AssignMergeBody, AssignMember, ArrayBody, ArraySecond violations, AssignMemo and ArrayMemo clean, ArrayHole, ArraySpread and AssignProps uncertifiable by design), so its uncertifiable rows rise by their new sites (SC1003 destructure-root-unproven 3 -> 6, SC3001 leaf-operation-unaccounted 3 -> 8, SC4001 owner-callers-unenumerated 2 -> 5, SC6002 effect-creation-unaccounted 3 -> 8, SC9012 value-held-in-binding 0 -> 1, SC9012 value-in-carrier 3 -> 9); reactive-ir/rc21-after-await-handed SC1003 props-callers-unenumerated 0 -> 1: the assignment in an effect apply stays SC1003 uncertifiable, a blocker relabelled (its const-destructure in onClick loses 2 SC9012 rows, recorded with a drops row)"
+  },
+  {
+   "fixture": "reactive-ir/store-destructure-roots",
+   "key": "SC9012 value-in-carrier",
+   "from": 3,
+   "to": 9,
+   "adr": "ADR 1193",
+   "fact": "ADR 1193 part 2 (facts schema 110, destructure_sites): the fixture store-destructure-roots gains the ten part-2 components (AssignBody, AssignMergeBody, AssignMember, ArrayBody, ArraySecond violations, AssignMemo and ArrayMemo clean, ArrayHole, ArraySpread and AssignProps uncertifiable by design), so its uncertifiable rows rise by their new sites (SC1003 destructure-root-unproven 3 -> 6, SC3001 leaf-operation-unaccounted 3 -> 8, SC4001 owner-callers-unenumerated 2 -> 5, SC6002 effect-creation-unaccounted 3 -> 8, SC9012 value-held-in-binding 0 -> 1, SC9012 value-in-carrier 3 -> 9); reactive-ir/rc21-after-await-handed SC1003 props-callers-unenumerated 0 -> 1: the assignment in an effect apply stays SC1003 uncertifiable, a blocker relabelled (its const-destructure in onClick loses 2 SC9012 rows, recorded with a drops row)"
   }
  ]
 }

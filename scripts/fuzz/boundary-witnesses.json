@@ -1,6 +1,6 @@
 {
  "version": 1,
- "checker": "claude/batch-8 24d1c6c07 (release build, ablated)",
+ "checker": "claude/infra-1210 7bc723e35 (release build, ablated)",
  "pairs": {
   "kept-collection": {
    "codes": {
@@ -92,7 +92,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -132,7 +132,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -154,13 +154,13 @@
    "codes": {
     "STRICT_READ_UNTRACKED": {
      "misuse": {
-      "programs": 26,
+      "programs": 61,
       "clean": 0,
       "violation": 0
      },
      "legal": {
-      "programs": 70,
-      "clean": 10,
+      "programs": 164,
+      "clean": 26,
       "violation": 0
      }
     },
@@ -182,13 +182,13 @@
    "codes": {
     "STRICT_READ_UNTRACKED": {
      "misuse": {
-      "programs": 26,
+      "programs": 61,
       "clean": 0,
       "violation": 0
      },
      "legal": {
-      "programs": 35,
-      "clean": 5,
+      "programs": 82,
+      "clean": 13,
       "violation": 0
      }
     },
@@ -210,13 +210,13 @@
    "codes": {
     "STRICT_READ_UNTRACKED": {
      "misuse": {
-      "programs": 26,
+      "programs": 61,
       "clean": 0,
       "violation": 0
      },
      "legal": {
-      "programs": 35,
-      "clean": 5,
+      "programs": 82,
+      "clean": 13,
       "violation": 0
      }
     },
@@ -238,13 +238,13 @@
    "codes": {
     "STRICT_READ_UNTRACKED": {
      "misuse": {
-      "programs": 26,
+      "programs": 61,
       "clean": 0,
       "violation": 0
      },
      "legal": {
-      "programs": 35,
-      "clean": 5,
+      "programs": 82,
+      "clean": 13,
       "violation": 0
      }
     },
@@ -266,13 +266,13 @@
    "codes": {
     "STRICT_READ_UNTRACKED": {
      "misuse": {
-      "programs": 26,
+      "programs": 61,
       "clean": 0,
       "violation": 0
      },
      "legal": {
-      "programs": 35,
-      "clean": 5,
+      "programs": 82,
+      "clean": 13,
       "violation": 0
      }
     },
@@ -294,13 +294,13 @@
    "codes": {
     "STRICT_READ_UNTRACKED": {
      "misuse": {
-      "programs": 26,
+      "programs": 61,
       "clean": 0,
       "violation": 0
      },
      "legal": {
-      "programs": 35,
-      "clean": 5,
+      "programs": 82,
+      "clean": 13,
       "violation": 0
      }
     },
@@ -322,13 +322,13 @@
    "codes": {
     "STRICT_READ_UNTRACKED": {
      "misuse": {
-      "programs": 26,
+      "programs": 61,
       "clean": 0,
       "violation": 0
      },
      "legal": {
-      "programs": 35,
-      "clean": 5,
+      "programs": 82,
+      "clean": 13,
       "violation": 0
      }
     },
@@ -350,13 +350,13 @@
    "codes": {
     "STRICT_READ_UNTRACKED": {
      "misuse": {
-      "programs": 26,
+      "programs": 61,
       "clean": 0,
       "violation": 0
      },
      "legal": {
-      "programs": 35,
-      "clean": 5,
+      "programs": 82,
+      "clean": 13,
       "violation": 0
      }
     },
@@ -378,13 +378,13 @@
    "codes": {
     "STRICT_READ_UNTRACKED": {
      "misuse": {
-      "programs": 26,
+      "programs": 61,
       "clean": 0,
       "violation": 0
      },
      "legal": {
-      "programs": 35,
-      "clean": 5,
+      "programs": 82,
+      "clean": 13,
       "violation": 0
      }
     },
@@ -406,13 +406,13 @@
    "codes": {
     "STRICT_READ_UNTRACKED": {
      "misuse": {
-      "programs": 26,
+      "programs": 61,
       "clean": 0,
       "violation": 0
      },
      "legal": {
-      "programs": 35,
-      "clean": 5,
+      "programs": 82,
+      "clean": 13,
       "violation": 0
      }
     },
@@ -434,13 +434,13 @@
    "codes": {
     "STRICT_READ_UNTRACKED": {
      "misuse": {
-      "programs": 26,
+      "programs": 61,
       "clean": 0,
       "violation": 0
      },
      "legal": {
-      "programs": 35,
-      "clean": 5,
+      "programs": 82,
+      "clean": 13,
       "violation": 0
      }
     },
@@ -462,13 +462,13 @@
    "codes": {
     "STRICT_READ_UNTRACKED": {
      "misuse": {
-      "programs": 26,
+      "programs": 61,
       "clean": 0,
       "violation": 0
      },
      "legal": {
-      "programs": 35,
-      "clean": 5,
+      "programs": 82,
+      "clean": 13,
       "violation": 0
      }
     },
@@ -490,13 +490,13 @@
    "codes": {
     "STRICT_READ_UNTRACKED": {
      "misuse": {
-      "programs": 26,
+      "programs": 61,
       "clean": 0,
       "violation": 0
      },
      "legal": {
-      "programs": 35,
-      "clean": 5,
+      "programs": 82,
+      "clean": 13,
       "violation": 0
      }
     },
@@ -518,14 +518,14 @@
    "codes": {
     "STRICT_READ_UNTRACKED": {
      "misuse": {
-      "programs": 26,
+      "programs": 61,
       "clean": 0,
       "violation": 0
      },
      "legal": {
-      "programs": 70,
-      "clean": 22,
-      "violation": 0
+      "programs": 164,
+      "clean": 106,
+      "violation": 12
      }
     },
     "REACTIVE_WRITE_IN_OWNED_SCOPE": {
@@ -536,7 +536,7 @@
      },
      "legal": {
       "programs": 6,
-      "clean": 4,
+      "clean": 6,
       "violation": 0
      }
     }
@@ -546,21 +546,33 @@
    "codes": {
     "STRICT_READ_UNTRACKED": {
      "misuse": {
-      "programs": 112,
+      "programs": 251,
       "clean": 2,
-      "violation": 35
+      "violation": 84
      },
      "legal": {
-      "programs": 8,
+      "programs": 24,
       "clean": 0,
       "violation": 0
      }
     },
     "REACTIVE_WRITE_IN_OWNED_SCOPE": {
      "misuse": {
-      "programs": 16,
+      "programs": 172,
       "clean": 0,
-      "violation": 3
+      "violation": 7
+     },
+     "legal": {
+      "programs": 36,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 26,
+      "clean": 0,
+      "violation": 2
      },
      "legal": {
       "programs": 12,
@@ -568,26 +580,14 @@
       "violation": 0
      }
     },
-    "ACTION_CALLED_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 0,
-      "clean": 0,
-      "violation": 0
-     },
-     "legal": {
-      "programs": 4,
-      "clean": 0,
-      "violation": 0
-     }
-    },
     "STORE_WRITE_OUTSIDE_SETTER": {
      "misuse": {
-      "programs": 42,
+      "programs": 172,
       "clean": 0,
       "violation": 30
      },
      "legal": {
-      "programs": 8,
+      "programs": 24,
       "clean": 0,
       "violation": 0
      }
@@ -644,7 +644,7 @@
      },
      "legal": {
       "programs": 9,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -678,37 +678,37 @@
    "codes": {
     "STRICT_READ_UNTRACKED": {
      "misuse": {
-      "programs": 367,
+      "programs": 958,
       "clean": 6,
-      "violation": 120
+      "violation": 355
      },
      "legal": {
-      "programs": 262,
-      "clean": 82,
-      "violation": 0
+      "programs": 864,
+      "clean": 352,
+      "violation": 6
      }
     },
     "REACTIVE_WRITE_IN_OWNED_SCOPE": {
      "misuse": {
-      "programs": 82,
+      "programs": 1330,
       "clean": 6,
-      "violation": 13
+      "violation": 45
      },
      "legal": {
-      "programs": 13,
-      "clean": 10,
+      "programs": 589,
+      "clean": 72,
       "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
      "misuse": {
-      "programs": 2,
+      "programs": 210,
       "clean": 0,
-      "violation": 2
+      "violation": 18
      },
      "legal": {
-      "programs": 4,
-      "clean": 4,
+      "programs": 68,
+      "clean": 6,
       "violation": 0
      }
     }
@@ -800,7 +800,7 @@
      },
      "legal": {
       "programs": 6,
-      "clean": 4,
+      "clean": 6,
       "violation": 0
      }
     },
@@ -828,7 +828,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -846,6 +846,22 @@
     }
    }
   },
+  "foreach-carried-entry": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 3,
+      "violation": 0
+     }
+    }
+   }
+  },
   "flow-climb-after-await": {
    "codes": {
     "STRICT_READ_UNTRACKED": {
@@ -856,7 +872,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     }
@@ -866,36 +882,36 @@
    "codes": {
     "STRICT_READ_UNTRACKED": {
      "misuse": {
-      "programs": 8,
+      "programs": 38,
       "clean": 0,
       "violation": 0
      },
      "legal": {
-      "programs": 8,
+      "programs": 38,
       "clean": 0,
       "violation": 0
      }
     },
     "REACTIVE_WRITE_IN_OWNED_SCOPE": {
      "misuse": {
-      "programs": 12,
+      "programs": 57,
       "clean": 0,
       "violation": 0
      },
      "legal": {
-      "programs": 12,
+      "programs": 57,
       "clean": 0,
       "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
      "misuse": {
-      "programs": 4,
+      "programs": 19,
       "clean": 0,
       "violation": 0
      },
      "legal": {
-      "programs": 4,
+      "programs": 19,
       "clean": 0,
       "violation": 0
      }
@@ -906,36 +922,36 @@
    "codes": {
     "STRICT_READ_UNTRACKED": {
      "misuse": {
-      "programs": 8,
+      "programs": 38,
       "clean": 0,
       "violation": 0
      },
      "legal": {
-      "programs": 8,
+      "programs": 38,
       "clean": 0,
       "violation": 0
      }
     },
     "REACTIVE_WRITE_IN_OWNED_SCOPE": {
      "misuse": {
-      "programs": 12,
+      "programs": 57,
       "clean": 0,
       "violation": 0
      },
      "legal": {
-      "programs": 12,
-      "clean": 0,
+      "programs": 57,
+      "clean": 2,
       "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
      "misuse": {
-      "programs": 4,
+      "programs": 19,
       "clean": 0,
       "violation": 0
      },
      "legal": {
-      "programs": 4,
+      "programs": 19,
       "clean": 0,
       "violation": 0
      }
@@ -946,36 +962,36 @@
    "codes": {
     "STRICT_READ_UNTRACKED": {
      "misuse": {
-      "programs": 8,
+      "programs": 38,
       "clean": 0,
       "violation": 0
      },
      "legal": {
-      "programs": 8,
+      "programs": 38,
       "clean": 0,
       "violation": 0
      }
     },
     "REACTIVE_WRITE_IN_OWNED_SCOPE": {
      "misuse": {
-      "programs": 12,
+      "programs": 57,
       "clean": 0,
       "violation": 0
      },
      "legal": {
-      "programs": 12,
+      "programs": 57,
       "clean": 0,
       "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
      "misuse": {
-      "programs": 4,
+      "programs": 19,
       "clean": 0,
       "violation": 0
      },
      "legal": {
-      "programs": 4,
+      "programs": 19,
       "clean": 0,
       "violation": 0
      }
@@ -992,7 +1008,7 @@
      },
      "legal": {
       "programs": 4,
-      "clean": 4,
+      "clean": 0,
       "violation": 0
      }
     }
@@ -1020,7 +1036,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -1061,7 +1077,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -1073,7 +1089,47 @@
      "legal": {
       "programs": 1,
       "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:Array.forEach:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
       "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
      }
     }
    }
@@ -1140,7 +1196,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -1181,7 +1237,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -1193,7 +1249,47 @@
      "legal": {
       "programs": 1,
       "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:Array.map:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
       "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
      }
     }
    }
@@ -1260,7 +1356,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -1301,7 +1397,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -1313,7 +1409,47 @@
      "legal": {
       "programs": 1,
       "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:Array.flatMap:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
       "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
      }
     }
    }
@@ -1380,7 +1516,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -1421,7 +1557,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -1433,7 +1569,47 @@
      "legal": {
       "programs": 1,
       "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:Array.filter:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
       "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
      }
     }
    }
@@ -1500,7 +1676,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -1541,7 +1717,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -1553,7 +1729,47 @@
      "legal": {
       "programs": 1,
       "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:Array.some:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
       "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
      }
     }
    }
@@ -1620,7 +1836,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -1661,7 +1877,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -1673,7 +1889,47 @@
      "legal": {
       "programs": 1,
       "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:Array.every:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
       "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
      }
     }
    }
@@ -1740,7 +1996,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -1781,7 +2037,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -1793,7 +2049,47 @@
      "legal": {
       "programs": 1,
       "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:Array.find:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
       "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
      }
     }
    }
@@ -1860,7 +2156,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -1901,7 +2197,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -1913,7 +2209,47 @@
      "legal": {
       "programs": 1,
       "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:Array.findIndex:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
       "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
      }
     }
    }
@@ -1980,7 +2316,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -2021,7 +2357,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -2033,7 +2369,47 @@
      "legal": {
       "programs": 1,
       "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:Array.reduce:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
       "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
      }
     }
    }
@@ -2100,7 +2476,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -2141,7 +2517,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -2153,7 +2529,47 @@
      "legal": {
       "programs": 1,
       "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:Array.reduceRight:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
       "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
      }
     }
    }
@@ -2220,7 +2636,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -2261,7 +2677,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -2273,7 +2689,47 @@
      "legal": {
       "programs": 1,
       "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:ReadonlyArray.forEach:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
       "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
      }
     }
    }
@@ -2340,7 +2796,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -2381,7 +2837,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -2393,7 +2849,47 @@
      "legal": {
       "programs": 1,
       "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:ReadonlyArray.map:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
       "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
      }
     }
    }
@@ -2460,7 +2956,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -2501,7 +2997,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -2513,7 +3009,47 @@
      "legal": {
       "programs": 1,
       "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:ReadonlyArray.flatMap:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
       "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
      }
     }
    }
@@ -2580,7 +3116,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -2621,7 +3157,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -2633,7 +3169,47 @@
      "legal": {
       "programs": 1,
       "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:ReadonlyArray.filter:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
       "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
      }
     }
    }
@@ -2700,7 +3276,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -2741,7 +3317,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -2753,7 +3329,47 @@
      "legal": {
       "programs": 1,
       "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:ReadonlyArray.some:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
       "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
      }
     }
    }
@@ -2820,7 +3436,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -2861,7 +3477,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -2873,7 +3489,47 @@
      "legal": {
       "programs": 1,
       "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:ReadonlyArray.every:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
       "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
      }
     }
    }
@@ -2940,7 +3596,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -2981,7 +3637,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -2993,7 +3649,47 @@
      "legal": {
       "programs": 1,
       "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:ReadonlyArray.find:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
       "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
      }
     }
    }
@@ -3060,7 +3756,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -3101,7 +3797,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -3113,7 +3809,47 @@
      "legal": {
       "programs": 1,
       "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:ReadonlyArray.findIndex:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
       "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
      }
     }
    }
@@ -3180,7 +3916,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -3221,7 +3957,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -3233,7 +3969,47 @@
      "legal": {
       "programs": 1,
       "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:ReadonlyArray.reduce:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
       "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
      }
     }
    }
@@ -3300,7 +4076,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -3341,7 +4117,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -3353,7 +4129,47 @@
      "legal": {
       "programs": 1,
       "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:ReadonlyArray.reduceRight:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
       "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
      }
     }
    }
@@ -3420,7 +4236,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -3461,7 +4277,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -3473,7 +4289,87 @@
      "legal": {
       "programs": 1,
       "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:Array.sort:b/zeroname": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
       "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
+     }
+    }
+   }
+  },
+  "table:Array.sort:b/one": {
+   "codes": {
+    "STRICT_READ_UNTRACKED": {
+     "misuse": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 2
+     },
+     "legal": {
+      "programs": 2,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 3
+     },
+     "legal": {
+      "programs": 3,
+      "clean": 0,
+      "violation": 0
+     }
+    },
+    "ACTION_CALLED_IN_OWNED_SCOPE": {
+     "misuse": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 1
+     },
+     "legal": {
+      "programs": 1,
+      "clean": 0,
+      "violation": 0
      }
     }
    }
@@ -3540,7 +4436,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -3581,7 +4477,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -3593,7 +4489,7 @@
      "legal": {
       "programs": 1,
       "clean": 0,
-      "violation": 1
+      "violation": 0
      }
     }
    }
@@ -3660,7 +4556,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -3701,7 +4597,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -3713,7 +4609,7 @@
      "legal": {
       "programs": 1,
       "clean": 0,
-      "violation": 1
+      "violation": 0
      }
     }
    }
@@ -3780,7 +4676,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -3821,7 +4717,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -3833,7 +4729,7 @@
      "legal": {
       "programs": 1,
       "clean": 0,
-      "violation": 1
+      "violation": 0
      }
     }
    }
@@ -3900,7 +4796,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -4020,7 +4916,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -4061,7 +4957,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -4073,7 +4969,7 @@
      "legal": {
       "programs": 1,
       "clean": 0,
-      "violation": 1
+      "violation": 0
      }
     }
    }
@@ -4140,7 +5036,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -4181,7 +5077,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -4193,7 +5089,7 @@
      "legal": {
       "programs": 1,
       "clean": 0,
-      "violation": 1
+      "violation": 0
      }
     }
    }
@@ -4260,7 +5156,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -4300,7 +5196,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -4420,7 +5316,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -4488,7 +5384,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -4500,7 +5396,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -4512,7 +5408,7 @@
      },
      "legal": {
       "programs": 1,
-      "clean": 1,
+      "clean": 0,
       "violation": 0
      }
     }
@@ -4580,7 +5476,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -4660,7 +5556,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -4740,7 +5636,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -4781,7 +5677,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -4793,7 +5689,7 @@
      "legal": {
       "programs": 1,
       "clean": 0,
-      "violation": 1
+      "violation": 0
      }
     }
    }
@@ -4860,7 +5756,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -4901,7 +5797,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -4913,7 +5809,7 @@
      "legal": {
       "programs": 1,
       "clean": 0,
-      "violation": 1
+      "violation": 0
      }
     }
    }
@@ -4980,7 +5876,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -5021,7 +5917,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -5033,7 +5929,7 @@
      "legal": {
       "programs": 1,
       "clean": 0,
-      "violation": 1
+      "violation": 0
      }
     }
    }
@@ -5100,7 +5996,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -5141,7 +6037,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -5153,7 +6049,7 @@
      "legal": {
       "programs": 1,
       "clean": 0,
-      "violation": 1
+      "violation": 0
      }
     }
    }
@@ -5220,7 +6116,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -5261,7 +6157,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -5273,7 +6169,7 @@
      "legal": {
       "programs": 1,
       "clean": 0,
-      "violation": 1
+      "violation": 0
      }
     }
    }
@@ -5340,7 +6236,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -5381,7 +6277,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -5393,7 +6289,7 @@
      "legal": {
       "programs": 1,
       "clean": 0,
-      "violation": 1
+      "violation": 0
      }
     }
    }
@@ -5460,7 +6356,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -5501,7 +6397,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -5513,7 +6409,7 @@
      "legal": {
       "programs": 1,
       "clean": 0,
-      "violation": 1
+      "violation": 0
      }
     }
    }
@@ -5580,7 +6476,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -5621,7 +6517,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -5633,7 +6529,7 @@
      "legal": {
       "programs": 1,
       "clean": 0,
-      "violation": 1
+      "violation": 0
      }
     }
    }
@@ -5700,7 +6596,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -5741,7 +6637,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -5753,7 +6649,7 @@
      "legal": {
       "programs": 1,
       "clean": 0,
-      "violation": 1
+      "violation": 0
      }
     }
    }
@@ -5820,7 +6716,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -5861,7 +6757,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -5873,7 +6769,7 @@
      "legal": {
       "programs": 1,
       "clean": 0,
-      "violation": 1
+      "violation": 0
      }
     }
    }
@@ -5940,7 +6836,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -5981,7 +6877,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -5993,7 +6889,7 @@
      "legal": {
       "programs": 1,
       "clean": 0,
-      "violation": 1
+      "violation": 0
      }
     }
    }
@@ -6060,7 +6956,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -6101,7 +6997,7 @@
      "legal": {
       "programs": 3,
       "clean": 0,
-      "violation": 3
+      "violation": 0
      }
     },
     "ACTION_CALLED_IN_OWNED_SCOPE": {
@@ -6113,7 +7009,7 @@
      "legal": {
       "programs": 1,
       "clean": 0,
-      "violation": 1
+      "violation": 0
      }
     }
    }
@@ -6180,7 +7076,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -6208,7 +7104,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -6248,7 +7144,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 0,
+      "clean": 1,
       "violation": 0
      }
     },
@@ -6276,7 +7172,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 0,
+      "clean": 1,
       "violation": 0
      }
     },
@@ -6316,7 +7212,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -6344,7 +7240,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -6384,7 +7280,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -6412,7 +7308,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -6452,7 +7348,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -6480,7 +7376,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -6520,7 +7416,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -6548,7 +7444,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -6588,7 +7484,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -6616,7 +7512,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -6656,7 +7552,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -6684,7 +7580,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -6724,7 +7620,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -6752,7 +7648,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -6792,7 +7688,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -6820,7 +7716,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -6848,7 +7744,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -6860,7 +7756,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -6888,7 +7784,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -6916,7 +7812,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -6928,7 +7824,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -6956,7 +7852,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -6984,7 +7880,7 @@
      },
      "legal": {
       "programs": 2,
-      "clean": 2,
+      "clean": 0,
       "violation": 0
      }
     },
@@ -6996,7 +7892,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -7024,7 +7920,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -7064,7 +7960,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -7092,7 +7988,7 @@
      },
      "legal": {
       "programs": 3,
-      "clean": 2,
+      "clean": 3,
       "violation": 0
      }
     },
@@ -7948,7 +8844,7 @@
      "misuse": {
       "programs": 3,
       "clean": 0,
-      "violation": 0
+      "violation": 3
      },
      "legal": {
       "programs": 3,
@@ -7960,7 +8856,7 @@
      "misuse": {
       "programs": 1,
       "clean": 0,
-      "violation": 0
+      "violation": 1
      },
      "legal": {
       "programs": 1,
@@ -7988,7 +8884,7 @@
      "misuse": {
       "programs": 3,
       "clean": 0,
-      "violation": 0
+      "violation": 3
      },
      "legal": {
       "programs": 3,
@@ -8000,7 +8896,7 @@
      "misuse": {
       "programs": 1,
       "clean": 0,
-      "violation": 0
+      "violation": 1
      },
      "legal": {
       "programs": 1,
@@ -10894,13 +11790,13 @@
    "codes": {
     "STRICT_READ_UNTRACKED": {
      "misuse": {
-      "programs": 560,
+      "programs": 735,
       "clean": 10,
-      "violation": 141
+      "violation": 316
      },
      "legal": {
-      "programs": 180,
-      "clean": 47,
+      "programs": 415,
+      "clean": 302,
       "violation": 0
      }
     },
@@ -10940,7 +11836,7 @@
      },
      "legal": {
       "programs": 45,
-      "clean": 18,
+      "clean": 27,
       "violation": 0
      }
     },
@@ -10964,11 +11860,11 @@
      "misuse": {
       "programs": 14,
       "clean": 0,
-      "violation": 10
+      "violation": 12
      },
      "legal": {
       "programs": 14,
-      "clean": 10,
+      "clean": 12,
       "violation": 0
      }
     },
@@ -10980,7 +11876,7 @@
      },
      "legal": {
       "programs": 21,
-      "clean": 8,
+      "clean": 12,
       "violation": 0
      }
     },
@@ -11020,7 +11916,7 @@
      },
      "legal": {
       "programs": 24,
-      "clean": 16,
+      "clean": 24,
       "violation": 0
      }
     },
@@ -11048,7 +11944,7 @@
      },
      "legal": {
       "programs": 56,
-      "clean": 52,
+      "clean": 46,
       "violation": 0
      }
     },
@@ -11060,7 +11956,7 @@
      },
      "legal": {
       "programs": 315,
-      "clean": 100,
+      "clean": 237,
       "violation": 0
      }
     },
@@ -11072,7 +11968,7 @@
      },
      "legal": {
       "programs": 98,
-      "clean": 45,
+      "clean": 74,
       "violation": 0
      }
     }
@@ -11088,7 +11984,7 @@
      },
      "legal": {
       "programs": 30,
-      "clean": 28,
+      "clean": 27,
       "violation": 0
      }
     },
@@ -11100,7 +11996,7 @@
      },
      "legal": {
       "programs": 45,
-      "clean": 28,
+      "clean": 41,
       "violation": 0
      }
     },
@@ -11140,7 +12036,7 @@
      },
      "legal": {
       "programs": 12,
-      "clean": 8,
+      "clean": 12,
       "violation": 0
      }
     },
@@ -11173,914 +12069,24 @@
      }
     }
    }
-  },
-  "table:Array.forEach:b/zeroname": {
-   "codes": {
-    "STRICT_READ_UNTRACKED": {
-     "misuse": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 2
-     },
-     "legal": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 3
-     },
-     "legal": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "ACTION_CALLED_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 1
-     },
-     "legal": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 0
-     }
-    }
-   }
-  },
-  "table:Array.map:b/zeroname": {
-   "codes": {
-    "STRICT_READ_UNTRACKED": {
-     "misuse": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 2
-     },
-     "legal": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 3
-     },
-     "legal": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "ACTION_CALLED_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 1
-     },
-     "legal": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 0
-     }
-    }
-   }
-  },
-  "table:Array.flatMap:b/zeroname": {
-   "codes": {
-    "STRICT_READ_UNTRACKED": {
-     "misuse": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 2
-     },
-     "legal": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 3
-     },
-     "legal": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "ACTION_CALLED_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 1
-     },
-     "legal": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 0
-     }
-    }
-   }
-  },
-  "table:Array.filter:b/zeroname": {
-   "codes": {
-    "STRICT_READ_UNTRACKED": {
-     "misuse": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 2
-     },
-     "legal": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 3
-     },
-     "legal": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "ACTION_CALLED_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 1
-     },
-     "legal": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 0
-     }
-    }
-   }
-  },
-  "table:Array.some:b/zeroname": {
-   "codes": {
-    "STRICT_READ_UNTRACKED": {
-     "misuse": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 2
-     },
-     "legal": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 3
-     },
-     "legal": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "ACTION_CALLED_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 1
-     },
-     "legal": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 0
-     }
-    }
-   }
-  },
-  "table:Array.every:b/zeroname": {
-   "codes": {
-    "STRICT_READ_UNTRACKED": {
-     "misuse": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 2
-     },
-     "legal": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 3
-     },
-     "legal": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "ACTION_CALLED_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 1
-     },
-     "legal": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 0
-     }
-    }
-   }
-  },
-  "table:Array.find:b/zeroname": {
-   "codes": {
-    "STRICT_READ_UNTRACKED": {
-     "misuse": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 2
-     },
-     "legal": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 3
-     },
-     "legal": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "ACTION_CALLED_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 1
-     },
-     "legal": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 0
-     }
-    }
-   }
-  },
-  "table:Array.findIndex:b/zeroname": {
-   "codes": {
-    "STRICT_READ_UNTRACKED": {
-     "misuse": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 2
-     },
-     "legal": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 3
-     },
-     "legal": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "ACTION_CALLED_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 1
-     },
-     "legal": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 0
-     }
-    }
-   }
-  },
-  "table:Array.reduce:b/zeroname": {
-   "codes": {
-    "STRICT_READ_UNTRACKED": {
-     "misuse": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 2
-     },
-     "legal": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 3
-     },
-     "legal": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "ACTION_CALLED_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 1
-     },
-     "legal": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 0
-     }
-    }
-   }
-  },
-  "table:Array.reduceRight:b/zeroname": {
-   "codes": {
-    "STRICT_READ_UNTRACKED": {
-     "misuse": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 2
-     },
-     "legal": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 3
-     },
-     "legal": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "ACTION_CALLED_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 1
-     },
-     "legal": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 0
-     }
-    }
-   }
-  },
-  "table:ReadonlyArray.forEach:b/zeroname": {
-   "codes": {
-    "STRICT_READ_UNTRACKED": {
-     "misuse": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 2
-     },
-     "legal": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 3
-     },
-     "legal": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "ACTION_CALLED_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 1
-     },
-     "legal": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 0
-     }
-    }
-   }
-  },
-  "table:ReadonlyArray.map:b/zeroname": {
-   "codes": {
-    "STRICT_READ_UNTRACKED": {
-     "misuse": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 2
-     },
-     "legal": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 3
-     },
-     "legal": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "ACTION_CALLED_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 1
-     },
-     "legal": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 0
-     }
-    }
-   }
-  },
-  "table:ReadonlyArray.flatMap:b/zeroname": {
-   "codes": {
-    "STRICT_READ_UNTRACKED": {
-     "misuse": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 2
-     },
-     "legal": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 3
-     },
-     "legal": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "ACTION_CALLED_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 1
-     },
-     "legal": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 0
-     }
-    }
-   }
-  },
-  "table:ReadonlyArray.filter:b/zeroname": {
-   "codes": {
-    "STRICT_READ_UNTRACKED": {
-     "misuse": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 2
-     },
-     "legal": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 3
-     },
-     "legal": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "ACTION_CALLED_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 1
-     },
-     "legal": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 0
-     }
-    }
-   }
-  },
-  "table:ReadonlyArray.some:b/zeroname": {
-   "codes": {
-    "STRICT_READ_UNTRACKED": {
-     "misuse": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 2
-     },
-     "legal": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 3
-     },
-     "legal": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "ACTION_CALLED_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 1
-     },
-     "legal": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 0
-     }
-    }
-   }
-  },
-  "table:ReadonlyArray.every:b/zeroname": {
-   "codes": {
-    "STRICT_READ_UNTRACKED": {
-     "misuse": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 2
-     },
-     "legal": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 3
-     },
-     "legal": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "ACTION_CALLED_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 1
-     },
-     "legal": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 0
-     }
-    }
-   }
-  },
-  "table:ReadonlyArray.find:b/zeroname": {
-   "codes": {
-    "STRICT_READ_UNTRACKED": {
-     "misuse": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 2
-     },
-     "legal": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 3
-     },
-     "legal": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "ACTION_CALLED_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 1
-     },
-     "legal": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 0
-     }
-    }
-   }
-  },
-  "table:ReadonlyArray.findIndex:b/zeroname": {
-   "codes": {
-    "STRICT_READ_UNTRACKED": {
-     "misuse": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 2
-     },
-     "legal": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 3
-     },
-     "legal": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "ACTION_CALLED_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 1
-     },
-     "legal": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 0
-     }
-    }
-   }
-  },
-  "table:ReadonlyArray.reduce:b/zeroname": {
-   "codes": {
-    "STRICT_READ_UNTRACKED": {
-     "misuse": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 2
-     },
-     "legal": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 3
-     },
-     "legal": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "ACTION_CALLED_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 1
-     },
-     "legal": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 0
-     }
-    }
-   }
-  },
-  "table:ReadonlyArray.reduceRight:b/zeroname": {
-   "codes": {
-    "STRICT_READ_UNTRACKED": {
-     "misuse": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 2
-     },
-     "legal": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 3
-     },
-     "legal": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "ACTION_CALLED_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 1
-     },
-     "legal": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 0
-     }
-    }
-   }
-  },
-  "table:Array.sort:b/zeroname": {
-   "codes": {
-    "STRICT_READ_UNTRACKED": {
-     "misuse": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 2
-     },
-     "legal": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 3
-     },
-     "legal": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "ACTION_CALLED_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 1
-     },
-     "legal": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 0
-     }
-    }
-   }
-  },
-  "table:Array.sort:b/one": {
-   "codes": {
-    "STRICT_READ_UNTRACKED": {
-     "misuse": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 2
-     },
-     "legal": {
-      "programs": 2,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "REACTIVE_WRITE_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 3
-     },
-     "legal": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 0
-     }
-    },
-    "ACTION_CALLED_IN_OWNED_SCOPE": {
-     "misuse": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 1
-     },
-     "legal": {
-      "programs": 1,
-      "clean": 0,
-      "violation": 0
-     }
-    }
-   }
-  },
-  "foreach-carried-entry": {
-   "codes": {
-    "STRICT_READ_UNTRACKED": {
-     "misuse": {
-      "programs": 3,
-      "clean": 0,
-      "violation": 0
-     },
-     "legal": {
-      "programs": 3,
-      "clean": 3,
-      "violation": 0
-     }
-    }
-   }
   }
  },
  "arms": {
   "body_roles.layered_window_after_awaits.unreported": [
    {
-    "pair": "ref-layer-after-await",
+    "pair": "primitive-contexts",
     "code": "STRICT_READ_UNTRACKED",
-    "context": "barm-ref-iife-await",
-    "decisive": true
+    "context": "async",
+    "decisive": false
    }
   ],
   "body_roles.window_after_awaits.unreported": [
+   {
+    "pair": "primitive-contexts",
+    "code": "STRICT_READ_UNTRACKED",
+    "context": "async",
+    "decisive": true
+   },
    {
     "pair": "callback-forms",
     "code": "ACTION_CALLED_IN_OWNED_SCOPE",
@@ -12103,14 +12109,8 @@
    },
    {
     "pair": "primitive-contexts",
-    "code": "STRICT_READ_UNTRACKED",
+    "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
     "context": "async",
-    "decisive": false
-   },
-   {
-    "pair": "ref-layer-after-await",
-    "code": "STRICT_READ_UNTRACKED",
-    "context": "barm-ref-each-await",
     "decisive": false
    }
   ],
@@ -12221,6 +12221,12 @@
     "code": "STRICT_READ_UNTRACKED",
     "context": "untrack",
     "layer": "handoff-function",
+    "decisive": true
+   },
+   {
+    "pair": "primitive-contexts",
+    "code": "STRICT_READ_UNTRACKED",
+    "context": "untrack",
     "decisive": true
    }
   ],
@@ -12346,7 +12352,7 @@
     "pair": "layers-depth-chain",
     "code": "STRICT_READ_UNTRACKED",
     "context": "untrack",
-    "layer": "chain-5",
+    "layer": "depth-15",
     "decisive": true
    },
    {
@@ -12500,6 +12506,12 @@
   ],
   "callee_roles.compiler-source": [
    {
+    "pair": "fire-exactness",
+    "code": "STRICT_READ_UNTRACKED",
+    "context": "evt-body-fire-project",
+    "decisive": true
+   },
+   {
     "pair": "layers-hand-off",
     "code": "ACTION_CALLED_IN_OWNED_SCOPE",
     "context": "handler",
@@ -12565,20 +12577,6 @@
     "pair": "table:Array.find:b/h",
     "code": "ACTION_CALLED_IN_OWNED_SCOPE",
     "context": "tbl-array-find-h",
-    "decisive": true
-   },
-   {
-    "pair": "table:Array.find:b/h",
-    "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
-    "context": "tbl-array-find-h",
-    "decisive": true
-   }
-  ],
-  "callee_roles.control-flow-climb-after-await": [
-   {
-    "pair": "flow-climb-after-await",
-    "code": "STRICT_READ_UNTRACKED",
-    "context": "barm-climb-await",
     "decisive": true
    }
   ],
@@ -12608,27 +12606,19 @@
     "decisive": false
    }
   ],
-  "callee_roles.forwarded-event-prop": [
+  "callee_roles.fresh-stack-callback": [
    {
-    "pair": "callback-prop-call",
-    "code": "STRICT_READ_UNTRACKED",
-    "context": "cbp-handler",
+    "pair": "primitive-contexts",
+    "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+    "context": "timer",
     "decisive": true
    },
    {
-    "pair": "callback-prop-call",
-    "code": "ACTION_CALLED_IN_OWNED_SCOPE",
-    "context": "cbp-handler",
-    "decisive": false
-   },
-   {
-    "pair": "callback-prop-call",
+    "pair": "primitive-contexts",
     "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
-    "context": "cbp-handler",
-    "decisive": false
-   }
-  ],
-  "callee_roles.fresh-stack-callback": [
+    "context": "timer",
+    "decisive": true
+   },
    {
     "pair": "table:setInterval:shadow-b/host-b",
     "code": "ACTION_CALLED_IN_OWNED_SCOPE",
@@ -12723,9 +12713,21 @@
     "decisive": true
    },
    {
+    "pair": "callback-prop-call",
+    "code": "STRICT_READ_UNTRACKED",
+    "context": "cbp-handler",
+    "decisive": true
+   },
+   {
     "pair": "fire-exactness",
     "code": "STRICT_READ_UNTRACKED",
     "context": "evt-body-fire-project",
+    "decisive": true
+   },
+   {
+    "pair": "foreach-carried-entry",
+    "code": "STRICT_READ_UNTRACKED",
+    "context": "barm-carried-handler",
     "decisive": true
    },
    {
@@ -12777,18 +12779,6 @@
     "code": "STRICT_READ_UNTRACKED",
     "context": "tbl-array-findindex-h",
     "decisive": true
-   },
-   {
-    "pair": "table:Array.flatMap:b/h",
-    "code": "STRICT_READ_UNTRACKED",
-    "context": "tbl-array-flatmap-h",
-    "decisive": true
-   },
-   {
-    "pair": "table:Array.forEach:b/h",
-    "code": "STRICT_READ_UNTRACKED",
-    "context": "tbl-array-foreach-h",
-    "decisive": true
    }
   ],
   "callee_roles.named-callback": [
@@ -12800,11 +12790,30 @@
     "decisive": true
    },
    {
+    "pair": "fire-exactness",
+    "code": "STRICT_READ_UNTRACKED",
+    "context": "evt-body-fire-project",
+    "decisive": true
+   },
+   {
+    "pair": "layers-base",
+    "code": "STRICT_READ_UNTRACKED",
+    "context": "untrack",
+    "layer": "closure",
+    "decisive": true
+   },
+   {
     "pair": "named-callback-carries-closure",
     "code": "STRICT_READ_UNTRACKED",
     "context": "memo",
     "layer": "handoff-foreach",
     "callback": "const",
+    "decisive": true
+   },
+   {
+    "pair": "primitive-contexts",
+    "code": "STRICT_READ_UNTRACKED",
+    "context": "memo",
     "decisive": true
    },
    {
@@ -12838,6 +12847,25 @@
     "code": "STRICT_READ_UNTRACKED",
     "context": "untrack",
     "callback": "const",
+    "decisive": true
+   },
+   {
+    "pair": "fire-exactness",
+    "code": "STRICT_READ_UNTRACKED",
+    "context": "evt-body-fire-project",
+    "decisive": true
+   },
+   {
+    "pair": "layers-base",
+    "code": "STRICT_READ_UNTRACKED",
+    "context": "untrack",
+    "layer": "closure",
+    "decisive": true
+   },
+   {
+    "pair": "primitive-contexts",
+    "code": "STRICT_READ_UNTRACKED",
+    "context": "memo",
     "decisive": true
    },
    {
@@ -12947,6 +12975,26 @@
     "decisive": true
    }
   ],
+  "execution_role.prop-literal-calls": [
+   {
+    "pair": "callback-prop-call",
+    "code": "STRICT_READ_UNTRACKED",
+    "context": "cbp-handler",
+    "decisive": true
+   },
+   {
+    "pair": "callback-prop-call",
+    "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+    "context": "cbp-handler",
+    "decisive": false
+   },
+   {
+    "pair": "callback-prop-call",
+    "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+    "context": "cbp-handler",
+    "decisive": false
+   }
+  ],
   "named_callbacks.named_callback_execution_role.deferred-callback-2": [
    {
     "pair": "callback-forms",
@@ -13013,6 +13061,41 @@
     "pair": "generator-steps",
     "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
     "context": "barm-gen-handler",
+    "decisive": true
+   }
+  ],
+  "write_roles.prop-literal-calls": [
+   {
+    "pair": "callback-prop-call",
+    "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+    "context": "cbp-handler",
+    "decisive": true
+   },
+   {
+    "pair": "callback-prop-call",
+    "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+    "context": "cbp-handler",
+    "decisive": true
+   }
+  ],
+  "write_roles.role_entries_complete.foreach-carried": [
+   {
+    "pair": "foreach-carried-entry",
+    "code": "STRICT_READ_UNTRACKED",
+    "context": "barm-carried-handler",
+    "decisive": true
+   },
+   {
+    "pair": "layers-base",
+    "code": "STRICT_READ_UNTRACKED",
+    "context": "untrack",
+    "layer": "closure",
+    "decisive": true
+   },
+   {
+    "pair": "primitive-contexts",
+    "code": "STRICT_READ_UNTRACKED",
+    "context": "untrack",
     "decisive": true
    }
   ],
@@ -13163,6 +13246,12 @@
     "code": "ACTION_CALLED_IN_OWNED_SCOPE",
     "context": "async",
     "decisive": true
+   },
+   {
+    "pair": "primitive-contexts",
+    "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+    "context": "async",
+    "decisive": true
    }
   ],
   "write_roles.write_role_walk.unreported-generator": [
@@ -13207,11 +13296,79 @@
     "decisive": true
    }
   ],
-  "write_roles.role_entries_complete.foreach-carried": [
+  "write_roles.write-flow-fallback": [
    {
-    "pair": "foreach-carried-entry",
-    "code": "STRICT_READ_UNTRACKED",
-    "context": "barm-carried-handler",
+    "pair": "callback-forms",
+    "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+    "context": "timer",
+    "callback": "const",
+    "decisive": true
+   },
+   {
+    "pair": "callback-forms",
+    "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+    "context": "timer",
+    "callback": "const",
+    "decisive": true
+   },
+   {
+    "pair": "seam-then",
+    "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+    "context": "bseam-then-definelit-other",
+    "decisive": true
+   },
+   {
+    "pair": "table:AnimationFrameProvider.requestAnimationFrame:shadow-b/host-b",
+    "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+    "context": "tbl-animationframeprovider-requestanimationframe-host-b",
+    "decisive": true
+   },
+   {
+    "pair": "table:AnimationFrameProvider.requestAnimationFrame:shadow-b/host-b",
+    "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+    "context": "tbl-animationframeprovider-requestanimationframe-host-b",
+    "decisive": true
+   },
+   {
+    "pair": "table:AnimationFrameProvider.requestAnimationFrame:shadow-u/host-u",
+    "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+    "context": "tbl-animationframeprovider-requestanimationframe-host-u",
+    "decisive": true
+   },
+   {
+    "pair": "table:AnimationFrameProvider.requestAnimationFrame:shadow-u/host-u",
+    "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+    "context": "tbl-animationframeprovider-requestanimationframe-host-u",
+    "decisive": true
+   },
+   {
+    "pair": "table:MediaSession.setActionHandler:shadow-b/host-b",
+    "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+    "context": "tbl-mediasession-setactionhandler-host-b",
+    "decisive": true
+   },
+   {
+    "pair": "table:MediaSession.setActionHandler:shadow-b/host-b",
+    "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+    "context": "tbl-mediasession-setactionhandler-host-b",
+    "decisive": true
+   },
+   {
+    "pair": "table:MediaSession.setActionHandler:shadow-u/host-u",
+    "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+    "context": "tbl-mediasession-setactionhandler-host-u",
+    "decisive": true
+   },
+   {
+    "pair": "table:MediaSession.setActionHandler:shadow-u/host-u",
+    "code": "REACTIVE_WRITE_IN_OWNED_SCOPE",
+    "context": "tbl-mediasession-setactionhandler-host-u",
+    "decisive": true
+   },
+   {
+    "pair": "table:Promise.catch:shadow-b/host-b",
+    "code": "ACTION_CALLED_IN_OWNED_SCOPE",
+    "context": "tbl-promise-catch-host-b",
     "decisive": true
    }
   ]

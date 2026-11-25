@@ -1543,6 +1543,24 @@ impl<'l, 'a> Census<'l, 'a> {
             Holder::JsxSpread(element) => self.jsx_value(file, element, None, mode),
             Holder::Binding(binding) => self.bound(file, at, binding, mode),
             Holder::Assigned(assignment) => {
+                // ADR 1193 part 2: the root's own reference an assignment's object target destructures (`({ v } = s)`,
+                // `static_rules::destructure_root`): the pattern's keys are SC1003's and SC1001's rows, as `const { v } = s`'s.
+                let target = ast.peel_ts_sugar_span(ast.assignments[assignment].target);
+                if mode == Mode::Root
+                    && self.steps <= 1
+                    && !self.props_root
+                    && ast.destructure_sites.iter().any(|site| {
+                        site.source == solid_facts::ast::DestructureSource::Assignment
+                            && site.binding.pattern == target
+                            && crate::static_rules::destructure_root(
+                                self.lookup,
+                                file,
+                                &site.binding,
+                            ) == Some(at)
+                    })
+                {
+                    return Position::Followed;
+                }
                 let answer = assigned(file, assignment);
                 // ADR 0860: an object that holds the value in a member hands
                 // it to every use of the object.
@@ -3213,6 +3231,30 @@ impl<'l, 'a> Census<'l, 'a> {
                 self.escape(file, at, row, mode, blockers::VALUE_HELD_IN_BINDING);
                 Position::Open(blockers::VALUE_HELD_IN_BINDING)
             });
+        }
+        // ADR 1193 part 2: a `const` array pattern over a one-literal root holder whose element at the root's slot is an object pattern
+        // the root's destructure (`const [{ v }] = [s]`, `static_rules::destructure_root`): the pattern's keys are SC1003's and
+        // SC1001's rows, as `const { v } = s`'s.
+        if let Mode::RootHolder(slot) = mode
+            && binding.shape == solid_facts::ast::BindingShape::Array
+            && binding.immutable
+            && !self.props_root
+            && self.steps <= 2
+        {
+            for site in &ast.destructure_sites {
+                let solid_facts::ast::DestructureSource::ArrayElement { outer, index } =
+                    site.source
+                else {
+                    continue;
+                };
+                if outer == binding.pattern
+                    && self.key(&index.to_string()) == slot
+                    && crate::static_rules::destructure_root(self.lookup, file, &site.binding)
+                        .is_some_and(|root| at.contains(root))
+                {
+                    return Position::Followed;
+                }
+            }
         }
         let each = match mode {
             Mode::Holder(_) if !identifier => Mode::Value,

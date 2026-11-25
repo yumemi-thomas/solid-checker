@@ -280,10 +280,11 @@ fn reasons<'a>(
     // ADR 1090: a flush with no census class of its own, written in exact in-place layers (an IIFE, a named function called once, a helper's callback it calls in its
     // body: `climb_in_place_layers`), is asked at the outermost layer's call, the class of that call's position: the layers run on its stack. Any other shape of the
     // climb (a layer in a parameter list, one also handed on, a suspension on the way, a withheld or unmodelled layer) keeps the site where it is, with no class.
+    // ADR 1206: a clean climb whose call has no class is still asked there, with none: `position_class` then asks only whether that call runs past a
+    // suspension of its own function no await dominates (ADR 1201).
     let (at, caller) = match site.caller {
         Some(caller) => (site.span, Some(caller)),
-        None => climbed_caller(lookup, file, site.span)
-            .map_or((site.span, None), |(at, caller)| (at, Some(caller))),
+        None => climbed_caller(lookup, file, site.span).unwrap_or((site.span, None)),
     };
     let class = position_class(lookup, file, at, caller, fake_timers);
     reasons.extend(class);
@@ -421,8 +422,7 @@ fn entry_placed<'a>(
     };
     let (at, caller) = match lookup.flush_caller_of_layer_call(file, fact) {
         Some(caller) => (call, Some(caller)),
-        None => climbed_caller(lookup, file, call)
-            .map_or((call, None), |(at, caller)| (at, Some(caller))),
+        None => climbed_caller(lookup, file, call).unwrap_or((call, None)),
     };
     if position_class(lookup, file, at, caller, fake_timers).is_some() {
         return true;
@@ -436,20 +436,28 @@ fn climbed_caller<'a>(
     lookup: &crate::indexes::SemanticLookup<'a>,
     file: &'a FileFacts,
     span: Span,
-) -> Option<(Span, crate::indexes::DispatchCaller)> {
+) -> Option<(Span, Option<crate::indexes::DispatchCaller>)> {
+    let at = clean_climb_end(lookup, file, span)?;
+    let call = file.ast.calls.iter().find(|call| call.span == at)?;
+    Some((at, lookup.flush_caller_of_layer_call(file, call)))
+}
+
+/// ADR 1090's climb from `span` through exact in-place layers, when it crossed at least one and is clean (no layer holds the site in a parameter
+/// list, none also hands its callback on, nothing on the way follows an await, no call crossed is withheld or an unmodelled slot): the call of the
+/// outermost layer, on whose stack the site runs. ADR 1206: the flush census and the delivery question (`flush_runs_off_any_delivery`) ask
+/// the continuation question at that call too, when its census class is none.
+pub(crate) fn clean_climb_end(
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    file: &FileFacts,
+    span: Span,
+) -> Option<Span> {
     let climb = crate::execution_role::climb_in_place_layers(file, span, lookup)?;
-    if climb.in_list.is_some()
-        || climb.among_others
-        || climb.suspended.is_some()
-        || climb.withheld
-        || climb.unmodelled
-    {
-        return None;
-    }
-    let call = file.ast.calls.iter().find(|call| call.span == climb.at)?;
-    lookup
-        .flush_caller_of_layer_call(file, call)
-        .map(|caller| (climb.at, caller))
+    (climb.in_list.is_none()
+        && !climb.among_others
+        && climb.suspended.is_none()
+        && !climb.withheld
+        && !climb.unmodelled)
+        .then_some(climb.at)
 }
 
 /// Whether a flush written in a scheduler's or a runner's callback runs on the stack that callback was given: everything between the flush and the call that hands the

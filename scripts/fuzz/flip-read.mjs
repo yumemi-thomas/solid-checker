@@ -53,8 +53,8 @@ export const SYNC_COMPUTE_LINES = {
 
 // ADR 0657: a destructure no exact root reaches. Each is a Get of the store at setup.
 export const STORE_DESTRUCTURES = {
-  "store-dstr-assign": { reads: true, text: (o) => `let v = 0; ({ v } = ${o}); void v;` },
-  "store-dstr-array": { reads: true, text: (o) => `const [{ v }] = [${o}]; void v;` },
+  "store-dstr-assign": { reads: true, text: (o) => `let dav = 0; ({ v: dav } = ${o}); void dav;` },
+  "store-dstr-array": { reads: true, text: (o) => `const [{ v: dyv }] = [${o}]; void dyv;` },
   "store-dstr-for-of": { reads: true, text: (o) => `for (const { v } of [${o}]) void v;` },
   "store-dstr-merge": { reads: true, imports: ["merge"], text: (o) => `const { v: dmv } = merge(${o}, { w: 1 }); void dmv;` },
   // ADR 1106: the plain object destructure. In a named helper the body calls (the `closure` layer) it was a clean nothing explained.

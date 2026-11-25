@@ -1,0 +1,126 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-later-layers/App.tsx",
+      "start": 972,
+      "end": 974,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-later-layers/App.tsx",
+      "start": 1664,
+      "end": 1667,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-later-layers/App.tsx",
+      "start": 2010,
+      "end": 2928,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-later-layers/App.tsx",
+      "start": 3333,
+      "end": 4441,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-later-layers/App.tsx",
+      "start": 4805,
+      "end": 4812,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-later-layers/App.tsx",
+      "start": 4833,
+      "end": 4842,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-later-layers/App.tsx",
+      "start": 4856,
+      "end": 4858,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-later-layers/App.tsx",
+      "start": 5105,
+      "end": 5112,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-later-layers/App.tsx",
+      "start": 5312,
+      "end": 5314,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "uncertifiable",
+      "blocker": "read-after-await-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-later-layers/App.tsx",
+      "start": 5332,
+      "end": 5340,
+      "fixes": 0
+    },
+    {
+      "rule": "unaudited-solid-release",
+      "code": "SC9014",
+      "kind": "uncertifiable",
+      "blocker": "dialect-detection",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/flush-later-layers/node_modules/solid-js/package.json",
+      "start": 0,
+      "end": 0,
+      "fixes": 0
+    }
+  ]
+}

@@ -184,6 +184,7 @@ pub(super) struct Collector<'s, 'semantic> {
     pub(super) straight_line_calls: Vec<Span>,
     pub(super) straight_line_constructs: Vec<Span>,
     pub(super) straight_line_assignments: Vec<Span>,
+    pub(super) destructure_sites: Vec<DestructureSiteFact>,
     pub(super) completion_sites: Vec<Span>,
     pub(super) returns: Vec<ReturnFact>,
     pub(super) jsx_elements: Vec<JsxElementFact>,
@@ -443,6 +444,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             straight_line_calls: Vec::new(),
             straight_line_constructs: Vec::new(),
             straight_line_assignments: Vec::new(),
+            destructure_sites: Vec::new(),
             completion_sites: Vec::new(),
             returns: Vec::new(),
             jsx_elements: Vec::new(),
@@ -544,6 +546,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.straight_line_calls.sort_unstable();
         self.straight_line_constructs.sort_unstable();
         self.straight_line_assignments.sort_unstable();
+        self.destructure_sites
+            .sort_by_key(|site| site.binding.pattern);
         self.completion_sites.sort_unstable();
         self.swallowing_try_blocks.sort_unstable();
         self.completion_sites.dedup();
@@ -803,6 +807,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             straight_line_calls: self.straight_line_calls,
             straight_line_constructs: self.straight_line_constructs,
             straight_line_assignments: self.straight_line_assignments,
+            destructure_sites: self.destructure_sites,
             completion_sites: self.completion_sites,
             returns: self.returns,
             jsx_elements: self.jsx_elements,
@@ -990,6 +995,163 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             initializer_identifier: metadata.initializer_identifier,
             initializer_value_kind: metadata.initializer_value_kind,
         }
+    }
+
+    /// ADR 1193: an object pattern that is a direct element of a declarator's array pattern (`const [{ v }] = [s]`), with no
+    /// default on the element, as a [`DestructureSiteFact`].
+    pub(super) fn array_element_sites(
+        &self,
+        declaration: &oxc_ast::ast::VariableDeclarator<'_>,
+    ) -> Vec<DestructureSiteFact> {
+        let BindingPattern::ArrayPattern(array) = &declaration.id else {
+            return Vec::new();
+        };
+        if declaration.init.is_none() {
+            return Vec::new();
+        }
+        array
+            .elements
+            .iter()
+            .enumerate()
+            .filter_map(|(index, element)| {
+                let element @ BindingPattern::ObjectPattern(_) = element.as_ref()? else {
+                    return None;
+                };
+                Some(DestructureSiteFact {
+                    binding: self.binding_fact(
+                        declaration.span,
+                        element,
+                        BindingMetadata {
+                            immutable: declaration.kind
+                                == oxc_ast::ast::VariableDeclarationKind::Const,
+                            ..BindingMetadata::default()
+                        },
+                    ),
+                    source: DestructureSource::ArrayElement {
+                        outer: span(declaration.id.span()),
+                        index: u32::try_from(index).ok()?,
+                    },
+                })
+            })
+            .collect()
+    }
+
+    /// ADR 1193: a plain `=` assignment's object target (`({ v } = s)`) as a [`DestructureSiteFact`], each property as
+    /// [`Self::binding_fact`] records a binding pattern's.
+    pub(super) fn assignment_site(
+        &self,
+        expression: &oxc_ast::ast::AssignmentExpression<'_>,
+    ) -> Option<DestructureSiteFact> {
+        if expression.operator != oxc_ast::ast::AssignmentOperator::Assign {
+            return None;
+        }
+        let AssignmentTarget::ObjectAssignmentTarget(object) = &expression.left else {
+            return None;
+        };
+        let mut names = Vec::new();
+        collect_object_target_names(object, &mut names);
+        let mut object_slots = Vec::new();
+        let mut object_properties = Vec::new();
+        for property in &object.properties {
+            match property {
+                AssignmentTargetProperty::AssignmentTargetPropertyIdentifier(property) => {
+                    let local = NamedSpan {
+                        span: span(property.binding.span),
+                    };
+                    if property.init.is_none() {
+                        object_slots.push(ObjectBindingFact {
+                            property: property.binding.name.as_str().into(),
+                            plain_identifier_key: self.source.get(
+                                property.binding.span.start as usize
+                                    ..property.binding.span.end as usize,
+                            ) == Some(property.binding.name.as_str()),
+                            local: local.clone(),
+                        });
+                    }
+                    object_properties.push(PatternPropertyFact {
+                        span: span(property.span),
+                        key: Some(property.binding.name.as_str().into()),
+                        computed: false,
+                        has_default: property.init.is_some(),
+                        nested: false,
+                        local: Some(local),
+                    });
+                }
+                AssignmentTargetProperty::AssignmentTargetPropertyProperty(property) => {
+                    let (target, has_default) = match &property.binding {
+                        AssignmentTargetMaybeDefault::AssignmentTargetWithDefault(with) => {
+                            (Some(&with.binding), true)
+                        }
+                        other => (other.as_assignment_target(), false),
+                    };
+                    let local = match target {
+                        Some(AssignmentTarget::AssignmentTargetIdentifier(identifier)) => {
+                            Some(NamedSpan {
+                                span: span(identifier.span),
+                            })
+                        }
+                        _ => None,
+                    };
+                    // The key by the parser's value (`"v"` is `v`), as `object_properties` records it.
+                    if let Some(local) = &local
+                        && !has_default
+                        && !property.computed
+                        && let Some(key) = property.name.static_name()
+                    {
+                        object_slots.push(ObjectBindingFact {
+                            property: key.as_ref().into(),
+                            plain_identifier_key: matches!(&property.name,
+                                PropertyKey::StaticIdentifier(key)
+                                    if self.source.get(key.span.start as usize..key.span.end as usize)
+                                        == Some(key.name.as_str())),
+                            local: local.clone(),
+                        });
+                    }
+                    object_properties.push(PatternPropertyFact {
+                        span: span(property.span),
+                        key: property.name.static_name().map(|key| key.as_ref().into()),
+                        computed: property.computed,
+                        has_default,
+                        nested: matches!(
+                            target,
+                            Some(
+                                AssignmentTarget::ObjectAssignmentTarget(_)
+                                    | AssignmentTarget::ArrayAssignmentTarget(_)
+                            )
+                        ),
+                        local,
+                    });
+                }
+            }
+        }
+        let call_initializer = match expression.right.get_inner_expression() {
+            Expression::CallExpression(call) => Some(span(call.span)),
+            _ => None,
+        };
+        Some(DestructureSiteFact {
+            binding: BindingFact {
+                declaration: span(expression.span),
+                pattern: span(object.span),
+                shape: BindingShape::Object,
+                names,
+                array_slots: Vec::new(),
+                object_slots,
+                object_properties,
+                pattern_rest: object.rest.is_some(),
+                immutable: false,
+                runtime_let: false,
+                in_switch_case: false,
+                initializer: Some(span(expression.right.span())),
+                call_initializer,
+                initializer_function: matches!(
+                    expression.right.get_inner_expression(),
+                    Expression::ArrowFunctionExpression(_) | Expression::FunctionExpression(_)
+                ),
+                initializer_identifier: None,
+                initializer_value_kind: self.runtime_value_kind(&expression.right),
+            },
+            source: DestructureSource::Assignment,
+        })
     }
 
     pub(super) fn return_fact(
@@ -1526,5 +1688,64 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             Expression::ArrayExpression(_) => RuntimeValueKind::Array,
             _ => RuntimeValueKind::Unknown,
         }
+    }
+}
+
+/// ADR 1193: the identifiers an object assignment target writes, nested targets included, in source order (member targets write
+/// no name).
+fn collect_object_target_names(
+    object: &oxc_ast::ast::ObjectAssignmentTarget<'_>,
+    names: &mut Vec<NamedSpan>,
+) {
+    for property in &object.properties {
+        match property {
+            AssignmentTargetProperty::AssignmentTargetPropertyIdentifier(property) => {
+                names.push(NamedSpan {
+                    span: span(property.binding.span),
+                });
+            }
+            AssignmentTargetProperty::AssignmentTargetPropertyProperty(property) => {
+                collect_maybe_default_names(&property.binding, names);
+            }
+        }
+    }
+    if let Some(rest) = &object.rest {
+        collect_target_names(&rest.target, names);
+    }
+}
+
+fn collect_maybe_default_names(
+    target: &AssignmentTargetMaybeDefault<'_>,
+    names: &mut Vec<NamedSpan>,
+) {
+    match target {
+        AssignmentTargetMaybeDefault::AssignmentTargetWithDefault(with) => {
+            collect_target_names(&with.binding, names);
+        }
+        other => {
+            if let Some(target) = other.as_assignment_target() {
+                collect_target_names(target, names);
+            }
+        }
+    }
+}
+
+fn collect_target_names(target: &AssignmentTarget<'_>, names: &mut Vec<NamedSpan>) {
+    match target {
+        AssignmentTarget::AssignmentTargetIdentifier(identifier) => names.push(NamedSpan {
+            span: span(identifier.span),
+        }),
+        AssignmentTarget::ObjectAssignmentTarget(object) => {
+            collect_object_target_names(object, names);
+        }
+        AssignmentTarget::ArrayAssignmentTarget(array) => {
+            for element in array.elements.iter().flatten() {
+                collect_maybe_default_names(element, names);
+            }
+            if let Some(rest) = &array.rest {
+                collect_target_names(&rest.target, names);
+            }
+        }
+        _ => {}
     }
 }
