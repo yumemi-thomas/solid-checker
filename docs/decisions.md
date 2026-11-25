@@ -5398,3 +5398,31 @@ Both answers looked only at a site written in the cleanup's own body. A closure,
 A throw on a branch is not this. `if (!ok) throw …; s();` keeps its violation, as `if (ok) s();` does: ADR 0458 reads a site in a branch as reached. A first cut demoted every evaluation that may throw, which turned the hook guard `if (!value) throw …` before a context read into uncertifiable in `context-member-forwarding` and `transported-parameter-flow`, where Chrome warns. That is lost recall, not a fixed false positive, so it was narrowed to "must throw". ADR 0279's premise stays: any other call (a helper past four calls, a package, a standard method) completes normally unless its signature says it may not.
 **Measured** (release, sc VM; main 3246a7201 against this). The generator gains three legal whole-store forms (`misuse.mjs`): `store-throw-first-getter` (W9's shape), `store-throw-first-local` (a local thrower) and the twin `store-throw-first-caught` (caught first, the read warns). A checker-only scan of every grid program holding a `throw` (43,613 in mx-recall, lg-recall, mx-census) and of the 7,157 rows of the new forms put the new blocker in 144 programs, all of the new forms, none of the existing programs. Probe with Chrome, 2,000 programs (the hits, 612 other rows of the new forms, 1,300 of the throw-holding programs): 91 lg-recall programs move from `disturbed` (main's SC1001 violation at a site of a run that threw first) to uncertifiable; these are the fixed false positives, listed in the rediscovery entry. Nothing else moves (mx-recall 364 agree, 309 recall-gap; lg-recall 255 clean, 953 uncertifiable; mx-census unchanged). 0 legal SC1001 violations, 0 V to U in mx-recall and mx-census. A cut that checked only the code before the reported call left 16 programs' call-attributed violations at the enclosing call (`f1()` running `boom(); f();`); the callee arm closes them. Coverage: only the new fixture moves. Fixture `throw-first-direct-call`: four uncertifiable shapes, W9's reaction-and-IIFE shape among them; `CaughtGetter`, `ConditionalThrow` and `DataMember` stay violations.
 **Not covered.** A throw on a branch, past four local calls, in another module, a package, a standard method or a getter not of a `const` literal. The grid judge reads main's 91 as `disturbed`, not as failures, so the old build does not fail `fuzz-focus` on them: the rediscovery entry records the outcomes instead.
+
+<a id="adr-1206"></a>
+## ADR 1206 — The continuation question is asked at the end of the in-place climb
+**The gap** (ADR 1201's leftovers). Two groups of the async loop and `finally` family kept a flush row though every layer around the flush runs in place under a call that runs past its async function's suspension. Step 0 (main 3246a7201 with ADR 1201, lg-recall):
+- 300 programs: a helper (`wrapUse`) under a closure, helper or IIFE layer in a compute handed by name. ADR 0709's unplaced SC2008 arm asks `flush_runs_off_any_delivery`, which asked the flush's own position and its first entry, never the end of the climb.
+- 360 programs: chains of named closures and nested IIFEs. The census climbs them (ADR 1090), but `climbed_caller` dropped a climb whose end call has no census class, so ADR 1201's question was never asked there.
+
+**Decision.**
+- `flush_accounting::clean_climb_end`: the end of ADR 1090's clean climb (no parameter list, no layer handed on, no suspension on the way, nothing withheld or unmodelled).
+- `climbed_caller` keeps the climb when the end call has no class. `position_class` then asks only ADR 1201's question there (a counted loop's later pass, a `catch` or `finally` behind a `try` head's await that cannot throw first).
+- `flush_runs_off_any_delivery` asks the same question at that call.
+
+The layers run in place on that call's stack, so they run past the same suspension.
+
+**Evidence.**
+- Fixture `flush-later-layers`:
+  - Clean: `WrapperNamed`, `Chain`, `DeepFinally` and `Deep17`. `Deep17` is 17 IIFEs, past the climb's bound of 16, but ADR 1199 takes the innermost IIFE's one call as its entry and the climb from there crosses the rest.
+  - Keep their rows: `HandedOn` and `AlsoFirstPass`.
+- Chrome case `runtime-oracle/flush-later-layers`: quiet.
+- Coverage: the new fixture; `flush-later-continuation`'s snapshot is re-recorded on the new base (main 3246a7201 drops `HandlerLoop`'s SC1002 row; the base and this build agree there).
+- Fuzz (release, base 99f5e29da against this, the three flush codes' programs of mx-recall, lg-recall and mx-census, Chrome-judged):
+  - lg-recall: 468 uncertifiable to clean (the 300 of the first group; 168 chain and depth programs).
+  - 60 named-compute programs with no layer lose their flush row and stay uncertifiable on SC1002 alone.
+  - mx unchanged; 0 legal V, 0 V to U, 0 clean to U.
+  - Family on flush rules alone: 1,932 to 1,464 programs (4,122 to 3,594 rows).
+- Predicted: up to 660; measured 468.
+
+**Left:** 192 chain-13, depth-16 and depth-17 programs stop at other walks' bounds: the effect-phase walk's (`effect_phase_origin` undecided) and `unplaced_blocker`'s depth limit. Each needs those walks to stop at a call past a suspension.
