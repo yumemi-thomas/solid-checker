@@ -1607,8 +1607,11 @@ impl<'l, 'a> Census<'l, 'a> {
                 if matches!(mode, Mode::Holder(_) | Mode::RootHolder(_)) {
                     // ADR 1218: a holder at a key of a `const` declarator's literal, which the declarator's pattern destructures with
                     // a pattern of its own (`const { a: { useIt } } = { a: { useIt: r1 } }`), is that pattern's, as a holder a
-                    // declarator destructures is the declarator's.
-                    if let Some(pattern) = nested_pattern_at(file, property) {
+                    // declarator destructures is the declarator's. A value's holder only: a root's alias reached that way has a row at
+                    // each Get (`bound`'s steps rule), where the escaped walk asks the role, so a root's holder stays escaped.
+                    if let Mode::Holder(_) = mode
+                        && let Some(pattern) = nested_pattern_at(file, property)
+                    {
                         return self.nested_bound(file, at, pattern, row, mode);
                     }
                     self.escape(file, at, row, mode, blockers::VALUE_IN_CARRIER);
@@ -3295,8 +3298,8 @@ impl<'l, 'a> Census<'l, 'a> {
     }
 
     /// ADR 1218: [`Self::bound`] for a pattern nested in a declarator's object pattern (facts schema 111,
-    /// `DestructureSource::ObjectProperty`), over the holder at its key ([`nested_pattern_at`]): its names hold what the holder's
-    /// slots hold, a value as a value and a root as a root, and a slot no name of it is known to take leaves the holder escaped.
+    /// `DestructureSource::ObjectProperty`), over a value's holder at its key ([`nested_pattern_at`]): its names hold what the
+    /// holder's slots hold, and a slot no name of it is known to take leaves the holder escaped.
     fn nested_bound(
         &mut self,
         file: &'a FileFacts,
@@ -3310,6 +3313,7 @@ impl<'l, 'a> Census<'l, 'a> {
             Mode::RootHolder(_) => Mode::Root,
             other => other,
         };
+        debug_assert!(matches!(mode, Mode::Holder(_)), "a value's holder only");
         let Some(names) = self.slot_names(binding, mode) else {
             self.escape(file, at, row, mode, blockers::VALUE_IN_CARRIER);
             return Position::Open(blockers::VALUE_IN_CARRIER);
