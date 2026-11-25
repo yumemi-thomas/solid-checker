@@ -212,6 +212,24 @@
       "why": "ADR 1216: an optimistic setter in LazyMemo (SC2009 uncertifiable), whose REACTIVE_WRITE_IN_OWNED_SCOPE code is ended only by SC2009 (the setter's guard throws OPTIMISTIC_WRITE_BEFORE_LOAD first); SC2001 `write-unaccounted` stands beside it (no false clean), as at optimistic-apply-before-load-render",
       "at": "fixtures/reactive-ir/optimistic-creating-entries/App.tsx:97:7",
       "adr": "ADR 1216"
+    },
+    "reactive-ir/optimistic-creating-entries|fixtures/reactive-ir/optimistic-creating-entries/App.tsx|553-564|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "ADR 1216: an optimistic setter in HelperAlsoHanded (SC2009 violation), whose REACTIVE_WRITE_IN_OWNED_SCOPE code is ended only by SC2009 (the setter's guard throws OPTIMISTIC_WRITE_BEFORE_LOAD first); SC2001 `write-unaccounted` stands beside it (no false clean), as at optimistic-apply-before-load-render",
+      "at": "fixtures/reactive-ir/optimistic-creating-entries/App.tsx:11:5",
+      "adr": "ADR 1216"
+    },
+    "reactive-ir/optimistic-creating-entries|fixtures/reactive-ir/optimistic-creating-entries/App.tsx|1071-1082|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "ADR 1216: an optimistic setter in FlushInHelper (SC2009 violation), whose REACTIVE_WRITE_IN_OWNED_SCOPE code is ended only by SC2009 (the setter's guard throws OPTIMISTIC_WRITE_BEFORE_LOAD first); SC2001 `write-unaccounted` stands beside it (no false clean), as at optimistic-apply-before-load-render",
+      "at": "fixtures/reactive-ir/optimistic-creating-entries/App.tsx:32:7",
+      "adr": "ADR 1216"
+    },
+    "reactive-ir/optimistic-creating-entries|fixtures/reactive-ir/optimistic-creating-entries/App.tsx|1270-1281|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "ADR 1216: an optimistic setter in SharedByMemoAndHandler (SC2009 violation), whose REACTIVE_WRITE_IN_OWNED_SCOPE code is ended only by SC2009 (the setter's guard throws OPTIMISTIC_WRITE_BEFORE_LOAD first); SC2001 `write-unaccounted` stands beside it (no false clean), as at optimistic-apply-before-load-render",
+      "at": "fixtures/reactive-ir/optimistic-creating-entries/App.tsx:42:5",
+      "adr": "ADR 1216"
     }
   }
 }
