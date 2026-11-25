@@ -2318,6 +2318,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/param-default-leaf/node_modules/**
 !fixtures/reactive-ir/iife-prop-read/node_modules/
 !fixtures/reactive-ir/iife-prop-read/node_modules/**
+!fixtures/reactive-ir/iife-write-helper/node_modules/
+!fixtures/reactive-ir/iife-write-helper/node_modules/**
 !fixtures/reactive-ir/carrier-call-row/node_modules/
 !fixtures/reactive-ir/carrier-call-row/node_modules/**
 !fixtures/reactive-ir/callback-prop-leaf/node_modules/

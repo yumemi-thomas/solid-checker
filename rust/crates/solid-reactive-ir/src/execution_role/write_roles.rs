@@ -2606,6 +2606,57 @@ pub(super) fn semantic_write_role_walk(
     )
 }
 
+/// ADR 1212: the call of the outermost IIFE around a site written directly in a chain of IIFEs inside a named local function (`const go = () => {
+/// (() => { setW(1); })(); }`), as ADR 1187's `component_prop_helper` climbs for a prop read. Each layer is an anonymous, unbound function literal,
+/// neither async nor a generator, called where it is written (not `new`), with the site, and then each layer's call, written directly in the enclosing
+/// function's body where it runs with that function (no JSX, class field or tracked region between: `runs_with_its_function`). The layers run in place,
+/// synchronously, at that call, so a write there is a write at the call. The chain must end in a function bound to a name that is never written
+/// again and is no possible component (`function_may_be_component`); `None` otherwise (an IIFE written directly in a component's or an anonymous callback's body keeps its own
+/// placement).
+pub(crate) fn named_helper_iife_call(
+    file: &solid_facts::FileFacts,
+    site: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    let ast = &file.ast;
+    let mut layer = crate::owners::containing_ast_function(ast, site)?;
+    let mut at = site;
+    let mut climbed = false;
+    loop {
+        if !(layer.body.contains(at)
+            && crate::owners::written_directly_in(ast, layer, at)
+            && super::runs_with_its_function(file, at, layer.span))
+        {
+            return None;
+        }
+        if layer.name.is_some()
+            || function_binding_name(file, layer).is_some()
+            || layer.r#async
+            || layer.generator
+        {
+            break;
+        }
+        let mut calls = ast.calls_with_peeled_callee(layer.span);
+        let call = calls.next().filter(|call| !call.construct)?;
+        if calls.next().is_some() {
+            return None;
+        }
+        at = call.span;
+        layer = crate::owners::containing_ast_function(ast, at)?;
+        climbed = true;
+    }
+    // A named function expression may call itself by its own name, from anywhere it runs: not this form. A binding written after its
+    // declaration (`let go = …; go = …`) may hold another function at its calls and positions: not this form either.
+    (climbed
+        && !(layer.kind == solid_facts::ast::FunctionKind::Expression && layer.name.is_some())
+        && function_binding_name(file, layer)
+            .is_some_and(|binding| !crate::indexes::binding_written(file, binding.span))
+        && !layer.generator
+        && !layer.r#async
+        && !lookup.function_may_be_component(file, layer))
+    .then_some(at)
+}
+
 /// [`semantic_write_role_walk`], and whether its `Unknown` is final: the write
 /// runs under an owner the call gave it, so what its function's other callers
 /// run it under places nothing (`decided`).
@@ -2645,6 +2696,11 @@ pub(super) fn write_role_walk<'f>(
             && let Some(run) = super::construct_only_member_run(file, span)
         {
             span = run;
+            continue;
+        }
+        // ADR 1212: a write written directly in IIFEs inside a named local function runs at the outermost IIFE's call, in that function.
+        if let Some(call) = named_helper_iife_call(file, span, lookup) {
+            span = call;
             continue;
         }
         match write_region_adjustment(file, span, lookup) {
