@@ -4742,9 +4742,49 @@ fn first_run_proven_at_call(
     let Some(component) = crate::owners::containing_ast_function(ast, call) else {
         return false;
     };
+    // ADR 1227: a render effect's first apply runs at its call whatever its component's props are (rc.21
+    // `dist/dev.js:2629-2633`; type 0 skips the held-run hooks, `:2727-2731`), so a component the creation pass of a
+    // module-scope mount renders eagerly (ADR 1216 slice 2) is mounted too. A user effect's run waits for the flush and
+    // keeps ADR 0505's premises.
+    let at_call = lookup
+        .primitive_at_call(file, call)
+        .is_some_and(|primitive| {
+            lookup
+                .dialect
+                .effect_apply_schedule_options(primitive, 1)
+                .is_some()
+        });
     lookup.function_may_be_component(file, component)
         && crate::interproc::site_on_every_completion(lookup, file, component.span, call)
-        && crate::owners::mounted_by_module_render(lookup, file, component)
+        && (crate::owners::mounted_by_module_render(lookup, file, component)
+            || (at_call && eagerly_mounted(file, component, lookup, EAGER_MOUNT_DEPTH)))
+}
+
+/// How many eager renders [`eagerly_mounted`] climbs.
+const EAGER_MOUNT_DEPTH: usize = 4;
+
+/// ADR 1227: `component` is rendered eagerly (ADR 1216 slice 2's `eager_render_sites`: a direct child of intrinsic
+/// elements, not in an attribute, an expression child or a component's children) in the body of a component that a
+/// module-scope `render` mounts, or that is itself rendered so, `depth` deep.
+fn eagerly_mounted(
+    file: &solid_facts::FileFacts,
+    component: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+) -> bool {
+    let Some(depth) = depth.checked_sub(1) else {
+        return false;
+    };
+    super::eager_render_sites(file, component, lookup)
+        .into_iter()
+        .filter_map(|element| crate::owners::containing_ast_function(&file.ast, element))
+        .any(|parent| {
+            parent.span != component.span
+                && lookup.function_may_be_component(file, parent)
+                && lookup.function_value_is_current(file, parent)
+                && (crate::owners::mounted_by_module_render(lookup, file, parent)
+                    || eagerly_mounted(file, parent, lookup, depth))
+        })
 }
 
 /// ADR 1227: the function literal an argument hands: the literal written there, or (a named apply) a `const` bound to a
