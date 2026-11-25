@@ -2606,8 +2606,9 @@ impl LocalAccessContext<'_, '_> {
         }
         // ADR 1107: a store's destructure SC1003 hands over (`delegated_destructure_slots`) reads each slot as a member: the
         // member read `store.a` at the slot, placed as any other (summaries, carriers, windows).
-        for binding in &file.ast.bindings {
-            // ADR 1193: the destructure's root (`destructure_root`): the initializer, a `for…of`'s `[s]`, `merge(s, {…})`'s `s`.
+        for binding in crate::static_rules::object_destructures(file) {
+            // ADR 1193: the destructure's root (`destructure_root`): the initializer, a `for…of`'s `[s]`, `merge(s, {…})`'s `s`; part 2:
+            // an assignment's value, an array pattern's element over a literal.
             let Some(root) = crate::static_rules::destructure_root(self.lookup, file, binding)
             else {
                 continue;
@@ -9927,7 +9928,7 @@ fn destructure_slot_key(
     file: &solid_facts::FileFacts,
     span: solid_facts::core::Span,
 ) -> Option<&str> {
-    file.ast.bindings.iter().find_map(|binding| {
+    crate::static_rules::object_destructures(file).find_map(|binding| {
         crate::static_rules::destructure_slot_keys(file, binding)?
             .into_iter()
             .find_map(|slot| (slot.property == span).then_some(slot.name))

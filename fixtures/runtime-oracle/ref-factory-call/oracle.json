@@ -1,0 +1,8 @@
+{
+  "note": "ADR 1209: a ref factory `ref={dir()}` evaluated inline in the body: a prop read in dir, directly or in an IIFE, reports STRICT_READ_UNTRACKED (violation at dir()); untrack quiet; the factory in a component's child and in a conditional ref keep uncertifiable rows.",
+  "haltMarker": true,
+  "mount": [
+    "Page"
+  ],
+  "steps": []
+}

@@ -383,6 +383,7 @@ jobs:
           node-version: 26
       # count: the one-way uncertifiable count (a fall needs a row, per fixture and path). rises: named rises. regress: a removed violation
       # needs a row. base: the frozen judge, the proof gate's candidates and the held cases against the base.
+      - run: node scripts/guard/symlinks.mjs
       - run: node scripts/guard/count.mjs
       - run: node scripts/guard/rises.mjs
       - run: node scripts/guard/regress.mjs

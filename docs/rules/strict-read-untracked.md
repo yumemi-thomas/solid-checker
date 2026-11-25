@@ -242,6 +242,11 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   to the named function's calls. An IIFE written directly in a named local
   helper's body runs in place, so its prop read is the helper's read at that
   call and is charged to the helper's calls (ADR 1187).
+  A `ref={dir()}` factory on an intrinsic element that the compiler evaluates
+  inline, exactly once, in the body's own markup is such a call: `dir`'s body
+  runs during the render, so its reads are charged to `dir()` (ADR 1209). In a
+  component's child or one arm of a conditional ref it is not, and the read stays
+  uncertifiable.
 - **A rendered function's body is a component body, however else it is
   called.** `const P2 = Plain; <P2 />` renders `Plain` as `<Plain />` would,
   so a body read in `Plain` is a violation even beside a tracked `{Plain()}`
