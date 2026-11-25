@@ -2221,6 +2221,45 @@ pub(super) fn member_is_get(ast: &solid_facts::ast::AstFacts, span: Span) -> boo
         })
 }
 
+/// ADR 1209: whether `site` is in a `ref` attribute's factory expression (`<p ref={dir()} />`) that the compiler evaluates inline, exactly
+/// once, where the element's markup is evaluated (`RefFactory`, schedule `Inline`, cardinality `ExactlyOnce`, owner ambient at the transform
+/// site: the factory phase of a two-phase ref; the function it returns runs later, in the directive-apply phase), and no other compiler
+/// operation contains the site: the markup is evaluated in `function`'s body itself, not in a child, a prop getter, a control-flow render
+/// or a tracked expression. The factory then runs while the body does, at the position the element is written. The compiler's census must
+/// be complete and unrefused: an absent operation proves nothing otherwise.
+pub(crate) fn inline_ref_factory_site(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    site: Span,
+) -> bool {
+    use solid_facts::compiler::{
+        CompilerExecutionCardinality, CompilerExecutionDisposition, CompilerExecutionSchedule,
+        CompilerOperationKind, CompilerOwnerRelation,
+    };
+    let model = &file.compiler.semantic_model;
+    if model.refusal.is_some() || !model.source_operations_complete {
+        return false;
+    }
+    let mut containing = model
+        .operations
+        .iter()
+        .filter(|operation| operation.span.contains(site));
+    let (Some(factory), None) = (containing.next(), containing.next()) else {
+        return false;
+    };
+    factory.kind == CompilerOperationKind::Ref
+        && factory.execution.disposition == CompilerExecutionDisposition::RefFactory
+        && factory.execution.schedule == CompilerExecutionSchedule::Inline
+        && factory.execution.cardinality == CompilerExecutionCardinality::ExactlyOnce
+        && factory.execution.owner == CompilerOwnerRelation::AmbientAtTransformSite
+        && function.body.contains(factory.span)
+        && !file
+            .compiler
+            .tracked_regions
+            .iter()
+            .any(|region| region.span.contains(site))
+}
+
 /// A direct body site that can execute only before this call first suspends.
 /// This is a may-run proof, as in ADR 0204: a branch need not be taken, but
 /// whenever the site is evaluated it must still be on the caller's stack.
@@ -2249,7 +2288,8 @@ pub(crate) fn body_site_runs_during_call(
         && file
             .ast
             .jsx_containing(site)
-            .any(|element| function.body.contains(element.span)))
+            .any(|element| function.body.contains(element.span))
+        && !inline_ref_factory_site(file, function, site))
         || file
             .ast
             .classes
