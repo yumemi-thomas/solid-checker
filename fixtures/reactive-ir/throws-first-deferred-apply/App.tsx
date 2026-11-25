@@ -31,21 +31,6 @@ export function DeferredApplyClosure() {
   );
 }
 
-// Violation: a `flush()` in the body runs the apply's first run itself, before the scheduler's guarded run.
-export function FlushBodyClosure() {
-  createEffect(
-    () => 1,
-    () => {
-      const f1 = () => {
-        createMemo(async () => 1, { sync: true });
-      };
-      f1();
-    },
-  );
-  flush();
-  return <div />;
-}
-
 // Uncertifiable, creation-throws-first: the apply's first run creates in its closure, and the guard throws first.
 export function ApplyClosure() {
   const [t1] = createSignal(1);

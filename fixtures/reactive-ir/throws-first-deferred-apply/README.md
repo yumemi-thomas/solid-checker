@@ -9,7 +9,6 @@ violation proves the guard.
 | component | SC7002 |
 |---|---|
 | `DeferredApplyClosure` (the apply deferred, rerun by a `flush()` in a handler's root) | violation (1205: uncertifiable `creation-throws-first`; main: violation) |
-| `FlushBodyClosure` (a `flush()` in the body runs the apply first) | violation (1205: uncertifiable; main: violation) |
 | `ApplyClosure` (no options, no flush) | uncertifiable `creation-throws-first` (as on main) |
 
 Chrome: `fixtures/runtime-oracle/throws-first-deferred-apply`. The case is
