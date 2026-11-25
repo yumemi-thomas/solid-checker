@@ -708,7 +708,8 @@ const APPLY_ENTRY_DEPTH: usize = 4;
 /// [`slot_called_only_in_applies`]), or, within `depth`, every run of it is one of its exact entries
 /// ([`crate::execution_role::plain_call_entries`], [`crate::execution_role::member_call_entries`]), each written directly (no
 /// nested function, no parameter list) in a function that is such an apply's callback or for which the same holds. Neither
-/// function may be `async` or a generator: a call past a suspension is off the apply's stack. `false` for anything else.
+/// function may be `async` or a generator: a call past a suspension is off the apply's stack. `false` for anything else. ADR
+/// 1220: the entries arm only for `rerunning_applies` (SC4001); SC7002 asks the slot arm alone.
 fn runs_only_in_applies(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
@@ -721,6 +722,13 @@ fn runs_only_in_applies(
     }
     if slot_called_only_in_applies(file, function, rerunning_applies, lookup) {
         return true;
+    }
+    // ADR 1220 (1205 round 3): the entries arm answers SC4001's question only (every run, `rerunning_applies`). SC7002's
+    // first-run question keeps main's answer (an SC6002 violation proves the guard, `effect_guarded`): an apply a `flush()`
+    // runs, during render or from a handler, or one with no first run (deferred, a reaction), reaches the result probe with
+    // no effect-callback guard first (20 Chrome-corroborated SYNC_NODE_RECEIVED_ASYNC programs).
+    if !rerunning_applies {
+        return false;
     }
     let Some(depth) = depth.checked_sub(1) else {
         return false;
