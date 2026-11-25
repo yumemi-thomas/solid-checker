@@ -938,11 +938,15 @@ fn stored_run_sites(
                 && binding.shape == solid_facts::ast::BindingShape::Identifier
                 && binding.names.iter().any(|name| name.span == collection)
                 && binding
-                    .call_initializer
-                    .and_then(|initializer| ast.call_at(initializer))
+                    .initializer
+                    .map(|initializer| ast.peel_ts_sugar_span(initializer))
+                    .and_then(|initializer| {
+                        ast.calls
+                            .iter()
+                            .find(|call| call.span == initializer && call.construct)
+                    })
                     .is_some_and(|created| {
-                        created.construct
-                            && created.arguments.is_empty()
+                        created.arguments.is_empty()
                             && standard(created).as_deref() == Some(constructor)
                     })
         });
