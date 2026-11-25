@@ -8,8 +8,8 @@ its callback during its call (`flush(fn)`, a memo's compute with no `lazy` optio
 
 | component | SC2009 |
 |---|---|
-| `HelperAlsoHanded`, `MemoCompute`, `FlushInHelper`, `SharedByMemoAndHandler` | violation (main: uncertifiable) |
-| `HandlerOnly`, `UnderBranch` (a call under a branch), `TimerOnly`, `InJsx` (a call written in JSX), `LazyMemo`, `AfterAwait`; the last helpers are also handed on, so no in-place layer decides them | uncertifiable |
+| `HelperAlsoHanded`, `MemoCompute`, `FlushInHelper`, `SharedByMemoAndHandler`, `InJsx` (a call in an intrinsic element's JSX, part 2) | violation (main: uncertifiable) |
+| `HandlerOnly`, `UnderBranch` (a call under a branch; the helper is also handed on), `TimerOnly`, `LazyMemo`, `AfterAwait` | uncertifiable |
 
 Chrome: `fixtures/runtime-oracle/optimistic-creating-entries`. Stub: rc.21's function form of `createOptimistic`, `createMemo`
 (its `lazy` option) and `flush(fn)`; `node_modules` from `rc21-optimistic-before-load`.

@@ -5414,4 +5414,16 @@ Each new hop is in `straight_line_calls` and outside every JSX element, and no l
   - mx-recall, 2,832: 62 recall-gap to agree (`depth-16` and `-17` chains among them); at code level, those 62 SC2009 rows from `optimistic-reach-unresolved` to violation, nothing else.
   - lg-recall, 1,236: unchanged, 0 legal V.
   - Of step 0's 350, 78 now agree.
+**Part 2: the write must run** (a false positive on main, found checking slice 1). SC2009 says the setter runs before the first answer. ADR 0636 placed the call on the creating pass but never asked whether it runs: ADR 0458's `SiteReach` drops only a site proven unreached and keeps `MayRun`. A write behind `if (props.go)`, after an early `return`, or in a component's children was a violation that Chrome does not confirm when that path does not run. Main 60de70ac7 has four such minimal cases, all static-only in the runtime oracle, and no legal grid had the shape. `written_in_creating_pass` now requires the setter call and every step of `some_entry_on_stack_of` (the old steps too) to be `runs_whenever_its_function_runs`: a completion site (`completion_sites`: straight-line flow no earlier exit of the function may skip), in no JSX element but an intrinsic one. The old `entry_on_stack_of` is no longer asked there.
+- Generator: legal contexts `flw-branch-false` and `flw-branch-false-helper` (the site behind `if (Math.random() > 2)`, in the body or in a helper whose one call is there): 2,472 lg-recall programs.
+  - Main 7e56b592b: 1,426 SC2009 violations at a site Chrome never runs.
+  - This build: 0, and nothing needs a look (rediscovery.json).
+- Fixture `optimistic-write-branch`:
+  - Violations, Chrome-covered: `Straight`, `IntrinsicJsx`.
+  - Uncertifiable: `AbsentProp`, `PassedFalse`, `RuntimeFalse`, `DirectUnderBranch`, `EarlyReturn`, `ComponentChildren`. Main reports them; Chrome is silent in all but `ComponentChildren`, whose `Box` reads its children.
+- `optimistic-creating-entries`' `InJsx` becomes a violation (intrinsic JSX runs while the tree is built; Chrome confirms).
+- Cost, named: 200 misuse programs from agree to recall-gap, true violations the proof no longer covers. They are writes in a construct that provably enters its body, which no fact says: `for (let i = 0; i < 1; …)`, `while (true)`, `do … while (false)`, a literal `switch` case, a label, a `finally`, a stepped generator, a tagged-template hand-off.
+  - mx-recall: 192, the body and root recall contexts.
+  - mx-census: 8 (`flw-guard-early`, `show`, `async-entry`).
+- Net against main: mx-census +116 and -8, mx-recall +62 and -192, lg-recall 0 legal V.
 **Not built** (`docs/open-work.md`): the rest of the 350. A helper a child calls as a callback prop needs a proof of when a component renders; so do `Dynamic`, `Portal` and a component's children. Also open: `Map`/`Set` `forEach` and other table carriers (ECMAScript), a tracked effect's first run, an apply that flushes, a module-scope source written in a component (the entry's synchronous render), and four may-follow-suspension loops.

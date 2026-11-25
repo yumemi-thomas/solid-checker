@@ -78,7 +78,7 @@ export function TimerOnly() {
   return <p>{value()}</p>;
 }
 
-// A call written in JSX runs when the compiled code reads it: this walk takes no JSX position (the helper is also handed on).
+// A call written in an intrinsic element's JSX runs as the tree is built (ADR 1216 part 2): a violation (the helper is also handed on).
 export function InJsx() {
   const [value, setValue] = createOptimistic(async () => 1);
   const write = () => {

@@ -15,7 +15,10 @@ in closures, helpers' callbacks, `untrack` or `createRoot` on that stack, in a h
 creates the source too, at module scope (ADR 0636). One run that throws is the claim, so one entry
 on that stack is enough (ADR 1216): a direct, straight-line call of an unrebound named helper written
 outside JSX, whatever its other uses (a handler, a map), and a primitive that runs its callback during
-its call (`flush(fn)`, a memo's or an effect's compute with no `lazy` option).
+its call (`flush(fn)`, a memo's or an effect's compute with no `lazy` option). The write and every such call must run
+whenever their function runs (ADR 1216 part 2): a completion site (no branch, loop, `try`, logical or earlier exit around
+it), in no JSX element but an intrinsic one. A write under a branch, after an early return or in a component's children
+is uncertifiable.
 
 Proven too (ADR 1175): the setter call is in the first run of an effect's apply that comes
 before the answer. The apply half is ADR 0504's (the call on every completion of the apply's
