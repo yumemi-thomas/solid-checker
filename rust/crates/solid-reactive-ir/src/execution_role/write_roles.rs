@@ -4789,10 +4789,10 @@ fn eagerly_mounted(
 
 /// ADR 1227: the function literal an argument hands: the literal written there, or (a named apply) a `const` bound to a
 /// function literal whose one reference is this argument, so every run of it is a run of the slot.
-fn handed_function_literal<'f>(
-    file: &'f solid_facts::FileFacts,
+fn handed_function_literal(
+    file: &solid_facts::FileFacts,
     argument: Span,
-) -> Option<&'f solid_facts::ast::FunctionFact> {
+) -> Option<&solid_facts::ast::FunctionFact> {
     let ast = &file.ast;
     let argument = ast.peel_ts_sugar_span(argument);
     if let Some(function) = ast.function_at(argument) {
