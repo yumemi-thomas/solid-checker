@@ -24,6 +24,9 @@ declare module "solid-js" {
   export function latest<T>(fn: () => T): T;
   export function isPending(fn: () => unknown): boolean;
   export function onCleanup(fn: () => void): void;
+  export type Context<T> = ((props: { value: T; children?: unknown }) => unknown) & { id: symbol; defaultValue: T | undefined };
+  export function createContext<T>(defaultValue?: T): Context<T>;
+  export function useContext<T>(context: Context<T>): T;
 }
 
 declare module "@solidjs/signals" {

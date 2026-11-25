@@ -3970,6 +3970,21 @@ impl<'l, 'a> Census<'l, 'a> {
             {
                 return self.position(file, call.span, Mode::Value);
             }
+            // ADR 1226: a store's merged view destructured (`const { v } = merge(ctx.s1, { w: 1 })`) is SC1003's only where
+            // `static_rules::destructure_root` names this argument (a plain reference first); elsewhere no rule reads its slots,
+            // so the view is a carrier (a row here, never a silence).
+            if view
+                && !self.props_root
+                && dialect.merges_props_reactivity(primitive)
+                && merged_destructure_unclaimed(
+                    self.lookup,
+                    file,
+                    call.span,
+                    call.arguments[index].span,
+                )
+            {
+                return Position::Open(blockers::VALUE_IN_CARRIER);
+            }
             return if view || callback {
                 Position::Followed
             } else {
@@ -4295,6 +4310,21 @@ fn no_member_writes(_: &FileFacts) -> Vec<Span> {
 }
 
 /// The literal a property or array holder row names.
+/// ADR 1226: whether the merge call `call` is the initializer of an object destructure whose root (`static_rules::destructure_root`)
+/// is not `argument`: the destructure's slots are then no rule's reads of the store handed there.
+fn merged_destructure_unclaimed(
+    lookup: &SemanticLookup<'_>,
+    file: &FileFacts,
+    call: Span,
+    argument: Span,
+) -> bool {
+    let argument = file.ast.peel_ts_sugar_span(argument);
+    crate::static_rules::object_destructures(file).any(|binding| {
+        binding.call_initializer == Some(call)
+            && crate::static_rules::destructure_root(lookup, file, binding) != Some(argument)
+    })
+}
+
 fn enclosing_literal(file: &FileFacts, row: Span) -> Option<Span> {
     let ast = &file.ast;
     if ast.array_literal_at(row).is_some() {

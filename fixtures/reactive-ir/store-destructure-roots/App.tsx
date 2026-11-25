@@ -1,4 +1,4 @@
-import { createMemo, createStore, merge } from "solid-js";
+import { createContext, createMemo, createStore, merge, useContext } from "solid-js";
 
 // ADR 1193: a store destructure whose root is no plain identifier initializer. `destructure_root` names the root where the runtime
 // reads every key from the store exactly: the sole element of the array literal a `for…of` iterates, and the first source of
@@ -129,4 +129,23 @@ export function AssignProps(props: { a: number }) {
   let a = 0;
   ({ a } = props);
   return <i>{a}</i>;
+}
+
+// ADR 1226: a store reached through a context or a holder's member, merged and destructured: no rule reads the slots
+// (`destructure_root` names a plain reference only), so the census keeps a row (uncertifiable), never a silence.
+const StoreCtx = createContext<{ s1: { v: number } }>();
+function ContextMergeChild() {
+  const ctx = useContext(StoreCtx)!;
+  const { v } = merge(ctx.s1, { w: 1 });
+  return <i>{v}</i>;
+}
+export function ContextMerge() {
+  const [s1] = createStore({ v: 0 });
+  return <StoreCtx value={{ s1 }}><ContextMergeChild /></StoreCtx>;
+}
+export function HolderMerge() {
+  const [s1] = createStore({ v: 0 });
+  const holder = { s1 };
+  const { v } = merge(holder.s1, { w: 1 });
+  return <i>{v}</i>;
 }
