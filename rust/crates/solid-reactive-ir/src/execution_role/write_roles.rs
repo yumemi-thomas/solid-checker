@@ -4747,6 +4747,32 @@ fn first_run_proven_at_call(
         && crate::owners::mounted_by_module_render(lookup, file, component)
 }
 
+/// ADR 1227: the function literal an argument hands: the literal written there, or (a named apply) a `const` bound to a
+/// function literal whose one reference is this argument, so every run of it is a run of the slot.
+fn handed_function_literal<'f>(
+    file: &'f solid_facts::FileFacts,
+    argument: Span,
+) -> Option<&'f solid_facts::ast::FunctionFact> {
+    let ast = &file.ast;
+    let argument = ast.peel_ts_sugar_span(argument);
+    if let Some(function) = ast.function_at(argument) {
+        return Some(function);
+    }
+    let declaration = ast.reference_declaration(argument)?;
+    let binding = ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding.names.iter().any(|name| name.span == declaration)
+    })?;
+    let function = ast.function_at(ast.peel_ts_sugar_span(binding.initializer?))?;
+    let mut references = ast.identifiers.iter().filter(|identifier| {
+        identifier.role == solid_facts::ast::IdentifierRole::Reference
+            && ast.reference_declaration(identifier.span) == Some(declaration)
+    });
+    (references.next().is_some_and(|only| only.span == argument) && references.next().is_none())
+        .then_some(function)
+}
+
 /// No call is written in the apply of the effect created at `call` before the
 /// position of `span` in it (the outermost function or site around `span` the
 /// apply's own body holds); a call around that position is the one that runs
@@ -4761,7 +4787,8 @@ fn apply_runs_nothing_before(
     let Some(apply) = ast
         .call_at(call)
         .and_then(|fact| fact.arguments.get(1))
-        .and_then(|argument| ast.function_at(ast.peel_ts_sugar_span(argument.span)))
+        .filter(|argument| !argument.spread)
+        .and_then(|argument| handed_function_literal(file, argument.span))
     else {
         return false;
     };
