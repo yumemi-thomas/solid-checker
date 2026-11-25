@@ -274,6 +274,25 @@
    "witness": "mx-context-not-found-dny-flush-load-x-direct-none (and dny-flush-popover, dny-flush-unmount; fixtures/reactive-ir/context-read-owner-varies, Varies): Chrome rc.21 throws NO_OWNER_CONTEXT where main 960bfa1f9 reported missing-context-provider (SC4002, CONTEXT_NOT_FOUND) at a useContext in a JSX handler (onLoad, onBeforeToggle, onBlur) that a later flush reaches unowned (the census false positives of open-defects)",
    "collateral": 33,
    "why": "ADR 1177 (bundle s, full census leg of the smoke): a context read written in a JSX handler whose owner varies by caller or may be null makes no provider claim (`owner-check-throws-first`: an unowned delivery may come first and throw NO_OWNER_CONTEXT). These 33 programs (context-not-found: dny-* 30, evt-* 2, pos-handler-owner 1) are the true proofs it withholds beside the three false positives: Chrome reports CONTEXT_NOT_FOUND at them because the owned run came first (a dispatch or an insertion at mount, e.g. dny-click-any, dny-load-show, dny-dispose-body), so the provider claim was right. One more program, mx-context-not-found-dny-change-checkbox-retyped-x-direct-none, moves alike and is in no ledger. Recovered when an order proof shows that a run at mount, before the handler can be delivered, is the first (docs/open-work.md, ADR 1177)."
+  },
+  {
+   "grid": "lg-recall",
+   "ids": [
+    "lg-strict-read-untracked-flush-read-call-iife-memo-wrapper-handoff-foreach",
+    "lg-strict-read-untracked-flush-read-call-iife-memo-wrapper-handoff-map",
+    "lg-strict-read-untracked-flush-read-call-iife-memo-wrapper-handoff-sort",
+    "lg-strict-read-untracked-flush-read-call-iife-signal-wrapper-handoff-foreach",
+    "lg-strict-read-untracked-flush-read-call-iife-signal-wrapper-handoff-map",
+    "lg-strict-read-untracked-flush-read-call-iife-signal-wrapper-handoff-sort",
+    "lg-strict-read-untracked-flush-read-call-memo-wrapper-handoff-foreach",
+    "lg-strict-read-untracked-flush-read-call-memo-wrapper-handoff-map",
+    "lg-strict-read-untracked-flush-read-call-memo-wrapper-handoff-sort",
+    "lg-strict-read-untracked-flush-read-call-signal-wrapper-handoff-foreach",
+    "lg-strict-read-untracked-flush-read-call-signal-wrapper-handoff-map",
+    "lg-strict-read-untracked-flush-read-call-signal-wrapper-handoff-sort"
+   ],
+   "adr": "ADR 1214",
+   "why": "ADR 1214 slice B places a named function handed to a standard inline carrier ([1].forEach(hf)) at the carrier's call. In these programs the read in wrapUse, called by hf, had on main 60de70ac7 no recorded proof at its site (proof log site line: end none, not credited): a silent clean. With hf placed the read gets a row at wrapUse() in hf, uncertifiable (callee-callback-timing): fail-closed, accepted by the owner as a never-proven clean."
   }
  ]
 }
