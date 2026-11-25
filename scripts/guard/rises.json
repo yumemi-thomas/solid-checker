@@ -8480,6 +8480,46 @@
    "to": 12,
    "adr": "ADR 1190",
    "fact": "slice 2 (execution_role::prop_literal_run_calls): a site in a callback prop's literal takes the role of the child's calls (read role execution_role.prop-literal-calls, write role write_roles.prop-literal-calls) and callee_callback_timing and unplaced_run_but ask each call: where the literal reads, the row of its lexical role leaves or changes kind (fp-owner-loading-cover: SC1001 function-run-unplaced leaves and SC5001 async-component-prop becomes invocation-context-unproven; repro prop-in-effect-apply-read: callee-callback-timing becomes read-backing-unproven under the exact cause direct-read-callers-unenumerable); a named wrapper the literal calls (wrapUse in handed-net c3-wrapper.tsx and handed-net-guards g4b.tsx) keeps its read's SC1001 function-run-unplaced row, a new uncertifiable row, because call_plainly_placed stops at a call in a named local function"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-first",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 18,
+   "to": 24,
+   "adr": "ADR 1205",
+   "fact": "new fixture components SlotHelperInApply, SlotMemberInApply and SlotMemberAlsoInTimer (ADR 1205 round 2): their own creation, leaf and owner rows, the kinds the fixture's other components have; the two apply-only creations are SC4001 creation-throws-first; no row moved elsewhere"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-first",
+   "key": "SC4001 creation-throws-first",
+   "from": 7,
+   "to": 9,
+   "adr": "ADR 1205",
+   "fact": "new fixture components SlotHelperInApply, SlotMemberInApply and SlotMemberAlsoInTimer (ADR 1205 round 2): their own creation, leaf and owner rows, the kinds the fixture's other components have; the two apply-only creations are SC4001 creation-throws-first; no row moved elsewhere"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-first",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 12,
+   "to": 15,
+   "adr": "ADR 1205",
+   "fact": "new fixture components SlotHelperInApply, SlotMemberInApply and SlotMemberAlsoInTimer (ADR 1205 round 2): their own creation, leaf and owner rows, the kinds the fixture's other components have; the two apply-only creations are SC4001 creation-throws-first; no row moved elsewhere"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-first",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 13,
+   "to": 18,
+   "adr": "ADR 1205",
+   "fact": "new fixture components SlotHelperInApply, SlotMemberInApply and SlotMemberAlsoInTimer (ADR 1205 round 2): their own creation, leaf and owner rows, the kinds the fixture's other components have; the two apply-only creations are SC4001 creation-throws-first; no row moved elsewhere"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-first",
+   "key": "SC6002 function-run-unplaced",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1205",
+   "fact": "new fixture components SlotHelperInApply, SlotMemberInApply and SlotMemberAlsoInTimer (ADR 1205 round 2): their own creation, leaf and owner rows, the kinds the fixture's other components have; the two apply-only creations are SC4001 creation-throws-first; no row moved elsewhere"
   }
  ]
 }
