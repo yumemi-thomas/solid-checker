@@ -302,6 +302,12 @@ impl<'a> SemanticLookup<'a> {
         file: &'a solid_facts::FileFacts,
         call: &solid_facts::ast::CallFact,
     ) -> bool {
+        // ADR 1201: past a suspension of its own async function no await dominates.
+        let later = |at: Span| {
+            !crate::owners::in_parameter_list(&file.ast, at)
+                && (crate::execution_role::in_counted_loop_later_pass(file, at)
+                    || crate::execution_role::follows_try_head_await(file, at, self))
+        };
         let placed = |at: &solid_facts::ast::CallFact| {
             matches!(
                 self.dispatch_caller(file, at),
@@ -315,13 +321,14 @@ impl<'a> SemanticLookup<'a> {
                 // ADR 1201: past a suspension of its own async function no await dominates (a counted loop's later pass, the `catch`
                 // or `finally` behind a `try` head's await that cannot throw first): it resumes on an empty stack, whoever runs the
                 // function (a primitive's compute or apply handed it by name included).
-                || (!crate::owners::in_parameter_list(&file.ast, at.span)
-                    && (crate::execution_role::in_counted_loop_later_pass(file, at.span)
-                        || crate::execution_role::follows_try_head_await(file, at.span, self)))
+                || later(at.span)
         };
         // ADR 0640: or on the stack of a call that does: `createRoot(() => flush())`
         // in a test's callback, a callback a local helper runs in place.
         placed(call)
+            // ADR 1206: or at the end of ADR 1090's clean in-place climb (a helper called once by a closure called once), when that call
+            // runs past such a suspension.
+            || crate::flush_accounting::clean_climb_end(self, file, call.span).is_some_and(later)
             || file.ast.functions_owning(call.span).any(|outer| {
                 crate::execution_role::entry_on_stack_of(file, call.span, Some(outer), self)
                     .is_some_and(|entry| {

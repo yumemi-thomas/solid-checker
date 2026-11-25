@@ -337,6 +337,26 @@ fn collect_symbol_spans(
             }
         }
     }
+    // ADR 1193 part 2: an assignment's object target destructures its value (`({ v } = s)`, facts schema 110): an identifier value is
+    // the destructure's root, whose symbol the rules ask, as a declarator's `initializer_identifier`.
+    for site in &file.ast.destructure_sites {
+        if site.source != solid_facts::ast::DestructureSource::Assignment {
+            continue;
+        }
+        let Some(value) = site
+            .binding
+            .initializer
+            .map(|value| file.ast.peel_ts_sugar_span(value))
+        else {
+            continue;
+        };
+        if file.ast.identifiers.iter().any(|identifier| {
+            identifier.span == value
+                && identifier.role == solid_facts::ast::IdentifierRole::Reference
+        }) {
+            add_symbol(value, true);
+        }
+    }
     for function in &file.ast.functions {
         if let Some(name) = &function.name {
             add_symbol(name.span, true);
