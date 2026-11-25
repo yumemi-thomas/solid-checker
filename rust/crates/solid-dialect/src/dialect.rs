@@ -724,6 +724,15 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// ADR 1224: whether the callback at `argument`, written in a component body, has its first run queued when the call
+    /// returns, into the next flush of the scheduler's queue (not at the call, and not on a later change): an effect's
+    /// apply that does not run at its call, a callback the runtime turns into a tracked effect. The analyzer places that run
+    /// in the flush that ends the mount only under premises that rule out a hold. The default claims nothing.
+    fn first_run_queued_at_creation(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
     /// ADR 0613: whether the callback at `argument` takes its "no owner"
     /// answer ([`CallbackOwner::None`], or the later runs of
     /// [`CallbackOwner::InheritsFirstRun`]) from the scheduler's flush: every

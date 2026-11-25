@@ -1,7 +1,7 @@
-import { createEffect, createOptimistic, createRenderEffect } from "solid-js";
+import { createEffect, createOptimistic, createRenderEffect, onSettled } from "solid-js";
 
-// ADR 1224: each export is the matching reactive-ir fixture `optimistic-effect-first-run(-render, -reads, -wrapped)`, its
-// child renamed. Chrome throws OPTIMISTIC_WRITE_BEFORE_LOAD in `Effect` and `Render`; the other two stay uncertifiable.
+// ADR 1224: each export is the matching reactive-ir fixture `optimistic-effect-first-run(-render, -reads, -wrapped, -settled, -named)`, its
+// child renamed. Chrome throws OPTIMISTIC_WRITE_BEFORE_LOAD in `Effect`, `Render`, `Settled` and `Named`; the other two stay uncertifiable.
 
 function KidEffect(props: { run: () => void }) {
   createEffect(
@@ -81,5 +81,43 @@ export function Wrapped() {
     <WrapWrapped>
       <KidWrapped run={() => setO(5)} />
     </WrapWrapped>
+  );
+}
+
+function KidSettled(props: { run: () => void }) {
+  onSettled(() => {
+    props.run();
+  });
+  return <p />;
+}
+
+export function Settled() {
+  const [, setO] = createOptimistic(async () => 1);
+  return (
+    <div>
+      <KidSettled run={() => setO(6)} />
+    </div>
+  );
+}
+
+function KidNamed(props: { run: () => void }) {
+  createEffect(
+    () => 1,
+    () => {
+      props.run();
+    },
+  );
+  return <p />;
+}
+
+export function Named() {
+  const [, setO] = createOptimistic(async () => 1);
+  function run() {
+    setO(7);
+  }
+  return (
+    <div>
+      <KidNamed run={run} />
+    </div>
   );
 }

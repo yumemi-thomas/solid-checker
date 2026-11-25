@@ -5309,10 +5309,14 @@ pub(crate) fn flush_mount_hold_free(
         && element.boolean_properties.is_empty()
         && element.attributes.iter().all(|attribute| {
             attribute.namespace.is_none()
-                && match attribute.expression {
-                    Some(expression) => ast
-                        .function_at(ast.peel_ts_sugar_span(expression))
-                        .is_some(),
+                && match attribute
+                    .expression
+                    .map(|expression| ast.peel_ts_sugar_span(expression))
+                {
+                    Some(expression) => {
+                        ast.function_at(expression).is_some()
+                            || local_function_value(file, creating, expression)
+                    }
                     None => attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::String,
                 }
         });
@@ -5335,10 +5339,43 @@ pub(crate) fn flush_mount_hold_free(
         )
 }
 
-/// ADR 1224: the effect call whose apply is `function` (the dialect's apply slot, `apply_callback_argument`) when its
-/// first run comes on the creating pass or in the flush that ends it: no options argument, a compute that settles on its
-/// first pass ([`compute_settles_synchronously`]: it calls, reads and throws nothing), and the call in its function's
-/// straight-line flow. Whether that flush holds nothing is [`flush_mount_hold_free`]'s, at the mount.
+/// ADR 1224: `expression` is a reference to a function `component` declares in its own body (a function declaration, or
+/// a `const` bound to a function literal), so handing it as a prop reads nothing.
+fn local_function_value(
+    file: &solid_facts::FileFacts,
+    component: &solid_facts::ast::FunctionFact,
+    expression: Span,
+) -> bool {
+    let ast = &file.ast;
+    let Some(declaration) = ast.reference_declaration(expression) else {
+        return false;
+    };
+    let own = |span: Span| {
+        crate::owners::containing_ast_function(ast, span)
+            .is_some_and(|function| function.span == component.span)
+    };
+    own(declaration)
+        && ast.functions.iter().any(|function| {
+            crate::owners::function_binding_name(file, function)
+                .is_some_and(|name| name.span == declaration)
+                && (crate::indexes::declared_function(ast, function)
+                    || ast.bindings.iter().any(|binding| {
+                        binding.immutable
+                            && binding.names.iter().any(|name| name.span == declaration)
+                            && binding
+                                .initializer
+                                .map(|value| ast.peel_ts_sugar_span(value))
+                                == Some(function.span)
+                    }))
+        })
+}
+
+/// ADR 1224: the call whose callback `function` has its first run on the creating pass or in the flush that ends it, the
+/// call in its function's straight-line flow, outside JSX: an effect's apply (the dialect's `apply_callback_argument`)
+/// that runs at its call (`effect_apply_schedule_options`: a render effect) or is queued at creation
+/// (`first_run_queued_at_creation`), with no options argument and a compute that settles on its first pass
+/// ([`compute_settles_synchronously`]: it calls, reads and throws nothing); or a lone callback queued at creation
+/// (`onSettled`). Whether that flush holds nothing is [`flush_mount_hold_free`]'s, at the mount.
 pub(crate) fn first_run_effect_of_apply(
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
@@ -5351,16 +5388,37 @@ pub(crate) fn first_run_effect_of_apply(
             ast.peel_ts_sugar_span(call.arguments[*index].span) == function.span
         })?;
     let primitive = lookup.primitive_at_call(file, call.span)?;
-    let [compute, apply] = call.arguments.as_slice() else {
+    let placed = ast.straight_line_calls.contains(&call.span)
+        && ast.jsx_containing(call.span).next().is_none();
+    if lookup.dialect.apply_callback_argument(primitive) == Some(index) {
+        // An effect's apply: no options argument, and a compute that settles on its first pass.
+        let [compute, apply] = call.arguments.as_slice() else {
+            return None;
+        };
+        let runs = lookup
+            .dialect
+            .first_run_queued_at_creation(primitive, index)
+            || lookup
+                .dialect
+                .effect_apply_schedule_options(primitive, index)
+                .is_some();
+        return (runs
+            && placed
+            && !compute.spread
+            && !apply.spread
+            && compute_settles_synchronously(file, compute.span))
+        .then_some(call.span);
+    }
+    // A callback the runtime makes a tracked effect (`onSettled`): its one argument, the callback itself.
+    let [callback] = call.arguments.as_slice() else {
         return None;
     };
-    (lookup.dialect.apply_callback_argument(primitive) == Some(index)
-        && !compute.spread
-        && !apply.spread
-        && compute_settles_synchronously(file, compute.span)
-        && ast.straight_line_calls.contains(&call.span)
-        && ast.jsx_containing(call.span).next().is_none())
-    .then_some(call.span)
+    (lookup
+        .dialect
+        .first_run_queued_at_creation(primitive, index)
+        && placed
+        && !callback.spread)
+        .then_some(call.span)
 }
 
 /// ADR 0505's premises past the compute: the component's own (a static tree, a body that runs nothing else) and a module-scope
