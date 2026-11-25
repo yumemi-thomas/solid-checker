@@ -1521,6 +1521,7 @@ fn direct_mutations(
                     may_not_write: head == Some(false) || logical.is_some(),
                     delete: false,
                     linked: false,
+                    logical: None,
                 };
                 push_unproven_container_write(file, context, written, root, sink, defects, ends);
                 decide(defects, false);
@@ -1601,6 +1602,7 @@ fn direct_mutations(
                 may_not_write: head == Some(false) || logical.is_some(),
                 delete: false,
                 linked: false,
+                logical: None,
             };
             push_unproven_container_write(file, context, written, root, sink, defects, ends);
             decide(defects, false);
@@ -1657,9 +1659,10 @@ fn direct_mutations(
                     }))
         {
             // ADR 0509: the caller may have passed a store for the prop. ADR 1225: a logical assignment writes only when its test
-            // passes, so it may not write here as in the paths above (`props.s1.v &&= 5` over `createStore({ v: 0 })` writes nothing).
+            // passes (`props.s1.v &&= 5` over `createStore({ v: 0 })` writes nothing): the sink carries its operator.
             let sink = SinkWrite {
-                may_not_write: head == Some(false) || logical.is_some(),
+                may_not_write: head == Some(false),
+                logical,
                 ..SinkWrite::writes(written)
             };
             push_unproven_container_write(file, context, written, root, sink, defects, ends);
@@ -1972,7 +1975,13 @@ fn handed_container_write(
             root: store_root,
             below,
         } => {
-            let mut sink_open = sink.may_not_write;
+            // ADR 1225: a logical assignment writes only where the handed store's own literal shows its test passes; elsewhere it
+            // may not write (an obligation, never a violation).
+            let mut sink_open = sink.may_not_write
+                || sink.logical.is_some_and(|operator| {
+                    handed_logical_writes(file, context, &symbol, operator, sink.member, store_root)
+                        != Some(true)
+                });
             if sink.delete {
                 match context.lookup.entity_at(file.path.as_str(), sink.member) {
                     None => sink_open = true,
@@ -2025,6 +2034,46 @@ fn handed_container_write(
 /// ADR 1172: the links of the write at `member` past `store_root` (a handed root, `props.s1`, holding the store `symbol` on every
 /// route, ADR 0919) are wrapped: the store is declared in this file and ADR 0491's proof holds from its own binding
 /// ([`store_literal_untouched_at`]), under strictNullChecks in a file `tsc` checks, with no optional link.
+/// ADR 1225: [`logical_assignment_writes`] for a store handed by prop (ADR 1172): the value at `member` past the handed root
+/// `store_root` is the literal the store `symbol`'s initializer holds, read through its declaration ([`store_literal_untouched_at`]:
+/// nothing else can write it). `None` where that is not proven, or the root is an alias of a link.
+fn handed_logical_writes(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    symbol: &crate::SymbolId,
+    operator: solid_facts::ast::LogicalAssignmentOperator,
+    member: Span,
+    store_root: Span,
+) -> Option<bool> {
+    use solid_facts::ast::LogicalAssignmentOperator;
+    let ast = &file.ast;
+    let (_, declaration) = context.accessors.get(symbol)?;
+    if declaration.path.as_ref() != file.path.as_str() {
+        return None;
+    }
+    let declaration = Span::new(
+        u32::try_from(declaration.start_byte).ok()?,
+        u32::try_from(declaration.end_byte).ok()?,
+    );
+    let mut value = store_literal_untouched_at(file, context, declaration, false)?;
+    let store_root = ast.peel_ts_sugar_span(store_root);
+    if link_alias_literal(file, store_root, declaration, value, 4).is_some() {
+        return None;
+    }
+    for key in &static_path(file, ast.peel_ts_sugar_span(member), store_root)? {
+        let key = file.source_text(*key)?;
+        value = ast.peel_ts_sugar_span(crate::execution_role::closed_literal_slot_value(
+            file, value, key,
+        )?);
+    }
+    let truth = literal_truthiness(file, value)?;
+    Some(match operator {
+        LogicalAssignmentOperator::Nullish => truth == Truthiness::Nullish,
+        LogicalAssignmentOperator::Or => truth != Truthiness::Truthy,
+        LogicalAssignmentOperator::And => truth == Truthiness::Truthy,
+    })
+}
+
 fn handed_links_wrappable(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
@@ -2177,6 +2226,8 @@ struct SinkWrite {
     may_not_write: bool,
     delete: bool,
     linked: bool,
+    /// ADR 1225: the operator of a logical assignment (`&&=`, `||=`, `??=`), which writes only when its test passes.
+    logical: Option<solid_facts::ast::LogicalAssignmentOperator>,
 }
 
 impl SinkWrite {
@@ -2186,6 +2237,7 @@ impl SinkWrite {
             may_not_write: false,
             delete: false,
             linked: false,
+            logical: None,
         }
     }
 
@@ -6249,6 +6301,7 @@ fn no_store_mutator_call(
                     may_not_write: withheld || !mutator_always_writes(text(file, member.property)),
                     delete: false,
                     linked: false,
+                    logical: None,
                 };
                 push_unproven_container_write(file, context, call.span, root, sink, defects, ends);
             }
@@ -6604,6 +6657,7 @@ fn no_store_standard_library_write(
                     may_not_write: withheld || !assign_writes(file, declaration, call),
                     delete: false,
                     linked: target != root,
+                    logical: None,
                 };
                 push_unproven_container_write(file, context, call.span, root, sink, defects, ends);
             }
@@ -6783,6 +6837,7 @@ fn no_store_delete(
                 may_not_write: optional,
                 delete: true,
                 linked: false,
+                logical: None,
             };
             push_unproven_container_write(file, context, member, root, sink, defects, ends);
             continue;
@@ -6805,6 +6860,7 @@ fn no_store_delete(
                     may_not_write: optional,
                     delete: true,
                     linked: false,
+                    logical: None,
                 };
                 push_unproven_container_write(file, context, member, root, sink, defects, ends);
             }

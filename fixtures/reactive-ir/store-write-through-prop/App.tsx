@@ -95,8 +95,8 @@ function AlsoHandedParent() {
   return <AlsoHandedChild s1={s1} />;
 }
 
-// ADR 1225: a logical assignment through the prop writes only when its test passes. Uncertifiable, never a violation: `&&=` and `??=`
-// over `v: 0` write nothing (Chrome silent); `||=` writes, a miss accepted (the handed literal's value is not read here).
+// ADR 1225: a logical assignment through the prop writes only when its test passes, read from the handed store's own literal:
+// `||=` over `v: 0` writes (a violation); `&&=` and `??=` write nothing (Chrome silent; uncertifiable, never a violation).
 function AndNoopChild(props: Props) {
   props.s1.a.v &&= 7;
   return <i />;
