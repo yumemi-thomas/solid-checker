@@ -47,7 +47,10 @@ a named closure the apply calls; ADR 0460). It is a violation where the first
 run is proven to be on the call (ADR 0503): the component is rendered by a
 module-scope `render(() => <C />, …)`, the call has no options, its compute
 settles on its first pass (no call, read or reference), and the call is on
-every completion of the body. `schedule` withholds the first run as `defer`
+every completion of the body. ADR 1227 widens it: the apply may be a `const` handed
+by name whose one reference is that argument, and the component may be one that such a mounted component renders
+eagerly, as a direct child of intrinsic elements up to four deep, whatever its props (a render effect's first run
+skips the held-run hooks, rc.21 `dist/dev.js:2727-2731`). `schedule` withholds the first run as `defer`
 does (ADR 0502). A `createRenderEffect` created where
 writes are legal (an event handler, module scope) leaves every run of its apply
 legal. A callback the dialect runs with no owner whenever it runs (a

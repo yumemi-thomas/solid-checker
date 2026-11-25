@@ -5489,3 +5489,22 @@ SC2009's existence walk takes the fact as one step per walk (`some_entry_on_stac
 - Chrome (`runtime-oracle/optimistic-effect-first-run`, each export its own root): OPTIMISTIC_WRITE_BEFORE_LOAD in `Effect`, `Render`, `Settled`, `Named` and `Wrapped` (the last a recall miss); silent in `Reads`, as the hold predicts, and in `Guarded`. The checker leaves the oracle case uncertifiable, as ADR 1175's does: its entry renders every export.
 - Probe (release, VM, Chrome judge), the merge 1942cf726 against this, every OPTIMISTIC_WRITE_BEFORE_LOAD program: mx-census 2,870: 10 recall-gap to agree (`cbp-apply`, `cbp-apply-named`, `cbp-settled`, `cbp-settled-named`, and `settled`: an `onSettled` in the creating component itself; signal and store each); mx-recall 2,832 and lg-recall 1,236 unchanged; 0 legal V.
 **Not built.** `cbp-jsx` (an insert's compute runs at creation, `dist/web.dev.js:1135-1138`, but the walk takes no step in JSX yet). The destructured, forwarded and spread prop forms (a parameter pattern and a two-component chain are outside the body and tree premises). The other rules' apply families the fact could serve, which have no consumer here: R7 (u-new scan) REACTIVE_WRITE_IN_OWNED_SCOPE `render-apply` 175, STRICT_READ_UNTRACKED `effect-apply`/`render-apply` 184, STORE_WRITE_OUTSIDE_SETTER 128, PENDING_ASYNC_UNTRACKED_READ 53 misuse programs.
+<a id="adr-1227"></a>
+## ADR 1227 — 1224's first-run timing in the other rules' placement
+**Triage** (R7 u-new scan, the blocker at the claimed site). Of the five families named for 1224, one is placement-shaped. REACTIVE_WRITE_IN_OWNED_SCOPE `render-apply` (misuse 175): 133 `function-run-unplaced`. The others are not:
+- STRICT_READ_UNTRACKED `effect-apply`/`render-apply` (184): about 156 are value identity (`handed-member-read`, `closed-parameter-member-dispatch`, carriers). The 28 timing-shaped ones create a primitive in the apply before the read (`createMemo(f)`, `createEffect(f, …)`: `creation-throws-first`), an ordering question in the apply, not first-run placement.
+- STORE_WRITE_OUTSIDE_SETTER apply (129): all `store-write-unproven`.
+- Legal REACTIVE_WRITE `effect-apply` (56): identity, 1 timing.
+- Legal PENDING_ASYNC_UNTRACKED_READ `*-guarded` (90): the source half (`source-pending-unproven`, `read-backing-unproven`).
+None of these is built here.
+**Consumer 1: SC2001's render-effect first run** (`write_roles.rs`, the `first-run-reporting` arm and ADR 0504's `pending_apply_first_run`, which share `first_run_proven_at_call`):
+- `apply_runs_nothing_before` takes the apply through `handed_function_literal`: the literal written there, or a `const` bound to a function literal whose one reference is the argument.
+- `first_run_proven_at_call` also takes, for a render effect only (`effect_apply_schedule_options`), a component that a module-mounted component renders eagerly (1216 slice 2's `eager_render_sites`), up to four deep (`eagerly_mounted`), whatever its props. A render effect's first apply runs at its call and skips the held-run hooks (rc.21 `dist/dev.js:2629-2633`, `:2727-2731`); the creation pass of a module `render` is in no lane. A user effect keeps ADR 0505's premises.
+**Evidence.**
+- Fixtures: `render-apply-named-write` and `render-apply-child-write` are violations. `-handed-twice` (the name is also a click handler) and `render-apply-child-write-wrapped` (a component's children) stay uncertifiable. `-deferred` has no SC2001 row (no first run under the owner).
+- Chrome (`runtime-oracle/render-apply-named-write`, each export its own root): CHROME_PENDING.
+- Probe (release, VM, Chrome judge), 1224 f1ee28b12 against this, every program of REACTIVE_WRITE_IN_OWNED_SCOPE, PENDING_ASYNC_UNTRACKED_READ, STORE_WRITE_OUTSIDE_SETTER and STRICT_READ_UNTRACKED whose id names a `render-apply` or `effect-apply` context:
+  - mx-recall 25,979: 229 recall-gap to agree (REACTIVE_WRITE `render-apply`: named `cb-const` applies through every layer, and one `prop-view-spread` child);
+  - mx-src 7,176: 19 (REACTIVE_WRITE `render-apply` children: `prop-omit` 6, `prop-spread` 6, `prop` 3, `prop-merge` 3, `prop-destructured` 1);
+  - mx-census 62, mx-pairs 22,059, lg-recall 9,561, lg-src 3,180, lg-pairs 9,897: unchanged; 0 legal V, no V to U. The 30 `unplaced` and 12 `false-clean` mx-recall rows are the base's, unchanged.
+
