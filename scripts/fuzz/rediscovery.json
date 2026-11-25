@@ -42955,5 +42955,27 @@
    "mx-primitive-in-effect-callback-flw-apply-slot-module-effect-wrapper-handoff-function"
   ],
   "rediscovered": "focus.mjs over every code handoff-member and handoff-function program of mx-recall (21,450, Chrome judge) with codediff: 1b2d2fa66 has an SC4001 violation on the 10 programs (main 7bc723e35 on the 5 handoff-function ones), and this build has creation-throws-first on all 10 and nothing else moves"
+ },
+ {
+  "finding": "ADR 1205 took a creation in a closure every entry of which is in an effect apply as SC7002 creation-throws-first, but a `defer: true` apply has no first run: its reruns come from a flush() the effect-callback guard does not precede, and Chrome reports SYNC_NODE_RECEIVED_ASYNC (a true violation lost)",
+  "found": "the integrator, bundle ak (2026-11-25): mx-sync-node-received-async-effect-apply-defer-flush-rerun-memo-direct-closure, Chrome-corroborated on main, uncertifiable on 1205",
+  "fixed": "ADR 1220 (competing_checks::apply_written_last: for SC7002 an entry counts only in an apply written last, with no options argument)",
+  "grid": "mx-recall",
+  "code": "SYNC_NODE_RECEIVED_ASYNC",
+  "ids": [
+   "mx-sync-node-received-async-effect-apply-defer-flush-rerun-effect-alias-closure",
+   "mx-sync-node-received-async-effect-apply-defer-flush-rerun-effect-destructured-closure",
+   "mx-sync-node-received-async-effect-apply-defer-flush-rerun-effect-direct-closure",
+   "mx-sync-node-received-async-effect-apply-defer-flush-rerun-effect-namespace-closure",
+   "mx-sync-node-received-async-effect-apply-defer-flush-rerun-effect-wrapper-closure",
+   "mx-sync-node-received-async-effect-apply-defer-flush-rerun-effect-wrapper-none",
+   "mx-sync-node-received-async-effect-apply-defer-flush-rerun-memo-alias-closure",
+   "mx-sync-node-received-async-effect-apply-defer-flush-rerun-memo-destructured-closure",
+   "mx-sync-node-received-async-effect-apply-defer-flush-rerun-memo-direct-closure",
+   "mx-sync-node-received-async-effect-apply-defer-flush-rerun-memo-namespace-closure",
+   "mx-sync-node-received-async-effect-apply-defer-flush-rerun-memo-wrapper-closure",
+   "mx-sync-node-received-async-effect-apply-defer-flush-rerun-memo-wrapper-none"
+  ],
+  "rediscovered": "focus.mjs --codes SYNC_NODE_RECEIVED_ASYNC --grids mx-recall over all 24,774 programs (Chrome judge): 1205 (768f246b7) has the 12 defer-flush-rerun-{memo,effect} programs listed as recall-gap; this build has them agree, and nothing else moves"
  }
 ]
