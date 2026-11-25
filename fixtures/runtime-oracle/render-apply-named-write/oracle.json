@@ -1,0 +1,1 @@
+{"note": "ADR 1227: a render effect whose apply is a const handed by name: rc.21 runs its first apply at the call under the component owner, and the write throws REACTIVE_WRITE_IN_OWNED_SCOPE (also where the name is a click handler too, which the checker leaves uncertifiable); defer skips that run."}
