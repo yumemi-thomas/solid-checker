@@ -207,7 +207,7 @@
   "SC5008 pending-read-unresolved": 24,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5587,
+  "SC6002 effect-creation-unaccounted": 5586,
   "SC6002 effect-owner-unproven": 54,
   "SC6002 function-run-unplaced": 65,
   "SC6002 generator-step-unplaced": 1,
@@ -6909,6 +6909,18 @@
    "fixtures": {
     "proved": "reactive-ir/iife-prop-read",
     "open": "reactive-ir/ref-factory-call"
+   }
+  },
+  {
+   "fixture": "reactive-ir/owner-after-await-for-await",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1215",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/body_roles.rs::own_body_await_before",
+   "fixtures": {
+    "proved": "reactive-ir/owner-after-await-for-await",
+    "open": "engine/eslint-reactivity-v2"
    }
   }
  ],
