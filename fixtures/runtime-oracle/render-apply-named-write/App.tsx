@@ -3,7 +3,7 @@ import { createRenderEffect, createSignal } from "solid-js";
 // ADR 1227: each export is the matching reactive-ir fixture `render-apply-named-write(-handed-twice, -deferred)` and
 // `render-apply-child-write(-wrapped)`.
 // rc.21 throws REACTIVE_WRITE_IN_OWNED_SCOPE in `Named`, `HandedTwice`, `ChildWrite` and `ChildWrapped`, not in
-// `Deferred`.
+// `Deferred`. `CallingParent` is `child-mount-first-run`'s (ADR 0507's twin, now a violation): it throws there too.
 
 export function Named() {
   const [, setW] = createSignal(0);
@@ -71,5 +71,26 @@ export function ChildWrapped() {
     <WrapChildWrapped>
       <ChildChildWrapped set={setW} extra={1} />
     </WrapChildWrapped>
+  );
+}
+
+function WriteChildCalling() {
+  const [count, setCount] = createSignal(0);
+  createRenderEffect(
+    () => 1,
+    () => {
+      setCount(2);
+    },
+  );
+  return <p>{count()}</p>;
+}
+
+export function CallingParent() {
+  const [flag] = createSignal(true);
+  void flag;
+  return (
+    <div>
+      <WriteChildCalling />
+    </div>
   );
 }

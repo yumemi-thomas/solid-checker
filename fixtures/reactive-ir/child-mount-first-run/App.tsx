@@ -64,8 +64,8 @@ function WriteChildB() {
   return <p>{count()}</p>;
 }
 
-// Uncertifiable: the parent runs code before rendering the child (a pass
-// that went pending would stage the child's).
+// Violation since ADR 1227 (uncertifiable under ADR 0507's body premise): the
+// child's render effect runs its first apply at its call whatever the parent ran.
 export function CallingParent() {
   const [flag] = createSignal(true);
   void flag;
