@@ -121,6 +121,63 @@ export function SlotAlsoInTimer() {
   setTimeout(() => timed.go(), 0);
   return <i />;
 }
+// ADR 1205 (the review of bundle ai): the creation one helper deeper, the helper called only in the slot, plainly or through a member
+// of a closed literal: every run of it is still on the apply's stack, so missing-owner stays uncertifiable (Chrome: PRIMITIVE_IN_EFFECT_CALLBACK).
+const helped = {
+  go: () => {
+    function hf() {
+      createEffect(() => 1, () => {});
+    }
+    hf();
+  },
+};
+export function SlotHelperInApply() {
+  createEffect(
+    () => 1,
+    () => {
+      helped.go();
+    },
+  );
+  return <i />;
+}
+const membered = {
+  go: () => {
+    const hf = () => {
+      createEffect(() => 1, () => {});
+    };
+    const ho = { m: hf };
+    ho.m();
+  },
+};
+export function SlotMemberInApply() {
+  createEffect(
+    () => 1,
+    () => {
+      membered.go();
+    },
+  );
+  return <i />;
+}
+// Kept: the helper's slot a timer calls too (its unowned run reports NO_OWNER_EFFECT).
+const helpedTimed = {
+  go: () => {
+    const hf = () => {
+      createEffect(() => 1, () => {});
+    };
+    const ho = { m: hf };
+    ho.m();
+  },
+};
+export function SlotMemberAlsoInTimer() {
+  createEffect(
+    () => 1,
+    () => {
+      helpedTimed.go();
+    },
+  );
+  setTimeout(() => helpedTimed.go(), 0);
+  return <i />;
+}
 export function HandlerOnly() {
   const g = () => {
     createEffect(() => 1, () => {});

@@ -697,9 +697,90 @@ fn in_slot_called_only_in_applies(
     else {
         return false;
     };
+    runs_only_in_applies(file, function, rerunning_applies, lookup, APPLY_ENTRY_DEPTH)
+}
+
+/// How many functions of exact entries [`runs_only_in_applies`] climbs through.
+const APPLY_ENTRY_DEPTH: usize = 4;
+
+/// ADR 1205 (the review of bundle ai): whether every run of `function` is on the stack of an apply the effect phase runs. Either
+/// `function` is a module literal's slot that only calls written directly in such applies run (ADR 1052 part 7,
+/// [`slot_called_only_in_applies`]), or, within `depth`, every run of it is one of its exact entries
+/// ([`crate::execution_role::plain_call_entries`], [`crate::execution_role::member_call_entries`]), each written directly (no
+/// nested function, no parameter list) in a function that is such an apply's callback or for which the same holds. Neither
+/// function may be `async` or a generator: a call past a suspension is off the apply's stack. `false` for anything else.
+fn runs_only_in_applies(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    rerunning_applies: bool,
+    lookup: &SemanticLookup<'_>,
+    depth: usize,
+) -> bool {
     if function.r#async || function.generator {
         return false;
     }
+    if slot_called_only_in_applies(file, function, rerunning_applies, lookup) {
+        return true;
+    }
+    let Some(depth) = depth.checked_sub(1) else {
+        return false;
+    };
+    let Some(entries) = crate::execution_role::plain_call_entries(file, function, lookup)
+        .or_else(|| crate::execution_role::member_call_entries(file, function, lookup))
+    else {
+        return false;
+    };
+    entries.iter().all(|(holder, call)| {
+        holder.path == file.path
+            && !crate::owners::in_parameter_list(&file.ast, *call)
+            && crate::owners::owning_function(&file.ast, *call).is_some_and(|caller| {
+                !caller.r#async
+                    && !caller.generator
+                    && caller.body.contains(*call)
+                    && crate::owners::written_directly_in(&file.ast, caller, *call)
+                    && (apply_callback(file, caller, rerunning_applies, lookup)
+                        || runs_only_in_applies(file, caller, rerunning_applies, lookup, depth))
+            })
+    })
+}
+
+/// Whether `function` is written as the whole argument of a dialect primitive whose callback at that position the effect phase runs
+/// (`Dialect::callback_runs_in_effect_phase`; with `rerunning_applies`, also `callback_reruns_in_effect_phase`), no spread before it.
+fn apply_callback(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    rerunning_applies: bool,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    ast.arguments_containing(function.span)
+        .any(|(holder, index)| {
+            ast.peel_ts_sugar_span(holder.arguments[index].span) == function.span
+                && holder.arguments[..=index]
+                    .iter()
+                    .all(|argument| !argument.spread)
+                && lookup
+                    .primitive_at_call(file, holder.span)
+                    .is_some_and(|primitive| {
+                        lookup
+                            .dialect
+                            .callback_runs_in_effect_phase(primitive, index)
+                            || rerunning_applies
+                                && lookup
+                                    .dialect
+                                    .callback_reruns_in_effect_phase(primitive, index)
+                    })
+        })
+}
+
+/// ADR 1052 part 7: [`in_slot_called_only_in_applies`] for the slot function `function`.
+fn slot_called_only_in_applies(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    rerunning_applies: bool,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
     if !ast.object_properties.iter().any(|property| {
         property.data
             && !property.computed
