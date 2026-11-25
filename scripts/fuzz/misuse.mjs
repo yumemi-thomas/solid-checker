@@ -925,8 +925,9 @@ for (const contexts of [FLIP_READ_CONTEXTS, FLIP_WRITE_CONTEXTS, FLIP_GEN_CONTEX
   for (const [code, added] of Object.entries(contexts)) SPEC[code].recallContexts = [...(SPEC[code].recallContexts ?? []), ...added];
 }
 for (const legal of [FLIP_READ_LEGAL, FLIP_WRITE_LEGAL]) for (const [code, added] of Object.entries(legal)) SPEC[code].recallLegal = [...(SPEC[code].recallLegal ?? []), ...added];
-// ADR 1219: every code's site behind a test that is false at run time is legal (it never runs).
-for (const [code, spec] of Object.entries(SPEC)) if (!spec.typedAway) spec.recallLegal = [...(spec.recallLegal ?? []), ...Object.keys(BRANCH_FALSE_LEGAL)];
+// ADR 1219: opt-in only (`SOLID_FUZZ_BRANCH_FALSE=1`): every code's site behind a test that is false at run time, a legal context. The
+// owner kept ADR 0458's may-run convention, so a violation there is the rule's claim, not a false positive; the contexts document the sweep.
+if (process.env.SOLID_FUZZ_BRANCH_FALSE === "1") for (const [code, spec] of Object.entries(SPEC)) if (!spec.typedAway) spec.recallLegal = [...(spec.recallLegal ?? []), ...Object.keys(BRANCH_FALSE_LEGAL)];
 for (const [code, only] of Object.entries(FLIP_READ_CONTEXT_ONLY)) SPEC[code].contextOnly = { ...SPEC[code].contextOnly, ...only };
 for (const [code, variants] of Object.entries(FLIP_READ_VARIANTS)) {
   const spec = SPEC[code];

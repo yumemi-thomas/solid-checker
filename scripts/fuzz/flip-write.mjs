@@ -151,7 +151,7 @@ const GUARDED_LEGAL = { "flw-guard-early": guardedAsync("guard-early"), "flw-gua
 /**
  * ADR 1219 (the cross-rule sweep of ADR 1216 part 2): the site behind a test that is false at run time, in the component body, directly
  * or in a helper whose one call is behind it. The site never runs, so Chrome reports nothing: a violation there claims a run that never
- * happens (ADR 0458 keeps `MayRun` sites). A legal context of every code (misuse.mjs).
+ * happens. Opt-in (`SOLID_FUZZ_BRANCH_FALSE=1`, misuse.mjs): the owner kept ADR 0458's may-run convention, so these are no default grid.
  */
 export const BRANCH_FALSE_LEGAL = {
   "flw-branch-false": (stmts) => ({ body: [ctl("dead-random", stmts)], view: [] }),
