@@ -87,7 +87,7 @@ export function SpreadReceiver(props: { xs: number[] }) {
   return <i>spread</i>;
 }
 
-// Negative (obligation): a `Set`'s size is not read here.
+// Positive (ADR 1216 slice 3): a seeded `Set` runs it.
 export function SetForEach() {
   const hf = () => {
     useContext(Ctx);
