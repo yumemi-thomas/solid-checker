@@ -2104,7 +2104,7 @@ pub(crate) fn exact_link_alias_chain(
         &create_store,
         store_declaration,
         false,
-        false,
+        None,
     )?;
     link_alias_literal(file, alias, store_declaration, initial, 1)?;
     Some(chain)
@@ -5028,13 +5028,13 @@ fn store_literal_untouched_at(
         &create_store,
         root_declaration,
         module_scope,
-        context.dialect.context_provider_member().is_none(),
+        Some(context.dialect),
     )
 }
 
 /// [`store_literal_untouched_at`] on the inputs it reads (ADR 1169: `local_access` asks it too): the lookup, the entity table and
-/// whether a symbol is a store `createStore` made (`create_store`). `bare_provider`: the dialect's provider is the context itself
-/// (`<Ctx value={…}>`, no provider member), so a store or setter handed in a provider's value literal may be followed (ADR 1211).
+/// whether a symbol is a store `createStore` made (`create_store`). `dialect`: where it is known, a prop is followed through the
+/// dialect's props views and a store or setter handed in a provider's value literal (ADR 1211); `None` follows static reads only.
 fn store_literal_proof(
     file: &FileFacts,
     lookup: &crate::indexes::SemanticLookup<'_>,
@@ -5042,7 +5042,7 @@ fn store_literal_proof(
     create_store: &dyn Fn(&crate::SymbolId) -> bool,
     root_declaration: Span,
     module_scope: bool,
-    bare_provider: bool,
+    dialect: Option<&dyn solid_dialect::Dialect>,
 ) -> Option<Span> {
     let ast = &file.ast;
     if crate::interproc::property_gets::direct_eval_in(file, Span::new(0, u32::MAX)) {
@@ -5121,17 +5121,23 @@ fn store_literal_proof(
                     || ast.reference_declaration(identifier.span) != Some(setter.span)
                     || handed_component_prop(file, lookup, identifier.span).is_some_and(
                         |(component, prop)| {
-                            component_prop_reads(file, lookup, component, prop, PROPS_VIEW_DEPTH)
+                            component_prop_reads(
+                                file,
+                                lookup,
+                                dialect,
+                                component,
+                                prop,
+                                PROPS_VIEW_DEPTH,
+                            )
+                            .is_some_and(|reads| reads.is_empty())
+                        },
+                    )
+                    || handed_context_key(file, lookup, dialect, identifier.span).is_some_and(
+                        |(context, key)| {
+                            context_key_reads(file, lookup, dialect, context, &key)
                                 .is_some_and(|reads| reads.is_empty())
                         },
                     )
-                    || (bare_provider
-                        && handed_context_key(file, lookup, identifier.span).is_some_and(
-                            |(context, key)| {
-                                context_key_reads(file, lookup, context, &key)
-                                    .is_some_and(|reads| reads.is_empty())
-                            },
-                        ))
             })
     }) {
         return None;
@@ -5196,9 +5202,8 @@ fn store_literal_proof(
         }
         if !contained_store_use(file, identifier.span, initial)
             && !consumed_by_alias_slots(file, identifier.span, &names, initial)
-            && !handed_to_contained_prop(file, lookup, identifier.span, initial)
-            && !(bare_provider
-                && handed_to_contained_context(file, lookup, identifier.span, initial))
+            && !handed_to_contained_prop(file, lookup, dialect, identifier.span, initial)
+            && !handed_to_contained_context(file, lookup, dialect, identifier.span, initial)
             && !link_alias_contained(file, identifier.span, initial, 4)
         {
             return None;
@@ -5663,6 +5668,7 @@ fn handed_component_prop<'f>(
 fn component_prop_reads(
     file: &FileFacts,
     lookup: &crate::indexes::SemanticLookup<'_>,
+    dialect: Option<&dyn solid_dialect::Dialect>,
     component: &solid_facts::ast::FunctionFact,
     prop: &str,
     depth: usize,
@@ -5686,7 +5692,7 @@ fn component_prop_reads(
     match parameter.shape {
         solid_facts::ast::BindingShape::Identifier => {
             let name = parameter.names.first()?;
-            props_object_reads(file, lookup, name.span, prop, false, depth)
+            props_object_reads(file, lookup, dialect, name.span, prop, false, depth)
         }
         solid_facts::ast::BindingShape::Object => {
             if parameter.pattern_rest {
@@ -5721,6 +5727,7 @@ const PROPS_VIEW_DEPTH: usize = 4;
 fn props_object_reads(
     file: &FileFacts,
     lookup: &crate::indexes::SemanticLookup<'_>,
+    dialect: Option<&dyn solid_dialect::Dialect>,
     declaration: Span,
     prop: &str,
     omitted: bool,
@@ -5777,16 +5784,18 @@ fn props_object_reads(
             reads.extend(component_prop_reads(
                 file,
                 lookup,
+                dialect,
                 component,
                 prop,
                 depth - 1,
             )?);
             continue;
         }
-        let (view, view_omits) = props_view_at(file, lookup, reference, prop)?;
+        let (view, view_omits) = props_view_at(file, lookup, dialect, reference, prop)?;
         reads.extend(props_object_reads(
             file,
             lookup,
+            dialect,
             view,
             prop,
             view_omits,
@@ -5801,6 +5810,7 @@ fn props_object_reads(
 fn props_view_at(
     file: &FileFacts,
     lookup: &crate::indexes::SemanticLookup<'_>,
+    dialect: Option<&dyn solid_dialect::Dialect>,
     reference: Span,
     prop: &str,
 ) -> Option<(Span, bool)> {
@@ -5810,25 +5820,28 @@ fn props_view_at(
             .iter()
             .any(|argument| !argument.spread && ast.peel_ts_sugar_span(argument.span) == reference)
     })?;
-    let omits = match lookup.primitive_at_call(file, call.span)? {
-        solid_dialect::Primitive::Merge => false,
-        solid_dialect::Primitive::Omit => {
-            let (source, keys) = call.arguments.split_first()?;
-            if ast.peel_ts_sugar_span(source.span) != reference {
+    let dialect = dialect?;
+    let primitive = lookup.primitive_at_call(file, call.span)?;
+    let omits = if dialect.merges_props_reactivity(primitive) {
+        false
+    } else if dialect.splits_props(primitive) {
+        let (source, keys) = call.arguments.split_first()?;
+        if ast.peel_ts_sugar_span(source.span) != reference {
+            return None;
+        }
+        let mut omits = false;
+        for key in keys {
+            let solid_facts::ast::ArgumentLiteralFact::String(name) = &key.literal_value else {
+                return None;
+            };
+            if key.spread {
                 return None;
             }
-            let mut omits = false;
-            for key in keys {
-                match &key.literal_value {
-                    solid_facts::ast::ArgumentLiteralFact::String(name) if !key.spread => {
-                        omits |= name.as_str() == prop;
-                    }
-                    _ => return None,
-                }
-            }
-            omits
+            omits |= name.as_str() == prop;
         }
-        _ => return None,
+        omits
+    } else {
+        return None;
     };
     let binding = ast.bindings.iter().find(|binding| {
         binding
@@ -5851,12 +5864,20 @@ fn props_view_at(
 fn handed_context_key(
     file: &FileFacts,
     lookup: &crate::indexes::SemanticLookup<'_>,
+    dialect: Option<&dyn solid_dialect::Dialect>,
     reference: Span,
 ) -> Option<(Span, String)> {
     let ast = &file.ast;
+    let dialect = dialect?;
+    if dialect.context_provider_member().is_some() {
+        return None;
+    }
+    // The key a provider stores is its `value` prop (`ContextRole::Create`).
     let (element, key) = ast.jsx_elements.iter().find_map(|element| {
         let mut values = element.attributes.iter().filter(|attribute| {
-            attribute.namespace.is_none() && file.source_text(attribute.local_name) == Some("value")
+            attribute.namespace.is_none()
+                && crate::kernel::property_key(file, attribute.local_name).as_deref()
+                    == Some("value")
         });
         let value = values.next()?;
         if values.next().is_some()
@@ -5872,17 +5893,25 @@ fn handed_context_key(
         if !property.data || property.method {
             return None;
         }
-        let key = file
-            .source_text(property.key)?
-            .trim_matches(['\'', '"'])
-            .to_owned();
+        let key = crate::kernel::property_key(file, property.key)?;
         Some((element, key))
     })?;
     if !element.spreads.is_empty() || element.member_object.is_some() {
         return None;
     }
     let declaration = ast.reference_declaration(element.name.span)?;
-    context_declared_here(file, lookup, declaration).then_some((declaration, key))
+    context_declared_here(file, lookup, dialect, declaration).then_some((declaration, key))
+}
+
+/// ADR 1211: the dialect's context role of the primitive the call at `call` resolves to, exactly.
+fn call_context_role(
+    file: &FileFacts,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    dialect: &dyn solid_dialect::Dialect,
+    call: Span,
+) -> Option<solid_dialect::ContextRole> {
+    let primitive = lookup.primitive_at_call(file, call)?;
+    dialect.context_role(dialect.name_of(primitive)?)
 }
 
 /// ADR 1211: `declaration` names an immutable, unexported, unwritten `const` of this file whose initializer is a `createContext`
@@ -5890,6 +5919,7 @@ fn handed_context_key(
 fn context_declared_here(
     file: &FileFacts,
     lookup: &crate::indexes::SemanticLookup<'_>,
+    dialect: &dyn solid_dialect::Dialect,
     declaration: Span,
 ) -> bool {
     let ast = &file.ast;
@@ -5909,8 +5939,8 @@ fn context_declared_here(
                 .initializer
                 .map(|initializer| ast.peel_ts_sugar_span(initializer))
                 == Some(call.span)
-                && lookup.primitive_at_call(file, call.span)
-                    == Some(solid_dialect::Primitive::CreateContext)
+                && call_context_role(file, lookup, dialect, call.span)
+                    == Some(solid_dialect::ContextRole::Create)
         });
     let exported = ast.exports.iter().any(|export| {
         export
@@ -5931,6 +5961,7 @@ fn context_declared_here(
 fn context_key_reads(
     file: &FileFacts,
     lookup: &crate::indexes::SemanticLookup<'_>,
+    dialect: Option<&dyn solid_dialect::Dialect>,
     declaration: Span,
     key: &str,
 ) -> Option<Vec<Span>> {
@@ -5959,7 +5990,9 @@ fn context_key_reads(
             matches!(call.arguments.as_slice(), [argument]
                 if !argument.spread && ast.peel_ts_sugar_span(argument.span) == reference)
         })?;
-        if lookup.primitive_at_call(file, call.span) != Some(solid_dialect::Primitive::UseContext) {
+        if call_context_role(file, lookup, dialect?, call.span)
+            != Some(solid_dialect::ContextRole::Read)
+        {
             return None;
         }
         let binding = ast.bindings.iter().find(|binding| {
@@ -5978,6 +6011,7 @@ fn context_key_reads(
                 reads.extend(props_object_reads(
                     file,
                     lookup,
+                    dialect,
                     name.span,
                     key,
                     false,
@@ -6010,11 +6044,12 @@ fn context_key_reads(
 fn handed_to_contained_context(
     file: &FileFacts,
     lookup: &crate::indexes::SemanticLookup<'_>,
+    dialect: Option<&dyn solid_dialect::Dialect>,
     reference: Span,
     initial: Span,
 ) -> bool {
-    handed_context_key(file, lookup, reference).is_some_and(|(context, key)| {
-        context_key_reads(file, lookup, context, &key).is_some_and(|reads| {
+    handed_context_key(file, lookup, dialect, reference).is_some_and(|(context, key)| {
+        context_key_reads(file, lookup, dialect, context, &key).is_some_and(|reads| {
             const_alias_reads(file, reads).is_some_and(|reads| {
                 reads
                     .iter()
@@ -6029,17 +6064,20 @@ fn handed_to_contained_context(
 fn handed_to_contained_prop(
     file: &FileFacts,
     lookup: &crate::indexes::SemanticLookup<'_>,
+    dialect: Option<&dyn solid_dialect::Dialect>,
     reference: Span,
     initial: Span,
 ) -> bool {
     handed_component_prop(file, lookup, reference).is_some_and(|(component, prop)| {
-        component_prop_reads(file, lookup, component, prop, PROPS_VIEW_DEPTH).is_some_and(|reads| {
-            const_alias_reads(file, reads).is_some_and(|reads| {
-                reads
-                    .iter()
-                    .all(|read| contained_store_use(file, *read, initial))
-            })
-        })
+        component_prop_reads(file, lookup, dialect, component, prop, PROPS_VIEW_DEPTH).is_some_and(
+            |reads| {
+                const_alias_reads(file, reads).is_some_and(|reads| {
+                    reads
+                        .iter()
+                        .all(|read| contained_store_use(file, *read, initial))
+                })
+            },
+        )
     })
 }
 
