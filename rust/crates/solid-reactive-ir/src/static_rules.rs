@@ -790,7 +790,7 @@ fn nested_in_named_callback(
 /// Fresh-at-call-time contexts where SC1003 ends a destructure silently (`DestructureRoleDoesNotReport`): tracked scopes
 /// re-run and re-subscribe, event handlers and deferred callbacks read current values, and no strict-read window is open after
 /// an await, a timer, a disposal or an error arm.
-fn destructure_role_does_not_report(
+pub(crate) fn destructure_role_does_not_report(
     lookup: &crate::indexes::SemanticLookup<'_>,
     file: &solid_facts::FileFacts,
     pattern: Span,

@@ -3973,7 +3973,7 @@ impl<'l, 'a> Census<'l, 'a> {
             // ADR 1226: a store's merged view destructured (`const { v } = merge(ctx.s1, { w: 1 })`) is SC1003's only where
             // `static_rules::destructure_root` names this argument and the argument is the store's own name (a source of this
             // census); elsewhere no rule reads its slots, so the destructure is a read site of the census, at its pattern, where
-            // SC1003's row would stand, decided by its role as any read past the root.
+            // SC1003's row would stand.
             if view && !self.props_root && dialect.merges_props_reactivity(primitive) {
                 let argument = ast.peel_ts_sugar_span(call.arguments[index].span);
                 let own_name = self
@@ -3994,7 +3994,30 @@ impl<'l, 'a> Census<'l, 'a> {
                     .map(|binding| binding.pattern)
                     .collect::<Vec<_>>();
                 for pattern in unclaimed {
-                    self.site(file, pattern, Site::Read, blockers::VALUE_IN_CARRIER);
+                    // Silent only where a proof of the read's legality stands: this census's role (`site`), or the role SC1003
+                    // ends a destructure silently in (`destructure_role_does_not_report`, on SC1003's own role).
+                    let path = file.path.as_str();
+                    if !self.allowed.contains_key(path) {
+                        let spans =
+                            crate::execution_role::allowed_callback_spans(file, self.lookup);
+                        self.allowed.insert(path.to_owned(), spans);
+                    }
+                    let role = crate::execution_role::semantic_execution_role(
+                        file,
+                        pattern,
+                        self.allowed.get(path).map_or(&[], Vec::as_slice),
+                        self.entities,
+                        self.symbol_names,
+                        self.lookup,
+                    );
+                    if !crate::static_rules::destructure_role_does_not_report(
+                        self.lookup,
+                        file,
+                        pattern,
+                        role,
+                    ) {
+                        self.site(file, pattern, Site::Read, blockers::VALUE_IN_CARRIER);
+                    }
                 }
             }
             return if view || callback {
