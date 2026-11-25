@@ -776,10 +776,7 @@ fn some_entry_from(
     budget: &mut usize,
     seen: &mut Vec<Span>,
 ) -> Option<Span> {
-    let Some(left) = budget.checked_sub(1) else {
-        return None;
-    };
-    *budget = left;
+    *budget = budget.checked_sub(1)?;
     let layer = containing_ast_function(&file.ast, at);
     if layer.map(|function| function.span) == target.map(|function| function.span) {
         return Some(at);
