@@ -4360,7 +4360,10 @@ fn nested_pattern_at(file: &FileFacts, property: usize) -> Option<&solid_facts::
     }
     let key = file.source_text(property.key).and_then(written_key)?;
     let literal = enclosing_literal(file, property.span)?;
-    let shape = ast.object_get_shapes.iter().find(|shape| shape.span == literal)?;
+    let shape = ast
+        .object_get_shapes
+        .iter()
+        .find(|shape| shape.span == literal)?;
     let mut slots = shape.properties.iter().filter(|slot| slot.key == key);
     let data_slot = slots.next().is_some_and(|slot| slot.getter.is_none());
     if !shape.closed || literal_reads_this(file, literal) || !data_slot || slots.next().is_some() {
@@ -4369,7 +4372,10 @@ fn nested_pattern_at(file: &FileFacts, property: usize) -> Option<&solid_facts::
     let declarator = ast.bindings.iter().find(|binding| {
         binding.shape == solid_facts::ast::BindingShape::Object
             && binding.immutable
-            && binding.initializer.map(|value| ast.peel_ts_sugar_span(value)) == Some(literal)
+            && binding
+                .initializer
+                .map(|value| ast.peel_ts_sugar_span(value))
+                == Some(literal)
     })?;
     if declarator.pattern_rest
         || declarator

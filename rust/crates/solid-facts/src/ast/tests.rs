@@ -101,7 +101,11 @@ fn destructure_sites_are_assignment_targets_and_array_elements() {
             .pattern
     };
     let property = |outer: crate::core::Span, key: &str| {
-        let binding = facts.bindings.iter().find(|binding| binding.pattern == outer).unwrap();
+        let binding = facts
+            .bindings
+            .iter()
+            .find(|binding| binding.pattern == outer)
+            .unwrap();
         binding
             .object_properties
             .iter()
