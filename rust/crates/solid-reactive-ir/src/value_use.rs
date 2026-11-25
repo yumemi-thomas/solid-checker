@@ -4063,6 +4063,20 @@ impl<'l, 'a> Census<'l, 'a> {
             if crate::runtime_semantics::reads_keys_only(resolved) {
                 return Position::Followed;
             }
+            // ADR 1228: a store handed as the receiver a standard function runs on (`Array.prototype.sort.call(st.items, …)`,
+            // `push.apply(st.items, …)`, `Reflect.apply(push, st.items, …)`) is read and written by that function at this call,
+            // where no authored frame stands below it: the call is a use beside the argument, as a primitive's that reads at its
+            // call (ADR 0928).
+            if matches!(mode, Mode::Root | Mode::RootParameter)
+                && resolved.declaration.as_ref().is_some_and(|declaration| {
+                    runs_on_receiver(declaration.qualified_name.as_ref(), index)
+                })
+            {
+                self.uses.push((
+                    call_use_span(file, call.span).location(file.path.as_str()),
+                    blockers::VALUE_IN_CARRIER,
+                ));
+            }
             return match crate::runtime_semantics::argument_behavior(resolved, callability, index) {
                 Some(RuntimeArgumentBehavior::FreshStackCallback) => Position::Followed,
                 Some(RuntimeArgumentBehavior::ValueOnly)
@@ -4412,6 +4426,21 @@ fn object_spread_literal(file: &FileFacts, spread: Span) -> Option<Span> {
         .min();
     (array.is_none_or(|array| size(object) < array) && call.is_none_or(|call| size(object) < call))
         .then_some(object)
+}
+
+/// ADR 1228: whether argument `index` of the standard function `qualified` is the receiver it runs a function on: `call`'s and
+/// `apply`'s first, `Reflect.apply`'s second.
+fn runs_on_receiver(qualified: &str, index: usize) -> bool {
+    match qualified {
+        "Function.call"
+        | "CallableFunction.call"
+        | "NewableFunction.call"
+        | "Function.apply"
+        | "CallableFunction.apply"
+        | "NewableFunction.apply" => index == 0,
+        "Reflect.apply" => index == 1,
+        _ => false,
+    }
 }
 
 /// ADR 1228: the object patterns a `for…of` over `operand` declares (one binding per element).
