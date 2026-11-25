@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1215 (fixture effect-creation-for-await): a creation past a for-await's or a dominating await's suspension (ForAwaitBody, BranchBlockAwait, FinallyOwnAwait) runs on the continuation: silent, Chrome quiet; FinallyAfterTry and AsyncGeneratorBody stay uncertifiable, Chrome quiet too."
+}

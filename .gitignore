@@ -2310,6 +2310,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/arm-only-store-destructure/node_modules/**
 !fixtures/reactive-ir/owner-call-effect-creation/variants/inline-handler/node_modules/
 !fixtures/reactive-ir/owner-call-effect-creation/variants/inline-handler/node_modules/**
+!fixtures/reactive-ir/effect-creation-for-await/node_modules/
+!fixtures/reactive-ir/effect-creation-for-await/node_modules/**
 !fixtures/reactive-ir/named-ref-entry/node_modules/
 !fixtures/reactive-ir/named-ref-entry/node_modules/**
 !fixtures/reactive-ir/component-prop-call-owner/node_modules/
