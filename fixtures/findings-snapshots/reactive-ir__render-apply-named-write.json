@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/render-apply-named-write/App.tsx",
+      "start": 376,
+      "end": 383,
+      "fixes": 0
+    }
+  ]
+}

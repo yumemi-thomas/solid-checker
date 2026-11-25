@@ -62,7 +62,7 @@
   "SC2001 binding-before-initialization": 3,
   "SC2001 component-identity-unproven": 10,
   "SC2001 escaped-name-unresolved": 4,
-  "SC2001 function-run-unplaced": 591,
+  "SC2001 function-run-unplaced": 590,
   "SC2001 function-unentered": 13,
   "SC2001 lazy-compute-unread": 7,
   "SC2001 owned-write-option-unread": 4,
@@ -6945,6 +6945,18 @@
    "fixtures": {
     "proved": "reactive-ir/owner-carrier-provably-runs",
     "open": "reactive-ir/owner-carrier-provably-runs"
+   }
+  },
+  {
+   "fixture": "reactive-ir/child-mount-first-run",
+   "key": "SC2001 function-run-unplaced",
+   "from": 6,
+   "to": 3,
+   "adr": "ADR 1227",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs::eagerly_mounted",
+   "fixtures": {
+    "proved": "reactive-ir/child-mount-first-run",
+    "open": "reactive-ir/child-mount-first-run"
    }
   }
  ],
