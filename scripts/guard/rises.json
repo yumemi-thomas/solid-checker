@@ -8672,6 +8672,14 @@
    "to": 19,
    "adr": "ADR 1228",
    "fact": "ContextSortCall, PropSortBind and PropPushReflect (a store's member reached through a context or a prop and handed as the receiver a standard function runs on: sort.call, an at-once bind, Reflect.apply) have an SC9012 row at the call that runs it where main had none (Chrome STORE_WRITE_OUTSIDE_SETTER); each adds the rows of its own site"
+  },
+  {
+   "fixture": "reactive-ir/async-carried-leaf-owner",
+   "key": "SC5003 async-read-unaccounted",
+   "from": 8,
+   "to": 9,
+   "adr": "ADR 1214",
+   "fact": "TrackedSharedWrapper's read in wrapUse: the carrier [1].forEach(hf) runs hf in place (slice B), so the read at a9() gets an SC5001 violation (Chrome rc.21: PENDING_ASYNC_FORBIDDEN_SCOPE) and its function-run-unplaced and call-attributed-read rows are replaced by one uncertifiable async-read-unaccounted row at the same site"
   }
  ]
 }

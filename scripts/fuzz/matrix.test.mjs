@@ -116,6 +116,55 @@ describe("judge", () => {
     // Only for the code that lists it: SC4001's obligation does not decline a flush code.
     expect(verdict({ checker: { ok: true, findings: [finding("missing-owner", "uncertifiable")] } }).outcome).toBe("false-clean");
   });
+  // ADR 1217: the checker's fail-closed answer where the read runs is the program's uncertifiable, not a false clean (audit 45516815348).
+  const at = (rule, kind, line, column) => ({ ...finding(rule, kind, line), column });
+  it("recall-gap (fail-closed) for an SC9012 in the callee of the call holding the read, off Chrome's position (values-callee)", () => {
+    const lines = Array.from({ length: 20 }, () => "x();");
+    lines[9] = "      Object.values(box)[0]();";
+    lines[11] = "  g1();";
+    const runtime = run([{ code: "FLUSH_IN_EFFECT_CALLBACK", message: "m", positions: [{ file: "App.tsx", line: 10, column: 7 }] }]);
+    const judged = (findings) => verdict({ runtime, built: { files: { "App.tsx": lines.join("\n") } }, checker: { ok: true, findings } });
+    expect(judged([at("reactive-dispatch-unresolved", "uncertifiable", 10, 21)])).toMatchObject({ outcome: "recall-gap", detail: { declinedBy: "fail-closed", failClosed: "reactive-dispatch-unresolved/SC@10:21 (callee)" } });
+    // The silent twin, and the same row on another statement, stay false cleans; SC5003 says nothing about a code that is not a pending read.
+    expect(judged([]).outcome).toBe("false-clean");
+    expect(judged([at("reactive-dispatch-unresolved", "uncertifiable", 12, 3)]).outcome).toBe("false-clean");
+    expect(judged([at("async-outside-loading-boundary", "uncertifiable", 10, 21)]).outcome).toBe("false-clean");
+    expect(judged([at("reactive-dispatch-unresolved", "violation", 10, 21)]).outcome).not.toBe("recall-gap");
+    // At a call's argument it is what the call was handed (R20): `set(holder.c)` stays a false clean, as the withholding tests below say.
+    lines[9] = "      set(holder.c);";
+    expect(judged([at("reactive-dispatch-unresolved", "uncertifiable", 10, 11)]).outcome).toBe("false-clean");
+  });
+  it("recall-gap (fail-closed) for an SC9012 at the carrier call where a placeless read runs (handed-flush loop-callee)", () => {
+    const text = [
+      'import { createMemo, flush } from "solid-js";',
+      "",
+      "export function C1() {",
+      "  const a1 = createMemo(async () => 1);",
+      "  const fns = [a1];",
+      "  const loop = (...xs: any[]) => { for (const f of fns) return (f as any)(...xs); };",
+      "  const other = (...xs: any[]) => { for (const f of fns) return (f as any)(...xs); };",
+      "  const K1 = () => {",
+      "    flush(() => {",
+      "      try { loop(); } catch { };",
+      "    });",
+      "    return <span />;",
+      "  };",
+      "  return <div />;",
+      "}",
+    ].join("\n");
+    const judged = (findings, source = text) => judge({ code: "CAUGHT_REACTIVE_READ", site: { line: 10 }, typecheck: { ok: true }, checker: { ok: true, findings }, built: { files: { "App.tsx": source } }, runtime: run([event("CAUGHT_REACTIVE_READ", null)]) });
+    const rows = [at("async-outside-loading-boundary", "uncertifiable", 5, 16), at("reactive-dispatch-unresolved", "uncertifiable", 5, 16), at("async-outside-loading-boundary", "uncertifiable", 6, 52), at("reactive-dispatch-unresolved", "uncertifiable", 6, 52)];
+    const callee = at("reactive-dispatch-unresolved", "uncertifiable", 6, 65);
+    expect(judged([...rows, callee])).toMatchObject({ outcome: "recall-gap", detail: { declinedBy: "fail-closed", failClosed: "reactive-dispatch-unresolved/SC@6:65 (carrier)" } });
+    // The call's own start counts as its callee does; an SC5003 there too, for this pending-read code.
+    expect(judged([at("async-outside-loading-boundary", "uncertifiable", 6, 64)]).detail.failClosed).toBe("async-outside-loading-boundary/SC@6:64 (carrier)");
+    // The silent twin, rows only at the carrier's iterable and the array (no call), and the same call in a function the site does not call: false cleans.
+    expect(judged([]).outcome).toBe("false-clean");
+    expect(judged(rows).outcome).toBe("false-clean");
+    expect(judged([at("reactive-dispatch-unresolved", "uncertifiable", 7, 65)]).outcome).toBe("false-clean");
+    // A name the file declares twice carries nothing.
+    expect(judged([...rows, callee], text.replace("  const K1 = () => {", "  const K1 = (loop: () => void) => {")).outcome).toBe("false-clean");
+  });
   it("marks a false clean certified when the file has no uncertifiable finding at all (a fail-closed break)", () => {
     expect(verdict({}).detail.certified).toBe(true);
     expect(verdict({ checker: { ok: true, findings: [finding("no-write-in-pure-computation", "violation", 30)] } }).detail.certified).toBe(true);

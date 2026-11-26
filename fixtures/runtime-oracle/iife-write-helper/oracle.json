@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1212: a write or an action call in an IIFE inside a named local function the body (or an inline ref factory) calls: REACTIVE_WRITE_IN_OWNED_SCOPE / ACTION_CALLED_IN_OWNED_SCOPE at the write (SC2001/SC2002 violations); the handler-only helper is legal (quiet); `.call`, a named function expression and a reassigned `let` keep uncertifiable rows (the reassigned one is quiet: its function never runs). The checker's fixture is reactive-ir/iife-write-helper."
+}

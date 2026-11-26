@@ -1170,6 +1170,8 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         );
         let sites = self.array_element_sites(declaration);
         self.destructure_sites.extend(sites);
+        let sites = self.object_property_sites(declaration);
+        self.destructure_sites.extend(sites);
         walk::walk_variable_declarator(self, declaration);
     }
 

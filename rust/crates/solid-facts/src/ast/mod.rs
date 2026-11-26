@@ -86,7 +86,9 @@ use thiserror::Error;
 /// 109 (ADR 1182): the assignments written in straight-line flow (`straight_line_assignments`), as `straight_line_calls`.
 /// 110 (ADR 1193): the object patterns no declarator describes that destructure as one (`destructure_sites`): a plain assignment's
 /// object target and an object pattern that is a direct element of a declarator's array pattern.
-pub const AST_FACTS_SCHEMA: u32 = 110;
+/// 111 (ADR 1218): an object pattern that is the value of a direct property of a declarator's object pattern
+/// (`DestructureSource::ObjectProperty`).
+pub const AST_FACTS_SCHEMA: u32 = 111;
 
 mod argument_completion;
 pub(crate) mod code_sinks;
