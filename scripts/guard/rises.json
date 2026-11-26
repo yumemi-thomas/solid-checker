@@ -8680,6 +8680,38 @@
    "to": 9,
    "adr": "ADR 1214",
    "fact": "TrackedSharedWrapper's read in wrapUse: the carrier [1].forEach(hf) runs hf in place (slice B), so the read at a9() gets an SC5001 violation (Chrome rc.21: PENDING_ASYNC_FORBIDDEN_SCOPE) and its function-run-unplaced and call-attributed-read rows are replaced by one uncertifiable async-read-unaccounted row at the same site"
+  },
+  {
+   "fixture": "reactive-ir/pending-source-layers",
+   "key": "SC1001 read-backing-unproven",
+   "from": 4,
+   "to": 5,
+   "adr": "ADR 1229",
+   "fact": "ADR 1229 (one implementation of in-place prop calls): `ThrowChild` in `pending-source-layers` (an IIFE that throws before `props.data()`) moves from the dispatch rows (`pending-read-unresolved`, `closed-parameter-member-dispatch`, relabelled in drops rows) to its rules' own uncertifiable rows (SC1001, SC5001, SC5003 `call-attributed-read`): uncertifiable to uncertifiable, nothing else moves"
+  },
+  {
+   "fixture": "reactive-ir/pending-source-layers",
+   "key": "SC5001 invocation-context-unproven",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1229",
+   "fact": "ADR 1229 (one implementation of in-place prop calls): `ThrowChild` in `pending-source-layers` (an IIFE that throws before `props.data()`) moves from the dispatch rows (`pending-read-unresolved`, `closed-parameter-member-dispatch`, relabelled in drops rows) to its rules' own uncertifiable rows (SC1001, SC5001, SC5003 `call-attributed-read`): uncertifiable to uncertifiable, nothing else moves"
+  },
+  {
+   "fixture": "reactive-ir/pending-source-layers",
+   "key": "SC5001 source-pending-unproven",
+   "from": 4,
+   "to": 5,
+   "adr": "ADR 1229",
+   "fact": "ADR 1229 (one implementation of in-place prop calls): `ThrowChild` in `pending-source-layers` (an IIFE that throws before `props.data()`) moves from the dispatch rows (`pending-read-unresolved`, `closed-parameter-member-dispatch`, relabelled in drops rows) to its rules' own uncertifiable rows (SC1001, SC5001, SC5003 `call-attributed-read`): uncertifiable to uncertifiable, nothing else moves"
+  },
+  {
+   "fixture": "reactive-ir/pending-source-layers",
+   "key": "SC5003 call-attributed-read",
+   "from": 2,
+   "to": 3,
+   "adr": "ADR 1229",
+   "fact": "ADR 1229 (one implementation of in-place prop calls): `ThrowChild` in `pending-source-layers` (an IIFE that throws before `props.data()`) moves from the dispatch rows (`pending-read-unresolved`, `closed-parameter-member-dispatch`, relabelled in drops rows) to its rules' own uncertifiable rows (SC1001, SC5001, SC5003 `call-attributed-read`): uncertifiable to uncertifiable, nothing else moves"
   }
  ]
 }
