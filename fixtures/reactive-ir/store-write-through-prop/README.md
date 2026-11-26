@@ -11,6 +11,8 @@ A write past the root through the prop (ADR 0919's handed route) is then dropped
 | component | outcome |
 |---|---|
 | `AssignChild` (`props.s1.a.v = 7`, the setter handed and unread), `PushChild` (destructured, `items.push`), `NamespaceChild`, `AliasChild` (`const held = props.s1`) | SC2003 violation (main: uncertifiable `store-write-unproven`) |
+| `OrWritesChild` (`props.s1.a.v ||= 7` over `v: 0`: the handed literal's test passes, ADR 1225) | SC2003 violation |
+| `AndNoopChild` (`&&=`), `NullishNoopChild` (`??=`) over `v: 0`: no write (ADR 1225) | uncertifiable `store-operation-may-not-write` (main: violations Chrome contradicts) |
 | `CallsSetterChild` (the setter read and called), `HandsOnChild` (the prop's link handed on), `WholeChild` (props used whole), `AlsoHandedChild` (the store also leaves the parent) | uncertifiable, as before |
 
 Chrome: `fixtures/runtime-oracle/store-write-through-prop` reports STORE_WRITE_OUTSIDE_SETTER at all seven writes. Stub: rc.21's

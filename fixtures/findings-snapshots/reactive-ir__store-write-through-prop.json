@@ -315,6 +315,104 @@
       "start": 2542,
       "end": 2554,
       "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-through-prop/App.tsx",
+      "start": 3009,
+      "end": 3017,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-through-prop/App.tsx",
+      "start": 3009,
+      "end": 3021,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "blocker": "store-operation-may-not-write",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-through-prop/App.tsx",
+      "start": 3009,
+      "end": 3021,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-through-prop/App.tsx",
+      "start": 3233,
+      "end": 3241,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-through-prop/App.tsx",
+      "start": 3233,
+      "end": 3245,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "uncertifiable",
+      "blocker": "store-operation-may-not-write",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-through-prop/App.tsx",
+      "start": 3233,
+      "end": 3245,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-through-prop/App.tsx",
+      "start": 3462,
+      "end": 3470,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "read-backing-unproven",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-through-prop/App.tsx",
+      "start": 3462,
+      "end": 3474,
+      "fixes": 0
+    },
+    {
+      "rule": "no-store-mutation-outside-setter",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/store-write-through-prop/App.tsx",
+      "start": 3462,
+      "end": 3474,
+      "fixes": 0
     }
   ]
 }

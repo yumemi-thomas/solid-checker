@@ -95,6 +95,33 @@ function AlsoHandedParent() {
   return <AlsoHandedChild s1={s1} />;
 }
 
+// ADR 1225: a logical assignment through the prop writes only when its test passes, read from the handed store's own literal:
+// `||=` over `v: 0` writes (a violation); `&&=` and `??=` write nothing (Chrome silent; uncertifiable, never a violation).
+function AndNoopChild(props: Props) {
+  props.s1.a.v &&= 7;
+  return <i />;
+}
+function AndNoopParent() {
+  const [s1, setS1] = createStore({ a: { v: 0 }, items: [0] });
+  return <AndNoopChild s1={s1} setS1={setS1} />;
+}
+function NullishNoopChild(props: Props) {
+  props.s1.a.v ??= 7;
+  return <i />;
+}
+function NullishNoopParent() {
+  const [s1, setS1] = createStore({ a: { v: 0 }, items: [0] });
+  return <NullishNoopChild s1={s1} setS1={setS1} />;
+}
+function OrWritesChild(props: Props) {
+  props.s1.a.v ||= 7;
+  return <i />;
+}
+function OrWritesParent() {
+  const [s1, setS1] = createStore({ a: { v: 0 }, items: [0] });
+  return <OrWritesChild s1={s1} setS1={setS1} />;
+}
+
 export function Page() {
   return (
     <div>
@@ -106,6 +133,9 @@ export function Page() {
       <HandsOnParent />
       <WholeParent />
       <AlsoHandedParent />
+      <AndNoopParent />
+      <NullishNoopParent />
+      <OrWritesParent />
     </div>
   );
 }

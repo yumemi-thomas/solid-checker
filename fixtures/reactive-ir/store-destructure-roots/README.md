@@ -23,3 +23,5 @@ it a plain value, array iteration intact) are `destructure_sites`, which the sam
 | `ArrayHole` (a hole before the element), `ArraySpread` (a spread literal), `AssignProps` (a props root) | uncertifiable, as before | `ArrayHole`, `ArraySpread`: STRICT_READ_UNTRACKED; `AssignProps`: silent |
 
 Chrome: `fixtures/runtime-oracle/store-destructure-roots`. Stubs: `absent-guard-prop`'s `solid-js.d.ts`.
+
+**ADR 1226.** `ContextMerge` (`merge(ctx.s1, { w: 1 })` destructured, the store from a context) and `HolderMerge` (`merge(holder.s1, …)`): no rule reads the slots, since `destructure_root` names a plain reference only, so the value-use census keeps an SC9012 `value-in-carrier` row there (uncertifiable; main: a certified clean for the context form, Chrome STRICT_READ_UNTRACKED).

@@ -540,6 +540,9 @@ function recallAxesOf(code, context, base, variants, options = {}) {
   if (context.startsWith("aw-then-computed")) return shapes.filter((shape) => (shape.binding === "direct" && /^(none|closure.*|helper.*)$/.test(shape.layer ?? "none")) || (shape.binding === "alias" && shape.layer === "none"));
   return shapes;
 }
+/** ADR 1208: the codes whose store variants cross the prop and context sources, and those sources. */
+const STORE_SOURCE_CODES = ["STRICT_READ_UNTRACKED", "STORE_WRITE_OUTSIDE_SETTER"];
+const STORE_SOURCES = ["prop", "prop-destructured", "context", "context-destructured"];
 function recallShapesOf(code, context, base, variants, { legal = false, lean = true } = {}) {
   // A recall-only code has no base grid: its `legal` contexts are recall cells too.
   const recallCell = (legal ? recallLegalOf : recallContextsOf)(code).includes(context) || (legal && SPEC[code].recallOnly && SPEC[code].legal?.includes(context));
@@ -600,6 +603,21 @@ function recallShapesOf(code, context, base, variants, { legal = false, lean = t
   for (const source of [...SOURCE_AXES.files, ...SOURCE_AXES.package]) for (const shape of local) if (plainOnly(source, shape) && sourcesOf(code, shape.variant, shape.binding, context).includes(source)) shapes.push({ ...shape, source });
   // ADR 1123: the tuple sources ask where the value comes from, not how the site spells it: the direct binding, no layer.
   for (const source of SOURCE_AXES.tuple) for (const shape of local) if (shape.binding === "direct" && shape.layer === "none" && sourcesOf(code, shape.variant, shape.binding, context).includes(source)) shapes.push({ ...shape, source });
+  // ADR 1208: a store the component receives, through a prop or a context (and their destructured forms), read or written by each
+  // store variant of the read and store-write grids, on the direct binding and a `const` alias of it: the source axes crossed only
+  // the base variants (a signal's or a base write's), so no recall store variant met a prop or context source (the held-alias false
+  // clean ADR 1169 fixed had no generated shape).
+  // The code's base cells only: a recall-only context asks how its host runs the site, which the local source already crosses.
+  if (STORE_SOURCE_CODES.includes(code) && !recallCell) {
+    const storeVariant = (variant) => SPEC[code].setup(variant, (prefix) => `${prefix}1`).some((sig) => sig.kind?.startsWith("store"));
+    const seen = new Set(shapes.map((shape) => `${shape.variant}|${shape.binding}|${shape.layer}|${shape.source ?? ""}|${shape.mount ?? ""}|${shape.callback ?? ""}`));
+    const plain = [...new Set(shapes.filter((shape) => !shape.source && !shape.mount && !shape.callback && storeVariant(shape.variant)).map((shape) => shape.variant))];
+    for (const variant of plain) for (const binding of ["direct", "alias"].filter((b) => bindingsOf(code, variant).includes(b))) for (const source of STORE_SOURCES) {
+      const shape = { variant, binding, layer: "none", source };
+      const key = `${variant}|${binding}|none|${source}||`;
+      if (!seen.has(key) && sourcesOf(code, variant, binding, context).includes(source)) { seen.add(key); shapes.push(shape); }
+    }
+  }
   return shapes;
 }
 

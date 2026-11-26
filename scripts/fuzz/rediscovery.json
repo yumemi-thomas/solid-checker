@@ -43183,5 +43183,63 @@
    "lg-strict-read-untracked-render-apply-store-throw-first-local-wrapper-closure-helper"
   ],
   "rediscovered": "focus.mjs --codes all on these ids (generator forms store-throw-first-getter and store-throw-first-local, added for this; 132 ids: the author's 91 direct and alias forms and 41 `wrapper` forms the whole-family scan of the integration bundle found), release builds, Chrome: main 3246a7201 (the 41 wrapper ids: main 7bc723e35) reports a violation at the site in each (judged disturbed: the run throws first, so the judge does not fail it); this build reports none (uncertifiable earlier-evaluation-may-throw)"
+ },
+ {
+  "finding": "A false positive: SC2003 at a logical assignment through a store handed by prop (`props.s1.v &&= 5`, `props.s1.v ??= 5` over `createStore({ v: 0 })`), which writes nothing; Chrome is silent. The handed route (ADR 0919/1172) took the sink as a plain write: the prop branch built it with `SinkWrite::writes`, where the local paths pass a logical assignment as one that may not write",
+  "found": "ADR 1208 (store variants crossed with the prop source, lg-recall noop-and/noop-nullish through `prop`), main 875c8a07c and 60de70ac7",
+  "fixed": "ADR 1225 (shared_reactivity.rs: the sink carries the logical operator; `handed_logical_writes` decides it from the handed store’s own literal, open where not proven)",
+  "grid": "lg-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "lg-store-write-outside-setter-handler-noop-and-direct-none-s-prop",
+   "lg-store-write-outside-setter-handler-noop-nullish-direct-none-s-prop",
+   "lg-store-write-outside-setter-then-noop-and-direct-none-s-prop",
+   "lg-store-write-outside-setter-then-noop-nullish-direct-none-s-prop",
+   "lg-store-write-outside-setter-timer-noop-and-direct-none-s-prop",
+   "lg-store-write-outside-setter-timer-noop-nullish-direct-none-s-prop"
+  ],
+  "rediscovered": "focus --grids lg-recall --runtime-diff all on the 6 and their local twins: main 60de70ac7 6 false-positive (Chrome silent, 12 compared, 0 differences); this build 6 uncertifiable, twins clean. Every prop cell of ADR 1208 (mx 3,084, lg 2,152, Chrome on all): only these 6 move"
+ },
+ {
+  "finding": "A false clean: a store reached through a context or a prop, merged and destructured in an untracked place (`const { v } = merge(ctx.s1, { w: 1 })`), had no row of any rule (16 certified through `context`, `context-destructured`; 16 more through `prop`, `prop-destructured` with an unrelated row beside them), while Chrome warns STRICT_READ_UNTRACKED; the local twin is SC1003 V. The value-use census took a store root handed to `merge` for a view whose destructure is SC1003’s, but SC1003 claims it only where `destructure_root` names the store’s own name",
+  "found": "ADR 1208 (store variants crossed with the prop and context sources), main 875c8a07c and 60de70ac7",
+  "fixed": "ADR 1226 (value_use.rs `argument`: an unclaimed merged destructure is a census read site at its pattern)",
+  "grid": "mx-recall",
+  "code": "STRICT_READ_UNTRACKED",
+  "ids": [
+   "mx-strict-read-untracked-body-store-dstr-merge-alias-none-s-context",
+   "mx-strict-read-untracked-body-store-dstr-merge-alias-none-s-context-destructured",
+   "mx-strict-read-untracked-body-store-dstr-merge-alias-none-s-prop",
+   "mx-strict-read-untracked-body-store-dstr-merge-alias-none-s-prop-destructured",
+   "mx-strict-read-untracked-body-store-dstr-merge-direct-none-s-context",
+   "mx-strict-read-untracked-body-store-dstr-merge-direct-none-s-context-destructured",
+   "mx-strict-read-untracked-body-store-dstr-merge-direct-none-s-prop",
+   "mx-strict-read-untracked-body-store-dstr-merge-direct-none-s-prop-destructured",
+   "mx-strict-read-untracked-effect-apply-store-dstr-merge-alias-none-s-context",
+   "mx-strict-read-untracked-effect-apply-store-dstr-merge-alias-none-s-context-destructured",
+   "mx-strict-read-untracked-effect-apply-store-dstr-merge-alias-none-s-prop",
+   "mx-strict-read-untracked-effect-apply-store-dstr-merge-alias-none-s-prop-destructured",
+   "mx-strict-read-untracked-effect-apply-store-dstr-merge-direct-none-s-context",
+   "mx-strict-read-untracked-effect-apply-store-dstr-merge-direct-none-s-context-destructured",
+   "mx-strict-read-untracked-effect-apply-store-dstr-merge-direct-none-s-prop",
+   "mx-strict-read-untracked-effect-apply-store-dstr-merge-direct-none-s-prop-destructured",
+   "mx-strict-read-untracked-render-apply-store-dstr-merge-alias-none-s-context",
+   "mx-strict-read-untracked-render-apply-store-dstr-merge-alias-none-s-context-destructured",
+   "mx-strict-read-untracked-render-apply-store-dstr-merge-alias-none-s-prop",
+   "mx-strict-read-untracked-render-apply-store-dstr-merge-alias-none-s-prop-destructured",
+   "mx-strict-read-untracked-render-apply-store-dstr-merge-direct-none-s-context",
+   "mx-strict-read-untracked-render-apply-store-dstr-merge-direct-none-s-context-destructured",
+   "mx-strict-read-untracked-render-apply-store-dstr-merge-direct-none-s-prop",
+   "mx-strict-read-untracked-render-apply-store-dstr-merge-direct-none-s-prop-destructured",
+   "mx-strict-read-untracked-root-store-dstr-merge-alias-none-s-context",
+   "mx-strict-read-untracked-root-store-dstr-merge-alias-none-s-context-destructured",
+   "mx-strict-read-untracked-root-store-dstr-merge-alias-none-s-prop",
+   "mx-strict-read-untracked-root-store-dstr-merge-alias-none-s-prop-destructured",
+   "mx-strict-read-untracked-root-store-dstr-merge-direct-none-s-context",
+   "mx-strict-read-untracked-root-store-dstr-merge-direct-none-s-context-destructured",
+   "mx-strict-read-untracked-root-store-dstr-merge-direct-none-s-prop",
+   "mx-strict-read-untracked-root-store-dstr-merge-direct-none-s-prop-destructured"
+  ],
+  "rediscovered": "focus --grids mx-recall --runtime-diff all on every store-dstr-merge program (2,896), ADR 1225’s build vs this: 32 false-clean -> recall-gap, nothing else; lg-recall (1,431) no move; Chrome 2,876 + 1,392 compared, 0 differences"
  }
 ]
