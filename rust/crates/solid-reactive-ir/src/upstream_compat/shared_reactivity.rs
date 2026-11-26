@@ -2056,8 +2056,13 @@ fn handed_links_wrappable(
             None => return false,
         }
     };
+    // ADR 1232: a module store of another file is proved there as a module's store.
+    let module_scope = !std::ptr::eq(literal_file, file)
+        && !literal_file
+            .ast
+            .any_function_body_containing(Span::new(start, end));
     let Some(initial) =
-        store_literal_untouched_at(literal_file, context, Span::new(start, end), false)
+        store_literal_untouched_at(literal_file, context, Span::new(start, end), module_scope)
     else {
         return false;
     };
@@ -4955,9 +4960,44 @@ fn links_proven_wrappable(
     root: Span,
 ) -> bool {
     let Some(initial) = store_literal_untouched(file, context, root, false) else {
-        return false;
+        return imported_links_wrappable(file, context, member, root);
     };
     links_wrappable_in(file, member, root, initial)
+}
+
+/// ADR 1232: [`links_proven_wrappable`] for a root that is a store another file declares at module scope and exports (an imported
+/// store): proved in its own file, where its census follows the export ([`exported_store_contained`]).
+fn imported_links_wrappable(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    member: Span,
+    root: Span,
+) -> bool {
+    let root = file.ast.peel_ts_sugar_span(root);
+    let Some(symbol) = source_symbol_at(context, file, root) else {
+        return false;
+    };
+    let Some((_, declaration)) = context.accessors.get(symbol) else {
+        return false;
+    };
+    if declaration.path.as_ref() == file.path.as_str() {
+        return false;
+    }
+    let Some(literal_file) = context.lookup.file_by_path(declaration.path.as_ref()) else {
+        return false;
+    };
+    let (Ok(start), Ok(end)) = (
+        u32::try_from(declaration.start_byte),
+        u32::try_from(declaration.end_byte),
+    ) else {
+        return false;
+    };
+    let declared = Span::new(start, end);
+    if literal_file.ast.any_function_body_containing(declared) {
+        return false;
+    }
+    store_literal_untouched_at(literal_file, context, declared, true)
+        .is_some_and(|initial| links_wrappable_across(file, member, root, literal_file, initial))
 }
 
 /// [`links_proven_wrappable`] once the store's literal `initial` is known untouched.
@@ -5180,23 +5220,45 @@ fn store_literal_proof(
         }
         names.extend(more);
     }
-    // A module's store reaches other files only through an export.
+    // A module's store reaches other files only through an export. ADR 1232: an export of the store or its setter (no alias) is
+    // followed into every file that references it ([`exported_store_contained`]).
     if !ast.any_function_body_containing(store.declaration) {
+        // A local name the source text does not give is taken as exported (fail closed).
+        let exported = |named: &[&str]| {
+            ast.exports.iter().any(|export| {
+                export
+                    .specifiers
+                    .iter()
+                    .chain(&export.declarations)
+                    .chain(&export.declaration_surface_only)
+                    .any(|specifier| match file.source_text(specifier.local.span) {
+                        Some(local) => named.contains(&local),
+                        None => true,
+                    })
+            })
+        };
         let named = names
             .iter()
             .filter_map(|name| file.source_text(*name))
             .collect::<Vec<_>>();
-        if ast.exports.iter().any(|export| {
-            export
-                .specifiers
-                .iter()
-                .chain(&export.declarations)
-                .chain(&export.declaration_surface_only)
-                .any(|specifier| {
-                    file.source_text(specifier.local.span)
-                        .is_none_or(|local| named.contains(&local))
-                })
-        }) {
+        let aliases = names
+            .iter()
+            .filter(|name| Some(**name) != slot(0).map(|store| store.span))
+            .filter_map(|name| file.source_text(*name))
+            .collect::<Vec<_>>();
+        let setter = slot(1).and_then(|setter| file.source_text(setter.span));
+        let store_name = slot(0).expect("slot 0").span;
+        if (exported(&named) || setter.is_some_and(|setter| exported(&[setter])))
+            && (exported(&aliases)
+                || !exported_store_contained(
+                    file,
+                    lookup,
+                    entities,
+                    store_name,
+                    slot(1).map(|setter| setter.span),
+                    initial,
+                ))
+        {
             return None;
         }
     }
@@ -6265,6 +6327,54 @@ fn carried_projection(
         literal,
         std::iter::once(key).chain(path.iter().cloned()).collect(),
     )])
+}
+
+/// ADR 1232: an exported module store (declared at `store`, its setter at `setter`, its literal `initial`, in `file`) is reached
+/// from other files only as a contained use: each reference of the store in another file is carried there ([`carried_store_reads`])
+/// to uses that are contained against this literal ([`contained_store_use_in`]), and the setter has no reference in another file.
+/// The references are the project's for the symbol (`symbol_references_if_present`); a symbol it does not hold answers `false`.
+fn exported_store_contained(
+    file: &FileFacts,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    entities: &crate::EntitySymbols,
+    store: Span,
+    setter: Option<Span>,
+    initial: Span,
+) -> bool {
+    let path = file.path.as_str();
+    let elsewhere = |declaration: Span| -> Option<Vec<(&FileFacts, Span)>> {
+        let symbol = entities.at(path, declaration)?;
+        let references = lookup.symbol_references_if_present(symbol.as_str())?;
+        let mut out = Vec::new();
+        for reference in references.iter() {
+            if reference.path.as_ref() == path {
+                continue;
+            }
+            let holder = lookup.file_by_path(reference.path.as_ref())?;
+            let (Ok(start), Ok(end)) = (
+                u32::try_from(reference.start_byte),
+                u32::try_from(reference.end_byte),
+            ) else {
+                return None;
+            };
+            out.push((holder, Span::new(start, end)));
+        }
+        Some(out)
+    };
+    let store_contained = elsewhere(store).is_some_and(|references| {
+        references.iter().all(|(holder, at)| {
+            carried_store_reads(holder, vec![*at]).is_some_and(|uses| {
+                uses.iter()
+                    .all(|used| contained_store_use_in(holder, *used, file, initial))
+            })
+        })
+    });
+    // A store with no setter slot has no setter to be referenced.
+    let setter_unreferenced = match setter {
+        None => true,
+        Some(setter) => elsewhere(setter).is_some_and(|references| references.is_empty()),
+    };
+    store_contained && setter_unreferenced
 }
 
 /// ADR 1232: whether an export of `file` names the module-scope binding declared at `name` (by its local name), or contains it
