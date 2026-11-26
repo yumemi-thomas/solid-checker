@@ -16,7 +16,7 @@
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "value-to-unresolved-callee",
+      "blocker": "package-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/affects-target-untouched/App.tsx",
       "start": 1616,

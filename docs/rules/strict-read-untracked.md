@@ -94,6 +94,13 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   direct calls reach, each call outside a function that may not run as a component
   (handed to `map`) and in a function that qualifies in turn; otherwise uncertifiable
   (ADR 1189).
+  A parameter bound by its function's one call (`const useT = (n) => …; useT(a1)`, the
+  function's one reference that call, the parameter plain, unwritten, its argument a `const`)
+  holds that accessor; a store, a setter or an action handed that way stays with its own
+  analysis. A `const` copy of an unwritten parameter holds it, and a copy of a destructured
+  prop reads what the prop does where its call is placed (ADR 1233). A member of the function's
+  returned object, a returned arrow or an element of a returned array is not dispatched yet:
+  that read in an effect's apply stays uncertifiable.
 - **Plain assignment targets are writes, not reads.** `store.name = next` is
   diagnosed by `no-store-mutation-outside-setter` without also reporting `store.name` here.
   Only the member that *is* the written target is exempt: read-modify-write
