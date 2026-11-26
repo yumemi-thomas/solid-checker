@@ -1007,8 +1007,8 @@ pub struct DestructureSiteFact {
     /// The pattern as a binding of shape `Object`: `pattern`, `names` (for an assignment, the identifiers it writes, which are
     /// references), `object_slots`, `object_properties` and `pattern_rest` as a declarator's. For an assignment, `declaration` is the
     /// assignment, `initializer` and `call_initializer` its value as a declarator's, and `initializer_identifier` always `None`:
-    /// the value's identifier is no declarator's initializer. For an array element, `declaration` is the declarator and there is
-    /// no initializer.
+    /// the value's identifier is no declarator's initializer. For an array element or an object property (ADR 1218), `declaration` is
+    /// the declarator and there is no initializer.
     pub binding: BindingFact,
     pub source: DestructureSource,
 }
@@ -1022,6 +1022,10 @@ pub enum DestructureSource {
     /// The element at `index` of the declarator's array pattern `outer` (no default on the element), whose value is the
     /// declarator's initializer iterated.
     ArrayElement { outer: Span, index: u32 },
+    /// Facts schema 111 (ADR 1218): the object pattern that is the value of the property `property` (no default, no computed key)
+    /// of the declarator's object pattern `outer`, whose value is that key of the declarator's initializer
+    /// (`const { a: { useIt } } = …`). One level only: a pattern nested in it is no site.
+    ObjectProperty { outer: Span, property: Span },
 }
 
 /// Facts schema 100 (ADR 1122): one property of an object binding pattern.

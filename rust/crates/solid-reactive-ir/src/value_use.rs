@@ -1616,6 +1616,15 @@ impl<'l, 'a> Census<'l, 'a> {
             }
             Holder::ObjectValue(property) => {
                 if matches!(mode, Mode::Holder(_) | Mode::RootHolder(_)) {
+                    // ADR 1218: a holder at a key of a `const` declarator's literal, which the declarator's pattern destructures with
+                    // a pattern of its own (`const { a: { useIt } } = { a: { useIt: r1 } }`), is that pattern's, as a holder a
+                    // declarator destructures is the declarator's. A value's holder only: a root's alias reached that way has a row at
+                    // each Get (`bound`'s steps rule), where the escaped walk asks the role, so a root's holder stays escaped.
+                    if let Mode::Holder(_) = mode
+                        && let Some(pattern) = nested_pattern_at(file, property)
+                    {
+                        return self.nested_bound(file, at, pattern, row, mode);
+                    }
                     self.escape(file, at, row, mode, blockers::VALUE_IN_CARRIER);
                     return Position::Open(blockers::VALUE_IN_CARRIER);
                 }
@@ -3378,6 +3387,49 @@ impl<'l, 'a> Census<'l, 'a> {
         held(answer)
     }
 
+    /// ADR 1218: [`Self::bound`] for a pattern nested in a declarator's object pattern (facts schema 111,
+    /// `DestructureSource::ObjectProperty`), over a value's holder at its key ([`nested_pattern_at`]): its names hold what the
+    /// holder's slots hold, and a slot no name of it is known to take leaves the holder escaped.
+    fn nested_bound(
+        &mut self,
+        file: &'a FileFacts,
+        at: Span,
+        binding: &'a solid_facts::ast::BindingFact,
+        row: Holder,
+        mode: Mode,
+    ) -> Position {
+        let each = match mode {
+            Mode::Holder(_) => Mode::Value,
+            Mode::RootHolder(_) => Mode::Root,
+            other => other,
+        };
+        debug_assert!(matches!(mode, Mode::Holder(_)), "a value's holder only");
+        let Some(names) = self.slot_names(binding, mode) else {
+            self.escape(file, at, row, mode, blockers::VALUE_IN_CARRIER);
+            return Position::Open(blockers::VALUE_IN_CARRIER);
+        };
+        let mut answer = Position::Followed;
+        for name in names {
+            if self
+                .lookup
+                .entities()
+                .exact(&name.span.location(file.path.as_str()))
+                .is_some_and(|symbol| self.sources.contains(symbol.as_str()))
+            {
+                continue;
+            }
+            let position = self.name_uses(file, name.span, each);
+            if answer == Position::Followed {
+                answer = position;
+            }
+        }
+        if binding.immutable {
+            answer
+        } else {
+            Position::Open(blockers::VALUE_HELD_IN_BINDING)
+        }
+    }
+
     /// Where a declared name's references put the value it holds: in its
     /// file, and in every file that imports it.
     fn name_uses(&mut self, file: &'a FileFacts, name: Span, mode: Mode) -> Position {
@@ -4426,6 +4478,64 @@ fn no_member_writes(_: &FileFacts) -> Vec<Span> {
 }
 
 /// The literal a property or array holder row names.
+/// ADR 1218: the pattern that destructures the value of the literal property `property` (an index of `object_properties`): the
+/// literal is a `const` declarator's whole initializer and closed (`ObjectGetShapeFact::closed`: no spread, no computed or repeated
+/// key, no `__proto__`, no setter), the property a data property whose key is written as itself and has no getter, and the
+/// declarator's object pattern, with no rest and no computed key, names that key once, with an object pattern of its own and no
+/// default (facts schema 111, `DestructureSource::ObjectProperty`). `None` anywhere else.
+fn nested_pattern_at(file: &FileFacts, property: usize) -> Option<&solid_facts::ast::BindingFact> {
+    let ast = &file.ast;
+    let property = &ast.object_properties[property];
+    if property.computed || !property.data || property.method {
+        return None;
+    }
+    let key = file.source_text(property.key).and_then(written_key)?;
+    let literal = enclosing_literal(file, property.span)?;
+    let shape = ast
+        .object_get_shapes
+        .iter()
+        .find(|shape| shape.span == literal)?;
+    let mut slots = shape.properties.iter().filter(|slot| slot.key == key);
+    let data_slot = slots.next().is_some_and(|slot| slot.getter.is_none());
+    if !shape.closed || literal_reads_this(file, literal) || !data_slot || slots.next().is_some() {
+        return None;
+    }
+    let declarator = ast.bindings.iter().find(|binding| {
+        binding.shape == solid_facts::ast::BindingShape::Object
+            && binding.immutable
+            && binding
+                .initializer
+                .map(|value| ast.peel_ts_sugar_span(value))
+                == Some(literal)
+    })?;
+    if declarator.pattern_rest
+        || declarator
+            .object_properties
+            .iter()
+            .any(|slot| slot.computed || slot.key.is_none())
+    {
+        return None;
+    }
+    let mut named = declarator
+        .object_properties
+        .iter()
+        .filter(|slot| slot.key.as_deref() == Some(key));
+    let slot = named.next()?;
+    if named.next().is_some() || slot.has_default || !slot.nested {
+        return None;
+    }
+    ast.destructure_sites
+        .iter()
+        .find(|site| {
+            site.source
+                == solid_facts::ast::DestructureSource::ObjectProperty {
+                    outer: declarator.pattern,
+                    property: slot.span,
+                }
+        })
+        .map(|site| &site.binding)
+}
+
 fn enclosing_literal(file: &FileFacts, row: Span) -> Option<Span> {
     let ast = &file.ast;
     if ast.array_literal_at(row).is_some() {

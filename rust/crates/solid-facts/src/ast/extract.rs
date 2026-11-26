@@ -1036,6 +1036,45 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             .collect()
     }
 
+    /// ADR 1218: an object pattern that is the value of a direct property of a declarator's object pattern (`const { a: { v } } = x`),
+    /// with no default and no computed key, as a [`DestructureSiteFact`]. One level: a pattern nested in it is no site.
+    pub(super) fn object_property_sites(
+        &self,
+        declaration: &oxc_ast::ast::VariableDeclarator<'_>,
+    ) -> Vec<DestructureSiteFact> {
+        let BindingPattern::ObjectPattern(object) = &declaration.id else {
+            return Vec::new();
+        };
+        if declaration.init.is_none() {
+            return Vec::new();
+        }
+        object
+            .properties
+            .iter()
+            .filter(|property| !property.computed)
+            .filter_map(|property| {
+                let value @ BindingPattern::ObjectPattern(_) = &property.value else {
+                    return None;
+                };
+                Some(DestructureSiteFact {
+                    binding: self.binding_fact(
+                        declaration.span,
+                        value,
+                        BindingMetadata {
+                            immutable: declaration.kind
+                                == oxc_ast::ast::VariableDeclarationKind::Const,
+                            ..BindingMetadata::default()
+                        },
+                    ),
+                    source: DestructureSource::ObjectProperty {
+                        outer: span(declaration.id.span()),
+                        property: span(property.span),
+                    },
+                })
+            })
+            .collect()
+    }
+
     /// ADR 1193: a plain `=` assignment's object target (`({ v } = s)`) as a [`DestructureSiteFact`], each property as
     /// [`Self::binding_fact`] records a binding pattern's.
     pub(super) fn assignment_site(
