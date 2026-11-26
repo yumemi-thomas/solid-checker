@@ -3748,10 +3748,13 @@ impl LocalAccessContext<'_, '_> {
                     .and_then(|member| self.props_callee_through(file, member, true))
             })
             // ADR 1233: or a `const` copy of a destructured prop slot (`const useIt = r1`), which holds the slot's one value:
-            // `props_callee_through` asks that nothing writes the slot.
+            // `props_callee_through` asks that nothing writes the slot. As a view's member (ADR 1100) it stands for the prop
+            // only where the call is placed; elsewhere the handed path below decides it, as before (lg-src, lg-combo: a copy
+            // read in a closure under `untrack`).
             .or_else(|| {
                 const_identifier_copy(file, call.callee)
                     .and_then(|reference| self.props_callee_through(file, reference, true))
+                    .map(|(declaration, property, _)| (declaration, property, true))
             })
             // ADR 1100: a view's member stands for the prop only where the
             // prop's own call is placed; elsewhere the handed obligation below
