@@ -515,6 +515,37 @@ thread_local! {
     static HANDED_LEAF: std::cell::Cell<Option<&'static str>> = const { std::cell::Cell::new(None) };
 }
 
+/// ADR 1233: the identifier reference a callee's `const` copy names: the callee is an identifier bound by an immutable binding of
+/// one plain identifier that nothing writes, whose whole initializer (TypeScript sugar peeled) is a reference (`const useIt = r1`).
+/// One step only; the reference's own binding is the caller's to prove.
+fn const_identifier_copy(
+    file: &solid_facts::FileFacts,
+    callee: solid_facts::core::Span,
+) -> Option<solid_facts::core::Span> {
+    use solid_facts::ast::{BindingShape, IdentifierRole};
+    let ast = &file.ast;
+    let callee = ast.peel_ts_sugar_span(callee);
+    let declaration = ast.reference_declaration(callee)?;
+    let binding = ast
+        .bindings
+        .iter()
+        .find(|binding| binding.names.iter().any(|name| name.span == declaration))?;
+    if !binding.immutable
+        || binding.shape != BindingShape::Identifier
+        || binding.names.len() != 1
+        || crate::indexes::binding_written(file, declaration)
+    {
+        return None;
+    }
+    let initializer = ast.peel_ts_sugar_span(binding.initializer?);
+    ast.identifiers
+        .iter()
+        .any(|identifier| {
+            identifier.span == initializer && identifier.role == IdentifierRole::Reference
+        })
+        .then_some(initializer)
+}
+
 /// A leaf of [`handed_value`] answering true: the census keeps the first one (a true always rises to the top). Returns true.
 fn handed_leaf(kind: &'static str) -> bool {
     if crate::blocker_census::enabled() {
@@ -3715,6 +3746,12 @@ impl LocalAccessContext<'_, '_> {
                 crate::execution_role::handed_member_alias(file, call.callee)
                     .filter(|member| *member != file.ast.peel_ts_sugar_span(call.callee))
                     .and_then(|member| self.props_callee_through(file, member, true))
+            })
+            // ADR 1233: or a `const` copy of a destructured prop slot (`const useIt = r1`), which holds the slot's one value:
+            // `props_callee_through` asks that nothing writes the slot.
+            .or_else(|| {
+                const_identifier_copy(file, call.callee)
+                    .and_then(|reference| self.props_callee_through(file, reference, true))
             })
             // ADR 1100: a view's member stands for the prop only where the
             // prop's own call is placed; elsewhere the handed obligation below

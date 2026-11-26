@@ -167,8 +167,20 @@ export function TrackedAliasReads() {
   return <div>{useIt()}{memo()}{peek}{before()}</div>;
 }
 
+// Violation (ADR 1233): a parameter bound by its function's one call holds that call's argument, and a `const` copy of it holds
+// the parameter: the copy's call reads `r1` untracked in the component body.
+export function ViaSingleCallParameter() {
+  const [r1] = createSignal(3);
+  const viaParam = (accessor: () => number) => {
+    const useParam = accessor;
+    useParam();
+  };
+  viaParam(r1);
+  return <div></div>;
+}
+
 // Refused: no exact alias, so no read. A `let`, a shadowing name, a
-// parameter, a literal with a spread, a computed key or a getter, and a
+// parameter of a function called twice, a literal with a spread, a computed key or a getter, and a
 // default. Where the type says `Accessor`, the call stays the
 // typed dispatch obligation (SC9012) it was before (ADR 0294).
 export function Refused() {
@@ -187,6 +199,7 @@ export function Refused() {
     useParam();
   };
   viaParam(r1);
+  viaParam(r2);
   const { spread } = { spread: r1, ...{} };
   spread();
   const { computed } = { ["computed"]: r1 };

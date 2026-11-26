@@ -966,11 +966,20 @@ fn resolve_setter_action_aliases(
                 .get(&row.source)
                 .filter(|_| !row.accessor_only)
                 .cloned();
+            // ADR 1233: nor a store: a write through a store parameter asks the parameter's callers (ADR 0719), which see a
+            // call made inside the store's own setter; as the store itself the write would be judged where it is written.
             let accessor = accessors
                 .get(&row.source)
                 .cloned()
                 .filter(|(_, declaration)| {
                     row.exact || (row.import && module_consts.contains(declaration))
+                })
+                .filter(|_| {
+                    !row.accessor_only
+                        || !matches!(
+                            source_kinds.get(&row.source),
+                            Some(ReactiveSourceKind::Store)
+                        )
                 });
             if setter.is_none() && action.is_none() && accessor.is_none() {
                 continue;

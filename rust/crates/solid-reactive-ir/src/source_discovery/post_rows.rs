@@ -77,9 +77,11 @@ pub(super) struct AliasRow {
     /// live binding of that `const`, initialized before any function the
     /// importing module defines can run.
     pub(super) import: bool,
-    /// ADR 1233: the row aliases an accessor only, never a setter or an action. A parameter bound to its function's one call
-    /// holds the argument's value, a setter's too, but a setter called through it (`(g) => () => g(1)`) is a write ADR 0509's
-    /// net already decides from the call; as a setter alias it would be a write in a closure no edge places.
+    /// ADR 1233: the row aliases an accessor that is not a store, never a setter, an action or a store. A parameter bound to
+    /// its function's one call holds the argument's value, a setter's too, but a setter called through it (`(g) => () => g(1)`)
+    /// is a write ADR 0509's net already decides from the call, and a write through a store parameter one ADR 0719 decides
+    /// from its callers (a call inside the store's own setter writes legally); as the source itself either would be judged
+    /// where it is written.
     pub(super) accessor_only: bool,
     /// Each name with a symbol: (symbol, display).
     pub(super) names: Vec<(SymbolId, SymbolId)>,
