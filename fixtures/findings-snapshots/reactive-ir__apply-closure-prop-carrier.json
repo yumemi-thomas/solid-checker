@@ -1,0 +1,26 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-unentered",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/apply-closure-prop-carrier/App.tsx",
+      "start": 362,
+      "end": 372,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/apply-closure-prop-carrier/App.tsx",
+      "start": 692,
+      "end": 702,
+      "fixes": 0
+    }
+  ]
+}
