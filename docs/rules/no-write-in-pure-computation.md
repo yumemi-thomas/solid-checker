@@ -354,12 +354,15 @@ runs it is a violation. Module initialization is silent.
 `refresh(props.name)` (or a never-written destructured `name`) whose every caller
 passes one exact refreshable source is that source's write, placed by the call's
 role: a violation in a memo or an effect compute ([ADR 1174](../decisions.md#adr-1174),
-`fixtures/reactive-ir/refresh-prop-target`); a target the caller census does not
-resolve (two sources, a spread caller, a written prop, a view of a view or a
-`merge` with the props not last, a context member) stays uncertifiable (ADR 0509).
+`fixtures/reactive-ir/refresh-prop-target`). So is `refresh(ctx.name)` (or a
+`const { name } = useContext(Ctx)` slot) when `Ctx` has no default, one provider
+whose closed literal value holds one `const` source there, and read-only readers
+([ADR 1214](../decisions.md#adr-1214), `fixtures/reactive-ir/refresh-context-member`).
 A `const` `merge(literal…, props)` or `omit(props, "k"…)` view whose Get of `name`
 is the parameter's own names `props.name` too ([ADR 1214](../decisions.md#adr-1214),
-`fixtures/reactive-ir/refresh-prop-view`).
+`fixtures/reactive-ir/refresh-prop-view`). A target none of these resolves (two
+sources, a spread caller, a written prop, a view of a view or a `merge` with the
+props not last, a context default or two providers) stays uncertifiable (ADR 0509).
 So is a write in a `createRoot` body, or in a component rendered only there,
 when the root call or the render is written in an effect apply or a leaf
 callback: rc.17 refuses the creation before the body runs (ADR 0475,

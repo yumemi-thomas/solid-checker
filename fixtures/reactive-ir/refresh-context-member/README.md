@@ -1,0 +1,5 @@
+# refresh-context-member
+
+**Claim (ADR 1214, slice C).** `refresh(ctx.m1)` on `const ctx = useContext(Ctx)`, or `refresh(m1)` on `const { m1 } = useContext(Ctx)`, names the source the provider's value holds at `m1` (`static_api::context_refresh_source`), under ADR 1123's premises: `Ctx` is an unwritten, unexported `const` made by `createContext()` with no default; every reference of `Ctx` is the one provider's tag (no spread, one `value`) or a `useContext` read whose result is read only (static member Gets, or a `const` pattern of static plain slots); the value is a closed literal whose `m1` is an unwritten `const` holding one source. The write is then that source's, placed by the call's role.
+
+Violations: `MemberReader`, `SlotReader` (in the component body; main: uncertifiable, `function-run-unplaced`). Clean: `HandlerReader`. Uncertifiable (fail closed): `DefaultReader` (a default value), `TwoReader` (two providers), `WrittenReader` (the member variant: another reader writes the slot), `LetReader` (the shadowed variant: a `let` written again).
