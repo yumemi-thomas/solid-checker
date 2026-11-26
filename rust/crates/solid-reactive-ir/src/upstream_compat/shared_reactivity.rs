@@ -6332,7 +6332,8 @@ fn carried_projection(
 /// ADR 1232: an exported module store (declared at `store`, its setter at `setter`, its literal `initial`, in `file`) is reached
 /// from other files only as a contained use: each reference of the store in another file is carried there ([`carried_store_reads`])
 /// to uses that are contained against this literal ([`contained_store_use_in`]), and the setter has no reference in another file.
-/// The references are the project's for the symbol (`symbol_references_if_present`); a symbol it does not hold answers `false`.
+/// The references are the project's for the symbol (`symbol_references_if_present`), so the program must be closed
+/// (`program_closed`); a symbol the table does not hold answers `false`.
 fn exported_store_contained(
     file: &FileFacts,
     lookup: &crate::indexes::SemanticLookup<'_>,
@@ -6341,6 +6342,10 @@ fn exported_store_contained(
     setter: Option<Span>,
     initial: Span,
 ) -> bool {
+    // An export of an open program may be imported by code the project does not hold.
+    if !lookup.program_closed {
+        return false;
+    }
     let path = file.path.as_str();
     let elsewhere = |declaration: Span| -> Option<Vec<(&FileFacts, Span)>> {
         let symbol = entities.at(path, declaration)?;
@@ -6417,6 +6422,15 @@ fn hook_carried_uses<'a>(
         return None;
     }
     let name = crate::owners::function_binding_name(file, function)?;
+    // A store the function does not create is one value for every call: an exported function of an open program hands it to callers
+    // the project does not hold. A store it creates is a new one per call, reached only through the calls followed here.
+    let created_per_call = file
+        .ast
+        .reference_declaration(reference)
+        .is_some_and(|declaration| function.body.contains(declaration));
+    if !created_per_call && !lookup.program_closed && name_exported(file, name.span) {
+        return None;
+    }
     let path = file.path.as_str();
     let symbol = entities.at(path, name.span)?;
     let references = lookup.symbol_references_if_present(symbol.as_str())?;
