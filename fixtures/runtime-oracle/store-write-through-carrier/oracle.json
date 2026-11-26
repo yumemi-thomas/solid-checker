@@ -1,0 +1,1 @@
+{"note": "ADR 1231: a handed store carried through a local literal, tuple or hook return and written past its root: rc.21 drops the write outside the setter (STORE_WRITE_OUTSIDE_SETTER) in each export. Where the carrier is also handed to a function or a pattern slot has a default, the checker leaves it uncertifiable."}

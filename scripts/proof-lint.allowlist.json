@@ -1186,13 +1186,13 @@
       }
     },
     "rust/crates/solid-reactive-ir/src/owners/leaf_universe.rs": {
-      "silent-unmatched-slot": {
-        "count": 1,
-        "why": "ADR 1031 (`silences`): `None => {}` is a group of codes the site does not have (no SC3001 code, or no SC6002 code): nothing to end or decline; every group the site has answers `Some` (an end or a decline)"
-      },
       "default-on-missing": {
         "count": 1,
         "why": "ADR 1190 (`prop_literal_calls_off_apply`): `_ => true` is a layer that is no component prop literal with proven calls; it adds no condition there, and the role silence still needs every other premise (the role, the entry walk)"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "ADR 1031 (`silences`): `None => {}` is a group of codes the site does not have (no SC3001 code, or no SC6002 code): nothing to end or decline; every group the site has answers `Some` (an end or a decline)"
       }
     },
     "rust/crates/solid-reactive-ir/src/owners/missing_owners.rs": {
@@ -1643,7 +1643,7 @@
     },
     "rust/crates/solid-reactive-ir/src/upstream_compat/shared_reactivity.rs": {
       "default-on-missing": {
-        "count": 12,
+        "count": 14,
         "why": "pending-review"
       },
       "finding-filter": {
