@@ -6267,8 +6267,13 @@ fn carried_projection(
     )])
 }
 
-/// ADR 1232: whether an export of `file` names the binding declared at `name` (by its local name), or contains it (`export function`).
+/// ADR 1232: whether an export of `file` names the module-scope binding declared at `name` (by its local name), or contains it
+/// (`export function`).
 fn name_exported(file: &FileFacts, name: Span) -> bool {
+    // Only a module-scope declaration can be exported; one inside a function an export holds is local to it.
+    if !crate::indexes::at_module_scope(&file.ast, name) {
+        return false;
+    }
     let Some(text) = file.source_text(name) else {
         return true;
     };
