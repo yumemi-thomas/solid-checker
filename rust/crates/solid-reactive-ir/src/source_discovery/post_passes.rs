@@ -957,8 +957,15 @@ fn resolve_setter_action_aliases(
         let mut accessor_aliases = Vec::new();
         for (slot, ordinal) in touched {
             let row = &rows[slot].aliases[ordinal as usize];
-            let setter = setters.get(&row.source).cloned();
-            let action = actions.get(&row.source).cloned();
+            // ADR 1233: an accessor-only row aliases no setter and no action.
+            let setter = setters
+                .get(&row.source)
+                .filter(|_| !row.accessor_only)
+                .cloned();
+            let action = actions
+                .get(&row.source)
+                .filter(|_| !row.accessor_only)
+                .cloned();
             let accessor = accessors
                 .get(&row.source)
                 .cloned()

@@ -77,6 +77,10 @@ pub(super) struct AliasRow {
     /// live binding of that `const`, initialized before any function the
     /// importing module defines can run.
     pub(super) import: bool,
+    /// ADR 1233: the row aliases an accessor only, never a setter or an action. A parameter bound to its function's one call
+    /// holds the argument's value, a setter's too, but a setter called through it (`(g) => () => g(1)`) is a write ADR 0509's
+    /// net already decides from the call; as a setter alias it would be a write in a closure no edge places.
+    pub(super) accessor_only: bool,
     /// Each name with a symbol: (symbol, display).
     pub(super) names: Vec<(SymbolId, SymbolId)>,
 }
@@ -375,6 +379,16 @@ pub(super) fn file_rows(ctx: &StageContext<'_>, slot: usize, file: &FileFacts) -
                         .initializer_identifier
                         .as_ref()
                         .is_some_and(|identifier| const_variable(file, identifier.span)));
+            // ADR 1233: a `const` copy of a parameter (a destructured prop slot included) that nothing writes holds it too: the
+            // parameter keeps the one value its call bound for the whole run of the body.
+            let exact = exact
+                || (binding.immutable
+                    && binding.shape == solid_facts::ast::BindingShape::Identifier
+                    && binding.names.len() == 1
+                    && binding
+                        .initializer_identifier
+                        .as_ref()
+                        .is_some_and(|identifier| unwritten_parameter(file, identifier.span)));
             let import = !exact
                 && binding.immutable
                 && binding.shape == solid_facts::ast::BindingShape::Identifier
@@ -388,6 +402,7 @@ pub(super) fn file_rows(ctx: &StageContext<'_>, slot: usize, file: &FileFacts) -
                 immutable: binding.immutable,
                 exact,
                 import,
+                accessor_only: false,
                 names: names.clone(),
             });
         }
@@ -419,6 +434,7 @@ pub(super) fn file_rows(ctx: &StageContext<'_>, slot: usize, file: &FileFacts) -
             immutable: true,
             exact: true,
             import: false,
+            accessor_only: false,
             names: vec![(symbol.clone(), name_of(alias.local))],
         });
     }
@@ -436,6 +452,7 @@ pub(super) fn file_rows(ctx: &StageContext<'_>, slot: usize, file: &FileFacts) -
             immutable: true,
             exact: true,
             import: false,
+            accessor_only: true,
             names: vec![(symbol.clone(), name_of(local))],
         });
     }
@@ -486,6 +503,7 @@ pub(super) fn file_rows(ctx: &StageContext<'_>, slot: usize, file: &FileFacts) -
                 immutable: true,
                 exact: false,
                 import: true,
+                accessor_only: false,
                 names: vec![(symbol.clone(), name_of(slot.local.span))],
             });
         }
@@ -993,6 +1011,26 @@ fn const_variable(file: &FileFacts, span: Span) -> bool {
                 binding.immutable && binding.names.iter().any(|name| name.span == declaration)
             })
         })
+}
+
+/// ADR 1233: `span` is a reference to a name a parameter declares (a plain parameter or a slot of a destructured one) that nothing
+/// writes ([`crate::indexes::binding_written`]: no assignment, update, redeclaration or direct `eval`).
+fn unwritten_parameter(file: &FileFacts, span: Span) -> bool {
+    let Some(declaration) = file
+        .ast
+        .reference_declaration(file.ast.peel_ts_sugar_span(span))
+    else {
+        return false;
+    };
+    file.ast
+        .innermost_function_containing(declaration)
+        .is_some_and(|function| {
+            function
+                .parameters
+                .iter()
+                .any(|parameter| parameter.names.iter().any(|name| name.span == declaration))
+        })
+        && !crate::indexes::binding_written(file, declaration)
 }
 
 /// ADR 0511: `span` is a reference to a named, runtime (not type-only)
