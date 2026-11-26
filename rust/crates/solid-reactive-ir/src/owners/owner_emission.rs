@@ -1262,12 +1262,16 @@ pub(super) fn layer_entry_open_by_reference(
     open
 }
 
-/// ADR 1159: whether the site at `span` runs on a delivery of an element's inline event handler literal and only there: the innermost layers around it, out
-/// to such a literal ([`delivered_handler_literal`]), are each an unnamed function called where it is written (an IIFE), which runs on its writer's stack.
-/// The literal has no binding, so its delivery is its one entry; the layers outside it only decide whether it is created. A named layer, a generator, a method
-/// or a function handed to a call answers nothing here (the site keeps the entry walk's answer): an exported helper a handler calls is also entered by
-/// importers the program does not show.
-pub(super) fn runs_in_delivered_handler(
+/// ADR 1159, ADR 1213: whether the site at `span` runs only on a stack a host entry starts, where no effect's apply is running: the delivery of an element's
+/// inline event handler literal ([`delivered_handler_literal`]), or a task a reviewed scheduler runs a callback on (`setTimeout(fn)`, `queueMicrotask(fn)`:
+/// `LayerRun::FreshStack`, an empty stack). rc.21 sets the effect-callback flag only for an apply's synchronous run and clears it when the run returns
+/// (`@solidjs/signals` `dist/dev.js:2772-2801`), so code a host entry starts meets it only where an apply on that stack runs it, which a layer between
+/// would have to be. From the site outwards each layer must run where it is written, on the stack of one call whose position the walk goes on from: an
+/// IIFE, an inline standard-library callback, a helper's or a named function's sole run (`layer_run`'s `InPlace`), or the callback a primitive's slot runs
+/// in place (`untrack(fn)`, `flush(fn)`: the dialect's `SlotRun::InPlace`, never an effect's apply, whose first run the dialect states as no in-place
+/// run). A generator, a layer run elsewhere or among other runs, a withheld call, a layer call written in JSX (the compiler places it), module code, a
+/// program with direct `eval` and a walk past [`HOST_ENTRY_DEPTH`] layers answer nothing (the site keeps the entry walk's answer).
+pub(super) fn runs_on_host_entry(
     file: &solid_facts::FileFacts,
     span: Span,
     lookup: &SemanticLookup<'_>,
@@ -1275,26 +1279,70 @@ pub(super) fn runs_in_delivered_handler(
     if lookup.program_has_eval() {
         return false;
     }
-    let mut layers = file.ast.functions_owning(span).collect::<Vec<_>>();
-    layers.sort_by_key(|function| function.span.end - function.span.start);
-    for function in layers {
-        if delivered_handler_literal(file, function, lookup) {
-            return true;
-        }
-        let in_place = file
-            .ast
-            .calls_with_peeled_callee(function.span)
-            .next()
-            .is_some();
+    let mut at = span;
+    for _ in 0..HOST_ENTRY_DEPTH {
+        let Some(function) = file.ast.innermost_function_owning(at) else {
+            return false;
+        };
+        // A call the walk moved to that is written in JSX of this function runs where the compiler places that expression, not where it is written.
         if function.generator
-            || function.method_name.is_some()
-            || function_binding_name(file, function).is_some()
-            || !in_place
+            || (at != span
+                && file
+                    .ast
+                    .jsx_containing(at)
+                    .any(|element| function.span.contains(element.span)))
         {
             return false;
         }
+        if delivered_handler_literal(file, function, lookup) {
+            return true;
+        }
+        match crate::execution_role::layer_run(file, function, lookup) {
+            crate::execution_role::LayerRun::FreshStack => return true,
+            crate::execution_role::LayerRun::InPlace(call) => {
+                at = call;
+                continue;
+            }
+            crate::execution_role::LayerRun::InPlaceAmongOthers(_)
+            | crate::execution_role::LayerRun::Elsewhere
+            | crate::execution_role::LayerRun::Withheld(_) => {}
+        }
+        match primitive_slot_in_place(file, function, lookup) {
+            Some(call) => at = call,
+            None => return false,
+        }
     }
     false
+}
+
+/// ADR 1213: how many layers [`runs_on_host_entry`] climbs before it answers nothing.
+const HOST_ENTRY_DEPTH: usize = 16;
+
+/// ADR 1213: the call whose resolved primitive runs `function`, written as one of its arguments, in place on the caller's stack (the dialect's
+/// `SlotRun::InPlace`: `untrack(fn)`, `flush(fn)`, `createRoot(fn)`).
+fn primitive_slot_in_place(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    file.ast
+        .arguments_containing(function.span)
+        .find(|(call, index)| {
+            !call.construct
+                && file.ast.peel_ts_sugar_span(call.arguments[*index].span) == function.span
+                && !call.arguments[*index].spread
+                && lookup
+                    .primitive_at_call(file, call.span)
+                    .is_some_and(|primitive| {
+                        matches!(
+                            lookup
+                                .dialect
+                                .slot_run(primitive, *index, call.arguments.len()),
+                            solid_dialect::SlotRun::InPlace(_)
+                        )
+                    })
+        })
+        .map(|(call, _)| call.span)
 }
 
 /// ADR 1159: whether `function` is an element's inline event handler literal the host delivers: the compiler's `EventHandler` callback at its span, no generator,

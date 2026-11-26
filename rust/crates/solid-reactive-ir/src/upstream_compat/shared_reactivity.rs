@@ -2104,6 +2104,7 @@ pub(crate) fn exact_link_alias_chain(
         &create_store,
         store_declaration,
         false,
+        None,
     )?;
     link_alias_literal(file, alias, store_declaration, initial, 1)?;
     Some(chain)
@@ -5027,11 +5028,13 @@ fn store_literal_untouched_at(
         &create_store,
         root_declaration,
         module_scope,
+        Some(context.dialect),
     )
 }
 
 /// [`store_literal_untouched_at`] on the inputs it reads (ADR 1169: `local_access` asks it too): the lookup, the entity table and
-/// whether a symbol is a store `createStore` made (`create_store`).
+/// whether a symbol is a store `createStore` made (`create_store`). `dialect`: where it is known, a prop is followed through the
+/// dialect's props views and a store or setter handed in a provider's value literal (ADR 1211); `None` follows static reads only.
 fn store_literal_proof(
     file: &FileFacts,
     lookup: &crate::indexes::SemanticLookup<'_>,
@@ -5039,6 +5042,7 @@ fn store_literal_proof(
     create_store: &dyn Fn(&crate::SymbolId) -> bool,
     root_declaration: Span,
     module_scope: bool,
+    dialect: Option<&dyn solid_dialect::Dialect>,
 ) -> Option<Span> {
     let ast = &file.ast;
     if crate::interproc::property_gets::direct_eval_in(file, Span::new(0, u32::MAX)) {
@@ -5117,7 +5121,20 @@ fn store_literal_proof(
                     || ast.reference_declaration(identifier.span) != Some(setter.span)
                     || handed_component_prop(file, lookup, identifier.span).is_some_and(
                         |(component, prop)| {
-                            component_prop_reads(file, component, prop)
+                            component_prop_reads(
+                                file,
+                                lookup,
+                                dialect,
+                                component,
+                                prop,
+                                PROPS_VIEW_DEPTH,
+                            )
+                            .is_some_and(|reads| reads.is_empty())
+                        },
+                    )
+                    || handed_context_key(file, lookup, dialect, identifier.span).is_some_and(
+                        |(context, key)| {
+                            context_key_reads(file, lookup, dialect, context, &key)
                                 .is_some_and(|reads| reads.is_empty())
                         },
                     )
@@ -5185,7 +5202,8 @@ fn store_literal_proof(
         }
         if !contained_store_use(file, identifier.span, initial)
             && !consumed_by_alias_slots(file, identifier.span, &names, initial)
-            && !handed_to_contained_prop(file, lookup, identifier.span, initial)
+            && !handed_to_contained_prop(file, lookup, dialect, identifier.span, initial)
+            && !handed_to_contained_context(file, lookup, dialect, identifier.span, initial)
             && !link_alias_contained(file, identifier.span, initial, 4)
         {
             return None;
@@ -5645,11 +5663,15 @@ fn handed_component_prop<'f>(
 /// ADR 1172: every read of prop `prop` in `component`, when its props object is used only through static keys: a props parameter
 /// every reference of which is the object of a static, non-optional member (each `props.<prop>` collected), or an object pattern with
 /// static keys, no rest, no default and no nested value (the references of `prop`'s local). `None` for any other use: the props
-/// object handed on, spread, written, a computed or optional key, a second parameter.
+/// object handed on, spread, written, a computed or optional key, a second parameter. ADR 1211: the object may also be handed to a
+/// props view or a component ([`props_object_reads`]).
 fn component_prop_reads(
     file: &FileFacts,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    dialect: Option<&dyn solid_dialect::Dialect>,
     component: &solid_facts::ast::FunctionFact,
     prop: &str,
+    depth: usize,
 ) -> Option<Vec<Span>> {
     let ast = &file.ast;
     let [parameter] = component.parameters.as_slice() else {
@@ -5670,24 +5692,7 @@ fn component_prop_reads(
     match parameter.shape {
         solid_facts::ast::BindingShape::Identifier => {
             let name = parameter.names.first()?;
-            let mut reads = Vec::new();
-            for reference in references(name.span) {
-                let member = ast
-                    .members
-                    .iter()
-                    .find(|member| ast.peel_ts_sugar_span(member.object) == reference)?;
-                if ast.computed_members.binary_search(&member.span).is_ok()
-                    || ast.optional_members.binary_search(&member.span).is_ok()
-                    || ast.write_targets.binary_search(&member.span).is_ok()
-                    || ast.is_no_get_target(member.span)
-                {
-                    return None;
-                }
-                if file.source_text(member.property)? == prop {
-                    reads.push(member.span);
-                }
-            }
-            Some(reads)
+            props_object_reads(file, lookup, dialect, name.span, prop, false, depth)
         }
         solid_facts::ast::BindingShape::Object => {
             if parameter.pattern_rest {
@@ -5710,22 +5715,369 @@ fn component_prop_reads(
     }
 }
 
-/// ADR 1172: the store reference `reference` is handed to an exact local component's prop ([`handed_component_prop`]) whose every read
-/// ([`component_prop_reads`]) is itself a contained use of the store ([`contained_store_use`]): the proxy goes nowhere else.
-fn handed_to_contained_prop(
+/// How many props views and forwarding components [`props_object_reads`] follows.
+const PROPS_VIEW_DEPTH: usize = 4;
+
+/// ADR 1172, ADR 1211: every read of key `prop` of the props object (or props view) declared at `declaration`, a superset: each
+/// reference is the object of a static, non-optional member that is not written (a read when its key is `prop`), or, `depth` levels
+/// deep, the whole argument of a `merge` call or the first argument of an `omit` call that is the whole initializer of a `const` (that
+/// view's own reads of `prop`), or the argument of a JSX spread of an element whose tag is a component of this file (that component's
+/// reads of `prop`). `omitted`: the view is an `omit` that drops `prop`, so a JSX spread of it reads no `prop`; a spread of any
+/// other view may read it at an element this does not follow. `None` for any other use.
+fn props_object_reads(
     file: &FileFacts,
     lookup: &crate::indexes::SemanticLookup<'_>,
+    dialect: Option<&dyn solid_dialect::Dialect>,
+    declaration: Span,
+    prop: &str,
+    omitted: bool,
+    depth: usize,
+) -> Option<Vec<Span>> {
+    let ast = &file.ast;
+    let mut reads = Vec::new();
+    let references = ast.identifiers.iter().filter(|identifier| {
+        identifier.role == solid_facts::ast::IdentifierRole::Reference
+            && ast.reference_declaration(identifier.span) == Some(declaration)
+    });
+    for reference in references.map(|identifier| identifier.span) {
+        if let Some(member) = ast
+            .members
+            .iter()
+            .find(|member| ast.peel_ts_sugar_span(member.object) == reference)
+        {
+            if ast.computed_members.binary_search(&member.span).is_ok()
+                || ast.optional_members.binary_search(&member.span).is_ok()
+                || ast.write_targets.binary_search(&member.span).is_ok()
+                || ast.is_no_get_target(member.span)
+            {
+                return None;
+            }
+            if file.source_text(member.property)? == prop {
+                reads.push(member.span);
+            }
+            continue;
+        }
+        if depth == 0 {
+            return None;
+        }
+        if let Some(element) = ast.jsx_elements.iter().find(|element| {
+            element
+                .spreads
+                .iter()
+                .any(|spread| ast.peel_ts_sugar_span(spread.argument) == reference)
+        }) {
+            if omitted {
+                continue;
+            }
+            if element.member_object.is_some() {
+                return None;
+            }
+            let (target, function) =
+                lookup.function_called_at(file.path.as_str(), element.name.span)?;
+            if target.path != file.path {
+                return None;
+            }
+            let component = ast
+                .functions
+                .iter()
+                .find(|candidate| candidate.span == function.span)?;
+            reads.extend(component_prop_reads(
+                file,
+                lookup,
+                dialect,
+                component,
+                prop,
+                depth - 1,
+            )?);
+            continue;
+        }
+        let (view, view_omits) = props_view_at(file, lookup, dialect, reference, prop)?;
+        reads.extend(props_object_reads(
+            file,
+            lookup,
+            dialect,
+            view,
+            prop,
+            view_omits,
+            depth - 1,
+        )?);
+    }
+    Some(reads)
+}
+
+/// ADR 1211: the declared name of the `const` whose whole initializer is a `merge` call `reference` is an argument of, or an `omit`
+/// call `reference` is the first argument of, with whether that `omit` drops `prop` (every other argument a string literal).
+fn props_view_at(
+    file: &FileFacts,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    dialect: Option<&dyn solid_dialect::Dialect>,
+    reference: Span,
+    prop: &str,
+) -> Option<(Span, bool)> {
+    let ast = &file.ast;
+    let call = ast.calls.iter().find(|call| {
+        call.arguments
+            .iter()
+            .any(|argument| !argument.spread && ast.peel_ts_sugar_span(argument.span) == reference)
+    })?;
+    let dialect = dialect?;
+    let primitive = lookup.primitive_at_call(file, call.span)?;
+    let omits = if dialect.merges_props_reactivity(primitive) {
+        false
+    } else if dialect.splits_props(primitive) {
+        let (source, keys) = call.arguments.split_first()?;
+        if ast.peel_ts_sugar_span(source.span) != reference {
+            return None;
+        }
+        let mut omits = false;
+        for key in keys {
+            let solid_facts::ast::ArgumentLiteralFact::String(name) = &key.literal_value else {
+                return None;
+            };
+            if key.spread {
+                return None;
+            }
+            omits |= name.as_str() == prop;
+        }
+        omits
+    } else {
+        return None;
+    };
+    let binding = ast.bindings.iter().find(|binding| {
+        binding
+            .initializer
+            .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == call.span)
+    })?;
+    let [name] = binding.names.as_slice() else {
+        return None;
+    };
+    (binding.immutable
+        && binding.shape == solid_facts::ast::BindingShape::Identifier
+        && !crate::indexes::binding_written(file, name.span))
+    .then_some((name.span, omits))
+}
+
+/// ADR 1211: the context and key a store or setter reference is handed to: `reference` is the value of a data property (or a
+/// shorthand) of a closed object literal that is the whole expression of the one `value` attribute of a provider element
+/// `<Ctx value={…}>` with no spread, where `Ctx` is an unexported, unwritten `const` of this file whose initializer is a
+/// `createContext` call. The context's declared name and the key.
+fn handed_context_key(
+    file: &FileFacts,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    dialect: Option<&dyn solid_dialect::Dialect>,
+    reference: Span,
+) -> Option<(Span, String)> {
+    let ast = &file.ast;
+    let dialect = dialect?;
+    if dialect.context_provider_member().is_some() {
+        return None;
+    }
+    // The key a provider stores is its `value` prop (`ContextRole::Create`).
+    let (element, key) = ast.jsx_elements.iter().find_map(|element| {
+        let mut values = element.attributes.iter().filter(|attribute| {
+            attribute.namespace.is_none()
+                && crate::kernel::property_key(file, attribute.local_name).as_deref()
+                    == Some("value")
+        });
+        let value = values.next()?;
+        if values.next().is_some()
+            || value.value_kind != solid_facts::ast::JsxAttributeValueKind::Expression
+        {
+            return None;
+        }
+        let literal = ast.peel_ts_sugar_span(value.expression?);
+        let properties = crate::interproc::accessor_provenance::closed_properties(file, literal)?;
+        let property = properties
+            .iter()
+            .find(|property| ast.peel_ts_sugar_span(property.value) == reference)?;
+        if !property.data || property.method {
+            return None;
+        }
+        let key = crate::kernel::property_key(file, property.key)?;
+        Some((element, key))
+    })?;
+    if !element.spreads.is_empty() || element.member_object.is_some() {
+        return None;
+    }
+    let declaration = ast.reference_declaration(element.name.span)?;
+    context_declared_here(file, lookup, dialect, declaration).then_some((declaration, key))
+}
+
+/// ADR 1211: the dialect's context role of the primitive the call at `call` resolves to, exactly.
+fn call_context_role(
+    file: &FileFacts,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    dialect: &dyn solid_dialect::Dialect,
+    call: Span,
+) -> Option<solid_dialect::ContextRole> {
+    let primitive = lookup.primitive_at_call(file, call)?;
+    dialect.context_role(dialect.name_of(primitive)?)
+}
+
+/// ADR 1211: `declaration` names an immutable, unexported, unwritten `const` of this file whose initializer is a `createContext`
+/// call: every reference of it is in this file.
+fn context_declared_here(
+    file: &FileFacts,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    dialect: &dyn solid_dialect::Dialect,
+    declaration: Span,
+) -> bool {
+    let ast = &file.ast;
+    let Some(binding) = ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding.names.len() == 1
+            && binding.names[0].span == declaration
+    }) else {
+        return false;
+    };
+    let created = binding
+        .call_initializer
+        .and_then(|call| ast.call_at(call))
+        .is_some_and(|call| {
+            binding
+                .initializer
+                .map(|initializer| ast.peel_ts_sugar_span(initializer))
+                == Some(call.span)
+                && call_context_role(file, lookup, dialect, call.span)
+                    == Some(solid_dialect::ContextRole::Create)
+        });
+    let exported = ast.exports.iter().any(|export| {
+        export
+            .specifiers
+            .iter()
+            .chain(&export.declarations)
+            .chain(&export.declaration_surface_only)
+            .any(|specifier| specifier.local.span == declaration)
+    });
+    created && !exported && !crate::indexes::binding_written(file, declaration)
+}
+
+/// ADR 1211: every read of key `key` of the value any provider of the context declared at `declaration` gives, a superset: every
+/// reference of the context is its declaration, a provider tag (or its closing tag), a type query, or the one argument of a
+/// `useContext` call whose result is the whole initializer of a `const`: an identifier, whose reads [`props_object_reads`] collects,
+/// or an object pattern with static keys, no rest, no default and no nested value (the references of `key`'s local). `None` for any
+/// other use.
+fn context_key_reads(
+    file: &FileFacts,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    dialect: Option<&dyn solid_dialect::Dialect>,
+    declaration: Span,
+    key: &str,
+) -> Option<Vec<Span>> {
+    let ast = &file.ast;
+    let references_of = |declared: Span| {
+        ast.identifiers
+            .iter()
+            .filter(move |identifier| {
+                identifier.role == solid_facts::ast::IdentifierRole::Reference
+                    && ast.reference_declaration(identifier.span) == Some(declared)
+            })
+            .map(|identifier| identifier.span)
+    };
+    let mut reads = Vec::new();
+    for reference in references_of(declaration) {
+        if ast.jsx_elements.iter().any(|element| {
+            element.name.span == reference || element.closing_name == Some(reference)
+        }) || ast
+            .type_queries
+            .iter()
+            .any(|query| query.contains(reference))
+        {
+            continue;
+        }
+        let call = ast.calls.iter().find(|call| {
+            matches!(call.arguments.as_slice(), [argument]
+                if !argument.spread && ast.peel_ts_sugar_span(argument.span) == reference)
+        })?;
+        if call_context_role(file, lookup, dialect?, call.span)
+            != Some(solid_dialect::ContextRole::Read)
+        {
+            return None;
+        }
+        let binding = ast.bindings.iter().find(|binding| {
+            binding
+                .initializer
+                .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == call.span)
+        })?;
+        if !binding.immutable {
+            return None;
+        }
+        match binding.shape {
+            solid_facts::ast::BindingShape::Identifier => {
+                let [name] = binding.names.as_slice() else {
+                    return None;
+                };
+                reads.extend(props_object_reads(
+                    file,
+                    lookup,
+                    dialect,
+                    name.span,
+                    key,
+                    false,
+                    PROPS_VIEW_DEPTH,
+                )?);
+            }
+            solid_facts::ast::BindingShape::Object => {
+                if binding.pattern_rest {
+                    return None;
+                }
+                for property in &binding.object_properties {
+                    if property.computed || property.nested || property.has_default {
+                        return None;
+                    }
+                    let local = property.local.as_ref()?;
+                    if property.key.as_deref()? == key {
+                        reads.extend(references_of(local.span));
+                    }
+                }
+            }
+            solid_facts::ast::BindingShape::Array => return None,
+        }
+    }
+    Some(reads)
+}
+
+/// ADR 1211: the store reference `reference` is handed in a provider's value literal ([`handed_context_key`]) whose every read
+/// ([`context_key_reads`]) is itself a contained use of the store ([`contained_store_use`]), as [`handed_to_contained_prop`] asks of a
+/// prop.
+fn handed_to_contained_context(
+    file: &FileFacts,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    dialect: Option<&dyn solid_dialect::Dialect>,
     reference: Span,
     initial: Span,
 ) -> bool {
-    handed_component_prop(file, lookup, reference).is_some_and(|(component, prop)| {
-        component_prop_reads(file, component, prop).is_some_and(|reads| {
+    handed_context_key(file, lookup, dialect, reference).is_some_and(|(context, key)| {
+        context_key_reads(file, lookup, dialect, context, &key).is_some_and(|reads| {
             const_alias_reads(file, reads).is_some_and(|reads| {
                 reads
                     .iter()
                     .all(|read| contained_store_use(file, *read, initial))
             })
         })
+    })
+}
+
+/// ADR 1172: the store reference `reference` is handed to an exact local component's prop ([`handed_component_prop`]) whose every read
+/// ([`component_prop_reads`]) is itself a contained use of the store ([`contained_store_use`]): the proxy goes nowhere else.
+fn handed_to_contained_prop(
+    file: &FileFacts,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+    dialect: Option<&dyn solid_dialect::Dialect>,
+    reference: Span,
+    initial: Span,
+) -> bool {
+    handed_component_prop(file, lookup, reference).is_some_and(|(component, prop)| {
+        component_prop_reads(file, lookup, dialect, component, prop, PROPS_VIEW_DEPTH).is_some_and(
+            |reads| {
+                const_alias_reads(file, reads).is_some_and(|reads| {
+                    reads
+                        .iter()
+                        .all(|read| contained_store_use(file, *read, initial))
+                })
+            },
+        )
     })
 }
 

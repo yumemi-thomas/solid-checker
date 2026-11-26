@@ -20,7 +20,7 @@
   "SC1001 no-hydration-subtree": 2,
   "SC1001 package-finding-at-entry": 141,
   "SC1001 package-value-read": 182,
-  "SC1001 read-backing-unproven": 420,
+  "SC1001 read-backing-unproven": 434,
   "SC1001 store-handed-to-package": 1,
   "SC1001 strict-read-unaccounted": 18,
   "SC1001 summary-read-unplaced": 97,
@@ -89,8 +89,8 @@
   "SC2003 search-depth-limit": 1,
   "SC2003 store-handed-to-package": 1,
   "SC2003 store-operation-may-not-write": 47,
-  "SC2003 store-write-unproven": 112,
-  "SC2003 unproven-container-root": 147,
+  "SC2003 store-write-unproven": 117,
+  "SC2003 unproven-container-root": 148,
   "SC2004 async-slot-unmodelled": 4,
   "SC2004 component-identity-unproven": 1,
   "SC2004 computation-error-unobserved": 26,
@@ -130,7 +130,7 @@
   "SC3001 function-run-unplaced": 44,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 7,
-  "SC3001 leaf-operation-unaccounted": 7234,
+  "SC3001 leaf-operation-unaccounted": 7236,
   "SC3001 leaf-owner-unproven": 69,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
@@ -291,9 +291,9 @@
   "SC9012 value-bound-held": 6,
   "SC9012 value-escaped-from-untrack": 8,
   "SC9012 value-exported-unnamed": 6,
-  "SC9012 value-forwarded": 293,
+  "SC9012 value-forwarded": 307,
   "SC9012 value-from-primitive-callback": 36,
-  "SC9012 value-held-in-binding": 167,
+  "SC9012 value-held-in-binding": 177,
   "SC9012 value-held-in-member": 31,
   "SC9012 value-in-carrier": 497,
   "SC9012 value-in-class-field": 14,
@@ -6909,6 +6909,18 @@
    "fixtures": {
     "proved": "reactive-ir/iife-prop-read",
     "open": "reactive-ir/ref-factory-call"
+   }
+  },
+  {
+   "fixture": "reactive-ir/owner-call-effect-creation-inline-handler",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 1213",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::runs_on_host_entry",
+   "fixtures": {
+    "proved": "reactive-ir/owner-call-effect-creation-inline-handler",
+    "open": "reactive-ir/owner-call-effect-creation-inline-handler"
    }
   }
  ],

@@ -893,6 +893,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/prop-alias-link-get/node_modules/**
 !fixtures/reactive-ir/store-write-through-prop/node_modules/
 !fixtures/reactive-ir/store-write-through-prop/node_modules/**
+!fixtures/reactive-ir/store-write-through-prop-view/node_modules/
+!fixtures/reactive-ir/store-write-through-prop-view/node_modules/**
 !fixtures/reactive-ir/flush-closure-called-once/node_modules/
 !fixtures/reactive-ir/flush-closure-called-once/node_modules/**
 !fixtures/reactive-ir/effect-error-arm-read/node_modules/
@@ -2312,6 +2314,10 @@ packages/wasm/owned/
 !fixtures/reactive-ir/arm-only-store-destructure/node_modules/**
 !fixtures/reactive-ir/owner-call-effect-creation/variants/inline-handler/node_modules/
 !fixtures/reactive-ir/owner-call-effect-creation/variants/inline-handler/node_modules/**
+!fixtures/reactive-ir/effect-creation-host-entry/node_modules/
+!fixtures/reactive-ir/effect-creation-host-entry/node_modules/**
+!fixtures/reactive-ir/effect-creation-host-entry/variants/apply/node_modules/
+!fixtures/reactive-ir/effect-creation-host-entry/variants/apply/node_modules/**
 !fixtures/reactive-ir/named-ref-entry/node_modules/
 !fixtures/reactive-ir/named-ref-entry/node_modules/**
 !fixtures/reactive-ir/component-prop-call-owner/node_modules/

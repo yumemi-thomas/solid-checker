@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1213 (fixture effect-creation-host-entry/variants/apply, ApplyMember): PRIMITIVE_IN_EFFECT_CALLBACK: an object's setTimeout member runs its argument at once."
+}

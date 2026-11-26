@@ -475,7 +475,7 @@ impl<'a> Question<'_, '_, 'a> {
                 self.entities,
                 self.symbol_names,
                 self.lookup,
-            ) && (super::owner_emission::runs_in_delivered_handler(file, span, self.lookup)
+            ) && (super::owner_emission::runs_on_host_entry(file, span, self.lookup)
                 || !entry_open())
                 // ADR 1190: a component prop's literal ADR 1171 proves entered by the child's calls runs where those calls run, not where
                 // it is written: the role must place each call off every apply too (`er-prop-apply-*`: a JSX creation in a literal the
