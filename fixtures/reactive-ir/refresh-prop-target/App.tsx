@@ -107,3 +107,76 @@ export function WrittenParent() {
   const m1 = createMemo(() => 1);
   return <Written m1={m1} />;
 }
+
+// ADR 1230: a component that hands the target's component its own props whole (`<InForward {...props} />`) passes what its own
+// callers pass (ADR 1173's checked forwards): violations through one and two forwarders; uncertifiable where the forwarder sets
+// `m1` itself or its callers pass two sources.
+function InForward(props: { m1: SourceAccessor<number> }) {
+  const m2 = createMemo(() => {
+    refresh(props.m1);
+    return 1;
+  });
+  return <p>{m2()}</p>;
+}
+function Forwarder(props: { m1: SourceAccessor<number> }) {
+  return <InForward {...props} />;
+}
+export function ForwardedParent() {
+  const m1 = createMemo(() => 1);
+  return <Forwarder m1={m1} />;
+}
+
+function InTwoLevels(props: { m1: SourceAccessor<number> }) {
+  const m2 = createMemo(() => {
+    refresh(props.m1);
+    return 1;
+  });
+  return <p>{m2()}</p>;
+}
+function Inner2(props: { m1: SourceAccessor<number> }) {
+  return <InTwoLevels {...props} />;
+}
+function Outer2(props: { m1: SourceAccessor<number> }) {
+  return <Inner2 {...props} />;
+}
+export function TwoLevelParent() {
+  const m1 = createMemo(() => 1);
+  return <Outer2 m1={m1} />;
+}
+
+function InOverride(props: { m1: SourceAccessor<number> }) {
+  const m2 = createMemo(() => {
+    refresh(props.m1);
+    return 1;
+  });
+  return <p>{m2()}</p>;
+}
+function Overrider(props: { m1: SourceAccessor<number> }) {
+  const other = createMemo(() => 2);
+  return <InOverride {...props} m1={other} />;
+}
+export function OverrideParent() {
+  const m1 = createMemo(() => 1);
+  return <Overrider m1={m1} />;
+}
+
+function InForwardTwo(props: { m1: SourceAccessor<number> }) {
+  const m2 = createMemo(() => {
+    refresh(props.m1);
+    return 1;
+  });
+  return <p>{m2()}</p>;
+}
+function ForwarderTwo(props: { m1: SourceAccessor<number> }) {
+  return <InForwardTwo {...props} />;
+}
+export function ForwardTwo() {
+  const a = createMemo(() => 1);
+  const b = createMemo(() => 2);
+  return (
+    <div>
+      <ForwarderTwo m1={a} />
+      <ForwarderTwo m1={b} />
+    </div>
+  );
+}

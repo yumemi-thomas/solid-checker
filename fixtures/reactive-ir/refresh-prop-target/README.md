@@ -10,3 +10,8 @@ write unplaced (SC2001 `function-run-unplaced`) although the call sits directly 
 Violations: `MemoParent` (in a memo), `EffectParent` (in an effect's compute), `DestructuredParent` (a never-written slot of a destructured props parameter). Clean: `HandlerParent`. Uncertifiable: `TwoCallers`
 (two sources), `SpreadParent` (a spread caller), `WrittenParent` (the component writes `props.m1`). Chrome:
 `runtime-oracle/refresh-prop-target`. Stub: reduced rc.21 signatures (`refresh` takes an accessor here for the brand).
+
+**ADR 1230.** A component that hands the target's component its own props whole passes what its callers pass (ADR 1173's
+checked forwards, `passed_through_forwards`): `ForwardedParent` (one forwarder) and `TwoLevelParent` (two) are violations;
+`OverrideParent` (the forwarder sets `m1` after its spread) and `ForwardTwo` (the forwarder's callers pass two memos) stay
+uncertifiable.

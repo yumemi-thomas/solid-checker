@@ -157,6 +157,9 @@ pub(crate) struct PassedSource {
 /// the parameter pattern span (how the destructure rule addresses a
 /// destructured parameter).
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
+/// ADR 1230: how many components handing their own props whole [`PropsReactivityIndex::passed_through_forwards`] follows.
+const FORWARD_DEPTH: usize = 4;
+
 pub(crate) struct PropsReactivityIndex {
     /// Whether the dialect asked for caller proof at all. When false, every
     /// query answers [`PropUse::Reactive`] — the upstream over-approximation
@@ -413,6 +416,50 @@ impl PropsReactivityIndex {
                 forwards,
             )
         })
+    }
+
+    /// ADR 1230: [`Self::passed_on_every_site`] followed through the components that hand this one their own props whole
+    /// (`<C1 {...props} />` in `M1`): at each level the sources every enumerated caller passes `name`, and the forwards'
+    /// callers in turn, where every forwarding element is one ADR 1173 checks (the props root current through its spreads,
+    /// `SpreadForwards::checked`) and sets no `name` itself. `None` where a level is not enumerated, passes a plain value or a
+    /// function, forwards unchecked, or the chain is deeper than [`FORWARD_DEPTH`].
+    pub(crate) fn passed_through_forwards(
+        &self,
+        declaration: &Location,
+        name: &str,
+    ) -> Option<Vec<SymbolId>> {
+        let mut sources = Vec::new();
+        let mut seen = Vec::new();
+        let mut pending = vec![(declaration.clone(), 0usize)];
+        while let Some((at, depth)) = pending.pop() {
+            if seen.contains(&at) {
+                continue;
+            }
+            if depth > FORWARD_DEPTH {
+                return None;
+            }
+            let (passed, plain, forwards) = self.passed_on_every_site(&at, name)?;
+            if plain {
+                return None;
+            }
+            if !forwards.is_empty()
+                && !matches!(
+                    self.by_declaration.get(&at),
+                    Some(PropsReactivity::Escaping {
+                        spread_forwards: Some(SpreadForwards { checked: true, .. }),
+                        ..
+                    })
+                )
+            {
+                return None;
+            }
+            sources.extend(passed);
+            pending.extend(forwards.into_iter().map(|parent| (parent, depth + 1)));
+            seen.push(at);
+        }
+        sources.sort();
+        sources.dedup();
+        Some(sources)
     }
 
     /// ADR 0823: every caller is enumerated, and none passes `name` a value

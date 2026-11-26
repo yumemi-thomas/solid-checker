@@ -228,6 +228,8 @@ pub(crate) enum DiscoveryRead {
     AccessorValueUse(Location, String),
     /// [`NotedProps::passed_on_every_site`] of one named slot (ADR 0919).
     PassedOnEverySite(Location, String),
+    /// ADR 1230: [`crate::source_discovery::PropsReactivityIndex::passed_through_forwards`] of one named slot.
+    PassedThroughForwards(Location, String),
     /// The primitive of a source whose accessor is declared at a location
     /// ([`primitive_declared_at`]).
     PrimitiveDeclaredAt(Location),
@@ -707,6 +709,22 @@ impl<'a> DiscoveryTables<'a> {
         entry
     }
 
+    /// ADR 1230: [`crate::source_discovery::PropsReactivityIndex::passed_through_forwards`], recorded.
+    pub(crate) fn props_passed_through_forwards(
+        &self,
+        declaration: &Location,
+        name: &str,
+    ) -> Option<Vec<SymbolId>> {
+        let answer = self
+            .props_reactivity
+            .passed_through_forwards(declaration, name);
+        note(
+            DiscoveryRead::PassedThroughForwards(declaration.clone(), name.to_owned()),
+            answer_of(&answer),
+        );
+        answer
+    }
+
     /// ADR 1174: [`crate::source_discovery::PropsReactivityIndex::passed_on_every_site`], recorded.
     pub(crate) fn props_passed_on_every_site(
         &self,
@@ -859,6 +877,11 @@ impl<'a> DiscoveryTables<'a> {
                     &self
                         .props_reactivity
                         .passed_on_every_site(declaration, name),
+                ),
+                DiscoveryRead::PassedThroughForwards(declaration, name) => answer_of(
+                    &self
+                        .props_reactivity
+                        .passed_through_forwards(declaration, name),
                 ),
                 DiscoveryRead::PrimitiveDeclaredAt(declaration) => answer_of(
                     &primitive_declared_at_in(self.accessors, self.source_primitives, declaration),

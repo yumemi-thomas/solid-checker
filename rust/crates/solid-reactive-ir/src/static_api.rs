@@ -1656,12 +1656,20 @@ impl StaticApiContext<'_> {
         let (sources, plain, forwards) = self
             .tables
             .props_passed_on_every_site(&declaration, &name)?;
+        if plain {
+            return None;
+        }
+        // ADR 1230: a component that hands this one its own props whole (`<C1 {...props} />`) passes what its own callers
+        // pass, followed through ADR 1173's checked forwards.
+        let sources = if forwards.is_empty() {
+            sources
+        } else {
+            self.tables
+                .props_passed_through_forwards(&declaration, &name)?
+        };
         let [source] = sources.as_slice() else {
             return None;
         };
-        if plain || !forwards.is_empty() {
-            return None;
-        }
         let kind = *self.tables.source_kind(source)?;
         if kind == ReactiveSourceKind::Store && self.tables.value_form_store(source) {
             return None;
