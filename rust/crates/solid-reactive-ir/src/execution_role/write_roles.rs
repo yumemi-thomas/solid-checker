@@ -1489,7 +1489,8 @@ pub(super) fn windowed_returned_cleanup(
 /// compute provably tracks nothing), so that the cleanup runs only when the effect's owner is disposed: the cleanup is a literal the
 /// apply returns, which no other code can name, and with no rerun nothing else calls it. A disposal runs it outside any strict-read
 /// window unless code in the project can dispose an owner on a stack of its own ([`SemanticLookup::project_may_dispose`], ADR 0695,
-/// the premise `onCleanup`'s callbacks rest on). The cleanup is neither `async` nor a generator, and the read is in its own body
+/// the premise `onCleanup`'s callbacks rest on), other than from an event handler ([`SemanticLookup::project_disposes_only_from_handlers`],
+/// ADR 1230). The cleanup is neither `async` nor a generator, and the read is in its own body
 /// (no nested function, instance field or parameter default). A read only: where a row of a `For` is disposed the cleanup runs owned,
 /// which owner codes would read differently, so nothing but the read role takes this answer.
 pub(crate) fn returned_cleanup_disposal_only(
@@ -1504,7 +1505,7 @@ pub(crate) fn returned_cleanup_disposal_only(
         && !cleanup.generator
         && !super::events::inside_instance_field(file, span)
         && windowed_returned_cleanup(file, cleanup, lookup) == Some(WindowedCleanup::NeverReruns)
-        && !lookup.project_may_dispose()
+        && (!lookup.project_may_dispose() || lookup.project_disposes_only_from_handlers())
 }
 
 /// Whether the effect's compute (its first argument, an inline function the

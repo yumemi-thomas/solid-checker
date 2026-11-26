@@ -212,6 +212,10 @@ impl SemanticLookup<'_> {
                 if self.may_dispose() {
                     names.push(Arc::from("may-dispose"));
                 }
+                // ADR 1230: and this.
+                if self.disposes_from_handlers() {
+                    names.push(Arc::from("disposes-from-handlers"));
+                }
                 ProbeAnswer::Names(names)
             }
             (Probe::DeclarationSymbolAt, PolledKey::FileSpan(id, span)) => ProbeAnswer::Symbols(

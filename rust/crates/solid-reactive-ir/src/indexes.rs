@@ -970,6 +970,9 @@ pub(super) struct SemanticLookup<'a> {
     /// [`Self::project_may_dispose`], part of `Section::ProjectPrimitives`'
     /// value, because any file's call moves it.
     project_may_dispose: OnceLock<bool>,
+    /// ADR 1230: [`Self::project_disposes_only_from_handlers`], part of `Section::ProjectPrimitives`' value as
+    /// [`Self::project_may_dispose`] is.
+    project_disposes_from_handlers: OnceLock<bool>,
     returned_callback_proof_digest: OnceLock<Option<CrossFileProofDigest>>,
     project_has_component_type: crate::base::reads::Recorded<bool>,
     /// Proven components, then functions whose only missing proof is an
@@ -1361,6 +1364,7 @@ impl<'a> SemanticLookup<'a> {
             file_named_callback_roles: OnceLock::new(),
             project_primitives: OnceLock::new(),
             project_may_dispose: OnceLock::new(),
+            project_disposes_from_handlers: OnceLock::new(),
             callback_capabilities: OnceLock::new(),
             returned_callback_proof_digest: OnceLock::new(),
             project_has_component_type: crate::base::reads::Recorded::new(),
@@ -1575,6 +1579,40 @@ impl<'a> SemanticLookup<'a> {
     pub(crate) fn project_may_dispose(&self) -> bool {
         crate::base::reads::note_once(crate::base::reads::Section::ProjectPrimitives);
         self.may_dispose()
+    }
+
+    /// ADR 1230: whether every disposal the project can make ([`Self::project_may_dispose`]) runs from an event handler, where no
+    /// strict-read window is open: no `getOwner` or `createOwner`, no `render`, `hydrate` or `onCleanup` whose result is kept, and
+    /// every `createRoot` whose callback takes its `dispose` hands it back only as `return dispose;` written in that callback's
+    /// own body, with the call's result the whole initializer of a `const` every reference of which is the callee of a call
+    /// statement written directly in the body of an inline `on…` handler of an intrinsic element.
+    pub(crate) fn project_disposes_only_from_handlers(&self) -> bool {
+        crate::base::reads::note_once(crate::base::reads::Section::ProjectPrimitives);
+        self.disposes_from_handlers()
+    }
+
+    fn disposes_from_handlers(&self) -> bool {
+        use solid_dialect::Primitive;
+        *self.project_disposes_from_handlers.get_or_init(|| {
+            let primitives = self.project_primitives();
+            if primitives.contains(&Primitive::GetOwner)
+                || primitives.contains(&Primitive::CreateOwner)
+            {
+                return false;
+            }
+            self.file_slots().iter().all(|file| {
+                file.ast
+                    .calls
+                    .iter()
+                    .all(|call| match self.primitive_at_call(file, call.span) {
+                        Some(Primitive::Render | Primitive::Hydrate | Primitive::OnCleanup) => {
+                            call.result_discarded
+                        }
+                        Some(Primitive::CreateRoot) => root_dispose_from_handlers(file, call),
+                        _ => true,
+                    })
+            })
+        })
     }
 
     fn may_dispose(&self) -> bool {
@@ -2193,6 +2231,7 @@ impl<'a> SemanticLookup<'a> {
                     text(&mut hasher, &primitive);
                 }
                 hasher.update([u8::from(self.may_dispose())]);
+                hasher.update([u8::from(self.disposes_from_handlers())]);
             }
             Section::ReflectiveDefinition => {
                 hasher.update([u8::from(
@@ -3489,4 +3528,92 @@ impl<'a> IntoIterator for &SymbolReferenceList<'a> {
     fn into_iter(self) -> Self::IntoIter {
         Box::new(self.iter())
     }
+}
+
+/// ADR 1230: whether a `createRoot` call hands its `dispose` only to event handlers ([`SemanticLookup::project_disposes_only_from_handlers`]):
+/// a callback literal that takes no parameter disposes nothing the project can call; one that takes `dispose` (an identifier) uses it
+/// only as `return dispose;` in its own body, the call is the whole initializer of a `const`, and every reference of that `const` is the
+/// callee of a call statement written directly in an inline `on…` handler of an intrinsic element.
+fn root_dispose_from_handlers(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> bool {
+    use solid_facts::ast::{BindingShape, IdentifierRole};
+    let ast = &file.ast;
+    let Some(callback) = call
+        .arguments
+        .first()
+        .and_then(|argument| ast.function_at(ast.peel_ts_sugar_span(argument.span)))
+    else {
+        return false;
+    };
+    let [parameter] = callback.parameters.as_slice() else {
+        return callback.parameters.is_empty();
+    };
+    let Some([dispose]) =
+        (parameter.shape == BindingShape::Identifier).then_some(parameter.names.as_slice())
+    else {
+        return false;
+    };
+    let references = |declaration: Span| {
+        ast.identifiers.iter().filter(move |identifier| {
+            identifier.role == IdentifierRole::Reference
+                && ast.reference_declaration(identifier.span) == Some(declaration)
+        })
+    };
+    let handed_back = references(dispose.span).all(|reference| {
+        ast.returns.iter().any(|returned| {
+            returned
+                .argument
+                .map(|argument| ast.peel_ts_sugar_span(argument))
+                == Some(reference.span)
+                && crate::owners::containing_ast_function(ast, returned.span)
+                    .map(|function| function.span)
+                    == Some(callback.span)
+        })
+    });
+    if !handed_back {
+        return false;
+    }
+    let Some(binding) = ast.bindings.iter().find(|binding| {
+        binding.shape == BindingShape::Identifier
+            && binding.immutable
+            && binding
+                .initializer
+                .map(|value| ast.peel_ts_sugar_span(value))
+                == Some(call.span)
+    }) else {
+        return false;
+    };
+    let Some(name) = binding.names.first() else {
+        return false;
+    };
+    references(name.span).all(|reference| {
+        ast.calls.iter().any(|use_call| {
+            ast.peel_ts_sugar_span(use_call.callee) == reference.span
+                && use_call.result_discarded
+                && use_call.arguments.is_empty()
+                && ast.jsx_elements.iter().any(|element| {
+                    crate::object_members::intrinsic_element(file, element)
+                        && element.spreads.is_empty()
+                        && element.attributes.iter().any(|attribute| {
+                            attribute.namespace.is_none()
+                                && file.source_text(attribute.local_name).is_some_and(|name| {
+                                    name.len() > 2
+                                        && name.starts_with("on")
+                                        && name[2..].starts_with(|c: char| c.is_ascii_uppercase())
+                                })
+                                && attribute.expression.is_some_and(|expression| {
+                                    let handler =
+                                        ast.function_at(ast.peel_ts_sugar_span(expression));
+                                    handler.is_some_and(|handler| {
+                                        crate::owners::containing_ast_function(ast, use_call.span)
+                                            .map(|function| function.span)
+                                            == Some(handler.span)
+                                    })
+                                })
+                        })
+                })
+        })
+    })
 }
