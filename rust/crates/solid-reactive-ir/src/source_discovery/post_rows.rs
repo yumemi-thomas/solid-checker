@@ -422,6 +422,23 @@ pub(super) fn file_rows(ctx: &StageContext<'_>, slot: usize, file: &FileFacts) -
             names: vec![(symbol.clone(), name_of(alias.local))],
         });
     }
+    // ADR 1233: a parameter bound to the one argument of its function's one call (`const useT = (n) => …; useT(a1)`) holds exactly
+    // the `const` that argument names, as a local alias does.
+    for (local, held) in single_call_parameter_aliases(file) {
+        let (Some(source), Some(symbol)) = (
+            entities.get(&location(path.clone(), held)),
+            entities.get(&location(path.clone(), local)),
+        ) else {
+            continue;
+        };
+        rows.aliases.push(AliasRow {
+            source: source.clone(),
+            immutable: true,
+            exact: true,
+            import: false,
+            names: vec![(symbol.clone(), name_of(local))],
+        });
+    }
     // ADR 0511: a slot of an inline object literal holding a named runtime
     // import (`const { d } = { d: a1 }`), the literal's other properties
     // plain data with static keys.
@@ -1044,4 +1061,87 @@ pub(crate) fn import_alias_declaration(file: &FileFacts, declaration: Span) -> b
         }
         solid_facts::ast::BindingShape::Array => false,
     }
+}
+
+/// ADR 1233: (parameter, the `const` it holds) for each parameter bound to the one argument of its function's one call: the function
+/// is the whole initializer of a `const` identifier whose one reference is the callee of a call (not `new`), and the parameter a plain
+/// identifier with no default, never written, whose argument (no spread at or before it) is a reference to a `const` variable. Every
+/// run of the function is that call's, so the parameter holds that variable's value wherever its body, or a function in it, reads it.
+fn single_call_parameter_aliases(
+    file: &solid_facts::FileFacts,
+) -> Vec<(solid_facts::core::Span, solid_facts::core::Span)> {
+    use solid_facts::ast::{BindingShape, IdentifierRole};
+    let ast = &file.ast;
+    use solid_facts::core::Span;
+    let references = |declaration: Span| {
+        ast.identifiers
+            .iter()
+            .filter(move |identifier| {
+                identifier.role == IdentifierRole::Reference
+                    && ast.reference_declaration(identifier.span) == Some(declaration)
+            })
+            .map(|identifier| identifier.span)
+    };
+    let const_variable = |declaration: Span| {
+        ast.bindings.iter().any(|binding| {
+            binding.immutable && binding.names.iter().any(|name| name.span == declaration)
+        })
+    };
+    let mut aliases = Vec::new();
+    for binding in &ast.bindings {
+        if !binding.immutable || binding.shape != BindingShape::Identifier {
+            continue;
+        }
+        let (Some(name), Some(initializer)) = (binding.names.first(), binding.initializer) else {
+            continue;
+        };
+        let Some(function) = ast.function_at(ast.peel_ts_sugar_span(initializer)) else {
+            continue;
+        };
+        let mut uses = references(name.span);
+        let (Some(reference), None) = (uses.next(), uses.next()) else {
+            continue;
+        };
+        let Some(call) = ast
+            .calls
+            .iter()
+            .find(|call| !call.construct && ast.peel_ts_sugar_span(call.callee) == reference)
+        else {
+            continue;
+        };
+        for (index, parameter) in function.parameters.iter().enumerate() {
+            let Some(local) = parameter.names.first() else {
+                continue;
+            };
+            if parameter.shape != BindingShape::Identifier
+                || parameter.initializer.is_some()
+                || crate::indexes::binding_written(file, local.span)
+                || call
+                    .arguments
+                    .iter()
+                    .take(index + 1)
+                    .any(|argument| argument.spread)
+            {
+                continue;
+            }
+            let Some(argument) = call.arguments.get(index) else {
+                continue;
+            };
+            let argument = ast.peel_ts_sugar_span(argument.span);
+            let Some(held) = ast
+                .identifiers
+                .iter()
+                .find(|identifier| {
+                    identifier.span == argument && identifier.role == IdentifierRole::Reference
+                })
+                .and_then(|identifier| ast.reference_declaration(identifier.span))
+            else {
+                continue;
+            };
+            if const_variable(held) {
+                aliases.push((local.span, held));
+            }
+        }
+    }
+    aliases
 }

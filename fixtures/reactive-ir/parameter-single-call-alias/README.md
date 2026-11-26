@@ -1,0 +1,3 @@
+# parameter-single-call-alias
+
+**Claim (ADR 1233).** A parameter bound to the one argument of its function's one call (the function the whole initializer of a `const` whose one reference is that call's callee; the parameter a plain identifier with no default, never written; the argument a `const` variable) is an exact alias of that variable (ADR 0463): `HandedChain` (the read in the method the function returns, called at once in an effect's apply) is an SC1001 violation (main: SC9012 uncertifiable `handed-member-read`; Chrome rc.21 STRICT_READ_UNTRACKED on the grid's `handed-chain` programs). Uncertifiable: `TwoCalls`, `Written`. Clean: `InHandler`. Stub: `effect-cleanup-disposal-only`'s.
