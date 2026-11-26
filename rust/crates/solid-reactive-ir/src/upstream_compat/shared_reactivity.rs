@@ -6050,7 +6050,7 @@ fn handed_to_contained_context(
 ) -> bool {
     handed_context_key(file, lookup, dialect, reference).is_some_and(|(context, key)| {
         context_key_reads(file, lookup, dialect, context, &key).is_some_and(|reads| {
-            const_alias_reads(file, reads).is_some_and(|reads| {
+            carried_store_reads(file, reads).is_some_and(|reads| {
                 reads
                     .iter()
                     .all(|read| contained_store_use(file, *read, initial))
@@ -6071,7 +6071,7 @@ fn handed_to_contained_prop(
     handed_component_prop(file, lookup, reference).is_some_and(|(component, prop)| {
         component_prop_reads(file, lookup, dialect, component, prop, PROPS_VIEW_DEPTH).is_some_and(
             |reads| {
-                const_alias_reads(file, reads).is_some_and(|reads| {
+                carried_store_reads(file, reads).is_some_and(|reads| {
                     reads
                         .iter()
                         .all(|read| contained_store_use(file, *read, initial))
@@ -6079,6 +6079,229 @@ fn handed_to_contained_prop(
             },
         )
     })
+}
+
+/// How many carrier steps [`carried_store_reads`] follows from all reads together.
+const CARRY_STEPS: usize = 64;
+
+/// ADR 1231: `reads` (each a value of the handed store: a prop's or a context key's read) carried forward to the places that use the
+/// value, through local carriers that hand it on unchanged:
+/// - an exact `const` identifier alias (`const useIt = props.s1`): its references (ADR 1172's [`const_alias_reads`]);
+/// - a data slot of a closed object literal, or an element of an array literal with no spread or hole up to it (`{ useIt: props.s1 }`,
+///   `[0, props.s1]`): that literal, with the slot's key still to project ([`carried_projection`]).
+/// Anything else is a use, which the caller judges. `None` where a carrier flows somewhere this does not follow, or past
+/// [`CARRY_STEPS`].
+fn carried_store_reads(file: &FileFacts, reads: Vec<Span>) -> Option<Vec<Span>> {
+    let ast = &file.ast;
+    let mut pending: Vec<(Span, Vec<String>)> =
+        reads.into_iter().map(|read| (read, Vec::new())).collect();
+    let mut out = Vec::new();
+    let mut steps = 0;
+    while let Some((at, path)) = pending.pop() {
+        steps += 1;
+        if steps > CARRY_STEPS {
+            return None;
+        }
+        let at = ast.peel_ts_sugar_span(at);
+        if path.is_empty() {
+            if let Some(binding) = whole_const_initializer(file, at) {
+                if binding.shape != solid_facts::ast::BindingShape::Identifier
+                    || binding.names.len() != 1
+                {
+                    return None;
+                }
+                pending.extend(
+                    references_of(file, binding.names[0].span)
+                        .map(|reference| (reference, Vec::new())),
+                );
+                continue;
+            }
+            if let Some((literal, key)) = literal_slot_of(file, at) {
+                pending.push((literal, vec![key]));
+                continue;
+            }
+            out.push(at);
+            continue;
+        }
+        pending.extend(carried_projection(file, at, &path)?);
+    }
+    Some(out)
+}
+
+/// ADR 1231: where the carrier at `at`, which holds the store at the keys `path`, hands it on: a static member read of the first key
+/// (the rest to project past it; another key's read reads none of the store), an exact `const` binding of it (an identifier's
+/// references, or the one plain slot of a rest-free object or array pattern that takes the key), the value a local function returns on
+/// its one straight-line return, at each direct call of the function (its only uses), or the slot of an enclosing literal. `None` for
+/// any other place.
+fn carried_projection(
+    file: &FileFacts,
+    at: Span,
+    path: &[String],
+) -> Option<Vec<(Span, Vec<String>)>> {
+    let ast = &file.ast;
+    let (first, rest) = path.split_first()?;
+    if let Some(member) = ast
+        .members
+        .iter()
+        .find(|member| ast.peel_ts_sugar_span(member.object) == at)
+    {
+        if ast.computed_members.binary_search(&member.span).is_ok()
+            || ast.optional_members.binary_search(&member.span).is_ok()
+        {
+            return None;
+        }
+        let name = file.source_text(member.property)?;
+        return Some(if name == first {
+            vec![(member.span, rest.to_vec())]
+        } else {
+            Vec::new()
+        });
+    }
+    if let Some(binding) = whole_const_initializer(file, at) {
+        return match binding.shape {
+            solid_facts::ast::BindingShape::Identifier if binding.names.len() == 1 => Some(
+                references_of(file, binding.names[0].span)
+                    .map(|reference| (reference, path.to_vec()))
+                    .collect(),
+            ),
+            solid_facts::ast::BindingShape::Object
+                if !binding.pattern_rest
+                    && binding.object_properties.len() == binding.object_slots.len() =>
+            {
+                Some(
+                    binding
+                        .object_slots
+                        .iter()
+                        .filter(|slot| slot.plain_identifier_key && slot.property.as_str() == first)
+                        .flat_map(|slot| references_of(file, slot.local.span))
+                        .map(|reference| (reference, rest.to_vec()))
+                        .collect(),
+                )
+            }
+            solid_facts::ast::BindingShape::Array if !binding.pattern_rest => {
+                let index: usize = first.parse().ok()?;
+                Some(
+                    binding
+                        .array_slots
+                        .get(index)
+                        .copied()
+                        .flatten()
+                        .into_iter()
+                        .flat_map(|local| references_of(file, local.span))
+                        .map(|reference| (reference, rest.to_vec()))
+                        .collect(),
+                )
+            }
+            _ => None,
+        };
+    }
+    if let Some(function) = returning_local_function(file, at) {
+        let name = crate::owners::function_binding_name(file, function)?;
+        let mut calls = Vec::new();
+        for reference in references_of(file, name.span) {
+            let call = ast.calls.iter().find(|call| {
+                !call.construct
+                    && ast.peel_ts_sugar_span(call.callee) == reference
+                    && call.arguments.iter().all(|argument| !argument.spread)
+            })?;
+            calls.push((call.span, path.to_vec()));
+        }
+        return Some(calls);
+    }
+    let (literal, key) = literal_slot_of(file, at)?;
+    Some(vec![(
+        literal,
+        std::iter::once(key).chain(path.iter().cloned()).collect(),
+    )])
+}
+
+/// ADR 1231: the immutable binding whose whole initializer is `at`.
+fn whole_const_initializer(file: &FileFacts, at: Span) -> Option<&solid_facts::ast::BindingFact> {
+    let ast = &file.ast;
+    ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding
+                .initializer
+                .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == at)
+            && !binding
+                .names
+                .iter()
+                .any(|name| crate::indexes::binding_written(file, name.span))
+    })
+}
+
+/// ADR 1231: the references of the declaration at `declaration`.
+fn references_of(file: &FileFacts, declaration: Span) -> impl Iterator<Item = Span> + '_ {
+    file.ast.identifiers.iter().filter_map(move |identifier| {
+        (identifier.role == IdentifierRole::Reference
+            && file.ast.reference_declaration(identifier.span) == Some(declaration))
+        .then_some(identifier.span)
+    })
+}
+
+/// ADR 1231: the literal `at` is written in and the key it is written at: a data, non-method, non-computed slot of a closed object
+/// literal, or an element of an array literal with no spread or hole up to it.
+fn literal_slot_of(file: &FileFacts, at: Span) -> Option<(Span, String)> {
+    let ast = &file.ast;
+    if let Some(shape) = ast.object_get_shapes.iter().find(|shape| {
+        shape.closed
+            && shape.span != at
+            && shape.span.contains(at)
+            && crate::interproc::accessor_provenance::closed_properties(file, shape.span)
+                .is_some_and(|properties| {
+                    properties.iter().any(|property| {
+                        ast.peel_ts_sugar_span(property.shorthand_binding.unwrap_or(property.value))
+                            == at
+                            || ast.peel_ts_sugar_span(property.value) == at
+                    })
+                })
+    }) {
+        let properties =
+            crate::interproc::accessor_provenance::closed_properties(file, shape.span)?;
+        let property = properties.iter().find(|property| {
+            ast.peel_ts_sugar_span(property.shorthand_binding.unwrap_or(property.value)) == at
+                || ast.peel_ts_sugar_span(property.value) == at
+        })?;
+        if !property.data || property.method || property.computed {
+            return None;
+        }
+        return Some((shape.span, crate::kernel::property_key(file, property.key)?));
+    }
+    let array = ast
+        .array_literals
+        .iter()
+        .filter_map(|span| ast.array_literal_at(*span))
+        .find(|array| {
+            array
+                .elements
+                .iter()
+                .any(|element| ast.peel_ts_sugar_span(element.span) == at)
+        })?;
+    let index = array
+        .elements
+        .iter()
+        .position(|element| ast.peel_ts_sugar_span(element.span) == at)?;
+    if array.elements[..=index]
+        .iter()
+        .any(|element| element.kind != solid_facts::ast::ArrayElementKind::Value)
+    {
+        return None;
+    }
+    Some((array.span, index.to_string()))
+}
+
+/// ADR 1231: the local plain function `at` is the value of: its expression body, or the argument of its one straight-line return.
+fn returning_local_function(file: &FileFacts, at: Span) -> Option<&solid_facts::ast::FunctionFact> {
+    let function = crate::owners::owning_function(&file.ast, at)?;
+    if function.r#async || function.generator {
+        return None;
+    }
+    let (values, single) = returned_expressions(file, function);
+    (single
+        && values
+            .iter()
+            .any(|value| file.ast.peel_ts_sugar_span(*value) == at))
+    .then_some(function)
 }
 
 /// ADR 1172: `reads` with each read that is the whole initializer of a `const` identifier binding (`const useIt = props.s1`) replaced by
