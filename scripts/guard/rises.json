@@ -8544,6 +8544,54 @@
    "to": 9,
    "adr": "ADR 1193",
    "fact": "ADR 1193 part 2 (facts schema 110, destructure_sites): the fixture store-destructure-roots gains the ten part-2 components (AssignBody, AssignMergeBody, AssignMember, ArrayBody, ArraySecond violations, AssignMemo and ArrayMemo clean, ArrayHole, ArraySpread and AssignProps uncertifiable by design), so its uncertifiable rows rise by their new sites (SC1003 destructure-root-unproven 3 -> 6, SC3001 leaf-operation-unaccounted 3 -> 8, SC4001 owner-callers-unenumerated 2 -> 5, SC6002 effect-creation-unaccounted 3 -> 8, SC9012 value-held-in-binding 0 -> 1, SC9012 value-in-carrier 3 -> 9); reactive-ir/rc21-after-await-handed SC1003 props-callers-unenumerated 0 -> 1: the assignment in an effect apply stays SC1003 uncertifiable, a blocker relabelled (its const-destructure in onClick loses 2 SC9012 rows, recorded with a drops row)"
+  },
+  {
+   "fixture": "reactive-ir/store-destructure-roots",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 8,
+   "to": 9,
+   "adr": "ADR 1226",
+   "fact": "the fixture gained ContextMerge and HolderMerge (a store reached through a context or a holder's member, merged and destructured): no rule reads those slots, so the value-use census keeps an uncertifiable row at each new site, never a silence (main certified the context form clean, Chrome warns STRICT_READ_UNTRACKED)"
+  },
+  {
+   "fixture": "reactive-ir/store-destructure-roots",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 5,
+   "to": 6,
+   "adr": "ADR 1226",
+   "fact": "the fixture gained ContextMerge and HolderMerge (a store reached through a context or a holder's member, merged and destructured): no rule reads those slots, so the value-use census keeps an uncertifiable row at each new site, never a silence (main certified the context form clean, Chrome warns STRICT_READ_UNTRACKED)"
+  },
+  {
+   "fixture": "reactive-ir/store-destructure-roots",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 8,
+   "to": 9,
+   "adr": "ADR 1226",
+   "fact": "the fixture gained ContextMerge and HolderMerge (a store reached through a context or a holder's member, merged and destructured): no rule reads those slots, so the value-use census keeps an uncertifiable row at each new site, never a silence (main certified the context form clean, Chrome warns STRICT_READ_UNTRACKED)"
+  },
+  {
+   "fixture": "reactive-ir/store-destructure-roots",
+   "key": "SC9012 value-in-carrier",
+   "from": 9,
+   "to": 13,
+   "adr": "ADR 1226",
+   "fact": "the fixture gained ContextMerge and HolderMerge (a store reached through a context or a holder's member, merged and destructured): no rule reads those slots, so the value-use census keeps an uncertifiable row at each new site, never a silence (main certified the context form clean, Chrome warns STRICT_READ_UNTRACKED)"
+  },
+  {
+   "fixture": "reactive-ir/store-write-through-prop",
+   "key": "SC1001 read-backing-unproven",
+   "from": 15,
+   "to": 21,
+   "adr": "ADR 1225",
+   "fact": "the fixture gained AndNoopChild, NullishNoopChild and OrWritesChild (a logical assignment through a handed store): the two no-op forms (`&&=`, `??=` over v: 0) stay uncertifiable store-operation-may-not-write (main reported violations Chrome contradicts), OrWritesChild stays a violation, and the read half of each logical assignment adds two SC1001 read-backing-unproven rows at its site"
+  },
+  {
+   "fixture": "reactive-ir/store-write-through-prop",
+   "key": "SC2003 store-operation-may-not-write",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1225",
+   "fact": "the fixture gained AndNoopChild, NullishNoopChild and OrWritesChild (a logical assignment through a handed store): the two no-op forms (`&&=`, `??=` over v: 0) stay uncertifiable store-operation-may-not-write (main reported violations Chrome contradicts), OrWritesChild stays a violation, and the read half of each logical assignment adds two SC1001 read-backing-unproven rows at its site"
   }
  ]
 }
