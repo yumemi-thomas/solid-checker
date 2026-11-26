@@ -5490,5 +5490,5 @@ Any other use of a carrier is `None`, and the proof fails closed. The bound is 6
 **Evidence.**
 - Fixture `store-write-through-carrier`: `HookChild`, `TupleChild`, `HookMemberChild` (a context source) are violations (Chrome STORE_WRITE_OUTSIDE_SETTER, `runtime-oracle/store-write-through-carrier`, covered; main: uncertifiable). `KeptChild` (the tuple handed to a function), `HandedHookChild` (the hook handed on) and `DefaultChild` (a pattern slot with a default) stay uncertifiable; Chrome drops their writes too, so they are recall misses.
 - Probe (release, VM, Chrome judge), main 18a6a811a against this, every code: mx-src (all 49,050) 3,276 recall-gap to agree; mx-pairs (the 50,112 prop- and context-sourced programs) 5,616; lg-src 21,102, lg-pairs 18,864, mx-recall 5,390 and lg-recall 2,552 (sourced) unchanged. 0 legal V, no V to U.
-**Built on main**, not on 1229: the gap does not depend on 1229's placement (on 1229 with 1211 the same programs fail the same premise in every layer).
+**Built on main**, not on 1229: on a local 1229 + 1211 build the open programs of these shapes were the same in every layer (none, closure, helper, IIFE), and the failing premise is the census, which 1229's placement does not touch.
 
