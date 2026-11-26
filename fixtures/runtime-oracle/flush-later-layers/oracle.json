@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1206: a flush in in-place layers (a helper under a closure, a chain of closures, 15 nested IIFEs) whose outermost call runs in a counted loop's later pass or a finally behind a try head's await (quiet, clean), and twins past the climb's bound or with a first-pass call (rows kept). The checker's fixture is reactive-ir/flush-later-layers."
+}

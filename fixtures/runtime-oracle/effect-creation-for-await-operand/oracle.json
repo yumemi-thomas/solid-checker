@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1215: a for await's operand is evaluated before the first suspension, on the apply's stack: PRIMITIVE_IN_EFFECT_CALLBACK, SC6002 keeps its claim."
+}

@@ -1,4 +1,4 @@
-import { For, createMemo, createSignal, createStore, untrack } from "solid-js";
+import { For, createContext, createMemo, createSignal, createStore, untrack, useContext } from "solid-js";
 
 // Positive: what a call returns, called again in the body (row at the outer call).
 export function FnAlias() {
@@ -65,6 +65,36 @@ export function UntrackLabelWrapper() {
 export function StorePushHeld() {
   const [list] = createStore<number[]>([0]);
   return <button onClick={() => { const f = Array.prototype.push.bind(list); f(1); }}>x</button>;
+}
+
+// ADR 1228: a store's member (or the store) reached through a context or a prop, handed as the receiver a standard function
+// runs on (`call`, an at-once `bind`, `Reflect.apply`): a row at the call that runs it, where Chrome reports (ADR 1208's grid programs)
+// STORE_WRITE_OUTSIDE_SETTER. Negative: another slot of the context's value (`ctx.other`), no row.
+type Lists = { s1: { items: number[] }; other: number[] };
+const ListCtx = createContext<Lists>();
+function ContextSortCallChild() {
+  const ctx = useContext<Lists>(ListCtx);
+  Array.prototype.sort.call(ctx.s1.items, (x: number, y: number) => y - x);
+  Array.prototype.sort.call(ctx.other, (x: number, y: number) => y - x);
+  return <p>x</p>;
+}
+export function ContextSortCall() {
+  const [s1] = createStore({ items: [1, 2] });
+  return <ListCtx value={{ s1, other: [1, 2] }}><ContextSortCallChild /></ListCtx>;
+}
+function PropSortBindChild(props: { s1: { items: number[] } }) {
+  return <button onClick={() => { Array.prototype.sort.bind(props.s1.items)((x: number, y: number) => y - x); }}>x</button>;
+}
+export function PropSortBind() {
+  const [s1] = createStore({ items: [1, 2] });
+  return <PropSortBindChild s1={s1} />;
+}
+function PropPushReflectChild(props: { list: number[] }) {
+  return <button onClick={() => { Reflect.apply(Array.prototype.push, props.list, [1]); }}>x</button>;
+}
+export function PropPushReflect() {
+  const [list] = createStore<number[]>([0]);
+  return <PropPushReflectChild list={list} />;
 }
 
 // Negative: the same calls in a memo's compute are tracked: no row at the call.

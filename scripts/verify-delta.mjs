@@ -383,6 +383,8 @@ export const CHECKS = {
   "whitespace-check": { command: ["git", "diff", "--check"] },
   "schema-json": { command: ["jq", "empty", "schema/typefacts-v1.schema.json", "schema/typefacts-codec-limits.json"] },
   "dialect-manifests": { command: ["bun", "scripts/dialect-manifests.mjs", "validate"] },
+  // ADR 1210: any path can become a link, so every slice checks the index: a tracked link is a fixture's own relative link.
+  "symlink-check": { command: ["node", "scripts/guard/symlinks.mjs"] },
   clippy: {
     command: [
       "cargo", TOOLCHAIN, "clippy", "--target-dir", LINT_TARGET, "--manifest-path", MANIFEST,
@@ -398,6 +400,7 @@ export const UNIVERSAL = [
   "whitespace-check",
   "schema-json",
   "dialect-manifests",
+  "symlink-check",
   "clippy",
 ];
 
@@ -1039,6 +1042,7 @@ export const LANES = {
   "whitespace-check": "preflight",
   "schema-json": "preflight",
   "dialect-manifests": "preflight",
+  "symlink-check": "preflight",
   // Check-only builds in their own target directory (LINT_TARGET).
   clippy: "lint",
   "wasm-compile": "lint",

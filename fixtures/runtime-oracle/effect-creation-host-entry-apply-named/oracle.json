@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1213 (fixture effect-creation-host-entry/variants/apply, ApplyNamed): PRIMITIVE_IN_EFFECT_CALLBACK: a local const the apply calls runs on its stack."
+}

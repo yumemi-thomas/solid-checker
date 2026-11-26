@@ -523,6 +523,21 @@ impl Dialect for Solid2 {
         }
     }
 
+    // ADR 1203: rc.21 `onSettled` (`@solidjs/signals` `dist/dev.js` `onSettled`,
+    // re-exported as is by `solid-js`) calls its callback on no path before it
+    // returns. Under an owner that admits children it creates a `trackedEffect`:
+    // a lazy `computed` (`dist/dev-shared.js` `setupComputedNode`: the
+    // forbidden-scope throw needs a children-forbidden context, which the
+    // branch excludes; `assertNotInEffectCallback` needs `context === null`;
+    // `lazy` skips the first compute), whose first run is enqueued on the heap
+    // (`enqueueSub`, `schedule`: a microtask, or a console line once halted).
+    // Otherwise it enqueues the callback on the global queue. The only throws
+    // left are in hooks a configuration installs (`enableExternalSource`, the
+    // dev hooks), which the runtime-configuration premise vetoes (ADR 0266).
+    fn call_returns_without_throwing(&self, primitive: Primitive) -> bool {
+        self.triple_exports == releases::TripleExports::Rc21 && primitive == Primitive::OnSettled
+    }
+
     // rc.21: `resolve` and `until` from `createTrackedEffect` throw "Cannot call
     // resolve inside a reactive scope", the observer guard, with no leaf-owner
     // mechanism (Chrome, ADR 0641). rc.17 is measured otherwise (ADR 0614).

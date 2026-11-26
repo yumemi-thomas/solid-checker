@@ -1168,6 +1168,10 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 },
             ),
         );
+        let sites = self.array_element_sites(declaration);
+        self.destructure_sites.extend(sites);
+        let sites = self.object_property_sites(declaration);
+        self.destructure_sites.extend(sites);
         walk::walk_variable_declarator(self, declaration);
     }
 
@@ -1870,6 +1874,9 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             });
         }
         let plain = expression.operator == AssignmentOperator::Assign;
+        if let Some(site) = self.assignment_site(expression) {
+            self.destructure_sites.push(site);
+        }
         if matches!(
             expression.left,
             AssignmentTarget::ObjectAssignmentTarget(_)

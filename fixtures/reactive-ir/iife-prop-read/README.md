@@ -9,7 +9,7 @@ the `RefFactory` shape here. Such a read is now SC1001 uncertifiable, the same a
 | component | outcome |
 |---|---|
 | `Arrow`, `Expression` | SC1001 violation at `go()` (ADR 1187; ADR 1184: uncertifiable at the read; main before it: clean) |
-| `RefFactory` | SC1001 uncertifiable at the read, as main leaves the same read written without the IIFE (the `ref={dir()}` call is not placed) |
+| `RefFactory` | SC1001 violation at `dir()` (ADR 1209: the inline ref factory runs during the body; before it: uncertifiable at the read) |
 | `Direct` (the read in the named function) | SC1001 violation at `go()` |
 | `BodyIife` (an IIFE in the body) | SC1001 violation at the read |
 | `AccessorIife` (an accessor read in the IIFE) | SC1001 violation at `go()` |

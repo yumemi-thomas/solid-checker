@@ -1,0 +1,101 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "leaf-callback-opaque",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/throw-first-direct-call/App.tsx",
+      "start": 517,
+      "end": 523,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "earlier-evaluation-may-throw",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/throw-first-direct-call/App.tsx",
+      "start": 528,
+      "end": 531,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "earlier-evaluation-may-throw",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/throw-first-direct-call/App.tsx",
+      "start": 721,
+      "end": 724,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "earlier-evaluation-may-throw",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/throw-first-direct-call/App.tsx",
+      "start": 872,
+      "end": 875,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "earlier-evaluation-may-throw",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/throw-first-direct-call/App.tsx",
+      "start": 1365,
+      "end": 1369,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "blocker": "owner-allocation-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/throw-first-direct-call/App.tsx",
+      "start": 1396,
+      "end": 1402,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/throw-first-direct-call/App.tsx",
+      "start": 1950,
+      "end": 1953,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/throw-first-direct-call/App.tsx",
+      "start": 2080,
+      "end": 2083,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/throw-first-direct-call/App.tsx",
+      "start": 2250,
+      "end": 2253,
+      "fixes": 0
+    }
+  ]
+}

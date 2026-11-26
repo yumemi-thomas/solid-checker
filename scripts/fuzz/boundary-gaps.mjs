@@ -237,8 +237,6 @@ export const ARM_GAPS = [
       "write_roles.walk-unknown-9",
       "write_roles.walk-unknown-10",
       "write_roles.walk-unknown-11",
-      // ADR 1023: the invocation flow's role, which the fallback takes when the walk answers unknown.
-      "write_roles.write-flow-fallback",
     ],
   },
   {
@@ -272,12 +270,12 @@ export const ARM_GAPS = [
     arms: ["execution_role.read_execution_role.reporting-run"],
   },
   {
-    reason: "ADR 1190 (slice 2): a read written in a component prop literal ADR 1171 proves run by the child's calls (inline, named or destructured; directly or through a clean in-place climb), each call placed by the role engine alone (`call_plainly_placed`), takes the calls' one role (`execution_role::prop_literal_run_calls`). No pair of the registry's snapshot separates the arm. Fixture `callback-prop-roles` does (SC1001 violations `ApplyRead`, `NamedBodyRead`; clean `JsxIifeRead`, a read in an IIFE the child runs in tracked JSX; an eager named-handler read kept uncertifiable), with Chrome (`runtime-oracle/callback-prop-roles`), and so do the recall grids' `cbp-*` contexts (the slice's probe: 34,507 programs, 0 false results; a first cut without the climb in the role made 208 false positives there, which `JsxIifeRead` pins).",
-    arms: ["execution_role.prop-literal-calls"],
+    reason: "ADR 1210 (the registry regenerated on 7bc723e35): the arms still answer silent at their pairs' legal side and the misuse side is still reported (`ref-layer-after-await`, the `barm-ref-*-await` contexts; `flow-climb-after-await`, `barm-climb-await`), but each legal program now carries an SC1002 uncertifiable `read-after-await-unaccounted` row at the read (ADR 0973's after-await accounting), so no legal cell is clean and the snapshot cannot count the separation (batch 8's snapshot, 24d1c6c07, had 4 and 2 clean). Separated again when SC1002 ends those reads; until then the read's own SC1001 silence is held by these pairs' misuse sides only.",
+    arms: ["body_roles.layered_window_after_awaits.unreported", "callee_roles.control-flow-climb-after-await"],
   },
   {
-    reason: "ADR 1190 (slice 2): a write written in a component prop literal ADR 1171 proves run by the child's calls, each placed by the role engine alone, takes the fold of the calls' write roles (`write_roles.prop-literal-calls`: a call that rejects the write proves it rejected; otherwise their one role, unplaced where they differ). No pair of the registry's snapshot separates the arm. Fixture `callback-prop-roles` does (SC2001 violation `DestructuredBodyWrite`; clean `DestructuredHandlerWrite`), with Chrome (`runtime-oracle/callback-prop-roles`), and so do the recall grids' `cbp-*` REACTIVE_WRITE_IN_OWNED_SCOPE contexts (the slice's probe, 0 false results).",
-    arms: ["write_roles.prop-literal-calls"],
+    reason: "ADR 1210 (the registry regenerated on 7bc723e35): the pair that separated the arm (`callback-prop-call`, context `cbp-handler`) is now decided first by ADR 1190's `execution_role.prop-literal-calls` (and `write_roles.prop-literal-calls` for a write), which that pair separates now: its legal cells are still clean, through the newer arm. No registered pair reaches a forwarded event prop the prop-literal proof does not place; fixture `callback-prop-roles` and the recall grids' `cbp-*` contexts keep the handler cases.",
+    arms: ["callee_roles.forwarded-event-prop"],
   },
 ];
 // </arm-gaps>

@@ -253,6 +253,11 @@ pub struct AstFacts {
     /// that reaches its position.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub straight_line_assignments: Vec<Span>,
+    /// Facts schema 110 (ADR 1193): the object patterns no declarator's [`BindingFact`] describes that read an object's keys as a
+    /// declarator's does, in source order: a plain assignment's object target (`({ v } = s)`), and an object pattern written as a
+    /// direct element of a declarator's array pattern (`const [{ v }] = [s]`). Not declarations: [`Self::bindings`] lists none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub destructure_sites: Vec<DestructureSiteFact>,
     /// The call, `new` and member expressions written in their innermost
     /// enclosing function's straight-line flow, outside any logical
     /// assignment and after no optional-chain link, that no earlier `return`,
@@ -992,6 +997,35 @@ pub struct BindingFact {
     /// for an argument: `const items = [a, b]` is `Array`.
     #[serde(default)]
     pub initializer_value_kind: RuntimeValueKind,
+}
+
+/// Facts schema 110 (ADR 1193): an object pattern that is no declarator's (`AstFacts::destructure_sites`), in a declarator's
+/// shape so a reader of object destructures takes it as one.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DestructureSiteFact {
+    /// The pattern as a binding of shape `Object`: `pattern`, `names` (for an assignment, the identifiers it writes, which are
+    /// references), `object_slots`, `object_properties` and `pattern_rest` as a declarator's. For an assignment, `declaration` is the
+    /// assignment, `initializer` and `call_initializer` its value as a declarator's, and `initializer_identifier` always `None`:
+    /// the value's identifier is no declarator's initializer. For an array element or an object property (ADR 1218), `declaration` is
+    /// the declarator and there is no initializer.
+    pub binding: BindingFact,
+    pub source: DestructureSource,
+}
+
+/// Facts schema 110 (ADR 1193): where a [`DestructureSiteFact`]'s value comes from.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", tag = "kind")]
+pub enum DestructureSource {
+    /// A plain `=` assignment's right side (`binding.initializer`).
+    Assignment,
+    /// The element at `index` of the declarator's array pattern `outer` (no default on the element), whose value is the
+    /// declarator's initializer iterated.
+    ArrayElement { outer: Span, index: u32 },
+    /// Facts schema 111 (ADR 1218): the object pattern that is the value of the property `property` (no default, no computed key)
+    /// of the declarator's object pattern `outer`, whose value is that key of the declarator's initializer
+    /// (`const { a: { useIt } } = …`). One level only: a pattern nested in it is no site.
+    ObjectProperty { outer: Span, property: Span },
 }
 
 /// Facts schema 100 (ADR 1122): one property of an object binding pattern.
@@ -2795,6 +2829,7 @@ impl AstFacts {
             straight_line_calls: Vec::new(),
             straight_line_constructs: Vec::new(),
             straight_line_assignments: Vec::new(),
+            destructure_sites: Vec::new(),
             completion_sites: Vec::new(),
             returns: Vec::new(),
             jsx_elements: Vec::new(),

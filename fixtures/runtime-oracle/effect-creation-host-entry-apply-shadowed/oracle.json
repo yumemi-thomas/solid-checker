@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1213 (fixture effect-creation-host-entry/variants/apply, ApplyShadowed): PRIMITIVE_IN_EFFECT_CALLBACK: a module setTimeout that shadows the global runs its argument at once."
+}

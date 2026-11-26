@@ -239,25 +239,23 @@ pub(super) fn direct_reference_contributions(
         }
         if source_kinds.get(source.symbol.as_str()) == Some(&ReactiveSourceKind::Store) {
             // ADR 1107: a destructure SC1003 hands over (`delegated_destructure_slots`) reads each slot as a member of the store.
-            let slot_members: Vec<solid_facts::ast::MemberFact> = file
-                .ast
-                .bindings
-                .iter()
-                .filter(|binding| {
-                    // ADR 1193: the destructure's root (`destructure_root`).
-                    crate::static_rules::destructure_root(lookup, file, binding)
-                        == Some(reference_span)
-                })
-                .filter_map(|binding| {
-                    crate::static_rules::delegated_destructure_slots(lookup, file, binding)
-                })
-                .flatten()
-                .map(|(slot, key)| solid_facts::ast::MemberFact {
-                    span: slot,
-                    object: reference_span,
-                    property: key,
-                })
-                .collect();
+            let slot_members: Vec<solid_facts::ast::MemberFact> =
+                crate::static_rules::object_destructures(file)
+                    .filter(|binding| {
+                        // ADR 1193: the destructure's root (`destructure_root`).
+                        crate::static_rules::destructure_root(lookup, file, binding)
+                            == Some(reference_span)
+                    })
+                    .filter_map(|binding| {
+                        crate::static_rules::delegated_destructure_slots(lookup, file, binding)
+                    })
+                    .flatten()
+                    .map(|(slot, key)| solid_facts::ast::MemberFact {
+                        span: slot,
+                        object: reference_span,
+                        property: key,
+                    })
+                    .collect();
             contributions.extend(
                 file.ast
                     .members

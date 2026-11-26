@@ -1543,6 +1543,35 @@ impl<'l, 'a> Census<'l, 'a> {
             Holder::JsxSpread(element) => self.jsx_value(file, element, None, mode),
             Holder::Binding(binding) => self.bound(file, at, binding, mode),
             Holder::Assigned(assignment) => {
+                // ADR 1193 part 2: the root's own reference an assignment's object target destructures (`({ v } = s)`,
+                // `static_rules::destructure_root`): the pattern's keys are SC1003's and SC1001's rows, as `const { v } = s`'s.
+                let target = ast.peel_ts_sugar_span(ast.assignments[assignment].target);
+                if mode == Mode::Root
+                    && self.steps <= 1
+                    && !self.props_root
+                    && ast.destructure_sites.iter().any(|site| {
+                        site.source == solid_facts::ast::DestructureSource::Assignment
+                            && site.binding.pattern == target
+                            && crate::static_rules::destructure_root(
+                                self.lookup,
+                                file,
+                                &site.binding,
+                            ) == Some(at)
+                    })
+                {
+                    return Position::Followed;
+                }
+                // ADR 1228: an assignment's object target over the store where no rule claims it (`({ v } = props.s1)`): a read
+                // site of the census at the pattern.
+                if matches!(mode, Mode::Root)
+                    && !self.props_root
+                    && ast.destructure_sites.iter().any(|site| {
+                        site.source == solid_facts::ast::DestructureSource::Assignment
+                            && site.binding.pattern == target
+                    })
+                {
+                    self.destructure_read(file, target);
+                }
                 let answer = assigned(file, assignment);
                 // ADR 0860: an object that holds the value in a member hands
                 // it to every use of the object.
@@ -1587,6 +1616,15 @@ impl<'l, 'a> Census<'l, 'a> {
             }
             Holder::ObjectValue(property) => {
                 if matches!(mode, Mode::Holder(_) | Mode::RootHolder(_)) {
+                    // ADR 1218: a holder at a key of a `const` declarator's literal, which the declarator's pattern destructures with
+                    // a pattern of its own (`const { a: { useIt } } = { a: { useIt: r1 } }`), is that pattern's, as a holder a
+                    // declarator destructures is the declarator's. A value's holder only: a root's alias reached that way has a row at
+                    // each Get (`bound`'s steps rule), where the escaped walk asks the role, so a root's holder stays escaped.
+                    if let Mode::Holder(_) = mode
+                        && let Some(pattern) = nested_pattern_at(file, property)
+                    {
+                        return self.nested_bound(file, at, pattern, row, mode);
+                    }
                     self.escape(file, at, row, mode, blockers::VALUE_IN_CARRIER);
                     return Position::Open(blockers::VALUE_IN_CARRIER);
                 }
@@ -1690,6 +1728,13 @@ impl<'l, 'a> Census<'l, 'a> {
                 {
                     return Position::Followed;
                 }
+                // ADR 1228: an object pattern the loop destructures each element with reads the store's slots where no rule
+                // claims it (a store reached through a context or a prop): a read site of the census at the pattern.
+                if matches!(mode, Mode::RootHolder(_)) && !self.props_root {
+                    for pattern in for_of_object_patterns(file, at) {
+                        self.destructure_read(file, pattern);
+                    }
+                }
                 // ADR 1104: a carrier a `for…of` iterates hands what it holds to the loop's binding: its uses are walked as past an
                 // escape, each with a row.
                 if matches!(mode, Mode::Holder(_) | Mode::RootHolder(_)) {
@@ -1703,6 +1748,30 @@ impl<'l, 'a> Census<'l, 'a> {
                 self.escape(file, at, row, mode, blockers::VALUE_THROWN);
                 Position::Open(blockers::VALUE_THROWN)
             }
+        }
+    }
+
+    /// ADR 1226, ADR 1228: an object destructure of the store that no rule claims (SC1003 reads only a destructure whose root is
+    /// the store's own name) is a read site of the census at its pattern, where SC1003's row would stand: silent only where a
+    /// proof of the read's legality stands, the census's role ([`Self::site`]) or the role SC1003 ends a destructure silently in
+    /// (`static_rules::destructure_role_does_not_report`, on SC1003's own role).
+    fn destructure_read(&mut self, file: &'a FileFacts, pattern: Span) {
+        let path = file.path.as_str();
+        if !self.allowed.contains_key(path) {
+            let spans = crate::execution_role::allowed_callback_spans(file, self.lookup);
+            self.allowed.insert(path.to_owned(), spans);
+        }
+        let role = crate::execution_role::semantic_execution_role(
+            file,
+            pattern,
+            self.allowed.get(path).map_or(&[], Vec::as_slice),
+            self.entities,
+            self.symbol_names,
+            self.lookup,
+        );
+        if !crate::static_rules::destructure_role_does_not_report(self.lookup, file, pattern, role)
+        {
+            self.site(file, pattern, Site::Read, blockers::VALUE_IN_CARRIER);
         }
     }
 
@@ -2656,6 +2725,44 @@ impl<'l, 'a> Census<'l, 'a> {
             })
     }
 
+    /// ADR 1228: the call a standard function runs at with `value` as its receiver: `call`'s or `apply`'s first argument,
+    /// `Reflect.apply`'s second (that call), or `bind`'s first where the bound function is called at once (the outer call).
+    fn runs_on_receiver_at(&self, file: &FileFacts, value: Span) -> Option<Span> {
+        let ast = &file.ast;
+        let value = ast.peel_ts_sugar_span(value);
+        ast.arguments_containing(value).find_map(|(call, index)| {
+            if ast.peel_ts_sugar_span(call.arguments[index].span) != value
+                || call.construct
+                || call
+                    .arguments
+                    .iter()
+                    .take(index + 1)
+                    .any(|argument| argument.spread)
+            {
+                return None;
+            }
+            let declaration = self
+                .lookup
+                .resolved_callee_call(file, call.callee)?
+                .declaration
+                .as_ref()
+                .filter(|declaration| declaration.standard_library)?;
+            let name = declaration.qualified_name.as_ref();
+            if runs_on_receiver(name, index) {
+                return Some(call.span);
+            }
+            (index == 0
+                && matches!(
+                    name,
+                    "Function.bind" | "CallableFunction.bind" | "NewableFunction.bind"
+                ))
+            .then(|| ast.calls_with_peeled_callee(call.span).next())
+            .flatten()
+            .filter(|outer| !outer.construct)
+            .map(|outer| outer.span)
+        })
+    }
+
     /// ADR 0811: where the census asks which store member writes SC2003
     /// decides in a file. Without it, none.
     pub(crate) fn with_member_writes(mut self, member_writes: MemberWrites<'l>) -> Self {
@@ -2791,6 +2898,16 @@ impl<'l, 'a> Census<'l, 'a> {
                         return self.position(file, top, Mode::Root);
                     }
                     return Position::Followed;
+                }
+                // ADR 1228: a member of the store reached through a slot, an alias or a prop, handed as the receiver a standard
+                // function runs on (`Array.prototype.sort.call(ctx.s1.items, …)`, `sort.bind(props.s1.items)(…)`): that function
+                // reads and writes the store's proxy at the call that runs it, where no authored frame stands below it and no row
+                // of the member's own answers for it: the call is a use beside the member's.
+                if let Some(runs) = self.runs_on_receiver_at(file, member.span) {
+                    self.uses.push((
+                        call_use_span(file, runs).location(file.path.as_str()),
+                        blockers::VALUE_IN_CARRIER,
+                    ));
                 }
                 let (start, end) = (u64::from(member.span.start), u64::from(member.span.end));
                 // A decided write covers this member only where it is the written target itself: in a deeper write
@@ -3214,6 +3331,30 @@ impl<'l, 'a> Census<'l, 'a> {
                 Position::Open(blockers::VALUE_HELD_IN_BINDING)
             });
         }
+        // ADR 1193 part 2: a `const` array pattern over a one-literal root holder whose element at the root's slot is an object pattern
+        // the root's destructure (`const [{ v }] = [s]`, `static_rules::destructure_root`): the pattern's keys are SC1003's and
+        // SC1001's rows, as `const { v } = s`'s.
+        if let Mode::RootHolder(slot) = mode
+            && binding.shape == solid_facts::ast::BindingShape::Array
+            && binding.immutable
+            && !self.props_root
+            && self.steps <= 2
+        {
+            for site in &ast.destructure_sites {
+                let solid_facts::ast::DestructureSource::ArrayElement { outer, index } =
+                    site.source
+                else {
+                    continue;
+                };
+                if outer == binding.pattern
+                    && self.key(&index.to_string()) == slot
+                    && crate::static_rules::destructure_root(self.lookup, file, &site.binding)
+                        .is_some_and(|root| at.contains(root))
+                {
+                    return Position::Followed;
+                }
+            }
+        }
         let each = match mode {
             Mode::Holder(_) if !identifier => Mode::Value,
             Mode::RootHolder(_) if !identifier => Mode::Root,
@@ -3244,6 +3385,49 @@ impl<'l, 'a> Census<'l, 'a> {
             }
         }
         held(answer)
+    }
+
+    /// ADR 1218: [`Self::bound`] for a pattern nested in a declarator's object pattern (facts schema 111,
+    /// `DestructureSource::ObjectProperty`), over a value's holder at its key ([`nested_pattern_at`]): its names hold what the
+    /// holder's slots hold, and a slot no name of it is known to take leaves the holder escaped.
+    fn nested_bound(
+        &mut self,
+        file: &'a FileFacts,
+        at: Span,
+        binding: &'a solid_facts::ast::BindingFact,
+        row: Holder,
+        mode: Mode,
+    ) -> Position {
+        let each = match mode {
+            Mode::Holder(_) => Mode::Value,
+            Mode::RootHolder(_) => Mode::Root,
+            other => other,
+        };
+        debug_assert!(matches!(mode, Mode::Holder(_)), "a value's holder only");
+        let Some(names) = self.slot_names(binding, mode) else {
+            self.escape(file, at, row, mode, blockers::VALUE_IN_CARRIER);
+            return Position::Open(blockers::VALUE_IN_CARRIER);
+        };
+        let mut answer = Position::Followed;
+        for name in names {
+            if self
+                .lookup
+                .entities()
+                .exact(&name.span.location(file.path.as_str()))
+                .is_some_and(|symbol| self.sources.contains(symbol.as_str()))
+            {
+                continue;
+            }
+            let position = self.name_uses(file, name.span, each);
+            if answer == Position::Followed {
+                answer = position;
+            }
+        }
+        if binding.immutable {
+            answer
+        } else {
+            Position::Open(blockers::VALUE_HELD_IN_BINDING)
+        }
     }
 
     /// Where a declared name's references put the value it holds: in its
@@ -3928,6 +4112,33 @@ impl<'l, 'a> Census<'l, 'a> {
             {
                 return self.position(file, call.span, Mode::Value);
             }
+            // ADR 1226: a store's merged view destructured (`const { v } = merge(ctx.s1, { w: 1 })`) is SC1003's only where
+            // `static_rules::destructure_root` names this argument and the argument is the store's own name (a source of this
+            // census); elsewhere no rule reads its slots, so the destructure is a read site of the census, at its pattern, where
+            // SC1003's row would stand.
+            if view && !self.props_root && dialect.merges_props_reactivity(primitive) {
+                let argument = ast.peel_ts_sugar_span(call.arguments[index].span);
+                let own_name = self
+                    .lookup
+                    .entities()
+                    .exact(&argument.location(file.path.as_str()))
+                    .is_some_and(|symbol| self.sources.contains(symbol.as_str()));
+                let unclaimed = crate::static_rules::object_destructures(file)
+                    .filter(|binding| {
+                        binding.call_initializer == Some(call.span)
+                            && (!own_name
+                                || crate::static_rules::destructure_root(
+                                    self.lookup,
+                                    file,
+                                    binding,
+                                ) != Some(argument))
+                    })
+                    .map(|binding| binding.pattern)
+                    .collect::<Vec<_>>();
+                for pattern in unclaimed {
+                    self.destructure_read(file, pattern);
+                }
+            }
             return if view || callback {
                 Position::Followed
             } else {
@@ -3951,6 +4162,20 @@ impl<'l, 'a> Census<'l, 'a> {
             // `Object.keys` runs no getter and answers no value.
             if crate::runtime_semantics::reads_keys_only(resolved) {
                 return Position::Followed;
+            }
+            // ADR 1228: a store handed as the receiver a standard function runs on (`Array.prototype.sort.call(st.items, …)`,
+            // `push.apply(st.items, …)`, `Reflect.apply(push, st.items, …)`) is read and written by that function at this call,
+            // where no authored frame stands below it: the call is a use beside the argument, as a primitive's that reads at its
+            // call (ADR 0928).
+            if matches!(mode, Mode::Root | Mode::RootParameter)
+                && resolved.declaration.as_ref().is_some_and(|declaration| {
+                    runs_on_receiver(declaration.qualified_name.as_ref(), index)
+                })
+            {
+                self.uses.push((
+                    call_use_span(file, call.span).location(file.path.as_str()),
+                    blockers::VALUE_IN_CARRIER,
+                ));
             }
             return match crate::runtime_semantics::argument_behavior(resolved, callability, index) {
                 Some(RuntimeArgumentBehavior::FreshStackCallback) => Position::Followed,
@@ -4253,6 +4478,64 @@ fn no_member_writes(_: &FileFacts) -> Vec<Span> {
 }
 
 /// The literal a property or array holder row names.
+/// ADR 1218: the pattern that destructures the value of the literal property `property` (an index of `object_properties`): the
+/// literal is a `const` declarator's whole initializer and closed (`ObjectGetShapeFact::closed`: no spread, no computed or repeated
+/// key, no `__proto__`, no setter), the property a data property whose key is written as itself and has no getter, and the
+/// declarator's object pattern, with no rest and no computed key, names that key once, with an object pattern of its own and no
+/// default (facts schema 111, `DestructureSource::ObjectProperty`). `None` anywhere else.
+fn nested_pattern_at(file: &FileFacts, property: usize) -> Option<&solid_facts::ast::BindingFact> {
+    let ast = &file.ast;
+    let property = &ast.object_properties[property];
+    if property.computed || !property.data || property.method {
+        return None;
+    }
+    let key = file.source_text(property.key).and_then(written_key)?;
+    let literal = enclosing_literal(file, property.span)?;
+    let shape = ast
+        .object_get_shapes
+        .iter()
+        .find(|shape| shape.span == literal)?;
+    let mut slots = shape.properties.iter().filter(|slot| slot.key == key);
+    let data_slot = slots.next().is_some_and(|slot| slot.getter.is_none());
+    if !shape.closed || literal_reads_this(file, literal) || !data_slot || slots.next().is_some() {
+        return None;
+    }
+    let declarator = ast.bindings.iter().find(|binding| {
+        binding.shape == solid_facts::ast::BindingShape::Object
+            && binding.immutable
+            && binding
+                .initializer
+                .map(|value| ast.peel_ts_sugar_span(value))
+                == Some(literal)
+    })?;
+    if declarator.pattern_rest
+        || declarator
+            .object_properties
+            .iter()
+            .any(|slot| slot.computed || slot.key.is_none())
+    {
+        return None;
+    }
+    let mut named = declarator
+        .object_properties
+        .iter()
+        .filter(|slot| slot.key.as_deref() == Some(key));
+    let slot = named.next()?;
+    if named.next().is_some() || slot.has_default || !slot.nested {
+        return None;
+    }
+    ast.destructure_sites
+        .iter()
+        .find(|site| {
+            site.source
+                == solid_facts::ast::DestructureSource::ObjectProperty {
+                    outer: declarator.pattern,
+                    property: slot.span,
+                }
+        })
+        .map(|site| &site.binding)
+}
+
 fn enclosing_literal(file: &FileFacts, row: Span) -> Option<Span> {
     let ast = &file.ast;
     if ast.array_literal_at(row).is_some() {
@@ -4301,6 +4584,44 @@ fn object_spread_literal(file: &FileFacts, spread: Span) -> Option<Span> {
         .min();
     (array.is_none_or(|array| size(object) < array) && call.is_none_or(|call| size(object) < call))
         .then_some(object)
+}
+
+/// ADR 1228: whether argument `index` of the standard function `qualified` is the receiver it runs a function on: `call`'s and
+/// `apply`'s first, `Reflect.apply`'s second.
+fn runs_on_receiver(qualified: &str, index: usize) -> bool {
+    match qualified {
+        "Function.call"
+        | "CallableFunction.call"
+        | "NewableFunction.call"
+        | "Function.apply"
+        | "CallableFunction.apply"
+        | "NewableFunction.apply" => index == 0,
+        "Reflect.apply" => index == 1,
+        _ => false,
+    }
+}
+
+/// ADR 1228: the object patterns a `for…of` over `operand` declares (one binding per element).
+fn for_of_object_patterns(file: &FileFacts, operand: Span) -> Vec<Span> {
+    let ast = &file.ast;
+    let Some((looped, left)) = ast.loop_repeats.iter().find(|(looped, left)| {
+        left.end == operand.start
+            && left.start > looped.start
+            && ast.loop_statements.contains(looped)
+            && ast.iterated_operands.contains(&operand)
+    }) else {
+        return Vec::new();
+    };
+    ast.bindings
+        .iter()
+        .filter(|binding| {
+            looped.contains(binding.pattern)
+                && left.contains(binding.pattern)
+                && binding.initializer.is_none()
+                && binding.shape == solid_facts::ast::BindingShape::Object
+        })
+        .map(|binding| binding.pattern)
+        .collect()
 }
 
 /// ADR 1104: the names a `for…of` declares, when `operand` is its iterated value: the binding written between the statement's

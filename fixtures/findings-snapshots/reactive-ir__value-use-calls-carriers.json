@@ -8,8 +8,8 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 246,
-      "end": 251,
+      "start": 273,
+      "end": 278,
       "fixes": 0
     },
     {
@@ -19,8 +19,8 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 275,
-      "end": 280,
+      "start": 302,
+      "end": 307,
       "fixes": 0
     },
     {
@@ -30,8 +30,8 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 393,
-      "end": 398,
+      "start": 420,
+      "end": 425,
       "fixes": 0
     },
     {
@@ -41,8 +41,8 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 409,
-      "end": 416,
+      "start": 436,
+      "end": 443,
       "fixes": 0
     },
     {
@@ -52,8 +52,8 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 532,
-      "end": 537,
+      "start": 559,
+      "end": 564,
       "fixes": 0
     },
     {
@@ -63,8 +63,8 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 550,
-      "end": 563,
+      "start": 577,
+      "end": 590,
       "fixes": 0
     },
     {
@@ -74,8 +74,8 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 772,
-      "end": 777,
+      "start": 799,
+      "end": 804,
       "fixes": 0
     },
     {
@@ -85,8 +85,8 @@
       "blocker": "value-to-unresolved-callee",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 773,
-      "end": 774,
+      "start": 800,
+      "end": 801,
       "fixes": 0
     },
     {
@@ -96,8 +96,8 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 962,
-      "end": 965,
+      "start": 989,
+      "end": 992,
       "fixes": 0
     },
     {
@@ -107,8 +107,8 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 971,
-      "end": 978,
+      "start": 998,
+      "end": 1005,
       "fixes": 0
     },
     {
@@ -118,8 +118,8 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 972,
-      "end": 977,
+      "start": 999,
+      "end": 1004,
       "fixes": 0
     },
     {
@@ -129,8 +129,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 1171,
-      "end": 1200,
+      "start": 1198,
+      "end": 1227,
       "fixes": 0
     },
     {
@@ -140,8 +140,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 1171,
-      "end": 1200,
+      "start": 1198,
+      "end": 1227,
       "fixes": 0
     },
     {
@@ -151,8 +151,8 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 1188,
-      "end": 1193,
+      "start": 1215,
+      "end": 1220,
       "fixes": 0
     },
     {
@@ -162,8 +162,8 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 1210,
-      "end": 1243,
+      "start": 1237,
+      "end": 1270,
       "fixes": 0
     },
     {
@@ -173,8 +173,8 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 1439,
-      "end": 1502,
+      "start": 1466,
+      "end": 1529,
       "fixes": 0
     },
     {
@@ -184,8 +184,8 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 1453,
-      "end": 1479,
+      "start": 1480,
+      "end": 1506,
       "fixes": 0
     },
     {
@@ -195,8 +195,8 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 1458,
-      "end": 1477,
+      "start": 1485,
+      "end": 1504,
       "fixes": 0
     },
     {
@@ -206,8 +206,8 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 1702,
-      "end": 1721,
+      "start": 1729,
+      "end": 1748,
       "fixes": 0
     },
     {
@@ -217,8 +217,8 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 1710,
-      "end": 1715,
+      "start": 1737,
+      "end": 1742,
       "fixes": 0
     },
     {
@@ -228,8 +228,8 @@
       "blocker": "function-call-target-unresolved",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 1949,
-      "end": 1974,
+      "start": 1976,
+      "end": 2001,
       "fixes": 0
     },
     {
@@ -239,8 +239,8 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 1975,
-      "end": 1979,
+      "start": 2002,
+      "end": 2006,
       "fixes": 0
     },
     {
@@ -250,30 +250,19 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 1982,
-      "end": 1986,
+      "start": 2009,
+      "end": 2013,
       "fixes": 0
     },
     {
       "rule": "reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",
-      "blocker": "value-to-unresolved-callee",
+      "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 2173,
-      "end": 2178,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-to-unresolved-callee",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 2218,
-      "end": 2223,
+      "start": 2572,
+      "end": 2644,
       "fixes": 0
     },
     {
@@ -283,8 +272,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 2239,
-      "end": 2249,
+      "start": 2832,
+      "end": 2905,
       "fixes": 0
     },
     {
@@ -294,8 +283,19 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 2239,
-      "end": 2249,
+      "start": 2832,
+      "end": 2905,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
+      "start": 2850,
+      "end": 2852,
       "fixes": 0
     },
     {
@@ -305,30 +305,19 @@
       "blocker": "value-in-carrier",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 2296,
-      "end": 2299,
+      "start": 3008,
+      "end": 3082,
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
       "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
+      "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 2305,
-      "end": 2312,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 2306,
-      "end": 2311,
+      "start": 3034,
+      "end": 3042,
       "fixes": 0
     },
     {
@@ -338,8 +327,173 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 2348,
-      "end": 2351,
+      "start": 3190,
+      "end": 3219,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
+      "start": 3190,
+      "end": 3219,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
+      "start": 3213,
+      "end": 3215,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
+      "start": 3316,
+      "end": 3368,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "blocker": "function-run-unplaced",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
+      "start": 3352,
+      "end": 3362,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
+      "start": 3477,
+      "end": 3513,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
+      "start": 3477,
+      "end": 3513,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
+      "start": 3505,
+      "end": 3509,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
+      "start": 3685,
+      "end": 3690,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-to-unresolved-callee",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
+      "start": 3730,
+      "end": 3735,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
+      "start": 3751,
+      "end": 3761,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-effect-callback",
+      "code": "SC6002",
+      "kind": "uncertifiable",
+      "blocker": "effect-creation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
+      "start": 3751,
+      "end": 3761,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
+      "start": 3808,
+      "end": 3811,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
+      "start": 3817,
+      "end": 3824,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-in-carrier",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
+      "start": 3818,
+      "end": 3823,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
+      "start": 3860,
+      "end": 3863,
       "fixes": 0
     },
     {
@@ -349,8 +503,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 2348,
-      "end": 2351,
+      "start": 3860,
+      "end": 3863,
       "fixes": 0
     },
     {
@@ -360,8 +514,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/value-use-calls-carriers/App.tsx",
-      "start": 2348,
-      "end": 2351,
+      "start": 3860,
+      "end": 3863,
       "fixes": 0
     }
   ]

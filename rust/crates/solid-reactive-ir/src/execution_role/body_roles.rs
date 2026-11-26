@@ -488,6 +488,29 @@ pub(crate) fn follows_dominating_await_in_own_body(
         })
 }
 
+/// ADR 1215: the suspension every run of `span` follows in the body of its own async (non-generator) function: an `await` written in
+/// that function at statement level of a block whose rest holds `span` (`AstFacts::dominating_awaits`: never a `catch` or `finally`
+/// reached unsuspended by a synchronous throw of the operand), or the suspension of the `for await` whose body holds `span` (each
+/// pass awaits the iterator's `next()` first). Bounded as [`follows_dominating_await_in_own_body`] (ADR 1139): only the instance
+/// fields, JSX elements and tracked regions written inside that function keep `span` off its continuation, so a site in an async
+/// handler literal written in JSX counts. The continuation runs as a microtask, on an empty stack.
+pub(crate) fn own_body_await_before(file: &solid_facts::FileFacts, span: Span) -> Option<Span> {
+    let function = containing_ast_function(&file.ast, span)
+        .filter(|function| function.r#async && !function.generator)?;
+    if !runs_with_its_function(file, span, function.span) {
+        return None;
+    }
+    let own = |at: Span| {
+        containing_ast_function(&file.ast, at).is_some_and(|owner| owner.span == function.span)
+    };
+    file.ast
+        .dominating_awaits
+        .iter()
+        .find(|(awaited, region)| region.contains(span) && own(*awaited))
+        .map(|(awaited, _)| *awaited)
+        .or_else(|| for_await_body_suspension(file, span).filter(|suspension| own(*suspension)))
+}
+
 /// ADR 1112: [`dominating_await_before`] without its `for await` fallback: an `await` written in the function that
 /// dominates `span`.
 fn follows_dominating_await_statement(file: &solid_facts::FileFacts, span: Span) -> bool {

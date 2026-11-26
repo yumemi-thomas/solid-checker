@@ -110,7 +110,8 @@ const ROW_BLOCKERS = new Set(["function-run-unplaced", "host-callback-timing", "
   "server-rendering-unresolved", "call-attributed-read", "carrier-run-unproven", "mount-unresolved", "creation-pass-unproven", "handler-dispatch-unproven",
   "conditional-return-unproven", "props-callers-unenumerated", "store-write-unproven", "loading-hold-unproven", "effect-owner-unproven", "package-source-unavailable",
   "runtime-configuration-premise", "instance-field-run-unplaced", "binding-before-initialization", "compiler-refused-file", "escaped-name-unresolved", "site-reach-undecided",
-  "lazy-compute-unread", "computation-error-unobserved", "refused-creation-unrun", "unreached-dead-code", "function-unentered", "execution-context-unaccounted"]);
+  "lazy-compute-unread", "computation-error-unobserved", "refused-creation-unrun", "unreached-dead-code", "function-unentered", "execution-context-unaccounted",
+  "earlier-evaluation-may-throw"]);
 
 export const contextKind = (context) => {
   if (context == null) return "";

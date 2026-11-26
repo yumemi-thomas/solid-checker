@@ -1,0 +1,5 @@
+# iife-write-helper
+
+**Claim (ADR 1212).** A write (a setter call, an action call) written directly in a chain of IIFEs inside a named local function runs at the outermost IIFE's call, in that function (`write_roles::named_helper_iife_call`, as ADR 1187's `component_prop_helper` climbs for a prop read). Each layer is an anonymous, unbound literal, neither async nor a generator, called where it is written (not `new`), with the site and each call written directly in the enclosing body. The write walk then asks the call's role: each call of the named function places it.
+
+Violations: `BodyCall`, `RefFactory` (two layers, the helper called by an inline ref factory), `ActionCall`. Clean: `Handler` (the helper runs only from an event handler). Uncertifiable (fail closed): `ThroughCall` (the member variant: the literal is run through `.call`), `SelfNamed` (a named function expression), `Reassigned` (the shadowed variant: a `let` reassigned before its call, so the function holding the IIFE never runs; the climb refuses a written binding).
