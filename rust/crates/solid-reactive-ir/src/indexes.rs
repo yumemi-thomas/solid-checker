@@ -1600,17 +1600,20 @@ impl<'a> SemanticLookup<'a> {
             {
                 return false;
             }
+            // Only these calls can dispose (the rest of `may_dispose`'s list is refused above): each answers whether it disposes
+            // only from a handler.
             self.file_slots().iter().all(|file| {
                 file.ast
                     .calls
                     .iter()
-                    .all(|call| match self.primitive_at_call(file, call.span) {
+                    .filter_map(|call| match self.primitive_at_call(file, call.span) {
                         Some(Primitive::Render | Primitive::Hydrate | Primitive::OnCleanup) => {
-                            call.result_discarded
+                            Some(call.result_discarded)
                         }
-                        Some(Primitive::CreateRoot) => root_dispose_from_handlers(file, call),
-                        _ => true,
+                        Some(Primitive::CreateRoot) => Some(root_dispose_from_handlers(file, call)),
+                        _ => None,
                     })
+                    .all(|from_handlers| from_handlers)
             })
         })
     }
