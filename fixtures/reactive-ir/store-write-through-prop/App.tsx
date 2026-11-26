@@ -95,6 +95,64 @@ function AlsoHandedParent() {
   return <AlsoHandedChild s1={s1} />;
 }
 
+// ADR 1225: a logical assignment through the prop writes only when its test passes, read from the handed store's own literal:
+// `||=` over `v: 0` writes (a violation); `&&=` and `??=` write nothing (Chrome silent; uncertifiable, never a violation).
+function AndNoopChild(props: Props) {
+  props.s1.a.v &&= 7;
+  return <i />;
+}
+function AndNoopParent() {
+  const [s1, setS1] = createStore({ a: { v: 0 }, items: [0] });
+  return <AndNoopChild s1={s1} setS1={setS1} />;
+}
+function NullishNoopChild(props: Props) {
+  props.s1.a.v ??= 7;
+  return <i />;
+}
+function NullishNoopParent() {
+  const [s1, setS1] = createStore({ a: { v: 0 }, items: [0] });
+  return <NullishNoopChild s1={s1} setS1={setS1} />;
+}
+function OrWritesChild(props: Props) {
+  props.s1.a.v ||= 7;
+  return <i />;
+}
+function OrWritesParent() {
+  const [s1, setS1] = createStore({ a: { v: 0 }, items: [0] });
+  return <OrWritesChild s1={s1} setS1={setS1} />;
+}
+
+// ADR 1228: a prop destructured in the parameter list, its value reached past it through a `let` alias or a helper's parameter
+// and written: the render may hand a store as the attribute's value (ADR 0509), so the write is uncertifiable (main: silent;
+// Chrome on ADR 1208's grid programs: STORE_WRITE_OUTSIDE_SETTER). Negative: the `let` written only with a fresh object, silent.
+function LetAliasChild({ s1 }: { s1: Items }) {
+  return (
+    <button
+      onClick={() => {
+        let r = { v: 0 };
+        r = s1.a;
+        r.v = 7;
+        let q = { v: 0 };
+        q.v = 7;
+      }}
+    />
+  );
+}
+function LetAliasParent() {
+  const [s1] = createStore({ a: { v: 0 }, items: [0] });
+  return <LetAliasChild s1={s1} />;
+}
+function ParamChild({ s1 }: { s1: Items }) {
+  const w = (x: { v: number }) => {
+    x.v = 7;
+  };
+  return <button onClick={() => w(s1.a)} />;
+}
+function ParamParent() {
+  const [s1] = createStore({ a: { v: 0 }, items: [0] });
+  return <ParamChild s1={s1} />;
+}
+
 export function Page() {
   return (
     <div>
@@ -106,6 +164,11 @@ export function Page() {
       <HandsOnParent />
       <WholeParent />
       <AlsoHandedParent />
+      <AndNoopParent />
+      <NullishNoopParent />
+      <OrWritesParent />
+      <LetAliasParent />
+      <ParamParent />
     </div>
   );
 }

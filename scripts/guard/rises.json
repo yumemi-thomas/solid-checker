@@ -8544,6 +8544,134 @@
    "to": 9,
    "adr": "ADR 1193",
    "fact": "ADR 1193 part 2 (facts schema 110, destructure_sites): the fixture store-destructure-roots gains the ten part-2 components (AssignBody, AssignMergeBody, AssignMember, ArrayBody, ArraySecond violations, AssignMemo and ArrayMemo clean, ArrayHole, ArraySpread and AssignProps uncertifiable by design), so its uncertifiable rows rise by their new sites (SC1003 destructure-root-unproven 3 -> 6, SC3001 leaf-operation-unaccounted 3 -> 8, SC4001 owner-callers-unenumerated 2 -> 5, SC6002 effect-creation-unaccounted 3 -> 8, SC9012 value-held-in-binding 0 -> 1, SC9012 value-in-carrier 3 -> 9); reactive-ir/rc21-after-await-handed SC1003 props-callers-unenumerated 0 -> 1: the assignment in an effect apply stays SC1003 uncertifiable, a blocker relabelled (its const-destructure in onClick loses 2 SC9012 rows, recorded with a drops row)"
+  },
+  {
+   "fixture": "reactive-ir/store-destructure-roots",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 8,
+   "to": 15,
+   "adr": "ADR 1228",
+   "fact": "ADR 1226's share 8 -> 9: the fixture gained ContextMerge and HolderMerge (a store reached through a context or a holder's member, merged and destructured): no rule reads those slots, so the value-use census keeps an uncertifiable row at each new site, never a silence (main certified the context form clean, Chrome warns STRICT_READ_UNTRACKED); ADR 1228's share 9 -> 15: ContextForOf (for…of over [ctx.s1]) and PropAssign (({ v } = props.s1)) are census read sites at the destructure pattern in the body, none in a memo's compute, so the census keeps one uncertifiable row per new site where main certified them clean"
+  },
+  {
+   "fixture": "reactive-ir/store-destructure-roots",
+   "key": "SC4001 owner-callers-unenumerated",
+   "from": 5,
+   "to": 6,
+   "adr": "ADR 1226",
+   "fact": "the fixture gained ContextMerge and HolderMerge (a store reached through a context or a holder's member, merged and destructured): no rule reads those slots, so the value-use census keeps an uncertifiable row at each new site, never a silence (main certified the context form clean, Chrome warns STRICT_READ_UNTRACKED)"
+  },
+  {
+   "fixture": "reactive-ir/store-destructure-roots",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 8,
+   "to": 15,
+   "adr": "ADR 1228",
+   "fact": "ADR 1226's share 8 -> 9: the fixture gained ContextMerge and HolderMerge (a store reached through a context or a holder's member, merged and destructured): no rule reads those slots, so the value-use census keeps an uncertifiable row at each new site, never a silence (main certified the context form clean, Chrome warns STRICT_READ_UNTRACKED); ADR 1228's share 9 -> 15: ContextForOf (for…of over [ctx.s1]) and PropAssign (({ v } = props.s1)) are census read sites at the destructure pattern in the body, none in a memo's compute, so the census keeps one uncertifiable row per new site where main certified them clean"
+  },
+  {
+   "fixture": "reactive-ir/store-destructure-roots",
+   "key": "SC9012 value-in-carrier",
+   "from": 9,
+   "to": 20,
+   "adr": "ADR 1228",
+   "fact": "ADR 1226's share 9 -> 13: the fixture gained ContextMerge and HolderMerge (a store reached through a context or a holder's member, merged and destructured): no rule reads those slots, so the value-use census keeps an uncertifiable row at each new site, never a silence (main certified the context form clean, Chrome warns STRICT_READ_UNTRACKED); ADR 1228's share 13 -> 20: ContextForOf (for…of over [ctx.s1]) and PropAssign (({ v } = props.s1)) are census read sites at the destructure pattern in the body, none in a memo's compute, so the census keeps one uncertifiable row per new site where main certified them clean"
+  },
+  {
+   "fixture": "reactive-ir/store-write-through-prop",
+   "key": "SC1001 read-backing-unproven",
+   "from": 15,
+   "to": 21,
+   "adr": "ADR 1225",
+   "fact": "the fixture gained AndNoopChild, NullishNoopChild and OrWritesChild (a logical assignment through a handed store): the two no-op forms (`&&=`, `??=` over v: 0) stay uncertifiable store-operation-may-not-write (main reported violations Chrome contradicts), OrWritesChild stays a violation, and the read half of each logical assignment adds two SC1001 read-backing-unproven rows at its site"
+  },
+  {
+   "fixture": "reactive-ir/store-write-through-prop",
+   "key": "SC2003 store-operation-may-not-write",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1225",
+   "fact": "the fixture gained AndNoopChild, NullishNoopChild and OrWritesChild (a logical assignment through a handed store): the two no-op forms (`&&=`, `??=` over v: 0) stay uncertifiable store-operation-may-not-write (main reported violations Chrome contradicts), OrWritesChild stays a violation, and the read half of each logical assignment adds two SC1001 read-backing-unproven rows at its site"
+  },
+  {
+   "fixture": "reactive-ir/store-destructure-roots",
+   "key": "SC1001 read-backing-unproven",
+   "from": 1,
+   "to": 2,
+   "adr": "ADR 1228",
+   "fact": "ContextForOf and PropAssign (a store reached through a context or assigned from a prop, destructured by for…of or an assignment) are census read sites at the pattern: each new site adds uncertifiable rows, where main certified them clean (Chrome STRICT_READ_UNTRACKED)"
+  },
+  {
+   "fixture": "reactive-ir/store-destructure-roots",
+   "key": "SC9012 value-held-in-binding",
+   "from": 1,
+   "to": 3,
+   "adr": "ADR 1228",
+   "fact": "ContextForOf and PropAssign (a store reached through a context or assigned from a prop, destructured by for…of or an assignment) are census read sites at the pattern: each new site adds uncertifiable rows, where main certified them clean (Chrome STRICT_READ_UNTRACKED)"
+  },
+  {
+   "fixture": "reactive-ir/store-write-through-prop",
+   "key": "SC1003 props-callers-unenumerated",
+   "from": 1,
+   "to": 3,
+   "adr": "ADR 1228",
+   "fact": "LetAliasChild and ParamChild (a prop destructured in the parameter list, its value reached past it through a let alias or a helper's parameter, and written): the render may hand a store as the attribute's value, so the write is SC2003 uncertifiable unproven-container-root where main was silent (Chrome: STORE_WRITE_OUTSIDE_SETTER on ADR 1208's grid programs); each new child adds its handed-prop rows"
+  },
+  {
+   "fixture": "reactive-ir/store-write-through-prop",
+   "key": "SC2003 unproven-container-root",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1228",
+   "fact": "LetAliasChild and ParamChild (a prop destructured in the parameter list, its value reached past it through a let alias or a helper's parameter, and written): the render may hand a store as the attribute's value, so the write is SC2003 uncertifiable unproven-container-root where main was silent (Chrome: STORE_WRITE_OUTSIDE_SETTER on ADR 1208's grid programs); each new child adds its handed-prop rows"
+  },
+  {
+   "fixture": "reactive-ir/store-write-through-prop",
+   "key": "SC9012 value-held-in-binding",
+   "from": 4,
+   "to": 8,
+   "adr": "ADR 1228",
+   "fact": "LetAliasChild and ParamChild (a prop destructured in the parameter list, its value reached past it through a let alias or a helper's parameter, and written): the render may hand a store as the attribute's value, so the write is SC2003 uncertifiable unproven-container-root where main was silent (Chrome: STORE_WRITE_OUTSIDE_SETTER on ADR 1208's grid programs); each new child adds its handed-prop rows"
+  },
+  {
+   "fixture": "reactive-ir/value-use-calls-carriers",
+   "key": "SC1001 function-run-unplaced",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1228",
+   "fact": "ContextSortCall, PropSortBind and PropPushReflect (a store's member reached through a context or a prop and handed as the receiver a standard function runs on: sort.call, an at-once bind, Reflect.apply) have an SC9012 row at the call that runs it where main had none (Chrome STORE_WRITE_OUTSIDE_SETTER); each adds the rows of its own site"
+  },
+  {
+   "fixture": "reactive-ir/value-use-calls-carriers",
+   "key": "SC3001 leaf-operation-unaccounted",
+   "from": 3,
+   "to": 6,
+   "adr": "ADR 1228",
+   "fact": "ContextSortCall, PropSortBind and PropPushReflect (a store's member reached through a context or a prop and handed as the receiver a standard function runs on: sort.call, an at-once bind, Reflect.apply) have an SC9012 row at the call that runs it where main had none (Chrome STORE_WRITE_OUTSIDE_SETTER); each adds the rows of its own site"
+  },
+  {
+   "fixture": "reactive-ir/value-use-calls-carriers",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 3,
+   "to": 6,
+   "adr": "ADR 1228",
+   "fact": "ContextSortCall, PropSortBind and PropPushReflect (a store's member reached through a context or a prop and handed as the receiver a standard function runs on: sort.call, an at-once bind, Reflect.apply) have an SC9012 row at the call that runs it where main had none (Chrome STORE_WRITE_OUTSIDE_SETTER); each adds the rows of its own site"
+  },
+  {
+   "fixture": "reactive-ir/value-use-calls-carriers",
+   "key": "SC9012 value-held-in-binding",
+   "from": 0,
+   "to": 2,
+   "adr": "ADR 1228",
+   "fact": "ContextSortCall, PropSortBind and PropPushReflect (a store's member reached through a context or a prop and handed as the receiver a standard function runs on: sort.call, an at-once bind, Reflect.apply) have an SC9012 row at the call that runs it where main had none (Chrome STORE_WRITE_OUTSIDE_SETTER); each adds the rows of its own site"
+  },
+  {
+   "fixture": "reactive-ir/value-use-calls-carriers",
+   "key": "SC9012 value-in-carrier",
+   "from": 15,
+   "to": 19,
+   "adr": "ADR 1228",
+   "fact": "ContextSortCall, PropSortBind and PropPushReflect (a store's member reached through a context or a prop and handed as the receiver a standard function runs on: sort.call, an at-once bind, Reflect.apply) have an SC9012 row at the call that runs it where main had none (Chrome STORE_WRITE_OUTSIDE_SETTER); each adds the rows of its own site"
   }
  ]
 }
