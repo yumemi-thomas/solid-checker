@@ -1,8 +1,9 @@
 import { createEffect, createSignal } from "solid-js";
 import type { Accessor, Setter } from "solid-js";
 
-// ADR 1229: each export is the matching reactive-ir fixture `apply-closure-prop(-read, -write-legal, -read-unrun)`.
-// rc.21 warns STRICT_READ_UNTRACKED in `Read`; `WriteLegal` and `ReadUnrun` raise nothing.
+// ADR 1229: each export is the matching reactive-ir fixture `apply-closure-prop(-read, -write-legal, -read-unrun)` and
+// `apply-closure-prop-carrier` (`CarrierEmpty`, `CarrierSeeded`).
+// rc.21 warns STRICT_READ_UNTRACKED in `Read` and `CarrierSeeded`; `WriteLegal`, `ReadUnrun` and `CarrierEmpty` raise nothing.
 
 function CRead(props: { r1: Accessor<number> }) {
   createEffect(
@@ -66,6 +67,48 @@ export function ReadUnrun() {
   return (
     <div>
       <CReadUnrun r1={r1} />
+    </div>
+  );
+}
+
+function CCarrierEmpty(props: { r1: Accessor<number> }) {
+  createEffect(
+    () => 1,
+    () => {
+      ([] as number[]).forEach(() => {
+        props.r1();
+      });
+    },
+  );
+  return <div />;
+}
+
+function CCarrierSeeded(props: { r1: Accessor<number> }) {
+  createEffect(
+    () => 1,
+    () => {
+      [1].forEach(() => {
+        props.r1();
+      });
+    },
+  );
+  return <div />;
+}
+
+export function CarrierEmpty() {
+  const [r1] = createSignal(3);
+  return (
+    <div>
+      <CCarrierEmpty r1={r1} />
+    </div>
+  );
+}
+
+export function CarrierSeeded() {
+  const [r1] = createSignal(3);
+  return (
+    <div>
+      <CCarrierSeeded r1={r1} />
     </div>
   );
 }
