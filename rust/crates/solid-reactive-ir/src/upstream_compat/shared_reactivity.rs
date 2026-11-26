@@ -2565,12 +2565,14 @@ impl<'c> ParameterFlow<'_, 'c> {
             }
             let Some(call) = caller.ast.calls_with_peeled_callee(callee).next() else {
                 // A render: the compiler builds the props object it passes,
-                // unless a spread may hand an object over whole.
-                self.open |=
-                    index == 0
-                        && caller.ast.jsx_elements.iter().any(|element| {
+                // unless a spread may hand an object over whole. ADR 1228: a sink that reads past that object (`a1.a.v` through
+                // `{ a1 }` destructured from it, an alias or a parameter of it) reaches an attribute's value, which a caller may
+                // hand a store (ADR 0509): open, as the props container's own route is.
+                self.open |= index == 0
+                    && (linked
+                        || caller.ast.jsx_elements.iter().any(|element| {
                             element.name.span == callee && !element.spreads.is_empty()
-                        });
+                        }));
                 continue;
             };
             let resolves = |found: Option<(&FileFacts, &solid_facts::ast::FunctionFact)>| {

@@ -2716,6 +2716,44 @@ impl<'l, 'a> Census<'l, 'a> {
             })
     }
 
+    /// ADR 1228: the call a standard function runs at with `value` as its receiver: `call`'s or `apply`'s first argument,
+    /// `Reflect.apply`'s second (that call), or `bind`'s first where the bound function is called at once (the outer call).
+    fn runs_on_receiver_at(&self, file: &FileFacts, value: Span) -> Option<Span> {
+        let ast = &file.ast;
+        let value = ast.peel_ts_sugar_span(value);
+        ast.arguments_containing(value).find_map(|(call, index)| {
+            if ast.peel_ts_sugar_span(call.arguments[index].span) != value
+                || call.construct
+                || call
+                    .arguments
+                    .iter()
+                    .take(index + 1)
+                    .any(|argument| argument.spread)
+            {
+                return None;
+            }
+            let declaration = self
+                .lookup
+                .resolved_callee_call(file, call.callee)?
+                .declaration
+                .as_ref()
+                .filter(|declaration| declaration.standard_library)?;
+            let name = declaration.qualified_name.as_ref();
+            if runs_on_receiver(name, index) {
+                return Some(call.span);
+            }
+            (index == 0
+                && matches!(
+                    name,
+                    "Function.bind" | "CallableFunction.bind" | "NewableFunction.bind"
+                ))
+            .then(|| ast.calls_with_peeled_callee(call.span).next())
+            .flatten()
+            .filter(|outer| !outer.construct)
+            .map(|outer| outer.span)
+        })
+    }
+
     /// ADR 0811: where the census asks which store member writes SC2003
     /// decides in a file. Without it, none.
     pub(crate) fn with_member_writes(mut self, member_writes: MemberWrites<'l>) -> Self {
@@ -2851,6 +2889,16 @@ impl<'l, 'a> Census<'l, 'a> {
                         return self.position(file, top, Mode::Root);
                     }
                     return Position::Followed;
+                }
+                // ADR 1228: a member of the store reached through a slot, an alias or a prop, handed as the receiver a standard
+                // function runs on (`Array.prototype.sort.call(ctx.s1.items, …)`, `sort.bind(props.s1.items)(…)`): that function
+                // reads and writes the store's proxy at the call that runs it, where no authored frame stands below it and no row
+                // of the member's own answers for it: the call is a use beside the member's.
+                if let Some(runs) = self.runs_on_receiver_at(file, member.span) {
+                    self.uses.push((
+                        call_use_span(file, runs).location(file.path.as_str()),
+                        blockers::VALUE_IN_CARRIER,
+                    ));
                 }
                 let (start, end) = (u64::from(member.span.start), u64::from(member.span.end));
                 // A decided write covers this member only where it is the written target itself: in a deeper write
