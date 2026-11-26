@@ -26,6 +26,12 @@ evaluated at module scope, and a JSX-returning function bound to a call's result
 are not placed: a write there is uncertifiable, never a violation. An exported
 capitalized function stays a component by module surface (ADR 0331).
 
+A write written directly in IIFEs inside a named local function that is no possible
+component (`const go = () => { (() => set(1))(); }`) runs at the outermost IIFE's
+call in that function, and is placed there by `go`'s calls, as a write written at
+the call would be (ADR 1212). A literal run through `.call`/`.apply` or a named
+function expression is not this form.
+
 A closure handed to a helper inside a `createRoot` body or a `runWithOwner(owner, …)`
 callback (`createRoot(() => hc1(() => set(1)))`, written in a handler) may run on that
 callback's stack, under its owner: the handler's permissive role is no proof for it, and its
