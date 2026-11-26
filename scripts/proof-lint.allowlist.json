@@ -1515,8 +1515,8 @@
         "why": "pending-review"
       },
       "name-only-match": {
-        "count": 1,
-        "why": "`sync` is the key of the options literal of a call whose primitive kind is already resolved and for which the dialect says the option exists (`supports_sync_option(kind)`, `options_argument(kind)`), not an identification of what the call is"
+        "count": 2,
+        "why": "`sync` is the key of the options literal of a call whose primitive kind is already resolved and for which the dialect says the option exists (`supports_sync_option(kind)`, `options_argument(kind)`), not an identification of what the call is; ADR 1214 slice C: `value` is the attribute key of the one provider element of a context the dialect's `ContextRole::Create` made, the prop that role says the provider stores; the element's tag and the context are resolved exactly first, so the key identifies no callee or binding"
       },
       "primitive-name-match": {
         "count": 3,
