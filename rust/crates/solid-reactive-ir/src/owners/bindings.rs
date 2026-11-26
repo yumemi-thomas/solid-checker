@@ -411,11 +411,18 @@ pub(crate) fn binding_returns_reactive_source(
 pub(crate) fn read_escapes_synchronous_extent(
     file: &solid_facts::FileFacts,
     span: Span,
+    owner_body: Span,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
     dialect: &dyn Dialect,
 ) -> bool {
     file.ast.arguments_containing(span).any(|(call, index)| {
+        // ADR 1235: only a callback between the owner and the read takes the read out of the owner's call. A call around the
+        // owner (`createEffect(c, () => { const useT = …; useT().read(); })`) runs the owner and its reads alike; the owner's
+        // call sites place them.
+        if !owner_body.contains(call.span) {
+            return false;
+        }
         let argument = &call.arguments[index];
         if !file
             .ast

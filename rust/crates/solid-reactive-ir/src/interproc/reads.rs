@@ -149,6 +149,7 @@ pub(super) fn direct_reference_contributions(
         if read_escapes_synchronous_extent(
             file,
             reference_span,
+            nodes[owner].body,
             entities,
             symbol_names,
             lookup.dialect,
@@ -415,8 +416,14 @@ fn in_place_layer_owners(
         {
             continue;
         }
-        if read_escapes_synchronous_extent(file, call, entities, symbol_names, lookup.dialect)
-            || read_escapes_runtime_stack(file, call, node.body, lookup)
+        if read_escapes_synchronous_extent(
+            file,
+            call,
+            node.body,
+            entities,
+            symbol_names,
+            lookup.dialect,
+        ) || read_escapes_runtime_stack(file, call, node.body, lookup)
             || runs_in_retained_value_literal(file, call, node)
             || runs_outside_owner_call(file, call, node.body, lookup)
         {
@@ -552,6 +559,7 @@ pub(super) fn typed_candidate_contributions(
         if read_escapes_synchronous_extent(
             file,
             call.callee,
+            nodes[owner].body,
             entities,
             symbol_names,
             lookup.dialect,
@@ -1409,6 +1417,7 @@ fn add_transported_call_summaries(
             if read_escapes_synchronous_extent(
                 file,
                 call.span,
+                nodes[owner].body,
                 entities,
                 symbol_names,
                 lookup.dialect,

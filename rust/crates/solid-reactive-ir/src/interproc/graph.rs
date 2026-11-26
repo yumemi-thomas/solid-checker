@@ -342,6 +342,7 @@ fn discover_call_graph(
         !read_escapes_synchronous_extent(
             file,
             call.span,
+            nodes[owner].body,
             symbols.entities,
             symbols.names,
             lookup.dialect,
