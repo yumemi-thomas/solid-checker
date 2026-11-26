@@ -2336,6 +2336,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/ref-factory-call/node_modules/**
 !fixtures/reactive-ir/iife-write-helper/node_modules/
 !fixtures/reactive-ir/iife-write-helper/node_modules/**
+!fixtures/reactive-ir/inline-carrier-named/node_modules/
+!fixtures/reactive-ir/inline-carrier-named/node_modules/**
 !fixtures/reactive-ir/carrier-call-row/node_modules/
 !fixtures/reactive-ir/carrier-call-row/node_modules/**
 !fixtures/reactive-ir/callback-prop-leaf/node_modules/

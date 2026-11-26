@@ -4442,17 +4442,7 @@ pub(crate) fn layer_run(
             if closed_literal_dispatch(file, call.callee, lookup) {
                 return None;
             }
-            let resolved = lookup.placing_callee_call(file, call.callee)?;
-            resolved
-                .declaration
-                .as_ref()
-                .is_some_and(|declaration| declaration.standard_library)
-                .then_some(())?;
-            let callability = lookup
-                .entity_at(file.path.as_str(), call.arguments[index].span)
-                .and_then(|entity| entity.callability);
-            crate::runtime_semantics::argument_behavior(resolved, callability, index)
-                .map(|behavior| (call, behavior))
+            standard_argument_behavior(file, call, index, lookup).map(|behavior| (call, behavior))
         });
     // ADR 0874: a call the census withholds places its inline callback's rows
     // as a standard one would, for one run among others, never the sole run:
@@ -4477,6 +4467,7 @@ pub(crate) fn layer_run(
             Some((call, ParameterUses::OnlyCalled)) => LayerRun::InPlace(call),
             Some((call, ParameterUses::AlsoElsewhere)) => LayerRun::InPlaceAmongOthers(call),
             None => sole_call_of_named_function(file, layer, lookup)
+                .or_else(|| sole_inline_carrier_of_named_function(file, layer, lookup))
                 .map_or(LayerRun::Elsewhere, LayerRun::InPlace),
         },
     }
@@ -4615,6 +4606,89 @@ fn sole_call_of_named_function(
         reference.path.as_ref() != path || !accounted(start, end)
     });
     (!escapes).then_some(call.span)
+}
+
+/// ADR 1214 (slice B): the one call that runs a function bound to a name, when its only use is being handed whole to a standard-library call's
+/// inline-callback slot (`const f = () => …; [1].forEach(f);`): `sole_call_of_named_function`'s premises (the binding holds this function, its module
+/// neither exports nor hands it out, it is no method, generator or named function expression), no call site of its own, and every other reference
+/// to the binding is the declaration. The call resolves to a standard-library declaration whose argument at that position runs inline
+/// (`runtime_semantics::argument_behavior` is `InlineCallback`, as for a literal written there), is no call a closed literal dispatches to its own
+/// method (ADR 1023), the census neither withholds it (ADR 0874) nor finds its member written by a loaded package (ADR 1114), and it provably runs the
+/// function at least once (`carrier_provably_runs`). The function then runs on that call's stack, synchronously, as a literal written in the slot would.
+pub(crate) fn sole_inline_carrier_of_named_function(
+    file: &solid_facts::FileFacts,
+    layer: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    use crate::runtime_semantics::RuntimeArgumentBehavior;
+    use solid_facts::ast::FunctionKind;
+    if layer.method_name.is_some()
+        || layer.generator
+        || (layer.kind == FunctionKind::Expression && layer.name.is_some())
+    {
+        return None;
+    }
+    let binding = function_binding_name(file, layer)?;
+    let path = file.path.as_str();
+    let symbol = lookup.entities().at(path, binding.span)?;
+    if !lookup.function_value_is_current(file, layer)
+        || lookup.hands_out_by_name(path, layer.span)
+        || module_exports(file, layer, lookup)
+        || !lookup.function_call_sites(path, layer.span).is_empty()
+    {
+        return None;
+    }
+    let references = lookup.symbol_references_if_present(symbol.as_str())?;
+    let mut uses = references.iter().filter(|reference| {
+        !(reference.path.as_ref() == path
+            && u32::try_from(reference.start_byte).is_ok_and(|start| start == binding.span.start))
+    });
+    let only = uses.next()?;
+    if uses.next().is_some() || only.path.as_ref() != path {
+        return None;
+    }
+    let (Ok(start), Ok(end)) = (u32::try_from(only.start_byte), u32::try_from(only.end_byte))
+    else {
+        return None;
+    };
+    let at = Span::new(start, end);
+    let ast = &file.ast;
+    let (call, index) = ast.arguments_containing(at).find(|(call, index)| {
+        !call.arguments[*index].spread && ast.peel_ts_sugar_span(call.arguments[*index].span) == at
+    })?;
+    // The carrier must provably run the function at least once (`carrier_runs`: `[1].forEach(f)`, a non-empty literal receiver): one that may run
+    // it zero times (`([] as T[]).map(f)`) keeps the function `Elsewhere`, where a site no run reaches keeps the proof that it never runs.
+    if call.construct
+        || closed_literal_dispatch(file, call.callee, lookup)
+        || lookup.standard_call_withheld(file, call.callee)
+        || lookup.package_written_standard_call(file, call.callee)
+        || !crate::carrier_runs::carrier_provably_runs(file, call.span, lookup)
+    {
+        return None;
+    }
+    (standard_argument_behavior(file, call, index, lookup)
+        == Some(RuntimeArgumentBehavior::InlineCallback))
+    .then_some(call.span)
+}
+
+/// The runtime behavior a standard-library call gives its argument at `index` (`runtime_semantics::argument_behavior`), from the call's placing
+/// resolution: `None` for a call no standard declaration resolves. `layer_run`'s literal arm and ADR 1214's named arm read it here, one read.
+fn standard_argument_behavior(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+    lookup: &SemanticLookup<'_>,
+) -> Option<crate::runtime_semantics::RuntimeArgumentBehavior> {
+    let resolved = lookup.placing_callee_call(file, call.callee)?;
+    resolved
+        .declaration
+        .as_ref()
+        .is_some_and(|declaration| declaration.standard_library)
+        .then_some(())?;
+    let callability = lookup
+        .entity_at(file.path.as_str(), call.arguments[index].span)
+        .and_then(|entity| entity.callability);
+    crate::runtime_semantics::argument_behavior(resolved, callability, index)
 }
 
 /// How many function layers one climb crosses before it says where it stopped (ADR 0532, ADR 0988).

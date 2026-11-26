@@ -538,28 +538,6 @@
       "fixes": 0
     },
     {
-      "rule": "pending-async-unsuspendable-read",
-      "code": "SC5001",
-      "kind": "uncertifiable",
-      "blocker": "invocation-context-unproven",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/async-carrier-call-attributed/App.tsx",
-      "start": 2995,
-      "end": 3001,
-      "fixes": 0
-    },
-    {
-      "rule": "async-outside-loading-boundary",
-      "code": "SC5003",
-      "kind": "uncertifiable",
-      "blocker": "call-attributed-read",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/async-carrier-call-attributed/App.tsx",
-      "start": 2995,
-      "end": 3001,
-      "fixes": 0
-    },
-    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
@@ -598,17 +576,6 @@
       "kind": "uncertifiable",
       "blocker": "source-pending-unproven",
       "severity": "error",
-      "path": "fixtures/reactive-ir/async-carrier-call-attributed/App.tsx",
-      "start": 3110,
-      "end": 3119,
-      "fixes": 0
-    },
-    {
-      "rule": "async-outside-loading-boundary",
-      "code": "SC5003",
-      "kind": "uncertifiable",
-      "blocker": "async-read-unaccounted",
-      "severity": "warning",
       "path": "fixtures/reactive-ir/async-carrier-call-attributed/App.tsx",
       "start": 3110,
       "end": 3119,

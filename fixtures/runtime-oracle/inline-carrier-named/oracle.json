@@ -1,0 +1,3 @@
+{
+  "note": "ADR 1214 (slice B): a named function handed to [1].forEach: quiet in a tracked JSX expression (clean), STRICT_READ_UNTRACKED in the body (violation); a function also kept, a project forEach and a reassigned let keep uncertifiable rows. The checker's fixture is reactive-ir/inline-carrier-named."
+}
