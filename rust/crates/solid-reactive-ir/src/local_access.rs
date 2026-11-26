@@ -4406,28 +4406,25 @@ impl LocalAccessContext<'_, '_> {
         if self.props_call_placed_at(file, call.span) {
             return true;
         }
-        // ADR 1229: a call written in in-place layers (an IIFE, a named closure its body calls once, a helper's callback)
-        // runs where the outermost layer's call does, on the same stack; that call is placed as a direct one would be.
+        // ADR 1222 (ADR 1229 measured it on every sourced grid): a call in layers that each run once in place (an IIFE, a local function's one direct call, an inline
+        // standard-library callback) runs on the stack of the outermost layer's call, which is placed by the rule above. A layer
+        // in a parameter list, one run among others, a run past a suspension, a withheld or unmodelled crossing and the bound
+        // answer nothing.
         crate::execution_role::climb_in_place_layers(file, call.span, self.lookup).is_some_and(
             |climb| {
-                !climb.bound()
-                    && climb.in_list.is_none()
+                climb.in_list.is_none()
                     && !climb.among_others
                     && climb.suspended.is_none()
                     && !climb.withheld
                     && !climb.unmodelled
-                    && !crate::execution_role::climb_crosses_library_callback(
-                        file,
-                        call.span,
-                        climb.at,
-                        self.lookup,
-                    )
+                    && !climb.bound()
                     && self.props_call_placed_at(file, climb.at)
             },
         )
     }
 
-    /// ADR 0509: the placement test of [`Self::props_call_placed`] for the position `at`.
+    /// ADR 0509's placement of the code at `at`: written directly in a component's body, or directly in a function literal a
+    /// dialect primitive's call written there receives.
     fn props_call_placed_at(
         &self,
         file: &solid_facts::FileFacts,
