@@ -2324,6 +2324,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/effect-creation-host-entry/node_modules/**
 !fixtures/reactive-ir/effect-creation-host-entry/variants/apply/node_modules/
 !fixtures/reactive-ir/effect-creation-host-entry/variants/apply/node_modules/**
+!fixtures/reactive-ir/effect-creation-for-await/node_modules/
+!fixtures/reactive-ir/effect-creation-for-await/node_modules/**
 !fixtures/reactive-ir/named-ref-entry/node_modules/
 !fixtures/reactive-ir/named-ref-entry/node_modules/**
 !fixtures/reactive-ir/component-prop-call-owner/node_modules/
