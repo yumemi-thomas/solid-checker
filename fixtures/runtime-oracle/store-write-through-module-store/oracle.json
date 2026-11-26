@@ -1,0 +1,1 @@
+{"note": "ADR 1232: an exported module store written past its root from another module: rc.21 drops the write outside the setter (STORE_WRITE_OUTSIDE_SETTER) in each export; where the store is handed on or its setter is referenced in that module, the checker leaves it uncertifiable."}
