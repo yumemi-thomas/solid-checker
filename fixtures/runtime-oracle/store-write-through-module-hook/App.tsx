@@ -1,3 +1,4 @@
+import { createStore } from "solid-js";
 import { useHanded, useKept, useSetter, useVals } from "./hooks";
 
 // ADR 1232: a store a hook of another module creates, every call's value used only as the root of contained uses, keeps its own
@@ -49,4 +50,25 @@ export function HookHanded() {
   const vals = useHanded();
   vals.s1.a.v = 7;
   return <i />;
+}
+
+// `local-alias-member-reads`' two same-file local-hook writes (ADR 1232 moves them to violations).
+export function StoreMemberWrite() {
+  const [state, setState] = createStore({ v: 0, items: [0] });
+  const useState = () => ({ state, setState });
+  const holder = useState();
+  holder.state.v = 1;
+  holder.state.items.push(1);
+  return <div>{state.v}</div>;
+}
+
+export function StoreLinkInClosureThroughMember() {
+  const [state, setState] = createStore({ v: 0, nested: { v: 0 } });
+  const useState = () => ({ state, setState });
+  const holder = useState();
+  const write = () => {
+    holder.state.nested.v = 1;
+  };
+  write();
+  return <div>{state.v}</div>;
 }
