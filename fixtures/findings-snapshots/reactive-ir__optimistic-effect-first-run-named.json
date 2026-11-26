@@ -1,0 +1,37 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-write-in-pure-computation",
+      "code": "SC2001",
+      "kind": "uncertifiable",
+      "blocker": "write-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/optimistic-effect-first-run-named/App.tsx",
+      "start": 442,
+      "end": 449,
+      "fixes": 0
+    },
+    {
+      "rule": "optimistic-write-before-load",
+      "code": "SC2009",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/optimistic-effect-first-run-named/App.tsx",
+      "start": 442,
+      "end": 449,
+      "fixes": 0
+    },
+    {
+      "rule": "optimistic-write-before-load",
+      "code": "SC2009",
+      "kind": "uncertifiable",
+      "blocker": "optimistic-reach-unresolved",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/optimistic-effect-first-run-named/App.tsx",
+      "start": 492,
+      "end": 495,
+      "fixes": 0
+    }
+  ]
+}

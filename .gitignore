@@ -2352,3 +2352,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/callback-prop-roles/node_modules/**
 !fixtures/reactive-ir/callback-prop-forwarded/node_modules/
 !fixtures/reactive-ir/callback-prop-forwarded/node_modules/**
+!fixtures/reactive-ir/props-call-in-place-layers/node_modules/
+!fixtures/reactive-ir/props-call-in-place-layers/node_modules/**

@@ -1,0 +1,1 @@
+{"note": "ADR 1229: a prop accessor or setter called in a closure an effect apply calls in place. The read warns STRICT_READ_UNTRACKED (rc.21) and the write is legal; a closure handed on and never called reads nothing."}

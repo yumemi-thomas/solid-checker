@@ -21,6 +21,12 @@ element is a direct child of intrinsic elements only (not in an expression child
 Also (ADR 1216 slice 3) `new Map([[k, v]]).forEach(f)` and `new Set([x]).forEach(f)`, and a function stored once in a
 fresh local `Map`, `Set` or `WeakMap` (`m.set(k, f)`, `s.add(f)`) that a later straight-line `forEach((g) => g())` or
 `get(key)!()` calls.
+Also (ADR 1224) an effect's first run on that walk: a `createRenderEffect` apply runs at its call, a `createEffect` apply
+and an owned `onSettled` callback in `render`'s synchronous tail flush, before any async answer. The flush must hold
+nothing: the component that creates the source is mounted by a module-scope `render` that runs first, the effect is in
+it or in one child it renders as a direct child of intrinsic elements (props string or function literals, or a function
+it declares), every tree is static and every body runs nothing else (ADR 0505). A tree that reads the pending source
+holds the flush (rc.21 is silent there) and stays uncertifiable.
 
 Proven too (ADR 1175): the setter call is in the first run of an effect's apply that comes
 before the answer. The apply half is ADR 0504's (the call on every completion of the apply's
