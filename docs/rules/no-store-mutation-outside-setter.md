@@ -114,7 +114,10 @@ the file declares and never exports keep it the same way through every `useConte
 ([ADR 1211](../decisions.md#adr-1211)). The read may also pass through a local carrier that hands it on unchanged: a closed
 literal's slot or an array element, then an exact `const` binding or rest-free plain destructuring, a static member read, or a local
 function's one return at each of its calls ([ADR 1231](../decisions.md#adr-1231): `const { useIt } = useThing()`,
-`const [, useIt] = [0, props.s1]`, `thing.useIt.a.v = 7`). An exact `const` alias of a link
+`const [, useIt] = [0, props.s1]`, `thing.useIt.a.v = 7`). A store of another module is proved there
+([ADR 1232](../decisions.md#adr-1232)): one a hook creates and returns, where the hook's every reference is a resolved call and each
+call's value reaches only contained uses, its setter none; and an exported module store whose every reference in another file is
+carried to contained uses, its setter referenced in no other file. An exact `const` alias of a link
 (`const held = s1.a`, every use of it such a path) holds that link's proxy, so
 `held.v = 7` is a violation ([ADR 1169](../decisions.md#adr-1169)); any other reference that hands a proxy out, a non-literal or open
 literal, a getter, a used setter or a module-scope store leaves it
