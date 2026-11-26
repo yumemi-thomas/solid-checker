@@ -19,6 +19,17 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-later-continuation/App.tsx",
+      "start": 3179,
+      "end": 3186,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "blocker": "leaf-operation-unaccounted",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/flush-later-continuation/App.tsx",
       "start": 3554,
       "end": 3561,
       "fixes": 0

@@ -8720,6 +8720,22 @@
    "to": 1,
    "adr": "ADR 1205",
    "fact": "new fixture components SlotHelperInApply, SlotMemberInApply and SlotMemberAlsoInTimer (ADR 1205 round 2): their own creation, leaf and owner rows, the kinds the fixture's other components have; the two apply-only creations are SC4001 creation-throws-first; no row moved elsewhere"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-first",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 11,
+   "to": 18,
+   "adr": "ADR 1205",
+   "fact": "on main 5972f57aa: ADR 1205 round 2's fixture components SlotHelperInApply, SlotMemberInApply and SlotMemberAlsoInTimer bring their own creation rows, and two function-run-unplaced rows keep their finding as effect-creation-unaccounted (the relabel row); no row moved elsewhere"
+  },
+  {
+   "fixture": "reactive-ir/competing-check-sync-memo",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 40,
+   "to": 42,
+   "adr": "ADR 1205",
+   "fact": "on main 5972f57aa: ADR 1205 round 2's fixture components SlotHelperInApply, SlotMemberInApply and SlotMemberAlsoInTimer bring their own creation rows, and two function-run-unplaced rows keep their finding as effect-creation-unaccounted (the relabel row); no row moved elsewhere"
   }
  ]
 }
