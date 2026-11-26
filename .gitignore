@@ -895,6 +895,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/store-write-through-prop/node_modules/**
 !fixtures/reactive-ir/store-write-through-prop-view/node_modules/
 !fixtures/reactive-ir/store-write-through-prop-view/node_modules/**
+!fixtures/reactive-ir/store-write-through-carrier/node_modules/
+!fixtures/reactive-ir/store-write-through-carrier/node_modules/**
 !fixtures/reactive-ir/flush-closure-called-once/node_modules/
 !fixtures/reactive-ir/flush-closure-called-once/node_modules/**
 !fixtures/reactive-ir/effect-error-arm-read/node_modules/
