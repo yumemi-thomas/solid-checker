@@ -2047,13 +2047,23 @@ fn handed_links_wrappable(
     ) else {
         return false;
     };
-    if declaration.path.as_ref() != file.path.as_str() {
-        return false;
-    }
-    let Some(initial) = store_literal_untouched_at(file, context, Span::new(start, end), false)
+    // ADR 1232: a store declared in another file (a hook there creates it) is proved in that file.
+    let literal_file = if declaration.path.as_ref() == file.path.as_str() {
+        file
+    } else {
+        match context.lookup.file_by_path(declaration.path.as_ref()) {
+            Some(other) => other,
+            None => return false,
+        }
+    };
+    let Some(initial) =
+        store_literal_untouched_at(literal_file, context, Span::new(start, end), false)
     else {
         return false;
     };
+    if !std::ptr::eq(literal_file, file) {
+        return links_wrappable_across(file, member, store_root, literal_file, initial);
+    }
     let store_root = ast.peel_ts_sugar_span(store_root);
     // ADR 1169: a root that is an exact `const` alias of a link (`const held = s1.a`) starts at that link's literal.
     if let Some(sub) = link_alias_literal(file, store_root, Span::new(start, end), initial, 4) {
@@ -4952,6 +4962,17 @@ fn links_proven_wrappable(
 
 /// [`links_proven_wrappable`] once the store's literal `initial` is known untouched.
 fn links_wrappable_in(file: &FileFacts, member: Span, root: Span, initial: Span) -> bool {
+    links_wrappable_across(file, member, root, file, initial)
+}
+
+/// [`links_wrappable_in`] for a write in `file` past a store whose literal `initial` is written in `literal_file` (ADR 1232).
+fn links_wrappable_across(
+    file: &FileFacts,
+    member: Span,
+    root: Span,
+    literal_file: &FileFacts,
+    initial: Span,
+) -> bool {
     let ast = &file.ast;
     // The written path's links resolve to literals (the use check already
     // walked it; this pins the links themselves).
@@ -4964,7 +4985,7 @@ fn links_wrappable_in(file: &FileFacts, member: Span, root: Span, initial: Span)
         _ => return false,
     };
     let called = ast.calls_with_peeled_callee(member).next().is_some();
-    let holds = resolve_literal_path(file, initial, prefix);
+    let holds = resolve_literal_path_in(file, literal_file, initial, prefix);
     if called {
         let Some(name) = file.source_text(*last) else {
             return false;
@@ -4973,7 +4994,7 @@ fn links_wrappable_in(file: &FileFacts, member: Span, root: Span, initial: Span)
         let writes = LENGTH_WRITING_ARRAY_MUTATORS.contains(&name)
             || matches!(holds, Some(LiteralValue::Array(array)) if ast
                 .calls_with_peeled_callee(member)
-                .any(|call| !call.construct && literal_mutator_writes(file, call, name, array)));
+                .any(|call| !call.construct && literal_mutator_writes_in(file, call, name, literal_file, array)));
         if !writes {
             return false;
         }
@@ -5138,6 +5159,9 @@ fn store_literal_proof(
                                 .is_some_and(|reads| reads.is_empty())
                         },
                     )
+                    // ADR 1232: a setter a hook hands out that no caller's value reaches a use of.
+                    || hook_carried_uses(file, lookup, entities, identifier.span)
+                        .is_some_and(|uses| uses.is_empty())
             })
     }) {
         return None;
@@ -5205,6 +5229,11 @@ fn store_literal_proof(
             && !handed_to_contained_prop(file, lookup, dialect, identifier.span, initial)
             && !handed_to_contained_context(file, lookup, dialect, identifier.span, initial)
             && !link_alias_contained(file, identifier.span, initial, 4)
+            // ADR 1232: the store a hook hands out, every caller's value of it a contained use.
+            && !hook_carried_uses(file, lookup, entities, identifier.span).is_some_and(|uses| {
+                uses.iter()
+                    .all(|(site_file, at)| contained_store_use_in(site_file, *at, file, initial))
+            })
         {
             return None;
         }
@@ -5520,13 +5549,23 @@ fn closed_literal(ast: &solid_facts::ast::AstFacts, span: Span) -> Option<Span> 
 /// The value the closed literal `literal` holds at `path`, one static key per
 /// step; an array literal or a primitive ends it.
 fn resolve_literal_path(file: &FileFacts, literal: Span, path: &[Span]) -> Option<LiteralValue> {
+    resolve_literal_path_in(file, file, literal, path)
+}
+
+/// [`resolve_literal_path`] with the path's keys written in `key_file` and the literal in `file` (ADR 1232).
+fn resolve_literal_path_in(
+    key_file: &FileFacts,
+    file: &FileFacts,
+    literal: Span,
+    path: &[Span],
+) -> Option<LiteralValue> {
     let ast = &file.ast;
     let mut value = LiteralValue::Object(literal);
     for &key in path {
         let LiteralValue::Object(object) = value else {
             return None;
         };
-        let name = file.source_text(key)?;
+        let name = key_file.source_text(key)?;
         let property = ast.object_properties.iter().find(|property| {
             object.contains(property.span)
                 && !property.computed
@@ -6093,9 +6132,17 @@ const CARRY_STEPS: usize = 64;
 /// Anything else is a use, which the caller judges. `None` where a carrier flows somewhere this does not follow, or past
 /// [`CARRY_STEPS`].
 fn carried_store_reads(file: &FileFacts, reads: Vec<Span>) -> Option<Vec<Span>> {
+    carried_uses(
+        file,
+        reads.into_iter().map(|read| (read, Vec::new())).collect(),
+    )
+}
+
+/// [`carried_store_reads`] from carriers that hold the value at the keys each start names (ADR 1232: a hook's call, holding the store
+/// at its returned literal's key).
+fn carried_uses(file: &FileFacts, start: Vec<(Span, Vec<String>)>) -> Option<Vec<Span>> {
     let ast = &file.ast;
-    let mut pending: Vec<(Span, Vec<String>)> =
-        reads.into_iter().map(|read| (read, Vec::new())).collect();
+    let mut pending = start;
     let mut out = Vec::new();
     let mut steps = 0;
     while let Some((at, path)) = pending.pop() {
@@ -6198,6 +6245,10 @@ fn carried_projection(
     }
     if let Some(function) = returning_local_function(file, at) {
         let name = crate::owners::function_binding_name(file, function)?;
+        // ADR 1232: its references are this file's only where no export names it.
+        if name_exported(file, name.span) {
+            return None;
+        }
         let mut calls = Vec::new();
         for reference in references_of(file, name.span) {
             let call = ast.calls.iter().find(|call| {
@@ -6214,6 +6265,77 @@ fn carried_projection(
         literal,
         std::iter::once(key).chain(path.iter().cloned()).collect(),
     )])
+}
+
+/// ADR 1232: whether an export of `file` names the binding declared at `name` (by its local name), or contains it (`export function`).
+fn name_exported(file: &FileFacts, name: Span) -> bool {
+    let Some(text) = file.source_text(name) else {
+        return true;
+    };
+    file.ast.exports.iter().any(|export| {
+        export.span.contains(name)
+            || export
+                .specifiers
+                .iter()
+                .chain(&export.declarations)
+                .chain(&export.declaration_surface_only)
+                .any(|specifier| {
+                    file.source_text(specifier.local.span)
+                        .is_none_or(|local| local == text)
+                })
+    })
+}
+
+/// ADR 1232: the uses, in every file, of the value the store reference `reference` hands out by a hook: `reference` is a slot of the
+/// literal a project function returns on its one straight-line return (`return { s1, setS1 }`); the function's every reference is
+/// its declaration, a type query or a call the call graph resolved to it (as ADR 0919's route asks of a function); there is at least
+/// one call; and each call's value is carried in its own file ([`carried_uses`]) from the slot's key. `None` where any of that fails.
+fn hook_carried_uses<'a>(
+    file: &FileFacts,
+    lookup: &crate::indexes::SemanticLookup<'a>,
+    entities: &crate::EntitySymbols,
+    reference: Span,
+) -> Option<Vec<(&'a FileFacts, Span)>> {
+    let (literal, key) = literal_slot_of(file, reference)?;
+    let function = returning_local_function(file, literal)?;
+    if !lookup.function_value_is_current(file, function) {
+        return None;
+    }
+    let name = crate::owners::function_binding_name(file, function)?;
+    let path = file.path.as_str();
+    let symbol = entities.at(path, name.span)?;
+    let references = lookup.symbol_references_if_present(symbol.as_str())?;
+    let sites = lookup.function_call_site_references(path, function.span);
+    let accounted = references.iter().all(|reference| {
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(reference.start_byte),
+            u32::try_from(reference.end_byte),
+        ) else {
+            return false;
+        };
+        let at = Span::new(start, end);
+        (reference.path.as_ref() == path
+            && (at == name.span || file.ast.type_queries.iter().any(|query| query.contains(at))))
+            || sites.iter().any(|(site_file, site)| {
+                site_file.path.as_str() == reference.path.as_ref() && *site == at
+            })
+    });
+    if !accounted || sites.is_empty() {
+        return None;
+    }
+    let mut uses = Vec::new();
+    for (site_file, site) in sites {
+        let ast = &site_file.ast;
+        let call = ast.calls.iter().find(|call| {
+            !call.construct
+                && ast.peel_ts_sugar_span(call.callee) == site
+                && call.arguments.iter().all(|argument| !argument.spread)
+        })?;
+        for at in carried_uses(site_file, vec![(call.span, vec![key.clone()])])? {
+            uses.push((site_file, at));
+        }
+    }
+    Some(uses)
 }
 
 /// ADR 1231: the immutable binding whose whole initializer is `at`.
@@ -6310,6 +6432,16 @@ fn returning_local_function(file: &FileFacts, at: Span) -> Option<&solid_facts::
 /// deleted, called as a callback-free array mutator on an array literal, or
 /// read where the literal holds a primitive.
 fn contained_store_use(file: &FileFacts, reference: Span, initial: Span) -> bool {
+    contained_store_use_in(file, reference, file, initial)
+}
+
+/// [`contained_store_use`] for a use written in `file` of a store whose literal `initial` is written in `literal_file` (ADR 1232).
+fn contained_store_use_in(
+    file: &FileFacts,
+    reference: Span,
+    literal_file: &FileFacts,
+    initial: Span,
+) -> bool {
     let ast = &file.ast;
     let mut top = reference;
     while let Some(parent) = ast.members.iter().find(|parent| {
@@ -6332,13 +6464,15 @@ fn contained_store_use(file: &FileFacts, reference: Span, initial: Span) -> bool
             .iter()
             .any(|&target| file.peel_parentheses(target) == Some(top));
     if written {
-        return holds_object(resolve_literal_path(file, initial, prefix));
+        return holds_object(resolve_literal_path_in(file, literal_file, initial, prefix));
     }
     let called = ast
         .calls_with_peeled_callee(top)
         .any(|call| !call.construct);
     if called {
-        let Some(LiteralValue::Array(array)) = resolve_literal_path(file, initial, prefix) else {
+        let Some(LiteralValue::Array(array)) =
+            resolve_literal_path_in(file, literal_file, initial, prefix)
+        else {
             return false;
         };
         let Some(name) = file.source_text(*last) else {
@@ -6347,11 +6481,11 @@ fn contained_store_use(file: &FileFacts, reference: Span, initial: Span) -> bool
         // ADR 1170: `sort`, `reverse`, `fill` and `copyWithin` where the literal proves the call writes; a `sort` then holds
         // number literals, so its comparator receives no proxy.
         return LENGTH_WRITING_ARRAY_MUTATORS.contains(&name)
-            || ast
-                .calls_with_peeled_callee(top)
-                .any(|call| !call.construct && literal_mutator_writes(file, call, name, array));
+            || ast.calls_with_peeled_callee(top).any(|call| {
+                !call.construct && literal_mutator_writes_in(file, call, name, literal_file, array)
+            });
     }
-    resolve_literal_path(file, initial, &path) == Some(LiteralValue::Primitive)
+    resolve_literal_path_in(file, literal_file, initial, &path) == Some(LiteralValue::Primitive)
 }
 
 /// Whether `tsc` reports a type error written in `file` at all: not a
@@ -6483,8 +6617,20 @@ fn literal_mutator_writes(
     method: &str,
     array: Span,
 ) -> bool {
+    literal_mutator_writes_in(file, call, method, file, array)
+}
+
+/// [`literal_mutator_writes`] for a call written in `file` on an array literal written in `literal_file` (ADR 1232: a store a hook of
+/// another module creates).
+fn literal_mutator_writes_in(
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    method: &str,
+    literal_file: &FileFacts,
+    array: Span,
+) -> bool {
     let ast = &file.ast;
-    let Some(literal) = ast.array_literal_at(array) else {
+    let Some(literal) = literal_file.ast.array_literal_at(array) else {
         return false;
     };
     if literal
@@ -6515,7 +6661,7 @@ fn literal_mutator_writes(
         "reverse" => call.arguments.is_empty() && length >= 2,
         "sort" => {
             let number = |span: Span| {
-                file.source_text(span).is_some_and(|text| {
+                literal_file.source_text(span).is_some_and(|text| {
                     !text.is_empty()
                         && text
                             .bytes()
