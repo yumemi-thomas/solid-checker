@@ -111,7 +111,10 @@ there is a violation too ([ADR 1172](../decisions.md#adr-1172)). The component m
 view held in a `const` (an `omit` rest spread onto an element reads no key it drops) or hand its props whole to another local
 component (`<Child {...props} />`, whose reads count), and a store and setter handed in the value literal of a provider of a context
 the file declares and never exports keep it the same way through every `useContext` result
-([ADR 1211](../decisions.md#adr-1211)). An exact `const` alias of a link
+([ADR 1211](../decisions.md#adr-1211)). The read may also pass through a local carrier that hands it on unchanged: a closed
+literal's slot or an array element, then an exact `const` binding or rest-free plain destructuring, a static member read, or a local
+function's one return at each of its calls ([ADR 1231](../decisions.md#adr-1231): `const { useIt } = useThing()`,
+`const [, useIt] = [0, props.s1]`, `thing.useIt.a.v = 7`). An exact `const` alias of a link
 (`const held = s1.a`, every use of it such a path) holds that link's proxy, so
 `held.v = 7` is a violation ([ADR 1169](../decisions.md#adr-1169)); any other reference that hands a proxy out, a non-literal or open
 literal, a getter, a used setter or a module-scope store leaves it
