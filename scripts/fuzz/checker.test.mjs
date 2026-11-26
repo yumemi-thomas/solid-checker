@@ -72,6 +72,25 @@ describe("mainSourceFor (ADR 0501)", () => {
     expect(mainSourceFor(oracle, `${app}export * from "./other";\n`)).toContain("Object.entries(mod");
     expect(mainSourceFor(oracle)).toContain("Object.entries(mod");
   });
+  it("reads a lowercase name a destructured export binds as never entered, and keeps the loop for a capitalised one (ADR 1223)", () => {
+    const oracle = JSON.stringify({ mount: ["C1"] });
+    const app = 'import * as S from "solid-js";\nexport function C1() {\n  return <div />;\n}\n';
+    for (const exported of ["export const { useContext: useContextN } = S;", "export const { a: { b }, ...rest } = { a: { b: 1 } };", "export const [, first] = [S.createSignal];"]) {
+      const named = mainSourceFor(oracle, `${app}${exported}\n`);
+      expect(named, exported).not.toContain("Object.entries(mod");
+      expect(named).toContain('render(() => <C1 />, host("C1"));');
+    }
+    for (const exported of ["export const { Loading: LoadingN } = S;", "export const { a: { B } } = { a: { B: S.Show } };"]) expect(mainSourceFor(oracle, `${app}${exported}\n`), exported).toContain("Object.entries(mod");
+  });
+  it("matches every runtime entry: each namespace loop enters only `default` and capitalised names (ADR 1223)", () => {
+    const filter = /name === ["']default["'] \|\| \/\^\[A-Z\]\/\.test\(name\)/;
+    for (const file of ["../runtime-oracle.mjs", "./chrome-host/runner.tsx", "./fast/runner.tsx"]) {
+      const text = readFileSync(join(dirname(fileURLToPath(import.meta.url)), file), "utf8");
+      const loops = text.split("Object.entries(mod").slice(1);
+      expect(loops.length, file).toBeGreaterThan(0);
+      for (const loop of loops) expect(loop.slice(0, 400), file).toMatch(filter);
+    }
+  });
 });
 
 describe("MAIN_SOURCE", () => {

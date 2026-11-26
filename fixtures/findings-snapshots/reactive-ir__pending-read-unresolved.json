@@ -288,50 +288,6 @@
       "fixes": 0
     },
     {
-      "rule": "async-outside-loading-boundary",
-      "code": "SC5003",
-      "kind": "uncertifiable",
-      "blocker": "pending-read-unresolved",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/pending-read-unresolved/App.tsx",
-      "start": 1899,
-      "end": 1915,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/pending-read-unresolved/App.tsx",
-      "start": 1899,
-      "end": 1915,
-      "fixes": 0
-    },
-    {
-      "rule": "async-outside-loading-boundary",
-      "code": "SC5003",
-      "kind": "uncertifiable",
-      "blocker": "pending-read-unresolved",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/pending-read-unresolved/App.tsx",
-      "start": 1906,
-      "end": 1913,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "value-in-carrier",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/pending-read-unresolved/App.tsx",
-      "start": 1906,
-      "end": 1913,
-      "fixes": 0
-    },
-    {
       "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",

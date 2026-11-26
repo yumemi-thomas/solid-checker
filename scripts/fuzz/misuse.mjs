@@ -525,6 +525,11 @@ const WHOLE_STORE_READS = {
   "store-byname-passed": { reads: true, imports: ["createMemo"], text: (o) => `{ const f = () => ${o}.v; createMemo(f); [f].forEach((g) => { queueMicrotask(g); }); }` },
   "store-byname-reassigned": { reads: true, imports: ["createMemo"], text: (o) => `{ const f = () => ${o}.v; createMemo(f); [f].forEach((g) => { g = () => 0; g(); }); }` },
   "store-settled-called": { reads: true, imports: ["onSettled"], text: (o) => `{ const f = () => { void ${o}.v; }; onSettled(f); f(); }` },
+  // ADR 1204: the same direct call after a Get that throws first (a literal's getter): the read never runs (rc.21 silent), and
+  // main reported SC1001 at the call. The plain `throw` and the local thrower are its twins; `-caught` catches it first and warns.
+  "store-throw-first-getter": { imports: ["onSettled"], text: (o) => `{ const f = () => { void ${o}.v; }; const box = { get cb(): () => void { throw new Error("no callback"); } }; onSettled(box.cb); f(); }` },
+  "store-throw-first-local": { text: (o) => `{ const f = () => { void ${o}.v; }; const boom = (): void => { throw new Error("boom"); }; boom(); f(); }` },
+  "store-throw-first-caught": { reads: true, text: (o) => `{ const f = () => { void ${o}.v; }; const box = { get cb(): number { throw new Error("no"); } }; try { void box.cb; } catch { } f(); }` },
   // ADR 1127: a named function expression called through the `const` holding it; the call graph keyed it by its own name only,
   // so the call reached no summary and the read was clean (also through ADR 1111's direct-call check).
   "store-named-called": { reads: true, text: (o) => `{ const f = function inner() { return ${o}.v; }; f(); }` },

@@ -459,6 +459,8 @@ jq empty schema/*.json
 jq empty fixtures/tsc-oracle/*.json
 jq empty fixtures/obligation-cases/*.json
 bun scripts/dialect-manifests.mjs validate
+# A tracked link is a fixture's own relative link, never an absolute one (ADR 1210).
+node scripts/guard/symlinks.mjs
 bun scripts/repro-budget.mjs
 # The one-way uncertifiable count against its ledger (endstage-report.md 1b).
 node scripts/guard/count.mjs

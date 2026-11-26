@@ -8,7 +8,8 @@ layer's call runs. Main left the read inside unplaced (`function-run-unplaced`).
 |---|---|
 | `ClosureInBody`, `IifeInClosure`, `StoreMemberInBody`, `NamespaceFlushInBody` (called once in the body) | SC1001 violation (main: uncertifiable) |
 | `ClosureInJsx`, `ClosureInHandler` (called once in a JSX expression or a handler) | clean (as on main) |
-| `AlsoTimer` (also handed to `setTimeout`), `CalledTwice`, `HandedToForEach` | uncertifiable, as before |
+| `AlsoTimer` (also handed to `setTimeout`), `CalledTwice` | uncertifiable, as before |
+| `HandedToForEach` (`[1].forEach(run)` in a tracked JSX expression) | clean since ADR 1214 slice B (the carrier runs `run` in place; uncertifiable before) |
 
 Chrome: `fixtures/runtime-oracle/flush-closure-called-once` reports STRICT_READ_UNTRACKED at the four violations and at the body
 calls of `AlsoTimer` and `CalledTwice`, and nothing at the rest. Stubs: `flush-write-path`'s (rc.21).

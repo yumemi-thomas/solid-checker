@@ -29,7 +29,7 @@ import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { browserExecutionCache, withRuntimeCache, cacheStats } from "./cache.mjs";
-import { callStarts, frameStarts, statementAt } from "./call-starts.mjs";
+import { callStarts, dispatchPlaces, frameStarts, statementAt } from "./call-starts.mjs";
 import { registrationPositions } from "./registration.mjs";
 import { partlySilentRules, besideCode, codeOfUncaught, codeRules, codesForRule, coversCodeAt, declinesCode, appStack, withheldAtStack, withStarts, ignoredRules, isPlacelessCode, policyOf, thrownCodes, withholdingRules } from "./codes.mjs";
 import { loggedEvents, offSiteVerdicts, runtimeEvents } from "./classify.mjs";
@@ -71,6 +71,7 @@ import { budgetOf, costLine, costLines, writeCosts } from "./cost.mjs";
 import { gridProfile } from "./perf.mjs";
 import { programSeed } from "./rng.mjs";
 import { shrink } from "./shrink.mjs";
+import { GRIDS } from "./focus-grids.mjs";
 import { legalTwin } from "./falseclean.mjs";
 import { attachDaemon, configFrom, parseArgs } from "./run.mjs";
 import { setExecutorChecks } from "./exec.mjs";
@@ -83,6 +84,9 @@ import { checkTypedAway, typeRejectedRows, typedAwayVerdict, typedOnPurpose } fr
 import { TYPE_ERROR_REFUSAL_SHARE, harnessRefusal, requireTypeChecker, resolveTsc, typeErrorRefusal, typecheck } from "./typecheck.mjs";
 
 export const OUTCOMES = ["typed-away", "harness", "unexecuted", "pending-uncaught", "not-fired", "agree", "wrong-rule", "recall-gap", "false-clean", "misplaced", "unplaced", "unjudged-claim", "halted-claim", "stacked-claim", "false-positive", "tsc-overlap"];
+// ADR 1217: the codes about a pending read, where an SC5003 uncertifiable (`async-outside-loading-boundary`: the pending read unresolved)
+// at the read is the checker's fail-closed answer (`judge`).
+const PENDING_READ_CODES = ["CAUGHT_REACTIVE_READ"];
 const CONFIRMED = ["agree", "wrong-rule", "recall-gap", "false-clean", "false-positive"];
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -372,15 +376,28 @@ function judgeSite({ code, site, typecheck: typed, checker, runtime, others = []
   const unrelated = covering.length ? { unrelated: covering.map((finding) => `${finding.rule}/${finding.kind}@${finding.line}`) } : {};
   const claimingElsewhere = relevant.find((finding) => claims(finding)) ?? (placedCode ? moduleFindings.find((finding) => claims(finding)) : undefined);
   if (claimingElsewhere) return { outcome: "recall-gap", detail: { ...detail, ...unrelated, declinedBy: mechanism(claimingElsewhere), remote: `${claimingElsewhere.rule}/${claimingElsewhere.kind}@${where(claimingElsewhere)}` } };
+  // The statement that holds the read: Chrome's top frame on the site's lines (a `wrapper` site's read is on its aux line, the site's line
+  // is the call). A code with a place and no such frame has none; a placeless code has the site's line.
+  const top = stacks.find((stack) => Number.isInteger(stack[0]?.column) && region.includes(stack[0].line))?.[0];
+  const statement = top ? statementAt(text, top.line, top.column) : null;
+  const atRead = (finding) => finding.file === "App.tsx" && (statement ? statement.contains(finding.line, finding.column) : isPlacelessCode(code) && finding.line === site.line);
+  // ADR 1217: the checker's fail-closed answer where the read runs. An uncertifiable SC9012 (any code: a withholding) or SC5003 (a code about
+  // a pending read) inside the callee of a call in the statement that holds the read (the call dispatches through what it could not resolve),
+  // or at a carrier call where the read runs (a call in the body of the function the site calls by name; call-starts.mjs `dispatchPlaces`),
+  // is this program's uncertifiable: a recall gap, not a false clean. Nothing else: a silent program, a row on another statement, or one at
+  // a call's argument (what the call was handed, R20, R22) stays a false clean.
+  const failClosedRule = (finding) => finding.kind === "uncertifiable" && finding.file === "App.tsx"
+    && (finding.rule === "reactive-dispatch-unresolved" || (finding.rule === "async-outside-loading-boundary" && PENDING_READ_CODES.includes(code)));
+  const candidates = relevant.filter(failClosedRule);
+  const placeOf = candidates.length && source.length > 1 ? dispatchPlaces(text, (line, column) => atRead({ file: "App.tsx", line, column })) : () => null;
+  const failClosed = candidates.find((finding) => placeOf(finding.line, finding.column));
+  if (failClosed) return { outcome: "recall-gap", detail: { ...detail, ...unrelated, declinedBy: "fail-closed", failClosed: `${failClosed.rule}/${failClosed.id}@${failClosed.line}:${failClosed.column} (${placeOf(failClosed.line, failClosed.column)})` } };
   // Certified: the file has no uncertifiable finding at all, so the checker claims it proved the whole file. A false clean there is a
   // fail-closed break (invariant 2); in a file with an uncertifiable finding elsewhere it is a recall gap that only lost its place.
   const certified = !checker.findings.some((finding) => !ignoredRules.includes(finding.rule) && finding.kind === "uncertifiable");
   const near = relevant.find(nearOnly);
-  // The named uncertifiables starting in the statement that holds the read: Chrome's top frame on the site's lines (a `wrapper` site's read is
-  // on its aux line, the site's line is the call). A code with a place and no such frame has none; a placeless code has the site's line.
+  // The named uncertifiables starting in the statement that holds the read (`top`, `statement` above).
   // `atRead` when one starts exactly at the position Chrome reported. What open-rows.mjs checks for a row the owner's stop rule covers (ADR 0815).
-  const top = stacks.find((stack) => Number.isInteger(stack[0]?.column) && region.includes(stack[0].line))?.[0];
-  const statement = top ? statementAt(text, top.line, top.column) : null;
   const namedU = relevant.filter((finding) => finding.kind === "uncertifiable" && finding.blocker && finding.file === "App.tsx"
     && (statement ? statement.contains(finding.line, finding.column) : isPlacelessCode(code) && finding.line === site.line)).map((finding) => ({ rule: finding.rule, id: finding.id, line: finding.line, column: finding.column, blocker: finding.blocker, ...(stacks.some((stack) => withheldAtStack(finding, stack.slice(0, 1), mount, code)) ? { atRead: true } : {}) }));
   return { outcome: "false-clean", detail: { ...detail, ...unrelated, certified, ...(near ? { withheldNear: `${near.rule}@${near.line}:${near.column}` } : {}), ...(namedU.length ? { namedU } : {}) } };
@@ -540,7 +557,10 @@ function recallAxesOf(code, context, base, variants, options = {}) {
   if (context.startsWith("aw-then-computed")) return shapes.filter((shape) => (shape.binding === "direct" && /^(none|closure.*|helper.*)$/.test(shape.layer ?? "none")) || (shape.binding === "alias" && shape.layer === "none"));
   return shapes;
 }
-function recallShapesOf(code, context, base, variants, { legal = false, lean = true } = {}) {
+/** ADR 1208: the codes whose store variants cross the prop and context sources, and those sources. */
+const STORE_SOURCE_CODES = ["STRICT_READ_UNTRACKED", "STORE_WRITE_OUTSIDE_SETTER"];
+const STORE_SOURCES = ["prop", "prop-destructured", "context", "context-destructured"];
+function recallShapesOf(code, context, base, variants, { legal = false, lean = true, src = [] } = {}) {
   // A recall-only code has no base grid: its `legal` contexts are recall cells too.
   const recallCell = (legal ? recallLegalOf : recallContextsOf)(code).includes(context) || (legal && SPEC[code].recallOnly && SPEC[code].legal?.includes(context));
   // A cell only the wrapper mounts make legal (misuse.mjs `legalWrapMounts`): its base shapes read a pending value under no boundary, so the
@@ -600,6 +620,24 @@ function recallShapesOf(code, context, base, variants, { legal = false, lean = t
   for (const source of [...SOURCE_AXES.files, ...SOURCE_AXES.package]) for (const shape of local) if (plainOnly(source, shape) && sourcesOf(code, shape.variant, shape.binding, context).includes(source)) shapes.push({ ...shape, source });
   // ADR 1123: the tuple sources ask where the value comes from, not how the site spells it: the direct binding, no layer.
   for (const source of SOURCE_AXES.tuple) for (const shape of local) if (shape.binding === "direct" && shape.layer === "none" && sourcesOf(code, shape.variant, shape.binding, context).includes(source)) shapes.push({ ...shape, source });
+  // ADR 1208: a store the component receives, through a prop or a context (and their destructured forms), read or written by each
+  // store variant of the read and store-write grids, on the direct binding and a `const` alias of it: the source axes crossed only
+  // the base variants (a signal's or a base write's), so no recall store variant met a prop or context source (the held-alias false
+  // clean ADR 1169 fixed had no generated shape).
+  // The code's base cells only: a recall-only context asks how its host runs the site, which the local source already crosses.
+  if (STORE_SOURCE_CODES.includes(code) && !recallCell) {
+    const storeVariant = (variant) => SPEC[code].setup(variant, (prefix) => `${prefix}1`).some((sig) => sig.kind?.startsWith("store"));
+    // The keys this grid already holds, and those the cell's src grid generates (`src`: its shapes for this cell, the same ids): an id
+    // is one grid's only, so the cover never attributes a src grid's program to this one (ADR 1208 r1: 536 ids were both grids').
+    const keyOf = (shape) => `${shape.variant}|${shape.binding}|${shape.layer}|${shape.source ?? ""}|${shape.mount ?? ""}|${shape.callback ?? ""}`;
+    const seen = new Set([...shapes, ...src].map(keyOf));
+    const plain = [...new Set(shapes.filter((shape) => !shape.source && !shape.mount && !shape.callback && storeVariant(shape.variant)).map((shape) => shape.variant))];
+    for (const variant of plain) for (const binding of ["direct", "alias"].filter((b) => bindingsOf(code, variant).includes(b))) for (const source of STORE_SOURCES) {
+      const shape = { variant, binding, layer: "none", source };
+      const key = `${variant}|${binding}|none|${source}||`;
+      if (!seen.has(key) && sourcesOf(code, variant, binding, context).includes(source)) { seen.add(key); shapes.push(shape); }
+    }
+  }
   return shapes;
 }
 
@@ -653,7 +691,12 @@ const variantFits = (code, context) => (variant) => (context === undefined || !S
 /** Whether a grid's options ask for the lean recall grid: `--recall` without `--recall-full` (`--recall-lean` is the default, a no-op). */
 export const recallLeanOf = (options) => Boolean(options.recall) && !options.recallFull;
 /** The misuse grid's recall shapes of a cell (`--recall`); `lean: false` is `--recall-full`. */
-export const recallShapes = (code, context, { lean = true } = {}) => recallAxes(code, context, gridShapes(code, context), gridVariantsOf(code).filter(variantFits(code, context)), { lean }).filter(fireShape(context));
+/** ADR 1208 r1: a grid's `--sources` and `--mounts` (focus-grids.mjs GRIDS), as the grid parses them. */
+export const gridSourcesOf = (grid) => { const args = GRIDS[grid]; const at = args.indexOf("--sources"); return sourcesOption(at < 0 ? undefined : args[at + 1]); };
+export const gridMountsOf = (grid) => { const args = GRIDS[grid]; const at = args.indexOf("--mounts"); return mountsOption(at < 0 ? undefined : args[at + 1]); };
+export const recallShapes = (code, context, { lean = true } = {}) => recallAxes(code, context, gridShapes(code, context), gridVariantsOf(code).filter(variantFits(code, context)), { lean, src: srcShapesOf(code, context) }).filter(fireShape(context));
+/** ADR 1208 r1: the shapes mx-src generates for the cell (none where mx-src has no such cell). */
+const srcShapesOf = (code, context) => (cellList({ codes: [code] }).some((cell) => cell.context === context) ? gridShapes(code, context, gridMountsOf("mx-src"), gridSourcesOf("mx-src")) : []);
 
 /**
  * `--grid`: every shape of a cell, one program each. A shape is the variant, the binding and the layer; on the recorded matrices every
@@ -804,7 +847,7 @@ export function buildMatrix(rows, { options, header, typedAway }) {
       code: cell.code, context: cell.context, programs: cell.rows.length, ...counts, confirmed,
       agreeRemote: cell.rows.filter((row) => row.outcome === "agree" && row.detail?.remote).length,
       falseCleanCertified: cell.rows.filter((row) => row.outcome === "false-clean" && row.detail?.certified).length,
-      recallGapBy: Object.fromEntries(["claiming", "withholding", "declining"].map((by) => [by, cell.rows.filter((row) => row.outcome === "recall-gap" && row.detail?.declinedBy === by).length])),
+      recallGapBy: Object.fromEntries(["claiming", "withholding", "declining", "fail-closed"].map((by) => [by, cell.rows.filter((row) => row.outcome === "recall-gap" && row.detail?.declinedBy === by).length])),
       secondaryCertified: cell.rows.filter((row) => Object.values(row.detail?.secondary ?? {}).includes("false-clean-certified")).length,
       byBinding: by("binding"), byLayer: by("layer"),
       chrome: chromeSummary(cell.rows),
@@ -828,7 +871,7 @@ export function buildMatrix(rows, { options, header, typedAway }) {
     generator: GENERATOR_VERSION, entry: ENTRY_VERSION, profile: "misuse", seed: options.seed, perCell: options.grid ? null : options.perCell, ...(options.grid ? { sampling: "grid" } : {}), ...(options.pairs ? { pairs: pairsOption(options.pairs) } : {}), ...(options.recall ? { recallLean: recallLeanOf(options) } : {}), checker: header, total,
     confirmed: CONFIRMED.reduce((sum, name) => sum + total[name], 0),
     falseCleanCertified: rows.filter((row) => row.outcome === "false-clean" && row.detail?.certified).length,
-    recallGapBy: Object.fromEntries(["claiming", "withholding", "declining"].map((by) => [by, rows.filter((row) => row.outcome === "recall-gap" && row.detail?.declinedBy === by).length])),
+    recallGapBy: Object.fromEntries(["claiming", "withholding", "declining", "fail-closed"].map((by) => [by, rows.filter((row) => row.outcome === "recall-gap" && row.detail?.declinedBy === by).length])),
     // The violations away from the site, by verdict (`judge`, classify.mjs `offSiteVerdicts`): `unconnected` ones are the next lead.
     offSite: Object.fromEntries(["false-positive", "unconnected", "unexecuted", "unjudged"].map((verdict) => [verdict, rows.flatMap((row) => row.detail?.offSite ?? []).filter((label) => label.split(":")[1].startsWith(verdict)).length])),
     // Per (rule, verdict, reason), what `gate` holds down (ADR 0641): a rise in violations nothing judged is a blind spot growing.

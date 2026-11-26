@@ -1817,29 +1817,13 @@ impl LocalAccessContext<'_, '_> {
     }
 
     /// The call a `merge` or `omit` view expression is: itself, or a `const`'s
-    /// initializer.
+    /// initializer ([`view_call_of`]).
     fn view_call<'f>(
         &self,
         file: &'f solid_facts::FileFacts,
         expression: solid_facts::core::Span,
     ) -> Option<&'f solid_facts::ast::CallFact> {
-        let expression = file.ast.peel_ts_sugar_span(expression);
-        let named =
-            crate::source_discovery::reference_symbol(file, expression, self.entities, self.lookup)
-                .and_then(|symbol| {
-                    file.ast.bindings.iter().find(|binding| {
-                        binding.immutable
-                            && binding.shape == solid_facts::ast::BindingShape::Identifier
-                            && binding.names.first().is_some_and(|name| {
-                                self.entities.get(&location(file.path.shared(), name.span))
-                                    == Some(&symbol)
-                            })
-                    })
-                })
-                .and_then(|binding| binding.call_initializer);
-        file.ast.call_at(named.map_or(expression, |initializer| {
-            file.ast.peel_ts_sugar_span(initializer)
-        }))
+        view_call_of(file, expression, self.entities, self.lookup)
     }
 
     /// ADR 1100: whether a Get of `key` on the `const` view `object` is a Get
@@ -1865,67 +1849,7 @@ impl LocalAccessContext<'_, '_> {
         parameter: &SymbolId,
         key: &str,
     ) -> bool {
-        const OBJECT_PROTOTYPE: [&str; 12] = [
-            "constructor",
-            "hasOwnProperty",
-            "isPrototypeOf",
-            "propertyIsEnumerable",
-            "toLocaleString",
-            "toString",
-            "valueOf",
-            "__proto__",
-            "__defineGetter__",
-            "__defineSetter__",
-            "__lookupGetter__",
-            "__lookupSetter__",
-        ];
-        let object = file.ast.peel_ts_sugar_span(object);
-        // Only a name bound to the view: `view_call` also answers a call.
-        if file.ast.call_at(object).is_some() {
-            return false;
-        }
-        let Some(call) = self.view_call(file, object) else {
-            return false;
-        };
-        if call.arguments.iter().any(|argument| argument.spread) {
-            return false;
-        }
-        let names_parameter = |argument: &solid_facts::ast::ArgumentFact| {
-            let span = file.ast.peel_ts_sugar_span(argument.span);
-            file.ast.has_reference_identifier_at(span)
-                && self.entities.get(&location(file.path.shared(), span)) == Some(parameter)
-        };
-        match self.lookup.primitive_at_call(file, call.span) {
-            Some(solid_dialect::Primitive::Merge) => {
-                let Some((last, earlier)) = call.arguments.split_last() else {
-                    return false;
-                };
-                !OBJECT_PROTOTYPE.contains(&key)
-                    && names_parameter(last)
-                    && earlier.iter().all(|argument| {
-                        let value = file.ast.peel_ts_sugar_span(argument.span);
-                        file.ast.object_get_shapes.iter().any(|shape| {
-                            shape.span == value
-                                && shape.closed
-                                && !shape.properties.iter().any(|property| property.key == key)
-                        })
-                    })
-            }
-            Some(solid_dialect::Primitive::Omit) => {
-                let Some((source, hidden)) = call.arguments.split_first() else {
-                    return false;
-                };
-                names_parameter(source)
-                    && hidden.iter().all(|argument| {
-                        matches!(
-                            &argument.literal_value,
-                            solid_facts::ast::ArgumentLiteralFact::String(hidden)
-                                if hidden.as_str() != key
-                        )
-                    })
-            }
-            _ => false,
-        }
+        view_get_is_props_get(file, object, parameter, key, self.entities, self.lookup)
     }
 
     /// The source an inline `omit` or `merge` view expression reads through to
@@ -2606,8 +2530,9 @@ impl LocalAccessContext<'_, '_> {
         }
         // ADR 1107: a store's destructure SC1003 hands over (`delegated_destructure_slots`) reads each slot as a member: the
         // member read `store.a` at the slot, placed as any other (summaries, carriers, windows).
-        for binding in &file.ast.bindings {
-            // ADR 1193: the destructure's root (`destructure_root`): the initializer, a `for…of`'s `[s]`, `merge(s, {…})`'s `s`.
+        for binding in crate::static_rules::object_destructures(file) {
+            // ADR 1193: the destructure's root (`destructure_root`): the initializer, a `for…of`'s `[s]`, `merge(s, {…})`'s `s`; part 2:
+            // an assignment's value, an array pattern's element over a literal.
             let Some(root) = crate::static_rules::destructure_root(self.lookup, file, binding)
             else {
                 continue;
@@ -5410,8 +5335,17 @@ impl LocalAccessContext<'_, '_> {
                     .function_at(file.ast.peel_ts_sugar_span(compute.span))
             })
             .is_some_and(|compute| compute.r#async);
+        // ADR 1216: one run suffices, so any entry that runs the call on the creating pass.
         let Some(entry) =
             crate::execution_role::entry_on_stack_of(file, call.span, creating, self.lookup)
+                .or_else(|| {
+                    crate::execution_role::some_entry_on_stack_of(
+                        file,
+                        call.span,
+                        creating,
+                        self.lookup,
+                    )
+                })
         else {
             return false;
         };
@@ -9927,7 +9861,7 @@ fn destructure_slot_key(
     file: &solid_facts::FileFacts,
     span: solid_facts::core::Span,
 ) -> Option<&str> {
-    file.ast.bindings.iter().find_map(|binding| {
+    crate::static_rules::object_destructures(file).find_map(|binding| {
         crate::static_rules::destructure_slot_keys(file, binding)?
             .into_iter()
             .find_map(|slot| (slot.property == span).then_some(slot.name))
@@ -12608,4 +12542,101 @@ pub(crate) fn array_callback_parameter(
     );
     (carrier && !lookup.standard_call_withheld(file, call.callee))
         .then_some((call.span, element_span))
+}
+
+/// ADR 1100 (free form, ADR 1214).
+pub(crate) fn view_get_is_props_get(
+    file: &solid_facts::FileFacts,
+    object: solid_facts::core::Span,
+    parameter: &SymbolId,
+    key: &str,
+    entities: &EntitySymbols,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    const OBJECT_PROTOTYPE: [&str; 12] = [
+        "constructor",
+        "hasOwnProperty",
+        "isPrototypeOf",
+        "propertyIsEnumerable",
+        "toLocaleString",
+        "toString",
+        "valueOf",
+        "__proto__",
+        "__defineGetter__",
+        "__defineSetter__",
+        "__lookupGetter__",
+        "__lookupSetter__",
+    ];
+    let object = file.ast.peel_ts_sugar_span(object);
+    // Only a name bound to the view: `view_call` also answers a call.
+    if file.ast.call_at(object).is_some() {
+        return false;
+    }
+    let Some(call) = view_call_of(file, object, entities, lookup) else {
+        return false;
+    };
+    if call.arguments.iter().any(|argument| argument.spread) {
+        return false;
+    }
+    let names_parameter = |argument: &solid_facts::ast::ArgumentFact| {
+        let span = file.ast.peel_ts_sugar_span(argument.span);
+        file.ast.has_reference_identifier_at(span)
+            && entities.get(&location(file.path.shared(), span)) == Some(parameter)
+    };
+    match lookup.primitive_at_call(file, call.span) {
+        Some(solid_dialect::Primitive::Merge) => {
+            let Some((last, earlier)) = call.arguments.split_last() else {
+                return false;
+            };
+            !OBJECT_PROTOTYPE.contains(&key)
+                && names_parameter(last)
+                && earlier.iter().all(|argument| {
+                    let value = file.ast.peel_ts_sugar_span(argument.span);
+                    file.ast.object_get_shapes.iter().any(|shape| {
+                        shape.span == value
+                            && shape.closed
+                            && !shape.properties.iter().any(|property| property.key == key)
+                    })
+                })
+        }
+        Some(solid_dialect::Primitive::Omit) => {
+            let Some((source, hidden)) = call.arguments.split_first() else {
+                return false;
+            };
+            names_parameter(source)
+                && hidden.iter().all(|argument| {
+                    matches!(
+                        &argument.literal_value,
+                        solid_facts::ast::ArgumentLiteralFact::String(hidden)
+                            if hidden.as_str() != key
+                    )
+                })
+        }
+        _ => false,
+    }
+}
+
+/// The call a `merge` or `omit` view expression is: itself, or a `const`'s
+/// initializer.
+pub(crate) fn view_call_of<'f>(
+    file: &'f solid_facts::FileFacts,
+    expression: solid_facts::core::Span,
+    entities: &EntitySymbols,
+    lookup: &SemanticLookup<'_>,
+) -> Option<&'f solid_facts::ast::CallFact> {
+    let expression = file.ast.peel_ts_sugar_span(expression);
+    let named = crate::source_discovery::reference_symbol(file, expression, entities, lookup)
+        .and_then(|symbol| {
+            file.ast.bindings.iter().find(|binding| {
+                binding.immutable
+                    && binding.shape == solid_facts::ast::BindingShape::Identifier
+                    && binding.names.first().is_some_and(|name| {
+                        entities.get(&location(file.path.shared(), name.span)) == Some(&symbol)
+                    })
+            })
+        })
+        .and_then(|binding| binding.call_initializer);
+    file.ast.call_at(named.map_or(expression, |initializer| {
+        file.ast.peel_ts_sugar_span(initializer)
+    }))
 }

@@ -188,6 +188,138 @@
       "owner": "fix 6 follow-up (open)",
       "why": "open: a method of a local object handed into a context value runs in any consumer; not closed by ADR 0934 (its function is no export and has a binding no summary follows); an uncertifiable `strict-read-unaccounted` row since ADR 0936",
       "at": "fixtures/uncertifiable-repro/sc1001/src/local-object-context-value.tsx:13:17"
+    },
+    "reactive-ir/optimistic-creating-entries|fixtures/reactive-ir/optimistic-creating-entries/App.tsx|857-868|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "ADR 1216: an optimistic setter in MemoCompute (SC2009 violation), whose REACTIVE_WRITE_IN_OWNED_SCOPE code is ended only by SC2009 (the setter's guard throws OPTIMISTIC_WRITE_BEFORE_LOAD first); SC2001 `write-unaccounted` stands beside it (no false clean), as at optimistic-apply-before-load-render",
+      "at": "fixtures/reactive-ir/optimistic-creating-entries/App.tsx:22:5",
+      "adr": "ADR 1216"
+    },
+    "reactive-ir/optimistic-creating-entries|fixtures/reactive-ir/optimistic-creating-entries/App.tsx|1953-1964|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "ADR 1216: an optimistic setter in UnderBranch (SC2009 uncertifiable), whose REACTIVE_WRITE_IN_OWNED_SCOPE code is ended only by SC2009 (the setter's guard throws OPTIMISTIC_WRITE_BEFORE_LOAD first); SC2001 `write-unaccounted` stands beside it (no false clean), as at optimistic-apply-before-load-render",
+      "at": "fixtures/reactive-ir/optimistic-creating-entries/App.tsx:64:5",
+      "adr": "ADR 1216"
+    },
+    "reactive-ir/optimistic-creating-entries|fixtures/reactive-ir/optimistic-creating-entries/App.tsx|2573-2584|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "ADR 1216: an optimistic setter in InJsx (SC2009 uncertifiable), whose REACTIVE_WRITE_IN_OWNED_SCOPE code is ended only by SC2009 (the setter's guard throws OPTIMISTIC_WRITE_BEFORE_LOAD first); SC2001 `write-unaccounted` stands beside it (no false clean), as at optimistic-apply-before-load-render",
+      "at": "fixtures/reactive-ir/optimistic-creating-entries/App.tsx:85:5",
+      "adr": "ADR 1216"
+    },
+    "reactive-ir/optimistic-creating-entries|fixtures/reactive-ir/optimistic-creating-entries/App.tsx|2860-2871|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "ADR 1216: an optimistic setter in LazyMemo (SC2009 uncertifiable), whose REACTIVE_WRITE_IN_OWNED_SCOPE code is ended only by SC2009 (the setter's guard throws OPTIMISTIC_WRITE_BEFORE_LOAD first); SC2001 `write-unaccounted` stands beside it (no false clean), as at optimistic-apply-before-load-render",
+      "at": "fixtures/reactive-ir/optimistic-creating-entries/App.tsx:97:7",
+      "adr": "ADR 1216"
+    },
+    "reactive-ir/optimistic-creating-entries|fixtures/reactive-ir/optimistic-creating-entries/App.tsx|553-564|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "ADR 1216: an optimistic setter in HelperAlsoHanded (SC2009 violation), whose REACTIVE_WRITE_IN_OWNED_SCOPE code is ended only by SC2009 (the setter's guard throws OPTIMISTIC_WRITE_BEFORE_LOAD first); SC2001 `write-unaccounted` stands beside it (no false clean), as at optimistic-apply-before-load-render",
+      "at": "fixtures/reactive-ir/optimistic-creating-entries/App.tsx:11:5",
+      "adr": "ADR 1216"
+    },
+    "reactive-ir/optimistic-creating-entries|fixtures/reactive-ir/optimistic-creating-entries/App.tsx|1071-1082|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "ADR 1216: an optimistic setter in FlushInHelper (SC2009 violation), whose REACTIVE_WRITE_IN_OWNED_SCOPE code is ended only by SC2009 (the setter's guard throws OPTIMISTIC_WRITE_BEFORE_LOAD first); SC2001 `write-unaccounted` stands beside it (no false clean), as at optimistic-apply-before-load-render",
+      "at": "fixtures/reactive-ir/optimistic-creating-entries/App.tsx:32:7",
+      "adr": "ADR 1216"
+    },
+    "reactive-ir/optimistic-creating-entries|fixtures/reactive-ir/optimistic-creating-entries/App.tsx|1270-1281|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "ADR 1216: an optimistic setter in SharedByMemoAndHandler (SC2009 violation), whose REACTIVE_WRITE_IN_OWNED_SCOPE code is ended only by SC2009 (the setter's guard throws OPTIMISTIC_WRITE_BEFORE_LOAD first); SC2001 `write-unaccounted` stands beside it (no false clean), as at optimistic-apply-before-load-render",
+      "at": "fixtures/reactive-ir/optimistic-creating-entries/App.tsx:42:5",
+      "adr": "ADR 1216"
+    },
+    "reactive-ir/optimistic-creating-renders|fixtures/reactive-ir/optimistic-creating-renders/App.tsx|537-548|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "ADR 1216 slice 2: an optimistic setter in CallbackProp (SC2009 violation), whose REACTIVE_WRITE_IN_OWNED_SCOPE code is ended only by SC2009 (the setter's guard throws OPTIMISTIC_WRITE_BEFORE_LOAD first); SC2001 `write-unaccounted` stands beside it (no false clean), as at optimistic-apply-before-load-render",
+      "at": "fixtures/reactive-ir/optimistic-creating-renders/App.tsx:15:23",
+      "adr": "ADR 1216"
+    },
+    "reactive-ir/optimistic-creating-renders|fixtures/reactive-ir/optimistic-creating-renders/App.tsx|715-726|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "ADR 1216 slice 2: an optimistic setter in RenderedChild (SC2009 violation), whose REACTIVE_WRITE_IN_OWNED_SCOPE code is ended only by SC2009 (the setter's guard throws OPTIMISTIC_WRITE_BEFORE_LOAD first); SC2001 `write-unaccounted` stands beside it (no false clean), as at optimistic-apply-before-load-render",
+      "at": "fixtures/reactive-ir/optimistic-creating-renders/App.tsx:24:5",
+      "adr": "ADR 1216"
+    },
+    "reactive-ir/optimistic-creating-renders|fixtures/reactive-ir/optimistic-creating-renders/App.tsx|1130-1141|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "ADR 1216 slice 2: an optimistic setter in ForwardedProp (SC2009 violation), whose REACTIVE_WRITE_IN_OWNED_SCOPE code is ended only by SC2009 (the setter's guard throws OPTIMISTIC_WRITE_BEFORE_LOAD first); SC2001 `write-unaccounted` stands beside it (no false clean), as at optimistic-apply-before-load-render",
+      "at": "fixtures/reactive-ir/optimistic-creating-renders/App.tsx:46:27",
+      "adr": "ADR 1216"
+    },
+    "reactive-ir/optimistic-creating-renders|fixtures/reactive-ir/optimistic-creating-renders/App.tsx|1408-1419|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "ADR 1216 slice 2: an optimistic setter in ConditionalRender (SC2009 uncertifiable), whose REACTIVE_WRITE_IN_OWNED_SCOPE code is ended only by SC2009 (the setter's guard throws OPTIMISTIC_WRITE_BEFORE_LOAD first); SC2001 `write-unaccounted` stands beside it (no false clean), as at optimistic-apply-before-load-render",
+      "at": "fixtures/reactive-ir/optimistic-creating-renders/App.tsx:57:5",
+      "adr": "ADR 1216"
+    },
+    "reactive-ir/optimistic-creating-renders|fixtures/reactive-ir/optimistic-creating-renders/App.tsx|2126-2137|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "ADR 1216 slice 2: an optimistic setter in InComponentChildren (SC2009 uncertifiable), whose REACTIVE_WRITE_IN_OWNED_SCOPE code is ended only by SC2009 (the setter's guard throws OPTIMISTIC_WRITE_BEFORE_LOAD first); SC2001 `write-unaccounted` stands beside it (no false clean), as at optimistic-apply-before-load-render",
+      "at": "fixtures/reactive-ir/optimistic-creating-renders/App.tsx:88:5",
+      "adr": "ADR 1216"
+    },
+    "reactive-ir/optimistic-creating-carriers|fixtures/reactive-ir/optimistic-creating-carriers/App.tsx|415-426|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "ADR 1216 slice 3: an optimistic setter in SeededMap (SC2009 violation), whose REACTIVE_WRITE_IN_OWNED_SCOPE code is ended only by SC2009 (the setter's guard throws OPTIMISTIC_WRITE_BEFORE_LOAD first); SC2001 `write-unaccounted` stands beside it (no false clean), as at optimistic-apply-before-load-render",
+      "at": "fixtures/reactive-ir/optimistic-creating-carriers/App.tsx:10:5",
+      "adr": "ADR 1216"
+    },
+    "reactive-ir/optimistic-creating-carriers|fixtures/reactive-ir/optimistic-creating-carriers/App.tsx|614-625|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "ADR 1216 slice 3: an optimistic setter in SeededSet (SC2009 violation), whose REACTIVE_WRITE_IN_OWNED_SCOPE code is ended only by SC2009 (the setter's guard throws OPTIMISTIC_WRITE_BEFORE_LOAD first); SC2001 `write-unaccounted` stands beside it (no false clean), as at optimistic-apply-before-load-render",
+      "at": "fixtures/reactive-ir/optimistic-creating-carriers/App.tsx:19:5",
+      "adr": "ADR 1216"
+    },
+    "reactive-ir/optimistic-creating-carriers|fixtures/reactive-ir/optimistic-creating-carriers/App.tsx|857-868|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "ADR 1216 slice 3: an optimistic setter in StoredInMap (SC2009 violation), whose REACTIVE_WRITE_IN_OWNED_SCOPE code is ended only by SC2009 (the setter's guard throws OPTIMISTIC_WRITE_BEFORE_LOAD first); SC2001 `write-unaccounted` stands beside it (no false clean), as at optimistic-apply-before-load-render",
+      "at": "fixtures/reactive-ir/optimistic-creating-carriers/App.tsx:29:5",
+      "adr": "ADR 1216"
+    },
+    "reactive-ir/optimistic-creating-carriers|fixtures/reactive-ir/optimistic-creating-carriers/App.tsx|1469-1480|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "ADR 1216 slice 3: an optimistic setter in StoredInWeakMap (SC2009 violation), whose REACTIVE_WRITE_IN_OWNED_SCOPE code is ended only by SC2009 (the setter's guard throws OPTIMISTIC_WRITE_BEFORE_LOAD first); SC2001 `write-unaccounted` stands beside it (no false clean), as at optimistic-apply-before-load-render",
+      "at": "fixtures/reactive-ir/optimistic-creating-carriers/App.tsx:56:5",
+      "adr": "ADR 1216"
+    },
+    "reactive-ir/optimistic-creating-carriers|fixtures/reactive-ir/optimistic-creating-carriers/App.tsx|1710-1721|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "ADR 1216 slice 3: an optimistic setter in EmptySet (SC2009 uncertifiable), whose REACTIVE_WRITE_IN_OWNED_SCOPE code is ended only by SC2009 (the setter's guard throws OPTIMISTIC_WRITE_BEFORE_LOAD first); SC2001 `write-unaccounted` stands beside it (no false clean), as at optimistic-apply-before-load-render",
+      "at": "fixtures/reactive-ir/optimistic-creating-carriers/App.tsx:67:5",
+      "adr": "ADR 1216"
+    },
+    "reactive-ir/optimistic-creating-carriers|fixtures/reactive-ir/optimistic-creating-carriers/App.tsx|1964-1975|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "ADR 1216 slice 3: an optimistic setter in StoredThenDeleted (SC2009 uncertifiable), whose REACTIVE_WRITE_IN_OWNED_SCOPE code is ended only by SC2009 (the setter's guard throws OPTIMISTIC_WRITE_BEFORE_LOAD first); SC2001 `write-unaccounted` stands beside it (no false clean), as at optimistic-apply-before-load-render",
+      "at": "fixtures/reactive-ir/optimistic-creating-carriers/App.tsx:77:5",
+      "adr": "ADR 1216"
+    },
+    "reactive-ir/optimistic-creating-carriers|fixtures/reactive-ir/optimistic-creating-carriers/App.tsx|2242-2253|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "ADR 1216 slice 3: an optimistic setter in StoredNeverRun (SC2009 uncertifiable), whose REACTIVE_WRITE_IN_OWNED_SCOPE code is ended only by SC2009 (the setter's guard throws OPTIMISTIC_WRITE_BEFORE_LOAD first); SC2001 `write-unaccounted` stands beside it (no false clean), as at optimistic-apply-before-load-render",
+      "at": "fixtures/reactive-ir/optimistic-creating-carriers/App.tsx:89:5",
+      "adr": "ADR 1216"
+    },
+    "reactive-ir/optimistic-creating-carriers|fixtures/reactive-ir/optimistic-creating-carriers/App.tsx|2469-2481|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "ADR 1216 slice 3: an optimistic setter in RunBeforeStore (SC2009 uncertifiable), whose REACTIVE_WRITE_IN_OWNED_SCOPE code is ended only by SC2009 (the setter's guard throws OPTIMISTIC_WRITE_BEFORE_LOAD first); SC2001 `write-unaccounted` stands beside it (no false clean), as at optimistic-apply-before-load-render",
+      "at": "fixtures/reactive-ir/optimistic-creating-carriers/App.tsx:99:5",
+      "adr": "ADR 1216"
+    },
+    "reactive-ir/optimistic-creating-carriers|fixtures/reactive-ir/optimistic-creating-carriers/App.tsx|2770-2782|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "ADR 1216 slice 3: an optimistic setter in OtherKey (SC2009 uncertifiable), whose REACTIVE_WRITE_IN_OWNED_SCOPE code is ended only by SC2009 (the setter's guard throws OPTIMISTIC_WRITE_BEFORE_LOAD first); SC2001 `write-unaccounted` stands beside it (no false clean), as at optimistic-apply-before-load-render",
+      "at": "fixtures/reactive-ir/optimistic-creating-carriers/App.tsx:112:5",
+      "adr": "ADR 1216"
+    },
+    "reactive-ir/optimistic-creating-carriers|fixtures/reactive-ir/optimistic-creating-carriers/App.tsx|3055-3067|C2/reporting-decision-no-row": {
+      "owner": "batch 11 slice 4: masked site, the code's U row stands; the proof is its producer's own",
+      "why": "ADR 1216 slice 3: an optimistic setter in OptionalCall (SC2009 uncertifiable), whose REACTIVE_WRITE_IN_OWNED_SCOPE code is ended only by SC2009 (the setter's guard throws OPTIMISTIC_WRITE_BEFORE_LOAD first); SC2001 `write-unaccounted` stands beside it (no false clean), as at optimistic-apply-before-load-render",
+      "at": "fixtures/reactive-ir/optimistic-creating-carriers/App.tsx:124:5",
+      "adr": "ADR 1216"
     }
   }
 }

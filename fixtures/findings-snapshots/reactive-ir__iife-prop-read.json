@@ -14,12 +14,11 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "uncertifiable",
-      "blocker": "callee-callback-timing",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/iife-prop-read/App.tsx",
-      "start": 710,
-      "end": 739,
+      "start": 794,
+      "end": 799,
       "fixes": 0
     },
     {

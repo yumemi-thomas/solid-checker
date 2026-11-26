@@ -742,6 +742,422 @@ pub(crate) fn entry_on_stack_of(
     None
 }
 
+/// How many layers [`some_entry_on_stack_of`] climbs through, over every route it tries.
+const SOME_ENTRY_BUDGET: usize = 64;
+
+/// ADR 1216: a position in `target` (`None`: at module scope) whose evaluation runs `site` on one stack on at least one
+/// execution, for a claim that one run suffices (a write that throws on its first run). Beside [`entry_on_stack_of`]'s
+/// steps, a layer is climbed through:
+/// - the callback of a dialect primitive that runs it during the call (`Execution::Inline`, or a tracked callback whose
+///   first run is `TrackedCallbackTiming::DuringCall`, with no `lazy` options argument written): `flush(fn)`, a memo's or
+///   an effect's compute;
+/// - any direct call of the name an unrebound named function is bound to (`const f = () => …`, `function f() {}`):
+///   other uses of the name do not matter here, since one run is the claim.
+///
+/// Each such call is a straight-line call of its function (`straight_line_calls`: run on every execution that reaches
+/// it) written outside JSX, and no layer it crosses is async or a generator or may follow a suspension. Not for a silence: a function also
+/// entered elsewhere runs there too.
+pub(crate) fn some_entry_on_stack_of(
+    file: &solid_facts::FileFacts,
+    site: Span,
+    target: Option<&solid_facts::ast::FunctionFact>,
+    lookup: &SemanticLookup<'_>,
+) -> Option<Span> {
+    let mut budget = SOME_ENTRY_BUDGET;
+    let mut seen = Vec::new();
+    some_entry_from(file, site, target, lookup, &mut budget, &mut seen)
+}
+
+fn some_entry_from(
+    file: &solid_facts::FileFacts,
+    at: Span,
+    target: Option<&solid_facts::ast::FunctionFact>,
+    lookup: &SemanticLookup<'_>,
+    budget: &mut usize,
+    seen: &mut Vec<Span>,
+) -> Option<Span> {
+    *budget = budget.checked_sub(1)?;
+    let layer = containing_ast_function(&file.ast, at);
+    if layer.map(|function| function.span) == target.map(|function| function.span) {
+        return Some(at);
+    }
+    let layer = layer?;
+    if seen.contains(&layer.span)
+        || layer.r#async
+        || layer.generator
+        || super::may_follow_suspension(file, at)
+    {
+        return None;
+    }
+    seen.push(layer.span);
+    let mut next = Vec::new();
+    // The steps of `entry_on_stack_of`.
+    if let Some(step) = file
+        .ast
+        .arguments_containing(layer.span)
+        .find(|(call, index)| {
+            file.ast.peel_ts_sugar_span(call.arguments[*index].span) == layer.span
+                && lookup
+                    .primitive_at_call(file, call.span)
+                    .is_some_and(|primitive| {
+                        lookup.dialect.synchronous_callback_slot(
+                            primitive,
+                            *index,
+                            call.arguments.len(),
+                        )
+                    })
+        })
+        .map(|(call, _)| call.span)
+        .or_else(|| untrack_carrier(file, layer, lookup).map(|call| call.span))
+        .or_else(|| in_place_step(file, layer, lookup))
+    {
+        next.push(step);
+    }
+    // A primitive that runs the layer during its own call.
+    next.extend(
+        file.ast
+            .arguments_containing(layer.span)
+            .filter(|(call, index)| {
+                file.ast.peel_ts_sugar_span(call.arguments[*index].span) == layer.span
+                    && runs_during_call(file, call, *index, lookup)
+                    && straight_line(file, call.span)
+            })
+            .map(|(call, _)| call.span),
+    );
+    // ADR 1216 slice 2: a callback prop's function runs at the child's calls of the prop (ADR 1171, 1190: inline, named,
+    // destructured, forwarded and spread forms).
+    if let Some(calls) = prop_literal_call_sites(file, layer, lookup) {
+        next.extend(calls.into_iter().filter(|call| straight_line(file, *call)));
+    }
+    // ADR 1216 slice 2: a component runs where the file renders it: an element of its tag written in the children of
+    // intrinsic elements only, so it is built when the tree around it is.
+    next.extend(eager_render_sites(file, layer, lookup));
+    // ADR 1216 slice 3: a function stored in a fresh local collection runs where the collection hands it back and calls it.
+    next.extend(stored_run_sites(file, layer, lookup));
+    // The direct calls of the name the layer is bound to.
+    if let Some(name) = crate::owners::function_binding_name(file, layer)
+        && lookup.function_value_is_current(file, layer)
+    {
+        for identifier in &file.ast.identifiers {
+            if identifier.role != solid_facts::ast::IdentifierRole::Reference
+                || file.ast.reference_declaration(identifier.span) != Some(name.span)
+            {
+                continue;
+            }
+            let called = file.ast.calls.iter().find(|call| {
+                !call.construct
+                    && file.ast.peel_ts_sugar_span(call.callee) == identifier.span
+                    && straight_line(file, call.span)
+            });
+            if let Some(call) = called {
+                next.push(call.span);
+            }
+        }
+    }
+    next.into_iter()
+        .find_map(|step| some_entry_from(file, step, target, lookup, budget, seen))
+}
+
+/// ADR 1216 slice 3: the positions where `function`, stored once in a fresh local collection, is handed back and called
+/// on some execution. `function` is bound to an unrebound name stored by one straight-line call of the standard
+/// `Map.set(k, f)`, `WeakMap.set(k, f)` or `Set.add(f)` on a `const` local initialized there by the standard constructor
+/// with no argument. Every other use of the collection is the receiver of a standard `forEach` whose callback is a
+/// literal of at most one parameter, or of `WeakMap.get`, so the collection holds exactly that entry afterwards. A site
+/// is a straight-line `forEach(literal)` whose callback calls its parameter straight-line, or a straight-line call of
+/// `get(k)` with the stored key (the same `const` binding). Both the store and the site run in the function that declares
+/// the collection, the site after the store, each climbed to it through straight-line `untrack` calls.
+fn stored_run_sites(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<Span> {
+    let ast = &file.ast;
+    let Some(name) = crate::owners::function_binding_name(file, function) else {
+        return Vec::new();
+    };
+    if !lookup.function_value_is_current(file, function) {
+        return Vec::new();
+    }
+    let standard = |call: &solid_facts::ast::CallFact| {
+        let kind = if call.construct {
+            typefacts::CallKind::Construct
+        } else {
+            typefacts::CallKind::Call
+        };
+        crate::indexes::standard_library_declaration_of(
+            lookup.resolved_callee_call(file, call.callee),
+            kind,
+        )
+        .map(|declaration| declaration.qualified_name.to_string())
+    };
+    let references = |declaration: Span| {
+        ast.identifiers.iter().filter(move |identifier| {
+            identifier.role == solid_facts::ast::IdentifierRole::Reference
+                && ast.reference_declaration(identifier.span) == Some(declaration)
+        })
+    };
+    let receiver_of = |call: &solid_facts::ast::CallFact| {
+        ast.member_at(ast.peel_ts_sugar_span(call.callee))
+            .map(|member| ast.peel_ts_sugar_span(member.object))
+    };
+    let mut sites = Vec::new();
+    for reference in references(name.span) {
+        let Some((store, index)) =
+            ast.arguments_containing(reference.span)
+                .find(|(call, index)| {
+                    ast.peel_ts_sugar_span(call.arguments[*index].span) == reference.span
+                })
+        else {
+            continue;
+        };
+        let Some(method) = standard(store) else {
+            continue;
+        };
+        let Some(constructor) = stored_collection_constructor(method.as_str(), index) else {
+            continue;
+        };
+        if store.construct
+            || store.arguments.iter().any(|argument| argument.spread)
+            || !straight_line(file, store.span)
+        {
+            continue;
+        }
+        let Some(collection) =
+            receiver_of(store).and_then(|object| ast.reference_declaration(object))
+        else {
+            continue;
+        };
+        let Some(home) = containing_ast_function(ast, collection) else {
+            continue;
+        };
+        let fresh = ast.bindings.iter().any(|binding| {
+            binding.immutable
+                && binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.names.iter().any(|name| name.span == collection)
+                && binding
+                    .initializer
+                    .map(|initializer| ast.peel_ts_sugar_span(initializer))
+                    .and_then(|initializer| {
+                        ast.calls
+                            .iter()
+                            .find(|call| call.span == initializer && call.construct)
+                    })
+                    .is_some_and(|created| {
+                        created.arguments.is_empty()
+                            && standard(created).as_deref() == Some(constructor)
+                    })
+        });
+        if !fresh {
+            continue;
+        }
+        // A position's run in `home`, through straight-line `untrack` layers.
+        let in_home = |site: Span| {
+            let mut at = site;
+            for _ in 0..4 {
+                let layer = containing_ast_function(ast, at)?;
+                if layer.span == home.span {
+                    return Some(at);
+                }
+                if layer.r#async || layer.generator {
+                    return None;
+                }
+                at = untrack_carrier(file, layer, lookup)
+                    .map(|call| call.span)
+                    .filter(|step| straight_line(file, *step))?;
+            }
+            None
+        };
+        let Some(at) = in_home(store.span).filter(|at| collection.end <= at.start) else {
+            continue;
+        };
+        let stored_key = (constructor == "WeakMapConstructor.construct")
+            .then(|| store.arguments.first())
+            .flatten()
+            .and_then(|key| ast.reference_declaration(ast.peel_ts_sugar_span(key.span)));
+        let mut uses_kept = true;
+        let mut found = Vec::new();
+        for use_site in references(collection) {
+            let Some(call) = ast
+                .calls
+                .iter()
+                .find(|call| !call.construct && receiver_of(call) == Some(use_site.span))
+            else {
+                uses_kept = false;
+                break;
+            };
+            if call.span == store.span {
+                continue;
+            }
+            match standard(call).as_deref() {
+                Some("Map.forEach" | "Set.forEach") => {
+                    let Some(callback) = call
+                        .arguments
+                        .first()
+                        .filter(|argument| !argument.spread)
+                        .and_then(|argument| {
+                            ast.function_at(ast.peel_ts_sugar_span(argument.span))
+                        })
+                    else {
+                        uses_kept = false;
+                        break;
+                    };
+                    if callback.parameters.len() > 1 || callback.rest_parameter {
+                        uses_kept = false;
+                        break;
+                    }
+                    let runs = !callback.r#async
+                        && !callback.generator
+                        && straight_line(file, call.span)
+                        && in_home(call.span).is_some_and(|run| at.end <= run.start)
+                        && callback
+                            .parameters
+                            .first()
+                            .filter(|parameter| {
+                                parameter.shape == solid_facts::ast::BindingShape::Identifier
+                            })
+                            .and_then(|parameter| parameter.names.first())
+                            .is_some_and(|parameter| {
+                                ast.calls.iter().any(|inner| {
+                                    !inner.construct
+                                        && ast.reference_declaration(
+                                            ast.peel_ts_sugar_span(inner.callee),
+                                        ) == Some(parameter.span)
+                                        && straight_line(file, inner.span)
+                                        && containing_ast_function(ast, inner.span)
+                                            .map(|layer| layer.span)
+                                            == Some(callback.span)
+                                })
+                            });
+                    if runs {
+                        found.push(call.span);
+                    }
+                }
+                Some("WeakMap.get") => {
+                    let same_key = stored_key.is_some()
+                        && call
+                            .arguments
+                            .first()
+                            .filter(|argument| !argument.spread)
+                            .and_then(|key| {
+                                ast.reference_declaration(ast.peel_ts_sugar_span(key.span))
+                            })
+                            == stored_key;
+                    let fixed_key = stored_key.is_some_and(|key| {
+                        ast.bindings.iter().any(|binding| {
+                            binding.immutable && binding.names.iter().any(|name| name.span == key)
+                        })
+                    });
+                    let caller = ast.calls.iter().find(|outer| {
+                        !outer.construct && ast.peel_ts_sugar_span(outer.callee) == call.span
+                    });
+                    if let Some(outer) = caller
+                        && same_key
+                        && fixed_key
+                        && straight_line(file, outer.span)
+                        && in_home(outer.span).is_some_and(|run| at.end <= run.start)
+                    {
+                        found.push(outer.span);
+                    }
+                }
+                _ => {
+                    uses_kept = false;
+                    break;
+                }
+            }
+        }
+        if uses_kept {
+            sites.extend(found);
+        }
+    }
+    sites
+}
+
+/// ADR 1216 slice 3: the standard constructor of the collection a store call writes its argument `index` into: the
+/// value of `Map.set` and `WeakMap.set`, the member of `Set.add`. `None` for any other method or slot: that call stores
+/// nothing [`stored_run_sites`] follows, so it gives no step (the site keeps its uncertifiable answer).
+fn stored_collection_constructor(method: &str, index: usize) -> Option<&'static str> {
+    match (method, index) {
+        ("Map.set", 1) => Some("MapConstructor.construct"),
+        ("WeakMap.set", 1) => Some("WeakMapConstructor.construct"),
+        ("Set.add", 0) => Some("SetConstructor.construct"),
+        _ => None,
+    }
+}
+
+/// ADR 1216 slice 2: the elements that render the component `function` of this file eagerly: a JSX element whose tag
+/// resolves to it (no member tag), every enclosing JSX element of which is intrinsic and holds it, or the element between,
+/// as a direct child: not in an attribute and not in an expression child (`{c() ? <K /> : null}` is evaluated reactively,
+/// possibly long after the creating pass). A component's children and attributes run only when that component reads them; an intrinsic element's
+/// children are built with it.
+fn eager_render_sites(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<Span> {
+    let ast = &file.ast;
+    ast.jsx_elements
+        .iter()
+        .filter(|element| {
+            element.member_object.is_none()
+                && !super::intrinsic_element(file, element)
+                && lookup
+                    .function_called_at(file.path.as_str(), element.name.span)
+                    .is_some_and(|(target, called)| {
+                        target.path == file.path && called.span == function.span
+                    })
+                && ast
+                    .jsx_containing(element.span)
+                    .filter(|outer| outer.span != element.span)
+                    .all(|outer| {
+                        super::intrinsic_element(file, outer)
+                            && outer
+                                .children
+                                .iter()
+                                .any(|child| child.contains(element.span))
+                            && (outer.children.contains(&element.span)
+                                || ast.jsx_containing(element.span).any(|between| {
+                                    between.span != element.span
+                                        && outer.span.contains(between.span)
+                                        && between.span != outer.span
+                                        && outer.children.contains(&between.span)
+                                }))
+                    })
+        })
+        .map(|element| element.span)
+        .collect()
+}
+
+/// ADR 1216: the dialect runs the callback at `index` of `call` before the call returns, on its first run at least
+/// (`Execution::Inline`, or `TrackedCallbackTiming::DuringCall`), and no argument stands where a `lazy` option may defer it.
+fn runs_during_call(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    index: usize,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
+        return false;
+    };
+    let count = call.arguments.len();
+    let dialect = lookup.dialect;
+    let during = dialect.callback_execution_at(primitive, index, count)
+        == Some(solid_dialect::Execution::Inline)
+        || dialect.tracked_callback_timing(primitive, index, count)
+            == Some(solid_dialect::TrackedCallbackTiming::DuringCall);
+    // A schedule with no `lazy` option has nothing to defer; one with it defers only where that argument is written.
+    let lazy_written = dialect
+        .lazy_option_argument(primitive)
+        .is_some_and(|options| options < count);
+    during && !lazy_written
+}
+
+/// ADR 1216: `call` is a call its function (or the module) runs on every execution that reaches it, written outside
+/// every JSX element: a JSX expression is evaluated when (and as often as) the compiled code reads it, and a component's
+/// children only when that component reads them, so `straight_line_calls`, which sees no function there, says nothing.
+fn straight_line(file: &solid_facts::FileFacts, call: Span) -> bool {
+    file.ast.straight_line_calls.contains(&call) && file.ast.jsx_containing(call).next().is_none()
+}
+
 pub(crate) fn runs_on_stack_of(
     file: &solid_facts::FileFacts,
     site: Span,

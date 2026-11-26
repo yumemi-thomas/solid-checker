@@ -28,17 +28,18 @@ use compact_str::CompactString;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Argument, ArrayExpressionElement, ArrowFunctionExpression, AssignmentExpression,
-    AssignmentTarget, AwaitExpression, BinaryExpression, BindingPattern, CallExpression,
-    ComputedMemberExpression, ConditionalExpression, Declaration, ExportAllDeclaration,
-    ExportDefaultDeclaration, ExportDefaultDeclarationKind, ExportNamedDeclaration, Expression,
-    FormalParameter, Function, FunctionType, IdentifierReference, IfStatement, ImportDeclaration,
-    ImportDeclarationSpecifier, ImportExpression, JSXAttributeItem, JSXAttributeName,
-    JSXAttributeValue, JSXElement, JSXElementName, JSXExpression, LogicalExpression,
-    LogicalOperator, ModuleExportName, NewExpression, ObjectProperty, ObjectPropertyKind,
-    PropertyKey, PropertyKind, ReturnStatement, SpreadElement, StaticMemberExpression,
-    TSGlobalDeclaration, TSImportEqualsDeclaration, TSImportType, TSImportTypeQualifier,
-    TSModuleBlock, TSModuleDeclaration, TSModuleDeclarationName, TSModuleReference, TSTypeQuery,
-    UnaryExpression, UpdateExpression, VariableDeclarator,
+    AssignmentTarget, AssignmentTargetMaybeDefault, AssignmentTargetProperty, AwaitExpression,
+    BinaryExpression, BindingPattern, CallExpression, ComputedMemberExpression,
+    ConditionalExpression, Declaration, ExportAllDeclaration, ExportDefaultDeclaration,
+    ExportDefaultDeclarationKind, ExportNamedDeclaration, Expression, FormalParameter, Function,
+    FunctionType, IdentifierReference, IfStatement, ImportDeclaration, ImportDeclarationSpecifier,
+    ImportExpression, JSXAttributeItem, JSXAttributeName, JSXAttributeValue, JSXElement,
+    JSXElementName, JSXExpression, LogicalExpression, LogicalOperator, ModuleExportName,
+    NewExpression, ObjectProperty, ObjectPropertyKind, PropertyKey, PropertyKind, ReturnStatement,
+    SpreadElement, StaticMemberExpression, TSGlobalDeclaration, TSImportEqualsDeclaration,
+    TSImportType, TSImportTypeQualifier, TSModuleBlock, TSModuleDeclaration,
+    TSModuleDeclarationName, TSModuleReference, TSTypeQuery, UnaryExpression, UpdateExpression,
+    VariableDeclarator,
 };
 use oxc_ast_visit::{Visit, walk};
 use oxc_parser::{ParseOptions, Parser};
@@ -83,7 +84,11 @@ use thiserror::Error;
 /// 108 (ADR 1152): the span of each name written with an escape, and of each chain of names that holds one, with the text the program means (`escaped_names`), and each
 /// string or template written with an escape whose whole value is one word, a text a check may read as a name (`escaped_strings`).
 /// 109 (ADR 1182): the assignments written in straight-line flow (`straight_line_assignments`), as `straight_line_calls`.
-pub const AST_FACTS_SCHEMA: u32 = 109;
+/// 110 (ADR 1193): the object patterns no declarator describes that destructure as one (`destructure_sites`): a plain assignment's
+/// object target and an object pattern that is a direct element of a declarator's array pattern.
+/// 111 (ADR 1218): an object pattern that is the value of a direct property of a declarator's object pattern
+/// (`DestructureSource::ObjectProperty`).
+pub const AST_FACTS_SCHEMA: u32 = 111;
 
 mod argument_completion;
 pub(crate) mod code_sinks;

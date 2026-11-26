@@ -1861,12 +1861,17 @@ pub(crate) fn unreached_report_sites(
         ) else {
             return None;
         };
-        Some(SyntaxReach::of(file, Span::new(start, end), lookup))
+        let span = Span::new(start, end);
+        // ADR 1204: asked of every site; read only where the reach queries leave it reached.
+        Some((
+            SyntaxReach::of(file, span, lookup),
+            earlier_evaluation_may_throw(file, span, lookup),
+        ))
     });
     let mut owners = sites
         .iter()
         .flatten()
-        .filter_map(|site| match site {
+        .filter_map(|(site, _)| match site {
             SyntaxReach::Owned(file, function) => Some((*file, *function)),
             _ => None,
         })
@@ -1898,16 +1903,33 @@ pub(crate) fn unreached_report_sites(
                     member_may_be_replaced: false,
                     returned_value_run: false,
                     returned_value_creation: false,
+                    earlier_may_throw: false,
                     undecided,
                 })
             };
-            match site? {
+            let (site, throws_first) = site?;
+            // ADR 1204: a site the reach queries leave reached may still follow an evaluation that throws.
+            let throw_first = || {
+                throws_first.then(|| crate::UnreachedSite {
+                    earlier_may_throw: true,
+                    location: (*location).clone(),
+                    dead_code: false,
+                    absent_prop: false,
+                    refused_creation: false,
+                    lazy_unread: false,
+                    member_may_be_replaced: false,
+                    returned_value_run: false,
+                    returned_value_creation: false,
+                    undecided: false,
+                })
+            };
+            match site {
                 SyntaxReach::DeadCode => answer(true, false, false, false, false),
                 SyntaxReach::AbsentProp => answer(false, true, false, false, false),
-                SyntaxReach::Unowned => None,
+                SyntaxReach::Unowned => throw_first(),
                 SyntaxReach::Owned(file, function) => {
                     match answers.get(&function_key(file, function))?.site() {
-                        SiteAnswer::MayRun => None,
+                        SiteAnswer::MayRun => throw_first(),
                         SiteAnswer::NeverEntered { refused_creation } => {
                             answer(false, false, refused_creation, false, false)
                         }
@@ -1931,6 +1953,180 @@ pub(crate) fn unreached_report_sites(
             }
         })
         .collect()
+}
+
+/// ADR 1204: the site runs only if every evaluation before it completes, and one of them must throw: in the function written
+/// around the site, or before the call of each in-place layer that runs that function (an IIFE, a closure's one direct call:
+/// [`in_place_layer_call`]), an evaluation of its own code (not of a function nested in it) that runs on every completion
+/// reaching it (`completion_sites`: straight-line flow, no earlier exit may skip it) and that must throw: a Get of a key a
+/// `const` object literal defines as a getter that must throw, or a call of a function declaration or `const` function literal
+/// of the file that must throw. A function must throw when its own straight-line code holds such an evaluation or a
+/// `throw new …`/`throw f(…)` whose operand is a completion site, uncaught in it, through local calls [`THROW_DEPTH`] deep. A
+/// row at a call of a local function (a call-attributed read) stands for what that function runs, so a callee that must throw
+/// is enough there. A throw that a `try` catches, where the `try`'s block does not also hold the site, completes the `try`.
+///
+/// A throw on a branch is not this: the site reads as reached, as a site in a branch does (ADR 0458). ADR 0279's premise stays:
+/// any other call completes normally unless its signature says it may not, so a throw this does not see (a helper's helper, a
+/// package) is outside the model.
+fn earlier_evaluation_may_throw(
+    file: &solid_facts::FileFacts,
+    site: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let ast = &file.ast;
+    // A row at a call of a local function stands for what runs in it (a call-attributed read).
+    if ast
+        .call_at(site)
+        .and_then(|call| local_function_of(file, call.callee))
+        .is_some_and(|callee| function_must_throw(file, callee, THROW_DEPTH))
+    {
+        return true;
+    }
+    let mut at = site;
+    for _ in 0..8 {
+        let Some(function) = crate::owners::containing_ast_function(ast, at) else {
+            return false;
+        };
+        let before = |span: Span| {
+            span.end <= at.start && own_code(file, function, span) && !caught_before(file, span, at)
+        };
+        if must_throw_in(file, function, &before, THROW_DEPTH) {
+            return true;
+        }
+        match in_place_layer_call(file, function, lookup) {
+            Some(call) => at = call,
+            None => return false,
+        }
+    }
+    false
+}
+
+/// ADR 1204: how many local calls deep [`function_must_throw`] follows a callee's own calls.
+const THROW_DEPTH: usize = 4;
+
+fn own_code(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    span: Span,
+) -> bool {
+    crate::owners::containing_ast_function(&file.ast, span)
+        .is_some_and(|owner| owner.span == function.span)
+}
+
+/// ADR 1204: whether an evaluation of `function`'s straight-line code that `admitted` keeps must throw: a Get of a throwing
+/// getter of a `const` literal, a call of a local function that must throw ([`function_must_throw`]), or a `throw` whose
+/// operand (a `new` or a call) is a completion site.
+fn must_throw_in(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    admitted: &dyn Fn(Span) -> bool,
+    depth: usize,
+) -> bool {
+    let ast = &file.ast;
+    let straight = |span: Span| ast.completion_sites.binary_search(&span).is_ok() && admitted(span);
+    ast.throws
+        .iter()
+        .any(|thrown| admitted(thrown.span) && straight(ast.peel_ts_sugar_span(thrown.argument)))
+        || ast
+            .members
+            .iter()
+            .any(|member| straight(member.span) && throwing_getter(file, member, depth))
+        || ast.calls.iter().any(|call| {
+            !call.construct
+                && straight(call.span)
+                && local_function_of(file, call.callee).is_some_and(|callee| {
+                    callee.span != function.span && function_must_throw(file, callee, depth)
+                })
+        })
+}
+
+/// ADR 1204: whether every completion of `function` throws out of it: [`must_throw_in`] its own code, uncaught in it, following
+/// local calls `depth` deep; past that depth, a call is taken to complete normally (ADR 0279's premise).
+fn function_must_throw(
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    depth: usize,
+) -> bool {
+    let Some(depth) = depth.checked_sub(1) else {
+        return false;
+    };
+    let admitted =
+        |span: Span| own_code(file, function, span) && !caught_before(file, span, function.span);
+    must_throw_in(file, function, &admitted, depth)
+}
+
+/// ADR 1204: the function a callee names: a function declaration of the file, or a `const` bound to a function literal.
+fn local_function_of(
+    file: &solid_facts::FileFacts,
+    callee: Span,
+) -> Option<&solid_facts::ast::FunctionFact> {
+    let ast = &file.ast;
+    let declaration = ast.reference_declaration(ast.peel_ts_sugar_span(callee))?;
+    ast.functions
+        .iter()
+        .find(|function| {
+            function.kind == solid_facts::ast::FunctionKind::Declaration
+                && function
+                    .name
+                    .as_ref()
+                    .is_some_and(|name| name.span == declaration)
+        })
+        .or_else(|| {
+            let binding = ast.bindings.iter().find(|binding| {
+                binding.immutable
+                    && binding.shape == solid_facts::ast::BindingShape::Identifier
+                    && binding.names.iter().any(|name| name.span == declaration)
+            })?;
+            ast.function_at(ast.peel_ts_sugar_span(binding.initializer?))
+        })
+}
+
+/// ADR 1204: whether `member` is a Get of a key a `const` object literal defines as a getter that must throw.
+fn throwing_getter(
+    file: &solid_facts::FileFacts,
+    member: &solid_facts::ast::MemberFact,
+    depth: usize,
+) -> bool {
+    let ast = &file.ast;
+    if ast.computed_members.contains(&member.span) {
+        return false;
+    }
+    let Some(key) = file.source_text(member.property) else {
+        return false;
+    };
+    let Some(declaration) = ast.reference_declaration(ast.peel_ts_sugar_span(member.object)) else {
+        return false;
+    };
+    let Some(literal) = ast
+        .bindings
+        .iter()
+        .find(|binding| {
+            binding.immutable
+                && binding.shape == solid_facts::ast::BindingShape::Identifier
+                && binding.names.iter().any(|name| name.span == declaration)
+        })
+        .and_then(|binding| binding.initializer)
+        .map(|value| ast.peel_ts_sugar_span(value))
+    else {
+        return false;
+    };
+    ast.object_get_shapes
+        .iter()
+        .filter(|shape| shape.span == literal)
+        .flat_map(|shape| &shape.properties)
+        .filter(|property| property.key.as_str() == key)
+        .filter_map(|property| property.getter)
+        .filter_map(|getter| ast.function_at(getter))
+        .any(|getter| function_must_throw(file, getter, depth + 1))
+}
+
+/// ADR 1204: whether a `try` with a `catch` holds `thrown` in its block and does not hold `site` there: the throw lands in the
+/// handler, which completes the `try`, and the code after it runs.
+fn caught_before(file: &solid_facts::FileFacts, thrown: Span, site: Span) -> bool {
+    file.ast
+        .try_catches
+        .iter()
+        .any(|caught| caught.block.contains(thrown) && !caught.block.contains(site))
 }
 
 fn function_key(

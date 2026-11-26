@@ -1702,9 +1702,20 @@ impl StaticApiContext<'_> {
             if self.tables.source_kind(root).is_some() {
                 return None;
             }
+            let key = file.source_text(member.property)?;
+            // ADR 1214: `merged.name` on a `const` `merge(lit…, props)` or `omit(props, "k"…)` view of the parameter, whose Get of `name`
+            // is the parameter's own Get (`local_access::view_get_is_props_get`, the rc.21 view semantics ADR 1100 reads), names `props.name`.
             let (_, declaration) = self.tables.prop_source(root)?;
             let parameter = self.entities.get(declaration)?;
-            if parameter != root
+            if (parameter != root
+                && !crate::local_access::view_get_is_props_get(
+                    file,
+                    object,
+                    parameter,
+                    key,
+                    self.entities,
+                    self.lookup,
+                ))
                 || !crate::local_access::props_root_is_current(
                     file,
                     declaration,
@@ -1723,10 +1734,7 @@ impl StaticApiContext<'_> {
             {
                 return None;
             }
-            return Some((
-                declaration.clone(),
-                file.source_text(member.property)?.to_owned(),
-            ));
+            return Some((declaration.clone(), key.to_owned()));
         }
         if !ast.identifiers.iter().any(|identifier| {
             identifier.span == at && identifier.role == solid_facts::ast::IdentifierRole::Reference

@@ -19,8 +19,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-later-continuation/App.tsx",
-      "start": 2465,
-      "end": 2472,
+      "start": 3554,
+      "end": 3561,
       "fixes": 0
     },
     {
@@ -30,8 +30,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-later-continuation/App.tsx",
-      "start": 2800,
-      "end": 2807,
+      "start": 3889,
+      "end": 3896,
       "fixes": 0
     },
     {
@@ -41,8 +41,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-later-continuation/App.tsx",
-      "start": 3160,
-      "end": 3167,
+      "start": 4249,
+      "end": 4256,
       "fixes": 0
     },
     {
@@ -52,8 +52,8 @@
       "blocker": "handed-read-after-await",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-later-continuation/App.tsx",
-      "start": 3187,
-      "end": 3188,
+      "start": 4276,
+      "end": 4277,
       "fixes": 0
     },
     {
@@ -63,8 +63,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/flush-later-continuation/App.tsx",
-      "start": 3695,
-      "end": 3702,
+      "start": 4784,
+      "end": 4791,
       "fixes": 0
     },
     {

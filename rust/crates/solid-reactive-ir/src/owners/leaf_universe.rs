@@ -410,6 +410,9 @@ impl<'a> Question<'_, '_, 'a> {
                 .jsx_containing(span)
                 .any(|element| function.span.contains(element.span))
             && let Some(awaited) = crate::execution_role::unconditional_await_before(file, span)
+                // ADR 1215: an `await` that dominates the rest of its block, or the suspension of the `for await` whose body
+                // holds the site (`own_body_await_before`): every run of the site follows it too.
+                .or_else(|| crate::execution_role::own_body_await_before(file, span))
         {
             effect_answer = Some(Ok((
                 SiteSilence::EffectCreationAfterAwait,
@@ -433,7 +436,8 @@ impl<'a> Question<'_, '_, 'a> {
             Ok(())
         };
         if let Err(reason) = plain {
-            // ADR 1205: an effect group the after-await silence already answered keeps that answer, as the leaf group keeps the census's.
+            // ADR 1215: an effect answer already given (the after-await silence, with the leaf group still open) stands; dropping it left the site's
+            // home row with neither a silence nor a decline (the proof gate's C1).
             return (
                 leaf_answer.or(open_leaf.then_some(Err(reason))),
                 effect_answer.or(open_effect.then_some(Err(reason))),
@@ -476,7 +480,7 @@ impl<'a> Question<'_, '_, 'a> {
                 self.entities,
                 self.symbol_names,
                 self.lookup,
-            ) && (super::owner_emission::runs_in_delivered_handler(file, span, self.lookup)
+            ) && (super::owner_emission::runs_on_host_entry(file, span, self.lookup)
                 || !entry_open())
                 // ADR 1190: a component prop's literal ADR 1171 proves entered by the child's calls runs where those calls run, not where
                 // it is written: the role must place each call off every apply too (`er-prop-apply-*`: a JSX creation in a literal the

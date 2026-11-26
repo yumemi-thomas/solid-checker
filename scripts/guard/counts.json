@@ -10,8 +10,9 @@
   "SC1001 compiler-refused-file": 1,
   "SC1001 component-identity-unproven": 136,
   "SC1001 creation-throws-first": 3,
+  "SC1001 earlier-evaluation-may-throw": 4,
   "SC1001 escaped-name-unresolved": 19,
-  "SC1001 function-run-unplaced": 1778,
+  "SC1001 function-run-unplaced": 1783,
   "SC1001 function-unentered": 1,
   "SC1001 host-callback-timing": 12,
   "SC1001 jsx-census-missing": 1,
@@ -19,7 +20,7 @@
   "SC1001 no-hydration-subtree": 2,
   "SC1001 package-finding-at-entry": 141,
   "SC1001 package-value-read": 182,
-  "SC1001 read-backing-unproven": 420,
+  "SC1001 read-backing-unproven": 447,
   "SC1001 store-handed-to-package": 1,
   "SC1001 strict-read-unaccounted": 18,
   "SC1001 summary-read-unplaced": 97,
@@ -33,7 +34,7 @@
   "SC1002 package-finding-at-entry": 17,
   "SC1002 package-operation-after-await": 3,
   "SC1002 parameter-initializer-unplaced": 8,
-  "SC1002 read-after-await-unaccounted": 746,
+  "SC1002 read-after-await-unaccounted": 751,
   "SC1002 search-depth-limit": 1,
   "SC1002 site-reach-undecided": 1,
   "SC1002 standard-member-impostor": 3,
@@ -41,13 +42,13 @@
   "SC1002 unresolved-invocation": 128,
   "SC1003 build-constant-arm": 1,
   "SC1003 callee-callback-timing": 3,
-  "SC1003 destructure-root-unproven": 34,
+  "SC1003 destructure-root-unproven": 37,
   "SC1003 escaped-name-unresolved": 1,
   "SC1003 function-run-unplaced": 2,
   "SC1003 function-unentered": 2,
   "SC1003 host-callback-timing": 1,
   "SC1003 package-finding-at-entry": 13,
-  "SC1003 props-callers-unenumerated": 19,
+  "SC1003 props-callers-unenumerated": 22,
   "SC1003 store-key-undecided": 11,
   "SC1003 summary-read-unplaced": 2,
   "SC1004 component-identity-unproven": 1,
@@ -61,7 +62,7 @@
   "SC2001 binding-before-initialization": 3,
   "SC2001 component-identity-unproven": 10,
   "SC2001 escaped-name-unresolved": 4,
-  "SC2001 function-run-unplaced": 591,
+  "SC2001 function-run-unplaced": 597,
   "SC2001 function-unentered": 13,
   "SC2001 lazy-compute-unread": 7,
   "SC2001 owned-write-option-unread": 4,
@@ -70,7 +71,7 @@
   "SC2001 setter-handed-to-package": 9,
   "SC2001 site-reach-undecided": 3,
   "SC2001 unreached-dead-code": 5,
-  "SC2001 write-unaccounted": 18,
+  "SC2001 write-unaccounted": 44,
   "SC2002 action-handed-to-package": 1,
   "SC2002 function-run-unplaced": 30,
   "SC2002 function-unentered": 2,
@@ -87,9 +88,9 @@
   "SC2003 package-finding-at-entry": 50,
   "SC2003 search-depth-limit": 1,
   "SC2003 store-handed-to-package": 1,
-  "SC2003 store-operation-may-not-write": 47,
-  "SC2003 store-write-unproven": 112,
-  "SC2003 unproven-container-root": 147,
+  "SC2003 store-operation-may-not-write": 49,
+  "SC2003 store-write-unproven": 117,
+  "SC2003 unproven-container-root": 150,
   "SC2004 async-slot-unmodelled": 4,
   "SC2004 component-identity-unproven": 1,
   "SC2004 computation-error-unobserved": 26,
@@ -99,7 +100,7 @@
   "SC2005 async-slot-unmodelled": 2,
   "SC2005 computation-error-unobserved": 6,
   "SC2005 function-run-unplaced": 7,
-  "SC2006 flush-in-action-unaccounted": 479,
+  "SC2006 flush-in-action-unaccounted": 481,
   "SC2006 function-run-unplaced": 45,
   "SC2006 package-finding-at-entry": 1,
   "SC2006 parameter-initializer-unplaced": 14,
@@ -121,7 +122,7 @@
   "SC2008 refused-creation-unrun": 1,
   "SC2008 search-depth-limit": 3,
   "SC2008 unreached-dead-code": 4,
-  "SC2009 optimistic-reach-unresolved": 13,
+  "SC2009 optimistic-reach-unresolved": 36,
   "SC2009 optimistic-write-unaccounted": 2,
   "SC3001 computation-error-unobserved": 13,
   "SC3001 creation-throws-first": 1,
@@ -129,7 +130,7 @@
   "SC3001 function-run-unplaced": 44,
   "SC3001 generator-stepped": 9,
   "SC3001 leaf-operation-identity-unproven": 7,
-  "SC3001 leaf-operation-unaccounted": 7232,
+  "SC3001 leaf-operation-unaccounted": 7340,
   "SC3001 leaf-owner-unproven": 69,
   "SC3001 package-finding-at-entry": 9,
   "SC3001 refused-creation-unrun": 1,
@@ -137,15 +138,15 @@
   "SC4001 async-flight-error-unobserved": 4,
   "SC4001 component-identity-unproven": 15,
   "SC4001 computation-error-unobserved": 31,
-  "SC4001 creation-throws-first": 19,
-  "SC4001 function-run-unplaced": 313,
+  "SC4001 creation-throws-first": 17,
+  "SC4001 function-run-unplaced": 312,
   "SC4001 function-unentered": 3,
   "SC4001 handler-key-overridden": 4,
   "SC4001 handler-member-unresolved": 40,
   "SC4001 handler-on-disabled-control": 7,
-  "SC4001 handler-spread-unresolved": 81,
-  "SC4001 owner-allocation-unproven": 24,
-  "SC4001 owner-callers-unenumerated": 3695,
+  "SC4001 handler-spread-unresolved": 84,
+  "SC4001 owner-allocation-unproven": 26,
+  "SC4001 owner-callers-unenumerated": 3742,
   "SC4001 owner-later-run-unowned": 19,
   "SC4001 owner-nullable": 8,
   "SC4001 owner-unproven": 5,
@@ -169,28 +170,28 @@
   "SC5001 binding-before-initialization": 1,
   "SC5001 call-attributed-read": 3,
   "SC5001 callee-callback-timing": 18,
-  "SC5001 carrier-run-unproven": 4,
+  "SC5001 carrier-run-unproven": 3,
   "SC5001 component-identity-unproven": 1,
   "SC5001 creation-pass-unproven": 18,
   "SC5001 declared-loading-value": 4,
   "SC5001 host-callback-timing": 1,
-  "SC5001 invocation-context-unproven": 175,
+  "SC5001 invocation-context-unproven": 174,
   "SC5001 mount-form-window": 1,
   "SC5001 mount-unresolved": 2,
   "SC5001 package-finding-at-entry": 44,
   "SC5001 source-module-unresolved": 1,
   "SC5001 source-pending-unproven": 343,
-  "SC5003 async-options-opaque": 40,
-  "SC5003 async-provenance-unproven": 174,
+  "SC5003 async-options-opaque": 41,
+  "SC5003 async-provenance-unproven": 177,
   "SC5003 async-read-caught": 4,
   "SC5003 async-read-unaccounted": 353,
-  "SC5003 call-attributed-read": 185,
+  "SC5003 call-attributed-read": 183,
   "SC5003 carrier-run-unproven": 2,
   "SC5003 component-identity-unproven": 1,
   "SC5003 mount-form-window": 2,
-  "SC5003 mount-unresolved": 384,
+  "SC5003 mount-unresolved": 411,
   "SC5003 package-finding-at-entry": 113,
-  "SC5003 pending-read-unresolved": 827,
+  "SC5003 pending-read-unresolved": 825,
   "SC5003 root-mount-pass-unproven": 54,
   "SC5003 server-rendering-unresolved": 1,
   "SC5003 source-module-unresolved": 1,
@@ -206,9 +207,9 @@
   "SC5008 pending-read-unresolved": 24,
   "SC6001 directive-owner-unproven": 19,
   "SC6002 callee-callback-timing": 2,
-  "SC6002 effect-creation-unaccounted": 5590,
+  "SC6002 effect-creation-unaccounted": 5660,
   "SC6002 effect-owner-unproven": 54,
-  "SC6002 function-run-unplaced": 61,
+  "SC6002 function-run-unplaced": 65,
   "SC6002 generator-step-unplaced": 1,
   "SC6002 package-finding-at-entry": 27,
   "SC6002 package-operation-in-effect-apply": 1,
@@ -248,7 +249,7 @@
   "SC9012 dependency-source-getter": 54,
   "SC9012 dependency-source-program-call-error": 1,
   "SC9012 dependency-value-unfollowed": 23,
-  "SC9012 derived-read-under-untrack": 6,
+  "SC9012 derived-read-under-untrack": 7,
   "SC9012 dialect-specifier-mapped": 10,
   "SC9012 escaped-name-unresolved": 54,
   "SC9012 exported-parameter-member-dispatch": 83,
@@ -257,11 +258,11 @@
   "SC9012 function-prototype-callee-unresolved": 2,
   "SC9012 function-run-unplaced": 1,
   "SC9012 handed-member-dispatch": 464,
-  "SC9012 handed-member-read": 79,
+  "SC9012 handed-member-read": 81,
   "SC9012 handed-read-after-await": 12,
   "SC9012 import-unresolved": 50,
   "SC9012 installed-member": 137,
-  "SC9012 leaf-callback-opaque": 273,
+  "SC9012 leaf-callback-opaque": 274,
   "SC9012 listener-reach": 128,
   "SC9012 package-callee": 28,
   "SC9012 package-finding-at-entry": 232,
@@ -285,16 +286,16 @@
   "SC9012 standard-member-impostor": 521,
   "SC9012 store-key-undecided": 16,
   "SC9012 tuple-iteration-written": 1503,
-  "SC9012 type-only-source": 98,
+  "SC9012 type-only-source": 99,
   "SC9012 value-as-parameter-default": 10,
   "SC9012 value-bound-held": 6,
   "SC9012 value-escaped-from-untrack": 8,
   "SC9012 value-exported-unnamed": 6,
-  "SC9012 value-forwarded": 293,
+  "SC9012 value-forwarded": 313,
   "SC9012 value-from-primitive-callback": 36,
-  "SC9012 value-held-in-binding": 167,
+  "SC9012 value-held-in-binding": 185,
   "SC9012 value-held-in-member": 31,
-  "SC9012 value-in-carrier": 493,
+  "SC9012 value-in-carrier": 533,
   "SC9012 value-in-class-field": 14,
   "SC9012 value-pending-in-jsx": 3,
   "SC9012 value-read-under-untrack": 1,
@@ -306,8 +307,8 @@
   "SC9012 value-thrown": 49,
   "SC9012 value-to-unresolved-callee": 374,
   "SC9012 value-use-unclassified": 52,
-  "SC9012 withheld-object-member": 100,
-  "SC9014 dialect-detection": 227,
+  "SC9012 withheld-object-member": 101,
+  "SC9014 dialect-detection": 230,
   "SC9014 router-release": 4,
   "SC9015 compiler-facts": 5,
   "SC9016 suppression-comments": 4
@@ -6854,6 +6855,240 @@
    "fixtures": {
     "proved": "reactive-ir/forwarded-callback-nested-window",
     "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/write-detached-owner-helper",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1202",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/callee_roles.rs::untracked_argument_layer_call",
+   "fixtures": {
+    "proved": "reactive-ir/write-detached-owner-helper",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/rc21-after-await-handed",
+   "key": "SC1003 destructure-root-unproven",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1193",
+   "kind": "relabel",
+   "relabeledTo": "SC1003 props-callers-unenumerated"
+  },
+  {
+   "fixture": "reactive-ir/rc21-after-await-handed",
+   "key": "SC9012 value-held-in-binding",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1193",
+   "kind": "relabel",
+   "relabeledTo": "SC1003 props-callers-unenumerated"
+  },
+  {
+   "fixture": "reactive-ir/rc21-after-await-handed",
+   "key": "SC9012 value-in-carrier",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 1193",
+   "proof": "rust/crates/solid-reactive-ir/src/value_use.rs::bound",
+   "fixtures": {
+    "proved": "reactive-ir/rc21-after-await-handed",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/iife-prop-read",
+   "key": "SC1001 callee-callback-timing",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1209",
+   "proof": "rust/crates/solid-reactive-ir/src/interproc/result_reads.rs::inline_ref_factory_site",
+   "fixtures": {
+    "proved": "reactive-ir/iife-prop-read",
+    "open": "reactive-ir/ref-factory-call"
+   }
+  },
+  {
+   "fixture": "reactive-ir/owner-call-effect-creation-inline-handler",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 2,
+   "to": 1,
+   "adr": "ADR 1213",
+   "proof": "rust/crates/solid-reactive-ir/src/owners/owner_emission.rs::runs_on_host_entry",
+   "fixtures": {
+    "proved": "reactive-ir/owner-call-effect-creation-inline-handler",
+    "open": "reactive-ir/owner-call-effect-creation-inline-handler"
+   }
+  },
+  {
+   "fixture": "reactive-ir/async-carrier-provably-runs",
+   "key": "SC5001 carrier-run-unproven",
+   "from": 3,
+   "to": 2,
+   "adr": "ADR 1216",
+   "proof": "rust/crates/solid-reactive-ir/src/carrier_runs.rs::seeded_collection",
+   "fixtures": {
+    "proved": "reactive-ir/async-carrier-provably-runs",
+    "open": "reactive-ir/async-carrier-provably-runs"
+   }
+  },
+  {
+   "fixture": "reactive-ir/async-carrier-provably-runs",
+   "key": "SC1001 read-backing-unproven",
+   "from": 4,
+   "to": 3,
+   "adr": "ADR 1216",
+   "proof": "rust/crates/solid-reactive-ir/src/carrier_runs.rs::seeded_collection",
+   "fixtures": {
+    "proved": "reactive-ir/async-carrier-provably-runs",
+    "open": "reactive-ir/async-carrier-provably-runs"
+   }
+  },
+  {
+   "fixture": "reactive-ir/owner-carrier-provably-runs",
+   "key": "SC4001 function-run-unplaced",
+   "from": 6,
+   "to": 5,
+   "adr": "ADR 1216",
+   "proof": "rust/crates/solid-reactive-ir/src/carrier_runs.rs::seeded_collection",
+   "fixtures": {
+    "proved": "reactive-ir/owner-carrier-provably-runs",
+    "open": "reactive-ir/owner-carrier-provably-runs"
+   }
+  },
+  {
+   "fixture": "reactive-ir/async-carried-leaf-owner",
+   "key": "SC1001 function-run-unplaced",
+   "from": 4,
+   "to": 3,
+   "adr": "ADR 1214",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs::sole_inline_carrier_of_named_function",
+   "fixtures": {
+    "proved": "reactive-ir/async-carried-leaf-owner",
+    "open": "reactive-ir/async-carried-leaf-owner"
+   }
+  },
+  {
+   "fixture": "reactive-ir/async-carried-leaf-owner",
+   "key": "SC5003 call-attributed-read",
+   "from": 4,
+   "to": 3,
+   "adr": "ADR 1214",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs::sole_inline_carrier_of_named_function",
+   "fixtures": {
+    "proved": "reactive-ir/async-carried-leaf-owner",
+    "open": "reactive-ir/async-carried-leaf-owner"
+   }
+  },
+  {
+   "fixture": "reactive-ir/async-carrier-call-attributed",
+   "key": "SC5001 invocation-context-unproven",
+   "from": 7,
+   "to": 6,
+   "adr": "ADR 1214",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs::sole_inline_carrier_of_named_function",
+   "fixtures": {
+    "proved": "reactive-ir/async-carrier-call-attributed",
+    "open": "reactive-ir/async-carrier-call-attributed"
+   }
+  },
+  {
+   "fixture": "reactive-ir/async-carrier-call-attributed",
+   "key": "SC5003 call-attributed-read",
+   "from": 7,
+   "to": 6,
+   "adr": "ADR 1214",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs::sole_inline_carrier_of_named_function",
+   "fixtures": {
+    "proved": "reactive-ir/async-carrier-call-attributed",
+    "open": "reactive-ir/async-carrier-call-attributed"
+   }
+  },
+  {
+   "fixture": "reactive-ir/async-carrier-call-attributed",
+   "key": "SC5003 async-read-unaccounted",
+   "from": 6,
+   "to": 5,
+   "adr": "ADR 1214",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs::sole_inline_carrier_of_named_function",
+   "fixtures": {
+    "proved": "reactive-ir/async-carrier-call-attributed",
+    "open": "reactive-ir/async-carrier-call-attributed"
+   }
+  },
+  {
+   "fixture": "reactive-ir/effect-cleanup-rerun-read",
+   "key": "SC1001 function-run-unplaced",
+   "from": 3,
+   "to": 2,
+   "adr": "ADR 1214",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs::sole_inline_carrier_of_named_function",
+   "fixtures": {
+    "proved": "reactive-ir/effect-cleanup-rerun-read",
+    "open": "reactive-ir/effect-cleanup-rerun-read"
+   }
+  },
+  {
+   "fixture": "reactive-ir/flush-closure-called-once",
+   "key": "SC1001 function-run-unplaced",
+   "from": 3,
+   "to": 2,
+   "adr": "ADR 1214",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs::sole_inline_carrier_of_named_function",
+   "fixtures": {
+    "proved": "reactive-ir/flush-closure-called-once",
+    "open": "reactive-ir/flush-closure-called-once"
+   }
+  },
+  {
+   "fixture": "reactive-ir/read-flush-layer-placed",
+   "key": "SC1001 function-run-unplaced",
+   "from": 4,
+   "to": 2,
+   "adr": "ADR 1214",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/write_roles.rs::sole_inline_carrier_of_named_function",
+   "fixtures": {
+    "proved": "reactive-ir/read-flush-layer-placed",
+    "open": "reactive-ir/read-flush-layer-placed"
+   }
+  },
+  {
+   "fixture": "reactive-ir/owner-after-await-for-await",
+   "key": "SC6002 effect-creation-unaccounted",
+   "from": 1,
+   "to": 0,
+   "adr": "ADR 1215",
+   "proof": "rust/crates/solid-reactive-ir/src/execution_role/body_roles.rs::own_body_await_before",
+   "fixtures": {
+    "proved": "reactive-ir/owner-after-await-for-await",
+    "open": "engine/eslint-reactivity-v2"
+   }
+  },
+  {
+   "fixture": "reactive-ir/pending-read-unresolved",
+   "key": "SC5003 pending-read-unresolved",
+   "from": 7,
+   "to": 5,
+   "adr": "ADR 1218",
+   "proof": "rust/crates/solid-reactive-ir/src/value_use.rs::nested_bound",
+   "fixtures": {
+    "proved": "reactive-ir/pending-read-unresolved",
+    "open": "reactive-ir/pending-read-unresolved"
+   }
+  },
+  {
+   "fixture": "reactive-ir/pending-read-unresolved",
+   "key": "SC9012 value-in-carrier",
+   "from": 2,
+   "to": 0,
+   "adr": "ADR 1218",
+   "proof": "rust/crates/solid-reactive-ir/src/value_use.rs::nested_bound",
+   "fixtures": {
+    "proved": "reactive-ir/pending-read-unresolved",
+    "open": "reactive-ir/value-use-nested-destructure"
    }
   },
   {

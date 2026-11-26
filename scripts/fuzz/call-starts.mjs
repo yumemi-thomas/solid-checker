@@ -71,6 +71,49 @@ export function carrierLines(source, line, fileName = "App.tsx") {
   return [...lines];
 }
 
+/**
+ * ADR 1217: `(line, column) => "callee" | "carrier" | null`, where a position stands to the calls of the site. `atSite(line, column)`
+ * says a call start is the site's (in the statement that holds the read). `callee`: inside the callee of such a call, the expression the
+ * call dispatches through (`box` in `Object.values(box)[0]()`), never its arguments (`holder.c` in `set(holder.c)` is what the call was
+ * handed, R20). `carrier`: the start of a call, or of its callee through parentheses and casts (`(f as any)(...xs)` at `(` or `f`), inside
+ * the body of a function such a call names (`loop()` at the site, `const loop = (...) => { ... }`). One level only, and only a name the
+ * file declares once: a shadowed or redeclared name, a member callee or an argument carries nothing.
+ */
+export function dispatchPlaces(source, atSite, fileName = "App.tsx") {
+  const ts = typescript();
+  const text = String(source ?? "");
+  const file = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, fileName.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const position = (offset) => { const at = file.getLineAndCharacterOfPosition(offset); return { line: at.line + 1, column: at.character + 1 }; };
+  const unwrap = (expression) => {
+    let inner = expression;
+    while (ts.isParenthesizedExpression(inner) || ts.isAsExpression(inner) || ts.isSatisfiesExpression(inner) || ts.isNonNullExpression(inner)) inner = inner.expression;
+    return inner;
+  };
+  const declared = new Map();
+  const calls = [];
+  const declare = (name, body) => declared.set(name, [...(declared.get(name) ?? []), body]);
+  const visit = (node) => {
+    if (ts.isFunctionDeclaration(node) && node.name) declare(node.name.text, node.body);
+    else if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) declare(node.name.text, node.initializer && (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer)) ? node.initializer.body : null);
+    else if (ts.isParameter(node) && ts.isIdentifier(node.name)) declare(node.name.text, null);
+    if (ts.isCallExpression(node)) calls.push(node);
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  const offsetOf = (line, column) => (file.getLineStarts()[line - 1] ?? Infinity) + column - 1;
+  const sited = calls.filter((call) => { const start = position(call.getStart(file)); return atSite(start.line, start.column); });
+  const callees = sited.map((call) => [call.expression.getStart(file), call.expression.getEnd()]);
+  const bodies = sited.flatMap((call) => {
+    const callee = unwrap(call.expression);
+    const body = ts.isIdentifier(callee) && declared.get(callee.text)?.length === 1 ? declared.get(callee.text)[0] : null;
+    return body ? [[body.getStart(file), body.getEnd()]] : [];
+  });
+  const carriers = calls.filter((call) => bodies.some(([start, end]) => start <= call.getStart(file) && call.getEnd() <= end))
+    .flatMap((call) => [position(call.getStart(file)), position(unwrap(call.expression).getStart(file))]);
+  return (line, column) => (callees.some(([start, end]) => start <= offsetOf(line, column) && offsetOf(line, column) < end) ? "callee"
+    : carriers.some((at) => at.line === line && at.column === column) ? "carrier" : null);
+}
+
 export function frameStarts(source, fileName = "App.tsx") {
   const starts = callStarts(source, fileName);
   // `inner` is the frame one step nearer the read (ADR 0981): a deeper frame that leads to it through a project function forwarding its parameter has the call's arguments.

@@ -1,0 +1,9 @@
+{
+  "note": "ADR 1213 (fixture effect-creation-host-entry/variants/apply, ApplyTimer): silent: the scheduler's callback runs on a fresh stack, after the apply returned (no PRIMITIVE_IN_EFFECT_CALLBACK).",
+  "steps": [
+    {
+      "action": "wait-for-selector",
+      "selector": "body[data-timer]"
+    }
+  ]
+}

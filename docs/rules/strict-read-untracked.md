@@ -242,6 +242,11 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   to the named function's calls. An IIFE written directly in a named local
   helper's body runs in place, so its prop read is the helper's read at that
   call and is charged to the helper's calls (ADR 1187).
+  A `ref={dir()}` factory on an intrinsic element that the compiler evaluates
+  inline, exactly once, in the body's own markup is such a call: `dir`'s body
+  runs during the render, so its reads are charged to `dir()` (ADR 1209). In a
+  component's child or one arm of a conditional ref it is not, and the read stays
+  uncertifiable.
 - **A rendered function's body is a component body, however else it is
   called.** `const P2 = Plain; <P2 />` renders `Plain` as `<Plain />` would,
   so a body read in `Plain` is a violation even beside a tracked `{Plain()}`
@@ -488,6 +493,8 @@ explicit one-time snapshot; it does not make the prop reactive.
 - **Getter arity.** The rc.13 accessor is `read.bind(null, node)` over `function read(el)` (`dist/dev.js` `accessor`, `dist/prod/signals.js` `accessor`). `solid-js`'s client wrappers return it unchanged, and its server builds return arrows with no parameter. Probed on the dev and prod client builds: `length` 0 and `typeof` `"function"`. The walk folds `p.length` against a numeric literal (`===`, `!==`, `==`, `!=`, `<`, `<=`, `>`, `>=`), and `typeof p`, or a `p.length` that only feeds a test, is no escape, so a branch that cannot run for the arguments is proven absent. A hoisted function declaration's body runs whenever it is called, so an earlier `return` leaves it possible rather than unreachable. A binding declared in a file with a direct `eval` is refused, and a binding the module exports proves no length.
 - **Not decided.** A read through another helper hop, an array of accessors (`accessArray`), and a read after an `await` (always an obligation).
 - **A helper's call in a `try`** ([ADR 1109](../decisions.md#adr-1109)). A helper's call of its parameter after a statement that may throw, in a `try` whose `catch` completes normally, is not on every completion of the helper: the callback's read is uncertifiable. A store handed through a standard inline callback's parameter (`[store].map((s) => s.v)`) is the store there: `s.v` gets the row `store.v` written there gets ([ADR 1181](../decisions.md#adr-1181): an exact default-library `map`, `forEach`, `filter`, `some`, `every` or `find` on a one-element literal, a plain never-written parameter), and the census's SC9012 `value-in-carrier` row is gone where every use of the parameter is such a Get; any other form (a destructured parameter, two elements, a listed array) keeps the SC9012 row, and a callback a carrier provably never runs (a `const` holding `[]` only iterations read, a one-element `sort`) is uncertifiable.
+
+- **An earlier evaluation that must throw** ([ADR 1204](../decisions.md#adr-1204)). A violation claims the read runs. Where an evaluation written before the site, in straight-line flow in its function or in an in-place layer that runs it (an IIFE, a closure's one direct call), must throw (a Get of a `const` literal's getter that throws, as in `onSettled(box.cb)`; a call of a local function that throws), and no `try` catches it short of the site, the site's run is not proven: uncertifiable `earlier-evaluation-may-throw`, for every rule's violation there. A throw on a branch reads as reached, as any branch does (ADR 0458); any other call completes normally unless its signature says otherwise (ADR 0279's premise).
 
 This rule is a member of the `reactivity` group key ([ADR 0428](../decisions.md#adr-0428)): `reactivity` in `rule-options.json` or a disable comment reaches it, and `strict-read-untracked` alone overrides the group.
 

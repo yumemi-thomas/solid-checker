@@ -151,3 +151,5 @@ The package named `vite` is read from its Node entry, where the walk finds a wri
 ## Endings by code (ADR 0968)
 
 An action call is accounted for, for this rule's Chrome code, only by an ending that answers that code: a row of its own table, an SC9012, the compiler's discard, a finding of a rule the dialect says claims the code, or a named silence that names it. A row of another table or a finding of another rule at the same place answers another code and ends nothing here, so this rule's own uncertifiable row (`action-unaccounted`) stands beside it: never a violation, and it yields to any row of the rule that stands. A site whose rule claims no code here, or whose code has no policy in the dialect, is not ended by what stands at it.
+
+An action called in IIFEs inside a named local function is placed at the outermost IIFE's call in that function, by that function's calls (ADR 1212, the write walk's climb).

@@ -88,8 +88,11 @@ function functionValue(ts, node, locals, seen = new Set()) {
 
 /**
  * The exports of App.tsx the namespace loop enters (`default` and the capitalised names whose value is a function), sorted as a module namespace's keys are, or `null` when one
- * of the exports cannot be classified from the text (a value a call computes, a re-export, `export *`): such a program keeps the namespace entry.
+ * of the exports cannot be classified from the text (a value a call computes, a re-export, `export *`, a capitalised name a destructured export binds): such a
+ * program keeps the namespace entry. A lowercase name a destructured export binds is never entered (ADR 1223).
  */
+/** ADR 1223: every name a binding pattern binds, its nested patterns' included. */
+const destructuredNames = (ts, pattern) => pattern.elements.flatMap((element) => (ts.isOmittedExpression(element) ? [] : ts.isIdentifier(element.name) ? [element.name.text] : destructuredNames(ts, element.name)));
 export function enteredExports(appText) {
   const ts = typescript();
   const source = ts.createSourceFile("App.tsx", appText, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TSX);
@@ -117,7 +120,17 @@ export function enteredExports(appText) {
       } else if (!exported) continue;
       else if (isDefault && (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement))) entered.set("default", true);
       else if (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) entered.set(statement.name.text, true);
-      else if (ts.isVariableStatement(statement)) for (const one of statement.declarationList.declarations) { if (!ts.isIdentifier(one.name)) throw new Error("destructured export"); exportedAs(one.name.text, functionValue(ts, one.initializer, locals)); }
+      else if (ts.isVariableStatement(statement)) for (const one of statement.declarationList.declarations) { if (!ts.isIdentifier(one.name)) {
+          // ADR 1223: a destructured export (`export const { useContext: useContextN } = S`) binds names the namespace loop of every
+          // runtime entry enters only when one is `default` or capitalised (runtime-oracle.mjs mainSource, chrome-host/runner.tsx,
+          // fast/runner.tsx: `name === "default" || /^[A-Z]/.test(name)`). A lowercase name is never entered, whatever it holds; a
+          // capitalised one may be, and is not classified from the text.
+          for (const name of destructuredNames(ts, one.name)) {
+            if (name === "default" || /^[A-Z]/.test(name)) throw new Error("destructured export");
+            entered.set(name, false);
+          }
+          continue;
+        } exportedAs(one.name.text, functionValue(ts, one.initializer, locals)); }
       else if (ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) continue;
       else throw new Error("unclassified export");
     }
