@@ -347,7 +347,10 @@ passes one exact refreshable source is that source's write, placed by the call's
 role: a violation in a memo or an effect compute ([ADR 1174](../decisions.md#adr-1174),
 `fixtures/reactive-ir/refresh-prop-target`); a target the caller census does not
 resolve (two sources, a spread caller, a written prop, a `merge`/`omit` view, a
-context member) stays uncertifiable (ADR 0509).
+context member) stays uncertifiable (ADR 0509). A component that hands the
+target's component its own props whole (`<C1 {...props} />`) passes what its
+own callers pass (ADR 1230), through up to four such forwarders that ADR 1173
+checks; one that also sets the name after its spread does not.
 So is a write in a `createRoot` body, or in a component rendered only there,
 when the root call or the render is written in an effect apply or a leaf
 callback: rc.17 refuses the creation before the body runs (ADR 0475,
