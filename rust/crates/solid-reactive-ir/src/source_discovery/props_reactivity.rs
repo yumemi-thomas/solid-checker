@@ -151,14 +151,14 @@ pub(crate) struct PassedSource {
     pub(crate) missing: bool,
 }
 
+/// ADR 1230: how many components handing their own props whole [`PropsReactivityIndex::passed_through_forwards`] follows.
+const FORWARD_DEPTH: usize = 4;
+
 /// The per-declaration classification map, keyed by the props parameter's
 /// declaration location (the same location `prop_sources` carries, so aliases
 /// and `merge` results resolve to their component's classification) and by
 /// the parameter pattern span (how the destructure rule addresses a
 /// destructured parameter).
-/// ADR 1230: how many components handing their own props whole [`PropsReactivityIndex::passed_through_forwards`] follows.
-const FORWARD_DEPTH: usize = 4;
-
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(crate) struct PropsReactivityIndex {
     /// Whether the dialect asked for caller proof at all. When false, every
