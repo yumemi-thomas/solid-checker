@@ -76,10 +76,10 @@
       "fixes": 0
     },
     {
-      "rule": "async-outside-loading-boundary",
-      "code": "SC5003",
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
       "kind": "uncertifiable",
-      "blocker": "pending-read-unresolved",
+      "blocker": "read-backing-unproven",
       "severity": "warning",
       "path": "fixtures/reactive-ir/pending-source-layers/App.tsx",
       "start": 2546,
@@ -87,14 +87,36 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
       "kind": "uncertifiable",
-      "blocker": "closed-parameter-member-dispatch",
+      "blocker": "invocation-context-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-source-layers/App.tsx",
+      "start": 2546,
+      "end": 2558,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
+      "kind": "uncertifiable",
+      "blocker": "source-pending-unproven",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/pending-source-layers/App.tsx",
+      "start": 2546,
+      "end": 2558,
+      "fixes": 0
+    },
+    {
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
+      "kind": "uncertifiable",
+      "blocker": "call-attributed-read",
       "severity": "warning",
       "path": "fixtures/reactive-ir/pending-source-layers/App.tsx",
       "start": 2546,
-      "end": 2556,
+      "end": 2558,
       "fixes": 0
     },
     {
