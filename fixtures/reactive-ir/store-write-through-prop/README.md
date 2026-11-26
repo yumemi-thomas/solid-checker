@@ -17,3 +17,5 @@ A write past the root through the prop (ADR 0919's handed route) is then dropped
 
 Chrome: `fixtures/runtime-oracle/store-write-through-prop` reports STORE_WRITE_OUTSIDE_SETTER at all seven writes. Stub: rc.21's
 `createStore` and `StoreSetter`, `node_modules` from `store-mutators`.
+
+**ADR 1228.** `LetAliasChild` (`r = s1.a; r.v = 7` with `{ s1 }` destructured in the parameter list) and `ParamChild` (`w(s1.a)`, `w` writing its parameter): the flow (ADR 0719) read a render as handing a compiler-built props object, so a sink reading past it ended with no store and no row. It reaches an attribute's value, which a caller may hand a store: SC2003 uncertifiable `unproven-container-root` (main: silent; Chrome reports STORE_WRITE_OUTSIDE_SETTER on the grid programs of these shapes, ADR 1208). Negative: `q`, written only with a fresh object, silent.

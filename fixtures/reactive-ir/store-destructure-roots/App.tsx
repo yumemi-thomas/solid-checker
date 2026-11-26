@@ -149,3 +149,33 @@ export function HolderMerge() {
   const { v } = merge(holder.s1, { w: 1 });
   return <i>{v}</i>;
 }
+
+// ADR 1228: the same through a `for…of` over `[ctx.s1]` and an assignment's target over `props.s1`: a census row at the
+// pattern in the body; none in a memo's compute (tracked).
+function ContextForOfChild() {
+  const ctx = useContext(StoreCtx)!;
+  for (const { v } of [ctx.s1]) void v;
+  const m = createMemo(() => {
+    for (const { v } of [ctx.s1]) void v;
+    return 1;
+  });
+  return <i>{m()}</i>;
+}
+export function ContextForOf() {
+  const [s1] = createStore({ v: 0 });
+  return <StoreCtx value={{ s1 }}><ContextForOfChild /></StoreCtx>;
+}
+function PropAssignChild(props: { s1: { v: number } }) {
+  let v = 0;
+  ({ v } = props.s1);
+  const m = createMemo(() => {
+    let w = 0;
+    ({ v: w } = props.s1);
+    return w;
+  });
+  return <i>{v + m()}</i>;
+}
+export function PropAssign() {
+  const [s1] = createStore({ v: 0 });
+  return <PropAssignChild s1={s1} />;
+}

@@ -1561,6 +1561,17 @@ impl<'l, 'a> Census<'l, 'a> {
                 {
                     return Position::Followed;
                 }
+                // ADR 1228: an assignment's object target over the store where no rule claims it (`({ v } = props.s1)`): a read
+                // site of the census at the pattern.
+                if matches!(mode, Mode::Root)
+                    && !self.props_root
+                    && ast.destructure_sites.iter().any(|site| {
+                        site.source == solid_facts::ast::DestructureSource::Assignment
+                            && site.binding.pattern == target
+                    })
+                {
+                    self.destructure_read(file, target);
+                }
                 let answer = assigned(file, assignment);
                 // ADR 0860: an object that holds the value in a member hands
                 // it to every use of the object.
@@ -1708,6 +1719,13 @@ impl<'l, 'a> Census<'l, 'a> {
                 {
                     return Position::Followed;
                 }
+                // ADR 1228: an object pattern the loop destructures each element with reads the store's slots where no rule
+                // claims it (a store reached through a context or a prop): a read site of the census at the pattern.
+                if matches!(mode, Mode::RootHolder(_)) && !self.props_root {
+                    for pattern in for_of_object_patterns(file, at) {
+                        self.destructure_read(file, pattern);
+                    }
+                }
                 // ADR 1104: a carrier a `for…of` iterates hands what it holds to the loop's binding: its uses are walked as past an
                 // escape, each with a row.
                 if matches!(mode, Mode::Holder(_) | Mode::RootHolder(_)) {
@@ -1721,6 +1739,30 @@ impl<'l, 'a> Census<'l, 'a> {
                 self.escape(file, at, row, mode, blockers::VALUE_THROWN);
                 Position::Open(blockers::VALUE_THROWN)
             }
+        }
+    }
+
+    /// ADR 1226, ADR 1228: an object destructure of the store that no rule claims (SC1003 reads only a destructure whose root is
+    /// the store's own name) is a read site of the census at its pattern, where SC1003's row would stand: silent only where a
+    /// proof of the read's legality stands, the census's role ([`Self::site`]) or the role SC1003 ends a destructure silently in
+    /// (`static_rules::destructure_role_does_not_report`, on SC1003's own role).
+    fn destructure_read(&mut self, file: &'a FileFacts, pattern: Span) {
+        let path = file.path.as_str();
+        if !self.allowed.contains_key(path) {
+            let spans = crate::execution_role::allowed_callback_spans(file, self.lookup);
+            self.allowed.insert(path.to_owned(), spans);
+        }
+        let role = crate::execution_role::semantic_execution_role(
+            file,
+            pattern,
+            self.allowed.get(path).map_or(&[], Vec::as_slice),
+            self.entities,
+            self.symbol_names,
+            self.lookup,
+        );
+        if !crate::static_rules::destructure_role_does_not_report(self.lookup, file, pattern, role)
+        {
+            self.site(file, pattern, Site::Read, blockers::VALUE_IN_CARRIER);
         }
     }
 
@@ -2674,6 +2716,44 @@ impl<'l, 'a> Census<'l, 'a> {
             })
     }
 
+    /// ADR 1228: the call a standard function runs at with `value` as its receiver: `call`'s or `apply`'s first argument,
+    /// `Reflect.apply`'s second (that call), or `bind`'s first where the bound function is called at once (the outer call).
+    fn runs_on_receiver_at(&self, file: &FileFacts, value: Span) -> Option<Span> {
+        let ast = &file.ast;
+        let value = ast.peel_ts_sugar_span(value);
+        ast.arguments_containing(value).find_map(|(call, index)| {
+            if ast.peel_ts_sugar_span(call.arguments[index].span) != value
+                || call.construct
+                || call
+                    .arguments
+                    .iter()
+                    .take(index + 1)
+                    .any(|argument| argument.spread)
+            {
+                return None;
+            }
+            let declaration = self
+                .lookup
+                .resolved_callee_call(file, call.callee)?
+                .declaration
+                .as_ref()
+                .filter(|declaration| declaration.standard_library)?;
+            let name = declaration.qualified_name.as_ref();
+            if runs_on_receiver(name, index) {
+                return Some(call.span);
+            }
+            (index == 0
+                && matches!(
+                    name,
+                    "Function.bind" | "CallableFunction.bind" | "NewableFunction.bind"
+                ))
+            .then(|| ast.calls_with_peeled_callee(call.span).next())
+            .flatten()
+            .filter(|outer| !outer.construct)
+            .map(|outer| outer.span)
+        })
+    }
+
     /// ADR 0811: where the census asks which store member writes SC2003
     /// decides in a file. Without it, none.
     pub(crate) fn with_member_writes(mut self, member_writes: MemberWrites<'l>) -> Self {
@@ -2809,6 +2889,16 @@ impl<'l, 'a> Census<'l, 'a> {
                         return self.position(file, top, Mode::Root);
                     }
                     return Position::Followed;
+                }
+                // ADR 1228: a member of the store reached through a slot, an alias or a prop, handed as the receiver a standard
+                // function runs on (`Array.prototype.sort.call(ctx.s1.items, …)`, `sort.bind(props.s1.items)(…)`): that function
+                // reads and writes the store's proxy at the call that runs it, where no authored frame stands below it and no row
+                // of the member's own answers for it: the call is a use beside the member's.
+                if let Some(runs) = self.runs_on_receiver_at(file, member.span) {
+                    self.uses.push((
+                        call_use_span(file, runs).location(file.path.as_str()),
+                        blockers::VALUE_IN_CARRIER,
+                    ));
                 }
                 let (start, end) = (u64::from(member.span.start), u64::from(member.span.end));
                 // A decided write covers this member only where it is the written target itself: in a deeper write
@@ -3994,30 +4084,7 @@ impl<'l, 'a> Census<'l, 'a> {
                     .map(|binding| binding.pattern)
                     .collect::<Vec<_>>();
                 for pattern in unclaimed {
-                    // Silent only where a proof of the read's legality stands: this census's role (`site`), or the role SC1003
-                    // ends a destructure silently in (`destructure_role_does_not_report`, on SC1003's own role).
-                    let path = file.path.as_str();
-                    if !self.allowed.contains_key(path) {
-                        let spans =
-                            crate::execution_role::allowed_callback_spans(file, self.lookup);
-                        self.allowed.insert(path.to_owned(), spans);
-                    }
-                    let role = crate::execution_role::semantic_execution_role(
-                        file,
-                        pattern,
-                        self.allowed.get(path).map_or(&[], Vec::as_slice),
-                        self.entities,
-                        self.symbol_names,
-                        self.lookup,
-                    );
-                    if !crate::static_rules::destructure_role_does_not_report(
-                        self.lookup,
-                        file,
-                        pattern,
-                        role,
-                    ) {
-                        self.site(file, pattern, Site::Read, blockers::VALUE_IN_CARRIER);
-                    }
+                    self.destructure_read(file, pattern);
                 }
             }
             return if view || callback {
@@ -4043,6 +4110,20 @@ impl<'l, 'a> Census<'l, 'a> {
             // `Object.keys` runs no getter and answers no value.
             if crate::runtime_semantics::reads_keys_only(resolved) {
                 return Position::Followed;
+            }
+            // ADR 1228: a store handed as the receiver a standard function runs on (`Array.prototype.sort.call(st.items, …)`,
+            // `push.apply(st.items, …)`, `Reflect.apply(push, st.items, …)`) is read and written by that function at this call,
+            // where no authored frame stands below it: the call is a use beside the argument, as a primitive's that reads at its
+            // call (ADR 0928).
+            if matches!(mode, Mode::Root | Mode::RootParameter)
+                && resolved.declaration.as_ref().is_some_and(|declaration| {
+                    runs_on_receiver(declaration.qualified_name.as_ref(), index)
+                })
+            {
+                self.uses.push((
+                    call_use_span(file, call.span).location(file.path.as_str()),
+                    blockers::VALUE_IN_CARRIER,
+                ));
             }
             return match crate::runtime_semantics::argument_behavior(resolved, callability, index) {
                 Some(RuntimeArgumentBehavior::FreshStackCallback) => Position::Followed,
@@ -4393,6 +4474,44 @@ fn object_spread_literal(file: &FileFacts, spread: Span) -> Option<Span> {
         .min();
     (array.is_none_or(|array| size(object) < array) && call.is_none_or(|call| size(object) < call))
         .then_some(object)
+}
+
+/// ADR 1228: whether argument `index` of the standard function `qualified` is the receiver it runs a function on: `call`'s and
+/// `apply`'s first, `Reflect.apply`'s second.
+fn runs_on_receiver(qualified: &str, index: usize) -> bool {
+    match qualified {
+        "Function.call"
+        | "CallableFunction.call"
+        | "NewableFunction.call"
+        | "Function.apply"
+        | "CallableFunction.apply"
+        | "NewableFunction.apply" => index == 0,
+        "Reflect.apply" => index == 1,
+        _ => false,
+    }
+}
+
+/// ADR 1228: the object patterns a `for…of` over `operand` declares (one binding per element).
+fn for_of_object_patterns(file: &FileFacts, operand: Span) -> Vec<Span> {
+    let ast = &file.ast;
+    let Some((looped, left)) = ast.loop_repeats.iter().find(|(looped, left)| {
+        left.end == operand.start
+            && left.start > looped.start
+            && ast.loop_statements.contains(looped)
+            && ast.iterated_operands.contains(&operand)
+    }) else {
+        return Vec::new();
+    };
+    ast.bindings
+        .iter()
+        .filter(|binding| {
+            looped.contains(binding.pattern)
+                && left.contains(binding.pattern)
+                && binding.initializer.is_none()
+                && binding.shape == solid_facts::ast::BindingShape::Object
+        })
+        .map(|binding| binding.pattern)
+        .collect()
 }
 
 /// ADR 1104: the names a `for…of` declares, when `operand` is its iterated value: the binding written between the statement's
