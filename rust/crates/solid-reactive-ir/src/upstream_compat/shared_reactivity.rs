@@ -6086,7 +6086,7 @@ const CARRY_STEPS: usize = 64;
 
 /// ADR 1231: `reads` (each a value of the handed store: a prop's or a context key's read) carried forward to the places that use the
 /// value, through local carriers that hand it on unchanged:
-/// - an exact `const` identifier alias (`const useIt = props.s1`): its references (ADR 1172's [`const_alias_reads`]);
+/// - an exact `const` identifier alias (`const useIt = props.s1`): its references (ADR 1172's step, which this subsumes);
 /// - a data slot of a closed object literal, or an element of an array literal with no spread or hole up to it (`{ useIt: props.s1 }`,
 ///   `[0, props.s1]`): that literal, with the slot's key still to project ([`carried_projection`]).
 /// Anything else is a use, which the caller judges. `None` where a carrier flows somewhere this does not follow, or past
@@ -6184,10 +6184,10 @@ fn carried_projection(
                     binding
                         .array_slots
                         .get(index)
-                        .copied()
-                        .flatten()
+                        .and_then(|slot| slot.as_ref())
+                        .map(|local| local.span)
                         .into_iter()
-                        .flat_map(|local| references_of(file, local.span))
+                        .flat_map(|local| references_of(file, local))
                         .map(|reference| (reference, rest.to_vec()))
                         .collect(),
                 )
@@ -6302,43 +6302,6 @@ fn returning_local_function(file: &FileFacts, at: Span) -> Option<&solid_facts::
             .iter()
             .any(|value| file.ast.peel_ts_sugar_span(*value) == at))
     .then_some(function)
-}
-
-/// ADR 1172: `reads` with each read that is the whole initializer of a `const` identifier binding (`const useIt = props.s1`) replaced by
-/// that binding's references, to four levels; `None` past them.
-fn const_alias_reads(file: &FileFacts, reads: Vec<Span>) -> Option<Vec<Span>> {
-    let ast = &file.ast;
-    let mut pending = reads;
-    let mut out = Vec::new();
-    for _ in 0..4 {
-        let mut next = Vec::new();
-        for read in pending {
-            let alias = ast.bindings.iter().find(|binding| {
-                binding.immutable
-                    && binding.shape == solid_facts::ast::BindingShape::Identifier
-                    && binding.names.len() == 1
-                    && binding
-                        .initializer
-                        .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == read)
-            });
-            match alias {
-                Some(binding) => {
-                    let name = binding.names[0].span;
-                    next.extend(ast.identifiers.iter().filter_map(|identifier| {
-                        (identifier.role == solid_facts::ast::IdentifierRole::Reference
-                            && ast.reference_declaration(identifier.span) == Some(name))
-                        .then_some(identifier.span)
-                    }));
-                }
-                None => out.push(read),
-            }
-        }
-        if next.is_empty() {
-            return Some(out);
-        }
-        pending = next;
-    }
-    None
 }
 
 /// The reference `reference` to a store whose initializer is the closed
