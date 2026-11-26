@@ -214,7 +214,7 @@
     "symbols_by_id": 1
   },
   "rust/crates/solid-reactive-ir/src/indexes.rs": {
-    "file_slots": 23,
+    "file_slots": 24,
     "file_by_path": 3,
     "symbols_by_id": 7,
     "typescript-table": 3,
@@ -222,7 +222,8 @@
     "hashmap-iteration": 1,
     "pending-review": [
       "symbol_names-scan rose 1 -> 2 (--allow-rise): unreviewed",
-      "file_slots rose 22 -> 23 (--allow-rise): unreviewed"
+      "file_slots rose 22 -> 23 (--allow-rise): unreviewed",
+      "file_slots rose 23 -> 24 (--allow-rise): ADR 1230 disposes_from_handlers, the whole-program scan beside may_dispose, recorded in Section::ProjectPrimitives' value and its memo probe"
     ]
   },
   "rust/crates/solid-reactive-ir/src/interproc/graph.rs": {
