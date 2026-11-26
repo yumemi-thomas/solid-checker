@@ -6089,6 +6089,7 @@ const CARRY_STEPS: usize = 64;
 /// - an exact `const` identifier alias (`const useIt = props.s1`): its references (ADR 1172's step, which this subsumes);
 /// - a data slot of a closed object literal, or an element of an array literal with no spread or hole up to it (`{ useIt: props.s1 }`,
 ///   `[0, props.s1]`): that literal, with the slot's key still to project ([`carried_projection`]).
+///
 /// Anything else is a use, which the caller judges. `None` where a carrier flows somewhere this does not follow, or past
 /// [`CARRY_STEPS`].
 fn carried_store_reads(file: &FileFacts, reads: Vec<Span>) -> Option<Vec<Span>> {
