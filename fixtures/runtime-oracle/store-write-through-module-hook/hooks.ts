@@ -15,3 +15,8 @@ export function useSetter() {
   const [s1, setS1] = createStore({ a: { v: 0 }, items: [0] });
   return { s1, setS1 };
 }
+
+export function useHanded() {
+  const [s1, setS1] = createStore({ a: { v: 0 }, items: [0] });
+  return { s1, setS1 };
+}

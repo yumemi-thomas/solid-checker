@@ -9,6 +9,6 @@ setter's slot reaching none. A write past the root is then dropped outside the s
 Violations (Chrome STORE_WRITE_OUTSIDE_SETTER, `runtime-oracle/store-write-through-module-hook`): `Destructured`, `Member`,
 `Shared` (a module-scope call, an array mutator). On main they are uncertifiable.
 
-Uncertifiable: `Kept` (the hook's value is handed to a function), `SetterRead` (the setter is called).
+Uncertifiable: `Kept` (the hook's value is handed to a function), `SetterRead` (the setter is called), `HookHanded` (the hook itself is handed to a function in another file: a reference no call accounts for).
 
 Stub: `store-write-through-carrier`'s.

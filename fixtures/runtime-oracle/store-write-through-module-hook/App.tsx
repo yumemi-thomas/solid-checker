@@ -1,4 +1,4 @@
-import { useKept, useSetter, useVals } from "./hooks";
+import { useHanded, useKept, useSetter, useVals } from "./hooks";
 
 // ADR 1232: a store a hook of another module creates, every call's value used only as the root of contained uses, keeps its own
 // literal (ADR 0491): a write past its root is dropped outside the setter (STORE_WRITE_OUTSIDE_SETTER).
@@ -41,5 +41,12 @@ export function SetterRead() {
     draft.a.v = 1;
   });
   s1.a.v = 7;
+  return <i />;
+}
+
+export function HookHanded() {
+  keep(useHanded);
+  const vals = useHanded();
+  vals.s1.a.v = 7;
   return <i />;
 }
