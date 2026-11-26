@@ -5508,4 +5508,21 @@ None of these is built here.
   - mx-recall 25,979: 229 recall-gap to agree (REACTIVE_WRITE `render-apply`: named `cb-const` applies through every layer, and one `prop-view-spread` child);
   - mx-src 7,176: 19 (REACTIVE_WRITE `render-apply` children: `prop-omit` 6, `prop-spread` 6, `prop` 3, `prop-merge` 3, `prop-destructured` 1);
   - mx-census 62, mx-pairs 22,059, lg-recall 9,561, lg-src 3,180, lg-pairs 9,897: unchanged; 0 legal V, no V to U. The 30 `unplaced` and 12 `false-clean` mx-recall rows are the base's, unchanged.
+<a id="adr-1229"></a>
+## ADR 1229 — A prop call in in-place layers is placed where the outermost layer runs
+**Step 0** (blocker census, `SOLID_CHECKER_BLOCKER_CENSUS=1`, and role logs on samples of the three families 1227's triage named). There are three mechanisms, not one identity resolution:
+- **(A)** A call of a prop's value is placed only directly in the component body or in a dialect primitive's literal there (ADR 0509, `props_call_placed`); in a closure the apply calls (`const f1 = () => props.r1(); f1();`) it is an obligation (`closed-parameter-member-dispatch`). The closure forms of `merge`/`omit`/spread/destructured props hit the same gate, reported as `handed-member-read` (their no-closure twins are violations already).
+- **(B)** Value flow through bindings and carriers: an alias of a destructured prop (`const useIt = r1`) and the mx-recall `use-*`/`handed-*` forms, two programs each in many shapes.
+- **(C)** A store held in a context value object (`ctx.s1.a.v = 7`: `value-held-in-binding`, `store-write-unproven`).
+**Decision** (built: A). `props_call_placed` also takes a call written in in-place layers: `climb_in_place_layers` from the call, not bound, not in a list, not among others, not past a suspension, not withheld or unmodelled, crossing no library callback, to a position the ADR 0509 test places (`props_call_placed_at`). The read or write then takes the role the call's own role walk gave it, as a direct call there would.
+**Evidence.**
+- Fixtures: `apply-closure-prop-read` violation (Chrome STRICT_READ_UNTRACKED, `runtime-oracle/apply-closure-prop`, covered); `apply-closure-prop-write-legal` clean (a setter in an effect apply); `apply-closure-prop-read-unrun` (the closure handed on, never called) keeps its obligation.
+- Probe (release, VM, Chrome judge), 1227 27842abb2 against this, every code:
+  - mx-src, all 49,050: 2,797 recall-gap to agree;
+  - lg-src, all 21,102: 766 uncertifiable to clean;
+  - mx-pairs, the 50,112 prop- and context-sourced programs: 4,176 recall-gap to agree;
+  - lg-pairs, 18,864: 1,680 uncertifiable to clean;
+  - mx-recall 5,390, lg-recall 2,552 (sourced programs) and the render/effect-apply sets of 1227's probe: unchanged.
+  0 legal V, no V to U.
+**Not built.** (B) and (C), each a different resolution: (B) many small value-flow shapes, (C) store identity through a provider's object literal.
 
