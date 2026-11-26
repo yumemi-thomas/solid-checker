@@ -5662,3 +5662,8 @@ Left: the `tbl-*-shadow-*` forms (a local object's method reaches the callback t
   - the `flw-apply-slot-module-effect` PRIMITIVE_IN_EFFECT_CALLBACK cell, 416 programs: unchanged; the six named SC4001 fixes stay `creation-throws-first` (main: violations);
   - 1205's selection (every code's `handoff-member` and `handoff-function`, mx-recall 21,450, lg-recall 11,342): unchanged.
 - Chrome-judged outcomes (focus.mjs, release, VM): mx-recall SYNC_NODE_RECEIVED_ASYNC 24,774: 20 recall-gap to agree, nothing else; mx-census 2,766 and 1205's selection (mx-recall 21,450, lg-recall 11,342): unchanged; 0 legal V.
+
+**Round 4** (the am judge's six V to U, on main 5972f57aa). The six are main's own false positives: an SC4001 `missing-owner` violation beside an uncertifiable PRIMITIVE_IN_EFFECT_CALLBACK row, with no runtime confirmation, which `creation-throws-first` removes. The arm is kept as it is. Against main, release, VM:
+- the `flw-apply-slot-*` cell, every code (mx-recall 1,664; lg-recall has none): outcomes unchanged; at code level 55 SC4001 violations become `creation-throws-first` (the six and 49 more, all PRIMITIVE_IN_EFFECT_CALLBACK programs; rediscovery entry), and 888 SC3001 `leaf-operation-unaccounted` rows go;
+- SYNC_NODE_RECEIVED_ASYNC (mx-recall 24,774): unchanged, the 20 SC7002 proofs kept (agree);
+- 1205's selection: mx-recall 1,573 recall-gap to agree, one not-fired to halted-claim (`x-wrapper-handoff-member`, ledgered); lg-recall 255 uncertifiable to clean (flush codes); no V to U, no legal V. ADR 1207 on top: identical on all three.
