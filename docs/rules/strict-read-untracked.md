@@ -386,7 +386,9 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   outside it (ADR 0539). A compute with no call, no reference and a literal
   return never reruns, and a read written in its cleanup's own body is silent:
   only the effect's disposal runs it, as an `onCleanup` callback, unless project
-  code may dispose an owner on a stack of its own (ADR 0695, ADR 1167).
+  code may dispose an owner on a stack of its own (ADR 0695, ADR 1167), unless every
+  disposal the project can make is a root's `dispose` called from an inline event
+  handler that no synchronous dispatch runs in a window (ADR 1230).
   A read in the cleanup is a violation where a click a user can reach writes a
   new value to the signal the compute reads: the rerun calls the cleanup in the
   apply's window with the owner alive (ADR 1183; an apply named by a `const` whose one reference is the apply argument is the
