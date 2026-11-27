@@ -4327,7 +4327,34 @@ impl LocalAccessContext<'_, '_> {
         file: &solid_facts::FileFacts,
         call: &solid_facts::ast::CallFact,
     ) -> bool {
-        let Some(function) = containing_ast_function(&file.ast, call.span) else {
+        if self.props_call_placed_at(file, call.span) {
+            return true;
+        }
+        // ADR 1222 (ADR 1229 measured it on every sourced grid): a call in layers that each run once in place (an IIFE, a local function's one direct call, an inline
+        // standard-library callback) runs on the stack of the outermost layer's call, which is placed by the rule above. A layer
+        // in a parameter list, one run among others, a run past a suspension, a withheld or unmodelled crossing and the bound
+        // answer nothing.
+        crate::execution_role::climb_in_place_layers(file, call.span, self.lookup).is_some_and(
+            |climb| {
+                climb.in_list.is_none()
+                    && !climb.among_others
+                    && climb.suspended.is_none()
+                    && !climb.withheld
+                    && !climb.unmodelled
+                    && !climb.bound()
+                    && self.props_call_placed_at(file, climb.at)
+            },
+        )
+    }
+
+    /// ADR 0509's placement of the code at `at`: written directly in a component's body, or directly in a function literal a
+    /// dialect primitive's call written there receives.
+    fn props_call_placed_at(
+        &self,
+        file: &solid_facts::FileFacts,
+        at: solid_facts::core::Span,
+    ) -> bool {
+        let Some(function) = containing_ast_function(&file.ast, at) else {
             return false;
         };
         if self.lookup.function_is_component(file, function) {
@@ -5336,8 +5363,9 @@ impl LocalAccessContext<'_, '_> {
             })
             .is_some_and(|compute| compute.r#async);
         // ADR 1216: one run suffices, so any entry that runs the call on the creating pass.
-        let Some(entry) =
+        let Some((entry, effect)) =
             crate::execution_role::entry_on_stack_of(file, call.span, creating, self.lookup)
+                .map(|entry| (entry, None))
                 .or_else(|| {
                     crate::execution_role::some_entry_on_stack_of(
                         file,
@@ -5349,6 +5377,27 @@ impl LocalAccessContext<'_, '_> {
         else {
             return false;
         };
+        // ADR 1224: a walk through an effect's apply holds only where its mount flush holds nothing.
+        if let Some(effect) = effect {
+            let held_free = creating
+                .zip(
+                    binding
+                        .call_initializer
+                        .and_then(|initializer| file.ast.call_at(initializer)),
+                )
+                .is_some_and(|(creating, source)| {
+                    crate::execution_role::flush_mount_hold_free(
+                        file,
+                        effect,
+                        creating,
+                        source,
+                        self.lookup,
+                    )
+                });
+            if !held_free {
+                return false;
+            }
+        }
         binding.immutable
             && literal_async
             && declared.end <= entry.start

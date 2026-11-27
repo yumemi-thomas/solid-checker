@@ -428,7 +428,11 @@
     "hashmap-iteration": 1
   },
   "rust/crates/solid-reactive-ir/src/upstream_compat/shared_reactivity.rs": {
-    "hashmap-iteration": 4
+    "file_by_path": 3,
+    "hashmap-iteration": 4,
+    "pending-review": [
+      "file_by_path rose 0 -> 3 (--allow-rise): unreviewed"
+    ]
   },
   "rust/crates/solid-reactive-ir/src/valid_use_server.rs": {
     "file_slots": 1

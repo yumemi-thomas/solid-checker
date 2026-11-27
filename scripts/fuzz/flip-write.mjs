@@ -149,6 +149,18 @@ const guardedAsync = (form) => (stmts) => ({ body: [expr(iife(fn([ctl(form, stmt
 const GUARDED = { "flw-guard-for-await": guardedAsync("guard-for-await"), "flw-guard-loop": guardedAsync("guard-loop"), "flw-guard-await": guardedAsync("guard-await"), "flw-guard-yield": (stmts) => ({ body: [ctl("guard-yield", stmts)], view: [] }) };
 const GUARDED_LEGAL = { "flw-guard-early": guardedAsync("guard-early"), "flw-guard-probe-loop": guardedAsync("guard-probe-loop") };
 /**
+ * ADR 1219 (the cross-rule sweep of ADR 1216 part 2): the site behind a test that is false at run time, in the component body, directly
+ * or in a helper whose one call is behind it. The site never runs, so Chrome reports nothing: a violation there claims a run that never
+ * happens. Opt-in (`SOLID_FUZZ_BRANCH_FALSE=1`, misuse.mjs): the owner kept ADR 0458's may-run convention, so these are no default grid.
+ */
+export const BRANCH_FALSE_LEGAL = {
+  "flw-branch-false": (stmts) => ({ body: [ctl("dead-random", stmts)], view: [] }),
+  "flw-branch-false-helper": (stmts, kit) => {
+    const g = kit.name("g");
+    return { body: [decl(g, fn(stmts)), ctl("dead-random", [expr(call(ref(g)))])], view: [] };
+  },
+};
+/**
  * F2 (scout's owner-context map): the site's function is called in the component body, so an owned edge reaches it, and it is also handed
  * somewhere a later click runs it with no owner. Chrome (rc.21): the site's NO_OWNER_* code on the click. The build before read the owned
  * edge as every entry. `flw-owned-twice` and `flw-owned-removed` are legal: every run is on the body's stack.
@@ -336,5 +348,5 @@ for (const code of OWNER_CODES) FLIP_WRITE_CONTEXTS[code] = [...(FLIP_WRITE_CONT
 export function flipWriteContext(context, stmts, kit) {
   const fire = DISPATCH_FIRES[context];
   if (fire) return { body: fire(stmts, kit), view: [] };
-  return (APPLY_AND_TIMER[context] ?? FLOW_VALUES[context] ?? GUARDED[context] ?? GUARDED_LEGAL[context] ?? ESCAPES[context] ?? ESCAPES_LEGAL[context] ?? UNPLACED_STEPS[context] ?? UNPLACED_APPLIES[context] ?? OPEN_CONTEXTS[context] ?? MIXED_OWNERS[context] ?? UNREACHED_WRITES[context])?.(stmts, kit);
+  return (APPLY_AND_TIMER[context] ?? FLOW_VALUES[context] ?? GUARDED[context] ?? GUARDED_LEGAL[context] ?? BRANCH_FALSE_LEGAL[context] ?? ESCAPES[context] ?? ESCAPES_LEGAL[context] ?? UNPLACED_STEPS[context] ?? UNPLACED_APPLIES[context] ?? OPEN_CONTEXTS[context] ?? MIXED_OWNERS[context] ?? UNREACHED_WRITES[context])?.(stmts, kit);
 }

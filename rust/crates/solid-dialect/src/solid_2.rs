@@ -1119,6 +1119,17 @@ impl Dialect for Solid2 {
     /// with no owner or under a leaf takes the same queue (`dist/dev.js:3058`,
     /// `globalQueue.enqueue(EFFECT_USER, fire)`): probed, under a `flush()` in a
     /// root body its callback's setter throws and its effect raises nothing.
+    fn first_run_queued_at_creation(&self, primitive: Primitive, argument: usize) -> bool {
+        // ADR 1224, `@solidjs/signals@2.0.0-rc.21`: `createEffect` (`user: true`, `dist/dev.js:3334-3352`) enqueues its
+        // apply's first run (`dist/dev.js:2629-2631`, `dist/dev-shared.js:2664-2672`); `onSettled` under a
+        // children-capable owner is a tracked effect (`dist/dev.js:3891-3893`) whose first run rides the heap into the
+        // next flush (`:2910-2914`). `createReaction`'s callback runs only on a later change, and is not this.
+        matches!(
+            (primitive, argument),
+            (Primitive::CreateEffect, 1) | (Primitive::OnSettled, 0)
+        )
+    }
+
     fn callback_runs_drained_by_flush(&self, primitive: Primitive, argument: usize) -> bool {
         matches!(
             (primitive, argument),

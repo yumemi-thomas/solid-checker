@@ -1,0 +1,3 @@
+# props-call-in-place-layers
+
+**Claim (ADR 1222).** A call of a component's prop written in layers that each run once, in place, on the body's stack (a local closure's one direct call, an IIFE, nested layers of either) is placed where the outermost layer is called, by ADR 0509's rule for code written in the body. `ClosureOnce`, `Iife`, `Nested` and `OmitView` (the member of an ADR 1100 `omit` view) write the signal every caller passes while the component body runs: SC2001. `Twice` (one run among others) and `Handed` (the closure handed to a function nothing models) stay uncertifiable. `Handler` (the closure runs from an event handler) and `Shadowed` (a local `props` inside the closure) are silent. `tsc --noEmit` accepts the fixture.

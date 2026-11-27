@@ -895,6 +895,14 @@ packages/wasm/owned/
 !fixtures/reactive-ir/store-write-through-prop/node_modules/**
 !fixtures/reactive-ir/store-write-through-prop-view/node_modules/
 !fixtures/reactive-ir/store-write-through-prop-view/node_modules/**
+!fixtures/reactive-ir/store-write-through-carrier/node_modules/
+!fixtures/reactive-ir/store-write-through-carrier/node_modules/**
+!fixtures/reactive-ir/store-write-through-module-hook/node_modules/
+!fixtures/reactive-ir/store-write-through-module-hook/node_modules/**
+!fixtures/reactive-ir/store-write-through-module-store/node_modules/
+!fixtures/reactive-ir/store-write-through-module-store/node_modules/**
+!fixtures/reactive-ir/store-write-through-module-store-open/node_modules/
+!fixtures/reactive-ir/store-write-through-module-store-open/node_modules/**
 !fixtures/reactive-ir/flush-closure-called-once/node_modules/
 !fixtures/reactive-ir/flush-closure-called-once/node_modules/**
 !fixtures/reactive-ir/effect-error-arm-read/node_modules/
@@ -2352,3 +2360,5 @@ packages/wasm/owned/
 !fixtures/reactive-ir/callback-prop-roles/node_modules/**
 !fixtures/reactive-ir/callback-prop-forwarded/node_modules/
 !fixtures/reactive-ir/callback-prop-forwarded/node_modules/**
+!fixtures/reactive-ir/props-call-in-place-layers/node_modules/
+!fixtures/reactive-ir/props-call-in-place-layers/node_modules/**

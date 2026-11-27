@@ -1,0 +1,1 @@
+{"note": "ADR 1232: a store a hook of another module creates, written past its root through the value of a call of the hook: rc.21 drops the write outside the setter (STORE_WRITE_OUTSIDE_SETTER) in each export; where the value is handed on or the setter is read the checker leaves it uncertifiable."}

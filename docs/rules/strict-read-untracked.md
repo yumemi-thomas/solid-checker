@@ -242,6 +242,10 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   to the named function's calls. An IIFE written directly in a named local
   helper's body runs in place, so its prop read is the helper's read at that
   call and is charged to the helper's calls (ADR 1187).
+  A call of a prop's value (or a `merge`/`omit`/spread view member) in in-place
+  layers (a closure the body or an apply calls once, an IIFE, a helper's callback)
+  is placed where the outermost layer's call is, as a direct call there would be
+  (ADR 1229); a closure handed on and never called keeps the obligation.
   A `ref={dir()}` factory on an intrinsic element that the compiler evaluates
   inline, exactly once, in the body's own markup is such a call: `dir`'s body
   runs during the render, so its reads are charged to `dir()` (ADR 1209). In a

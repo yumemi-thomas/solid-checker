@@ -1186,13 +1186,13 @@
       }
     },
     "rust/crates/solid-reactive-ir/src/owners/leaf_universe.rs": {
-      "silent-unmatched-slot": {
-        "count": 1,
-        "why": "ADR 1031 (`silences`): `None => {}` is a group of codes the site does not have (no SC3001 code, or no SC6002 code): nothing to end or decline; every group the site has answers `Some` (an end or a decline)"
-      },
       "default-on-missing": {
         "count": 1,
         "why": "ADR 1190 (`prop_literal_calls_off_apply`): `_ => true` is a layer that is no component prop literal with proven calls; it adds no condition there, and the role silence still needs every other premise (the role, the entry walk)"
+      },
+      "silent-unmatched-slot": {
+        "count": 1,
+        "why": "ADR 1031 (`silences`): `None => {}` is a group of codes the site does not have (no SC3001 code, or no SC6002 code): nothing to end or decline; every group the site has answers `Some` (an end or a decline)"
       }
     },
     "rust/crates/solid-reactive-ir/src/owners/missing_owners.rs": {
@@ -1515,8 +1515,8 @@
         "why": "pending-review"
       },
       "name-only-match": {
-        "count": 1,
-        "why": "`sync` is the key of the options literal of a call whose primitive kind is already resolved and for which the dialect says the option exists (`supports_sync_option(kind)`, `options_argument(kind)`), not an identification of what the call is"
+        "count": 2,
+        "why": "`sync` is the key of the options literal of a call whose primitive kind is already resolved and for which the dialect says the option exists (`supports_sync_option(kind)`, `options_argument(kind)`), not an identification of what the call is; ADR 1214 slice C: `value` is the attribute key of the one provider element of a context the dialect's `ContextRole::Create` made, the prop that role says the provider stores; the element's tag and the context are resolved exactly first, so the key identifies no callee or binding"
       },
       "primitive-name-match": {
         "count": 3,
@@ -1643,7 +1643,7 @@
     },
     "rust/crates/solid-reactive-ir/src/upstream_compat/shared_reactivity.rs": {
       "default-on-missing": {
-        "count": 12,
+        "count": 14,
         "why": "pending-review"
       },
       "finding-filter": {
