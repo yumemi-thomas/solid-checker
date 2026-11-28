@@ -9,8 +9,8 @@ export function HandedChain() {
   return <p>x</p>;
 }
 
-// Uncertifiable (a known miss, docs/open-work.md): the same read in an effect's apply. `n()` is an accessor read now, but the
-// call that runs it, a member of the returned object, is not dispatched (SC9012 `handed-member-read`).
+// Violation (ADR 1235): the same read in an effect's apply. The method the returned object holds runs on the call's stack, which
+// the apply runs untracked.
 export function EffectApplyChain() {
   const [a1] = createSignal(0);
   createEffect(

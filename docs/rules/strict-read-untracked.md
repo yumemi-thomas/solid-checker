@@ -98,9 +98,11 @@ and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
   function's one reference that call, the parameter plain, unwritten, its argument a `const`)
   holds that accessor; a store, a setter or an action handed that way stays with its own
   analysis. A `const` copy of an unwritten parameter holds it, and a copy of a destructured
-  prop reads what the prop does where its call is placed (ADR 1233). A member of the function's
-  returned object, a returned arrow or an element of a returned array is not dispatched yet:
-  that read in an effect's apply stays uncertifiable.
+  prop reads what the prop does where its call is placed (ADR 1233). What such a function returns
+  runs on the call that runs it, also when the function is declared inside an effect's apply: a
+  method of the returned object, a returned arrow, a function element of a returned array that a
+  `map`/`forEach` callback calls through its parameter (the array inline or held by a `const`
+  named once), and an element's method (ADR 1235).
 - **Plain assignment targets are writes, not reads.** `store.name = next` is
   diagnosed by `no-store-mutation-outside-setter` without also reporting `store.name` here.
   Only the member that *is* the written target is exempt: read-modify-write

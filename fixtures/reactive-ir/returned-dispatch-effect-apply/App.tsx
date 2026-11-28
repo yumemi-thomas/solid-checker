@@ -65,7 +65,22 @@ export function ElementMember() {
   return <p>x</p>;
 }
 
-// Clean: the same chain in a memo's compute, which tracks the read.
+// Uncertifiable: the held array has a second reference, so a holder could have replaced an element (ADR 0282); no element is run.
+export function HeldTwice() {
+  const [a1] = createSignal(0);
+  createEffect(
+    () => 1,
+    () => {
+      const useT = (n: () => number) => [(): number => n()];
+      const x = useT(a1);
+      void x.length;
+      x.forEach((f) => void f());
+    },
+  );
+  return <p>x</p>;
+}
+
+// Not a violation: the same chain in a memo's compute, which tracks the read (uncertifiable today: the dispatch obligation stays).
 export function InMemo() {
   const [a1] = createSignal(0);
   const m = createMemo(() => {
@@ -88,7 +103,8 @@ export function InHandler() {
   );
 }
 
-// Clean: the function is declared in the apply but only handed on to a later run (`queueMicrotask`), so no read runs there.
+// Not a violation: the function is declared in the apply but only handed on to a later run (`queueMicrotask`), so no read runs there
+// (uncertifiable: the microtask's run is unplaced).
 export function Deferred() {
   const [a1] = createSignal(0);
   createEffect(
