@@ -8712,6 +8712,14 @@
    "to": 3,
    "adr": "ADR 1229",
    "fact": "ADR 1229 (one implementation of in-place prop calls): `ThrowChild` in `pending-source-layers` (an IIFE that throws before `props.data()`) moves from the dispatch rows (`pending-read-unresolved`, `closed-parameter-member-dispatch`, relabelled in drops rows) to its rules' own uncertifiable rows (SC1001, SC5001, SC5003 `call-attributed-read`): uncertifiable to uncertifiable, nothing else moves"
+  },
+  {
+   "fixture": "reactive-ir/after-await-read-first-writes",
+   "key": "SC9012 value-held-in-binding",
+   "from": 0,
+   "to": 6,
+   "adr": "ADR 1236",
+   "fact": "reactive-ir/after-await-read-first-writes: the compound, update and logical writes after the await (ADR 1000's Compound, Update, Logical) Get their target, so the store write's decided row no longer covers that Get in the value-use census: its SC9012 value-held-in-binding row stands at each, beside the SC1002 and SC2003 rows the sites had; no row left"
   }
  ]
 }

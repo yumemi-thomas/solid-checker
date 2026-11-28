@@ -2,6 +2,17 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/after-await-read-first-writes/App.tsx",
+      "start": 728,
+      "end": 733,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
@@ -21,6 +32,17 @@
       "path": "fixtures/reactive-ir/after-await-read-first-writes/App.tsx",
       "start": 752,
       "end": 759,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/after-await-read-first-writes/App.tsx",
+      "start": 752,
+      "end": 757,
       "fixes": 0
     },
     {
@@ -35,6 +57,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/after-await-read-first-writes/App.tsx",
+      "start": 919,
+      "end": 924,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "uncertifiable",
@@ -57,6 +90,17 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/after-await-read-first-writes/App.tsx",
+      "start": 943,
+      "end": 948,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "uncertifiable",
@@ -65,6 +109,17 @@
       "path": "fixtures/reactive-ir/after-await-read-first-writes/App.tsx",
       "start": 988,
       "end": 991,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/after-await-read-first-writes/App.tsx",
+      "start": 1109,
+      "end": 1114,
       "fixes": 0
     },
     {
@@ -87,6 +142,17 @@
       "path": "fixtures/reactive-ir/after-await-read-first-writes/App.tsx",
       "start": 1133,
       "end": 1140,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "value-held-in-binding",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/after-await-read-first-writes/App.tsx",
+      "start": 1133,
+      "end": 1138,
       "fixes": 0
     },
     {
