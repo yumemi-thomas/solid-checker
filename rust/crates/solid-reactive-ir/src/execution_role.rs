@@ -569,32 +569,7 @@ pub(crate) fn dynamic_read_role(
             )
         };
     }
-    // ADR 1234: a body the component census proves through an exact `dynamic` source runs in that component's
-    // `untrack(() => component(props))`, where no read reports; a site the climb above cannot carry to that body
-    // (a class constructor, a helper called twice, a handler) is not shown to be outside it.
-    if role == ExecutionRole::UntrackedRendering && inside_dynamic_mount(file, span, lookup) {
-        return role_arm!(
-            "execution_role.dynamic_read_role.dynamic-mount-unclimbed",
-            ExecutionRole::Unknown
-        );
-    }
     role
-}
-
-/// ADR 1234: whether a function whose body holds `span` has, in its own file, a reference that is the source of an exact
-/// `dynamic` mount (`stored_throw::dynamic_mount_sites`, the reading the component census takes for a render).
-fn inside_dynamic_mount(
-    file: &solid_facts::FileFacts,
-    span: Span,
-    lookup: &SemanticLookup<'_>,
-) -> bool {
-    file.ast.functions_body_containing(span).any(|function| {
-        function_binding_name(file, function).is_some_and(|name| {
-            file.ast
-                .reference_identifiers_to(name.span)
-                .any(|reference| crate::stored_throw::dynamic_mount_sites(file, reference.span, lookup).is_some())
-        })
-    })
 }
 
 /// Whether an intrinsic `ref` applies `literal` while creating an element in a

@@ -389,7 +389,44 @@ impl<'a> SemanticLookup<'a> {
                 .chain(closures)
                 .map(|inner| crate::location(path, inner))
                 .collect(),
+            dynamic_mount_only: self.dynamic_mount_only(file, function),
         })
+    }
+
+    /// ADR 1234: whether every reference of `function`'s binding, its declaration aside, is in its own file the source of an exact
+    /// `dynamic` mount with a reached tag (`stored_throw::dynamic_mount_sites`), and there is one at least.
+    fn dynamic_mount_only(&self, file: &FileFacts, function: &solid_facts::ast::FunctionFact) -> bool {
+        let path = file.path.as_str();
+        let Some(name) = crate::owners::function_binding_name(file, function) else {
+            return false;
+        };
+        let Some(symbol) = self.entities().at(path, name.span) else {
+            return false;
+        };
+        let Some(references) = self.symbol_references_if_present(symbol.as_str()) else {
+            return false;
+        };
+        let mut mounted = false;
+        for reference in references {
+            let (Ok(start), Ok(end)) = (
+                u32::try_from(reference.start_byte),
+                u32::try_from(reference.end_byte),
+            ) else {
+                return false;
+            };
+            let at = Span::new(start, end);
+            if reference.path.as_ref() != path {
+                return false;
+            }
+            if at == name.span {
+                continue;
+            }
+            match crate::stored_throw::dynamic_mount_sites(file, at, self) {
+                Some((_, tags)) if !tags.is_empty() => mounted = true,
+                _ => return false,
+            }
+        }
+        mounted
     }
 
     /// ADR 0571: `inner` is bound to a name nothing writes, and every

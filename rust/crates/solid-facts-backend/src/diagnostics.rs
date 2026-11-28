@@ -510,9 +510,14 @@ impl DiagnosticSession {
         // only where `createComponent` calls it, so no violation in its own
         // body is proven. Style rules claim nothing about execution.
         for finding in &mut findings {
+            let in_region = if finding.id.starts_with("SC2003") {
+                solid_reactive_ir::store_write_in_undecided_component
+            } else {
+                solid_reactive_ir::site_in_undecided_component
+            };
             if finding.kind == "violation"
                 && !finding.id.starts_with("SC80")
-                && solid_reactive_ir::site_in_undecided_component(
+                && in_region(
                     &program,
                     finding.primary_location.path.as_ref(),
                     finding.primary_location.start_byte,

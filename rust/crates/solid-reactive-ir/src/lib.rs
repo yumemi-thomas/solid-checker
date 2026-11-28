@@ -2059,6 +2059,11 @@ pub struct UndecidedRegion {
     pub body: Location,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub placed_callbacks: Vec<Location>,
+    /// ADR 1234: the function's every reference but its declaration is, in its own file, the source of an exact `dynamic`
+    /// mount (`const D = dynamic(() => C)`, every use of `D` a tag, a tag reached: ADR 1016's reading). Its body runs where
+    /// `dynamic`'s component calls it, never as a plain call; only the store-write rule reads this.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub dynamic_mount_only: bool,
 }
 
 impl UndecidedRegion {
@@ -2082,6 +2087,17 @@ pub fn site_in_undecided_component(program: &Program, path: &str, start: u64, en
         .undecided_component_regions
         .iter()
         .any(|region| region.contains(path, start, end))
+}
+
+/// ADR 1234: [`site_in_undecided_component`] for a store write's violation (SC2003): a region whose function only an exact
+/// `dynamic` mount enters ([`UndecidedRegion::dynamic_mount_only`]) withholds nothing there. Whether the body runs as a
+/// component or as a plain call changes no store write's guard; what a plain call could change, the setter window around it,
+/// SC2003's origin check reads at the mount's call and tags.
+pub fn store_write_in_undecided_component(program: &Program, path: &str, start: u64, end: u64) -> bool {
+    program
+        .undecided_component_regions
+        .iter()
+        .any(|region| !region.dynamic_mount_only && region.contains(path, start, end))
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
