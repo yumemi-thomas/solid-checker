@@ -411,16 +411,18 @@ pub(crate) fn binding_returns_reactive_source(
 pub(crate) fn read_escapes_synchronous_extent(
     file: &solid_facts::FileFacts,
     span: Span,
-    owner_body: Span,
+    owner: Span,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
     dialect: &dyn Dialect,
 ) -> bool {
+    // ADR 1235: a function literal a function returns (itself, or a member or element of the literal it returns) runs only where
+    // a call of the returned value runs it, so a callback around it (`createEffect(c, () => { const useT = (n) => ({ read: () =>
+    // n() }); useT(a1).read(); })`) takes none of its reads out of that call: the call sites, inside the same callback, place them.
+    let returned = returned_function_literal(file, owner);
+    let owner_body = file.ast.function_at(owner).map(|function| function.body);
     file.ast.arguments_containing(span).any(|(call, index)| {
-        // ADR 1235: only a callback between the owner and the read takes the read out of the owner's call. A call around the
-        // owner (`createEffect(c, () => { const useT = …; useT().read(); })`) runs the owner and its reads alike; the owner's
-        // call sites place them.
-        if !owner_body.contains(call.span) {
+        if returned && owner_body.is_some_and(|body| !body.contains(call.span)) {
             return false;
         }
         let argument = &call.arguments[index];
@@ -472,6 +474,54 @@ pub(crate) fn read_escapes_synchronous_extent(
                 )
             })
     })
+}
+
+/// ADR 1235: the function literal at `owner` is a value the innermost function around it returns: that function's returned value
+/// itself (an arrow's expression body, a `return`'s argument), or a property value or element of the object or array literal it
+/// returns, to three literal levels (`() => () => n()`, `() => ({ read: () => n() })`, `() => [{ m: () => n() }]`).
+fn returned_function_literal(file: &solid_facts::FileFacts, owner: Span) -> bool {
+    let ast = &file.ast;
+    let Some(parent) = ast
+        .functions
+        .iter()
+        .filter(|function| function.span != owner && function.span.contains(owner))
+        .min_by_key(|function| function.span.end - function.span.start)
+    else {
+        return false;
+    };
+    fn holds(file: &solid_facts::FileFacts, value: Span, owner: Span, depth: usize) -> bool {
+        let ast = &file.ast;
+        let value = ast.peel_ts_sugar_span(value);
+        if value == owner {
+            return true;
+        }
+        if depth == 0 {
+            return false;
+        }
+        if let Some(literal) = ast.array_literal_at(value) {
+            return literal
+                .elements
+                .iter()
+                .any(|element| holds(file, element.span, owner, depth - 1));
+        }
+        ast.object_get_shapes
+            .iter()
+            .any(|shape| shape.span == value && shape.closed)
+            && ast.object_properties.iter().any(|property| {
+                value.contains(property.span)
+                    && property.data
+                    && !property.computed
+                    // A property of this literal, not of one nested in it.
+                    && !ast.object_get_shapes.iter().any(|inner| {
+                        inner.span != value && value.contains(inner.span) && inner.span.contains(property.span)
+                    })
+                    && holds(file, property.value, owner, depth - 1)
+            })
+    }
+    crate::local_access::returned_values(file, parent)
+        .into_iter()
+        .flatten()
+        .any(|value| holds(file, value, owner, 3))
 }
 
 /// An exact global scheduler's queued callback cannot read during the

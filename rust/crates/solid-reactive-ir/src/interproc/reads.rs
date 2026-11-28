@@ -149,7 +149,7 @@ pub(super) fn direct_reference_contributions(
         if read_escapes_synchronous_extent(
             file,
             reference_span,
-            nodes[owner].body,
+            nodes[owner].span,
             entities,
             symbol_names,
             lookup.dialect,
@@ -559,7 +559,7 @@ pub(super) fn typed_candidate_contributions(
         if read_escapes_synchronous_extent(
             file,
             call.callee,
-            nodes[owner].body,
+            nodes[owner].span,
             entities,
             symbol_names,
             lookup.dialect,
@@ -1417,7 +1417,7 @@ fn add_transported_call_summaries(
             if read_escapes_synchronous_extent(
                 file,
                 call.span,
-                nodes[owner].body,
+                nodes[owner].span,
                 entities,
                 symbol_names,
                 lookup.dialect,
