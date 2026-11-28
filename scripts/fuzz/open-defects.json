@@ -181,7 +181,8 @@
   "haltedClaim": 2,
   "causes": {
    "R-unplaced": 8,
-   "R-halted": 2
+   "R-halted": 2,
+   "secondary-false-clean": 32
   }
  }
 }
