@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
@@ -35,7 +35,8 @@ describe("the audit's oracle sample", () => {
 
 // A run directory as the workflow lays it out: shards/<name>/<grid>/ and oracle/<grid>/, oracle/manifests/<grid>.json. `parts` splits a
 // grid's oracle as the workflow does (its manifest records `parts`, its results are oracle/<grid>/part-<i>/); `dropPart` leaves one out.
-function run({ count = 2, drop = null, oracleOutcome = null, behaviour = false, problem = false, recall = "full", mixed = false, parts = {}, dropPart = null } = {}) {
+// `split` lays the recall grids out as a full audit's shard does (focus.mjs `splitsRecall`): <grid>/<code>/, codes A (even ids) and B.
+function run({ count = 2, drop = null, oracleOutcome = null, behaviour = false, problem = false, recall = "full", mixed = false, parts = {}, dropPart = null, split = false } = {}) {
   const root = mkdtempSync(join(tmpdir(), "fuzz-audit-"));
   const all = Object.fromEntries(AUDIT_GRIDS.map((grid) => [grid, Array.from({ length: 10 }, (_, i) => ({ id: `${grid}-${i}`, outcome: problem && grid === "mx-base" && i === 3 ? "false-clean" : "agree" }))]));
   for (let index = 0; index < count; index += 1) {
@@ -44,8 +45,13 @@ function run({ count = 2, drop = null, oracleOutcome = null, behaviour = false, 
       const dir = join(root, "shards", `shard-${index}`, grid);
       mkdirSync(dir, { recursive: true });
       const mine = all[grid].filter((row) => shardOf(row.id, count) === index);
-      writeFileSync(join(dir, "programs.jsonl"), mine.map((row) => JSON.stringify(row)).join("\n") + "\n");
-      writeFileSync(join(dir, grid.startsWith("mx") ? "matrix.json" : "legal.json"), JSON.stringify({ gridShard: { index, count, kept: mine.length, of: 10 }, selected: mine.length, ...(grid.endsWith("-recall") && (recall === "lean") !== (mixed && index === 1) ? { recallLean: true } : {}) }));
+      const lean = grid.endsWith("-recall") && (recall === "lean") !== (mixed && index === 1) ? { recallLean: true } : {};
+      const units = split && grid.endsWith("-recall") ? ["A", "B"].map((code, parity) => [join(dir, code), mine.filter((row) => Number(row.id.split("-").pop()) % 2 === parity), 5]) : [[dir, mine, 10]];
+      for (const [unit, unitRows, of] of units) {
+        mkdirSync(unit, { recursive: true });
+        writeFileSync(join(unit, "programs.jsonl"), unitRows.map((row) => JSON.stringify(row)).join("\n") + "\n");
+        writeFileSync(join(unit, grid.startsWith("mx") ? "matrix.json" : "legal.json"), JSON.stringify({ gridShard: { index, count, kept: unitRows.length, of }, selected: unitRows.length, ...lean }));
+      }
     }
   }
   mkdirSync(join(root, "oracle", "manifests"), { recursive: true });
@@ -233,6 +239,48 @@ describe("the audit's verdict", () => {
     const taken = jobs.flatMap((job) => partIds(manifests.find((m) => m.grid === job.grid).ids, job.part, job.parts));
     expect(taken.toSorted()).toEqual(manifests.flatMap((m) => m.ids).toSorted());
     expect(jobs.filter((job) => job.grid === "mx-census")).toEqual([0, 1, 2, 3, 4, 5].map((part) => ({ grid: "mx-census", part, parts: 6 })));
+  });
+
+  // Run 45845595439 (full, 40 shards) failed at pick: a full audit's recall grids are split by code, and only <grid>/matrix.json was read.
+  it("reads a full audit's recall grids, split by code, as one shard each", () => {
+    const whole = judge({ shards: join(run(), "shards"), oracle: join(run(), "oracle") });
+    const root = run({ split: true });
+    expect(readShards(join(root, "shards")).attention).toEqual([]);
+    const split = judge({ shards: join(root, "shards"), oracle: join(root, "oracle") });
+    expect(split.attention).toEqual([]);
+    for (const grid of ["mx-recall", "lg-recall"]) expect(split.grids[grid]).toEqual(whole.grids[grid]);
+    expect(recallModeOf(readShards(join(root, "shards")).shards)).toBe("full");
+    expect(recallModeOf(readShards(join(run({ split: true, recall: "lean" }), "shards")).shards)).toBe("lean");
+    // A code with no report, or codes of different shards, is not a whole run.
+    const torn = run({ split: true });
+    rmSync(join(torn, "shards", "shard-0", "mx-recall", "B", "matrix.json"));
+    writeFileSync(join(torn, "shards", "shard-1", "lg-recall", "A", "legal.json"), JSON.stringify({ gridShard: { index: 0, count: 2, kept: 0, of: 5 } }));
+    expect(readShards(join(torn, "shards")).attention).toEqual(expect.arrayContaining([
+      "shard-0/mx-recall: no report for code B",
+      "shard-1/lg-recall: its codes are of different shards (0/2, 1/2)",
+      "shard-1/lg-recall: not a shard",
+    ]));
+  });
+
+  it("picks the same oracle sample from a split recall grid's codes as from the whole grid", () => {
+    const picked = (split) => {
+      const root = run({ count: 2, split });
+      for (const grid of AUDIT_GRIDS) {
+        const candidates = Array.from({ length: 6 }, (_, i) => ({ id: `${grid}-${i}`, stratum: `s${i % 4}`, rank: fnv(`${grid}-${i}`) }));
+        for (let index = 0; index < 2; index += 1) {
+          const mine = candidates.filter((candidate) => shardOf(candidate.id, 2) === index);
+          const units = split && grid.endsWith("-recall") ? ["A", "B"].map((code, parity) => [join(code), mine.filter((row) => Number(row.id.split("-").pop()) % 2 === parity)]) : [["", mine]];
+          for (const [unit, unitRows] of units) writeFileSync(join(root, "shards", `shard-${index}`, grid, unit, "oracle-candidates.jsonl"), unitRows.map((row) => JSON.stringify(row)).join("\n") + "\n");
+        }
+      }
+      const out = join(root, "manifests");
+      const result = spawnSync(process.execPath, [new URL("./audit.mjs", import.meta.url).pathname, "pick", "--shards", join(root, "shards"), "--out", out], { encoding: "utf8" });
+      expect(result.status, result.stderr).toBe(0);
+      return Object.fromEntries(AUDIT_GRIDS.map((grid) => [grid, JSON.parse(readFileSync(join(out, `${grid}.json`), "utf8")).ids]));
+    };
+    const whole = picked(false);
+    expect(whole["mx-recall"].length).toBe(4);
+    expect(picked(true)).toEqual(whole);
   });
 
   it("writes the parts into pick's manifests and its matrix", () => {
