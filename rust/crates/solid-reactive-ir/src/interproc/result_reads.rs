@@ -1834,9 +1834,18 @@ impl<'s, 'a, 'b, 'c> DirectReadProof<'s, 'a, 'b, 'c> {
         if read.local || read.conditional {
             return false;
         }
+        let origin = |symbol: &SymbolId| {
+            super::transport_reads::runtime_source_origin(provenance, symbol)
+                || super::transport_reads::source_origin(provenance, symbol)
+        };
+        // ADR 1235: a read through an exact alias of a source (ADR 1233's parameter bound by its function's one call) carries the
+        // source's own entry: the alias stands for the symbol that entry declares, whose origin decides.
         let proven_origin = || {
-            super::transport_reads::runtime_source_origin(provenance, &read.symbol)
-                || super::transport_reads::source_origin(provenance, &read.symbol)
+            origin(&read.symbol)
+                || accessors
+                    .get(&read.symbol)
+                    .and_then(|(_, declaration)| entities.get(declaration))
+                    .is_some_and(|root| *root != read.symbol && origin(root))
         };
         if array_entry && !proven_origin() {
             return false;
