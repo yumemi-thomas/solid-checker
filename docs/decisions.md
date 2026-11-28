@@ -5714,3 +5714,20 @@ The code is ADR 0491/1172/1211's own store proof (no eslint-plugin-solid counter
 - Coverage: `local-alias-member-reads`' two same-file local-hook writes (`holder.state.items.push(1)`, and `holder.state.nested.v = 1` in a closure) move U to V (Chrome exports in `runtime-oracle/store-write-through-module-hook`). `store-operation-may-not-write`'s exported `e` stays uncertifiable: a first cut without the closed-program premise moved it to V with no reference to follow, which is why the premise exists. Fixture `store-write-through-module-store-open` pins it.
 - proof-lint: two more `default-on-missing` shapes in the file's pending-review entry (an unreadable local name taken as exported; a store with no setter slot has no setter reference), both fail-safe.
 
+
+<a id="adr-1236"></a>
+## ADR 1236 — A write that reads its target first does not cover that Get in the value-use census
+**The false clean** (full audit 45845595439 on 5972f57aa, the first full audit read since `claude/audit-pick-fix`). 32 mx-recall programs:
+- the shape: `const ctx = useContext(ValCtx); ctx.s1.v += 1` (and `++`, plain or destructured reader), the store and setter handed in the provider's value literal (ADR 1211);
+- where: the body, an effect's apply, a render effect's apply, a `createRoot` body;
+- rc.21 warns STRICT_READ_UNTRACKED at the Get the write makes before its Set, as well as STORE_WRITE_OUTSIDE_SETTER;
+- the checker certified the program clean of STRICT_READ_UNTRACKED (secondary `false-clean-certified`); still so on e54daf814.
+
+The value-use census follows the store to the reader and takes a member with a row for read. `write_decided_target` (ADR 0811) also took a member that an SC2003 decided write targets, meant for its Set only, and so covered the Get of a compound, update or logical write.
+
+**Decision.** `write_decided_target` answers no for a member that an assignment reading its target (`reads_target`: compound, update, logical) writes. The census's `value-held-in-binding` row stays at the Get: SC9012 uncertifiable, never a proof of the read. Not built: SC1001's own row there. The read rules do not follow a provider's value to its readers' member reads (`docs/open-work.md`).
+
+**Evidence.**
+- Fixture `context-store-compound-read`: `+=`, `++`, `||=` and a destructured reader are SC2003 violations with SC9012 uncertifiable at the write; a plain `=` is SC2003 only. Chrome: `runtime-oracle/context-store-compound-read`.
+- The 32 (release, VM, `--recall-full`, Chrome judge): main certified false clean; this build false clean, uncertified (no problem row). They leave the open-defects ledger in the same branch that listed them; rediscovery entry.
+- Probe, main e54daf814 against this, every STORE_WRITE and STRICT_READ program whose write reads its target: mx-recall 6,604 and lg-recall 1,344, outcomes unchanged. There is no FP, no V to U and no clean to U.

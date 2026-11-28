@@ -43553,5 +43553,47 @@
    "mx-strict-read-untracked-pos-class-field-store-map-member-direct-none"
   ],
   "rediscovered": "focus --grids mx-recall --runtime-diff 0 --ids (4 programs), checker main-release 60de70ac7: the generator of 60de70ac7 4 harness (no runtime record); this generator 4 recall-gap"
+ },
+ {
+  "finding": "A store handed in a provider's value literal and written through a useContext result by a write that reads its target first (`ctx.s1.v += 1`, `ctx.s1.v++`) Gets the member before it Sets it, and rc.21 warns STRICT_READ_UNTRACKED there; the value-use census took the store write's SC2003 row for the member's (`write_decided_target`), so the Get had no row and the program was certified clean of STRICT_READ_UNTRACKED",
+  "found": "full audit 45845595439 (main 5972f57aa), read with claude/audit-pick-fix: 32 mx-recall secondary false cleans (STRICT_READ_UNTRACKED false-clean-certified); W9 re-probe on main e54daf814: all 32",
+  "fixed": "ADR 1236 (value_use.rs `write_decided_target`: a write that reads its target does not cover that Get; SC9012 value-held-in-binding stays at the site)",
+  "grid": "mx-recall",
+  "code": "STORE_WRITE_OUTSIDE_SETTER",
+  "ids": [
+   "mx-store-write-outside-setter-body-compound-alias-none-s-context",
+   "mx-store-write-outside-setter-body-compound-alias-none-s-context-destructured",
+   "mx-store-write-outside-setter-body-compound-direct-none-s-context",
+   "mx-store-write-outside-setter-body-compound-direct-none-s-context-destructured",
+   "mx-store-write-outside-setter-body-increment-alias-none-s-context",
+   "mx-store-write-outside-setter-body-increment-alias-none-s-context-destructured",
+   "mx-store-write-outside-setter-body-increment-direct-none-s-context",
+   "mx-store-write-outside-setter-body-increment-direct-none-s-context-destructured",
+   "mx-store-write-outside-setter-effect-apply-compound-alias-none-s-context",
+   "mx-store-write-outside-setter-effect-apply-compound-alias-none-s-context-destructured",
+   "mx-store-write-outside-setter-effect-apply-compound-direct-none-s-context",
+   "mx-store-write-outside-setter-effect-apply-compound-direct-none-s-context-destructured",
+   "mx-store-write-outside-setter-effect-apply-increment-alias-none-s-context",
+   "mx-store-write-outside-setter-effect-apply-increment-alias-none-s-context-destructured",
+   "mx-store-write-outside-setter-effect-apply-increment-direct-none-s-context",
+   "mx-store-write-outside-setter-effect-apply-increment-direct-none-s-context-destructured",
+   "mx-store-write-outside-setter-render-apply-compound-alias-none-s-context",
+   "mx-store-write-outside-setter-render-apply-compound-alias-none-s-context-destructured",
+   "mx-store-write-outside-setter-render-apply-compound-direct-none-s-context",
+   "mx-store-write-outside-setter-render-apply-compound-direct-none-s-context-destructured",
+   "mx-store-write-outside-setter-render-apply-increment-alias-none-s-context",
+   "mx-store-write-outside-setter-render-apply-increment-alias-none-s-context-destructured",
+   "mx-store-write-outside-setter-render-apply-increment-direct-none-s-context",
+   "mx-store-write-outside-setter-render-apply-increment-direct-none-s-context-destructured",
+   "mx-store-write-outside-setter-root-compound-alias-none-s-context",
+   "mx-store-write-outside-setter-root-compound-alias-none-s-context-destructured",
+   "mx-store-write-outside-setter-root-compound-direct-none-s-context",
+   "mx-store-write-outside-setter-root-compound-direct-none-s-context-destructured",
+   "mx-store-write-outside-setter-root-increment-alias-none-s-context",
+   "mx-store-write-outside-setter-root-increment-alias-none-s-context-destructured",
+   "mx-store-write-outside-setter-root-increment-direct-none-s-context",
+   "mx-store-write-outside-setter-root-increment-direct-none-s-context-destructured"
+  ],
+  "rediscovered": "focus --codes STORE_WRITE_OUTSIDE_SETTER --grids mx-recall --recall-full --ids (32 programs), Chrome judge: main e54daf814 32 agree with secondary STRICT_READ_UNTRACKED false-clean-certified; this build 32 agree with it false-clean (uncertified: the SC9012 row withholds it), no problem row"
  }
 ]

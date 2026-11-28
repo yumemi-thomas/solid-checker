@@ -1,0 +1,1 @@
+{"note": "ADR 1236: a store handed in a provider value literal, written through a useContext result: rc.21 warns STORE_WRITE_OUTSIDE_SETTER at every write and STRICT_READ_UNTRACKED at the Get of a write that reads its target first (+=, ++, ||=); the plain write warns STORE_WRITE_OUTSIDE_SETTER only."}
