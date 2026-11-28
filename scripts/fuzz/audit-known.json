@@ -1264,7 +1264,7 @@
    "kind": "halted-claim",
    "item": "flw-flow-for-async",
    "idRegex": "flw-flow-for-async",
-   "adr": "ADR 1217",
+   "adr": "ADR 1205",
    "work": "scripts/fuzz/classify.mjs halted claims",
    "why": "SETTLED_CLEANUP_UNOWNED in a flow row after an async step: the run halts before the site (REACTIVITY_HALTED, offSite missing-owner@halted(halt-before-site)), the program is not-fired. 58 at the lean audit 63725c6bf and now; the full audit holds 98 because the full recall grid generates 40 more of the same family (the mounts `m-for`, `m-show`, `m-child` variants the lean grid omits): 58 of the 98 are the lean audit's own ids, 40 were absent from it. The 2 ledgered R-halted rows are not counted here. ADR 1217 (audit 45516815348 on 60de70ac7): the lean audit holds 314, the 58 and 256 more of the same family it did not store (every binding and layer of the read grids, the lean mounts m-dynamic, m-for-item, m-show-later and m-show-signal among them); triaged as the same halt before the site, each a halted claim like the 58. The full ids are the last full audit’s 98 and the 256: the full grid generates every lean program; it has not been audited since, so its own extra mounts of the family may be more. ADR 1205 adds `x-wrapper-handoff-member` to both lists: the member call is an exact edge now, so the missing-owner claim at the wrapper's `onSettled` stands, and the run halts before it as for the others.",
    "ids": {
