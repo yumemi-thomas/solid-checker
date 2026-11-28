@@ -2093,7 +2093,12 @@ pub fn site_in_undecided_component(program: &Program, path: &str, start: u64, en
 /// `dynamic` mount enters ([`UndecidedRegion::dynamic_mount_only`]) withholds nothing there. Whether the body runs as a
 /// component or as a plain call changes no store write's guard; what a plain call could change, the setter window around it,
 /// SC2003's origin check reads at the mount's call and tags.
-pub fn store_write_in_undecided_component(program: &Program, path: &str, start: u64, end: u64) -> bool {
+pub fn store_write_in_undecided_component(
+    program: &Program,
+    path: &str,
+    start: u64,
+    end: u64,
+) -> bool {
     program
         .undecided_component_regions
         .iter()

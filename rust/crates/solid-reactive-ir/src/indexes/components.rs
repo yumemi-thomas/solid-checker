@@ -395,7 +395,11 @@ impl<'a> SemanticLookup<'a> {
 
     /// ADR 1234: whether every reference of `function`'s binding, its declaration aside, is in its own file the source of an exact
     /// `dynamic` mount with a reached tag (`stored_throw::dynamic_mount_sites`), and there is one at least.
-    fn dynamic_mount_only(&self, file: &FileFacts, function: &solid_facts::ast::FunctionFact) -> bool {
+    fn dynamic_mount_only(
+        &self,
+        file: &FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+    ) -> bool {
         let path = file.path.as_str();
         let Some(name) = crate::owners::function_binding_name(file, function) else {
             return false;
