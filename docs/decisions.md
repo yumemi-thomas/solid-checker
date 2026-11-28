@@ -5714,3 +5714,16 @@ The code is ADR 0491/1172/1211's own store proof (no eslint-plugin-solid counter
 - Coverage: `local-alias-member-reads`' two same-file local-hook writes (`holder.state.items.push(1)`, and `holder.state.nested.v = 1` in a closure) move U to V (Chrome exports in `runtime-oracle/store-write-through-module-hook`). `store-operation-may-not-write`'s exported `e` stays uncertifiable: a first cut without the closed-program premise moved it to V with no reference to follow, which is why the premise exists. Fixture `store-write-through-module-store-open` pins it.
 - proof-lint: two more `default-on-missing` shapes in the file's pending-review entry (an unreadable local name taken as exported; a store with no setter slot has no setter reference), both fail-safe.
 
+<a id="adr-1234"></a>
+## ADR 1234 — A store write in a component only an exact `dynamic` mount enters
+**The gap.** 1,476 mx-pairs STORE_WRITE_OUTSIDE_SETTER recall gaps (and more in mx-recall) were writes in a component mounted only through `const D = dynamic(() => C)` and `<D />`. SC2003 had two blockers there:
+- the origin check (`container_root::origin_closed`, ADR 0919) found the `() => C` reference neither a call nor a tag;
+- the component census leaves `C`'s identity undecided (that reference escapes), and the backend pass turned every violation in an undecided region into `component-identity-unproven`.
+
+**Decision** (the split the coordinator ruled; the first cut proved the identity for every rule, and Chrome disagreed on STRICT_READ_UNTRACKED reads in such bodies: 114 false positives, 756 V to U).
+- The origin check takes an exact `dynamic` source (ADR 1016's reading, `stored_throw::dynamic_mount_sites`) as starts at the `dynamic` call and every reached tag. Each start must be outside a function handed to a call that may be a setter, as a tag of `C` must be.
+- `UndecidedRegion::dynamic_mount_only`: a function whose every reference but its declaration is, in its own file, such a source with a reached tag. Its region withholds no SC2003 violation (`store_write_in_undecided_component`). A plain call is the one thing identity would rule out, and the mount makes none. Every other rule keeps the region.
+
+**Evidence.**
+- Fixture `store-write-dynamic-mount` (Chrome: `runtime-oracle/store-write-dynamic-mount`). Violations: `Mounted`, `Closing`, `OwnStore`. Uncertifiable: a tag in a function handed to `later`, `D` used outside a tag, a shadowed `dynamic`, `web.dynamic`. The setter's own write has no SC2003 row.
+- Probe, main e54daf814 against this, every code's `-m-dynamic` programs (release, VM): mx-recall 64,079, 5,984 STORE_WRITE recall-gap to agree; mx-pairs 4,176, 1,476 (all of them); lg-recall 34,746 and lg-pairs 1,866 unchanged. There is no FP, no V to U and no clean to U. Coverage moves nothing else.

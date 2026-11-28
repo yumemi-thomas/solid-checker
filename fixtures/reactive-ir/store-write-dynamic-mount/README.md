@@ -17,7 +17,8 @@ Violations (Chrome STORE_WRITE_OUTSIDE_SETTER, `runtime-oracle/store-write-dynam
 `Closing` (an array mutator; the tag written with a closing tag), `OwnStore` (the component's own `createStore`). On main they are
 uncertifiable.
 
-Clean: `ThroughSetter` (the write is the setter's own).
+No SC2003 row: `ThroughSetter` (the write is the setter's own; its setter call keeps SC2001 `component-identity-unproven`, the undecided
+region every rule but SC2003 keeps).
 
 Uncertifiable: `InWindow` (the tag is in a function handed to `later`, a call that may be a setter), `OutsideTag` (`D` is also pushed
 into an array), `Shadowed` (a local `dynamic`), `Namespace` (`web.dynamic`: the bare-name check refuses it).
