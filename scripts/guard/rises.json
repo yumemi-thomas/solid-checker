@@ -8736,6 +8736,22 @@
    "to": 42,
    "adr": "ADR 1205",
    "fact": "on main 5972f57aa: ADR 1205 round 2's fixture components SlotHelperInApply, SlotMemberInApply and SlotMemberAlsoInTimer bring their own creation rows, and two function-run-unplaced rows keep their finding as effect-creation-unaccounted (the relabel row); no row moved elsewhere"
+  },
+  {
+   "fixture": "reactive-ir/later-assigned-function",
+   "key": "SC2006 flush-in-action-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1207",
+   "fact": "reactive-ir/later-assigned-function: the flush the assigned member runs keeps its row under the flush census's blocker (the relabel rows of SC2006 and SC2008 function-run-unplaced 7 -> 6), measured against ADR 1205 round 4 on main 5972f57aa"
+  },
+  {
+   "fixture": "reactive-ir/later-assigned-function",
+   "key": "SC2008 flush-in-effect-unaccounted",
+   "from": 0,
+   "to": 1,
+   "adr": "ADR 1207",
+   "fact": "reactive-ir/later-assigned-function: the flush the assigned member runs keeps its row under the flush census's blocker (the relabel rows of SC2006 and SC2008 function-run-unplaced 7 -> 6), measured against ADR 1205 round 4 on main 5972f57aa"
   }
  ]
 }
