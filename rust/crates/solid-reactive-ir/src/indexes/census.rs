@@ -1710,7 +1710,7 @@ fn component_census(
                 || lazy_default_value(ctx, candidate_id, function.span, span, &mut lazy_veto)?
                 || route_value(ctx, candidate_id, span)?
                 || compound_value(ctx, candidate_id, span)?
-                || dynamic_source_value(ctx, candidate, candidate_id, span)?;
+                || (candidate_id == id && dynamic_source_value(ctx, candidate, candidate_id, span)?);
             rendered_by_reference |= renders;
             let escapes = !(callback && !component_value)
                 && !renders
