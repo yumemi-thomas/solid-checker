@@ -1343,6 +1343,86 @@ fn compound_value(ctx: &Ctx<'_, '_, BuildSchema>, id: FileId, span: Span) -> Res
         .is_ok())
 }
 
+/// ADR 1234: whether `reference` in `id` is the source of an exact `dynamic` mount (ADR 1016's reading, as
+/// `stored_throw::dynamic_mount_sites` takes it): the whole body of a parameterless, non-`async` arrow that is the only argument of
+/// the dialect's non-static `dynamic` called by a bare name, that call the initializer of an unexported `const` whose every reference
+/// is a plain JSX tag name, one an opening tag at least. `dynamic`'s component then calls the function in `createMemo(() => untrack(()
+/// => component(props)))` (`@solidjs/web@2.0.0-rc.21` `dist/web.dev.js:2451`, ADR 0992), as `<Dynamic component={C}>` does: a
+/// render of it at each tag.
+fn dynamic_source_value(
+    ctx: &Ctx<'_, '_, BuildSchema>,
+    file: &FileFacts,
+    id: FileId,
+    reference: Span,
+) -> Result<bool, Cycle> {
+    use solid_facts::ast::{BindingShape, FunctionKind};
+    let ast = &file.ast;
+    let Some(arrow) = ast.functions.iter().find(|function| {
+        function.kind == FunctionKind::Arrow
+            && function.expression_body
+            && function.parameters.is_empty()
+            && !function.rest_parameter
+            && !function.r#async
+            && !function.generator
+            && function
+                .expression_return
+                .as_ref()
+                .and_then(|value| value.argument)
+                .is_some_and(|argument| ast.peel_ts_sugar_span(argument) == reference)
+    }) else {
+        return Ok(false);
+    };
+    let Some(call) = ast.calls.iter().find(|call| {
+        call.arguments.len() == 1
+            && !call.arguments[0].spread
+            && ast.peel_ts_sugar_span(call.arguments[0].span) == arrow.span
+    }) else {
+        return Ok(false);
+    };
+    let bare = file
+        .source_text(ast.peel_ts_sugar_span(call.callee))
+        .is_some_and(|text| !text.is_empty() && text.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$'));
+    if call.construct || !bare {
+        return Ok(false);
+    }
+    let dialect = ctx.dialect();
+    if !ctx
+        .memo::<CallPrimitives>(&id)?
+        .get(&call.span)
+        .is_some_and(|primitive| dialect.dynamic_source_mounts_at_tag(*primitive))
+    {
+        return Ok(false);
+    }
+    let Some(binding) = ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && !binding.in_switch_case
+            && binding.shape == BindingShape::Identifier
+            && binding.names.len() == 1
+            && binding
+                .initializer
+                .is_some_and(|initializer| ast.peel_ts_sugar_span(initializer) == call.span)
+    }) else {
+        return Ok(false);
+    };
+    let name = binding.names[0].span;
+    if super::components::binding_exported(file, name) {
+        return Ok(false);
+    }
+    let mut opened = false;
+    for use_ in ast.reference_identifiers_to(name) {
+        if ast
+            .jsx_elements
+            .iter()
+            .any(|element| element.member_object.is_none() && element.name.span == use_.span)
+        {
+            opened = true;
+        } else if !ast.jsx_elements.iter().any(|element| element.closing_name == Some(use_.span)) {
+            return Ok(false);
+        }
+    }
+    Ok(opened)
+}
+
 /// Whether `span` in `id` is a route component value an audited router
 /// renders (ADR 0334).
 fn route_value(ctx: &Ctx<'_, '_, BuildSchema>, id: FileId, span: Span) -> Result<bool, Cycle> {
@@ -1629,7 +1709,8 @@ fn component_census(
                 .contains_key(&span)
                 || lazy_default_value(ctx, candidate_id, function.span, span, &mut lazy_veto)?
                 || route_value(ctx, candidate_id, span)?
-                || compound_value(ctx, candidate_id, span)?;
+                || compound_value(ctx, candidate_id, span)?
+                || dynamic_source_value(ctx, candidate, candidate_id, span)?;
             rendered_by_reference |= renders;
             let escapes = !(callback && !component_value)
                 && !renders

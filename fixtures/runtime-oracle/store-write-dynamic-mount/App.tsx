@@ -1,3 +1,4 @@
+import { createStore } from "solid-js";
 import { dynamic } from "@solidjs/web";
 import * as web from "@solidjs/web";
 import { useClosing, useInWindow, useMounted, useNamespace, useOutsideTag, useShadowed, useThroughSetter } from "./hooks";
@@ -25,6 +26,17 @@ function Closing() {
 export function MountsClosing() {
   const D = dynamic(() => Closing);
   return <div><D></D></div>;
+}
+
+// The component's own store (`createStore` in its body): its identity is proved by the mount.
+function OwnStore() {
+  const [s1] = createStore({ a: { v: 0 }, items: [0] });
+  s1.a.v = 7;
+  return <i />;
+}
+export function MountsOwnStore() {
+  const D = dynamic(() => OwnStore);
+  return <div><D /></div>;
 }
 
 // Clean: the write is the setter's own.
