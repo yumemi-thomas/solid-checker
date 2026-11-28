@@ -40,8 +40,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/parameter-single-call-alias/App.tsx",
-      "start": 788,
-      "end": 800,
+      "start": 716,
+      "end": 728,
       "fixes": 0
     },
     {
@@ -51,8 +51,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/parameter-single-call-alias/App.tsx",
-      "start": 788,
-      "end": 800,
+      "start": 716,
+      "end": 728,
       "fixes": 0
     },
     {
@@ -62,8 +62,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/parameter-single-call-alias/App.tsx",
-      "start": 788,
-      "end": 800,
+      "start": 716,
+      "end": 728,
       "fixes": 0
     },
     {
@@ -73,30 +73,18 @@
       "blocker": "function-run-unplaced",
       "severity": "warning",
       "path": "fixtures/reactive-ir/parameter-single-call-alias/App.tsx",
-      "start": 890,
-      "end": 893,
+      "start": 818,
+      "end": 821,
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "handed-member-read",
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/parameter-single-call-alias/App.tsx",
-      "start": 909,
-      "end": 922,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "blocker": "handed-member-dispatch",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/parameter-single-call-alias/App.tsx",
-      "start": 1227,
-      "end": 1240,
+      "start": 837,
+      "end": 852,
       "fixes": 0
     },
     {
@@ -106,8 +94,8 @@
       "blocker": "handed-member-dispatch",
       "severity": "warning",
       "path": "fixtures/reactive-ir/parameter-single-call-alias/App.tsx",
-      "start": 1251,
-      "end": 1264,
+      "start": 1155,
+      "end": 1168,
       "fixes": 0
     },
     {
@@ -117,8 +105,19 @@
       "blocker": "handed-member-dispatch",
       "severity": "warning",
       "path": "fixtures/reactive-ir/parameter-single-call-alias/App.tsx",
-      "start": 1517,
-      "end": 1530,
+      "start": 1179,
+      "end": 1192,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/parameter-single-call-alias/App.tsx",
+      "start": 1445,
+      "end": 1458,
       "fixes": 0
     },
     {
@@ -128,8 +127,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/parameter-single-call-alias/App.tsx",
-      "start": 2141,
-      "end": 2151,
+      "start": 2069,
+      "end": 2079,
       "fixes": 0
     },
     {
@@ -139,8 +138,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/parameter-single-call-alias/App.tsx",
-      "start": 2141,
-      "end": 2151,
+      "start": 2069,
+      "end": 2079,
       "fixes": 0
     },
     {
@@ -150,8 +149,8 @@
       "blocker": "leaf-operation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/parameter-single-call-alias/App.tsx",
-      "start": 2300,
-      "end": 2304,
+      "start": 2228,
+      "end": 2232,
       "fixes": 0
     },
     {
@@ -161,8 +160,8 @@
       "blocker": "owner-callers-unenumerated",
       "severity": "error",
       "path": "fixtures/reactive-ir/parameter-single-call-alias/App.tsx",
-      "start": 2300,
-      "end": 2304,
+      "start": 2228,
+      "end": 2232,
       "fixes": 0
     },
     {
@@ -172,8 +171,8 @@
       "blocker": "effect-creation-unaccounted",
       "severity": "error",
       "path": "fixtures/reactive-ir/parameter-single-call-alias/App.tsx",
-      "start": 2300,
-      "end": 2304,
+      "start": 2228,
+      "end": 2232,
       "fixes": 0
     }
   ]

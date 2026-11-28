@@ -30,6 +30,17 @@
       "blocker": "handed-member-dispatch",
       "severity": "warning",
       "path": "fixtures/reactive-ir/handed-call-results/App.tsx",
+      "start": 651,
+      "end": 669,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "blocker": "handed-member-dispatch",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/handed-call-results/App.tsx",
       "start": 677,
       "end": 678,
       "fixes": 0
