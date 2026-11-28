@@ -1831,6 +1831,15 @@ fn dynamic_mount_tags(
     reference: Span,
     lookup: &crate::indexes::SemanticLookup<'_>,
 ) -> Option<Vec<Span>> {
+    dynamic_mount_sites(file, reference, lookup).map(|(_, tags)| tags)
+}
+
+/// [`dynamic_mount_tags`] with the `dynamic` call itself: `(call, reached tags)`. ADR 1234: SC2003's origin check reads both.
+pub(crate) fn dynamic_mount_sites(
+    file: &FileFacts,
+    reference: Span,
+    lookup: &crate::indexes::SemanticLookup<'_>,
+) -> Option<(Span, Vec<Span>)> {
     use solid_facts::ast::{BindingShape, FunctionKind};
     let ast = &file.ast;
     let arrow = ast.functions.iter().find(|function| {
@@ -1901,11 +1910,12 @@ fn dynamic_mount_tags(
     // run count, as for a component's own tag (ADRs 0458 and 1015). With none
     // left, nothing above every tag reports: the end is unobserved.
     let reach = SiteReach::new(lookup);
-    Some(
+    Some((
+        call.span,
         tags.into_iter()
             .filter(|tag| reach.site(file, *tag) == Reach::MayRun)
             .collect(),
-    )
+    ))
 }
 
 /// `reference` is exactly the `component` of a `Dynamic`, the one prop that is

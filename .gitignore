@@ -899,6 +899,8 @@ packages/wasm/owned/
 !fixtures/reactive-ir/store-write-through-carrier/node_modules/**
 !fixtures/reactive-ir/store-write-through-module-hook/node_modules/
 !fixtures/reactive-ir/store-write-through-module-hook/node_modules/**
+!fixtures/reactive-ir/store-write-dynamic-mount/node_modules/
+!fixtures/reactive-ir/store-write-dynamic-mount/node_modules/**
 !fixtures/reactive-ir/store-write-through-module-store/node_modules/
 !fixtures/reactive-ir/store-write-through-module-store/node_modules/**
 !fixtures/reactive-ir/store-write-through-module-store-open/node_modules/

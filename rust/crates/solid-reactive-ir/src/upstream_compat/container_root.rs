@@ -946,6 +946,12 @@ fn origin_closed(
         // Every reference is a call or a render the call graph resolved to
         // this function, each started where no setter can run it.
         let sites = lookup.function_call_site_references(path, function.span);
+        // ADR 1234: or, in this file, the source of an exact `dynamic`
+        // (`const D1 = dynamic(() => C1)`, every use of `D1` a tag: ADR 1016's
+        // reading): `C1` mounts at `D1`'s reached tags, through the memo the
+        // call creates, so the call and each tag are its starts. None reached
+        // is no reading (the census stays open).
+        let mut mounts = Vec::new();
         let accounted = references.iter().all(|reference| {
             let (Ok(start), Ok(end)) = (
                 u32::try_from(reference.start_byte),
@@ -959,24 +965,37 @@ fn origin_closed(
                 || sites.iter().any(|(site_file, site)| {
                     site_file.path.as_str() == reference.path.as_ref() && *site == at
                 })
+                || (reference.path.as_ref() == path
+                    && crate::stored_throw::dynamic_mount_sites(file, at, lookup).is_some_and(
+                        |(call, tags)| {
+                            let reached = !tags.is_empty();
+                            mounts.push(call);
+                            mounts.extend(tags);
+                            reached
+                        },
+                    ))
         });
+        // A tag is created where it is written: one inside a function handed
+        // to a call that may be a setter renders in its window.
+        let in_setter_window = |site_file: &FileFacts, at: Span| {
+            site_file.ast.calls.iter().any(|call| {
+                call.arguments.iter().any(|argument| {
+                    site_file
+                        .ast
+                        .functions_within(argument.span)
+                        .any(|function| function.span.contains(at))
+                }) && callee_may_set_store(site_file, context, call)
+            })
+        };
         return accounted
+            && mounts.iter().all(|at| !in_setter_window(file, *at))
             && sites.iter().all(|(site_file, at)| {
                 let site_ast = &site_file.ast;
-                // A tag is created where it is written: one inside a function
-                // handed to a call that may be a setter renders in its window.
                 let rendered = site_ast
                     .jsx_elements
                     .iter()
                     .any(|element| element.name.span == *at || element.closing_name == Some(*at));
-                (rendered
-                    && !site_ast.calls.iter().any(|call| {
-                        call.arguments.iter().any(|argument| {
-                            site_ast
-                                .functions_within(argument.span)
-                                .any(|function| function.span.contains(*at))
-                        }) && callee_may_set_store(site_file, context, call)
-                    }))
+                (rendered && !in_setter_window(site_file, *at))
                     || site_ast
                         .calls
                         .iter()
