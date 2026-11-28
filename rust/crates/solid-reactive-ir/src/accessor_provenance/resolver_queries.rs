@@ -302,22 +302,6 @@ pub(super) fn transport_rows<'w>(
     rows
 }
 
-/// ADR 1235: the concise body `body` is the invocation `call` (TypeScript sugar peeled), or `void` applied to it (`(f) => void f()`):
-/// the text before the call is the `void` keyword and whitespace only, and the call ends the body. A comment or anything else
-/// between them answers no.
-fn body_is_invocation(file: &FileFacts, body: Span, call: Span) -> bool {
-    let body = file.ast.peel_ts_sugar_span(body);
-    if body == call {
-        return true;
-    }
-    body.contains(call)
-        && body.end == call.end
-        && file
-            .source_text(Span::new(body.start, call.start))
-            .and_then(|prefix| prefix.strip_prefix("void"))
-            .is_some_and(|rest| !rest.is_empty() && rest.chars().all(char::is_whitespace))
-}
-
 /// The exact element-member callbacks a built-in `map`/`forEach` call of an
 /// array literal invokes, when every element's member is a synchronous arrow
 /// invoked exactly once through the callback's own parameter.
@@ -365,7 +349,7 @@ fn array_members<'w>(
     if invocations.next().is_some()
         || invocation.construct
         || invocation.arguments.iter().any(|a| a.spread)
-        || !body_is_invocation(file, callback.body, invocation.span)
+        || file.ast.peel_ts_sugar_span(callback.body) != invocation.span
         || !super::super::body_site_runs_during_call(file, callback, invocation.span)
     {
         return None;

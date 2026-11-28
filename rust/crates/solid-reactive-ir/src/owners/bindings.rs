@@ -479,7 +479,7 @@ pub(crate) fn read_escapes_synchronous_extent(
 /// ADR 1235: the function literal at `owner` is a value the innermost function around it returns: that function's returned value
 /// itself (an arrow's expression body, a `return`'s argument), or a property value or element of the object or array literal it
 /// returns, to three literal levels (`() => () => n()`, `() => ({ read: () => n() })`, `() => [{ m: () => n() }]`).
-fn returned_function_literal(file: &solid_facts::FileFacts, owner: Span) -> bool {
+pub(crate) fn returned_function_literal(file: &solid_facts::FileFacts, owner: Span) -> bool {
     let ast = &file.ast;
     let Some(parent) = ast
         .functions

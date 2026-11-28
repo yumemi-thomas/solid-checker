@@ -103,9 +103,12 @@ pub(super) trait Values<'w>: World<'w> {
             };
             let target_file = self.file(&path)?;
             let function = target_file.ast.function_at(span)?;
+            // ADR 1235: a function literal another function returns (`useT(a1)()()`: the arrow `useT(a1)` answers) is that call's
+            // fresh value, which no binding holds and no write replaces.
             if function.r#async
                 || function.generator
-                || !crate::indexes::function_value_is_current_in(target_file, function)
+                || !(crate::indexes::function_value_is_current_in(target_file, function)
+                    || crate::owners::returned_function_literal(target_file, span))
             {
                 return None;
             }
