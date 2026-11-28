@@ -6,16 +6,16 @@ import type { StoreSetter } from "solid-js";
 // STORE_WRITE_OUTSIDE_SETTER at the write. The store write's SC2003 row does not answer the Get, so the value-use census keeps its
 // SC9012 row there (`value-held-in-binding`): uncertifiable, where it was certified clean. A plain write (`=`) Gets nothing.
 
-type Props = { s1: { a: { v: number }; items: number[] }; setS1: StoreSetter<{ a: { v: number }; items: number[] }> };
+type Props = { s1: { v: number }; setS1: StoreSetter<{ v: number }> };
 
 const CompoundCtx = createContext<Props>();
 function CompoundChild() {
   const ctx = useContext(CompoundCtx);
-  ctx.s1.a.v += 1;
+  ctx.s1.v += 1;
   return <i />;
 }
 export function CompoundParent() {
-  const [s1, setS1] = createStore({ a: { v: 0 }, items: [0] });
+  const [s1, setS1] = createStore({ v: 0 });
   return (
     <CompoundCtx value={{ s1, setS1 }}>
       <CompoundChild />
@@ -26,11 +26,11 @@ export function CompoundParent() {
 const IncrementCtx = createContext<Props>();
 function IncrementChild() {
   const ctx = useContext(IncrementCtx);
-  ctx.s1.a.v++;
+  ctx.s1.v++;
   return <i />;
 }
 export function IncrementParent() {
-  const [s1, setS1] = createStore({ a: { v: 0 }, items: [0] });
+  const [s1, setS1] = createStore({ v: 0 });
   return (
     <IncrementCtx value={{ s1, setS1 }}>
       <IncrementChild />
@@ -41,11 +41,11 @@ export function IncrementParent() {
 const LogicalCtx = createContext<Props>();
 function LogicalChild() {
   const ctx = useContext(LogicalCtx);
-  ctx.s1.a.v ||= 1;
+  ctx.s1.v ||= 1;
   return <i />;
 }
 export function LogicalParent() {
-  const [s1, setS1] = createStore({ a: { v: 0 }, items: [0] });
+  const [s1, setS1] = createStore({ v: 0 });
   return (
     <LogicalCtx value={{ s1, setS1 }}>
       <LogicalChild />
@@ -56,11 +56,11 @@ export function LogicalParent() {
 const PlainCtx = createContext<Props>();
 function PlainChild() {
   const ctx = useContext(PlainCtx);
-  ctx.s1.a.v = 7;
+  ctx.s1.v = 7;
   return <i />;
 }
 export function PlainParent() {
-  const [s1, setS1] = createStore({ a: { v: 0 }, items: [0] });
+  const [s1, setS1] = createStore({ v: 0 });
   return (
     <PlainCtx value={{ s1, setS1 }}>
       <PlainChild />
@@ -72,11 +72,11 @@ export function PlainParent() {
 const PairCtx = createContext<Props>();
 function DestructuredChild() {
   const { s1 } = useContext(PairCtx);
-  s1.a.v += 1;
+  s1.v += 1;
   return <i />;
 }
 export function DestructuredParent() {
-  const [s1, setS1] = createStore({ a: { v: 0 }, items: [0] });
+  const [s1, setS1] = createStore({ v: 0 });
   return (
     <PairCtx value={{ s1, setS1 }}>
       <DestructuredChild />
