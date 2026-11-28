@@ -53,9 +53,36 @@ const SEED = FOCUS_DEFAULTS.seed;
 
 const readJsonl = (path) => (existsSync(path) ? readFileSync(path, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)) : []);
 const readJson = (path) => (existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : null);
-/** A grid directory's report (matrix.json or legal.json). */
-const gridReport = (dir) => readJson(join(dir, "matrix.json")) ?? readJson(join(dir, "legal.json"));
 const subdirs = (dir) => (existsSync(dir) ? readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort() : []);
+/** A grid process's report (matrix.json or legal.json). */
+const unitReport = (dir) => readJson(join(dir, "matrix.json")) ?? readJson(join(dir, "legal.json"));
+/**
+ * A grid directory's units: the directory itself, or, where focus.mjs split the grid by code (`--split-codes`, and a recall grid run in
+ * full, `splitsRecall`: every full audit's mx-recall and lg-recall), its `<grid>/<code>/` directories. Run 45845595439 (full, 40 shards)
+ * failed at pick because only `<grid>/matrix.json` was read.
+ */
+const gridUnits = (dir) => (unitReport(dir) ? [dir] : subdirs(dir).map((code) => join(dir, code)));
+/** A grid directory's rows of one file (programs.jsonl, oracle-candidates.jsonl), every unit's. */
+const gridRows = (dir, file) => gridUnits(dir).flatMap((unit) => readJsonl(join(unit, file)));
+/**
+ * A grid directory's report. A split grid's is its units' put together: the shard they share, the programs added up (`kept`, and `of`,
+ * each code's part of the grid). `problems` names a unit with no report, or units of different shards; `units` the codes' reports.
+ */
+export function gridReport(dir) {
+  const own = unitReport(dir);
+  if (own) return own;
+  const units = subdirs(dir).map((code) => ({ code, report: unitReport(join(dir, code)) }));
+  if (!units.length) return null;
+  const problems = units.filter((unit) => !unit.report).map((unit) => `no report for code ${unit.code}`);
+  const reports = units.map((unit) => unit.report).filter(Boolean);
+  const shards = new Set(reports.map((report) => (report.gridShard ? `${report.gridShard.index}/${report.gridShard.count}` : "none")));
+  if (shards.size > 1) problems.push(`its codes are of different shards (${[...shards].sort().join(", ")})`);
+  const first = reports[0]?.gridShard;
+  const gridShard = shards.size === 1 && first
+    ? { index: first.index, count: first.count, kept: reports.reduce((sum, report) => sum + report.gridShard.kept, 0), of: reports.reduce((sum, report) => sum + report.gridShard.of, 0) }
+    : undefined;
+  return { split: true, units: reports, problems, gridShard };
+}
 
 /**
  * The oracle jobs one run may take, the account's concurrent runners (20, the most run 41775917761 ran at once), and the part size a
@@ -105,8 +132,10 @@ const RECALL_GRIDS = AUDIT_GRIDS.filter((grid) => grid.endsWith("-recall"));
 export function recallModeOf(shards) {
   const modes = new Set();
   for (const shard of shards) for (const grid of RECALL_GRIDS) {
-    const report = gridReport(join(shard.dir, grid));
-    if (report) modes.add(report.recallLean === true ? "lean" : "full");
+    for (const unit of gridUnits(join(shard.dir, grid))) {
+      const report = unitReport(unit);
+      if (report) modes.add(report.recallLean === true ? "lean" : "full");
+    }
   }
   return modes.size > 1 ? "mixed" : [...modes][0] ?? "full";
 }
@@ -138,6 +167,7 @@ export function readShards(dir) {
     for (const grid of AUDIT_GRIDS) {
       const report = gridReport(join(shard.dir, grid));
       if (!report) { attention.push(`${shard.name}: no report for ${grid}`); continue; }
+      for (const problem of report.problems ?? []) attention.push(`${shard.name}/${grid}: ${problem}`);
       const part = report.gridShard;
       if (!part) { attention.push(`${shard.name}/${grid}: not a shard`); continue; }
       count ??= part.count;
@@ -161,7 +191,7 @@ function pick(options) {
   mkdirSync(out, { recursive: true });
   const perStratum = parsePerStratum(ORACLE_PER_STRATUM);
   const picked = AUDIT_GRIDS.map((grid) => {
-    const lists = shards.map((shard) => readJsonl(join(shard.dir, grid, "oracle-candidates.jsonl")));
+    const lists = shards.map((shard) => gridRows(join(shard.dir, grid), "oracle-candidates.jsonl"));
     return { grid, lists, ids: pickOracle(lists, perStratum) };
   });
   const split = oracleParts(Object.fromEntries(picked.map(({ grid, ids }) => [grid, ids.length])));
@@ -284,7 +314,7 @@ export function judge({ shards: shardsDir, oracle: oracleDir, against }) {
       if (!report?.gridShard) continue;
       planned ??= report.gridShard.of;
       if (report.gridShard.of !== planned) attention.push(`${shard.name}/${grid}: a grid of ${report.gridShard.of} programs, the other shards' of ${planned}`);
-      const shardRows = readJsonl(join(dir, "programs.jsonl"));
+      const shardRows = gridRows(dir, "programs.jsonl");
       if (shardRows.length !== report.gridShard.kept) attention.push(`${shard.name}/${grid}: ${shardRows.length} rows for ${report.gridShard.kept} programs`);
       const manifest = manifestIds(grid);
       for (const row of shardRows) {
