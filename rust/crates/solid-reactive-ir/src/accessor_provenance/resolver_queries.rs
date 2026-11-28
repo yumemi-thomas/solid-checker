@@ -302,6 +302,103 @@ pub(super) fn transport_rows<'w>(
     rows
 }
 
+/// ADR 1235: the concise body `body` is `void` applied to the call `call`: the text before the call is the `void` keyword and
+/// whitespace only, and the call ends the body. A comment or anything else between them answers no.
+fn void_invocation(file: &FileFacts, body: Span, call: Span) -> bool {
+    let body = file.ast.peel_ts_sugar_span(body);
+    body.contains(call)
+        && body.end == call.end
+        && file
+            .source_text(Span::new(body.start, call.start))
+            .and_then(|prefix| prefix.strip_prefix("void"))
+            .is_some_and(|rest| !rest.is_empty() && rest.chars().all(char::is_whitespace))
+}
+
+/// ADR 1235: the functions a built-in `map`/`forEach` callback runs when it calls its own parameter (`useT(a1).forEach((f) =>
+/// f())`): the receiver is a fresh array (ADR 0282's tuple, which no holder could have changed: the call itself, or a `const` of
+/// one name nothing writes whose one reference is this receiver), every element of it a synchronous arrow, and the parameter named
+/// only as that callee.
+fn function_elements<'w>(
+    world: &impl TransportWorld<'w>,
+    file: &'w FileFacts,
+    call: &'w ast::CallFact,
+    receiver: Span,
+    parameter: Span,
+    callee: Span,
+) -> Option<Vec<(String, Span)>> {
+    if file.ast.identifiers.iter().any(|id| {
+        id.role == ast::IdentifierRole::Reference
+            && file.ast.reference_declaration(id.span) == Some(parameter)
+            && id.span != callee
+    }) {
+        return None;
+    }
+    let fresh = fresh_array_call(file, receiver)?;
+    let Value::Tuple { path, elements, .. } = world.value(file, fresh, 24, &mut false)? else {
+        return None;
+    };
+    if ["map", "forEach"]
+        .into_iter()
+        .any(|member| world.member_vetoed(&path, member))
+    {
+        return None;
+    }
+    let array_file = world.file(&path)?;
+    let mut targets = Vec::new();
+    for element in elements {
+        let Value::Callable(Callable::Function { path, span }) =
+            world.value(array_file, element, 24, &mut false)?
+        else {
+            return None;
+        };
+        let selected = world.file(&path)?.ast.function_at(span)?;
+        if selected.kind != ast::FunctionKind::Arrow || selected.r#async || selected.generator {
+            return None;
+        }
+        if !targets.contains(&(path.clone(), span)) {
+            targets.push((path, span));
+        }
+    }
+    if targets.is_empty() || world.named_callback(file, call.callee) {
+        return None;
+    }
+    Some(targets)
+}
+
+/// ADR 1235: the call whose fresh array `receiver` is: the receiver itself when it is a call, or the call initializing a `const`
+/// of one name, inside a function, nothing writes, whose one reference is `receiver`.
+fn fresh_array_call(file: &FileFacts, receiver: Span) -> Option<Span> {
+    let ast = &file.ast;
+    let receiver = ast.peel_ts_sugar_span(receiver);
+    if ast.call_at(receiver).is_some() {
+        return Some(receiver);
+    }
+    let declaration = ast.reference_declaration(receiver)?;
+    let binding = ast
+        .bindings
+        .iter()
+        .find(|binding| binding.names.iter().any(|name| name.span == declaration))?;
+    if !binding.immutable
+        || binding.shape != ast::BindingShape::Identifier
+        || binding.names.len() != 1
+        || containing_ast_function(ast, declaration).is_none()
+        || crate::indexes::binding_written(file, declaration)
+        || ast
+            .identifiers
+            .iter()
+            .filter(|id| {
+                id.role == ast::IdentifierRole::Reference
+                    && ast.reference_declaration(id.span) == Some(declaration)
+            })
+            .count()
+            != 1
+    {
+        return None;
+    }
+    let initializer = ast.peel_ts_sugar_span(binding.initializer?);
+    ast.call_at(initializer).is_some().then_some(initializer)
+}
+
 /// The exact element-member callbacks a built-in `map`/`forEach` call of an
 /// array literal invokes, when every element's member is a synchronous arrow
 /// invoked exactly once through the callback's own parameter.
@@ -349,9 +446,22 @@ fn array_members<'w>(
     if invocations.next().is_some()
         || invocation.construct
         || invocation.arguments.iter().any(|a| a.spread)
-        || file.ast.peel_ts_sugar_span(callback.body) != invocation.span
         || !super::super::body_site_runs_during_call(file, callback, invocation.span)
     {
+        return None;
+    }
+    let body_is_call = file.ast.peel_ts_sugar_span(callback.body) == invocation.span;
+    // ADR 1235: an element that is itself a function, called through the callback's own parameter (`(f) => f()`, `(f) => void f()`).
+    let callee = file.ast.peel_ts_sugar_span(invocation.callee);
+    if file.ast.member_at(callee).is_none()
+        && file.ast.reference_declaration(callee) == Some(name.span)
+    {
+        if !(body_is_call || void_invocation(file, callback.body, invocation.span)) {
+            return None;
+        }
+        return function_elements(world, file, call, receiver, name.span, callee);
+    }
+    if !body_is_call {
         return None;
     }
     let member = file.ast.members.iter().find(|m| {
