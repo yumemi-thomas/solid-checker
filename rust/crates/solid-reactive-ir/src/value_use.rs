@@ -2776,12 +2776,9 @@ impl<'l, 'a> Census<'l, 'a> {
     /// ADR 1236: so does a write that reads its target first (`ctx.s1.v += 1`, `ctx.s1.v++`, `ctx.s1.v ||= 1`): it Gets `member`
     /// before it Sets it, and rc.21 warns STRICT_READ_UNTRACKED at that Get, which the write's row does not answer.
     fn write_decided_target(&mut self, file: &FileFacts, member: Span) -> bool {
-        if file
-            .ast
-            .assignments
-            .iter()
-            .any(|assignment| assignment.reads_target && file.ast.peel_ts_sugar_span(assignment.target) == member)
-        {
+        if file.ast.assignments.iter().any(|assignment| {
+            assignment.reads_target && file.ast.peel_ts_sugar_span(assignment.target) == member
+        }) {
             return false;
         }
         let member_writes = &self.member_writes;
