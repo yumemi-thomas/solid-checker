@@ -1001,6 +1001,15 @@ fn origin_closed(
                         .iter()
                         .find(|call| site_ast.peel_ts_sugar_span(call.callee) == *at)
                         .is_some_and(|call| origin_closed(site_file, context, call.span, depth - 1))
+                    // The call graph takes a `dynamic` source for an entry of the
+                    // component (ADR 1016): it starts at the call and the tags.
+                    || crate::stored_throw::dynamic_mount_sites(site_file, *at, lookup).is_some_and(
+                        |(call, tags)| {
+                            !tags.is_empty()
+                                && !in_setter_window(site_file, call)
+                                && tags.iter().all(|tag| !in_setter_window(site_file, *tag))
+                        },
+                    )
             });
     }
     false
